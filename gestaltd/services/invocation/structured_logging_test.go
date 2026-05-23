@@ -110,7 +110,7 @@ func TestBrokerPlugin5xxResultObservability(t *testing.T) { //nolint:paralleltes
 		{
 			name:      "plugin transport",
 			operation: "assistant.reconcileStuckRequests",
-			transport: catalog.TransportPlugin,
+			transport: catalog.TransportApp,
 			ctx: invocation.WithHTTPBinding(
 				invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTPBinding),
 				"slack_events",
@@ -171,7 +171,7 @@ func TestBrokerPlugin5xxResultObservability(t *testing.T) { //nolint:paralleltes
 			if tt.wantWarning {
 				assertStructuredLogField(t, record, "provider", "slack")
 				assertStructuredLogField(t, record, "operation", tt.operation)
-				assertStructuredLogField(t, record, "transport", catalog.TransportPlugin)
+				assertStructuredLogField(t, record, "transport", catalog.TransportApp)
 				assertStructuredLogField(t, record, "surface", string(invocation.InvocationSurfaceHTTPBinding))
 				assertStructuredLogField(t, record, "http_binding", "slack_events")
 				assertStructuredLogField(t, record, "subject_id", "service_account:workflow-config")

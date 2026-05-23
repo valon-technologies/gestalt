@@ -34,7 +34,7 @@ class BuildTests(unittest.TestCase):
         output: pathlib.Path,
         platform_name: str = "linux",
         target: str = "provider",
-        plugin_name: str = "released-plugin",
+        app_name: str = "released-plugin",
         runtime_kind: str = "integration",
         goos: str = "linux",
         goarch: str = "amd64",
@@ -82,7 +82,7 @@ class BuildTests(unittest.TestCase):
                     root=root,
                     target=target,
                     output_path=output,
-                    plugin_name=plugin_name,
+                    app_name=app_name,
                     runtime_kind=runtime_kind,
                     goos=goos,
                     goarch=goarch,
@@ -117,7 +117,7 @@ class BuildTests(unittest.TestCase):
                 output_name=output_name,
             ):
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    root = pathlib.Path(tmpdir) / "plugin"
+                    root = pathlib.Path(tmpdir) / "app"
                     output = root / "dist" / output_name
                     root.mkdir()
                     with mock.patch.dict(_build.os.environ, {}, clear=False):
@@ -158,7 +158,7 @@ class BuildTests(unittest.TestCase):
                     captured.bundle_config,
                     {
                         "target": "provider",
-                        "plugin_name": "released-plugin",
+                        "app_name": "released-plugin",
                         "runtime_kind": "integration",
                     },
                 )
@@ -171,7 +171,7 @@ class BuildTests(unittest.TestCase):
         """Cache mode should persist only private packager cache state."""
         with tempfile.TemporaryDirectory() as tmpdir:
             base = pathlib.Path(tmpdir)
-            root = base / "plugin"
+            root = base / "app"
             output = root / "dist" / "provider-bin"
             cache_root = base / "cache"
             root.mkdir()
@@ -195,7 +195,7 @@ class BuildTests(unittest.TestCase):
                 captured.bundle_config,
                 {
                     "target": "provider",
-                    "plugin_name": "released-plugin",
+                    "app_name": "released-plugin",
                     "runtime_kind": "integration",
                 },
             )
@@ -245,7 +245,7 @@ class BuildTests(unittest.TestCase):
     def test_whitespace_build_cache_dir_keeps_default_clean_build(self) -> None:
         """Blank cache env values should behave like unset env values."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            root = pathlib.Path(tmpdir) / "plugin"
+            root = pathlib.Path(tmpdir) / "app"
             output = root / "dist" / "provider-bin"
             root.mkdir()
 
@@ -262,7 +262,7 @@ class BuildTests(unittest.TestCase):
     def test_build_cache_dir_file_fails_before_packager_invocation(self) -> None:
         """A non-directory cache path should fail with a clear SDK error."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            root = pathlib.Path(tmpdir) / "plugin"
+            root = pathlib.Path(tmpdir) / "app"
             output = root / "dist" / "provider-bin"
             cache_file = pathlib.Path(tmpdir) / "cache-file"
             root.mkdir()
@@ -282,7 +282,7 @@ class BuildTests(unittest.TestCase):
                             root=root,
                             target="provider",
                             output_path=output,
-                            plugin_name="released-plugin",
+                            app_name="released-plugin",
                             runtime_kind="integration",
                             goos="linux",
                             goarch="amd64",
@@ -321,7 +321,7 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(result.root, pathlib.Path("/root"))
         self.assertEqual(result.target, "mod:attr")
         self.assertEqual(result.output_path, pathlib.Path("/out/bin"))
-        self.assertEqual(result.plugin_name, "my-plugin")
+        self.assertEqual(result.app_name, "my-plugin")
         self.assertEqual(result.runtime_kind, "integration")
         self.assertEqual(result.goos, "linux")
         self.assertEqual(result.goarch, "amd64")

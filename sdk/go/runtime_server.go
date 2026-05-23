@@ -86,8 +86,8 @@ func (s *runtimeServer) StartProvider(ctx context.Context, _ *emptypb.Empty) (*p
 
 func providerKindToProto(kind ProviderKind) proto.ProviderKind {
 	switch kind {
-	case ProviderKindIntegration:
-		return proto.ProviderKind_PROVIDER_KIND_INTEGRATION
+	case ProviderKindApp:
+		return proto.ProviderKind_PROVIDER_KIND_APP
 	case ProviderKindAuthentication:
 		return proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION
 	case ProviderKindAuthorization:

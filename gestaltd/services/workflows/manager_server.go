@@ -9,9 +9,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
@@ -19,11 +19,11 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type InvocationTokenManager = plugininvokerservice.InvocationTokenManager
+type InvocationTokenManager = appinvokerservice.InvocationTokenManager
 type ManagerService = workflowmanager.Service
 
 func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
-	return plugininvokerservice.NewInvocationTokenManager(secret)
+	return appinvokerservice.NewInvocationTokenManager(secret)
 }
 
 type ProviderServer struct {
@@ -57,11 +57,11 @@ func (s *ProviderServer) CreateDefinition(ctx context.Context, req *proto.Create
 	if err != nil {
 		return nil, err
 	}
-	managed, err := s.manager.CreateDefinition(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.DefinitionUpsert{
-		ProviderName:     strings.TrimSpace(req.GetProviderName()),
-		Target:           target,
-		IdempotencyKey:   strings.TrimSpace(req.GetIdempotencyKey()),
-		CallerPluginName: strings.TrimSpace(s.pluginName),
+	managed, err := s.manager.CreateDefinition(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.DefinitionUpsert{
+		ProviderName:   strings.TrimSpace(req.GetProviderName()),
+		Target:         target,
+		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
+		CallerAppName:  strings.TrimSpace(s.pluginName),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -88,7 +88,7 @@ func (s *ProviderServer) GetDefinition(ctx context.Context, req *proto.GetWorkfl
 	if definitionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "definition_id is required")
 	}
-	managed, err := s.manager.GetDefinition(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), definitionID)
+	managed, err := s.manager.GetDefinition(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), definitionID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -118,10 +118,10 @@ func (s *ProviderServer) UpdateDefinition(ctx context.Context, req *proto.Update
 	if err != nil {
 		return nil, err
 	}
-	managed, err := s.manager.UpdateDefinition(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), definitionID, workflowmanager.DefinitionUpsert{
-		ProviderName:     strings.TrimSpace(req.GetProviderName()),
-		Target:           target,
-		CallerPluginName: strings.TrimSpace(s.pluginName),
+	managed, err := s.manager.UpdateDefinition(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), definitionID, workflowmanager.DefinitionUpsert{
+		ProviderName:  strings.TrimSpace(req.GetProviderName()),
+		Target:        target,
+		CallerAppName: strings.TrimSpace(s.pluginName),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -148,7 +148,7 @@ func (s *ProviderServer) DeleteDefinition(ctx context.Context, req *proto.Delete
 	if definitionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "definition_id is required")
 	}
-	if err := s.manager.DeleteDefinition(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), definitionID); err != nil {
+	if err := s.manager.DeleteDefinition(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), definitionID); err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -181,14 +181,14 @@ func (s *ProviderServer) UpsertSchedule(ctx context.Context, req *proto.UpsertWo
 	if err != nil {
 		return nil, err
 	}
-	upsert.CallerPluginName = strings.TrimSpace(s.pluginName)
+	upsert.CallerAppName = strings.TrimSpace(s.pluginName)
 	upsert.IdempotencyKey = strings.TrimSpace(req.GetIdempotencyKey())
 	upsert.DefinitionID = strings.TrimSpace(req.GetDefinitionId())
 	var managed *workflowmanager.ManagedSchedule
 	if scheduleID == "" {
-		managed, err = s.manager.CreateSchedule(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), upsert)
+		managed, err = s.manager.CreateSchedule(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), upsert)
 	} else {
-		managed, err = s.manager.UpdateSchedule(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), scheduleID, upsert)
+		managed, err = s.manager.UpdateSchedule(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), scheduleID, upsert)
 	}
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -215,13 +215,13 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 	if err != nil {
 		return nil, err
 	}
-	managed, err := s.manager.StartRun(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.RunStart{
-		ProviderName:     strings.TrimSpace(req.GetProviderName()),
-		Target:           target,
-		DefinitionID:     strings.TrimSpace(req.GetDefinitionId()),
-		IdempotencyKey:   strings.TrimSpace(req.GetIdempotencyKey()),
-		WorkflowKey:      strings.TrimSpace(req.GetWorkflowKey()),
-		CallerPluginName: strings.TrimSpace(s.pluginName),
+	managed, err := s.manager.StartRun(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.RunStart{
+		ProviderName:   strings.TrimSpace(req.GetProviderName()),
+		Target:         target,
+		DefinitionID:   strings.TrimSpace(req.GetDefinitionId()),
+		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
+		WorkflowKey:    strings.TrimSpace(req.GetWorkflowKey()),
+		CallerAppName:  strings.TrimSpace(s.pluginName),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -248,7 +248,7 @@ func (s *ProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflo
 	if runID == "" {
 		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
-	managed, err := s.manager.SignalRun(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.RunSignal{
+	managed, err := s.manager.SignalRun(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.RunSignal{
 		RunID:  runID,
 		Signal: workflowSignalFromProto(req.GetSignal()),
 	})
@@ -287,14 +287,14 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 	if err != nil {
 		return nil, err
 	}
-	managed, err = s.manager.SignalOrStartRun(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.RunSignalOrStart{
-		ProviderName:     strings.TrimSpace(req.GetProviderName()),
-		WorkflowKey:      strings.TrimSpace(req.GetWorkflowKey()),
-		Target:           target,
-		DefinitionID:     strings.TrimSpace(req.GetDefinitionId()),
-		IdempotencyKey:   strings.TrimSpace(req.GetIdempotencyKey()),
-		Signal:           workflowSignalFromProto(req.GetSignal()),
-		CallerPluginName: strings.TrimSpace(s.pluginName),
+	managed, err = s.manager.SignalOrStartRun(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.RunSignalOrStart{
+		ProviderName:   strings.TrimSpace(req.GetProviderName()),
+		WorkflowKey:    strings.TrimSpace(req.GetWorkflowKey()),
+		Target:         target,
+		DefinitionID:   strings.TrimSpace(req.GetDefinitionId()),
+		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
+		Signal:         workflowSignalFromProto(req.GetSignal()),
+		CallerAppName:  strings.TrimSpace(s.pluginName),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -321,7 +321,7 @@ func (s *ProviderServer) GetSchedule(ctx context.Context, req *proto.GetWorkflow
 	if scheduleID == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
 	}
-	managed, err := s.manager.GetSchedule(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), scheduleID)
+	managed, err := s.manager.GetSchedule(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), scheduleID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -347,7 +347,7 @@ func (s *ProviderServer) DeleteSchedule(ctx context.Context, req *proto.DeleteWo
 	if scheduleID == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
 	}
-	if err := s.manager.DeleteSchedule(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), scheduleID); err != nil {
+	if err := s.manager.DeleteSchedule(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), scheduleID); err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -368,7 +368,7 @@ func (s *ProviderServer) PauseSchedule(ctx context.Context, req *proto.PauseWork
 	if scheduleID == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
 	}
-	managed, err := s.manager.PauseSchedule(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), scheduleID)
+	managed, err := s.manager.PauseSchedule(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), scheduleID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -394,7 +394,7 @@ func (s *ProviderServer) ResumeSchedule(ctx context.Context, req *proto.ResumeWo
 	if scheduleID == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
 	}
-	managed, err := s.manager.ResumeSchedule(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), scheduleID)
+	managed, err := s.manager.ResumeSchedule(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), scheduleID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -431,14 +431,14 @@ func (s *ProviderServer) UpsertEventTrigger(ctx context.Context, req *proto.Upse
 	if err != nil {
 		return nil, err
 	}
-	upsert.CallerPluginName = strings.TrimSpace(s.pluginName)
+	upsert.CallerAppName = strings.TrimSpace(s.pluginName)
 	upsert.IdempotencyKey = strings.TrimSpace(req.GetIdempotencyKey())
 	upsert.DefinitionID = strings.TrimSpace(req.GetDefinitionId())
 	var managed *workflowmanager.ManagedEventTrigger
 	if triggerID == "" {
-		managed, err = s.manager.CreateEventTrigger(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), upsert)
+		managed, err = s.manager.CreateEventTrigger(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), upsert)
 	} else {
-		managed, err = s.manager.UpdateEventTrigger(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), triggerID, upsert)
+		managed, err = s.manager.UpdateEventTrigger(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), triggerID, upsert)
 	}
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -465,7 +465,7 @@ func (s *ProviderServer) GetEventTrigger(ctx context.Context, req *proto.GetWork
 	if triggerID == "" {
 		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
 	}
-	managed, err := s.manager.GetEventTrigger(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), triggerID)
+	managed, err := s.manager.GetEventTrigger(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), triggerID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -491,7 +491,7 @@ func (s *ProviderServer) DeleteEventTrigger(ctx context.Context, req *proto.Dele
 	if triggerID == "" {
 		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
 	}
-	if err := s.manager.DeleteEventTrigger(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), triggerID); err != nil {
+	if err := s.manager.DeleteEventTrigger(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), triggerID); err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -512,7 +512,7 @@ func (s *ProviderServer) PauseEventTrigger(ctx context.Context, req *proto.Pause
 	if triggerID == "" {
 		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
 	}
-	managed, err := s.manager.PauseEventTrigger(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), triggerID)
+	managed, err := s.manager.PauseEventTrigger(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), triggerID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -538,7 +538,7 @@ func (s *ProviderServer) ResumeEventTrigger(ctx context.Context, req *proto.Resu
 	if triggerID == "" {
 		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
 	}
-	managed, err := s.manager.ResumeEventTrigger(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), triggerID)
+	managed, err := s.manager.ResumeEventTrigger(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), triggerID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -564,9 +564,9 @@ func (s *ProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWor
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "event: %v", err)
 	}
-	published, err := s.manager.PublishEvent(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.EventPublish{
+	published, err := s.manager.PublishEvent(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.EventPublish{
 		ProviderName: strings.TrimSpace(req.GetProviderName()),
-		PluginName:   strings.TrimSpace(s.pluginName),
+		AppName:      strings.TrimSpace(s.pluginName),
 		Event:        event,
 	})
 	if err != nil {
@@ -579,19 +579,19 @@ func (s *ProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWor
 	return out, nil
 }
 
-func (s *ProviderServer) tokenContext(token string) (plugininvokerservice.TokenContext, error) {
+func (s *ProviderServer) tokenContext(token string) (appinvokerservice.TokenContext, error) {
 	tokenCtx, err := s.tokens.ResolveToken(token, s.pluginName)
 	if err != nil {
-		return plugininvokerservice.TokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
+		return appinvokerservice.TokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	return tokenCtx, nil
 }
 
-func (s *ProviderServer) requireWorkflowGrant(tokenCtx plugininvokerservice.TokenContext, operation string) error {
+func (s *ProviderServer) requireWorkflowGrant(tokenCtx appinvokerservice.TokenContext, operation string) error {
 	if tokenCtx.AllowsWorkflowManagerOperation(operation) {
 		return nil
 	}
-	return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for plugin %q", operation, strings.TrimSpace(s.pluginName))
+	return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q", operation, strings.TrimSpace(s.pluginName))
 }
 
 func workflowManagerSignalOrStartMetricDims(req *proto.SignalOrStartWorkflowProviderRunRequest, managed *workflowmanager.ManagedRunSignal) observability.WorkflowMetricDims {
@@ -652,21 +652,21 @@ func workflowManagerTargetOrDefinition(targetProto *proto.BoundWorkflowTarget, d
 }
 
 func workflowManagerTargetProtoIsSet(targetProto *proto.BoundWorkflowTarget) bool {
-	return targetProto != nil && (targetProto.GetPlugin() != nil || targetProto.GetAgent() != nil)
+	return targetProto != nil && (targetProto.GetApp() != nil || targetProto.GetAgent() != nil)
 }
 
 func workflowManagerTarget(targetProto *proto.BoundWorkflowTarget) (coreworkflow.Target, error) {
 	target := workflowTargetFromProto(targetProto)
 	if target.Agent == nil {
-		if target.Plugin == nil {
-			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
+		if target.App == nil {
+			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.app.app_name is required")
 		}
-		pluginTarget := *target.Plugin
-		if strings.TrimSpace(pluginTarget.PluginName) == "" {
-			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
+		pluginTarget := *target.App
+		if strings.TrimSpace(pluginTarget.AppName) == "" {
+			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.app.app_name is required")
 		}
 		if strings.TrimSpace(pluginTarget.Operation) == "" {
-			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.plugin.operation is required")
+			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.app.operation is required")
 		}
 	} else if strings.TrimSpace(target.Agent.ProviderName) == "" {
 		return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.agent.provider_name is required")

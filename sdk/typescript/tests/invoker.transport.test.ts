@@ -12,12 +12,12 @@ import { expect, test } from "bun:test";
 import {
   ExchangeInvocationTokenResponseSchema,
   OperationResultSchema,
-  PluginInvoker as PluginInvokerService,
-} from "../src/internal/gen/v1/plugin_pb.ts";
+  AppInvoker as AppInvokerService,
+} from "../src/internal/gen/v1/app_pb.ts";
 import {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
-  PluginInvoker,
+  AppInvoker,
   request,
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
@@ -26,13 +26,13 @@ interface IssueLookupParams {
   issue_number: number;
 }
 
-test("PluginInvoker forwards invocation tokens from strings and Request objects", async () => {
+test("AppInvoker forwards invocation tokens from strings and Request objects", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-plugin-invoker-"));
   const socketPath = join(tempDir, "plugin-invoker.sock");
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const calls: Array<{
     invocationToken: string;
-    plugin: string;
+    app: string;
     operation: string;
     params: Record<string, unknown>;
     connection: string;
@@ -41,7 +41,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
   }> = [];
   const graphqlCalls: Array<{
     invocationToken: string;
-    plugin: string;
+    app: string;
     document: string;
     variables: Record<string, unknown>;
     connection: string;
@@ -51,7 +51,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
   const exchanges: Array<{
     parentInvocationToken: string;
     grants: Array<{
-      plugin: string;
+      app: string;
       operations: string[];
       surfaces: string[];
       allOperations: boolean;
@@ -65,13 +65,13 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
     connect: false,
     routes(router) {
       router.service(
-        PluginInvokerService,
+        AppInvokerService,
         {
           async exchangeInvocationToken(input) {
             exchanges.push({
               parentInvocationToken: input.parentInvocationToken,
               grants: input.grants.map((grant) => ({
-                plugin: grant.plugin,
+                app: grant.app,
                 operations: [...grant.operations],
                 surfaces: [...grant.surfaces],
                 allOperations: grant.allOperations,
@@ -86,7 +86,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
             const params = Object.fromEntries(Object.entries(input.params ?? {}));
             calls.push({
               invocationToken: input.invocationToken,
-              plugin: input.plugin,
+              app: input.app,
               operation: input.operation,
               params,
               connection: input.connection,
@@ -97,7 +97,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
               status: 207,
               body: JSON.stringify({
                 invocationToken: input.invocationToken,
-                plugin: input.plugin,
+                app: input.app,
                 operation: input.operation,
                 params,
                 connection: input.connection,
@@ -110,7 +110,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
             const variables = Object.fromEntries(Object.entries(input.variables ?? {}));
             graphqlCalls.push({
               invocationToken: input.invocationToken,
-              plugin: input.plugin,
+              app: input.app,
               document: input.document,
               variables,
               connection: input.connection,
@@ -121,7 +121,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
               status: 208,
               body: JSON.stringify({
                 invocationToken: input.invocationToken,
-                plugin: input.plugin,
+                app: input.app,
                 document: input.document,
                 variables,
                 connection: input.connection,
@@ -130,7 +130,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
               }),
             });
           },
-        } satisfies Partial<ServiceImpl<typeof PluginInvokerService>>,
+        } satisfies Partial<ServiceImpl<typeof AppInvokerService>>,
       );
     },
   });
@@ -147,19 +147,19 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
 
     process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
 
-    const fromHandle = new PluginInvoker("invocation-token-123");
+    const fromHandle = new AppInvoker("invocation-token-123");
     const childToken = await fromHandle.exchangeInvocationToken({
       grants: [
         {
-          plugin: "github",
+          app: "github",
           operations: ["get_issue"],
         },
         {
-          plugin: "linear",
+          app: "linear",
           surfaces: ["graphql"],
         },
         {
-          plugin: "google_sheets",
+          app: "google_sheets",
           allOperations: true,
         },
       ],
@@ -184,7 +184,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
     expect(first.status).toBe(207);
     expect(JSON.parse(first.body)).toEqual({
       invocationToken: "invocation-token-123",
-      plugin: "github",
+      app: "github",
       operation: "get_issue",
       params: {
         issue_number: 42,
@@ -194,7 +194,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
       idempotencyKey: "issue-42-create",
     });
 
-    const fromRequest = new PluginInvoker(
+    const fromRequest = new AppInvoker(
       request("tok", {}, {}, {}, {}, {}, "invocation-token-456"),
     );
     const second = await fromRequest.invoke("slack", "post_message", {
@@ -206,7 +206,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
     expect(second.status).toBe(207);
     expect(JSON.parse(second.body)).toEqual({
       invocationToken: "invocation-token-456",
-      plugin: "slack",
+      app: "slack",
       operation: "post_message",
       params: {
         channel: "eng",
@@ -235,7 +235,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
     expect(graphql.status).toBe(208);
     expect(JSON.parse(graphql.body)).toEqual({
       invocationToken: "invocation-token-456",
-      plugin: "linear",
+      app: "linear",
       document: "query Viewer($team: String!) { viewer(team: $team) { id } }",
       variables: {
         team: "eng",
@@ -250,19 +250,19 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
         parentInvocationToken: "invocation-token-123",
         grants: [
           {
-            plugin: "github",
+            app: "github",
             operations: ["get_issue"],
             surfaces: [],
             allOperations: false,
           },
           {
-            plugin: "linear",
+            app: "linear",
             operations: [],
             surfaces: ["graphql"],
             allOperations: false,
           },
           {
-            plugin: "google_sheets",
+            app: "google_sheets",
             operations: [],
             surfaces: [],
             allOperations: true,
@@ -275,7 +275,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
     expect(calls).toEqual([
       {
         invocationToken: "invocation-token-123",
-        plugin: "github",
+        app: "github",
         operation: "get_issue",
         params: {
           issue_number: 42,
@@ -286,7 +286,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
       },
       {
         invocationToken: "invocation-token-456",
-        plugin: "slack",
+        app: "slack",
         operation: "post_message",
         params: {
           channel: "eng",
@@ -302,7 +302,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
     expect(graphqlCalls).toEqual([
       {
         invocationToken: "invocation-token-456",
-        plugin: "linear",
+        app: "linear",
         document: "query Viewer($team: String!) { viewer(team: $team) { id } }",
         variables: {
           team: "eng",
@@ -327,12 +327,12 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
   }
 });
 
-test("PluginInvoker prioritizes invocation-token validation over socket configuration", () => {
+test("AppInvoker prioritizes invocation-token validation over socket configuration", () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
 
   try {
     delete process.env[ENV_HOST_SERVICE_SOCKET];
-    expect(() => new PluginInvoker("   ")).toThrow(
+    expect(() => new AppInvoker("   ")).toThrow(
       "plugin invoker: invocation token is not available",
     );
   } finally {
@@ -367,7 +367,7 @@ async function reserveTCPAddress(): Promise<string> {
   });
 }
 
-test("PluginInvoker honors tcp target env and relay token env", async () => {
+test("AppInvoker honors tcp target env and relay token env", async () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
   const seenTokens: string[] = [];
@@ -378,18 +378,18 @@ test("PluginInvoker honors tcp target env and relay token env", async () => {
     grpcWeb: false,
     connect: false,
     routes(router) {
-      router.service(PluginInvokerService, {
+      router.service(AppInvokerService, {
         async invoke(input) {
           return create(OperationResultSchema, {
             status: 204,
             body: JSON.stringify({
               invocationToken: input.invocationToken,
-              plugin: input.plugin,
+              app: input.app,
               operation: input.operation,
             }),
           });
         },
-      } satisfies Partial<ServiceImpl<typeof PluginInvokerService>>);
+      } satisfies Partial<ServiceImpl<typeof AppInvokerService>>);
     },
   });
   const server = createServer((req, res) => {
@@ -412,13 +412,13 @@ test("PluginInvoker honors tcp target env and relay token env", async () => {
     process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
     process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
-    const invoker = new PluginInvoker("invoke-token");
+    const invoker = new AppInvoker("invoke-token");
     const response = await invoker.invoke("github", "get_issue");
 
     expect(response.status).toBe(204);
     expect(JSON.parse(response.body)).toEqual({
       invocationToken: "invoke-token",
-      plugin: "github",
+      app: "github",
       operation: "get_issue",
     });
     expect(seenTokens).toEqual(["relay-token-typescript"]);

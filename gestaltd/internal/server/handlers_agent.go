@@ -70,7 +70,7 @@ type agentMessagePartImageRefRequest struct {
 
 type agentToolRefRequest struct {
 	System         string `json:"system,omitempty"`
-	Plugin         string `json:"plugin,omitempty"`
+	App            string `json:"app,omitempty"`
 	Operation      string `json:"operation,omitempty"`
 	Connection     string `json:"connection,omitempty"`
 	Instance       string `json:"instance,omitempty"`
@@ -1038,7 +1038,7 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 		ref := refs[i]
 		out = append(out, coreagent.ToolRef{
 			System:         strings.TrimSpace(ref.System),
-			Plugin:         strings.TrimSpace(ref.Plugin),
+			App:            strings.TrimSpace(ref.App),
 			Operation:      strings.TrimSpace(ref.Operation),
 			Connection:     strings.TrimSpace(ref.Connection),
 			Instance:       strings.TrimSpace(ref.Instance),
@@ -1063,7 +1063,7 @@ func agentToolRefsToRequest(refs []coreagent.ToolRef) []agentToolRefRequest {
 		ref := refs[i]
 		out = append(out, agentToolRefRequest{
 			System:         strings.TrimSpace(ref.System),
-			Plugin:         strings.TrimSpace(ref.Plugin),
+			App:            strings.TrimSpace(ref.App),
 			Operation:      strings.TrimSpace(ref.Operation),
 			Connection:     strings.TrimSpace(ref.Connection),
 			Instance:       strings.TrimSpace(ref.Instance),
@@ -1079,16 +1079,16 @@ func validateAgentToolRefs(refs []agentToolRefRequest) error {
 	for idx := range refs {
 		ref := refs[idx]
 		system := strings.TrimSpace(ref.System)
-		plugin := strings.TrimSpace(ref.Plugin)
+		app := strings.TrimSpace(ref.App)
 		operation := strings.TrimSpace(ref.Operation)
 		connection := strings.TrimSpace(ref.Connection)
 		instance := strings.TrimSpace(ref.Instance)
 		credentialMode := strings.TrimSpace(ref.CredentialMode)
-		if system == "" && plugin == "" {
-			return fmt.Errorf("toolRefs[%d].plugin or system is required", idx)
+		if system == "" && app == "" {
+			return fmt.Errorf("toolRefs[%d].app or system is required", idx)
 		}
-		if system != "" && plugin != "" {
-			return fmt.Errorf("toolRefs[%d] must set exactly one of plugin or system", idx)
+		if system != "" && app != "" {
+			return fmt.Errorf("toolRefs[%d] must set exactly one of app or system", idx)
 		}
 		if system != "" {
 			if system != coreagent.SystemToolWorkflow {
@@ -1107,7 +1107,7 @@ func validateAgentToolRefs(refs []agentToolRefRequest) error {
 			if operation == "*" || connection == "*" || instance == "*" {
 				return fmt.Errorf("toolRefs[%d] wildcard fields are not supported", idx)
 			}
-			if plugin == "*" && (operation != "" || connection != "" || instance != "" || credentialMode != "" || strings.TrimSpace(ref.Title) != "" || strings.TrimSpace(ref.Description) != "") {
+			if app == "*" && (operation != "" || connection != "" || instance != "" || credentialMode != "" || strings.TrimSpace(ref.Title) != "" || strings.TrimSpace(ref.Description) != "") {
 				return fmt.Errorf("toolRefs[%d] global ref cannot include operation, connection, instance, credentialMode, title, or description", idx)
 			}
 		}
@@ -1489,7 +1489,7 @@ func firstAgentToolTarget(refs []agentToolRefRequest) (string, string) {
 		if systemName := strings.TrimSpace(ref.System); systemName != "" {
 			return systemName, strings.TrimSpace(ref.Operation)
 		}
-		pluginName := strings.TrimSpace(ref.Plugin)
+		pluginName := strings.TrimSpace(ref.App)
 		operation := strings.TrimSpace(ref.Operation)
 		if pluginName == "" && operation == "" {
 			continue

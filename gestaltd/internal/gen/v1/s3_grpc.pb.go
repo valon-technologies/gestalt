@@ -369,7 +369,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // S3ObjectAccess models host-mediated object access for plugin-scoped S3
-// bindings. It is registered by gestaltd for plugins and is not implemented by
+// bindings. It is registered by gestaltd for apps and is not implemented by
 // S3 providers.
 type S3ObjectAccessClient interface {
 	CreateObjectAccessURL(ctx context.Context, in *CreateObjectAccessURLRequest, opts ...grpc.CallOption) (*CreateObjectAccessURLResponse, error)
@@ -398,7 +398,7 @@ func (c *s3ObjectAccessClient) CreateObjectAccessURL(ctx context.Context, in *Cr
 // for forward compatibility.
 //
 // S3ObjectAccess models host-mediated object access for plugin-scoped S3
-// bindings. It is registered by gestaltd for plugins and is not implemented by
+// bindings. It is registered by gestaltd for apps and is not implemented by
 // S3 providers.
 type S3ObjectAccessServer interface {
 	CreateObjectAccessURL(context.Context, *CreateObjectAccessURLRequest) (*CreateObjectAccessURLResponse, error)

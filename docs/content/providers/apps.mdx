@@ -1,0 +1,1215 @@
+import { Tabs } from 'nextra/components'
+import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
+
+# Apps
+
+App providers are the packages that expose tools through Gestalt. Operators
+configure them under `apps`, while the host takes care of catalog
+loading, external credential resolution, connection management, HTTP routing,
+and MCP exposure.
+
+## How app providers work
+
+An app package includes a manifest that defines metadata, connections, and
+optional passthrough API surfaces. Apps can be
+[executable](#defining-operations), [declarative](#declarative-apps), or
+[both](#hybrid-providers).
+Apps support:
+
+> REST/OpenAPI, GraphQL, MCP and executable custom-defined code
+
+as stated in [Overview](/).
+
+If the manifest enables MCP, the same operations are also exposed through the
+server's `/mcp` endpoint.
+
+## How app invocation uses authorization
+
+Gestalt resolves every app request to a canonical subject, then
+[authorization](/providers/authorization) decides whether that subject may use
+the app or operation.
+
+When executable
+[apps call other configured app operations](/applications#calling-another-app-from-your-application),
+authorization scopes are threaded through the call stack for both users and
+[service accounts](/service-accounts).
+
+## Configuring an app provider
+
+```yaml
+apps:
+  github:
+    displayName: GitHub
+    source:
+      package: github.com/valon-technologies/gestalt-providers/apps/github
+      version: 0.0.1-alpha.1
+    config:
+      apiBaseUrl: https://api.github.com
+      clientId: ${GITHUB_CLIENT_ID}
+      clientSecret:
+        secret:
+          provider: default
+          name: github-client-secret
+```
+
+During local development, point at a source manifest instead:
+
+```yaml
+apps:
+  support:
+    source: ./apps/support/manifest.yaml
+```
+
+Hosted HTTP route overrides are deployment-specific; see
+[Hosted HTTP endpoints](#hosted-http-endpoints).
+
+## Connections and credentials
+
+The [external credentials provider](/providers/external-credentials) resolves
+credentials for configured connections. App manifests declare connection
+needs; deployment config binds or overrides them. Use
+[`mode: none`](/providers/external-credentials#connection-modes) or
+[`mode: subject`](/providers/external-credentials#connection-modes) depending
+on whether the connection should resolve credentials for the effective
+credential subject, including a caller, subject-owned API token owner, or
+[`runAs`](/service-accounts#runas) subject.
+
+Auth types: `oauth2`, `mcp_oauth`, `bearer`, `manual`, `none`. See
+[Config File > connections](/reference/config-file#connections).
+
+## Filtering operations and egress
+
+### `allowedOperations`
+
+Use `allowedOperations` to publish only a subset of a large app catalog:
+
+```yaml
+apps:
+  github:
+    source:
+      package: github.com/valon-technologies/gestalt-providers/apps/github
+      version: 0.0.1-alpha.1
+    allowedOperations:
+      issues.list:
+        alias: list_issues
+      issues.get:
+        alias: get_issue
+```
+
+### `allowedHosts`
+
+<ActiveDevelopmentCallout><code>allowedHosts</code></ActiveDevelopmentCallout>
+
+Use `egress.allowedHosts` when an app needs explicit outbound access:
+
+```yaml
+apps:
+  github:
+    egress:
+      allowedHosts:
+        - api.github.com
+        - "*.github.com"
+```
+
+For executable plugins, `egress.allowedHosts` is only a complete security
+boundary when the app runs inside a [runtime](/providers/runtime) that
+supports hostname-based egress controls.
+
+
+## Building your own app
+
+Use this section for the app manifest and SDK implementation surface. For the
+shared package model, provider search/add commands, and release mechanics, see
+[Provider packages](/providers#provider-packages) and
+[Releasing provider packages](/providers#releasing-provider-packages).
+
+### Manifest
+
+You declare static metadata, connections, and passthrough surfaces in a manifest file. Gestalt accepts `manifest.yaml`, `manifest.yml`, or `manifest.json`.
+
+<Tabs items={['YAML', 'JSON']}>
+  <Tabs.Tab>
+    ```yaml
+    kind: app
+    source: github.com/your-org/apps/slack
+    version: 0.0.1
+    displayName: Slack
+    description: Send messages, search conversations, and manage channels.
+    spec:
+      mcp: true
+      connections:
+        default:
+          auth:
+            type: oauth2
+            authorizationUrl: https://slack.com/oauth/v2/authorize
+            tokenUrl: https://slack.com/api/oauth.v2.access
+            accessTokenPath: authed_user.access_token
+            scopeParam: user_scope
+            scopeSeparator: ','
+            scopes:
+              - channels:read
+              - chat:write
+              - search:read
+              - users:read
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```json
+    {
+      "kind": "app",
+      "source": "github.com/your-org/apps/slack",
+      "version": "0.0.1",
+      "displayName": "Slack",
+      "description": "Send messages, search conversations, and manage channels.",
+      "spec": {
+        "mcp": true,
+        "connections": {
+          "default": {
+            "auth": {
+              "type": "oauth2",
+              "authorizationUrl": "https://slack.com/oauth/v2/authorize",
+              "tokenUrl": "https://slack.com/api/oauth.v2.access",
+              "accessTokenPath": "authed_user.access_token",
+              "scopeParam": "user_scope",
+              "scopeSeparator": ",",
+              "scopes": ["channels:read", "chat:write", "search:read", "users:read"]
+            }
+          }
+        }
+      }
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+See [Provider Manifests](/reference/app-manifests) for the full field reference.
+
+### Creating a project
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    You need Go 1.26+ and a running `gestaltd` instance for testing.
+
+    ```sh
+    mkdir slack && cd slack
+    go mod init github.com/your-org/apps/slack
+    go get github.com/valon-technologies/gestalt/sdk/go@latest
+    ```
+
+    Recommended layout:
+
+    ```text
+    slack/
+      go.mod
+      manifest.yaml
+      provider.go
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    You need Python 3.10+ and a running `gestaltd` instance for testing.
+
+    ```sh
+    mkdir slack && cd slack
+    ```
+
+    Recommended layout:
+
+    ```text
+    slack/
+      pyproject.toml
+      manifest.yaml
+      provider.py
+      scripts/
+        build-provider.sh
+    ```
+
+    Keep Python dependency and package metadata in `pyproject.toml`; the
+    provider manifest points Gestalt at the built executable artifact:
+
+    ```toml
+    [project]
+    name = "gestalt-slack"
+    version = "0.0.1"
+    dependencies = ["gestalt-sdk"]
+
+    [tool.uv]
+    package = false
+    ```
+
+    ```yaml
+    build:
+      command:
+        - ./scripts/build-provider.sh
+      inputs:
+        - pyproject.toml
+        - provider.py
+        - scripts
+    entrypoint:
+      artifactPath: .gestalt/build/slack
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    You need the current stable Rust toolchain, Cargo, and a running `gestaltd` instance for testing.
+
+    ```sh
+    mkdir slack && cd slack
+    cargo init --lib
+    ```
+
+    Recommended layout:
+
+    ```text
+    slack/
+      Cargo.toml
+      manifest.yaml
+      src/
+        lib.rs
+    ```
+
+    Add the SDK and schema dependencies:
+
+    ```sh
+    cargo add gestalt-sdk --rename gestalt
+    cargo add schemars --features derive
+    cargo add serde --features derive
+    cargo add serde_json
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    You need the package manager and TypeScript runtime or compiler used by
+    your `run` and `build.command`, plus a running `gestaltd` instance for
+    testing.
+
+    ```sh
+    mkdir slack && cd slack
+    npm init -y
+    npm install @valon-technologies/gestalt
+    npm install --save-dev tsx
+    ```
+
+    Recommended layout:
+
+    ```text
+    slack/
+      package.json
+      manifest.yaml
+      provider.ts
+      scripts/
+        build-provider.mjs
+    ```
+
+    Put normal package metadata and scripts in `package.json`; the provider
+    manifest points Gestalt at the executable artifact produced by the build:
+
+    ```json
+    {
+      "name": "gestalt-slack",
+      "version": "0.0.1",
+      "private": true,
+      "type": "module",
+      "scripts": {
+        "build": "node ./scripts/build-provider.mjs",
+        "dev:provider": "tsx ./provider.ts"
+      },
+      "dependencies": {
+        "@valon-technologies/gestalt": "latest"
+      },
+      "devDependencies": {
+        "tsx": "latest"
+      }
+    }
+    ```
+
+    ```yaml
+    build:
+      command:
+        - npm
+        - run
+        - build
+      inputs:
+        - package.json
+        - package-lock.json
+        - provider.ts
+        - scripts
+    run:
+      - npm
+      - run
+      - dev:provider
+    entrypoint:
+      artifactPath: .gestalt/build/slack
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Defining operations
+
+Operations are the callable units of an app. Each operation has an ID, an HTTP method, input and output types, and a handler function. Executable source apps can use SDK-native source package metadata, declare `run` for local source execution, or declare `build.command` and `entrypoint.artifactPath` when they need a compiled release artifact.
+
+The following example defines a `conversations.getMessage` operation that fetches a single Slack message by channel and timestamp. The handler uses the resolved runtime token from the request context to call the Slack API.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package provider
+
+    import (
+      "context"
+      "net/http"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type Provider struct{}
+
+    type GetMessageInput struct {
+      Channel string `json:"channel" doc:"Channel ID"        required:"true"`
+      TS      string `json:"ts"      doc:"Message timestamp" required:"true"`
+    }
+
+    type GetMessageOutput struct {
+      Message map[string]any `json:"message"`
+    }
+
+    var (
+      getMessageOp = gestalt.Operation[GetMessageInput, GetMessageOutput]{
+        ID:          "conversations.getMessage",
+        Method:      http.MethodGet,
+        Description: "Get a single message from a Slack channel",
+      }
+      Router = gestalt.MustRouter(
+        gestalt.Register(getMessageOp, (*Provider).getMessage),
+      )
+    )
+
+    func New() *Provider { return &Provider{} }
+
+    func (p *Provider) Configure(_ context.Context, _ string, _ map[string]any) error {
+      return nil
+    }
+
+    func (p *Provider) getMessage(
+      ctx context.Context,
+      input GetMessageInput,
+      req gestalt.Request,
+    ) (gestalt.Response[GetMessageOutput], error) {
+      // Call Slack API using req.Token as the resolved Bearer token.
+      // Fetch conversations.history filtered to the single message at input.TS.
+      return gestalt.OK(GetMessageOutput{Message: map[string]any{"ts": input.TS}}), nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from gestalt import (
+        Model,
+        field,
+        operation,
+        Request,
+    )
+
+    class GetMessageInput(Model):
+        channel: str = field(description="Channel ID")
+        ts: str = field(description="Message timestamp")
+
+    class GetMessageOutput(Model):
+        message: dict
+
+    @operation(
+        method="GET",
+        description="Get a single message from a Slack channel",
+    )
+    def conversations_getMessage(
+        input: GetMessageInput, req: Request
+    ) -> GetMessageOutput:
+        # Call Slack API using req.token as the resolved Bearer token.
+        # Fetch conversations.history filtered to the single message at input.ts.
+        return GetMessageOutput(message={"ts": input.ts})
+    ```
+
+    The top-level `configure(name, config)` function runs once at startup if defined. It does not need a decorator.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use serde::{Deserialize, Serialize};
+    use std::sync::Arc;
+
+    pub struct Provider;
+
+    #[gestalt::async_trait]
+    impl gestalt::Provider for Provider {
+        async fn configure(
+            &self, _name: &str, _config: serde_json::Map<String, serde_json::Value>,
+        ) -> gestalt::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[derive(Deserialize, schemars::JsonSchema)]
+    pub struct GetMessageInput {
+        #[schemars(description = "Channel ID")]
+        channel: String,
+        #[schemars(description = "Message timestamp")]
+        ts: String,
+    }
+
+    #[derive(Serialize, schemars::JsonSchema)]
+    pub struct GetMessageOutput {
+        message: serde_json::Value,
+    }
+
+    pub fn router() -> gestalt::Result<gestalt::Router<Provider>> {
+        gestalt::Router::new().register(
+            gestalt::Operation::<GetMessageInput, GetMessageOutput>::new(
+                "conversations.getMessage",
+            )
+            .method("GET")
+            .description("Get a single message from a Slack channel"),
+            |_provider: Arc<Provider>, input: GetMessageInput, request: gestalt::Request| async move {
+                // Call Slack API using request.token as the resolved Bearer token.
+                let _ = (input, request);
+                todo!("fetch conversations.history")
+            },
+        )
+    }
+
+    gestalt::export_provider!(constructor = Provider, router = router);
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import { defineApp, ok, operation, s } from "@valon-technologies/gestalt";
+
+    export const app = defineApp({
+      operations: [
+        operation({
+          id: "conversations.getMessage",
+          method: "GET",
+          description: "Get a single message from a Slack channel",
+          readOnly: true,
+          input: s.object({
+            channel: s.string({ description: "Channel ID" }),
+            ts: s.string({ description: "Message timestamp" }),
+          }),
+          output: s.object({
+            message: s.object({
+              ts: s.string({ description: "Message timestamp" }),
+            }),
+          }),
+          async handler(input, request) {
+            // Call Slack API using request.token as the resolved Bearer token.
+            // Fetch conversations.history filtered to the single message at input.ts.
+            return ok({ message: { ts: input.ts } });
+          },
+        }),
+      ],
+    });
+    ```
+
+    The manifest `run` command starts this source locally. Object-form
+    `build.command` packages the release executable declared by
+    `entrypoint.artifactPath`.
+  </Tabs.Tab>
+</Tabs>
+
+By default, input decode failures return a structured `400` response, and unhandled errors return a structured `500` response.
+
+### Hosted HTTP endpoints
+
+Hosted HTTP endpoints let an external product call an app through a stable
+HTTP route, while the app still handles the request as a normal operation.
+They are useful for webhooks and other inbound requests whose path, signature
+verification, body shape, or acknowledgment response needs to match the calling
+product.
+
+The endpoint declaration belongs in the app manifest under `spec.http` and
+`spec.securitySchemes`. Deployment config selects the app and may override
+fields, but most deployments do not need a separate route declaration.
+
+See [Hosted HTTP Bindings](/reference/app-manifests#hosted-http-bindings)
+for security schemes, request decoding, subject resolution, and target
+operations.
+
+```yaml
+kind: app
+source: github.com/your-org/apps/slack
+version: 0.0.1
+spec:
+  securitySchemes:
+    slack_signed:
+      type: hmac
+      secret:
+        env: SLACK_SIGNING_SECRET
+      signatureHeader: X-Slack-Signature
+      signaturePrefix: v0=
+      payloadTemplate: "v0:{header:X-Slack-Request-Timestamp}:{raw_body}"
+      timestampHeader: X-Slack-Request-Timestamp
+      maxAgeSeconds: 300
+  http:
+    support_command:
+      path: /commands/support
+      method: POST
+      credentialMode: none
+      security: slack_signed
+      target: handle_support_command
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded: {}
+      ack:
+        status: 200
+        body:
+          status: accepted
+```
+
+Implement the target operation in the app SDK:
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package provider
+
+    import (
+      "context"
+      "net/http"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type Provider struct{}
+
+    type SlackCommandInput struct {
+      TeamID    string `json:"team_id"    required:"true"`
+      UserID    string `json:"user_id"    required:"true"`
+      ChannelID string `json:"channel_id" required:"true"`
+      Text      string `json:"text,omitempty"`
+    }
+
+    type SlackCommandOutput struct {
+      OK bool `json:"ok"`
+    }
+
+    var (
+      supportCommandOp = gestalt.Operation[SlackCommandInput, SlackCommandOutput]{
+        ID:     "handle_support_command",
+        Method: http.MethodPost,
+      }
+      Router = gestalt.MustRouter(
+        gestalt.Register(supportCommandOp, (*Provider).handleSupportCommand),
+      )
+    )
+
+    func New() *Provider { return &Provider{} }
+
+    func (p *Provider) Configure(_ context.Context, _ string, _ map[string]any) error {
+      return nil
+    }
+
+    func (p *Provider) handleSupportCommand(
+      ctx context.Context,
+      input SlackCommandInput,
+      req gestalt.Request,
+    ) (gestalt.Response[SlackCommandOutput], error) {
+      // Run the Slack command workflow. The host already verified the signature.
+      return gestalt.OK(SlackCommandOutput{OK: true}), nil
+    }
+
+    func (p *Provider) ResolveHTTPSubject(
+      ctx context.Context,
+      req gestalt.HTTPSubjectRequest,
+    ) (*gestalt.Subject, error) {
+      teamID, _ := req.Params["team_id"].(string)
+      userID, _ := req.Params["user_id"].(string)
+      if teamID == "" || userID == "" {
+        return nil, gestalt.Error(http.StatusBadRequest, "missing Slack subject fields")
+      }
+      return &gestalt.Subject{
+        ID:          "slack:" + teamID + ":" + userID,
+        Kind:        "user",
+        DisplayName: userID,
+        AuthSource:  "slack",
+      }, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from gestalt import (
+        Plugin,
+        Model,
+        field,
+        Request,
+        HTTPSubjectRequest,
+        Subject,
+        http_subject_error,
+    )
+
+    app = Plugin("slack")
+
+    class SlackCommandInput(Model):
+        team_id: str
+        user_id: str
+        channel_id: str
+        text: str = field(default="")
+
+    @app.operation(id="handle_support_command", method="POST")
+    def handle_support_command(
+        input: SlackCommandInput, req: Request
+    ) -> dict[str, bool]:
+        # Run the Slack command workflow. The host already verified the signature.
+        return {"ok": True}
+
+    @app.http_subject
+    def resolve_http_subject(
+        request: HTTPSubjectRequest,
+    ) -> Subject | None:
+        team_id = str(request.params.get("team_id") or "")
+        user_id = str(request.params.get("user_id") or "")
+        if not team_id or not user_id:
+            raise http_subject_error(400, "missing Slack subject fields")
+        return Subject(
+            id=f"slack:{team_id}:{user_id}",
+            kind="user",
+            display_name=user_id,
+            auth_source="slack",
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use serde::{Deserialize, Serialize};
+    use std::sync::Arc;
+
+    #[derive(Default)]
+    pub struct Provider;
+
+    #[gestalt::async_trait]
+    impl gestalt::Provider for Provider {
+        async fn resolve_http_subject(
+            &self,
+            request: gestalt::HTTPSubjectRequest,
+            _context: &gestalt::Request,
+        ) -> gestalt::Result<Option<gestalt::Subject>> {
+            let team_id = request
+                .params
+                .get("team_id")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            let user_id = request
+                .params
+                .get("user_id")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+
+            if team_id.is_empty() || user_id.is_empty() {
+                return Err(gestalt::Error::bad_request(
+                    "missing Slack subject fields",
+                ));
+            }
+
+            Ok(Some(gestalt::Subject {
+                id: format!("slack:{team_id}:{user_id}"),
+                kind: "user".to_string(),
+                display_name: user_id.to_string(),
+                auth_source: "slack".to_string(),
+                ..Default::default()
+            }))
+        }
+    }
+
+    #[derive(Deserialize, schemars::JsonSchema)]
+    pub struct SlackCommandInput {
+        team_id: String,
+        user_id: String,
+        channel_id: String,
+        #[serde(default)]
+        text: String,
+    }
+
+    #[derive(Serialize, schemars::JsonSchema)]
+    pub struct SlackCommandOutput {
+        ok: bool,
+    }
+
+    pub fn router() -> gestalt::Result<gestalt::Router<Provider>> {
+        gestalt::Router::new().register(
+            gestalt::Operation::<SlackCommandInput, SlackCommandOutput>::new(
+                "handle_support_command",
+            )
+            .method("POST"),
+            |_provider: Arc<Provider>, input: SlackCommandInput, request: gestalt::Request| async move {
+                // Run the Slack command workflow. The host already verified the signature.
+                let _ = (input, request);
+                Ok(gestalt::ok(SlackCommandOutput { ok: true }))
+            },
+        )
+    }
+
+    gestalt::export_provider!(constructor = Provider::default, router = router);
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import {
+      defineApp,
+      httpSubjectError,
+      ok,
+      operation,
+      s,
+    } from "@valon-technologies/gestalt";
+
+    export const app = defineApp({
+      resolveHTTPSubject(request) {
+        const teamID = String(request.params.team_id ?? "");
+        const userID = String(request.params.user_id ?? "");
+        if (!teamID || !userID) {
+          throw httpSubjectError(400, "missing Slack subject fields");
+        }
+        return {
+          id: `slack:${teamID}:${userID}`,
+          kind: "user",
+          displayName: userID,
+          authSource: "slack",
+        };
+      },
+      operations: [
+        operation({
+          id: "handle_support_command",
+          method: "POST",
+          input: s.object({
+            team_id: s.string(),
+            user_id: s.string(),
+            channel_id: s.string(),
+            text: s.optional(s.string()),
+          }),
+          output: s.object({ ok: s.boolean() }),
+          async handler(input, request) {
+            // Run the Slack command workflow. The host already verified the signature.
+            return ok({ ok: true });
+          },
+        }),
+      ],
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Request query parameters are included in the operation input. JSON object
+bodies merge into the input by field name, form-encoded bodies become string
+parameters, and unsupported body types are passed as `rawBody`. If `ack` is
+configured, Gestalt sends that response immediately and runs the operation
+asynchronously. Without `ack`, the caller receives the operation response.
+
+### Declarative apps
+
+Not every app needs executable code. If the upstream API is already reachable
+over HTTP, you can expose it as REST operations declared entirely in the
+manifest. Gestalt forwards each invocation to the upstream and resolves a
+runtime credential when the selected connection requires one. No provider
+process runs.
+
+The following manifest exposes three Slack API endpoints as Gestalt operations, with no code at all:
+
+```yaml
+kind: app
+source: github.com/your-org/apps/slack-readonly
+version: 0.0.1
+displayName: Slack (read-only)
+description: Read Slack channels and messages via the REST API.
+spec:
+  mcp: true
+  surfaces:
+    rest:
+      baseUrl: https://slack.com
+      operations:
+        - name: conversations.list
+          description: List conversations and channels
+          method: GET
+          path: /api/conversations.list
+          parameters:
+            - name: limit
+              type: int
+              in: query
+            - name: types
+              type: string
+              in: query
+        - name: conversations.history
+          description: Read message history for a channel
+          method: GET
+          path: /api/conversations.history
+          parameters:
+            - name: channel
+              type: string
+              in: query
+              required: true
+            - name: limit
+              type: int
+              in: query
+            - name: oldest
+              type: string
+              in: query
+        - name: users.list
+          description: List workspace users
+          method: GET
+          path: /api/users.list
+          parameters:
+            - name: limit
+              type: int
+              in: query
+  connections:
+    default:
+      auth:
+        type: oauth2
+        authorizationUrl: https://slack.com/oauth/v2/authorize
+        tokenUrl: https://slack.com/api/oauth.v2.access
+        accessTokenPath: authed_user.access_token
+        scopeParam: user_scope
+        scopeSeparator: ','
+        scopes:
+          - channels:read
+          - users:read
+```
+
+You configure a declarative app the same way as any other. Point the config at the manifest, and the declared operations appear in the catalog:
+
+```yaml
+apps:
+  slack-readonly:
+    source: ./slack-readonly/manifest.yaml
+```
+
+```sh
+gestalt app invoke slack-readonly conversations.list -p limit=5
+```
+
+Gestalt handles credential resolution, request formatting, and response
+passthrough. The `spec.surfaces.rest.baseUrl` is the root for all declared
+paths, and each operation's `parameters` define how input fields map to query
+parameters or request body fields.
+
+You can also declare OpenAPI, GraphQL, and MCP surfaces using `spec.surfaces.openapi`, `spec.surfaces.graphql`, and `spec.surfaces.mcp`. See [Provider Manifests](/reference/app-manifests) for the full surface schema.
+
+#### Hybrid providers
+
+An app can combine declarative passthrough surfaces with executable
+operations. The host forwards declarative operations directly to the upstream
+API, while executable operations run in the provider process. Both appear in the
+same catalog.
+
+Do not define the same operation ID in more than one surface. If two surfaces
+expose the same ID, provider validation fails. Use `allowedOperations` to filter
+or alias collisions when needed.
+
+### Operation ID conventions
+
+Operation IDs should use period-separated hierarchical names. The Slack app uses `conversations.list`, `conversations.history`, `chat.postMessage`, and `users.info`.
+
+This convention enables prefix matching in the CLI. When you run `gestalt app invoke slack conversations`, the CLI joins the space-separated segments with periods and shows all operations whose ID starts with `conversations.`. This makes large catalogs navigable without memorizing every operation name.
+
+### Dynamic catalogs
+
+By default, the operation catalog is static and materialized at startup. If your app needs to expose different operations depending on the caller's credentials or runtime state, implement a session catalog.
+
+A Slack app could use this to check which Slack workspace the caller is connected to and adjust the available operations accordingly.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*gestalt.Catalog, error) {
+        return &gestalt.Catalog{
+            Name:        "slack-session",
+            DisplayName: "Slack",
+            Operations: []*gestalt.CatalogOperation{
+                {
+                    Id:     "conversations.getMessage",
+                    Method: http.MethodGet,
+                    ReadOnly: true,
+                },
+            },
+        }, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from gestalt import (
+        session_catalog,
+        Request,
+        Catalog,
+        CatalogOperation,
+    )
+
+    @session_catalog
+    def dynamic_catalog(request: Request) -> Catalog:
+        return Catalog(
+            name="slack-session",
+            display_name="Slack",
+            operations=[
+                CatalogOperation(
+                    id="conversations.getMessage",
+                    method="GET",
+                    read_only=True,
+                )
+            ],
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    #[gestalt::async_trait]
+    impl gestalt::Provider for Provider {
+        fn supports_session_catalog(&self) -> bool {
+            true
+        }
+
+        async fn catalog_for_request(
+            &self,
+            request: &gestalt::Request,
+        ) -> gestalt::Result<Option<gestalt::Catalog>> {
+            Ok(Some(gestalt::Catalog {
+                name: "slack-session".to_string(),
+                display_name: "Slack".to_string(),
+                operations: vec![gestalt::CatalogOperation {
+                    id: "conversations.getMessage".to_string(),
+                    method: "GET".to_string(),
+                    read_only: true,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }))
+        }
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    export const app = defineApp({
+      sessionCatalog(request) {
+        return {
+          name: "slack-session",
+          displayName: "Slack",
+          operations: [
+            {
+              id: "conversations.getMessage",
+              method: "GET",
+              readOnly: true,
+            },
+          ],
+        };
+      },
+      operations: [/* ... */],
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Post-connect metadata
+
+Apps can derive additional connection metadata after Gestalt completes a
+credential exchange. Use a post-connect hook when the upstream connect response
+contains workspace, tenant, or account identifiers that should be stored with
+the connection and reused by later operation requests. Return only non-secret
+metadata; Gestalt already stores access and refresh tokens separately.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+      "context"
+      "encoding/json"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    func (p *Provider) PostConnect(ctx context.Context, token *gestalt.ConnectedToken) (map[string]string, error) {
+      upstream := map[string]string{}
+      if token.MetadataJSON != "" {
+        _ = json.Unmarshal([]byte(token.MetadataJSON), &upstream)
+      }
+
+      return map[string]string{
+        "slack_team_id": upstream["team_id"],
+        "subject_id":    token.SubjectID,
+        "connection":    token.Connection,
+        "instance":      token.Instance,
+      }, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from gestalt import post_connect, ConnectedToken
+
+    @post_connect
+    def capture_workspace(token: ConnectedToken) -> dict[str, str]:
+        return {
+            "slack_team_id": token.metadata.get("team_id", ""),
+            "subject_id": token.subject_id,
+            "connection": token.connection,
+            "instance": token.instance,
+        }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    #[gestalt::async_trait]
+    impl gestalt::Provider for Provider {
+        fn supports_post_connect(&self) -> bool {
+            true
+        }
+
+        async fn post_connect(
+            &self,
+            token: &gestalt::ConnectedToken,
+        ) -> gestalt::Result<std::collections::BTreeMap<String, String>> {
+            Ok([
+                (
+                    "slack_team_id".to_string(),
+                    token.metadata.get("team_id").cloned().unwrap_or_default(),
+                ),
+                ("subject_id".to_string(), token.subject_id.clone()),
+                ("connection".to_string(), token.connection.clone()),
+                ("instance".to_string(), token.instance.clone()),
+            ]
+            .into_iter()
+            .collect())
+        }
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import { defineApp } from "@valon-technologies/gestalt";
+
+    export const app = defineApp({
+      postConnect(token) {
+        return {
+          slack_team_id: token.metadata.team_id ?? "",
+          subject_id: token.subjectId,
+          connection: token.connection,
+          instance: token.instance,
+        };
+      },
+      operations: [/* ... */],
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Testing locally
+
+Use `gestaltd provider validate` and `gestaltd serve --path` when iterating on
+source apps.
+
+Validate the app in isolation:
+
+```sh
+gestaltd provider validate --path ./slack
+```
+
+Run the app locally with browser-facing UI available:
+
+```sh
+gestaltd serve --path ./slack
+```
+
+Validate or serve the UI bundle directly when you are working on the frontend
+itself:
+
+```sh
+gestaltd provider validate --path ./ui
+gestaltd serve --path ./ui
+```
+
+When the app needs supporting providers, extra plugins, or explicit mounted
+UIs, layer real config overlays on top of the synthesized baseline:
+
+```sh
+gestaltd provider validate --path ./slack --config ./dev/support.yaml
+gestaltd serve --path ./slack --config ./dev/support.yaml
+```
+
+Repeated `--config` flags merge left-to-right, and `null` deletes inherited
+entries. That makes it possible to boot some supporting providers while
+suppressing others for a local session.
+
+When your config already points at local provider source paths, use config-based
+serve with `--watch` to restart after local config, source provider, or local
+release metadata changes:
+
+```sh
+gestaltd serve \
+  --app slack \
+  --config ./base.yaml \
+  --config ./dev/local.yaml \
+  --watch
+```
+
+`--watch` is not supported with `--path`, `--remote`, or `--locked`; use it with
+`--config` files that reference the local sources you want to iterate on.
+
+#### Attaching local code to a remote server
+
+<ActiveDevelopmentCallout changeNote="Behavior, authorization requirements, and attach-session semantics may change between releases without warning.">Remote local serve</ActiveDevelopmentCallout>
+
+Use `gestaltd serve --remote` when you want a remote Gestalt instance to handle auth,
+authorization, connections, secrets, and host services, but route a selected
+app implementation to your local machine:
+
+```sh
+export GESTALT_URL=https://gestalt.example.com
+
+gestaltd serve --remote "$GESTALT_URL" --path ./slack
+```
+
+With `--path` and no `--config`, Gestalt matches the local manifest `source` to
+a configured remote app and preserves the remote app's config. If more
+than one remote app uses the same source, or the manifest has no source, pass
+`--name`:
+
+```sh
+gestaltd serve --remote "$GESTALT_URL" --path ./slack --name slack
+```
+
+Use layered config files for explicit local config overrides or multi-app
+attach sessions:
+
+```sh
+gestaltd serve \
+  --remote "$GESTALT_URL" \
+  --config ./base.yaml \
+  --config ./prod.yaml \
+  --path ./slack \
+  --name slack
+```
+
+You can also attach every source-backed app from layered config overlays:
+
+```sh
+gestaltd serve \
+  --remote "$GESTALT_URL" \
+  --config ./base.yaml \
+  --config ./prod.yaml \
+  --config ./dev/local-apps.yaml
+```
+
+Remote attach is owner-scoped. The remote server must opt in with
+`server.dev.attachmentState`, and the target app must allow the caller's role
+or API-token action grant. Other users keep seeing the deployed provider.
+
+For attach setup, token permissions, diagnostics, and cleanup, see
+[CLI](/reference/cli#provider-development) and
+[Config File > provider development](/reference/config-file#provider-development).
+
+Once the local server is running, invoke an operation:
+
+```sh
+gestalt app invoke slack conversations.getMessage -p channel=C01ABC23DEF -p ts=1712161829.000300
+```
+
+## What to read next
+
+For application composition, see [Applications](/applications).
+For configuration, see [Configuration](/reference/configuration). For operation
+invocation, see [HTTP API](/reference/http-api). For manifest fields, see
+[Provider Manifests](/reference/app-manifests). For authorization behavior,
+see [Authorization](/providers/authorization).

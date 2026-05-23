@@ -99,7 +99,7 @@ type MessagePart struct {
 
 type ToolTarget struct {
 	System                string `json:",omitempty"`
-	Plugin                string
+	App                   string
 	Operation             string
 	Connection            string
 	Instance              string
@@ -133,7 +133,7 @@ type Tool struct {
 
 type ToolRef struct {
 	System                string `json:",omitempty"`
-	Plugin                string
+	App                   string
 	Operation             string
 	Connection            string
 	Instance              string
@@ -145,9 +145,9 @@ type ToolRef struct {
 }
 
 type ResolveToolsRequest struct {
-	ToolRefs         []ToolRef
-	ToolSource       ToolSourceMode
-	CallerPluginName string
+	ToolRefs      []ToolRef
+	ToolSource    ToolSourceMode
+	CallerAppName string
 }
 
 type ToolSourceMode string
@@ -166,7 +166,7 @@ func ValidateMCPCatalogToolRefs(refs []ToolRef, fieldName string) error {
 	for i := range refs {
 		ref := refs[i]
 		system := strings.TrimSpace(ref.System)
-		pluginName := strings.TrimSpace(ref.Plugin)
+		pluginName := strings.TrimSpace(ref.App)
 		operation := strings.TrimSpace(ref.Operation)
 		connection := strings.TrimSpace(ref.Connection)
 		instance := strings.TrimSpace(ref.Instance)
@@ -174,7 +174,7 @@ func ValidateMCPCatalogToolRefs(refs []ToolRef, fieldName string) error {
 			return fmt.Errorf("mcp catalog %s[%d].system %q is not supported", fieldName, i, system)
 		}
 		if system != "" && pluginName != "" {
-			return fmt.Errorf("mcp catalog %s[%d] must set exactly one of plugin or system", fieldName, i)
+			return fmt.Errorf("mcp catalog %s[%d] must set exactly one of app or system", fieldName, i)
 		}
 		if system != "" {
 			if operation == "" {
@@ -189,7 +189,7 @@ func ValidateMCPCatalogToolRefs(refs []ToolRef, fieldName string) error {
 			continue
 		}
 		if pluginName == "" {
-			return fmt.Errorf("mcp catalog %s[%d].plugin is required", fieldName, i)
+			return fmt.Errorf("mcp catalog %s[%d].app is required", fieldName, i)
 		}
 		if operation == "*" || connection == "*" || instance == "*" {
 			return fmt.Errorf("mcp catalog %s[%d] wildcard fields are not supported", fieldName, i)
@@ -541,7 +541,7 @@ type ManagerUpdateSessionRequest struct {
 }
 
 type ManagerCreateTurnRequest struct {
-	CallerPluginName  string
+	CallerAppName     string
 	IdempotencyKey    string
 	Model             string
 	SessionID         string

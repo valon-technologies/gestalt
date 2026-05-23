@@ -183,7 +183,7 @@ func (noopTelemetryProvider) Shutdown(context.Context) error  { return nil }
 
 func workflowStartupTestConfig() *config.Config {
 	return &config.Config{
-		Plugins: map[string]*config.ProviderEntry{},
+		Apps: map[string]*config.ProviderEntry{},
 		Providers: config.ProvidersConfig{
 			Authentication: map[string]*config.ProviderEntry{
 				"default": {
@@ -284,9 +284,9 @@ func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []runtimehost.Ho
 
 func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, target coreworkflow.Target) string {
 	t.Helper()
-	pluginTarget := target.Plugin
+	pluginTarget := target.App
 	if pluginTarget == nil {
-		t.Fatalf("workflow target plugin is nil: %#v", target)
+		t.Fatalf("workflow target app is nil: %#v", target)
 		return ""
 	}
 	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
@@ -310,7 +310,7 @@ func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, targ
 	return ref.ID
 }
 
-func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testing.T) {
+func TestBootstrapWorkflowStartupCallbackWaitsForDelayedAppProvider(t *testing.T) {
 	t.Parallel()
 
 	bin, manifestRoot := buildModifiedExampleProviderBinary(t, func(source string) string {
@@ -323,7 +323,7 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 	})
 
 	cfg := workflowStartupTestConfig()
-	cfg.Plugins = map[string]*config.ProviderEntry{
+	cfg.Apps = map[string]*config.ProviderEntry{
 		"roadmap": {
 			Command:              bin,
 			ResolvedManifest:     newExecutableManifest("Roadmap", "Delayed startup provider"),
@@ -343,19 +343,19 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
-			Connection:  config.PluginConnectionName,
+			Connection:  config.AppConnectionName,
 			Instance:    "default",
 			AccessToken: "workflow-startup-token",
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		executionRef := storeStartupExecutionRef(t, deps, name, testWorkflowPluginTarget("roadmap", "status"))
+		executionRef := storeStartupExecutionRef(t, deps, name, testWorkflowAppTarget("roadmap", "status"))
 		resp, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
-				Kind: &proto.BoundWorkflowTarget_Plugin{
-					Plugin: &proto.BoundWorkflowPluginTarget{
-						PluginName: "roadmap",
-						Operation:  "status",
+				Kind: &proto.BoundWorkflowTarget_App{
+					App: &proto.BoundWorkflowAppTarget{
+						AppName:   "roadmap",
+						Operation: "status",
 					},
 				},
 			},
@@ -456,7 +456,7 @@ func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 	bin, manifestRoot := buildModifiedExampleProviderBinary(t, func(source string) string { return source })
 
 	cfg := workflowStartupTestConfig()
-	cfg.Plugins = map[string]*config.ProviderEntry{
+	cfg.Apps = map[string]*config.ProviderEntry{
 		"roadmap": {
 			Command:              bin,
 			ResolvedManifest:     newExecutableManifest("Roadmap", "Startup callback provider"),
@@ -476,7 +476,7 @@ func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
-			Connection:  config.PluginConnectionName,
+			Connection:  config.AppConnectionName,
 			Instance:    "default",
 			AccessToken: "workflow-startup-token",
 		}); err != nil {
@@ -484,10 +484,10 @@ func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 		}
 		_, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
-				Kind: &proto.BoundWorkflowTarget_Plugin{
-					Plugin: &proto.BoundWorkflowPluginTarget{
-						PluginName: "roadmap",
-						Operation:  "status",
+				Kind: &proto.BoundWorkflowTarget_App{
+					App: &proto.BoundWorkflowAppTarget{
+						AppName:   "roadmap",
+						Operation: "status",
 					},
 				},
 			},

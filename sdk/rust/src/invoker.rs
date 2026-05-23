@@ -12,11 +12,11 @@ use tower::service_fn;
 
 use crate::OperationResult;
 use crate::generated::v1::{
-    self as pb, plugin_invoker_client::PluginInvokerClient as ProtoPluginInvokerClient,
+    self as pb, app_invoker_client::AppInvokerClient as ProtoAppInvokerClient,
 };
 use crate::protocol;
 
-type PluginInvokerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
+type AppInvokerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
 /// Environment variable containing the plugin-invoker host-service target.
 pub const ENV_PLUGIN_INVOKER_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
@@ -25,8 +25,8 @@ pub const ENV_PLUGIN_INVOKER_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 const PLUGIN_INVOKER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
-/// Errors returned by [`PluginInvoker`].
-pub enum PluginInvokerError {
+/// Errors returned by [`AppInvoker`].
+pub enum AppInvokerError {
     /// The invocation token was empty.
     #[error("plugin invoker: invocation token is not available")]
     MissingInvocationToken,
@@ -50,18 +50,18 @@ pub enum PluginInvokerError {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 /// Grant included when exchanging an invocation token for a child token.
 pub struct InvocationGrant {
-    /// Plugin name that the child token may invoke.
+    /// App name that the child token may invoke.
     pub plugin: String,
     /// Specific operation ids allowed by the child token.
     pub operations: Vec<String>,
     /// Surface names allowed by the child token.
     pub surfaces: Vec<String>,
-    /// Whether the child token may invoke every operation on the plugin.
+    /// Whether the child token may invoke every operation on the app.
     pub all_operations: bool,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-/// Options that select the target connection for a plugin invocation.
+/// Options that select the target connection for an app invocation.
 pub struct InvokeOptions {
     /// Connected account id or name to invoke against.
     pub connection: String,
@@ -71,29 +71,29 @@ pub struct InvokeOptions {
     pub idempotency_key: String,
 }
 
-/// Client for invoking sibling plugin operations through the host.
-pub struct PluginInvoker {
-    client: ProtoPluginInvokerClient<PluginInvokerTransport>,
+/// Client for invoking sibling app operations through the host.
+pub struct AppInvoker {
+    client: ProtoAppInvokerClient<AppInvokerTransport>,
     invocation_token: String,
 }
 
-impl PluginInvoker {
-    /// Connects to the plugin invoker with an invocation token from the host.
+impl AppInvoker {
+    /// Connects to the app invoker with an invocation token from the host.
     pub async fn connect(
         invocation_token: impl AsRef<str>,
-    ) -> std::result::Result<Self, PluginInvokerError> {
+    ) -> std::result::Result<Self, AppInvokerError> {
         let invocation_token = invocation_token.as_ref().trim().to_owned();
         if invocation_token.is_empty() {
-            return Err(PluginInvokerError::MissingInvocationToken);
+            return Err(AppInvokerError::MissingInvocationToken);
         }
 
         let socket_path = std::env::var(ENV_PLUGIN_INVOKER_SOCKET).map_err(|_| {
-            PluginInvokerError::Env(format!("{ENV_PLUGIN_INVOKER_SOCKET} is not set"))
+            AppInvokerError::Env(format!("{ENV_PLUGIN_INVOKER_SOCKET} is not set"))
         })?;
         let relay_token = std::env::var(ENV_PLUGIN_INVOKER_SOCKET_TOKEN).unwrap_or_default();
 
-        let channel = match parse_plugin_invoker_target(&socket_path)? {
-            PluginInvokerTarget::Unix(path) => {
+        let channel = match parse_app_invoker_target(&socket_path)? {
+            AppInvokerTarget::Unix(path) => {
                 Endpoint::try_from("http://[::]:50051")?
                     .connect_with_connector(service_fn(move |_: Uri| {
                         let path = path.clone();
@@ -101,12 +101,12 @@ impl PluginInvoker {
                     }))
                     .await?
             }
-            PluginInvokerTarget::Tcp(address) => {
+            AppInvokerTarget::Tcp(address) => {
                 Endpoint::from_shared(format!("http://{address}"))?
                     .connect()
                     .await?
             }
-            PluginInvokerTarget::Tls(address) => {
+            AppInvokerTarget::Tls(address) => {
                 Endpoint::from_shared(format!("https://{address}"))?
                     .tls_config(ClientTlsConfig::new().with_native_roots())?
                     .connect()
@@ -115,7 +115,7 @@ impl PluginInvoker {
         };
 
         Ok(Self {
-            client: ProtoPluginInvokerClient::with_interceptor(
+            client: ProtoAppInvokerClient::with_interceptor(
                 channel,
                 relay_token_interceptor(relay_token.trim())?,
             ),
@@ -123,21 +123,21 @@ impl PluginInvoker {
         })
     }
 
-    /// Invokes one operation on another plugin.
+    /// Invokes one operation on another app.
     pub async fn invoke<P>(
         &mut self,
         plugin: &str,
         operation: &str,
         params: P,
         options: Option<InvokeOptions>,
-    ) -> std::result::Result<OperationResult, PluginInvokerError>
+    ) -> std::result::Result<OperationResult, AppInvokerError>
     where
         P: Serialize,
     {
         let response = self
             .client
-            .invoke(pb::PluginInvokeRequest {
-                plugin: plugin.to_string(),
+            .invoke(pb::AppInvokeRequest {
+                plugin: app.to_string(),
                 operation: operation.to_string(),
                 params: Some(serializable_to_struct(params, "params")?),
                 connection: options
@@ -158,7 +158,7 @@ impl PluginInvoker {
             .into_inner();
 
         let status = u16::try_from(response.status).map_err(|_| {
-            PluginInvokerError::Protocol(format!(
+            AppInvokerError::Protocol(format!(
                 "plugin invoker: invalid response status {}",
                 response.status
             ))
@@ -177,13 +177,13 @@ impl PluginInvoker {
         document: &str,
         variables: Option<V>,
         options: Option<InvokeOptions>,
-    ) -> std::result::Result<OperationResult, PluginInvokerError>
+    ) -> std::result::Result<OperationResult, AppInvokerError>
     where
         V: Serialize,
     {
         let document = document.trim();
         if document.is_empty() {
-            return Err(PluginInvokerError::Protocol(
+            return Err(AppInvokerError::Protocol(
                 "plugin invoker: graphql document is required".to_string(),
             ));
         }
@@ -191,7 +191,7 @@ impl PluginInvoker {
         let response = self
             .client
             .invoke_graph_ql(pb::PluginInvokeGraphQlRequest {
-                plugin: plugin.to_string(),
+                plugin: app.to_string(),
                 document: document.to_string(),
                 variables: variables
                     .map(|value| serializable_to_optional_struct(value, "variables"))
@@ -215,7 +215,7 @@ impl PluginInvoker {
             .into_inner();
 
         let status = u16::try_from(response.status).map_err(|_| {
-            PluginInvokerError::Protocol(format!(
+            AppInvokerError::Protocol(format!(
                 "plugin invoker: invalid response status {}",
                 response.status
             ))
@@ -232,7 +232,7 @@ impl PluginInvoker {
         &mut self,
         grants: &[InvocationGrant],
         ttl: Option<Duration>,
-    ) -> std::result::Result<String, PluginInvokerError> {
+    ) -> std::result::Result<String, AppInvokerError> {
         let ttl_seconds = ttl
             .map(duration_to_ttl_seconds)
             .transpose()?
@@ -251,63 +251,63 @@ impl PluginInvoker {
     }
 }
 
-enum PluginInvokerTarget {
+enum AppInvokerTarget {
     Unix(String),
     Tcp(String),
     Tls(String),
 }
 
-fn parse_plugin_invoker_target(
+fn parse_app_invoker_target(
     raw_target: &str,
-) -> Result<PluginInvokerTarget, PluginInvokerError> {
+) -> Result<AppInvokerTarget, AppInvokerError> {
     let target = raw_target.trim();
     if target.is_empty() {
-        return Err(PluginInvokerError::Env(
+        return Err(AppInvokerError::Env(
             "plugin invoker: transport target is required".to_string(),
         ));
     }
     if let Some(address) = target.strip_prefix("tcp://") {
         let address = address.trim();
         if address.is_empty() {
-            return Err(PluginInvokerError::Env(format!(
+            return Err(AppInvokerError::Env(format!(
                 "plugin invoker: tcp target {raw_target:?} is missing host:port"
             )));
         }
-        return Ok(PluginInvokerTarget::Tcp(address.to_string()));
+        return Ok(AppInvokerTarget::Tcp(address.to_string()));
     }
     if let Some(address) = target.strip_prefix("tls://") {
         let address = address.trim();
         if address.is_empty() {
-            return Err(PluginInvokerError::Env(format!(
+            return Err(AppInvokerError::Env(format!(
                 "plugin invoker: tls target {raw_target:?} is missing host:port"
             )));
         }
-        return Ok(PluginInvokerTarget::Tls(address.to_string()));
+        return Ok(AppInvokerTarget::Tls(address.to_string()));
     }
     if let Some(path) = target.strip_prefix("unix://") {
         let path = path.trim();
         if path.is_empty() {
-            return Err(PluginInvokerError::Env(format!(
+            return Err(AppInvokerError::Env(format!(
                 "plugin invoker: unix target {raw_target:?} is missing a socket path"
             )));
         }
-        return Ok(PluginInvokerTarget::Unix(path.to_string()));
+        return Ok(AppInvokerTarget::Unix(path.to_string()));
     }
     if target.contains("://") {
         let scheme = target.split("://").next().unwrap_or_default();
-        return Err(PluginInvokerError::Env(format!(
+        return Err(AppInvokerError::Env(format!(
             "plugin invoker: unsupported target scheme {scheme:?}"
         )));
     }
-    Ok(PluginInvokerTarget::Unix(target.to_string()))
+    Ok(AppInvokerTarget::Unix(target.to_string()))
 }
 
-fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::PluginInvocationGrant> {
+fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::AppInvocationGrant> {
     grants
         .iter()
         .filter_map(|grant| {
-            let plugin = grant.plugin.trim();
-            if plugin.is_empty() {
+            let app = grant.app.trim();
+            if app.is_empty() {
                 return None;
             }
             let operations = grant
@@ -325,8 +325,8 @@ fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::PluginInvocat
                 .map(|surface| surface.to_ascii_lowercase())
                 .collect();
 
-            Some(pb::PluginInvocationGrant {
-                plugin: plugin.to_owned(),
+            Some(pb::AppInvocationGrant {
+                plugin: app.to_owned(),
                 operations,
                 surfaces,
                 all_operations: grant.all_operations,
@@ -335,26 +335,26 @@ fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::PluginInvocat
         .collect()
 }
 
-fn duration_to_ttl_seconds(ttl: Duration) -> std::result::Result<i64, PluginInvokerError> {
+fn duration_to_ttl_seconds(ttl: Duration) -> std::result::Result<i64, AppInvokerError> {
     if ttl.is_zero() {
         return Ok(0);
     }
 
     let ttl_seconds = ttl.as_secs().max(1);
     i64::try_from(ttl_seconds).map_err(|_| {
-        PluginInvokerError::Protocol(
+        AppInvokerError::Protocol(
             "plugin invoker: exchange token ttl exceeds supported range".to_string(),
         )
     })
 }
 
-fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, PluginInvokerError> {
+fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, AppInvokerError> {
     let header = if token.trim().is_empty() {
         None
     } else {
         Some(MetadataValue::try_from(token.to_string()).map_err(|err| {
-            PluginInvokerError::Env(format!(
-                "invalid plugin invoker relay token metadata: {err}"
+            AppInvokerError::Env(format!(
+                "invalid app invoker relay token metadata: {err}"
             ))
         })?)
     };
@@ -380,7 +380,7 @@ impl Interceptor for RelayTokenInterceptor {
 fn serializable_to_struct<T: Serialize>(
     value: T,
     field_name: &str,
-) -> std::result::Result<prost_types::Struct, PluginInvokerError> {
+) -> std::result::Result<prost_types::Struct, AppInvokerError> {
     let value = protocol::json_value_from_serializable(value)?;
     Ok(json_to_optional_struct(value, field_name)?.unwrap_or_default())
 }
@@ -388,25 +388,25 @@ fn serializable_to_struct<T: Serialize>(
 fn json_to_optional_struct(
     value: serde_json::Value,
     field_name: &str,
-) -> std::result::Result<Option<prost_types::Struct>, PluginInvokerError> {
+) -> std::result::Result<Option<prost_types::Struct>, AppInvokerError> {
     if value.is_null() {
         return Ok(None);
     }
     let serde_json::Value::Object(_) = &value else {
-        return Err(PluginInvokerError::Protocol(format!(
+        return Err(AppInvokerError::Protocol(format!(
             "plugin invoker: {field_name} must serialize to a JSON object"
         )));
     };
 
     protocol::struct_from_json(value)
         .map(Some)
-        .map_err(|err| PluginInvokerError::Protocol(err.to_string()))
+        .map_err(|err| AppInvokerError::Protocol(err.to_string()))
 }
 
 fn serializable_to_optional_struct<T: Serialize>(
     value: T,
     field_name: &str,
-) -> std::result::Result<Option<prost_types::Struct>, PluginInvokerError> {
+) -> std::result::Result<Option<prost_types::Struct>, AppInvokerError> {
     let value = protocol::json_value_from_serializable(value)?;
     json_to_optional_struct(value, field_name)
 }

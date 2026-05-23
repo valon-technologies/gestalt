@@ -20,11 +20,11 @@ provider code imports from the crate root after renaming `gestalt-sdk` to
 
 | Section | Start with | Use it for |
 | --- | --- | --- |
-| Provider authoring | [`Provider`], [`Operation`], [`Router`], [`Request`], [`HTTPSubjectRequest`], [`ConnectedToken`], [`Response`], [`ok`] | Executable plugin providers, typed request handlers, hosted HTTP subject hooks, post-connect metadata hooks, and operation results. |
+| Provider authoring | [`Provider`], [`Operation`], [`Router`], [`Request`], [`HTTPSubjectRequest`], [`ConnectedToken`], [`Response`], [`ok`] | Executable app providers, typed request handlers, hosted HTTP subject hooks, post-connect metadata hooks, and operation results. |
 | Catalog metadata | [`Catalog`], [`CatalogOperation`], [`Router::register`] | Schema-derived operation catalogs from `serde` and `schemars` types. |
-| Provider runtimes | [`AuthenticationProvider`], [`CacheProvider`], [`S3Provider`], [`SecretsProvider`], [`WorkflowProvider`], [`AgentProvider`], [`PluginRuntimeProvider`] | Host-service backends implemented as Rust providers. |
+| Provider runtimes | [`AuthenticationProvider`], [`CacheProvider`], [`S3Provider`], [`SecretsProvider`], [`WorkflowProvider`], [`AgentProvider`], [`AppRuntimeProvider`] | Host-service backends implemented as Rust providers. |
 | Workflow and agent models | [`new_bound_workflow_target`], [`new_workflow_signal`], [`new_bound_workflow_run`], [`new_workflow_execution_reference`], [`new_agent_message`], [`new_agent_tool_ref`] | Native workflow values, agent messages, tool refs, and copy helpers. |
-| Host-service clients | [`Cache`], [`S3`], [`WorkflowHost`], [`WorkflowManager`], [`AgentHost`], [`AgentManager`], [`PluginInvoker`] | Calling sibling services exposed to a provider process by `gestaltd`. |
+| Host-service clients | [`Cache`], [`S3`], [`WorkflowHost`], [`WorkflowManager`], [`AgentHost`], [`AgentManager`], [`AppInvoker`] | Calling sibling services exposed to a provider process by `gestaltd`. |
 | Runtime and telemetry | [`runtime`], [`telemetry`], [`RuntimeMetadata`] | Provider process entrypoints and provider-authored GenAI spans and metrics. |
 
 ## Quick start
@@ -87,11 +87,11 @@ a host-service backend.
 | `SecretsProvider` | `export_secrets_provider!` | Secret resolution. |
 | `WorkflowProvider` | `export_workflow_provider!` | Workflow runs, schedules, and event triggers. |
 | `AgentProvider` | `export_agent_provider!` | Agent sessions, turns, events, interactions, and capabilities. |
-| `PluginRuntimeProvider` | `export_plugin_runtime_provider!` | Hosted plugin execution backends. |
+| `AppRuntimeProvider` | `export_app_runtime_provider!` | Hosted app execution backends. |
 
 The crate also exposes clients for sibling host services, including `Cache`,
 `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`, `AgentManager`, and
-`PluginInvoker`.
+`AppInvoker`.
 
 `AgentProvider` implementations receive and return native structs such as
 `CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
@@ -113,17 +113,17 @@ The crate exposes higher-level authoring APIs:
 - `Provider`, `Request`, `ConnectedToken`, `Response`, and `ok(...)` model
   integration providers.
 - `HTTPSubjectRequest` and `Provider::resolve_http_subject` let executable
-  plugins map verified hosted HTTP requests to concrete subjects.
+  apps map verified hosted HTTP requests to concrete subjects.
 - `Router` and `Operation` register typed operations and derive catalog
   metadata from `serde` and `schemars`.
 - `AuthenticationProvider`, `CacheProvider`, `S3Provider`, `SecretsProvider`,
-  `WorkflowProvider`, `AgentProvider`, and `PluginRuntimeProvider` model
+  `WorkflowProvider`, `AgentProvider`, and `AppRuntimeProvider` model
   executable provider runtimes.
 - `Cache`, `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`,
-  `AgentManager`, and `PluginInvoker` call sibling host services.
+  `AgentManager`, and `AppInvoker` call sibling host services.
 - `RuntimeMetadata` lets provider runtimes describe their display metadata and
   version.
-- Workflow builder inputs such as `BoundWorkflowPluginTarget`,
+- Workflow builder inputs such as `BoundWorkflowAppTarget`,
   `BoundWorkflowAgentTarget`, `WorkflowSignal`, and
   `BoundWorkflowRun` model provider-owned workflow state.
 

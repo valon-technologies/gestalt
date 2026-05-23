@@ -4,7 +4,7 @@ use crate::api::ApiClient;
 use crate::catalog;
 use crate::output::{self, Format};
 
-use super::plugin_errors;
+use super::app_errors;
 
 pub fn describe(
     client: &ApiClient,
@@ -14,18 +14,18 @@ pub fn describe(
     instance: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let selector_resolution = plugin_errors::resolve_selector(
+    let selector_resolution = app_errors::resolve_selector(
         client,
         plugin,
         operation,
         connection,
         instance,
-        plugin_errors::SelectorCommand::Describe,
+        app_errors::SelectorCommand::Describe,
     );
     let resolved_selector = match selector_resolution {
-        plugin_errors::SelectorResolution::Selected(selector) => Some(selector),
-        plugin_errors::SelectorResolution::Message(message) => bail!(message),
-        plugin_errors::SelectorResolution::Unchanged => None,
+        app_errors::SelectorResolution::Selected(selector) => Some(selector),
+        app_errors::SelectorResolution::Message(message) => bail!(message),
+        app_errors::SelectorResolution::Unchanged => None,
     };
     let connection = resolved_selector
         .as_ref()
@@ -36,26 +36,26 @@ pub fn describe(
         .map(|selector| selector.instance.as_str())
         .or(instance);
 
-    let cat = plugin_errors::map_catalog_error(
+    let cat = app_errors::map_catalog_error(
         client,
         plugin,
         operation,
         connection,
         instance,
-        plugin_errors::SelectorCommand::Describe,
+        app_errors::SelectorCommand::Describe,
         catalog::fetch_catalog(client, plugin, connection, instance),
     )?;
 
     let op = match cat.find_operation(operation) {
         Some(op) => op.clone(),
         None if connection.is_some() || instance.is_some() || cat.operations().is_empty() => {
-            let fallback_cat = plugin_errors::map_catalog_error(
+            let fallback_cat = app_errors::map_catalog_error(
                 client,
                 plugin,
                 operation,
                 None,
                 None,
-                plugin_errors::SelectorCommand::Describe,
+                app_errors::SelectorCommand::Describe,
                 catalog::fetch_catalog(client, plugin, None, None),
             )?;
             match fallback_cat.find_operation(operation) {

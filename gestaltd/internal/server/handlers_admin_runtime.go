@@ -29,15 +29,15 @@ type adminRuntimeProfilePair struct {
 }
 
 type adminRuntimeProfile struct {
-	CanHostPlugins    bool   `json:"canHostPlugins"`
+	CanHostApps       bool   `json:"canHostPlugins"`
 	HostServiceAccess string `json:"hostServiceAccess"`
 	EgressMode        string `json:"egressMode"`
 }
 
 type adminRuntimeSessionInfo struct {
-	ID     string `json:"id"`
-	State  string `json:"state"`
-	Plugin string `json:"plugin,omitempty"`
+	ID    string `json:"id"`
+	State string `json:"state"`
+	App   string `json:"app,omitempty"`
 }
 
 type adminRuntimeLogEntry struct {
@@ -108,9 +108,9 @@ func (s *Server) listAdminRuntimeProviderSessions(w http.ResponseWriter, r *http
 		out := make([]adminRuntimeSessionInfo, 0, len(snapshot.Sessions))
 		for _, session := range snapshot.Sessions {
 			out = append(out, adminRuntimeSessionInfo{
-				ID:     strings.TrimSpace(session.ID),
-				State:  strings.TrimSpace(string(session.State)),
-				Plugin: strings.TrimSpace(session.Metadata["plugin"]),
+				ID:    strings.TrimSpace(session.ID),
+				State: strings.TrimSpace(string(session.State)),
+				App:   strings.TrimSpace(session.Metadata["app"]),
 			})
 		}
 		writeJSON(w, http.StatusOK, out)
@@ -139,7 +139,7 @@ func (s *Server) listAdminRuntimeProviderSessionLogs(w http.ResponseWriter, r *h
 		writeJSON(w, http.StatusOK, []adminRuntimeLogEntry{})
 		return
 	}
-	logs, err := s.pluginRuntimes.ListPluginRuntimeSessionLogs(r.Context(), providerName, sessionID, afterSeq, limit)
+	logs, err := s.pluginRuntimes.ListAppRuntimeSessionLogs(r.Context(), providerName, sessionID, afterSeq, limit)
 	if err != nil {
 		if errors.Is(err, indexeddb.ErrNotFound) || errors.Is(err, runtimelogs.ErrSessionNotFound) {
 			writeError(w, http.StatusNotFound, "runtime session not found")
@@ -173,7 +173,7 @@ func (s *Server) adminRuntimeSnapshots(r *http.Request) ([]bootstrap.RuntimeProv
 	if s.pluginRuntimes == nil {
 		return nil, nil
 	}
-	return s.pluginRuntimes.SnapshotPluginRuntimes(r.Context())
+	return s.pluginRuntimes.SnapshotAppRuntimes(r.Context())
 }
 
 func adminRuntimeProfilePairFromSnapshot(snapshot *bootstrap.RuntimeProviderSnapshot) *adminRuntimeProfilePair {
@@ -185,7 +185,7 @@ func adminRuntimeProfilePairFromSnapshot(snapshot *bootstrap.RuntimeProviderSnap
 
 func adminRuntimeProfileFromBootstrap(behavior bootstrap.RuntimeBehavior) adminRuntimeProfile {
 	return adminRuntimeProfile{
-		CanHostPlugins:    behavior.CanHostPlugins,
+		CanHostApps:       behavior.CanHostApps,
 		HostServiceAccess: strings.TrimSpace(string(behavior.HostServiceAccess)),
 		EgressMode:        strings.TrimSpace(string(behavior.EgressMode)),
 	}

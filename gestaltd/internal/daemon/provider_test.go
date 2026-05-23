@@ -28,10 +28,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	authenticationservice "github.com/valon-technologies/gestalt/server/services/authentication"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	secretsservice "github.com/valon-technologies/gestalt/server/services/secrets"
@@ -40,27 +40,27 @@ import (
 )
 
 const (
-	releaseTestPluginName          = "release-test"
-	releaseTestSource              = "github.com/testowner/plugins/catalog/release-test"
+	releaseTestAppName             = "release-test"
+	releaseTestSource              = "github.com/testowner/apps/catalog/release-test"
 	releaseTestModule              = "example.com/release-test"
 	releaseTestIconPath            = "branding/icon.svg"
 	releaseProviderSchemaPath      = "schemas/provider.schema.json"
-	declarativeReleasePluginName   = "declarative-release"
-	declarativeReleaseSource       = "github.com/testowner/plugins/catalog/declarative-release"
-	uiTestPluginName               = "ui-test"
-	uiTestSource                   = "github.com/testowner/plugins/catalog/ui-test"
+	declarativeReleaseAppName      = "declarative-release"
+	declarativeReleaseSource       = "github.com/testowner/apps/catalog/declarative-release"
+	uiTestAppName                  = "ui-test"
+	uiTestSource                   = "github.com/testowner/apps/catalog/ui-test"
 	uiTestAssetRoot                = "out"
-	prebuiltProviderPluginName     = "prebuilt-provider"
-	prebuiltProviderSource         = "github.com/testowner/plugins/prebuilt-provider"
+	prebuiltProviderAppName        = "prebuilt-provider"
+	prebuiltProviderSource         = "github.com/testowner/apps/prebuilt-provider"
 	prebuiltProviderBinaryPath     = "bin/provider"
-	authReleasePluginName          = "auth-release"
-	authReleaseSource              = "github.com/testowner/plugins/auth-release"
+	authReleaseAppName             = "auth-release"
+	authReleaseSource              = "github.com/testowner/apps/auth-release"
 	authReleaseSchemaPath          = "schemas/auth.schema.json"
-	authorizationReleasePluginName = "authorization-release"
-	authorizationReleaseSource     = "github.com/testowner/plugins/authorization-release"
+	authorizationReleaseAppName    = "authorization-release"
+	authorizationReleaseSource     = "github.com/testowner/apps/authorization-release"
 	authorizationReleaseSchemaPath = "schemas/authorization.schema.json"
-	secretsReleasePluginName       = "secrets-release"
-	secretsReleaseSource           = "github.com/testowner/plugins/secrets-release"
+	secretsReleaseAppName          = "secrets-release"
+	secretsReleaseSource           = "github.com/testowner/apps/secrets-release"
 	secretsReleaseSchemaPath       = "schemas/secrets.schema.json"
 )
 
@@ -89,7 +89,7 @@ func TestProviderRemoteConfigPathSynthesizesSourcePlugin(t *testing.T) {
 	if targets[0].Entry.ResolvedManifestPath == "" {
 		t.Fatal("target resolved manifest path is empty")
 	}
-	if targets[0].Source != "github.com/test/plugins/provider" {
+	if targets[0].Source != "github.com/test/apps/provider" {
 		t.Fatalf("target source = %q, want manifest source", targets[0].Source)
 	}
 	if !targets[0].InheritRemoteConfig {
@@ -271,7 +271,7 @@ func TestProviderAttachCommandsUseOwnerAttachmentRoutes(t *testing.T) {
 					IdleTimeoutSeconds: 120,
 					Providers: []providerdev.AttachmentProviderInfo{{
 						Name:   "roadmap",
-						Source: "github.com/test/plugins/roadmap",
+						Source: "github.com/test/apps/roadmap",
 						UI:     true,
 						UIPath: "/roadmap",
 					}},
@@ -285,7 +285,7 @@ func TestProviderAttachCommandsUseOwnerAttachmentRoutes(t *testing.T) {
 				IdleTimeoutSeconds: 120,
 				Providers: []providerdev.AttachmentProviderInfo{{
 					Name:   "roadmap",
-					Source: "github.com/test/plugins/roadmap",
+					Source: "github.com/test/apps/roadmap",
 					UI:     true,
 					UIPath: "/roadmap",
 				}},
@@ -314,7 +314,7 @@ func TestProviderAttachCommandsUseOwnerAttachmentRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provider attach show: %v\n%s", err, showOut)
 	}
-	for _, want := range []string{"Attach ID: attach-1", "Providers:", "roadmap", "source=github.com/test/plugins/roadmap", "ui=/roadmap"} {
+	for _, want := range []string{"Attach ID: attach-1", "Providers:", "roadmap", "source=github.com/test/apps/roadmap", "ui=/roadmap"} {
 		if !strings.Contains(string(showOut), want) {
 			t.Fatalf("show output missing %q:\n%s", want, showOut)
 		}
@@ -469,8 +469,8 @@ func TestRun_ProviderReleaseRejectsInvalidManifest(t *testing.T) {
 		{
 			name: "rest surface requires baseUrl",
 			manifestYAML: `
-kind: plugin
-source: github.com/testowner/plugins/invalid
+kind: app
+source: github.com/testowner/apps/invalid
 version: 0.0.1-alpha.1
 spec:
   surfaces:
@@ -485,8 +485,8 @@ spec:
 		{
 			name: "exec block requires artifact path",
 			manifestYAML: `
-kind: plugin
-source: github.com/testowner/plugins/invalid
+kind: app
+source: github.com/testowner/apps/invalid
 version: 0.0.1-alpha.1
 spec: {}
 entrypoint:
@@ -524,7 +524,7 @@ func TestE2EProviderReleaseBigquery(t *testing.T) {
 	repoRoot := filepath.Join("..", "..", "..")
 	bigqueryDir := filepath.Join(repoRoot, "plugins", "bigquery")
 	if _, err := os.Stat(filepath.Join(bigqueryDir, "go.mod")); err != nil {
-		t.Skipf("bigquery plugin not found: %v", err)
+		t.Skipf("bigquery app not found: %v", err)
 	}
 
 	outputDir := t.TempDir()
@@ -542,7 +542,7 @@ func TestE2EProviderReleaseBigquery(t *testing.T) {
 		t.Fatalf("provider release failed: %v\n%s", err, out)
 	}
 
-	archiveName := "gestalt-plugin-bigquery_v" + testVersion + "_linux_amd64.tar.gz"
+	archiveName := "gestalt-app-bigquery_v" + testVersion + "_linux_amd64.tar.gz"
 	archivePath := filepath.Join(outputDir, archiveName)
 	if _, err := os.Stat(archivePath); err != nil {
 		t.Fatalf("expected archive %s to exist: %v", archiveName, err)
@@ -564,8 +564,8 @@ func TestE2EProviderReleaseBigquery(t *testing.T) {
 	if artifact.OS != "linux" || artifact.Arch != "amd64" {
 		t.Fatalf("artifact platform = %s/%s, want linux/amd64", artifact.OS, artifact.Arch)
 	}
-	if artifact.Path != "gestalt-plugin-bigquery" {
-		t.Fatalf("artifact path = %q, want %q", artifact.Path, "gestalt-plugin-bigquery")
+	if artifact.Path != "gestalt-app-bigquery" {
+		t.Fatalf("artifact path = %q, want %q", artifact.Path, "gestalt-app-bigquery")
 	}
 
 	binaryPath := filepath.Join(extractDir, artifact.Path)
@@ -607,7 +607,7 @@ func TestRun_ProviderReleaseDefaultsSourcePluginToHostPlatform(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archiveName := "gestalt-app-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	assertReleaseDefaultsToHostPlatform(t, manifest, func(t *testing.T, artifact providermanifestv1.Artifact) {
 		assertExpectedGoArtifactPlatform(t, artifact, runtime.GOOS, runtime.GOARCH, "")
@@ -629,7 +629,7 @@ func TestRun_ProviderReleaseBuildsRequestedPlatformSets(t *testing.T) {
 	)
 
 	assertReleasePlatforms(t, outputDir, defaultReleasePlatformsForTest(t), func(platform releasePlatform) string {
-		return "gestalt-plugin-release-test_v" + testVersion + "_" + platform.GOOS + "_" + platform.GOARCH + ".tar.gz"
+		return "gestalt-app-release-test_v" + testVersion + "_" + platform.GOOS + "_" + platform.GOARCH + ".tar.gz"
 	}, func(t *testing.T, artifact providermanifestv1.Artifact, platform releasePlatform) {
 		assertExpectedGoArtifactPlatform(t, artifact, platform.GOOS, platform.GOARCH, "")
 	})
@@ -639,7 +639,7 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
-		pluginName: authReleasePluginName,
+		pluginName: authReleaseAppName,
 		schemaPath: authReleaseSchemaPath,
 		sourceFile: "auth.go",
 		sourceCode: testutil.GeneratedAuthPackageSource(),
@@ -658,7 +658,7 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := platformArchiveNameForTest(authReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
+	archiveName := platformArchiveNameForTest(authReleaseAppName, testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	binaryName := ".gestalt/build/provider"
@@ -764,7 +764,7 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthorizationProvider(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
-		pluginName: authorizationReleasePluginName,
+		pluginName: authorizationReleaseAppName,
 		schemaPath: authorizationReleaseSchemaPath,
 		sourceFile: "authorization.go",
 		sourceCode: testutil.GeneratedAuthorizationPackageSource(),
@@ -783,7 +783,7 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthorizationProvider(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := platformArchiveNameForTest(authorizationReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
+	archiveName := platformArchiveNameForTest(authorizationReleaseAppName, testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	binaryName := ".gestalt/build/provider"
@@ -826,7 +826,7 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthorizationProvider(t *testing.T) {
 	decision, err := authz.Evaluate(context.Background(), &core.AccessEvaluationRequest{
 		Subject:  &core.SubjectRef{Type: "user", Id: "generated-user"},
 		Action:   &core.ActionRef{Name: "invoke"},
-		Resource: &core.ResourceRef{Type: "plugin", Id: "github"},
+		Resource: &core.ResourceRef{Type: "app", Id: "github"},
 	})
 	if err != nil {
 		t.Fatalf("Evaluate: %v", err)
@@ -864,7 +864,7 @@ func TestRun_ProviderReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
-		pluginName: secretsReleasePluginName,
+		pluginName: secretsReleaseAppName,
 		schemaPath: secretsReleaseSchemaPath,
 		sourceFile: "secrets.go",
 		sourceCode: testutil.GeneratedSecretsPackageSource(),
@@ -883,7 +883,7 @@ func TestRun_ProviderReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := platformArchiveNameForTest(secretsReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
+	archiveName := platformArchiveNameForTest(secretsReleaseAppName, testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	binaryName := ".gestalt/build/provider"
@@ -901,7 +901,7 @@ func TestRun_ProviderReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 
 	sm, err := secretsservice.NewExecutable(context.Background(), secretsservice.ExecConfig{
 		Command: filepath.Join(extractDir, binaryName),
-		Name:    secretsReleasePluginName,
+		Name:    secretsReleaseAppName,
 	})
 	if err != nil {
 		t.Fatalf("secretsservice.NewExecutable: %v", err)
@@ -924,12 +924,12 @@ func TestRun_ProviderReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 func TestRun_ProviderReleaseBuildsGoSourceWorkflowPlugin(t *testing.T) {
 	t.Parallel()
 
-	const workflowReleasePluginName = "workflow-release"
+	const workflowReleaseAppName = "workflow-release"
 	const workflowReleaseSource = "github.com/testowner/providers/workflow-release"
 	const workflowReleaseSchemaPath = "workflow.schema.json"
 
 	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
-		pluginName: workflowReleasePluginName,
+		pluginName: workflowReleaseAppName,
 		schemaPath: workflowReleaseSchemaPath,
 		sourceFile: "workflow.go",
 		sourceCode: testutil.GeneratedWorkflowPackageSource(),
@@ -948,7 +948,7 @@ func TestRun_ProviderReleaseBuildsGoSourceWorkflowPlugin(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := platformArchiveNameForTest(workflowReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
+	archiveName := platformArchiveNameForTest(workflowReleaseAppName, testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	binaryName := ".gestalt/build/provider"
@@ -990,12 +990,12 @@ func TestRun_ProviderReleaseBuildsGoSourceWorkflowPlugin(t *testing.T) {
 func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T) {
 	t.Parallel()
 
-	const externalCredentialReleasePluginName = "external-credentials-release"
+	const externalCredentialReleaseAppName = "external-credentials-release"
 	const externalCredentialReleaseSource = "github.com/testowner/providers/external-credentials-release"
 	const externalCredentialReleaseSchemaPath = "external-credentials.schema.json"
 
 	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
-		pluginName: externalCredentialReleasePluginName,
+		pluginName: externalCredentialReleaseAppName,
 		schemaPath: externalCredentialReleaseSchemaPath,
 		sourceFile: "externalcredentials.go",
 		sourceCode: testutil.GeneratedExternalCredentialPackageSource(),
@@ -1014,7 +1014,7 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 		"--output", outputDir,
 	)
 
-	archiveName := platformArchiveNameForTest(externalCredentialReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
+	archiveName := platformArchiveNameForTest(externalCredentialReleaseAppName, testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	binaryName := ".gestalt/build/provider"
@@ -1038,7 +1038,7 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 
 	provider, err := externalcredentialsservice.NewExecutable(context.Background(), externalcredentialsservice.ExecConfig{
 		Command: filepath.Join(extractDir, binaryName),
-		Name:    externalCredentialReleasePluginName,
+		Name:    externalCredentialReleaseAppName,
 		HostServices: []runtimehost.HostService{{
 			Name: "external-credentials",
 			Register: func(srv *grpc.Server) {
@@ -1106,7 +1106,7 @@ func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 	goAuthFixture := func(t *testing.T) sourceComponentReleaseFixtureParams {
 		t.Helper()
 		return sourceComponentReleaseFixtureParams{
-			pluginName: authReleasePluginName,
+			pluginName: authReleaseAppName,
 			schemaPath: authReleaseSchemaPath,
 			sourceFile: "auth.go",
 			sourceCode: testutil.GeneratedAuthPackageSource(),
@@ -1131,14 +1131,14 @@ func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 	}{
 		{
 			name:       "go_source",
-			pluginName: authReleasePluginName,
+			pluginName: authReleaseAppName,
 			version:    "0.0.15-test",
 			prepare: func(t *testing.T) string {
 				t.Helper()
 				return newSourceComponentReleaseFixture(t, t.TempDir(), goAuthFixture(t))
 			},
 			archiveName: func(version string) string {
-				return platformArchiveNameForTest(authReleasePluginName, version, runtime.GOOS, runtime.GOARCH)
+				return platformArchiveNameForTest(authReleaseAppName, version, runtime.GOOS, runtime.GOARCH)
 			},
 			assertArtifact: func(t *testing.T, artifact providermanifestv1.Artifact) {
 				t.Helper()
@@ -1199,7 +1199,7 @@ func TestRun_ProviderReleaseCopiesCompiledSupportFiles(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archiveName := "gestalt-app-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 
 	if _, err := providerpkg.ValidatePackageDir(extractDir); err != nil {
@@ -1228,7 +1228,7 @@ func TestRun_ProviderReleaseCopiesUISupportFiles(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-ui-test_v" + testVersion + ".tar.gz"
+	archiveName := "gestalt-app-ui-test_v" + testVersion + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 
 	for _, rel := range []string{
@@ -1307,7 +1307,7 @@ func TestRun_ProviderReleaseStagesOwnedUIPackage(t *testing.T) {
 				"--output", outputDir,
 			)
 
-			archiveName := "gestalt-plugin-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+			archiveName := "gestalt-app-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 			extractDir := extractReleasedArchive(t, outputDir, archiveName)
 			manifest := readReleasedManifest(t, outputDir, archiveName)
 			if manifest.Spec == nil || manifest.Spec.UI == nil {
@@ -1339,8 +1339,8 @@ func TestRun_ProviderReleaseStagesOwnedUIPackage(t *testing.T) {
 			if metadata.Package != releaseTestSource {
 				t.Fatalf("release metadata package = %q, want %q", metadata.Package, releaseTestSource)
 			}
-			if metadata.Kind != providermanifestv1.KindPlugin {
-				t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindPlugin)
+			if metadata.Kind != providermanifestv1.KindApp {
+				t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindApp)
 			}
 			if metadata.Version != testVersion {
 				t.Fatalf("release metadata version = %q, want %q", metadata.Version, testVersion)
@@ -1380,14 +1380,14 @@ func TestRun_ProviderReleaseStagesOwnedUIPackage(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 			}
-			plugin := loaded.Plugins["roadmap"]
-			if plugin == nil || plugin.ResolvedManifest == nil {
-				t.Fatalf("ResolvedManifest = %+v", plugin)
+			app := loaded.Apps["roadmap"]
+			if app == nil || app.ResolvedManifest == nil {
+				t.Fatalf("ResolvedManifest = %+v", app)
 			}
-			if plugin.Command == "" {
-				t.Fatalf("plugin.Command = %q, want packaged executable path", plugin.Command)
+			if app.Command == "" {
+				t.Fatalf("app.Command = %q, want packaged executable path", app.Command)
 			}
-			if got := plugin.ResolvedManifest.Version; got != testVersion {
+			if got := app.ResolvedManifest.Version; got != testVersion {
 				t.Fatalf("ResolvedManifest.Version = %q, want %q", got, testVersion)
 			}
 
@@ -1433,7 +1433,7 @@ func TestRun_ProviderReleaseBuildsProviderSupportFilesBeforePackaging(t *testing
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archiveName := "gestalt-app-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	_ = readReleasedManifest(t, outputDir, archiveName)
 	if _, err := os.Stat(filepath.Join(extractDir, releaseProviderSchemaPath)); err != nil {
@@ -1477,7 +1477,7 @@ func TestRun_ProviderReleaseBuildsSourceUIAssetsBeforePackaging(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-ui-test_v" + testVersion + ".tar.gz"
+	archiveName := "gestalt-app-ui-test_v" + testVersion + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	if manifest.Build != nil {
@@ -1535,7 +1535,7 @@ func TestRun_ProviderReleaseAllowsOverlappingSupportPaths(t *testing.T) {
 	}
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindUI,
-		Source:      "github.com/testowner/plugins/ui-overlap",
+		Source:      "github.com/testowner/apps/ui-overlap",
 		Version:     "0.0.1",
 		DisplayName: "UI Overlap",
 		IconFile:    "out/icon.svg",
@@ -1557,7 +1557,7 @@ func TestRun_ProviderReleaseAllowsOverlappingSupportPaths(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-ui-overlap_v" + testVersion + ".tar.gz"
+	archiveName := "gestalt-app-ui-overlap_v" + testVersion + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	for _, rel := range []string{"out/icon.svg", "out/index.html"} {
 		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
@@ -1580,12 +1580,12 @@ func TestRun_ProviderReleaseTreatsGoModWithoutProviderPackageAsDeclarative(t *te
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-ui-test_v" + testVersion + ".tar.gz"
+	archiveName := "gestalt-app-ui-test_v" + testVersion + ".tar.gz"
 	if _, err := os.Stat(filepath.Join(outputDir, archiveName)); err != nil {
 		t.Fatalf("expected declarative archive %s to exist: %v", archiveName, err)
 	}
 
-	compiledArchiveName := "gestalt-plugin-ui-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	compiledArchiveName := "gestalt-app-ui-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	if _, err := os.Stat(filepath.Join(outputDir, compiledArchiveName)); !os.IsNotExist(err) {
 		t.Fatalf("unexpected compiled archive %s: %v", compiledArchiveName, err)
 	}
@@ -1603,7 +1603,7 @@ func TestRun_ProviderReleaseWritesProviderReleaseMetadataForDeclarativePlugin(t 
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-" + declarativeReleasePluginName + "_v" + testVersion + ".tar.gz"
+	archiveName := "gestalt-app-" + declarativeReleaseAppName + "_v" + testVersion + ".tar.gz"
 	if _, err := os.Stat(filepath.Join(outputDir, archiveName)); err != nil {
 		t.Fatalf("expected archive %s to exist: %v", archiveName, err)
 	}
@@ -1612,8 +1612,8 @@ func TestRun_ProviderReleaseWritesProviderReleaseMetadataForDeclarativePlugin(t 
 	if metadata.Package != declarativeReleaseSource {
 		t.Fatalf("release metadata package = %q, want %q", metadata.Package, declarativeReleaseSource)
 	}
-	if metadata.Kind != providermanifestv1.KindPlugin {
-		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindPlugin)
+	if metadata.Kind != providermanifestv1.KindApp {
+		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindApp)
 	}
 	if metadata.Version != testVersion {
 		t.Fatalf("release metadata version = %q, want %q", metadata.Version, testVersion)
@@ -1645,8 +1645,8 @@ func TestRun_ProviderReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *
 
 	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
 	writeReleaseTestManifestFormat(t, pluginDir, "manifest.yaml", &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
-		Source:      "github.com/testowner/plugins/provider-yaml",
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/testowner/apps/provider-yaml",
 		Version:     "0.0.1",
 		DisplayName: "Provider YAML",
 		Spec: &providermanifestv1.Spec{
@@ -1679,7 +1679,7 @@ func TestRun_ProviderReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-provider-yaml_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archiveName := "gestalt-app-provider-yaml_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifestPath, manifest := readManifestFromDir(t, extractDir)
 	if filepath.Base(manifestPath) != "manifest.yaml" {
@@ -1728,8 +1728,8 @@ func TestRun_ProviderReleaseSupportsSourcePackageManifestFile(t *testing.T) {
 		t.Fatalf("remove %s: %v", providerpkg.ManifestFile, err)
 	}
 	writeReleaseTestManifestFormat(t, pluginDir, "manifest.yaml", &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
-		Source:      "github.com/testowner/plugins/source-manifest",
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/testowner/apps/source-manifest",
 		Version:     "0.0.1",
 		DisplayName: "Source Manifest",
 		Spec: &providermanifestv1.Spec{
@@ -1751,14 +1751,14 @@ func TestRun_ProviderReleaseSupportsSourcePackageManifestFile(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-source-manifest_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archiveName := "gestalt-app-source-manifest_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifestPath, manifest := readManifestFromDir(t, extractDir)
 	if filepath.Base(manifestPath) != "manifest.yaml" {
 		t.Fatalf("released manifest = %q, want manifest.yaml", filepath.Base(manifestPath))
 	}
-	if manifest.Source != "github.com/testowner/plugins/source-manifest" {
-		t.Fatalf("manifest source = %q, want %q", manifest.Source, "github.com/testowner/plugins/source-manifest")
+	if manifest.Source != "github.com/testowner/apps/source-manifest" {
+		t.Fatalf("manifest source = %q, want %q", manifest.Source, "github.com/testowner/apps/source-manifest")
 	}
 }
 
@@ -1782,9 +1782,9 @@ func TestRun_ProviderReleaseChecksumsOnlyCurrentArchives(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read checksums.txt: %v", err)
 	}
-	if got := string(checksumData); strings.Contains(got, "gestalt-plugin-ui-test_v1.0.0.tar.gz") {
+	if got := string(checksumData); strings.Contains(got, "gestalt-app-ui-test_v1.0.0.tar.gz") {
 		t.Fatalf("checksums.txt unexpectedly included stale archive: %s", got)
-	} else if !strings.Contains(got, "gestalt-plugin-ui-test_v1.0.1.tar.gz") {
+	} else if !strings.Contains(got, "gestalt-app-ui-test_v1.0.1.tar.gz") {
 		t.Fatalf("checksums.txt missing current archive: %s", got)
 	}
 }
@@ -1864,7 +1864,7 @@ func TestRun_ProviderReleaseCompilesProviderWithoutSourceArtifacts(t *testing.T)
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archiveName := "gestalt-app-" + releaseTestAppName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 
@@ -1891,7 +1891,7 @@ func TestRun_ProviderReleaseCompilesSDKSourceProviderWithoutBuildCommand(t *test
 
 	pluginDir := newSourceProviderReleaseFixtureWithoutCatalog(t, t.TempDir())
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		Source:      releaseTestSource,
 		Version:     "0.0.1",
 		DisplayName: "Release Test",
@@ -1911,11 +1911,11 @@ func TestRun_ProviderReleaseCompilesSDKSourceProviderWithoutBuildCommand(t *test
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archiveName := "gestalt-app-" + releaseTestAppName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 
-	wantBinary := "gestalt-plugin-" + releaseTestPluginName
+	wantBinary := "gestalt-app-" + releaseTestAppName
 	if runtime.GOOS == "windows" {
 		wantBinary += ".exe"
 	}
@@ -2007,7 +2007,7 @@ func TestRun_ProviderReleaseWindowsArtifactUsesExe(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_windows_amd64.tar.gz"
+	archiveName := "gestalt-app-" + releaseTestAppName + "_v" + testVersion + "_windows_amd64.tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	binaryName := ".gestalt/build/provider"
@@ -2034,7 +2034,7 @@ func defaultReleasePlatformsForTest(t *testing.T) []releasePlatform {
 }
 
 func platformArchiveNameForTest(pluginName, version, goos, goarch string) string {
-	return fmt.Sprintf("gestalt-plugin-%s_v%s_%s_%s.tar.gz", pluginName, version, goos, goarch)
+	return fmt.Sprintf("gestalt-app-%s_v%s_%s_%s.tar.gz", pluginName, version, goos, goarch)
 }
 
 func assertExpectedGoArtifactPlatform(t *testing.T, artifact providermanifestv1.Artifact, goos, goarch, _ string) {
@@ -2238,7 +2238,7 @@ providers:
         path: %q
       config:
         path: %q
-plugins:
+apps:
   %s:
     source: %q
     ui:
@@ -2360,7 +2360,7 @@ func hostedHTTPMetadataSpec(target string) *providermanifestv1.Spec {
 func newSourceProviderReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
-	pluginDir := filepath.Join(dir, releaseTestPluginName)
+	pluginDir := filepath.Join(dir, releaseTestAppName)
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
@@ -2368,9 +2368,9 @@ func newSourceProviderReleaseFixture(t *testing.T, dir string) string {
 	writeTestFile(t, pluginDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0644)
 	writeStaticCatalogProviderMain(t, pluginDir)
 	artifactRel := ".gestalt/build/provider"
-	writeGoPluginBuildFixture(t, pluginDir, releaseTestModule, releaseTestPluginName, artifactRel)
+	writeGoPluginBuildFixture(t, pluginDir, releaseTestModule, releaseTestAppName, artifactRel)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		Source:      releaseTestSource,
 		Version:     "0.0.1",
 		DisplayName: "Release Test",
@@ -2404,12 +2404,12 @@ func newBuiltSourceProviderReleaseFixture(t *testing.T, dir string) string {
 func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
-	pluginDir := filepath.Join(dir, releaseTestPluginName)
+	pluginDir := filepath.Join(dir, releaseTestAppName)
 	testutil.CopyExampleProviderPlugin(t, pluginDir)
 	artifactRel := ".gestalt/build/provider"
-	writeGoPluginBuildFixture(t, pluginDir, "github.com/valon-technologies/gestalt/testdata/provider-go", releaseTestPluginName, artifactRel)
+	writeGoPluginBuildFixture(t, pluginDir, "github.com/valon-technologies/gestalt/testdata/provider-go", releaseTestAppName, artifactRel)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		Source:      releaseTestSource,
 		Version:     "0.0.1",
 		DisplayName: "Release Test",
@@ -2426,12 +2426,12 @@ func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 func newDeclarativeProviderReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
-	pluginDir := filepath.Join(dir, declarativeReleasePluginName)
+	pluginDir := filepath.Join(dir, declarativeReleaseAppName)
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		Source:      declarativeReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "Declarative Release",
@@ -2475,14 +2475,14 @@ func writeStaticCatalogProviderMainAt(t *testing.T, dir, rel string) {
 func newPrebuiltProviderReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
-	pluginDir := filepath.Join(dir, prebuiltProviderPluginName)
+	pluginDir := filepath.Join(dir, prebuiltProviderAppName)
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
 	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
 	writeTestFile(t, pluginDir, prebuiltProviderBinaryPath, []byte("prebuilt-provider"), 0755)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		Source:      prebuiltProviderSource,
 		Version:     "0.0.1",
 		DisplayName: "Prebuilt Provider",
@@ -2505,7 +2505,7 @@ func newUIReleaseFixture(t *testing.T, dir string) string {
 func newBuiltUIReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
-	pluginDir := filepath.Join(dir, uiTestPluginName)
+	pluginDir := filepath.Join(dir, uiTestAppName)
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
@@ -2527,7 +2527,7 @@ func newBuiltUIReleaseFixture(t *testing.T, dir string) string {
 func newSourceBuiltUIReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
-	pluginDir := filepath.Join(dir, uiTestPluginName)
+	pluginDir := filepath.Join(dir, uiTestAppName)
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
@@ -2623,7 +2623,7 @@ func newSourceProviderReleaseFixtureWithSourceBuiltOwnedUI(t *testing.T, dir str
 func newUIReleaseFixtureWithAssetRoot(t *testing.T, dir, assetRoot string) string {
 	t.Helper()
 
-	pluginDir := filepath.Join(dir, uiTestPluginName)
+	pluginDir := filepath.Join(dir, uiTestAppName)
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
@@ -2751,7 +2751,7 @@ func writeReleaseTestManifestFormat(t *testing.T, dir, manifestFile string, mani
 		t.Fatalf("encodeTestManifestFormat(%s): %v", manifestFile, err)
 	}
 	writeTestFile(t, dir, manifestFile, data, 0644)
-	if manifest.Kind == providermanifestv1.KindPlugin && manifest.Spec != nil {
+	if manifest.Kind == providermanifestv1.KindApp && manifest.Spec != nil {
 		writeTestFile(t, dir, providerpkg.StaticCatalogFile, []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)
 	}
 }

@@ -16,8 +16,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
-	"github.com/valon-technologies/gestalt/server/services/plugins/graphql"
+	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/graphql"
 )
 
 func TestGraphQLSessionCatalogProviderLoadsCatalogOnDemand(t *testing.T) {

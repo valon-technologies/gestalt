@@ -10,9 +10,9 @@ import (
 type ProviderKind string
 
 const (
-	// ProviderKindIntegration is the main executable provider surface used by
-	// integration plugins.
-	ProviderKindIntegration ProviderKind = "integration"
+	// ProviderKindApp is the main executable provider surface used by
+	// integration apps.
+	ProviderKindApp ProviderKind = "integration"
 	// ProviderKindAuthentication serves interactive login and token-validation
 	// flows.
 	ProviderKindAuthentication ProviderKind = "authentication"
@@ -324,14 +324,14 @@ func InvocationTokenFromContext(ctx context.Context) string {
 
 // WithWorkflowContext attaches workflow callback metadata to the context.
 // The workflow object uses a JSON-style lowerCamelCase shape such as runId,
-// target.plugin.pluginName, trigger.scheduleId, and trigger.event.specVersion.
+// target.app.pluginName, trigger.scheduleId, and trigger.event.specVersion.
 func WithWorkflowContext(ctx context.Context, workflow map[string]any) context.Context {
 	return context.WithValue(ctx, workflowKey{}, workflow)
 }
 
 // WorkflowContextFromContext returns workflow callback metadata attached by
 // WithWorkflowContext. The workflow object uses a JSON-style lowerCamelCase
-// shape such as runId, target.plugin.pluginName, trigger.scheduleId, and
+// shape such as runId, target.app.pluginName, trigger.scheduleId, and
 // trigger.event.specVersion.
 func WorkflowContextFromContext(ctx context.Context) map[string]any {
 	workflow, _ := ctx.Value(workflowKey{}).(map[string]any)

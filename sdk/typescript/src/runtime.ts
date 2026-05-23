@@ -55,15 +55,15 @@ import {
   type PostConnectCredential as ProtoPostConnectCredential,
   type RequestContext as ProtoRequestContext,
   type ResolveHTTPSubjectRequest as ProtoResolveHTTPSubjectRequest,
-  IntegrationProvider as IntegrationProviderService,
+  AppProvider as AppProviderService,
   StartProviderResponseSchema,
   type ExecuteRequest,
   type GetSessionCatalogRequest,
   type StartProviderRequest,
-} from "./internal/gen/v1/plugin_pb.ts";
+} from "./internal/gen/v1/app_pb.ts";
 import {
-  PluginRuntimeProvider as PluginRuntimeProviderService,
-} from "./internal/gen/v1/pluginruntime_pb.ts";
+  AppRuntimeProvider as AppRuntimeProviderService,
+} from "./internal/gen/v1/appruntime_pb.ts";
 import {
   ConfigureProviderResponseSchema,
   HealthCheckResponseSchema,
@@ -104,16 +104,16 @@ import {
 } from "./http-subject.ts";
 import {
   type ConnectedToken,
-  PluginProvider,
+  AppProvider,
   encodeConnectionMode,
   encodeConnectionParam,
-  isPluginProvider,
-} from "./plugin.ts";
+  isAppProvider,
+} from "./app.ts";
 import {
-  PluginRuntimeProvider,
-  createPluginRuntimeProviderService,
-  isPluginRuntimeProvider,
-} from "./pluginruntime.ts";
+  AppRuntimeProvider,
+  createAppRuntimeProviderService,
+  isAppRuntimeProvider,
+} from "./appruntime.ts";
 import {
   providerKindLabel,
   resolveDefaultProviderExport,
@@ -156,7 +156,7 @@ export const CURRENT_PROTOCOL_VERSION = 3;
 export const USAGE = "usage: bun run runtime.ts ROOT PROVIDER_TARGET";
 export { createAgentProviderService } from "./agent.ts";
 export { createAuthorizationProviderService } from "./authorization.ts";
-export { createPluginRuntimeProviderService } from "./pluginruntime.ts";
+export { createAppRuntimeProviderService } from "./appruntime.ts";
 export { createWorkflowProviderService } from "./workflow.ts";
 
 /**
@@ -171,13 +171,13 @@ export type RuntimeArgs = {
  * Provider implementations supported by the runtime host.
  */
 export type LoadedProvider =
-  | PluginProvider
+  | AppProvider
   | AuthenticationProvider
   | AuthorizationProvider
   | CacheProvider
   | SecretsProvider
   | S3Provider
-  | PluginRuntimeProvider
+  | AppRuntimeProvider
   | AgentProvider
   | WorkflowProvider;
 
@@ -191,12 +191,12 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
   Record<ProviderKind, ProviderRuntimeEntry>
 > = {
   integration: {
-    isProvider: isPluginProvider as (value: unknown) => value is LoadedProvider,
-    protoKind: ProtoProviderKind.INTEGRATION,
+    isProvider: isAppProvider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.APP,
     registerService(router, provider) {
       router.service(
-        IntegrationProviderService,
-        createProviderService(provider as PluginProvider),
+        AppProviderService,
+        createProviderService(provider as AppProvider),
       );
     },
   },
@@ -252,12 +252,12 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
   },
   runtime: {
     isProvider:
-      isPluginRuntimeProvider as (value: unknown) => value is LoadedProvider,
+      isAppRuntimeProvider as (value: unknown) => value is LoadedProvider,
     protoKind: ProtoProviderKind.RUNTIME,
     registerService(router, provider) {
       router.service(
-        PluginRuntimeProviderService,
-        createPluginRuntimeProviderService(provider as PluginRuntimeProvider),
+        AppRuntimeProviderService,
+        createAppRuntimeProviderService(provider as AppRuntimeProvider),
       );
     },
   },
@@ -368,8 +368,8 @@ export async function runLoadedProvider(
 
   const catalogPath = process.env[ENV_WRITE_CATALOG];
   if (catalogPath) {
-    if (!isPluginProvider(provider)) {
-      throw new Error("static catalog generation is only supported for plugin providers");
+    if (!isAppProvider(provider)) {
+      throw new Error("static catalog generation is only supported for app providers");
     }
     writeFileSync(catalogPath, catalogToYaml(provider.staticCatalog()), "utf8");
     return;
@@ -527,15 +527,15 @@ export function createRuntimeService(
 }
 
 /**
- * Adapts a plugin provider to the shared protocol service implementation.
+ * Adapts an app provider to the shared protocol service implementation.
  *
  * @internal
  */
 export function createProviderService(
   provider: LoadedProvider,
-): Partial<ServiceImpl<typeof IntegrationProviderService>> {
-  if (!isPluginProvider(provider)) {
-    throw new Error("provider is not a plugin provider");
+): Partial<ServiceImpl<typeof AppProviderService>> {
+  if (!isAppProvider(provider)) {
+    throw new Error("provider is not an app provider");
   }
   return {
     async getMetadata() {

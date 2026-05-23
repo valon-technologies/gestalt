@@ -46,7 +46,7 @@ func (s *Server) handleS3ObjectAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ref := target.Ref
-	ref.Key = s3.PluginObjectKey(target.PluginName, ref.Key)
+	ref.Key = s3.AppObjectKey(target.AppName, ref.Key)
 
 	switch target.Method {
 	case s3store.PresignMethodGet:

@@ -72,7 +72,7 @@ import {
 import {
   type SubjectContext as ProtoSubjectContext,
   type AgentToolRef as ProtoAgentToolRef,
-} from "./internal/gen/v1/plugin_pb.ts";
+} from "./internal/gen/v1/app_pb.ts";
 import {
   errorMessage,
   type ExternalIdentity,
@@ -205,7 +205,7 @@ export interface AgentActor {
 }
 
 export interface AgentToolRef {
-  plugin?: string | undefined;
+  app?: string | undefined;
   operation?: string | undefined;
   connection?: string | undefined;
   instance?: string | undefined;

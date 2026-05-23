@@ -462,7 +462,7 @@ pub(crate) fn new_workflow_manager_publish_event_request(
     input: WorkflowManagerPublishEvent,
 ) -> crate::Result<pb::PublishWorkflowProviderEventRequest> {
     Ok(pb::PublishWorkflowProviderEventRequest {
-        plugin_name: String::new(),
+        app_name: String::new(),
         event: input
             .event
             .map(new_workflow_event)

@@ -24,7 +24,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"gopkg.in/yaml.v3"
 )
 
@@ -180,7 +180,7 @@ func operatorGoComponentServeCallForTest(t *testing.T, kind string) string {
 	case providermanifestv1.KindAgent:
 		return "gestalt.ServeAgentProvider(ctx, providerpkg.New())"
 	case providermanifestv1.KindRuntime:
-		return "gestalt.ServePluginRuntimeProvider(ctx, providerpkg.New())"
+		return "gestalt.ServeAppRuntimeProvider(ctx, providerpkg.New())"
 	default:
 		t.Fatalf("unsupported Go component fixture kind %q", kind)
 		return ""
@@ -363,7 +363,7 @@ func writeLocalExecutablePlugin(t *testing.T, dir, name string, operations ...st
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", root, err)
 	}
-	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin"))
+	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app"))
 	artifactFullPath := filepath.Join(root, filepath.FromSlash(artifactPath))
 	if err := os.MkdirAll(filepath.Dir(artifactFullPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactFullPath), err)
@@ -374,8 +374,8 @@ func writeLocalExecutablePlugin(t *testing.T, dir, name string, operations ...st
 	}
 	manifestPath := filepath.Join(root, "manifest.yaml")
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
-		Source:      "github.com/test/plugins/" + name,
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/test/apps/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: testDisplayName(name),
 		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
@@ -409,8 +409,8 @@ func writeLocalMCPSpecPlugin(t *testing.T, dir, name string) string {
 	}
 	manifestPath := filepath.Join(root, "manifest.yaml")
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
-		Source:      "github.com/test/plugins/" + name,
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/test/apps/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: testDisplayName(name),
 		Spec: &providermanifestv1.Spec{
@@ -455,8 +455,8 @@ paths:
 
 	manifestPath := filepath.Join(root, "manifest.yaml")
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
-		Source:      "github.com/test/plugins/" + name,
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/test/apps/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: testDisplayName(name),
 		Spec: &providermanifestv1.Spec{
@@ -503,7 +503,7 @@ paths:
 		t.Fatalf("WriteFile(%s): %v", openAPIPath, err)
 	}
 
-	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin"))
+	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app"))
 	artifactFullPath := filepath.Join(root, filepath.FromSlash(artifactPath))
 	if err := os.MkdirAll(filepath.Dir(artifactFullPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactFullPath), err)
@@ -514,8 +514,8 @@ paths:
 	}
 	manifestPath := filepath.Join(root, "manifest.yaml")
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
-		Source:      "github.com/test/plugins/" + name,
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/test/apps/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: testDisplayName(name),
 		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
@@ -580,11 +580,11 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 		t.Fatalf("WriteFile artifact: %v", err)
 	}
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Source:      "github.com/testowner/plugins/local-provider",
+		Source:      "github.com/testowner/apps/local-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Local Provider",
 		Description: "Local executable provider",
-		Kind:        providermanifestv1.KindPlugin, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
+		Kind:        providermanifestv1.KindApp, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -598,7 +598,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
     example:
       source:
         path: ./manifest.yaml
@@ -615,7 +615,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Plugins["example"]
+	intg := loaded.Apps["example"]
 	if intg == nil || intg.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg)
 		return
@@ -643,8 +643,8 @@ func TestLoadForExecutionAtPath_ResolvesLocalMCPOAuthManifestPluginWithoutLockfi
 	dir := t.TempDir()
 	manifestPath := filepath.Join(dir, "manifest.yaml")
 	manifest := []byte(`
-kind: plugin
-source: github.com/testowner/plugins/notion
+kind: app
+source: github.com/testowner/apps/notion
 version: 0.0.1-alpha.1
 displayName: Notion
 spec:
@@ -663,7 +663,7 @@ spec:
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
     notion:
       source:
         path: ./manifest.yaml
@@ -680,7 +680,7 @@ spec:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Plugins["notion"]
+	intg := loaded.Apps["notion"]
 	if intg == nil || intg.ResolvedManifest == nil || intg.ResolvedManifest.Spec == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg)
 		return
@@ -754,8 +754,8 @@ func TestLoadForExecutionAtPath_RejectsUndeclaredManifestSurfaceConnections(t *t
 
 			dir := t.TempDir()
 			manifestPath := filepath.Join(dir, "manifest.yaml")
-			manifest := fmt.Sprintf(`kind: plugin
-source: github.com/testowner/plugins/example
+			manifest := fmt.Sprintf(`kind: app
+source: github.com/testowner/apps/example
 version: 0.0.1-alpha.1
 displayName: Example
 spec:
@@ -770,7 +770,7 @@ spec:
 			}
 
 			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+			cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
     example:
       source:
         path: ./manifest.yaml
@@ -803,51 +803,51 @@ func TestPrepareAtPath_RejectsInvalidPluginInvokesShape(t *testing.T) {
 	}{
 		{
 			name: "missing plugin",
-			body: `plugins:
+			body: `apps:
     caller:
       source:
         path: ./caller/manifest.yaml
       invokes:
         - operation: ping
 `,
-			want: `plugins.caller.invokes[0].plugin is required`,
+			want: `apps.caller.invokes[0].app is required`,
 		},
 		{
 			name: "missing operation",
-			body: `plugins:
+			body: `apps:
     caller:
       source:
         path: ./caller/manifest.yaml
       invokes:
-        - plugin: target
+        - app: target
 `,
-			want: `plugins.caller.invokes[0].operation or .surface is required`,
+			want: `apps.caller.invokes[0].operation or .surface is required`,
 		},
 		{
 			name: "duplicate dependency",
-			body: `plugins:
+			body: `apps:
     caller:
       source:
         path: ./caller/manifest.yaml
       invokes:
-        - plugin: target
+        - app: target
           operation: ping
-        - plugin: target
+        - app: target
           operation: ping
 `,
-			want: `plugins.caller.invokes[1] duplicates invokes[0]`,
+			want: `apps.caller.invokes[1] duplicates invokes[0]`,
 		},
 		{
-			name: "non plugin provider",
+			name: "non app provider",
 			body: `  cache:
     shared:
       source:
         path: ./cache-manifest.yaml
       invokes:
-        - plugin: target
+        - app: target
           operation: ping
 `,
-			want: `providers.cache.shared.invokes is only supported on plugins.*`,
+			want: `providers.cache.shared.invokes is only supported on apps.*`,
 		},
 	}
 
@@ -883,18 +883,18 @@ func TestPrepareAtPath_RejectsInvalidPluginWorkflowCapabilitiesShape(t *testing.
 	}{
 		{
 			name: "missing operations",
-			body: `plugins:
+			body: `apps:
     caller:
       source:
         path: ./caller/manifest.yaml
       capabilities:
         workflow: {}
 `,
-			want: `plugins.caller.capabilities.workflow.operations is required`,
+			want: `apps.caller.capabilities.workflow.operations is required`,
 		},
 		{
 			name: "unsupported operation",
-			body: `plugins:
+			body: `apps:
     caller:
       source:
         path: ./caller/manifest.yaml
@@ -903,11 +903,11 @@ func TestPrepareAtPath_RejectsInvalidPluginWorkflowCapabilitiesShape(t *testing.
           operations:
             - workflow.create
 `,
-			want: `plugins.caller.capabilities.workflow.operations[0] "workflow.create" is not supported`,
+			want: `apps.caller.capabilities.workflow.operations[0] "workflow.create" is not supported`,
 		},
 		{
 			name: "duplicate operation",
-			body: `plugins:
+			body: `apps:
     caller:
       source:
         path: ./caller/manifest.yaml
@@ -917,10 +917,10 @@ func TestPrepareAtPath_RejectsInvalidPluginWorkflowCapabilitiesShape(t *testing.
             - events.publish
             - events.publish
 `,
-			want: `plugins.caller.capabilities.workflow.operations[1] duplicates operations[0]`,
+			want: `apps.caller.capabilities.workflow.operations[1] duplicates operations[0]`,
 		},
 		{
-			name: "non plugin provider",
+			name: "non app provider",
 			body: `  cache:
     shared:
       source:
@@ -930,7 +930,7 @@ func TestPrepareAtPath_RejectsInvalidPluginWorkflowCapabilitiesShape(t *testing.
           operations:
             - events.publish
 `,
-			want: `providers.cache.shared.capabilities is only supported on plugins.*`,
+			want: `providers.cache.shared.capabilities is only supported on apps.*`,
 		},
 	}
 
@@ -964,12 +964,12 @@ func TestPrepareAtPath_AllowsInvokesAgainstEffectiveAlias(t *testing.T) {
 	targetManifestPath := writeLocalExecutablePlugin(t, dir, "target", "ping")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
     caller:
       source:
         path: %q
       invokes:
-        - plugin: target
+        - app: target
           operation: renamed_ping
     target:
       source:
@@ -997,12 +997,12 @@ func TestPrepareAtPath_RejectsHybridExecutableStaticOperationByOriginalNameAfter
 	targetManifestPath := writeLocalExecutableOpenAPIPlugin(t, dir, "target", []string{"ping"}, []string{"status"})
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
     caller:
       source:
         path: %q
       invokes:
-        - plugin: target
+        - app: target
           operation: ping
     target:
       source:
@@ -1020,7 +1020,7 @@ server:
 	}
 
 	_, err := NewLifecycle().PrepareAtPath(cfgPath)
-	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "ping" on plugin "target"`) {
+	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "ping" on app "target"`) {
 		t.Fatalf("PrepareAtPath error = %v, want unknown operation error", err)
 	}
 }
@@ -1032,7 +1032,7 @@ func TestPrepareAtPath_RejectsHybridExecutableDuplicateEffectiveOperation(t *tes
 	targetManifestPath := writeLocalExecutableOpenAPIPlugin(t, dir, "target", []string{"ping"}, []string{"status"})
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
     target:
       source:
         path: %q
@@ -1056,34 +1056,34 @@ func TestPrepareAtPath_AllowsManagedPluginInvokesOnFirstPrepare(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	const callerRef = "github.com/testowner/plugins/caller"
-	const targetRef = "github.com/testowner/plugins/target"
+	const callerRef = "github.com/testowner/apps/caller"
+	const targetRef = "github.com/testowner/apps/target"
 	const version = "0.0.1-alpha.1"
 
 	callerPkg := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		Source:      callerRef,
 		Version:     version,
 		DisplayName: "Caller",
 		Entrypoint: &providermanifestv1.Entrypoint{
-			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
+			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app")),
 		},
 		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 	}, map[string]string{
-		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "caller-binary",
+		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app")): "caller-binary",
 	}, true)
 
 	targetPkg := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		Source:      targetRef,
 		Version:     version,
 		DisplayName: "Target",
 		Entrypoint: &providermanifestv1.Entrypoint{
-			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
+			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app")),
 		},
 		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 	}, map[string]string{
-		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "target-binary",
+		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app")): "target-binary",
 	}, true)
 
 	srv := newManagedMetadataServer(t, []managedMetadataRelease{
@@ -1093,7 +1093,7 @@ func TestPrepareAtPath_AllowsManagedPluginInvokesOnFirstPrepare(t *testing.T) {
 			archiveFilePath: callerPkg,
 			packageSource:   callerRef,
 			version:         version,
-			kind:            providermanifestv1.KindPlugin,
+			kind:            providermanifestv1.KindApp,
 			runtime:         providerReleaseRuntimeExecutable,
 		},
 		{
@@ -1102,18 +1102,18 @@ func TestPrepareAtPath_AllowsManagedPluginInvokesOnFirstPrepare(t *testing.T) {
 			archiveFilePath: targetPkg,
 			packageSource:   targetRef,
 			version:         version,
-			kind:            providermanifestv1.KindPlugin,
+			kind:            providermanifestv1.KindApp,
 			runtime:         providerReleaseRuntimeExecutable,
 		},
 	})
 	defer srv.Close()
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
     caller:
       source: %s/providers/caller/v%s/provider-release.yaml
       invokes:
-        - plugin: target
+        - app: target
           operation: ping
     target:
       source: %s/providers/target/v%s/provider-release.yaml
@@ -1130,7 +1130,7 @@ server:
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	if lock.Providers["caller"].Executable == "" || lock.Providers["target"].Executable == "" {
-		t.Fatalf("prepared plugin executables = %#v", lock.Providers)
+		t.Fatalf("prepared app executables = %#v", lock.Providers)
 	}
 }
 
@@ -1142,12 +1142,12 @@ func TestPrepareAtPath_AllowsSessionCatalogOnlyInvokesTarget(t *testing.T) {
 	targetManifestPath := writeLocalMCPSpecPlugin(t, dir, "target")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
     caller:
       source:
         path: %q
       invokes:
-        - plugin: target
+        - app: target
           operation: private_search
           runAs:
             subject:
@@ -1177,12 +1177,12 @@ func TestPrepareAtPath_DoesNotWriteLockfileWhenInvokesValidationFails(t *testing
 	targetManifestPath := writeLocalExecutablePlugin(t, dir, "target", "ping")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
     caller:
       source:
         path: %q
       invokes:
-        - plugin: target
+        - app: target
           operation: missing
     target:
       source:
@@ -1195,7 +1195,7 @@ server:
 	}
 
 	_, err := NewLifecycle().PrepareAtPath(cfgPath)
-	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "missing" on plugin "target"`) {
+	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "missing" on app "target"`) {
 		t.Fatalf("PrepareAtPath error = %v, want unknown operation error", err)
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, LockfileName)); !os.IsNotExist(statErr) {
@@ -1211,12 +1211,12 @@ func TestPrepareAtPath_RejectsHybridMCPTypoAsUnknownOperation(t *testing.T) {
 	targetManifestPath := writeLocalOpenAPIAndMCPSpecPlugin(t, dir, "target")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
     caller:
       source:
         path: %q
       invokes:
-        - plugin: target
+        - app: target
           operation: private_search
     target:
       source:
@@ -1229,7 +1229,7 @@ server:
 	}
 
 	_, err := NewLifecycle().PrepareAtPath(cfgPath)
-	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "private_search" on plugin "target"`) {
+	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "private_search" on app "target"`) {
 		t.Fatalf("PrepareAtPath error = %v, want unknown operation error", err)
 	}
 	if strings.Contains(err.Error(), "session-catalog-only operation") {
@@ -1245,12 +1245,12 @@ func TestLoadForExecutionAtPath_RejectsInvalidPluginInvokesDependency(t *testing
 	targetManifestPath := writeLocalExecutablePlugin(t, dir, "target", "ping")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
     caller:
       source:
         path: %q
       invokes:
-        - plugin: target
+        - app: target
           operation: missing
     target:
       source:
@@ -1263,7 +1263,7 @@ server:
 	}
 
 	_, _, err := NewLifecycle().LoadForExecutionAtPath(cfgPath, false)
-	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "missing" on plugin "target"`) {
+	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "missing" on app "target"`) {
 		t.Fatalf("LoadForExecutionAtPath error = %v, want unknown operation error", err)
 	}
 }
@@ -1305,8 +1305,8 @@ paths:
 	}
 	targetManifestPath := filepath.Join(targetRoot, "manifest.yaml")
 	targetManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
-		Source:      "github.com/test/plugins/target",
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/test/apps/target",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Target",
 		Spec: &providermanifestv1.Spec{
@@ -1323,14 +1323,14 @@ paths:
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
     caller:
       source:
         path: %q
       invokes:
-        - plugin: target
+        - app: target
           operation: status
-        - plugin: target
+        - app: target
           operation: ping
     target:
       source:
@@ -1394,10 +1394,10 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedUIWithoutLockfile(t *testing
     roadmap:
       source:
         path: ./ui/manifest.yaml
-plugins:
+apps:
     roadmap:
       source:
-        path: ./plugin/manifest.yaml
+        path: ./app/manifest.yaml
       ui:
         bundle: roadmap
         path: /create-customer-roadmap-review
@@ -1416,11 +1416,11 @@ plugins:
 			wantPolicy: "roadmap_policy",
 		},
 		{
-			name: "plugin owned ui via plugin ui path",
-			uiConfigYAML: `plugins:
+			name: "plugin owned ui via app ui path",
+			uiConfigYAML: `apps:
     roadmap:
       source:
-        path: ./plugin/manifest.yaml
+        path: ./app/manifest.yaml
       ui:
         path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_policy
@@ -1439,11 +1439,11 @@ plugins:
 			ownedUIPath: "../ui/manifest.yaml",
 		},
 		{
-			name: "plugin owned source-built ui via plugin ui path",
-			uiConfigYAML: `plugins:
+			name: "plugin owned source-built ui via app ui path",
+			uiConfigYAML: `apps:
     roadmap:
       source:
-        path: ./plugin/manifest.yaml
+        path: ./app/manifest.yaml
       ui:
         path: /create-customer-roadmap-review
 `,
@@ -1453,11 +1453,11 @@ plugins:
 			sourceBuild: true,
 		},
 		{
-			name: "plugin owned ui via plugin ui path with noncanonical manifest filename",
-			uiConfigYAML: `plugins:
+			name: "plugin owned ui via app ui path with noncanonical manifest filename",
+			uiConfigYAML: `apps:
     roadmap:
       source:
-        path: ./plugin/manifest.yaml
+        path: ./app/manifest.yaml
       ui:
         path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_policy
@@ -1482,10 +1482,10 @@ plugins:
     roadmap:
       source:
         path: ./ui/manifest.yaml
-plugins:
+apps:
     roadmap:
       source:
-        path: ./plugin/manifest.yaml
+        path: ./app/manifest.yaml
       ui:
         path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_policy
@@ -1565,27 +1565,27 @@ plugins:
 				t.Fatalf("WriteFile manifest: %v", err)
 			}
 			if tc.extraYAML != "" || tc.ownedUIPath != "" {
-				pluginManifestPath := filepath.Join(dir, "plugin", "manifest.yaml")
+				pluginManifestPath := filepath.Join(dir, "app", "manifest.yaml")
 				if err := os.MkdirAll(filepath.Dir(pluginManifestPath), 0o755); err != nil {
-					t.Fatalf("MkdirAll plugin dir: %v", err)
+					t.Fatalf("MkdirAll app dir: %v", err)
 				}
-				pluginArtifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin"))
-				pluginArtifactPath := filepath.Join(dir, "plugin", filepath.FromSlash(pluginArtifactRel))
+				pluginArtifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app"))
+				pluginArtifactPath := filepath.Join(dir, "app", filepath.FromSlash(pluginArtifactRel))
 				if err := os.MkdirAll(filepath.Dir(pluginArtifactPath), 0o755); err != nil {
-					t.Fatalf("MkdirAll plugin artifact dir: %v", err)
+					t.Fatalf("MkdirAll app artifact dir: %v", err)
 				}
 				if err := os.WriteFile(pluginArtifactPath, []byte("roadmap-plugin"), 0o755); err != nil {
-					t.Fatalf("WriteFile plugin artifact: %v", err)
+					t.Fatalf("WriteFile app artifact: %v", err)
 				}
 				pluginSpec := withNoAuthDefaultConnection(&providermanifestv1.Spec{})
 				if tc.ownedUIPath != "" {
 					pluginSpec.UI = &providermanifestv1.OwnedUI{Path: tc.ownedUIPath}
 				}
 				pluginManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-					Source:      "github.com/testowner/plugins/roadmap",
+					Source:      "github.com/testowner/apps/roadmap",
 					Version:     "0.0.1-alpha.1",
 					DisplayName: "Roadmap Plugin",
-					Kind:        providermanifestv1.KindPlugin,
+					Kind:        providermanifestv1.KindApp,
 					Spec:        pluginSpec,
 					Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: pluginArtifactRel},
 				}, providerpkg.ManifestFormatYAML)
@@ -1593,10 +1593,10 @@ plugins:
 					t.Fatalf("EncodePluginManifest: %v", err)
 				}
 				if err := os.WriteFile(pluginManifestPath, pluginManifest, 0o644); err != nil {
-					t.Fatalf("WriteFile plugin manifest: %v", err)
+					t.Fatalf("WriteFile app manifest: %v", err)
 				}
-				if err := os.WriteFile(filepath.Join(dir, "plugin", "catalog.yaml"), []byte("name: roadmap\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
-					t.Fatalf("WriteFile plugin catalog: %v", err)
+				if err := os.WriteFile(filepath.Join(dir, "app", "catalog.yaml"), []byte("name: roadmap\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
+					t.Fatalf("WriteFile app catalog: %v", err)
 				}
 			}
 
@@ -1652,18 +1652,18 @@ plugins:
 				t.Fatalf("AuthorizationPolicy = %q, want %q", got, tc.wantPolicy)
 			}
 			if tc.wantPolicy != "" {
-				if got := entry.OwnerPlugin; got != "roadmap" {
-					t.Fatalf("OwnerPlugin = %q, want %q", got, "roadmap")
+				if got := entry.OwnerApp; got != "roadmap" {
+					t.Fatalf("OwnerApp = %q, want %q", got, "roadmap")
 				}
 			}
 			if tc.wantPolicy != "" {
-				plugin := loaded.Plugins["roadmap"]
-				if plugin == nil {
-					t.Fatal(`Plugins["roadmap"] = nil`)
+				app := loaded.Apps["roadmap"]
+				if app == nil {
+					t.Fatal(`Apps["roadmap"] = nil`)
 					return
 				}
-				if got := plugin.AuthorizationPolicy; got != tc.wantPolicy {
-					t.Fatalf("Plugin AuthorizationPolicy = %q, want %q", got, tc.wantPolicy)
+				if got := app.AuthorizationPolicy; got != tc.wantPolicy {
+					t.Fatalf("App AuthorizationPolicy = %q, want %q", got, tc.wantPolicy)
 				}
 			}
 			if _, err := os.Stat(filepath.Join(dir, LockfileName)); err != nil {
@@ -1745,7 +1745,7 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 	t.Parallel()
 
 	dir := t.TempDir()
-	const pluginRef = "github.com/testowner/plugins/roadmap"
+	const pluginRef = "github.com/testowner/apps/roadmap"
 	const version = "0.0.1-alpha.1"
 
 	pkgDir := filepath.Join(dir, "roadmap-plugin-pkg")
@@ -1753,7 +1753,7 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 		t.Fatalf("MkdirAll package dir: %v", err)
 	}
 
-	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin"))
+	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app"))
 	artifactContent := []byte("plugin-binary")
 	artifactFullPath := filepath.Join(pkgDir, filepath.FromSlash(artifactPath))
 	if err := os.MkdirAll(filepath.Dir(artifactFullPath), 0o755); err != nil {
@@ -1788,7 +1788,7 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 
 	sum := sha256.Sum256(artifactContent)
 	pluginManifestBytes, err := providerpkg.EncodeManifest(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		Source:      pluginRef,
 		Version:     version,
 		DisplayName: "Roadmap Review",
@@ -1808,10 +1808,10 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 		}),
 	})
 	if err != nil {
-		t.Fatalf("Encode plugin manifest: %v", err)
+		t.Fatalf("Encode app manifest: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(pkgDir, providerpkg.ManifestFile), pluginManifestBytes, 0o644); err != nil {
-		t.Fatalf("WriteFile plugin manifest: %v", err)
+		t.Fatalf("WriteFile app manifest: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(pkgDir, "catalog.yaml"), []byte("name: roadmap\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile catalog: %v", err)
@@ -1841,17 +1841,17 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 
 	srv := newManagedMetadataServer(t, []managedMetadataRelease{{
 		metadataPath:    "/providers/roadmap-plugin/v" + version + "/provider-release.yaml",
-		archiveURLPath:  "/providers/roadmap-plugin/v" + version + "/roadmap-plugin.tar.gz",
+		archiveURLPath:  "/providers/roadmap-plugin/v" + version + "/roadmap-app.tar.gz",
 		archiveFilePath: pkgPath,
 		packageSource:   pluginRef,
 		version:         version,
-		kind:            providermanifestv1.KindPlugin,
+		kind:            providermanifestv1.KindApp,
 		runtime:         providerReleaseRuntimeExecutable,
 	}})
 	defer srv.Close()
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
   roadmap:
     source: ` + srv.URL + `/providers/roadmap-plugin/v` + version + `/provider-release.yaml
     ui:
@@ -1916,35 +1916,35 @@ func TestLoadForExecutionAtPath_RefreshesManagedPluginWhenGenericArchiveLockIsSt
 	t.Parallel()
 
 	dir := t.TempDir()
-	const pluginRef = "github.com/testowner/plugins/roadmap"
+	const pluginRef = "github.com/testowner/apps/roadmap"
 	const version = "0.0.1-alpha.1"
 
 	pluginPkg := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		Source:      pluginRef,
 		Version:     version,
 		DisplayName: "Roadmap Review",
 		Entrypoint: &providermanifestv1.Entrypoint{
-			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
+			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app")),
 		},
 		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 	}, map[string]string{
-		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "plugin-binary-" + version,
+		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app")): "plugin-binary-" + version,
 	}, true)
 
 	srv := newManagedMetadataServer(t, []managedMetadataRelease{{
 		metadataPath:    "/providers/roadmap-plugin/v" + version + "/provider-release.yaml",
-		archiveURLPath:  "/providers/roadmap-plugin/v" + version + "/roadmap-plugin.tar.gz",
+		archiveURLPath:  "/providers/roadmap-plugin/v" + version + "/roadmap-app.tar.gz",
 		archiveFilePath: pluginPkg,
 		packageSource:   pluginRef,
 		version:         version,
-		kind:            providermanifestv1.KindPlugin,
+		kind:            providermanifestv1.KindApp,
 		runtime:         providerReleaseRuntimeExecutable,
 	}})
 	defer srv.Close()
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
   roadmap:
     source: ` + srv.URL + `/providers/roadmap-plugin/v` + version + `/provider-release.yaml
 server:
@@ -1967,7 +1967,7 @@ server:
 	staleLock := &Lockfile{
 		Providers: map[string]LockEntry{
 			"roadmap": {
-				Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Plugins["roadmap"], paths.configDir),
+				Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Apps["roadmap"], paths.configDir),
 				Source:      srv.URL + "/providers/roadmap-plugin/v" + version + "/provider-release.yaml",
 				Version:     version,
 				Archives: map[string]LockArchive{
@@ -1984,12 +1984,12 @@ server:
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
-	if loaded.Plugins["roadmap"] == nil || loaded.Plugins["roadmap"].ResolvedManifest == nil {
-		t.Fatalf("ResolvedManifest = %+v", loaded.Plugins["roadmap"])
+	if loaded.Apps["roadmap"] == nil || loaded.Apps["roadmap"].ResolvedManifest == nil {
+		t.Fatalf("ResolvedManifest = %+v", loaded.Apps["roadmap"])
 		return
 	}
-	if loaded.Plugins["roadmap"].Command == "" {
-		t.Fatal("loaded plugin command is empty")
+	if loaded.Apps["roadmap"].Command == "" {
+		t.Fatal("loaded app command is empty")
 	}
 
 	rewrittenLock, err := ReadLockfile(filepath.Join(dir, LockfileName))
@@ -2008,27 +2008,27 @@ func TestLoadForExecutionAtPath_LockedManagedDeclarativePluginMaterializesBefore
 	t.Parallel()
 
 	dir := t.TempDir()
-	const pluginRef = "github.com/testowner/plugins/roadmap"
+	const pluginRef = "github.com/testowner/apps/roadmap"
 	const oldVersion = "0.0.1-alpha.1"
 	const newVersion = "0.0.2-alpha.1"
 
-	buildExecutablePlugin := func(version string) string {
+	buildExecutableApp := func(version string) string {
 		return mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-			Kind:        providermanifestv1.KindPlugin,
+			Kind:        providermanifestv1.KindApp,
 			Source:      pluginRef,
 			Version:     version,
 			DisplayName: "Roadmap Review",
 			Entrypoint: &providermanifestv1.Entrypoint{
-				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
+				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app")),
 			},
 			Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 		}, map[string]string{
-			filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "plugin-binary-" + version,
+			filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app")): "plugin-binary-" + version,
 		}, true)
 	}
-	buildDeclarativePlugin := func(version string) string {
+	buildDeclarativeApp := func(version string) string {
 		return mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-			Kind:        providermanifestv1.KindPlugin,
+			Kind:        providermanifestv1.KindApp,
 			Source:      pluginRef,
 			Version:     version,
 			DisplayName: "Roadmap Review",
@@ -2049,8 +2049,8 @@ func TestLoadForExecutionAtPath_LockedManagedDeclarativePluginMaterializesBefore
 		}, nil, false)
 	}
 
-	oldPluginPkg := buildExecutablePlugin(oldVersion)
-	newPluginPkg := buildDeclarativePlugin(newVersion)
+	oldPluginPkg := buildExecutableApp(oldVersion)
+	newPluginPkg := buildDeclarativeApp(newVersion)
 	newPluginArchive, err := os.ReadFile(newPluginPkg)
 	if err != nil {
 		t.Fatalf("ReadFile new declarative package: %v", err)
@@ -2064,20 +2064,20 @@ func TestLoadForExecutionAtPath_LockedManagedDeclarativePluginMaterializesBefore
 	srv := newManagedMetadataServer(t, []managedMetadataRelease{
 		{
 			metadataPath:    "/providers/roadmap-plugin/v" + oldVersion + "/provider-release.yaml",
-			archiveURLPath:  "/providers/roadmap-plugin/v" + oldVersion + "/roadmap-plugin.tar.gz",
+			archiveURLPath:  "/providers/roadmap-plugin/v" + oldVersion + "/roadmap-app.tar.gz",
 			archiveFilePath: oldPluginPkg,
 			packageSource:   pluginRef,
 			version:         oldVersion,
-			kind:            providermanifestv1.KindPlugin,
+			kind:            providermanifestv1.KindApp,
 			runtime:         providerReleaseRuntimeExecutable,
 		},
 		{
 			metadataPath:    "/providers/roadmap-plugin/v" + newVersion + "/provider-release.yaml",
-			archiveURLPath:  "/providers/roadmap-plugin/v" + newVersion + "/roadmap-plugin.tar.gz",
+			archiveURLPath:  "/providers/roadmap-plugin/v" + newVersion + "/roadmap-app.tar.gz",
 			archiveFilePath: newPluginPkg,
 			packageSource:   pluginRef,
 			version:         newVersion,
-			kind:            providermanifestv1.KindPlugin,
+			kind:            providermanifestv1.KindApp,
 			runtime:         providerReleaseRuntimeDeclarative,
 		},
 	})
@@ -2085,7 +2085,7 @@ func TestLoadForExecutionAtPath_LockedManagedDeclarativePluginMaterializesBefore
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	writeConfig := func(version string) {
-		cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+		cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
   roadmap:
     source: ` + srv.URL + `/providers/roadmap-plugin/v` + version + `/provider-release.yaml
 server:
@@ -2112,10 +2112,10 @@ server:
 	lock := normalizeLockfile(initialLock)
 	lock.Providers = map[string]LockEntry{
 		"roadmap": {
-			Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Plugins["roadmap"], paths.configDir),
+			Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Apps["roadmap"], paths.configDir),
 			Source:      srv.URL + "/providers/roadmap-plugin/v" + newVersion + "/provider-release.yaml",
 			Package:     pluginRef,
-			Kind:        providermanifestv1.KindPlugin,
+			Kind:        providermanifestv1.KindApp,
 			Runtime:     providerReleaseRuntimeDeclarative,
 			Version:     newVersion,
 			Archives: map[string]LockArchive{
@@ -2134,18 +2134,18 @@ server:
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
-	if loaded.Plugins["roadmap"] == nil || loaded.Plugins["roadmap"].ResolvedManifest == nil {
-		t.Fatalf("ResolvedManifest = %+v", loaded.Plugins["roadmap"])
+	if loaded.Apps["roadmap"] == nil || loaded.Apps["roadmap"].ResolvedManifest == nil {
+		t.Fatalf("ResolvedManifest = %+v", loaded.Apps["roadmap"])
 		return
 	}
-	if got := loaded.Plugins["roadmap"].ResolvedManifest.Version; got != newVersion {
+	if got := loaded.Apps["roadmap"].ResolvedManifest.Version; got != newVersion {
 		t.Fatalf("ResolvedManifest.Version = %q, want %q", got, newVersion)
 	}
-	if !loaded.Plugins["roadmap"].ResolvedManifest.IsDeclarativeOnlyProvider() {
-		t.Fatalf("ResolvedManifest = %+v, want declarative-only provider", loaded.Plugins["roadmap"].ResolvedManifest)
+	if !loaded.Apps["roadmap"].ResolvedManifest.IsDeclarativeOnlyProvider() {
+		t.Fatalf("ResolvedManifest = %+v, want declarative-only provider", loaded.Apps["roadmap"].ResolvedManifest)
 	}
-	if loaded.Plugins["roadmap"].Command != "" {
-		t.Fatalf("loaded plugin command = %q, want declarative plugin without executable", loaded.Plugins["roadmap"].Command)
+	if loaded.Apps["roadmap"].Command != "" {
+		t.Fatalf("loaded app command = %q, want declarative app without executable", loaded.Apps["roadmap"].Command)
 	}
 }
 
@@ -2176,7 +2176,7 @@ providers:
       source:
         path: %q
       path: /roadmap
-plugins:
+apps:
   example:
     source:
       path: %q
@@ -2222,13 +2222,13 @@ server:
 			t.Fatalf("LoadForExecutionAtPath(locked=%t): %v", locked, err)
 		}
 
-		plugin := loaded.Plugins["example"]
-		if plugin == nil || plugin.ResolvedManifest == nil {
-			t.Fatalf("Plugins[example] = %+v", plugin)
+		app := loaded.Apps["example"]
+		if app == nil || app.ResolvedManifest == nil {
+			t.Fatalf("Apps[example] = %+v", app)
 			return
 		}
-		if got := plugin.Command; strings.Contains(got, "stale/provider/executable") {
-			t.Fatalf("plugin.Command = %q, want derived prepared path", got)
+		if got := app.Command; strings.Contains(got, "stale/provider/executable") {
+			t.Fatalf("app.Command = %q, want derived prepared path", got)
 		}
 
 		indexedDB := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindIndexedDB)
@@ -2263,14 +2263,14 @@ func TestPrepareAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.
 	t.Parallel()
 
 	dir := t.TempDir()
-	const pluginRef = "github.com/testowner/plugins/roadmap"
+	const pluginRef = "github.com/testowner/apps/roadmap"
 	const version = "0.0.1-alpha.1"
 
 	pkgDir := filepath.Join(dir, "roadmap-managed-pkg")
 	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll package dir: %v", err)
 	}
-	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin"))
+	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "app"))
 	artifactContent := []byte("plugin-binary")
 	artifactFullPath := filepath.Join(pkgDir, filepath.FromSlash(artifactPath))
 	if err := os.MkdirAll(filepath.Dir(artifactFullPath), 0o755); err != nil {
@@ -2281,7 +2281,7 @@ func TestPrepareAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.
 	}
 	sum := sha256.Sum256(artifactContent)
 	manifestBytes, err := json.Marshal(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		Source:      pluginRef,
 		Version:     version,
 		DisplayName: "Roadmap Review",
@@ -2337,17 +2337,17 @@ func TestPrepareAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.
 	)
 	srv := newManagedMetadataServer(t, []managedMetadataRelease{{
 		metadataPath:    "/providers/roadmap-plugin/v" + version + "/provider-release.yaml",
-		archiveURLPath:  "/providers/roadmap-plugin/v" + version + "/roadmap-plugin.tar.gz",
+		archiveURLPath:  "/providers/roadmap-plugin/v" + version + "/roadmap-app.tar.gz",
 		archiveFilePath: pkgPath,
 		packageSource:   pluginRef,
 		version:         version,
-		kind:            providermanifestv1.KindPlugin,
+		kind:            providermanifestv1.KindApp,
 		runtime:         providerReleaseRuntimeExecutable,
 	}})
 	defer srv.Close()
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
   roadmap:
     source: ` + srv.URL + `/providers/roadmap-plugin/v` + version + `/provider-release.yaml
     ui:
@@ -2448,7 +2448,7 @@ func TestPrepareAtPath_RejectsMetadataPackageManifestKindMismatch(t *testing.T) 
 	t.Parallel()
 
 	dir := t.TempDir()
-	const source = "github.com/testowner/gestalt-providers/plugins/auth-only"
+	const source = "github.com/testowner/gestalt-providers/apps/auth-only"
 	const version = "0.0.1-alpha.1"
 	pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
 		Kind:       providermanifestv1.KindAuthentication,
@@ -2466,14 +2466,14 @@ func TestPrepareAtPath_RejectsMetadataPackageManifestKindMismatch(t *testing.T) 
 		archiveFilePath: pkgPath,
 		packageSource:   source,
 		version:         version,
-		kind:            providermanifestv1.KindPlugin,
+		kind:            providermanifestv1.KindApp,
 		runtime:         providerReleaseRuntimeExecutable,
 	}})
 	defer srv.Close()
 	lc := NewLifecycle().WithHTTPClient(srv.Client())
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
     example:
       source: ` + srv.URL + `/providers/auth-only/v` + version + `/provider-release.yaml
 server:
@@ -2488,7 +2488,7 @@ server:
 		t.Fatal("expected provider kind validation error")
 		return
 	}
-	if !strings.Contains(err.Error(), `manifest has kind "authentication", want "plugin"`) {
+	if !strings.Contains(err.Error(), `manifest has kind "authentication", want "app"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -2555,7 +2555,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	authManifestPath := filepath.Join(dir, "auth-manifest.yaml")
 	authManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Kind:       providermanifestv1.KindAuthentication,
-		Source:     "github.com/testowner/plugins/local-auth",
+		Source:     "github.com/testowner/apps/local-auth",
 		Version:    "0.0.1-alpha.1",
 		Spec:       &providermanifestv1.Spec{},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: authArtifact, Args: []string{"serve-auth"}},
@@ -2656,7 +2656,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	writeOperatorGoComponentBuildFixture(t, dir, "example.com/local-components", providermanifestv1.KindAuthentication, authArtifactRel)
 	authManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Kind:    providermanifestv1.KindAuthentication,
-		Source:  "github.com/testowner/plugins/local-source-auth",
+		Source:  "github.com/testowner/apps/local-source-auth",
 		Version: "0.0.1-alpha.1",
 		Spec:    &providermanifestv1.Spec{},
 		Build: &providermanifestv1.SourceBuild{
@@ -2745,10 +2745,10 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	artifactRel := ".gestalt/build/provider"
 	writeOperatorGoPluginBuildFixture(t, dir, "example.com/local-generated-provider", "example", artifactRel)
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Source:      "github.com/testowner/plugins/local-generated-provider",
+		Source:      "github.com/testowner/apps/local-generated-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Provider",
-		Kind:        providermanifestv1.KindPlugin, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
+		Kind:        providermanifestv1.KindApp, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 		Build: &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
@@ -2761,7 +2761,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	writeTestFile("manifest.yaml", manifest, 0o644)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
     example:
       source:
         path: ./manifest.yaml
@@ -2776,7 +2776,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Plugins["example"]
+	intg := loaded.Apps["example"]
 	if intg == nil || intg.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg)
 	}
@@ -2813,10 +2813,10 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 	artifactRel := ".gestalt/build/provider"
 	writeOperatorGoPluginBuildFixture(t, dir, "example.com/local-locked-provider", "example", artifactRel)
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Source:      "github.com/testowner/plugins/local-locked-provider",
+		Source:      "github.com/testowner/apps/local-locked-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Locked Local Provider",
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		Spec:        withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 		Build: &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
@@ -2830,7 +2830,7 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 	writeTestFile("manifest.yaml", manifest, 0o644)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
     example:
       source:
         path: ./manifest.yaml
@@ -2844,7 +2844,7 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=false): %v", err)
 	}
-	preparedCommand := loaded.Plugins["example"].Command
+	preparedCommand := loaded.Apps["example"].Command
 	if preparedCommand == "" {
 		t.Fatal("prepared command is empty")
 	}
@@ -2859,7 +2859,7 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
-	intg := locked.Plugins["example"]
+	intg := locked.Apps["example"]
 	if intg == nil || intg.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg)
 	}
@@ -2872,7 +2872,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalPythonSourcePlugin
 	t.Parallel()
 
 	if runtime.GOOS == "windows" {
-		t.Skip("local Python source plugin fixture is POSIX-only")
+		t.Skip("local Python source app fixture is POSIX-only")
 	}
 
 	dir := t.TempDir()
@@ -3037,10 +3037,10 @@ operations:
 `), 0o644)
 
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Source:      "github.com/testowner/plugins/local-python-provider",
+		Source:      "github.com/testowner/apps/local-python-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Python Provider",
-		Kind:        providermanifestv1.KindPlugin, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
+		Kind:        providermanifestv1.KindApp, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -3048,7 +3048,7 @@ operations:
 	}
 	writeTestFile("manifest.yaml", manifest, 0o644)
 
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `apps:
     example:
       source:
         path: ./manifest.yaml
@@ -3061,26 +3061,26 @@ operations:
 import gestalt
 import provider
 
-provider.plugin.configure_provider("example", {"prefix": "Hello"})
-status, body = provider.plugin.execute("echo", {
+provider.app.configure_provider("example", {"prefix": "Hello"})
+status, body = provider.app.execute("echo", {
     "names": ["Ada", "Grace"],
     "metadata": {"role": "admin"},
     "filters": {"owner": "Ada"},
     "limit": 3,
 }, gestalt.Request())
-double_status, double_body = provider.plugin.execute("times_two", {
+double_status, double_body = provider.app.execute("times_two", {
     "value": 3,
 }, gestalt.Request())
-decode_status, decode_body = provider.plugin.execute("times_two", {
+decode_status, decode_body = provider.app.execute("times_two", {
     "value": "oops",
 }, gestalt.Request())
-explode_status, explode_body = provider.plugin.execute("explode", {}, gestalt.Request())
-zero_status, zero_body = provider.plugin.execute("status_zero", {}, gestalt.Request())
-maybe_status, maybe_body = provider.plugin.execute("maybe_filters", {
+explode_status, explode_body = provider.app.execute("explode", {}, gestalt.Request())
+zero_status, zero_body = provider.app.execute("status_zero", {}, gestalt.Request())
+maybe_status, maybe_body = provider.app.execute("maybe_filters", {
     "owner": "Grace",
 }, gestalt.Request())
-list_status, list_body = provider.plugin.execute("list_items", {}, gestalt.Request())
-session_catalog = provider.plugin.catalog_for_request(gestalt.Request(token="secret-token"))
+list_status, list_body = provider.app.execute("list_items", {}, gestalt.Request())
+session_catalog = provider.app.catalog_for_request(gestalt.Request(token="secret-token"))
 print(json.dumps({
     "status": status,
     "body": json.loads(body),
@@ -3094,7 +3094,7 @@ print(json.dumps({
     "list_body": json.loads(list_body),
     "maybe_status": maybe_status,
     "maybe_body": json.loads(maybe_body),
-    "supports_session_catalog": provider.plugin.supports_session_catalog(),
+    "supports_session_catalog": provider.app.supports_session_catalog(),
     "session_catalog": {
         "name": session_catalog.name if session_catalog else "",
         "display_name": session_catalog.display_name if session_catalog else "",
@@ -3117,7 +3117,7 @@ print(json.dumps({
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Plugins["example"]
+	intg := loaded.Apps["example"]
 	if intg == nil || intg.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg)
 	}
@@ -3506,8 +3506,8 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		root := t.TempDir()
 		firstConfigDir := filepath.Join(root, "one", "deploy")
 		secondConfigDir := filepath.Join(root, "two", "deploy")
-		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "plugins/sample/manifest.yaml", providermanifestv1.KindAuthorization)
-		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "plugins/sample/manifest.yaml", providermanifestv1.KindAuthorization)
+		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthorization)
+		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthorization)
 
 		firstProvider := &config.ProviderEntry{
 			Source: config.ProviderSource{Path: firstManifestPath},
@@ -3564,8 +3564,8 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		root := t.TempDir()
 		firstConfigDir := filepath.Join(root, "one", "deploy")
 		secondConfigDir := filepath.Join(root, "two", "deploy")
-		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "plugins/sample/manifest.yaml", providermanifestv1.KindAuthorization)
-		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "plugins/sample/manifest.yaml", providermanifestv1.KindAuthorization)
+		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthorization)
+		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthorization)
 		if err := os.WriteFile(secondManifestPath, []byte("source: github.com/test-org/two/component\nversion: 0.0.2\nkind: authorization\nentrypoint:\n  artifactPath: .gestalt/build/provider\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile(%q): %v", secondManifestPath, err)
 		}
@@ -3609,7 +3609,7 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		}
 		manifest := []byte(`source: github.com/test-org/fingerprint-test/component
 version: 0.0.1
-kind: plugin
+kind: app
 build:
   command: [sh, ./build.sh]
   inputs: [build.sh]
@@ -3838,7 +3838,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 			"default": {
 				Fingerprint: "telemetry-fp",
 				Source:      "github.com/test-org/test-repo/telemetry-declarative",
-				Kind:        providermanifestv1.KindPlugin,
+				Kind:        providermanifestv1.KindApp,
 				Runtime:     providerReleaseRuntimeDeclarative,
 				Version:     "1.4.0",
 				Archives: map[string]LockArchive{
@@ -3850,7 +3850,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 			"default": {
 				Fingerprint: "audit-fp",
 				Source:      "github.com/test-org/test-repo/audit-declarative",
-				Kind:        providermanifestv1.KindPlugin,
+				Kind:        providermanifestv1.KindApp,
 				Runtime:     providerReleaseRuntimeDeclarative,
 				Version:     "1.5.0",
 				Archives: map[string]LockArchive{
@@ -3892,7 +3892,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if err := json.Unmarshal(lockData, &diskLock); err != nil {
 		t.Fatalf("Unmarshal lockfile: %v", err)
 	}
-	providerEntry, ok := diskLock.Providers.Plugin["example"]
+	providerEntry, ok := diskLock.Providers.App["example"]
 	if !ok {
 		t.Fatal(`disk lock providers.plugin["example"] not found`)
 	}
@@ -3905,8 +3905,8 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if providerEntry.Source != "" {
 		t.Fatalf("provider source = %q, want omitted portable source", providerEntry.Source)
 	}
-	if providerEntry.Kind != providermanifestv1.KindPlugin {
-		t.Fatalf("provider kind = %q, want %q", providerEntry.Kind, providermanifestv1.KindPlugin)
+	if providerEntry.Kind != providermanifestv1.KindApp {
+		t.Fatalf("provider kind = %q, want %q", providerEntry.Kind, providermanifestv1.KindApp)
 	}
 	if providerEntry.Runtime != providerLockRuntimeExecutable {
 		t.Fatalf("provider runtime = %q, want %q", providerEntry.Runtime, providerLockRuntimeExecutable)
@@ -3937,8 +3937,8 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if telemetryEntry.Package != want.Telemetry["default"].Source {
 		t.Fatalf("telemetry package = %q, want %q", telemetryEntry.Package, want.Telemetry["default"].Source)
 	}
-	if telemetryEntry.Kind != providermanifestv1.KindPlugin {
-		t.Fatalf("telemetry kind = %q, want %q", telemetryEntry.Kind, providermanifestv1.KindPlugin)
+	if telemetryEntry.Kind != providermanifestv1.KindApp {
+		t.Fatalf("telemetry kind = %q, want %q", telemetryEntry.Kind, providermanifestv1.KindApp)
 	}
 	if telemetryEntry.Runtime != providerReleaseRuntimeDeclarative {
 		t.Fatalf("telemetry runtime = %q, want %q", telemetryEntry.Runtime, providerReleaseRuntimeDeclarative)
@@ -3950,8 +3950,8 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if auditEntry.Package != want.Audit["default"].Source {
 		t.Fatalf("audit package = %q, want %q", auditEntry.Package, want.Audit["default"].Source)
 	}
-	if auditEntry.Kind != providermanifestv1.KindPlugin {
-		t.Fatalf("audit kind = %q, want %q", auditEntry.Kind, providermanifestv1.KindPlugin)
+	if auditEntry.Kind != providermanifestv1.KindApp {
+		t.Fatalf("audit kind = %q, want %q", auditEntry.Kind, providermanifestv1.KindApp)
 	}
 	if auditEntry.Runtime != providerReleaseRuntimeDeclarative {
 		t.Fatalf("audit runtime = %q, want %q", auditEntry.Runtime, providerReleaseRuntimeDeclarative)
@@ -4015,7 +4015,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 func TestHashArchiveEntry_HashesFallbackArchive(t *testing.T) {
 	t.Parallel()
 
-	const payload = "generic plugin archive"
+	const payload = "generic app archive"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(payload))
 	}))

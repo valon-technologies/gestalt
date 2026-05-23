@@ -18,32 +18,32 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
+	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
 )
 
 const (
-	pluginRuntimeHostServiceRelayTokenTTL = 30 * 24 * time.Hour
-	hostServiceTLSCAFileEnv               = "GESTALT_HOST_SERVICE_TLS_CA_FILE"
-	hostServiceTLSCAPEMEnv                = "GESTALT_HOST_SERVICE_TLS_CA_PEM"
+	appRuntimeHostServiceRelayTokenTTL = 30 * 24 * time.Hour
+	hostServiceTLSCAFileEnv            = "GESTALT_HOST_SERVICE_TLS_CA_FILE"
+	hostServiceTLSCAPEMEnv             = "GESTALT_HOST_SERVICE_TLS_CA_PEM"
 )
 
-func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, *plugininvokerservice.InvocationTokenManager, func(), error) {
+func buildAppRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, *appinvokerservice.InvocationTokenManager, func(), error) {
 	var (
 		hostServices []runtimehost.HostService
 		cleanup      func()
-		invTokens    *plugininvokerservice.InvocationTokenManager
+		invTokens    *appinvokerservice.InvocationTokenManager
 	)
-	fail := func(err error) ([]runtimehost.HostService, *plugininvokerservice.InvocationTokenManager, func(), error) {
+	fail := func(err error) ([]runtimehost.HostService, *appinvokerservice.InvocationTokenManager, func(), error) {
 		if cleanup != nil {
 			cleanup()
 			cleanup = nil
@@ -51,7 +51,7 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		return nil, nil, nil, err
 	}
 
-	effectiveIndexedDB, err := config.ResolveEffectivePluginIndexedDB(name, entry, deps.SelectedIndexedDBName, deps.IndexedDBDefs)
+	effectiveIndexedDB, err := config.ResolveEffectiveAppIndexedDB(name, entry, deps.SelectedIndexedDBName, deps.IndexedDBDefs)
 	if err != nil {
 		return fail(err)
 	}
@@ -85,7 +85,7 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		needInvocationTokens = true
 	}
 	if needInvocationTokens {
-		invTokens, err = plugininvokerservice.NewInvocationTokenManager(deps.EncryptionKey)
+		invTokens, err = appinvokerservice.NewInvocationTokenManager(deps.EncryptionKey)
 		if err != nil {
 			return fail(err)
 		}
@@ -103,7 +103,7 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
 	}
 	if len(entry.Invokes) > 0 {
-		hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
+		hostServices = append(hostServices, buildAppInvokerHostService(name, entry, deps, invTokens))
 	}
 	return hostServices, invTokens, cleanup, nil
 }
@@ -115,7 +115,7 @@ func appendRuntimeLogHostService(hostServices []runtimehost.HostService, runtime
 	runtimeProviderName := runtimeSessionLogProviderName(runtimeConfig)
 	return append(hostServices, runtimehost.HostService{
 		Name:           "runtime_log_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.PluginRuntimeLogHost_ServiceDesc.ServiceName)},
+		MethodPrefixes: []string{grpcMethodPrefix(proto.AppRuntimeLogHost_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			runtimehost.RegisterRuntimeLogHostServer(srv, runtimeProviderName, deps.Services.RuntimeSessionLogs.AppendSessionLogs)
 		},
@@ -213,7 +213,7 @@ func mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostS
 
 type runtimeHostServiceSessionVerifier struct {
 	providerName string
-	provider     pluginruntime.Provider
+	provider     appruntime.Provider
 }
 
 func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.Context, sessionID string) error {
@@ -224,7 +224,7 @@ func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.
 	if v.provider == nil {
 		return fmt.Errorf("plugin runtime provider is not configured")
 	}
-	session, err := v.provider.GetSession(ctx, pluginruntime.GetSessionRequest{SessionID: sessionID})
+	session, err := v.provider.GetSession(ctx, appruntime.GetSessionRequest{SessionID: sessionID})
 	if err != nil {
 		return err
 	}
@@ -243,14 +243,14 @@ func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.
 		}
 	}
 	switch session.State {
-	case pluginruntime.SessionStatePending, pluginruntime.SessionStateReady, pluginruntime.SessionStateRunning:
+	case appruntime.SessionStatePending, appruntime.SessionStateReady, appruntime.SessionStateRunning:
 		return nil
 	default:
 		return fmt.Errorf("plugin runtime session %q is %s", sessionID, session.State)
 	}
 }
 
-func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimePlan RuntimePlacementPlan, runtimeProvider pluginruntime.Provider) (func(), error) {
+func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimePlan RuntimePlacementPlan, runtimeProvider appruntime.Provider) (func(), error) {
 	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay {
 		return nil, nil
 	}
@@ -269,7 +269,7 @@ func (workflowHostServiceSessionVerifier) VerifyHostServiceSession(context.Conte
 }
 
 func registerPublicWorkflowHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps) (func(), error) {
-	if !hostCanRelayPluginRuntimeHostServices(deps) {
+	if !hostCanRelayAppRuntimeHostServices(deps) {
 		return nil, nil
 	}
 	return registerVerifiedPublicHostServices(providerName, hostServices, deps, workflowHostServiceSessionVerifier{}, true)
@@ -312,14 +312,14 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, de
 		return "", nil, "", false, fmt.Errorf("init host service relay tokens: %w", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName: providerName,
-		SessionID:  sessionID,
-		Service:    "host_service",
+		AppName:   providerName,
+		SessionID: sessionID,
+		Service:   "host_service",
 		// MethodPrefix "/" scopes the relay to the unified host-service surface.
 		// Per-RPC access is enforced by AllowsMethod and session verification, not
 		// by narrowing the token to individual gRPC service prefixes.
 		MethodPrefix: "/",
-		TTL:          pluginRuntimeHostServiceRelayTokenTTL,
+		TTL:          appRuntimeHostServiceRelayTokenTTL,
 	})
 	if err != nil {
 		return "", nil, "", false, fmt.Errorf("mint %s host service relay token: %w", serviceLabel, err)
@@ -499,7 +499,7 @@ func registerS3Servers(bindings map[string]s3store.Client, defaultBinding, plugi
 	return s3.NewRoutingServers(bindings, defaultBinding, pluginName, accessURLs)
 }
 
-func buildPluginWorkflowProviderHostService(pluginName string, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
+func buildPluginWorkflowProviderHostService(pluginName string, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.WorkflowManager
 	if manager == nil {
 		manager = unavailableWorkflowManager{}
@@ -513,7 +513,7 @@ func buildPluginWorkflowProviderHostService(pluginName string, deps Deps, tokens
 	}
 }
 
-func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
+func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.AgentManager
 	if manager == nil {
 		manager = unavailableAgentManager{}
@@ -547,18 +547,18 @@ func buildPluginExternalCredentialsHostService(provider core.ExternalCredentialP
 	}
 }
 
-func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
-	invoker := deps.PluginInvoker
+func buildAppInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
+	invoker := deps.AppInvoker
 	if invoker == nil {
-		invoker = unavailablePluginInvoker{}
+		invoker = unavailableAppInvoker{}
 	}
 	return runtimehost.HostService{
-		Name:           "plugin_invoker",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.PluginInvoker_ServiceDesc.ServiceName)},
+		Name:           "app_invoker",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.AppInvoker_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer(
+			proto.RegisterAppInvokerServer(srv, appinvokerservice.NewServer(
 				pluginName,
-				invocationconfig.PluginInvocationDependencies(entry.Invokes),
+				invocationconfig.AppInvocationDependencies(entry.Invokes),
 				invoker,
 				tokens,
 			))

@@ -75,7 +75,7 @@ func (s workflowProviderServer) ListRuns(ctx context.Context, req *proto.ListWor
 		PageSize:     int(req.GetPageSize()),
 		PageToken:    req.GetPageToken(),
 		Status:       WorkflowRunStatus(req.GetStatus()),
-		TargetPlugin: req.GetTargetPlugin(),
+		TargetApp: req.GetTargetApp(),
 	})
 	if err != nil {
 		return nil, providerRPCError("workflow list runs", err)
@@ -383,7 +383,7 @@ func publishWorkflowProviderEventRequestFromProto(req *proto.PublishWorkflowProv
 		event = &input
 	}
 	return &PublishWorkflowProviderEventRequest{
-		PluginName:  req.GetPluginName(),
+		AppName:  req.GetAppName(),
 		Event:       event,
 		PublishedBy: workflowActorInputPtrFromActor(req.GetPublishedBy()),
 	}

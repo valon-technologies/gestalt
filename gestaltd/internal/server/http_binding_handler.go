@@ -26,7 +26,7 @@ func (s *Server) handleHTTPBinding(binding MountedHTTPBinding, w http.ResponseWr
 			if requestErr.status > 0 && requestErr.status < 400 {
 				if binding.Ack != nil {
 					if err := writeHTTPBindingAck(w, binding.Ack); err != nil {
-						slog.ErrorContext(r.Context(), "write http binding ack", "plugin", binding.PluginName, "binding", binding.Name, "error", err)
+						slog.ErrorContext(r.Context(), "write http binding ack", "app", binding.AppName, "binding", binding.Name, "error", err)
 						writeError(w, http.StatusInternalServerError, "failed to write http binding response")
 					}
 				} else {
@@ -35,14 +35,14 @@ func (s *Server) handleHTTPBinding(binding MountedHTTPBinding, w http.ResponseWr
 				return
 			}
 			if requestErr.status >= 500 {
-				slog.ErrorContext(r.Context(), "http binding verification failed", "plugin", binding.PluginName, "binding", binding.Name, "error", err)
+				slog.ErrorContext(r.Context(), "http binding verification failed", "app", binding.AppName, "binding", binding.Name, "error", err)
 			} else {
-				slog.WarnContext(r.Context(), "http binding verification rejected request", "plugin", binding.PluginName, "binding", binding.Name, "error", err)
+				slog.WarnContext(r.Context(), "http binding verification rejected request", "app", binding.AppName, "binding", binding.Name, "error", err)
 			}
 			writeError(w, requestErr.status, requestErr.message)
 			return
 		}
-		slog.ErrorContext(r.Context(), "http binding verification failed", "plugin", binding.PluginName, "binding", binding.Name, "error", err)
+		slog.ErrorContext(r.Context(), "http binding verification failed", "app", binding.AppName, "binding", binding.Name, "error", err)
 		writeError(w, http.StatusUnauthorized, "http binding verification failed")
 		return
 	}
@@ -58,21 +58,21 @@ func (s *Server) handleHTTPBinding(binding MountedHTTPBinding, w http.ResponseWr
 		var requestErr *httpBindingRequestError
 		if errors.As(err, &requestErr) {
 			if requestErr.status >= 500 {
-				slog.ErrorContext(r.Context(), "http binding subject resolution failed", "plugin", binding.PluginName, "binding", binding.Name, "error", err)
+				slog.ErrorContext(r.Context(), "http binding subject resolution failed", "app", binding.AppName, "binding", binding.Name, "error", err)
 			} else {
-				slog.WarnContext(r.Context(), "http binding subject resolution rejected request", "plugin", binding.PluginName, "binding", binding.Name, "error", err)
+				slog.WarnContext(r.Context(), "http binding subject resolution rejected request", "app", binding.AppName, "binding", binding.Name, "error", err)
 			}
 			writeError(w, requestErr.status, requestErr.message)
 			return
 		}
-		slog.ErrorContext(r.Context(), "http binding subject resolution failed", "plugin", binding.PluginName, "binding", binding.Name, "error", err)
+		slog.ErrorContext(r.Context(), "http binding subject resolution failed", "app", binding.AppName, "binding", binding.Name, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to resolve http binding subject")
 		return
 	}
 
 	if binding.Ack != nil {
 		if err := writeHTTPBindingAck(w, binding.Ack); err != nil {
-			slog.ErrorContext(r.Context(), "write http binding ack", "plugin", binding.PluginName, "binding", binding.Name, "error", err)
+			slog.ErrorContext(r.Context(), "write http binding ack", "app", binding.AppName, "binding", binding.Name, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to write http binding response")
 			return
 		}
@@ -82,7 +82,7 @@ func (s *Server) handleHTTPBinding(binding MountedHTTPBinding, w http.ResponseWr
 
 	result, err := s.httpBindingOperationInvocation(r.Context(), binding, resolvedPrincipal, verified, parsed)
 	if err != nil {
-		s.writeInvocationError(w, r, binding.PluginName, binding.Target, err)
+		s.writeInvocationError(w, r, binding.AppName, binding.Target, err)
 		return
 	}
 	writeOperationResult(w, result)

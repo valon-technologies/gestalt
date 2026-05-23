@@ -29,7 +29,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "validate",
 			args:      []string{"validate", "--help"},
-			wantParts: []string{"gestaltd validate", "scoped validation of one plugin closure", "--plugin NAME", "--lockfile PATH"},
+			wantParts: []string{"gestaltd validate", "scoped validation of one app closure", "--app NAME", "--lockfile PATH"},
 		},
 		{
 			name:      "lock",
@@ -50,7 +50,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "serve",
 			args:      []string{"serve", "--help"},
-			wantParts: []string{"gestaltd serve --path PATH", "gestaltd serve --remote URL", "--plugin NAME", "--port PORT", "--watch"},
+			wantParts: []string{"gestaltd serve --path PATH", "gestaltd serve --remote URL", "--app NAME", "--port PORT", "--watch"},
 		},
 		{
 			name:      "provider repo",
@@ -65,7 +65,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "provider validate",
 			args:      []string{"provider", "validate", "--help"},
-			wantParts: []string{"gestaltd provider validate", "v1 supports kind: plugin and kind: ui manifests", "--config PATH"},
+			wantParts: []string{"gestaltd provider validate", "v1 supports kind: app and kind: ui manifests", "--config PATH"},
 		},
 	}
 
@@ -138,7 +138,7 @@ func TestE2EProviderAddPackageSourceUpdatesConfig(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("apiVersion: gestaltd.config/v5\nplugins:\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("apiVersion: gestaltd.config/v6\napps:\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	indexPath := filepath.Join(dir, "provider-index.yaml")
@@ -151,7 +151,7 @@ packages:
     versions:
       1.2.3:
         metadata: file:///tmp/provider-release.yaml
-        kind: plugin
+        kind: app
         runtime: executable
 `
 	if err := os.WriteFile(indexPath, []byte(indexYAML), 0o644); err != nil {
@@ -178,9 +178,9 @@ packages:
 	if got := cfg.ProviderRepositories["local"].URL; got != indexURL {
 		t.Fatalf("providerRepositories.local.url = %q, want %q", got, indexURL)
 	}
-	entry := cfg.Plugins["alpha"]
+	entry := cfg.Apps["alpha"]
 	if entry == nil {
-		t.Fatal(`Plugins["alpha"] = nil`)
+		t.Fatal(`Apps["alpha"] = nil`)
 	}
 	if got := entry.Source.PackageRepo(); got != "local" {
 		t.Fatalf("Source.PackageRepo = %q, want local", got)
@@ -209,9 +209,9 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 			wantPart: "unexpected arguments: extra",
 		},
 		{
-			name:     "top level plugin flag",
-			args:     []string{"--plugin", "alpha"},
-			wantPart: "flag provided but not defined: -plugin",
+			name:     "top level app flag",
+			args:     []string{"--app", "alpha"},
+			wantPart: "flag provided but not defined: -app",
 		},
 		{
 			name:     "serve trailing args",

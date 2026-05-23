@@ -14,11 +14,11 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/services/apps/mcpupstream"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/plugins/mcpupstream"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -301,7 +301,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		}
 		operationConnection = core.ResolveConnectionAlias(operationConnection)
 		explicitConnection := core.ResolveConnectionAlias(conn)
-		overrideAllowed := transport == catalog.TransportPlugin || OperationConnectionOverrideAllowed(execProv, opMeta.ID, params)
+		overrideAllowed := transport == catalog.TransportApp || OperationConnectionOverrideAllowed(execProv, opMeta.ID, params)
 		overrideDenied := !overrideAllowed
 		if operationConnection != "" && operationConnection != explicitConnection && overrideDenied {
 			return fail(fmt.Errorf(
@@ -364,7 +364,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 }
 
 func observePlugin5xxResult(ctx context.Context, span trace.Span, p *principal.Principal, providerName, operation, transport string, result *core.OperationResult) {
-	if result == nil || transport != catalog.TransportPlugin || !validHTTPStatus(result.Status) || result.Status < http.StatusInternalServerError {
+	if result == nil || transport != catalog.TransportApp || !validHTTPStatus(result.Status) || result.Status < http.StatusInternalServerError {
 		return
 	}
 
@@ -665,7 +665,7 @@ func (b *Broker) connectionID(providerName, connection string) string {
 	providerName = strings.TrimSpace(providerName)
 	connection = strings.TrimSpace(connection)
 	if connection == "" {
-		connection = core.PluginConnectionName
+		connection = core.AppConnectionName
 	}
 	if b != nil && b.connectionRuntime != nil {
 		if info, ok := b.connectionRuntime(providerName, connection); ok && strings.TrimSpace(info.ConnectionID) != "" {
@@ -803,7 +803,7 @@ func (b *Broker) ResolveRuntimeConnectionCredential(ctx context.Context, p *prin
 	providerName = strings.TrimSpace(providerName)
 	connection = core.ResolveConnectionAlias(connection)
 	if connection == "" {
-		connection = core.PluginConnectionName
+		connection = core.AppConnectionName
 	}
 	info, ok := b.connectionRuntime(providerName, connection)
 	if !ok {
@@ -912,7 +912,7 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 		credentialConnection = strings.TrimSpace(connection)
 	}
 	if credentialConnection == "" {
-		credentialConnection = core.PluginConnectionName
+		credentialConnection = core.AppConnectionName
 	}
 	SetCredentialAudit(ctx, credentialMode, credentialSubjectID, credentialConnection, storedCredential.Instance)
 	ctx = WithCredentialContext(ctx, CredentialContext{

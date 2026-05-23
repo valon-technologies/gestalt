@@ -256,7 +256,7 @@ func TestTracing_AgentTurnTraceTree(t *testing.T) { //nolint:paralleltest // mut
 		t.Fatalf("session response missing id: %#v", session)
 	}
 
-	turnBody := `{"messages":[{"role":"user","text":"search docs"}],"toolRefs":[{"plugin":"docs","operation":"search"}]}`
+	turnBody := `{"messages":[{"role":"user","text":"search docs"}],"toolRefs":[{"app":"docs","operation":"search"}]}`
 	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(turnBody))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "agent-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)

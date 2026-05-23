@@ -2,7 +2,7 @@ use clap::{CommandFactory, Parser};
 use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
     AgentArgs, AgentCommands, AgentSessionCommands, AgentTurnCommands, AgentTurnEventCommands,
-    AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, InvokeArgs, PluginCommands,
+    AppCommands, AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, InvokeArgs,
     TokenCommands, WorkflowCommands, WorkflowEventCommands, WorkflowRunCommands,
     WorkflowScheduleCommands, WorkflowTriggerCommands,
 };
@@ -33,12 +33,10 @@ fn run() -> anyhow::Result<()> {
             ConfigCommands::Unset { key } => commands::config::unset(&key),
             ConfigCommands::List => commands::config::list(format),
         },
-        Commands::Plugin { command } => dispatch_plugin_command(command, url, format),
-        Commands::Invoke(args) => {
-            dispatch_plugin_command(PluginCommands::Invoke(args), url, format)
-        }
+        Commands::App { command } => dispatch_plugin_command(command, url, format),
+        Commands::Invoke(args) => dispatch_plugin_command(AppCommands::Invoke(args), url, format),
         Commands::Describe(args) => {
-            dispatch_plugin_command(PluginCommands::Describe(args), url, format)
+            dispatch_plugin_command(AppCommands::Describe(args), url, format)
         }
         Commands::Tokens { command } => {
             let client = ApiClient::from_env(url)?;
@@ -58,8 +56,8 @@ fn run() -> anyhow::Result<()> {
             let client = ApiClient::from_env(url)?;
             match command {
                 WorkflowCommands::Schedules { command } => match command {
-                    WorkflowScheduleCommands::List { plugin } => {
-                        commands::workflows::list(&client, plugin.as_deref(), format)
+                    WorkflowScheduleCommands::List { app } => {
+                        commands::workflows::list(&client, app.as_deref(), format)
                     }
                     WorkflowScheduleCommands::Get { id } => {
                         commands::workflows::get(&client, &id, format)
@@ -81,10 +79,10 @@ fn run() -> anyhow::Result<()> {
                     }
                 },
                 WorkflowCommands::Triggers { command } => match command {
-                    WorkflowTriggerCommands::List { plugin, event_type } => {
+                    WorkflowTriggerCommands::List { app, event_type } => {
                         commands::workflows::list_triggers(
                             &client,
-                            plugin.as_deref(),
+                            app.as_deref(),
                             event_type.as_deref(),
                             format,
                         )
@@ -110,13 +108,13 @@ fn run() -> anyhow::Result<()> {
                 },
                 WorkflowCommands::Runs { command } => match command {
                     WorkflowRunCommands::List {
-                        plugin,
+                        app,
                         status,
                         page_size,
                         page_token,
                     } => commands::workflows::list_runs(
                         &client,
-                        plugin.as_deref(),
+                        app.as_deref(),
                         status.as_deref(),
                         page_size,
                         page_token.as_deref(),
@@ -319,30 +317,25 @@ fn dispatch_agent_command(
 }
 
 fn dispatch_plugin_command(
-    command: PluginCommands,
+    command: AppCommands,
     url: Option<&str>,
     format: gestalt::output::Format,
 ) -> anyhow::Result<()> {
     let client = ApiClient::from_env(url)?;
     match command {
-        PluginCommands::List => commands::plugins::list(&client, format),
-        PluginCommands::Connect {
+        AppCommands::List => commands::apps::list(&client, format),
+        AppCommands::Connect {
             name,
             connection,
             instance,
-        } => commands::plugins::connect(&client, &name, connection.as_deref(), instance.as_deref()),
-        PluginCommands::Disconnect {
+        } => commands::apps::connect(&client, &name, connection.as_deref(), instance.as_deref()),
+        AppCommands::Disconnect {
             name,
             connection,
             instance,
-        } => commands::plugins::disconnect(
-            &client,
-            &name,
-            connection.as_deref(),
-            instance.as_deref(),
-        ),
-        PluginCommands::Invoke(InvokeArgs {
-            plugin,
+        } => commands::apps::disconnect(&client, &name, connection.as_deref(), instance.as_deref()),
+        AppCommands::Invoke(InvokeArgs {
+            app,
             operation,
             params,
             connection,
@@ -351,7 +344,7 @@ fn dispatch_plugin_command(
             input_file,
         }) => commands::invoke::run(
             &client,
-            &plugin,
+            &app,
             &operation,
             &params,
             commands::invoke::InvokeOptions {
@@ -362,14 +355,14 @@ fn dispatch_plugin_command(
             },
             format,
         ),
-        PluginCommands::Describe(DescribeArgs {
-            plugin,
+        AppCommands::Describe(DescribeArgs {
+            app,
             operation,
             connection,
             instance,
         }) => commands::describe::describe(
             &client,
-            &plugin,
+            &app,
             &operation,
             connection.as_deref(),
             instance.as_deref(),

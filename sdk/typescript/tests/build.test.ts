@@ -23,11 +23,11 @@ import {
   CredentialContextSchema,
   ExecuteRequestSchema,
   GetSessionCatalogRequestSchema,
-  IntegrationProvider as IntegrationProviderService,
+  AppProvider as AppProviderService,
   RequestContextSchema,
   StartProviderRequestSchema,
   SubjectContextSchema,
-} from "../src/internal/gen/v1/plugin_pb.ts";
+} from "../src/internal/gen/v1/app_pb.ts";
 import {
   GetSecretRequestSchema,
   SecretsProvider as SecretsProviderService,
@@ -91,11 +91,11 @@ async function waitForSocket(
   }
 }
 
-function workflowPluginTarget(pluginName: string, operation: string) {
+function workflowPluginTarget(appName: string, operation: string) {
   return {
     kind: {
-      case: "plugin" as const,
-      value: { pluginName, operation },
+      case: "app" as const,
+      value: { appName, operation },
     },
   };
 }
@@ -200,13 +200,13 @@ test("buildProviderBinary compiles a runnable authentication provider executable
   }
 }, 45_000);
 
-test("buildProviderBinary compiles a runnable plugin provider executable", async () => {
+test("buildProviderBinary compiles a runnable app provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
   const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gts-integration-");
 
   try {
-    const label = "plugin";
+    const label = "app";
     const outputPath = join(tempDir, `fixture-${label}${executableSuffix}`);
     const socketPath = join(tempDir, `${label}.sock`);
     let child: ChildProcess | undefined;
@@ -214,7 +214,7 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
     try {
       buildProviderBinary({
         root: fixturePath("basic-provider"),
-        target: "plugin:./provider.ts#plugin",
+        target: "app:./provider.ts#app",
         outputPath,
         providerName: `fixture-${label}`,
         goos,
@@ -237,14 +237,14 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
 
       const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
       const provider = createUnixGrpcClient(
-        IntegrationProviderService,
+        AppProviderService,
         socketPath,
       );
 
       const identity = await runtime.getProviderIdentity(
         create(EmptySchema, {}),
       );
-      expect(identity.kind).toBe(ProtoProviderKind.INTEGRATION);
+      expect(identity.kind).toBe(ProtoProviderKind.APP);
       expect(identity.name).toBe(`fixture-${label}`);
       expect(identity.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
       expect(identity.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
@@ -424,7 +424,7 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
   }
 }, 30_000);
 
-test("buildProviderBinary compiles a plugin provider executable without an explicit export name", async () => {
+test("buildProviderBinary compiles an app provider executable without an explicit export name", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
   const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gts-integration-fallback-");
@@ -435,7 +435,7 @@ test("buildProviderBinary compiles a plugin provider executable without an expli
   try {
     buildProviderBinary({
       root: fixturePath("basic-provider-default-export"),
-      target: "plugin:./provider.ts",
+      target: "app:./provider.ts",
       outputPath,
       providerName: "fixture-fallback",
       goos,
@@ -458,12 +458,12 @@ test("buildProviderBinary compiles a plugin provider executable without an expli
 
     const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
     const provider = createUnixGrpcClient(
-      IntegrationProviderService,
+      AppProviderService,
       socketPath,
     );
 
     const identity = await runtime.getProviderIdentity(create(EmptySchema, {}));
-    expect(identity.kind).toBe(ProtoProviderKind.INTEGRATION);
+    expect(identity.kind).toBe(ProtoProviderKind.APP);
     expect(identity.name).toBe("fixture-fallback");
 
     const metadata = await provider.getMetadata(create(EmptySchema, {}));
@@ -491,7 +491,7 @@ test("buildProviderBinary compiles a plugin provider executable without an expli
   }
 }, 15_000);
 
-test("buildProviderBinary falls through null exports to the next plugin candidate", async () => {
+test("buildProviderBinary falls through null exports to the next app candidate", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
   const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gts-integration-null-export-");
@@ -502,7 +502,7 @@ test("buildProviderBinary falls through null exports to the next plugin candidat
   try {
     buildProviderBinary({
       root: fixturePath("basic-provider-null-export"),
-      target: "plugin:./provider.ts",
+      target: "app:./provider.ts",
       outputPath,
       providerName: "fixture-null-export",
       goos,
@@ -525,12 +525,12 @@ test("buildProviderBinary falls through null exports to the next plugin candidat
 
     const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
     const provider = createUnixGrpcClient(
-      IntegrationProviderService,
+      AppProviderService,
       socketPath,
     );
 
     const identity = await runtime.getProviderIdentity(create(EmptySchema, {}));
-    expect(identity.kind).toBe(ProtoProviderKind.INTEGRATION);
+    expect(identity.kind).toBe(ProtoProviderKind.APP);
     expect(identity.name).toBe("fixture-null-export");
 
     const result = await provider.execute(
@@ -901,10 +901,10 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
         target: workflowPluginTarget("roadmap", "sync"),
       }),
     );
-    if (run.target?.kind.case !== "plugin") {
-      throw new Error("workflow run target is not a plugin target");
+    if (run.target?.kind.case !== "app") {
+      throw new Error("workflow run target is not an app target");
     }
-    expect(run.target.kind.value.pluginName).toBe("roadmap");
+    expect(run.target.kind.value.appName).toBe("roadmap");
     expect(run.id).toBe("roadmap:sync:1");
   } finally {
     if (child) {

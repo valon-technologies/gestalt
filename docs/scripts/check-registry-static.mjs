@@ -75,13 +75,13 @@ try {
     includes: registryMarker,
   });
   await assertResponse({
-    url: `${baseUrl}/providers/plugin/slack/`,
+    url: `${baseUrl}/providers/app/slack/`,
     host: "registry.gestaltd.ai",
     status: 200,
     includes: registryMarker,
   });
   await assertResponse({
-    url: `${baseUrl}/providers/plugin/slack/events/`,
+    url: `${baseUrl}/providers/app/slack/events/`,
     host: "registry.gestaltd.ai",
     status: 200,
     includes: registryMarker,
@@ -228,25 +228,25 @@ try {
     includes: "Install Gestalt",
   });
   await assertResponse({
-    url: `${baseUrl}/registry/providers/plugin/slack/`,
+    url: `${baseUrl}/registry/providers/app/slack/`,
     host: "gestaltd.ai",
     status: 200,
     includes: registryMarker,
   });
   await assertResponse({
-    url: `${baseUrl}/registry/providers/plugin/slack/events/`,
+    url: `${baseUrl}/registry/providers/app/slack/events/`,
     host: "gestaltd.ai",
     status: 200,
     includes: registryMarker,
   });
   await assertResponse({
-    url: `${baseUrl}/providers/plugin/slack/`,
+    url: `${baseUrl}/providers/app/slack/`,
     host: "gestaltd.ai",
     status: 404,
     excludes: registryMarker,
   });
   await assertResponse({
-    url: `${baseUrl}/providers/plugin/slack/events/`,
+    url: `${baseUrl}/providers/app/slack/events/`,
     host: "gestaltd.ai",
     status: 404,
     excludes: registryMarker,

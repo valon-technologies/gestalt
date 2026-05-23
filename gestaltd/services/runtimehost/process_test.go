@@ -77,7 +77,7 @@ func TestWaitForPluginConnWaitsForGRPCReady(t *testing.T) {
 		t.Fatalf("create short temp dir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
-	socket := filepath.Join(root, "plugin.sock")
+	socket := filepath.Join(root, "app.sock")
 	rawLis, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatalf("listen raw unix socket: %v", err)
@@ -162,7 +162,7 @@ func TestWaitForPluginConnReturnsProcessExitBeforeReady(t *testing.T) {
 		t.Fatalf("create short temp dir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
-	socket := filepath.Join(root, "plugin.sock")
+	socket := filepath.Join(root, "app.sock")
 	rawLis, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatalf("listen raw unix socket: %v", err)

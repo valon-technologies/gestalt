@@ -62,7 +62,7 @@ Core authoring types
 
 .. _python-plugin-authoring:
 
-Plugin authoring
+App authoring
 ----------------
 
 .. autosummary::
@@ -128,7 +128,7 @@ non-aliased message copies.
 .. autosummary::
    :nosignatures:
 
-   BoundWorkflowPluginTarget
+   BoundWorkflowAppTarget
    BoundWorkflowAgentTarget
    BoundWorkflowTarget
    BoundWorkflowRun
@@ -154,7 +154,7 @@ non-aliased message copies.
    workflow_execution_reference
    workflow_execution_reference_from_reference
 
-.. autoclass:: BoundWorkflowPluginTarget
+.. autoclass:: BoundWorkflowAppTarget
 
 .. autoclass:: BoundWorkflowAgentTarget
 
@@ -357,13 +357,13 @@ Provider interfaces
 
    ProviderKind
    ProviderMetadata
-   PluginProvider
+   AppProvider
    MetadataProvider
    HealthChecker
    Starter
    WarningsProvider
    Closer
-   PluginProviderAdapter
+   AppProviderAdapter
    AuthenticationProvider
    ExternalTokenValidator
    SessionTTLProvider
@@ -371,7 +371,7 @@ Provider interfaces
    CacheProvider
    S3Provider
    AgentProvider
-   PluginRuntimeProvider
+   AppRuntimeProvider
    WorkflowProvider
    AuthenticatedUser
    BeginLoginRequest
@@ -382,7 +382,7 @@ Provider interfaces
 
 .. autoclass:: ProviderMetadata
 
-.. autoclass:: PluginProvider
+.. autoclass:: AppProvider
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
@@ -406,7 +406,7 @@ Provider interfaces
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
-.. autoclass:: PluginProviderAdapter
+.. autoclass:: AppProviderAdapter
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
@@ -438,7 +438,7 @@ Provider interfaces
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
-.. autoclass:: PluginRuntimeProvider
+.. autoclass:: AppRuntimeProvider
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
@@ -740,7 +740,7 @@ These clients connect to host services made available to a provider process by
    AgentManager
    Authorization
    AuthorizationClient
-   PluginInvoker
+   AppInvoker
    RuntimeLogHost
    RuntimeLogWriter
    RuntimeLogHandler
@@ -766,7 +766,7 @@ These clients connect to host services made available to a provider process by
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
 
-.. autoclass:: PluginInvoker
+.. autoclass:: AppInvoker
    :members:
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__

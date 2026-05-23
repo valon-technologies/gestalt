@@ -55,7 +55,7 @@ func (s *Server) mountedUIForProvider(provider, mountedPath string) (MountedUI, 
 		if mounted.Handler == nil || mounted.Path != mountedPath {
 			continue
 		}
-		if mounted.PluginName == provider {
+		if mounted.AppName == provider {
 			return mounted, true
 		}
 	}
@@ -80,8 +80,8 @@ func (s *Server) mountedUIRootAccessibleContext(ctx context.Context, p *principa
 		access  invocation.AccessContext
 		allowed bool
 	)
-	if mounted.PluginName != "" {
-		access, allowed = s.authorizer.ResolveAccess(ctx, p, mounted.PluginName)
+	if mounted.AppName != "" {
+		access, allowed = s.authorizer.ResolveAccess(ctx, p, mounted.AppName)
 	} else {
 		access, allowed = s.authorizer.ResolvePolicyAccess(ctx, p, mounted.AuthorizationPolicy)
 	}

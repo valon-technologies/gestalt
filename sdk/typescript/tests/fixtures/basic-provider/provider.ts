@@ -1,6 +1,6 @@
 import {
   connectionParam,
-  definePlugin,
+  defineApp,
   ok,
   s,
 } from "../../../src/index.ts";
@@ -8,7 +8,7 @@ import {
 let configuredName = "";
 let configuredConfig: Record<string, unknown> = {};
 
-export const plugin = definePlugin({
+export const app = defineApp({
   displayName: "Fixture Provider",
   description: "Provider fixture used by SDK tests",
   configure(name, config) {

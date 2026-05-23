@@ -165,8 +165,8 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 		call      func(context.Context, coreworkflow.Provider) error
 	}
 	calls := []workflowProviderMetricCall{
-		{"start run", observability.WorkflowOperationStartRun, workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindPlugin, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.StartRun(ctx, coreworkflow.StartRunRequest{Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{PluginName: "ignored", Operation: "ignored"}}})
+		{"start run", observability.WorkflowOperationStartRun, workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindApp, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.StartRun(ctx, coreworkflow.StartRunRequest{Target: coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "ignored", Operation: "ignored"}}})
 			return err
 		}},
 		{"get run", observability.WorkflowOperationGetRun, workflowMetricAttrs(observability.WorkflowOperationGetRun), func(ctx context.Context, p coreworkflow.Provider) error {
@@ -189,8 +189,8 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 			_, err := p.SignalOrStartRun(ctx, coreworkflow.SignalOrStartRunRequest{Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{ProviderName: "ignored"}}, Signal: coreworkflow.Signal{Name: "poke"}})
 			return err
 		}},
-		{"upsert schedule", observability.WorkflowOperationUpsertSchedule, workflowMetricAttrsWith(observability.WorkflowOperationUpsertSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindPlugin, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{PluginName: "ignored", Operation: "ignored"}}})
+		{"upsert schedule", observability.WorkflowOperationUpsertSchedule, workflowMetricAttrsWith(observability.WorkflowOperationUpsertSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindApp, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{Target: coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "ignored", Operation: "ignored"}}})
 			return err
 		}},
 		{"get schedule", observability.WorkflowOperationGetSchedule, workflowMetricAttrsWith(observability.WorkflowOperationGetSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
@@ -212,8 +212,8 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 			_, err := p.ResumeSchedule(ctx, coreworkflow.ResumeScheduleRequest{ScheduleID: "sched-1"})
 			return err
 		}},
-		{"upsert trigger", observability.WorkflowOperationUpsertEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationUpsertEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindPlugin, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{PluginName: "ignored", Operation: "ignored"}}})
+		{"upsert trigger", observability.WorkflowOperationUpsertEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationUpsertEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindApp, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{Target: coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "ignored", Operation: "ignored"}}})
 			return err
 		}},
 		{"get trigger", observability.WorkflowOperationGetEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationGetEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
@@ -245,8 +245,8 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 	}
 	store := workflow.(coreworkflow.ExecutionReferenceStore)
 	calls = append(calls,
-		workflowProviderMetricCall{"put execution ref", observability.WorkflowOperationPutExecutionReference, workflowMetricAttrsWith(observability.WorkflowOperationPutExecutionReference, observability.WorkflowTriggerKindNone, observability.WorkflowTargetKindPlugin, observability.WorkflowRunStatusUnknown), func(ctx context.Context, _ coreworkflow.Provider) error {
-			_, err := store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{ID: "ref-1", Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{PluginName: "ignored", Operation: "ignored"}}})
+		workflowProviderMetricCall{"put execution ref", observability.WorkflowOperationPutExecutionReference, workflowMetricAttrsWith(observability.WorkflowOperationPutExecutionReference, observability.WorkflowTriggerKindNone, observability.WorkflowTargetKindApp, observability.WorkflowRunStatusUnknown), func(ctx context.Context, _ coreworkflow.Provider) error {
+			_, err := store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{ID: "ref-1", Target: coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "ignored", Operation: "ignored"}}})
 			return err
 		}},
 		workflowProviderMetricCall{"get execution ref", observability.WorkflowOperationGetExecutionReference, workflowMetricAttrs(observability.WorkflowOperationGetExecutionReference), func(ctx context.Context, _ coreworkflow.Provider) error {
@@ -287,7 +287,7 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 		"gestaltd.workflow.provider.name":    "workflow-metrics",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationStartRun,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindManual,
-		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindPlugin,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindApp,
 		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusPending,
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 	})
@@ -299,10 +299,10 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusPending,
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 	})
-	startRunAttrs := workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindPlugin, observability.WorkflowRunStatusUnknown)
+	startRunAttrs := workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindApp, observability.WorkflowRunStatusUnknown)
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.run.id")
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.execution_ref")
-	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.plugin.operation")
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.app.operation")
 }
 
 func TestWorkflowHostRecordsOperationMetricsAcrossTransport(t *testing.T) {
@@ -343,8 +343,8 @@ func TestWorkflowHostRecordsOperationMetricsAcrossTransport(t *testing.T) {
 		Trigger: &proto.WorkflowRunTrigger{Kind: &proto.WorkflowRunTrigger_Schedule{
 			Schedule: &proto.WorkflowScheduleTrigger{ScheduleId: "sched-1"},
 		}},
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Plugin{
-			Plugin: &proto.BoundWorkflowPluginTarget{PluginName: "ignored", Operation: "ignored"},
+		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{
+			App: &proto.BoundWorkflowAppTarget{AppName: "ignored", Operation: "ignored"},
 		}},
 	})
 	if err != nil {
@@ -362,7 +362,7 @@ func TestWorkflowHostRecordsOperationMetricsAcrossTransport(t *testing.T) {
 		"gestaltd.workflow.provider.name":    "workflow-host-metrics",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationInvokeOperation,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSchedule,
-		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindPlugin,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindApp,
 		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusUnknown,
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 	}
@@ -380,7 +380,7 @@ func TestWorkflowHostRecordsOperationMetricsAcrossTransport(t *testing.T) {
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.host.operation.duration", successAttrs, "gestalt.provider")
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.host.operation.duration", successAttrs, "gestaltd.workflow.run.id")
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.host.operation.duration", successAttrs, "gestaltd.workflow.execution_ref")
-	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.host.operation.duration", successAttrs, "gestaltd.workflow.plugin.operation")
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.host.operation.duration", successAttrs, "gestaltd.workflow.app.operation")
 }
 
 func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T) { //nolint:paralleltest // mutates global slog and OTel providers.
@@ -437,7 +437,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 			Kind:      principal.KindUser,
 			Source:    principal.SourceSession,
 			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
-				{Plugin: "simple"},
+				{App: "simple"},
 			}),
 		}),
 		"slack",
@@ -454,8 +454,8 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 			Kind:      principal.KindUser,
 			Source:    principal.SourceSession,
 			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
-				{Plugin: "simple"},
-				{Plugin: "datadog", Operations: []string{"listAlerts"}},
+				{App: "simple"},
+				{App: "datadog", Operations: []string{"listAlerts"}},
 			}),
 		}),
 		"slack",
@@ -506,8 +506,8 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		IdempotencyKey:  "idem-invalid-target",
 		InvocationToken: token,
 		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Plugin{
-			Plugin: &proto.BoundWorkflowPluginTarget{Operation: "run"},
+		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{
+			App: &proto.BoundWorkflowAppTarget{Operation: "run"},
 		}},
 	})
 	if status.Code(err) != codes.InvalidArgument {
@@ -525,7 +525,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 				ProviderName: "simple",
 				Prompt:       "handle the Slack message",
 				ToolRefs: []*proto.AgentToolRef{
-					{Plugin: "github", Operation: "reviewPullRequest"},
+					{App: "github", Operation: "reviewPullRequest"},
 				},
 			},
 		}},
@@ -545,7 +545,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 				ProviderName: "simple",
 				Prompt:       "handle the Slack message",
 				ToolRefs: []*proto.AgentToolRef{
-					{Plugin: "datadog", Operation: "listAlerts"},
+					{App: "datadog", Operation: "listAlerts"},
 				},
 			},
 		}},
@@ -579,7 +579,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"gestaltd.workflow.provider.name":    "unknown",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
-		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindPlugin,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindApp,
 		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusUnknown,
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 		"error.type":                         "grpc.invalid_argument",
@@ -610,7 +610,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"workflow_key_sha256",
 		"gestaltd.workflow.run.id",
 		"gestaltd.workflow.execution_ref",
-		"gestaltd.workflow.plugin.operation",
+		"gestaltd.workflow.app.operation",
 	} {
 		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.manager.operation.duration", successAttrs, forbidden)
 	}
@@ -1044,8 +1044,8 @@ func telemetryRun(id string, status proto.WorkflowRunStatus) *proto.BoundWorkflo
 		Id:        id,
 		Status:    status,
 		CreatedAt: timestamppb.Now(),
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Plugin{
-			Plugin: &proto.BoundWorkflowPluginTarget{PluginName: "ignored", Operation: "ignored"},
+		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{
+			App: &proto.BoundWorkflowAppTarget{AppName: "ignored", Operation: "ignored"},
 		}},
 	}
 }
@@ -1055,8 +1055,8 @@ func telemetrySchedule(id string) *proto.BoundWorkflowSchedule {
 		Id:        id,
 		CreatedAt: timestamppb.Now(),
 		UpdatedAt: timestamppb.Now(),
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Plugin{
-			Plugin: &proto.BoundWorkflowPluginTarget{PluginName: "ignored", Operation: "ignored"},
+		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{
+			App: &proto.BoundWorkflowAppTarget{AppName: "ignored", Operation: "ignored"},
 		}},
 	}
 }
@@ -1067,8 +1067,8 @@ func telemetryEventTrigger(id string) *proto.BoundWorkflowEventTrigger {
 		CreatedAt: timestamppb.Now(),
 		UpdatedAt: timestamppb.Now(),
 		Match:     &proto.WorkflowEventMatch{Type: "ignored"},
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Plugin{
-			Plugin: &proto.BoundWorkflowPluginTarget{PluginName: "ignored", Operation: "ignored"},
+		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{
+			App: &proto.BoundWorkflowAppTarget{AppName: "ignored", Operation: "ignored"},
 		}},
 	}
 }
@@ -1077,8 +1077,8 @@ func telemetryExecutionReference() *proto.WorkflowExecutionReference {
 	return &proto.WorkflowExecutionReference{
 		Id:           "ref-1",
 		ProviderName: "workflow-metrics",
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Plugin{
-			Plugin: &proto.BoundWorkflowPluginTarget{PluginName: "ignored", Operation: "ignored"},
+		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{
+			App: &proto.BoundWorkflowAppTarget{AppName: "ignored", Operation: "ignored"},
 		}},
 		CreatedAt: timestamppb.Now(),
 	}

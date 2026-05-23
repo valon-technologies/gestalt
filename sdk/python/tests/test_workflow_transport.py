@@ -14,7 +14,7 @@ import grpc
 from gestalt import (
     ENV_HOST_SERVICE_SOCKET,
     ENV_HOST_SERVICE_TOKEN,
-    BoundWorkflowPluginTarget,
+    BoundWorkflowAppTarget,
     BoundWorkflowTarget,
     Request,
     WorkflowEvent,
@@ -38,7 +38,7 @@ _manager_relay_tokens: list[str] = []
 
 
 class _PluginTargetDict(TypedDict):
-    plugin_name: str
+    app_name: str
     operation: str
 
 
@@ -55,8 +55,8 @@ class _InvokeOperationRequestInput:
 class _WorkflowHostServicer(workflow_pb2_grpc.WorkflowHostServicer):
     def InvokeOperation(self, request: Any, context: grpc.ServicerContext) -> Any:
         target = request.target
-        plugin = target.plugin if target is not None else None
-        operation = plugin.operation if plugin is not None else ""
+        app = target.plugin if target is not None else None
+        operation = app.operation if app is not None else ""
         return workflow_pb2.InvokeWorkflowOperationResponse(
             status=202,
             body=f"{request.run_id}:{operation}",
@@ -180,7 +180,7 @@ class WorkflowTransportTests(unittest.TestCase):
 
     def test_workflow_host_roundtrip(self) -> None:
         target: _BoundTargetDict = {
-            "plugin": {"plugin_name": "demo", "operation": "sync"}
+            "app": {"app_name": "demo", "operation": "sync"}
         }
         with WorkflowHost() as host:
             response = host.invoke_operation(
@@ -237,8 +237,8 @@ class WorkflowTransportTests(unittest.TestCase):
                 WorkflowManagerCreateDefinition(
                     provider_name="managed",
                     target=BoundWorkflowTarget(
-                        plugin=BoundWorkflowPluginTarget(
-                            plugin_name="demo",
+                        plugin=BoundWorkflowAppTarget(
+                            app_name="demo",
                             operation="sync",
                         ),
                     ),

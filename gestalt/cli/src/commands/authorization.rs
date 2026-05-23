@@ -6,9 +6,9 @@ use serde_json::{Map, Value, json};
 
 use crate::api::{ApiClient, encode_path_segment};
 use crate::cli::{
-    AuthorizationAdminCommands, AuthorizationAdminMemberCommands, AuthorizationCommands,
-    AuthorizationManagedSubjectRole, AuthorizationModelCommands, AuthorizationPageArgs,
-    AuthorizationPluginCommands, AuthorizationPluginMemberCommands, AuthorizationProviderCommands,
+    AuthorizationAdminCommands, AuthorizationAdminMemberCommands, AuthorizationAppCommands,
+    AuthorizationCommands, AuthorizationManagedSubjectRole, AuthorizationModelCommands,
+    AuthorizationPageArgs, AuthorizationPluginMemberCommands, AuthorizationProviderCommands,
     AuthorizationRelationshipCommands, AuthorizationRelationshipListArgs,
     AuthorizationSubjectCommands, AuthorizationSubjectCreateArgs,
     AuthorizationSubjectExternalIdentityCommands, AuthorizationSubjectGrantCommands,
@@ -16,7 +16,7 @@ use crate::cli::{
     AuthorizationSubjectTokenCommands, AuthorizationSubjectTokenCreateArgs,
     AuthorizationSubjectUpdateArgs,
 };
-use crate::commands::plugins;
+use crate::commands::apps;
 use crate::output::{self, Format};
 
 const SUBJECT_PREFIX: &str = "service_account:";
@@ -52,13 +52,11 @@ pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Form
                 AuthorizationSubjectGrantCommands::List { subject } => {
                     list_subject_grants(client, &subject, format)
                 }
-                AuthorizationSubjectGrantCommands::Set {
-                    subject,
-                    plugin,
-                    role,
-                } => set_subject_grant(client, &subject, &plugin, &role, format),
-                AuthorizationSubjectGrantCommands::Remove { subject, plugin } => {
-                    remove_subject_grant(client, &subject, &plugin, format)
+                AuthorizationSubjectGrantCommands::Set { subject, app, role } => {
+                    set_subject_grant(client, &subject, &app, &role, format)
+                }
+                AuthorizationSubjectGrantCommands::Remove { subject, app } => {
+                    remove_subject_grant(client, &subject, &app, format)
                 }
             },
             AuthorizationSubjectCommands::ExternalIdentities { command } => match command {
@@ -129,22 +127,22 @@ pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Form
                 }
             },
         },
-        AuthorizationCommands::Plugins { command } => match command {
-            AuthorizationPluginCommands::List => list_plugins(client, format),
-            AuthorizationPluginCommands::Members { command } => match command {
-                AuthorizationPluginMemberCommands::List { plugin } => {
-                    list_plugin_members(client, &plugin, format)
+        AuthorizationCommands::Apps { command } => match command {
+            AuthorizationAppCommands::List => list_plugins(client, format),
+            AuthorizationAppCommands::Members { command } => match command {
+                AuthorizationPluginMemberCommands::List { app } => {
+                    list_plugin_members(client, &app, format)
                 }
                 AuthorizationPluginMemberCommands::Set(args) => set_plugin_member(
                     client,
-                    &args.plugin,
+                    &args.app,
                     args.subject_id.as_deref(),
                     args.email.as_deref(),
                     &args.role,
                     format,
                 ),
-                AuthorizationPluginMemberCommands::Remove { plugin, subject_id } => {
-                    remove_plugin_member(client, &plugin, &subject_id, format)
+                AuthorizationPluginMemberCommands::Remove { app, subject_id } => {
+                    remove_plugin_member(client, &app, &subject_id, format)
                 }
             },
         },
@@ -406,7 +404,7 @@ pub fn remove_subject_external_identity(
 
 pub fn list_subject_integrations(client: &ApiClient, subject: &str, format: Format) -> Result<()> {
     let resp = client
-        .get(&format!("{}/integrations", subject_path(subject)?))
+        .get(&format!("{}/apps", subject_path(subject)?))
         .context("failed to list service account integrations")?;
     print_array_response(
         &resp,
@@ -424,7 +422,7 @@ pub fn connect_subject_integration(
     instance: Option<&str>,
 ) -> Result<()> {
     let subject = canonical_service_account_subject(subject)?;
-    plugins::connect_managed_subject(client, &subject, name, connection, instance)
+    apps::connect_managed_subject(client, &subject, name, connection, instance)
 }
 
 pub fn disconnect_subject_integration(
@@ -435,7 +433,7 @@ pub fn disconnect_subject_integration(
     instance: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let normalized_connection = connection.map(plugins::canonical_connection_name);
+    let normalized_connection = connection.map(apps::canonical_connection_name);
     let mut params = Vec::new();
     if let Some(connection) = normalized_connection {
         params.push(("_connection".to_string(), connection.to_string()));
@@ -445,7 +443,7 @@ pub fn disconnect_subject_integration(
     }
     let path = append_query(
         &format!(
-            "{}/integrations/{}",
+            "{}/apps/{}",
             subject_path(subject)?,
             encode_path_segment(name)
         ),
@@ -525,7 +523,7 @@ pub fn revoke_all_subject_tokens(client: &ApiClient, subject: &str, format: Form
 
 pub fn list_plugins(client: &ApiClient, format: Format) -> Result<()> {
     let resp = client
-        .get("/admin/api/v1/authorization/plugins")
+        .get("/admin/api/v1/authorization/apps")
         .context("failed to list authorization plugins")?;
     print_array_response(
         &resp,
@@ -538,10 +536,10 @@ pub fn list_plugins(client: &ApiClient, format: Format) -> Result<()> {
 pub fn list_plugin_members(client: &ApiClient, plugin: &str, format: Format) -> Result<()> {
     let resp = client
         .get(&format!(
-            "/admin/api/v1/authorization/plugins/{}/members",
+            "/admin/api/v1/authorization/apps/{}/members",
             encode_path_segment(plugin)
         ))
-        .context("failed to list plugin members")?;
+        .context("failed to list app members")?;
     print_array_response(
         &resp,
         format,
@@ -563,12 +561,12 @@ pub fn set_plugin_member(
     let resp = client
         .put(
             &format!(
-                "/admin/api/v1/authorization/plugins/{}/members",
+                "/admin/api/v1/authorization/apps/{}/members",
                 encode_path_segment(plugin)
             ),
             &body,
         )
-        .context("failed to set plugin member")?;
+        .context("failed to set app member")?;
     print_admin_write_response(&resp, format)
 }
 
@@ -581,11 +579,11 @@ pub fn remove_plugin_member(
     let subject_id = canonical_non_system_subject(subject_id)?;
     let resp = client
         .delete(&format!(
-            "/admin/api/v1/authorization/plugins/{}/members/{}",
+            "/admin/api/v1/authorization/apps/{}/members/{}",
             encode_path_segment(plugin),
             encode_path_segment(&subject_id)
         ))
-        .context("failed to remove plugin member")?;
+        .context("failed to remove app member")?;
     print_status(
         &resp,
         format,
@@ -846,21 +844,21 @@ fn token_permissions(args: &AuthorizationSubjectTokenCreateArgs) -> Result<Optio
         return Ok(None);
     }
 
-    let mut by_plugin: BTreeMap<String, (Vec<String>, Vec<String>)> = BTreeMap::new();
+    let mut by_app: BTreeMap<String, (Vec<String>, Vec<String>)> = BTreeMap::new();
     for value in &args.permission {
         let (plugin, operation) = parse_scoped_value(value, "permission")?;
-        by_plugin.entry(plugin).or_default().0.push(operation);
+        by_app.entry(plugin).or_default().0.push(operation);
     }
     for value in &args.action {
         let (plugin, action) = parse_scoped_value(value, "action")?;
-        by_plugin.entry(plugin).or_default().1.push(action);
+        by_app.entry(plugin).or_default().1.push(action);
     }
 
-    let permissions = by_plugin
+    let permissions = by_app
         .into_iter()
         .map(|(plugin, (operations, actions))| {
             let mut permission = object();
-            permission.insert("plugin".to_string(), json!(plugin));
+            permission.insert("app".to_string(), json!(plugin));
             if !operations.is_empty() {
                 permission.insert("operations".to_string(), json!(operations));
             }
@@ -878,7 +876,7 @@ fn parse_scoped_value(value: &str, label: &str) -> Result<(String, String)> {
         bail!("--{label} must use plugin:name form");
     };
     Ok((
-        non_empty("plugin", plugin)?.to_string(),
+        non_empty("app", plugin)?.to_string(),
         non_empty(label, name)?.to_string(),
     ))
 }
@@ -1053,7 +1051,7 @@ fn member_row(item: &Value) -> Vec<String> {
 
 fn grant_row(item: &Value) -> Vec<String> {
     vec![
-        string_cell(item, "plugin"),
+        string_cell(item, "app"),
         string_cell(item, "role"),
         string_cell(item, "source"),
         bool_cell(item, "mutable"),
@@ -1124,7 +1122,7 @@ fn permissions_cell(item: &Value) -> String {
 }
 
 fn permission_cell(item: &Value) -> String {
-    let plugin = string_cell(item, "plugin");
+    let app = string_cell(item, "app");
     let operations = string_array_cell(item, "operations");
     let actions = string_array_cell(item, "actions");
     let mut parts = Vec::new();
@@ -1135,9 +1133,9 @@ fn permission_cell(item: &Value) -> String {
         parts.push(format!("actions={actions}"));
     }
     if parts.is_empty() {
-        plugin
+        app
     } else {
-        format!("{} ({})", plugin, parts.join(", "))
+        format!("{} ({})", app, parts.join(", "))
     }
 }
 

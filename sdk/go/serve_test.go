@@ -37,7 +37,7 @@ type stubOutput struct {
 	AccessRole          string `json:"access_role"`
 	HostBaseURL         string `json:"host_base_url"`
 	ToolRefsSet         bool   `json:"tool_refs_set,omitempty"`
-	ToolRefPlugin       string `json:"tool_ref_plugin,omitempty"`
+	ToolRefApp       string `json:"tool_ref_plugin,omitempty"`
 	ToolRefOperation    string `json:"tool_ref_operation,omitempty"`
 	IdempotencyKey      string `json:"idempotency_key"`
 }
@@ -113,7 +113,7 @@ func (p *stubProvider) testOp(_ context.Context, _ stubInput, req gestalt.Reques
 		IdempotencyKey:      req.IdempotencyKey,
 	}
 	if len(req.ToolRefs) > 0 {
-		out.ToolRefPlugin = req.ToolRefs[0].Plugin
+		out.ToolRefApp = req.ToolRefs[0].App
 		out.ToolRefOperation = req.ToolRefs[0].Operation
 	}
 	return gestalt.OK(out), nil
@@ -279,7 +279,7 @@ func TestProviderServerGetMetadata(t *testing.T) {
 	t.Parallel()
 
 	t.Run("plain provider", func(t *testing.T) {
-		client := newIntegrationProviderClient(t, &stubProvider{}, stubRouter)
+		client := newAppProviderClient(t, &stubProvider{}, stubRouter)
 		meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
 		if err != nil {
 			t.Fatalf("GetMetadata: %v", err)
@@ -299,7 +299,7 @@ func TestProviderServerGetMetadata(t *testing.T) {
 	})
 
 	t.Run("session catalog provider", func(t *testing.T) {
-		client := newIntegrationProviderClient(t, &sessionCatalogStubProvider{
+		client := newAppProviderClient(t, &sessionCatalogStubProvider{
 			sessionCatalog: &gestalt.Catalog{
 				Name: "test-provider",
 				Operations: []*gestalt.CatalogOperation{
@@ -326,7 +326,7 @@ func TestProviderServerGetMetadata(t *testing.T) {
 	})
 
 	t.Run("post connect provider", func(t *testing.T) {
-		client := newIntegrationProviderClient(t, &postConnectStubProvider{}, postConnectStubRouter)
+		client := newAppProviderClient(t, &postConnectStubProvider{}, postConnectStubRouter)
 		meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
 		if err != nil {
 			t.Fatalf("GetMetadata: %v", err)
@@ -350,7 +350,7 @@ func TestProviderServerPostConnect(t *testing.T) {
 	t.Parallel()
 
 	t.Run("supported", func(t *testing.T) {
-		client := newIntegrationProviderClient(t, &postConnectStubProvider{
+		client := newAppProviderClient(t, &postConnectStubProvider{
 			metadata: map[string]string{"kind": "slack_identity"},
 		}, postConnectStubRouter)
 		resp, err := client.PostConnect(context.Background(), &proto.PostConnectRequest{
@@ -374,7 +374,7 @@ func TestProviderServerPostConnect(t *testing.T) {
 	})
 
 	t.Run("unsupported", func(t *testing.T) {
-		client := newIntegrationProviderClient(t, &stubProvider{}, stubRouter)
+		client := newAppProviderClient(t, &stubProvider{}, stubRouter)
 		_, err := client.PostConnect(context.Background(), &proto.PostConnectRequest{})
 		if err == nil {
 			t.Fatal("PostConnect should return error for unsupported provider")
@@ -407,7 +407,7 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 				},
 			},
 		}
-		client := newIntegrationProviderClient(t, prov, sessionCatalogStubRouter)
+		client := newAppProviderClient(t, prov, sessionCatalogStubRouter)
 		resp, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{
 			Token: "tok",
 			Context: &proto.RequestContext{
@@ -452,7 +452,7 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 	})
 
 	t.Run("unsupported", func(t *testing.T) {
-		client := newIntegrationProviderClient(t, &stubProvider{}, stubRouter)
+		client := newAppProviderClient(t, &stubProvider{}, stubRouter)
 		_, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{Token: "t"})
 		if err == nil {
 			t.Fatal("GetSessionCatalog should return error for unsupported provider")
@@ -538,7 +538,7 @@ func TestProviderServerExecute(t *testing.T) {
 						PublicBaseUrl: "https://gestalt.example.test",
 					},
 					ToolRefs: []*proto.AgentToolRef{{
-						Plugin:    "github",
+						App: "github",
 						Operation: "bot.getPullRequest",
 					}},
 					ToolRefsSet: true,
@@ -584,7 +584,7 @@ func TestProviderServerExecute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := newIntegrationProviderClient(t, &stubProvider{}, tt.router)
+			client := newAppProviderClient(t, &stubProvider{}, tt.router)
 
 			resp, err := client.Execute(context.Background(), tt.request)
 			if err != nil {
@@ -614,7 +614,7 @@ func TestProviderServerExecute(t *testing.T) {
 				(*panicHTTPSubjectProvider).testOp,
 			),
 		)
-		client := newIntegrationProviderClient(t, &panicHTTPSubjectProvider{}, panicHTTPSubjectRouter)
+		client := newAppProviderClient(t, &panicHTTPSubjectProvider{}, panicHTTPSubjectRouter)
 
 		reader, writer, err := os.Pipe()
 		if err != nil {
@@ -657,7 +657,7 @@ func TestProviderServerExecute(t *testing.T) {
 				(*rejectHTTPSubjectProvider).testOp,
 			),
 		)
-		client := newIntegrationProviderClient(t, &rejectHTTPSubjectProvider{}, rejectHTTPSubjectRouter)
+		client := newAppProviderClient(t, &rejectHTTPSubjectProvider{}, rejectHTTPSubjectRouter)
 
 		resp, err := client.ResolveHTTPSubject(context.Background(), &proto.ResolveHTTPSubjectRequest{
 			Request: &proto.HTTPSubjectRequest{
@@ -681,7 +681,7 @@ func TestProviderServerStartProvider(t *testing.T) {
 
 	t.Run("accepts matching protocol version", func(t *testing.T) {
 		prov := &startableStubProvider{}
-		client := newIntegrationProviderClient(t, prov, startableStubRouter)
+		client := newAppProviderClient(t, prov, startableStubRouter)
 		ctx := context.Background()
 
 		cfg, _ := structpb.NewStruct(map[string]any{"key": "val"})
@@ -706,7 +706,7 @@ func TestProviderServerStartProvider(t *testing.T) {
 
 	t.Run("rejects mismatched protocol version", func(t *testing.T) {
 		prov := &startableStubProvider{}
-		client := newIntegrationProviderClient(t, prov, startableStubRouter)
+		client := newAppProviderClient(t, prov, startableStubRouter)
 		ctx := context.Background()
 
 		_, err := client.StartProvider(ctx, &proto.StartProviderRequest{

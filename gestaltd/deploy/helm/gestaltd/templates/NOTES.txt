@@ -49,7 +49,7 @@ Then visit:
 {{- end }}
 
 Default chart profile:
-  auth.plugin.builtin=none, SQLite on /data, single replica
+  auth.app.builtin=none, SQLite on /data, single replica
   static dev-only encryption key
   Suitable for local development or trusted internal clusters
   Replace server.encryption_key and auth settings before production use
@@ -68,7 +68,7 @@ For Google OAuth:
 For OIDC, override config.auth.plugin in your values file.
 {{- if .Values.preparation.enabled }}
 
-Plugin preparation is enabled. Init containers run `gestaltd lock` followed by
+App preparation is enabled. Init containers run `gestaltd lock` followed by
 `gestaltd sync --locked` before the main server starts, preparing lock state
 and artifacts in a shared volume.
 The main container runs with --locked to prevent mutation at startup.

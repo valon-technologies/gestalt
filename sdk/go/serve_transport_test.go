@@ -16,7 +16,7 @@ import (
 )
 
 func TestServeProviderRoundTrip(t *testing.T) {
-	socket := newSocketPath(t, "plugin.sock")
+	socket := newSocketPath(t, "app.sock")
 	t.Setenv(proto.EnvProviderSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -43,7 +43,7 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	})
 
 	conn := newUnixConn(t, socket)
-	client := proto.NewIntegrationProviderClient(conn)
+	client := proto.NewAppProviderClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()

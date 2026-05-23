@@ -11,9 +11,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
+	"github.com/valon-technologies/gestalt/server/services/apps/paraminterp"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
-	"github.com/valon-technologies/gestalt/server/services/plugins/paraminterp"
 )
 
 type startOAuthRequest struct {
@@ -160,7 +160,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 			writePendingConnectionPage(w, status, pendingConnectionPageView{
 				Title:     title,
 				Message:   pageMessage,
-				LinkURL:   "/integrations",
+				LinkURL:   "/apps",
 				LinkLabel: "Open integrations",
 			}, "failed to render oauth error page")
 			return
@@ -316,5 +316,5 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 	auditAllowed = true
 	auditErr = nil
-	http.Redirect(w, r, "/integrations?connected="+url.QueryEscape(providerName), http.StatusSeeOther)
+	http.Redirect(w, r, "/apps?connected="+url.QueryEscape(providerName), http.StatusSeeOther)
 }

@@ -8,8 +8,8 @@ from urllib import parse as _urlparse
 import grpc
 
 from ._api import Response
-from ._gen.v1 import plugin_pb2 as _pb
-from ._gen.v1 import plugin_pb2_grpc as _pb_grpc
+from ._gen.v1 import app_pb2 as _pb
+from ._gen.v1 import app_pb2_grpc as _pb_grpc
 from ._grpc_transport import (
     ENV_HOST_SERVICE_SOCKET,
     ENV_HOST_SERVICE_TOKEN,
@@ -30,10 +30,10 @@ pb_grpc: Any = _pb_grpc
 _PLUGIN_INVOKER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 
 
-class PluginInvoker:
-    """Client for invoking sibling plugin operations from provider code.
+class AppInvoker:
+    """Client for invoking sibling app operations from provider code.
 
-    ``PluginInvoker`` connects to the host plugin-invoker service exposed in
+    ``AppInvoker`` connects to the host plugin-invoker service exposed in
     ``GESTALT_HOST_SERVICE_SOCKET``. It attaches the invocation token supplied
     by the host to each request and returns regular :class:`gestalt.Response`
     objects for operation and GraphQL calls.
@@ -51,8 +51,8 @@ class PluginInvoker:
             )
         relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
 
-        self._channel = _plugin_invoker_channel(socket_path, token=relay_token)
-        self._stub = pb_grpc.PluginInvokerStub(self._channel)
+        self._channel = _app_invoker_channel(socket_path, token=relay_token)
+        self._stub = pb_grpc.AppInvokerStub(self._channel)
         self._invocation_token = trimmed_token
 
     def close(self) -> None:
@@ -70,14 +70,14 @@ class PluginInvoker:
         instance: str = "",
         idempotency_key: str = "",
     ) -> Response[str]:
-        """Invoke one operation on another plugin.
+        """Invoke one operation on another app.
 
         ``params`` accepts a JSON-compatible object. ``connection`` and
         ``instance`` select the connected account or provider instance that the
-        target plugin should invoke against.
+        target app should invoke against.
         """
 
-        request = pb.PluginInvokeRequest(
+        request = pb.AppInvokeRequest(
             invocation_token=self._invocation_token,
             plugin=plugin,
             operation=operation,
@@ -108,7 +108,7 @@ class PluginInvoker:
         if not trimmed_document:
             raise RuntimeError("plugin invoker: graphql document is required")
 
-        request = pb.PluginInvokeGraphQLRequest(
+        request = pb.AppInvokeGraphQLRequest(
             invocation_token=self._invocation_token,
             plugin=plugin,
             document=trimmed_document,
@@ -142,7 +142,7 @@ class PluginInvoker:
         response = self._stub.ExchangeInvocationToken(request)
         return response.invocation_token
 
-    def __enter__(self) -> PluginInvoker:
+    def __enter__(self) -> AppInvoker:
         """Return the client for ``with`` statements."""
 
         return self
@@ -189,7 +189,7 @@ def _grants_from_values(values: Sequence[Any] | None) -> list[Any]:
         if not plugin:
             continue
         grants.append(
-            pb.PluginInvocationGrant(
+            pb.AppInvocationGrant(
                 plugin=plugin,
                 operations=operations,
                 surfaces=surfaces,
@@ -201,14 +201,14 @@ def _grants_from_values(values: Sequence[Any] | None) -> list[Any]:
 
 def _grant_parts(value: Any) -> tuple[str, list[str], list[str], bool]:
     if isinstance(value, Mapping):
-        raw_plugin = value.get("plugin", "")
+        raw_plugin = value.get("app", "")
         raw_operations = value.get("operations", ())
         raw_surfaces = value.get("surfaces", ())
         raw_all_operations = value.get(
             "all_operations", value.get("allOperations", False)
         )
     else:
-        raw_plugin = getattr(value, "plugin", "")
+        raw_plugin = getattr(value, "app", "")
         raw_operations = getattr(value, "operations", ())
         raw_surfaces = getattr(value, "surfaces", ())
         raw_all_operations = getattr(
@@ -217,7 +217,7 @@ def _grant_parts(value: Any) -> tuple[str, list[str], list[str], bool]:
             getattr(value, "allOperations", False),
         )
 
-    plugin = str(raw_plugin).strip()
+    app = str(raw_plugin).strip()
     if isinstance(raw_operations, str):
         raw_operations = [raw_operations]
     if isinstance(raw_surfaces, str):
@@ -233,7 +233,7 @@ def _grant_parts(value: Any) -> tuple[str, list[str], list[str], bool]:
     )
 
 
-def _plugin_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
+def _app_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
     target = raw_target.strip()
     if not target:
         raise RuntimeError("plugin invoker: transport target is required")
@@ -243,7 +243,7 @@ def _plugin_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel
             raise RuntimeError(
                 f"plugin invoker: tcp target {raw_target!r} is missing host:port"
             )
-        return _with_plugin_invoker_relay_token(
+        return _with_app_invoker_relay_token(
             insecure_internal_channel(internal_channel_target("tcp", address)),
             token,
         )
@@ -253,7 +253,7 @@ def _plugin_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel
             raise RuntimeError(
                 f"plugin invoker: tls target {raw_target!r} is missing host:port"
             )
-        return _with_plugin_invoker_relay_token(
+        return _with_app_invoker_relay_token(
             secure_internal_channel(internal_channel_target("tls", address)),
             token,
         )
@@ -263,7 +263,7 @@ def _plugin_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel
             raise RuntimeError(
                 f"plugin invoker: unix target {raw_target!r} is missing a socket path"
             )
-        return _with_plugin_invoker_relay_token(
+        return _with_app_invoker_relay_token(
             insecure_internal_channel(internal_channel_target("unix", socket_path)),
             token,
         )
@@ -272,13 +272,13 @@ def _plugin_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel
         raise RuntimeError(
             f"plugin invoker: unsupported target scheme {parsed.scheme!r}"
         )
-    return _with_plugin_invoker_relay_token(
+    return _with_app_invoker_relay_token(
         insecure_internal_channel(internal_channel_target("unix", target)),
         token,
     )
 
 
-def _with_plugin_invoker_relay_token(channel: grpc.Channel, token: str) -> grpc.Channel:
+def _with_app_invoker_relay_token(channel: grpc.Channel, token: str) -> grpc.Channel:
     token = token.strip()
     if not token:
         return channel

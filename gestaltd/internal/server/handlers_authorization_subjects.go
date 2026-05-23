@@ -50,7 +50,7 @@ type managedSubjectMemberInfo struct {
 }
 
 type managedSubjectGrantInfo struct {
-	Plugin  string `json:"plugin"`
+	App     string `json:"app"`
 	Role    string `json:"role"`
 	Source  string `json:"source"`
 	Mutable bool   `json:"mutable"`
@@ -74,17 +74,17 @@ func (s *Server) mountAuthorizationSubjectRoutes(r chi.Router) {
 	r.Delete("/authorization/subjects/{subjectID}/members/{memberSubjectID}", s.deleteManagedSubjectMember)
 
 	r.Get("/authorization/subjects/{subjectID}/grants", s.listManagedSubjectGrants)
-	r.Put("/authorization/subjects/{subjectID}/grants/{plugin}", s.putManagedSubjectGrant)
-	r.Delete("/authorization/subjects/{subjectID}/grants/{plugin}", s.deleteManagedSubjectGrant)
+	r.Put("/authorization/subjects/{subjectID}/grants/{app}", s.putManagedSubjectGrant)
+	r.Delete("/authorization/subjects/{subjectID}/grants/{app}", s.deleteManagedSubjectGrant)
 
 	r.Get("/authorization/subjects/{subjectID}/external-identities", s.listManagedSubjectExternalIdentities)
 	r.Put("/authorization/subjects/{subjectID}/external-identities", s.putManagedSubjectExternalIdentity)
 	r.Delete("/authorization/subjects/{subjectID}/external-identities", s.deleteManagedSubjectExternalIdentity)
 
-	r.Get("/authorization/subjects/{subjectID}/integrations", s.listManagedSubjectIntegrations)
+	r.Get("/authorization/subjects/{subjectID}/apps", s.listManagedSubjectIntegrations)
 	r.Post("/authorization/subjects/{subjectID}/auth/start-oauth", s.startManagedSubjectIntegrationOAuth)
 	r.Post("/authorization/subjects/{subjectID}/auth/connect-manual", s.connectManagedSubjectManual)
-	r.Delete("/authorization/subjects/{subjectID}/integrations/{name}", s.disconnectManagedSubjectIntegration)
+	r.Delete("/authorization/subjects/{subjectID}/apps/{name}", s.disconnectManagedSubjectIntegration)
 
 	r.Get("/authorization/subjects/{subjectID}/tokens", s.listManagedSubjectAPITokens)
 	r.Post("/authorization/subjects/{subjectID}/tokens", s.createManagedSubjectAPIToken)
@@ -341,7 +341,7 @@ func (s *Server) putManagedSubjectGrant(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "plugin"))
+	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "app"))
 	if err != nil {
 		s.writeAdminAuthorizationPluginError(w, err)
 		return
@@ -372,12 +372,12 @@ func (s *Server) putManagedSubjectGrant(w http.ResponseWriter, r *http.Request) 
 	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
 			"status":   "persisted_pending_reload",
-			"grant":    managedSubjectGrantInfo{Plugin: plugin, Role: membership.Role, Source: "dynamic", Mutable: true},
+			"grant":    managedSubjectGrantInfo{App: plugin, Role: membership.Role, Source: "dynamic", Mutable: true},
 			"reloaded": false,
 		})
 		return
 	}
-	writeJSON(w, http.StatusOK, managedSubjectGrantInfo{Plugin: plugin, Role: membership.Role, Source: "dynamic", Mutable: true})
+	writeJSON(w, http.StatusOK, managedSubjectGrantInfo{App: plugin, Role: membership.Role, Source: "dynamic", Mutable: true})
 }
 
 func (s *Server) deleteManagedSubjectGrant(w http.ResponseWriter, r *http.Request) {
@@ -385,7 +385,7 @@ func (s *Server) deleteManagedSubjectGrant(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "plugin"))
+	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "app"))
 	if err != nil {
 		s.writeAdminAuthorizationPluginError(w, err)
 		return
@@ -774,10 +774,10 @@ func (s *Server) managedSubjectMemberRows(ctx context.Context, subjectID string)
 }
 
 func (s *Server) managedSubjectGrantRows(ctx context.Context, subjectID string) ([]managedSubjectGrantInfo, error) {
-	byPlugin := map[string]managedSubjectGrantInfo{}
-	for plugin := range s.pluginDefs {
-		if access, ok := s.authorizer.StaticRoleForProviderIdentity(plugin, subjectID); ok && access.Role != "" {
-			byPlugin[plugin] = managedSubjectGrantInfo{Plugin: plugin, Role: access.Role, Source: "static", Mutable: false}
+	byApp := map[string]managedSubjectGrantInfo{}
+	for appName := range s.pluginDefs {
+		if access, ok := s.authorizer.StaticRoleForProviderIdentity(appName, subjectID); ok && access.Role != "" {
+			byApp[appName] = managedSubjectGrantInfo{App: appName, Role: access.Role, Source: "static", Mutable: false}
 		}
 	}
 	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ReadRelationshipsRequest{
@@ -788,23 +788,23 @@ func (s *Server) managedSubjectGrantRows(ctx context.Context, subjectID string) 
 		return nil, err
 	}
 	for _, rel := range relationships {
-		if rel == nil || rel.GetResource() == nil || rel.GetResource().GetType() != authorization.ProviderResourceTypePluginDynamic {
+		if rel == nil || rel.GetResource() == nil || rel.GetResource().GetType() != authorization.ProviderResourceTypeAppDynamic {
 			continue
 		}
-		plugin := strings.TrimSpace(rel.GetResource().GetId())
-		if plugin == "" {
+		app := strings.TrimSpace(rel.GetResource().GetId())
+		if app == "" {
 			continue
 		}
-		if existing, ok := byPlugin[plugin]; ok && existing.Source == "static" {
+		if existing, ok := byApp[app]; ok && existing.Source == "static" {
 			continue
 		}
-		byPlugin[plugin] = managedSubjectGrantInfo{Plugin: plugin, Role: strings.TrimSpace(rel.GetRelation()), Source: "dynamic", Mutable: true}
+		byApp[app] = managedSubjectGrantInfo{App: app, Role: strings.TrimSpace(rel.GetRelation()), Source: "dynamic", Mutable: true}
 	}
-	out := make([]managedSubjectGrantInfo, 0, len(byPlugin))
-	for _, grant := range byPlugin {
+	out := make([]managedSubjectGrantInfo, 0, len(byApp))
+	for _, grant := range byApp {
 		out = append(out, grant)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Plugin < out[j].Plugin })
+	sort.Slice(out, func(i, j int) bool { return out[i].App < out[j].App })
 	return out, nil
 }
 

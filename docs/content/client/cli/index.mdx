@@ -4,7 +4,7 @@ asIndexPage: true
 
 # CLI
 
-`gestalt` is the client CLI for interacting with a running `gestaltd` server. It handles authentication, plugin connections, operation invocation, workflow management, agent sessions and turns, and API token management. A [Docker image](/client/cli/docker) is also available for CI and containerized environments.
+`gestalt` is the client CLI for interacting with a running `gestaltd` server. It handles authentication, app connections, operation invocation, workflow management, agent sessions and turns, and API token management. A [Docker image](/client/cli/docker) is also available for CI and containerized environments.
 
 ## Global flags
 
@@ -22,11 +22,11 @@ asIndexPage: true
 | `gestalt auth status` | Show current authentication state and server connectivity. |
 | `gestalt init` | Run the interactive setup wizard. |
 | `gestalt config get\|set\|unset\|list` | Manage the local client config. |
-| `gestalt plugin list` | List plugins from the server. |
-| `gestalt plugin connect NAME` | Connect a plugin through OAuth or interactive manual authentication. |
-| `gestalt plugin disconnect NAME` | Disconnect a plugin, removing stored credentials. |
-| `gestalt plugin invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
-| `gestalt plugin describe NAME OPERATION` | Show one operation's parameter contract. |
+| `gestalt app list` | List apps from the server. |
+| `gestalt app connect NAME` | Connect an app through OAuth or interactive manual authentication. |
+| `gestalt app disconnect NAME` | Disconnect an app, removing stored credentials. |
+| `gestalt app invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
+| `gestalt app describe NAME OPERATION` | Show one operation's parameter contract. |
 | `gestalt workflow schedules ...` | Create, list, inspect, update, pause, resume, or delete workflow schedules. |
 | `gestalt workflow triggers ...` | Create, list, inspect, update, pause, resume, or delete workflow triggers. |
 | `gestalt workflow events publish ...` | Publish an event into the workflow system. |
@@ -64,41 +64,41 @@ For authentication, the CLI checks `GESTALT_API_KEY` first, then stored credenti
 
 The CLI searches the current directory and then parent directories until it finds the nearest `.gestalt/config.json`.
 
-## Plugin connect flags
+## App connect flags
 
-`gestalt plugin connect NAME` accepts `--connection` and `--instance`. When the selected connection uses manual authentication instead of OAuth, the CLI prompts for the required credential fields and connection parameters.
+`gestalt app connect NAME` accepts `--connection` and `--instance`. When the selected connection uses manual authentication instead of OAuth, the CLI prompts for the required credential fields and connection parameters.
 
-## Plugin disconnect flags
+## App disconnect flags
 
-`gestalt plugin disconnect NAME` accepts `--connection` and `--instance` to target a specific named connection or stored instance. When both are omitted, the default connection is disconnected.
+`gestalt app disconnect NAME` accepts `--connection` and `--instance` to target a specific named connection or stored instance. When both are omitted, the default connection is disconnected.
 
 ## Invoke flags
 
-`gestalt plugin invoke` accepts `-p`/`--param key=value`, `--input-file file.json` (use `-` for stdin), `--connection`, `--instance`, and `--select`. Use `:=` instead of `=` to pass JSON values: `-p items:='["a","b"]'`.
+`gestalt app invoke` accepts `-p`/`--param key=value`, `--input-file file.json` (use `-` for stdin), `--connection`, `--instance`, and `--select`. Use `:=` instead of `=` to pass JSON values: `-p items:='["a","b"]'`.
 
 ## Operation name matching
 
 Operation names with dots (like `chat.postMessage`) can be typed as space-separated segments:
 
 ```sh
-gestalt plugin invoke slack chat postMessage
+gestalt app invoke slack chat postMessage
 ```
 
-This resolves to `chat.postMessage`. If the segments match a prefix shared by multiple operations, the CLI displays the matching subset instead of an error. For example, `gestalt plugin invoke slack chat` lists all operations starting with `chat.`.
+This resolves to `chat.postMessage`. If the segments match a prefix shared by multiple operations, the CLI displays the matching subset instead of an error. For example, `gestalt app invoke slack chat` lists all operations starting with `chat.`.
 
 ## Examples
 
 ```sh
-gestalt plugin list
-gestalt plugin connect notion --connection MCP
-gestalt plugin describe slack chat.postMessage
-gestalt plugin invoke slack chat postMessage \
+gestalt app list
+gestalt app connect notion --connection MCP
+gestalt app describe slack chat.postMessage
+gestalt app invoke slack chat postMessage \
   --connection plugin \
   -p channel=C123 \
   -p text='hello'
 gestalt workflow schedules create \
   --cron "0 */6 * * *" \
-  --plugin github \
+  --app github \
   --operation issues.list \
   -p owner=valon-technologies \
   -p repo=gestalt
@@ -106,7 +106,7 @@ gestalt workflow triggers create \
   --type roadmap.item.updated \
   --source roadmap \
   --subject item \
-  --plugin slack \
+  --app slack \
   --operation chat.postMessage \
   -p channel=C123 \
   -p text='Roadmap item updated'
@@ -116,7 +116,7 @@ gestalt workflow events publish \
   --subject item \
   -p id=item-1 \
   -e traceId=trace-1
-gestalt workflow runs list --plugin github --status failed
+gestalt workflow runs list --app github --status failed
 gestalt tokens create --name automation
 ```
 
@@ -129,12 +129,12 @@ workflow runs.
 
 ```sh
 gestalt workflow schedules list
-gestalt workflow schedules list --plugin github
+gestalt workflow schedules list --app github
 gestalt workflow schedules get <schedule-id>
 gestalt workflow schedules create \
   --cron "0 */6 * * *" \
   --timezone America/New_York \
-  --plugin github \
+  --app github \
   --operation issues.list \
   --connection default \
   --instance acme-org \
@@ -154,13 +154,13 @@ Use `-p key=value` for strings and `-p key:=json` for structured values. Use
 
 ```sh
 gestalt workflow triggers list
-gestalt workflow triggers list --plugin slack --type roadmap.item.updated
+gestalt workflow triggers list --app slack --type roadmap.item.updated
 gestalt workflow triggers get <trigger-id>
 gestalt workflow triggers create \
   --type roadmap.item.updated \
   --source roadmap \
   --subject item \
-  --plugin slack \
+  --app slack \
   --operation chat.postMessage \
   --connection default \
   -p channel=C123 \
@@ -171,7 +171,7 @@ gestalt workflow triggers resume <trigger-id>
 gestalt workflow triggers delete <trigger-id>
 ```
 
-Trigger creation uses the same plugin target input conventions as schedules.
+Trigger creation uses the same app target input conventions as schedules.
 `--type` is required. `--source` and `--subject` are optional exact match
 fields. Use `--target-file file.json` when you want to pass the full workflow
 target object directly, for example an agent target.
@@ -199,7 +199,7 @@ start the next operations.
 
 ```sh
 gestalt workflow runs list
-gestalt workflow runs list --plugin github --status failed
+gestalt workflow runs list --app github --status failed
 gestalt workflow runs get <run-id>
 gestalt workflow runs cancel <run-id> --reason "operator requested"
 ```
@@ -235,7 +235,7 @@ cat <<'JSON' | gestalt --format json agent turns create session-1 --input -
     {"role": "user", "text": "Summarize the roadmap risk."}
   ],
   "toolRefs": [
-    {"pluginName": "roadmap", "operation": "sync"}
+    {"app": "roadmap", "operation": "sync"}
   ],
   "responseSchema": {
     "type": "object",
@@ -252,7 +252,7 @@ JSON
 `--provider`; `gestalt agent resume [session-id]` resumes either a specific
 session or the most recently updated active session. The first turn in a CLI
 session can include repeated `--system` messages, repeated `--message` prompts,
-and repeated `--tool plugin:operation` additions. During execution, the CLI
+and repeated `--tool app:operation` additions. During execution, the CLI
 parses the event stream, renders assistant/tool/interaction events, cancels the
 active turn on Ctrl-C, and resolves pending interactions inline. TTY sessions
 use a full-screen terminal UI with a persistent transcript, streaming assistant
@@ -270,7 +270,7 @@ prompt-and-print fallback used by scripts and tests; there, end an input line
 with `\` to continue the same user message on the next prompt.
 
 `gestalt agent turns create` is the non-interactive equivalent. It supports
-repeated `--system`, repeated `--message`, repeated `--tool plugin:operation`,
+repeated `--system`, repeated `--message`, repeated `--tool app:operation`,
 `--idempotency-key`, and `--input`. `gestalt agent turns transcript` renders a
 stored turn by combining the turn's messages from
 `GET /api/v1/agent/turns/{turnID}` with stored display-projected events from
@@ -289,7 +289,7 @@ streaming output to interaction prompts when a provider requests input.
 
 `gestalt authorization` covers service account subjects and the dynamic
 authorization admin surface. Built-in Gestalt admins can manage all dynamic
-grants. Plugin admins can manage members for the specific plugins they
+grants. App admins can manage members for the specific apps they
 administer, so they can grant users or service accounts access without being
 global Gestalt admins. Admin subcommands may require `--url` pointing at the
 management base URL when public and management listeners are split.
@@ -334,15 +334,15 @@ gestalt authorization subjects tokens create service_account:release-bot \
 gestalt authorization subjects tokens revoke service_account:release-bot <token-id>
 gestalt authorization subjects tokens revoke-all service_account:release-bot
 
-gestalt authorization plugins list
-gestalt authorization plugins members list github
-gestalt authorization plugins members set github \
+gestalt authorization apps list
+gestalt authorization apps members list github
+gestalt authorization apps members set github \
   --subject-id service_account:release-bot \
   --role viewer
-gestalt authorization plugins members set github \
+gestalt authorization apps members set github \
   --email operator@example.com \
   --role admin
-gestalt authorization plugins members remove github service_account:release-bot
+gestalt authorization apps members remove github service_account:release-bot
 
 gestalt authorization admins members list
 gestalt authorization admins members set \
@@ -353,15 +353,15 @@ gestalt authorization admins members remove user:user_123
 gestalt authorization provider get
 gestalt authorization models list
 gestalt authorization relationships list \
-  --resource-type plugin_dynamic \
+  --resource-type app_dynamic \
   --resource-id github
 ```
 
-Subject token creation accepts `--permission plugin:operation`,
-`--action plugin:action`, `--scopes`, or `--permissions-file` with a raw JSON
+Subject token creation accepts `--permission app:operation`,
+`--action app:action`, `--scopes`, or `--permissions-file` with a raw JSON
 permissions array. These inputs are mutually exclusive except
 `--permission` and `--action`, which can be combined. Provider-dev attach uses
-`--action plugin:provider_dev.attach`.
+`--action app:provider_dev.attach`.
 
 ### Local Quickstart
 

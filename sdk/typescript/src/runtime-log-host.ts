@@ -13,9 +13,9 @@ import {
 } from "./host-service.ts";
 
 import {
-  PluginRuntimeLogHost as PluginRuntimeLogHostService,
-  PluginRuntimeLogStream as ProtoPluginRuntimeLogStream,
-} from "./internal/gen/v1/pluginruntime_pb.ts";
+  AppRuntimeLogHost as AppRuntimeLogHostService,
+  AppRuntimeLogStream as ProtoAppRuntimeLogStream,
+} from "./internal/gen/v1/appruntime_pb.ts";
 import { timestampFromDate } from "./protocol.ts";
 
 /** Environment variable containing the current plugin-runtime session id. */
@@ -71,7 +71,7 @@ export interface RuntimeLogWriterOptions {
  * to bridge Node streams into the runtime log host.
  */
 export class RuntimeLogHost {
-  private readonly client: Client<typeof PluginRuntimeLogHostService>;
+  private readonly client: Client<typeof AppRuntimeLogHostService>;
   private sourceSeq = 0n;
 
   constructor() {
@@ -87,7 +87,7 @@ export class RuntimeLogHost {
       parseHostServiceTarget("runtime log host", target),
       hostServiceMetadataInterceptors(relayToken, ""),
     );
-    this.client = createClient(PluginRuntimeLogHostService, transport);
+    this.client = createClient(AppRuntimeLogHostService, transport);
   }
 
   async appendLogs(
@@ -208,14 +208,14 @@ function runtimeLogAppendResponseFromProto(
 
 function runtimeLogStream(
   stream: RuntimeLogStreamInput,
-): ProtoPluginRuntimeLogStream {
+): ProtoAppRuntimeLogStream {
   switch (stream.trim().toLowerCase()) {
     case "stdout":
-      return ProtoPluginRuntimeLogStream.STDOUT;
+      return ProtoAppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_STDOUT;
     case "stderr":
-      return ProtoPluginRuntimeLogStream.STDERR;
+      return ProtoAppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_STDERR;
     case "runtime":
-      return ProtoPluginRuntimeLogStream.RUNTIME;
+      return ProtoAppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_RUNTIME;
     default:
       throw new Error(`unsupported runtime log stream ${JSON.stringify(stream)}`);
   }

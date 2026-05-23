@@ -16,8 +16,8 @@ class WorkflowHelperTests(unittest.TestCase):
         created_at = dt.datetime(2026, 5, 8, 12, 0, tzinfo=dt.timezone.utc)
 
         target = gestalt.bound_workflow_target(
-            plugin=gestalt.BoundWorkflowPluginTarget(
-                plugin_name="plugin",
+            plugin=gestalt.BoundWorkflowAppTarget(
+                app_name="app",
                 operation="run",
                 input=Payload(ok=False, count=0),
             )
@@ -36,29 +36,29 @@ class WorkflowHelperTests(unittest.TestCase):
             trigger=gestalt.WorkflowRunTrigger(manual=True),
         )
 
-        self.assertEqual(target.plugin.plugin_name, "plugin")
-        self.assertEqual(target.plugin.input.fields["count"].number_value, 0)
-        self.assertFalse(target.plugin.input.fields["ok"].bool_value)
+        self.assertEqual(target.app.app_name, "app")
+        self.assertEqual(target.app.input.fields["count"].number_value, 0)
+        self.assertFalse(target.app.input.fields["ok"].bool_value)
         self.assertEqual(signal.payload.fields["ok"].bool_value, True)
         self.assertEqual(signal.sequence, 0)
         self.assertEqual(run.created_at.ToDatetime(tzinfo=dt.timezone.utc), created_at)
 
     def test_copy_helpers_do_not_alias_nested_payloads(self) -> None:
         target = gestalt.bound_workflow_target(
-            plugin=gestalt.BoundWorkflowPluginTarget(
-                plugin_name="plugin",
+            plugin=gestalt.BoundWorkflowAppTarget(
+                app_name="app",
                 operation="run",
                 input={"nested": {"value": "original"}},
             )
         )
         copied = gestalt.bound_workflow_target_from_target(target)
 
-        target.plugin.input.fields["nested"].struct_value.fields[
+        target.app.input.fields["nested"].struct_value.fields[
             "value"
         ].string_value = "changed"
 
         self.assertEqual(
-            copied.plugin.input.fields["nested"]
+            copied.app.input.fields["nested"]
             .struct_value.fields["value"]
             .string_value,
             "original",
@@ -176,8 +176,8 @@ class WorkflowHelperTests(unittest.TestCase):
                     model_options={"temperature": 0},
                     timeout_seconds=45,
                     output_delivery=gestalt.WorkflowOutputDelivery(
-                        target=gestalt.BoundWorkflowPluginTarget(
-                            plugin_name="slack",
+                        target=gestalt.BoundWorkflowAppTarget(
+                            app_name="slack",
                             operation="reply",
                         ),
                         input_bindings=[
@@ -215,7 +215,7 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertIsInstance(copied.steps[0].messages[0], gestalt.AgentMessage)
         self.assertEqual(copied.steps[0].response_schema["type"], "object")
         self.assertEqual(
-            copied.steps[0].output_delivery.target.plugin_name,
+            copied.steps[0].output_delivery.target.app_name,
             "slack",
         )
         self.assertEqual(

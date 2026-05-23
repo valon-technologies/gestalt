@@ -279,7 +279,7 @@ func (s *Server) pluginRouteAuthMiddleware(pluginParam string) func(http.Handler
 
 			auth, err := s.pluginAuthRuntime(pluginName)
 			if err != nil {
-				slog.ErrorContext(r.Context(), "plugin route auth provider is not initialized", "plugin", pluginName, "error", err)
+				slog.ErrorContext(r.Context(), "plugin route auth provider is not initialized", "app", pluginName, "error", err)
 				writeError(w, http.StatusInternalServerError, "plugin route auth provider is not initialized")
 				return
 			}

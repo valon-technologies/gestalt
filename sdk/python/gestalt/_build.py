@@ -31,7 +31,7 @@ class BuildArgs:
     root: pathlib.Path
     target: str
     output_path: pathlib.Path
-    plugin_name: str
+    app_name: str
     runtime_kind: str
     goos: str
     goarch: str
@@ -51,12 +51,12 @@ def _parse_build_args(args: list[str]) -> BuildArgs | None:
     if len(args) != 7:
         return None
 
-    root, target, output_path, plugin_name, runtime_kind, goos, goarch = args
+    root, target, output_path, app_name, runtime_kind, goos, goarch = args
     return BuildArgs(
         root=pathlib.Path(root),
         target=target,
         output_path=pathlib.Path(output_path),
-        plugin_name=plugin_name,
+        app_name=app_name,
         runtime_kind=runtime_kind,
         goos=goos,
         goarch=goarch,
@@ -75,7 +75,7 @@ def build_plugin_binary(args: BuildArgs) -> None:
         write_bundled_plugin_config(
             bundle_config_path,
             target=args.target,
-            plugin_name=args.plugin_name,
+            app_name=args.app_name,
             runtime_kind=args.runtime_kind,
         )
 
@@ -211,7 +211,7 @@ def _build_cache_namespace(
         "root": str(root_path),
         "target": args.target,
         "module": module_name,
-        "plugin_name": args.plugin_name,
+        "app_name": args.app_name,
         "runtime_kind": args.runtime_kind,
         "goos": args.goos,
         "goarch": args.goarch,

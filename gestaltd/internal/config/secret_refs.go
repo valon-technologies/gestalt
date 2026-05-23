@@ -246,7 +246,7 @@ func TransformSourceAuthTokens(cfg *Config, transform ConfigStringTransformer) e
 		entry.Source.Auth.Token = next
 		return nil
 	}
-	for _, entry := range cfg.Plugins {
+	for _, entry := range cfg.Apps {
 		if err := transformEntry(entry); err != nil {
 			return err
 		}
@@ -356,7 +356,7 @@ func TransformConfigStringFields(cfg *Config, transform ConfigStringTransformer)
 			return err
 		}
 	}
-	for _, entry := range cfg.Plugins {
+	for _, entry := range cfg.Apps {
 		if entry == nil {
 			continue
 		}

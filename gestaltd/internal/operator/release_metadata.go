@@ -18,8 +18,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
-	"github.com/valon-technologies/gestalt/server/services/plugins/source"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/apps/source"
 	"gopkg.in/yaml.v3"
 )
 
@@ -112,7 +112,7 @@ func validateProviderReleaseMetadata(metadata *providerReleaseMetadata) error {
 		return fmt.Errorf("provider release version: %w", err)
 	}
 	switch metadata.Kind {
-	case providermanifestv1.KindPlugin, providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime, providermanifestv1.KindUI:
+	case providermanifestv1.KindApp, providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime, providermanifestv1.KindUI:
 	default:
 		return fmt.Errorf("provider release kind %q is not supported", metadata.Kind)
 	}
@@ -122,8 +122,8 @@ func validateProviderReleaseMetadata(metadata *providerReleaseMetadata) error {
 			return fmt.Errorf("provider release runtime %q is invalid for kind %q", metadata.Runtime, metadata.Kind)
 		}
 	case providerReleaseRuntimeDeclarative:
-		if metadata.Kind != providermanifestv1.KindPlugin {
-			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindPlugin)
+		if metadata.Kind != providermanifestv1.KindApp {
+			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindApp)
 		}
 	case providerReleaseRuntimeUI:
 		if metadata.Kind != providermanifestv1.KindUI {
@@ -421,7 +421,7 @@ func lockEntryKind(entry LockEntry, fallback string) string {
 	}
 	switch fallback {
 	case providerLockKindTelemetry, providerLockKindAudit:
-		return providermanifestv1.KindPlugin
+		return providermanifestv1.KindApp
 	default:
 		return fallback
 	}
@@ -443,7 +443,7 @@ func releaseRuntimeForManifest(manifest *providermanifestv1.Manifest, kind strin
 	switch kind {
 	case providermanifestv1.KindUI:
 		return providerReleaseRuntimeUI
-	case providermanifestv1.KindPlugin:
+	case providermanifestv1.KindApp:
 		if manifest != nil && manifest.IsDeclarativeOnlyProvider() {
 			return providerReleaseRuntimeDeclarative
 		}
@@ -542,7 +542,7 @@ func copyLocalArchiveForSource(path string) (*providerpkg.DownloadResult, error)
 	}
 	defer func() { _ = src.Close() }()
 
-	tmp, err := os.CreateTemp("", "gestalt-plugin-*.tar.gz")
+	tmp, err := os.CreateTemp("", "gestalt-app-*.tar.gz")
 	if err != nil {
 		return nil, fmt.Errorf("create temp file: %w", err)
 	}

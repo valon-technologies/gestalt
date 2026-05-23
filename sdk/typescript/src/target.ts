@@ -76,7 +76,7 @@ export function parseProviderTarget(
     };
   }
 
-  const kind = parseExternalProviderKind(target.kind ?? "plugin");
+  const kind = parseExternalProviderKind(target.kind ?? "app");
   if (!target.target || typeof target.target !== "string") {
     throw new Error("gestalt.provider.target is required");
   }

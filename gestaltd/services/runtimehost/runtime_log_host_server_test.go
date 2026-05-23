@@ -19,7 +19,7 @@ import (
 )
 
 //nolint:staticcheck // grpc.DialContext/WithBlock are still used for this test-only Unix dialer.
-func newRuntimeLogHostTestClient(t *testing.T, socket string) proto.PluginRuntimeLogHostClient {
+func newRuntimeLogHostTestClient(t *testing.T, socket string) proto.AppRuntimeLogHostClient {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -42,7 +42,7 @@ func newRuntimeLogHostTestClient(t *testing.T, socket string) proto.PluginRuntim
 		}
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	return proto.NewPluginRuntimeLogHostClient(conn)
+	return proto.NewAppRuntimeLogHostClient(conn)
 }
 
 func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
@@ -62,7 +62,7 @@ func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
 	hostServices, err := StartHostServices([]HostService{{
 		Name: "runtime_logs",
 		Register: func(srv *grpc.Server) {
-			proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", func(_ context.Context, runtimeProviderName, sessionID string, entries []runtimelogs.AppendEntry) (int64, error) {
+			proto.RegisterAppRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", func(_ context.Context, runtimeProviderName, sessionID string, entries []runtimelogs.AppendEntry) (int64, error) {
 				mu.Lock()
 				defer mu.Unlock()
 				copied := make([]runtimelogs.AppendEntry, len(entries))
@@ -88,15 +88,15 @@ func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
 	client := newRuntimeLogHostTestClient(t, bindings[0].SocketPath)
 
 	observedAt := time.Date(2026, time.April, 23, 12, 34, 56, 0, time.UTC)
-	_, err = client.AppendLogs(context.Background(), &proto.AppendPluginRuntimeLogsRequest{
+	_, err = client.AppendLogs(context.Background(), &proto.AppendAppRuntimeLogsRequest{
 		SessionId: "session-1",
-		Logs: []*proto.PluginRuntimeLogEntry{{
-			Stream:     proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
+		Logs: []*proto.AppRuntimeLogEntry{{
+			Stream:     proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
 			Message:    "runtime boot",
 			ObservedAt: timestamppb.New(observedAt),
 			SourceSeq:  7,
 		}, {
-			Stream:     proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR,
+			Stream:     proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR,
 			Message:    "stderr line\n",
 			ObservedAt: timestamppb.New(observedAt.Add(time.Second)),
 			SourceSeq:  8,
@@ -153,7 +153,7 @@ func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *t
 	hostServices, err := StartHostServices([]HostService{{
 		Name: "runtime_logs",
 		Register: func(srv *grpc.Server) {
-			proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", store.AppendSessionLogs))
+			proto.RegisterAppRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", store.AppendSessionLogs))
 		},
 	}})
 	if err != nil {
@@ -167,8 +167,8 @@ func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *t
 	}
 	client := newRuntimeLogHostTestClient(t, bindings[0].SocketPath)
 
-	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{SessionId: "session-1", Logs: []*proto.PluginRuntimeLogEntry{{
-		Stream:    proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR,
+	_, err = client.AppendLogs(ctx, &proto.AppendAppRuntimeLogsRequest{SessionId: "session-1", Logs: []*proto.AppRuntimeLogEntry{{
+		Stream:    proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR,
 		Message:   "after stop\n",
 		SourceSeq: 2,
 	}}})
@@ -193,8 +193,8 @@ func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *t
 	}); err != nil {
 		t.Fatalf("RegisterSession(second): %v", err)
 	}
-	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{SessionId: "session-1", Logs: []*proto.PluginRuntimeLogEntry{{
-		Stream:  proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
+	_, err = client.AppendLogs(ctx, &proto.AppendAppRuntimeLogsRequest{SessionId: "session-1", Logs: []*proto.AppRuntimeLogEntry{{
+		Stream:  proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
 		Message: "fresh session",
 	}}})
 	if err != nil {
@@ -221,7 +221,7 @@ func TestRuntimeLogHostServerMapsUnknownSessionToNotFound(t *testing.T) {
 	hostServices, err := StartHostServices([]HostService{{
 		Name: "runtime_logs",
 		Register: func(srv *grpc.Server) {
-			proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", store.AppendSessionLogs))
+			proto.RegisterAppRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", store.AppendSessionLogs))
 		},
 	}})
 	if err != nil {
@@ -234,8 +234,8 @@ func TestRuntimeLogHostServerMapsUnknownSessionToNotFound(t *testing.T) {
 		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
 	}
 	client := newRuntimeLogHostTestClient(t, bindings[0].SocketPath)
-	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{SessionId: "never-registered", Logs: []*proto.PluginRuntimeLogEntry{{
-		Stream:  proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
+	_, err = client.AppendLogs(ctx, &proto.AppendAppRuntimeLogsRequest{SessionId: "never-registered", Logs: []*proto.AppRuntimeLogEntry{{
+		Stream:  proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
 		Message: "should fail",
 	}}})
 	if status.Code(err) != codes.NotFound {
@@ -276,7 +276,7 @@ func TestRuntimeLogHostServerKeepsStoppedSessionThroughEvictionPressure(t *testi
 	hostServices, err := StartHostServices([]HostService{{
 		Name: "runtime_logs",
 		Register: func(srv *grpc.Server) {
-			proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", store.AppendSessionLogs))
+			proto.RegisterAppRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", store.AppendSessionLogs))
 		},
 	}})
 	if err != nil {
@@ -289,15 +289,15 @@ func TestRuntimeLogHostServerKeepsStoppedSessionThroughEvictionPressure(t *testi
 		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
 	}
 	client := newRuntimeLogHostTestClient(t, bindings[0].SocketPath)
-	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{SessionId: "stopping-session", Logs: []*proto.PluginRuntimeLogEntry{{
-		Stream:  proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
+	_, err = client.AppendLogs(ctx, &proto.AppendAppRuntimeLogsRequest{SessionId: "stopping-session", Logs: []*proto.AppRuntimeLogEntry{{
+		Stream:  proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
 		Message: "late shutdown log",
 	}}})
 	if err != nil {
 		t.Fatalf("AppendLogs(stopping session): %v", err)
 	}
-	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{SessionId: "quiet-live-session", Logs: []*proto.PluginRuntimeLogEntry{{
-		Stream:  proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
+	_, err = client.AppendLogs(ctx, &proto.AppendAppRuntimeLogsRequest{SessionId: "quiet-live-session", Logs: []*proto.AppRuntimeLogEntry{{
+		Stream:  proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
 		Message: "quiet live should have been evicted first",
 	}}})
 	if status.Code(err) != codes.NotFound {

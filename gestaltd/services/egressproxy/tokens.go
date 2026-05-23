@@ -27,7 +27,7 @@ type TokenManager struct {
 }
 
 type TokenRequest struct {
-	PluginName    string
+	AppName       string
 	SessionID     string
 	AllowedHosts  []string
 	DefaultAction egress.PolicyAction
@@ -35,7 +35,7 @@ type TokenRequest struct {
 }
 
 type Target struct {
-	PluginName    string
+	AppName       string
 	SessionID     string
 	AllowedHosts  []string
 	DefaultAction egress.PolicyAction
@@ -43,7 +43,7 @@ type Target struct {
 
 type tokenClaims struct {
 	jwt.RegisteredClaims
-	PluginName    string              `json:"plugin,omitempty"`
+	AppName       string              `json:"app,omitempty"`
 	SessionID     string              `json:"session_id,omitempty"`
 	AllowedHosts  []string            `json:"allowed_hosts,omitempty"`
 	DefaultAction egress.PolicyAction `json:"default_action,omitempty"`
@@ -71,7 +71,7 @@ func (m *TokenManager) MintToken(req TokenRequest) (string, error) {
 
 	now := m.now()
 	expiresAt := now.Add(m.tokenTTL(req.TTL))
-	subject := strings.TrimSpace(req.PluginName)
+	subject := strings.TrimSpace(req.AppName)
 	if subject == "" {
 		subject = "egress-proxy"
 	}
@@ -86,7 +86,7 @@ func (m *TokenManager) MintToken(req TokenRequest) (string, error) {
 			NotBefore: jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
-		PluginName:    strings.TrimSpace(req.PluginName),
+		AppName:       strings.TrimSpace(req.AppName),
 		SessionID:     strings.TrimSpace(req.SessionID),
 		AllowedHosts:  normalizeAllowedHosts(req.AllowedHosts),
 		DefaultAction: normalizeDefaultAction(req.DefaultAction),
@@ -102,7 +102,7 @@ func (m *TokenManager) ResolveToken(token string) (Target, error) {
 		return Target{}, err
 	}
 	return Target{
-		PluginName:    strings.TrimSpace(claims.PluginName),
+		AppName:       strings.TrimSpace(claims.AppName),
 		SessionID:     strings.TrimSpace(claims.SessionID),
 		AllowedHosts:  normalizeAllowedHosts(claims.AllowedHosts),
 		DefaultAction: normalizeDefaultAction(claims.DefaultAction),

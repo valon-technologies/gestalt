@@ -21,7 +21,7 @@ class SearchInput(gestalt.Model):
 plugin = gestalt.Plugin("search")
 
 
-@plugin.operation(method="GET", title="Search")
+@app.operation(method="GET", title="Search")
 def search(input: SearchInput, request: gestalt.Request):
     return {"results": [input.query]}
 ```
@@ -69,10 +69,10 @@ The top-level `gestalt` package exposes the supported authoring API:
 - `Model`, `field`, `Plugin`, `operation`, and `Request` for integration
   providers.
 - `AuthenticationProvider`, `CacheProvider`, `S3Provider`, `SecretsProvider`,
-  `WorkflowProvider`, `AgentProvider`, and `PluginRuntimeProvider` for
+  `WorkflowProvider`, `AgentProvider`, and `AppRuntimeProvider` for
   host-service provider runtimes.
 - `Cache`, `IndexedDB`, `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`,
-  `AgentManager`, and `PluginInvoker` for calling sibling host services.
+  `AgentManager`, and `AppInvoker` for calling sibling host services.
 - `gestalt.testing` for native fixture helpers used by SDK transport tests.
 - `gestalt.telemetry` for provider-authored GenAI spans and metrics.
 

@@ -57,17 +57,17 @@ try {
   const baseUrl = `http://127.0.0.1:${port}`;
 
   await assertResponse({
-    url: `${baseUrl}/providers/plugin/slack/`,
+    url: `${baseUrl}/providers/app/slack/`,
     status: 200,
     includes: registryMarker,
   });
   await assertResponse({
-    url: `${baseUrl}/providers/plugin/slack/events/`,
+    url: `${baseUrl}/providers/app/slack/events/`,
     status: 200,
     includes: registryMarker,
   });
   await assertResponse({
-    url: `${baseUrl}/providers/plugin/slack/missing/`,
+    url: `${baseUrl}/providers/app/slack/missing/`,
     status: 200,
     includes: registryMarker,
   });
@@ -75,10 +75,10 @@ try {
   const catalogResponse = await fetch(`${baseUrl}/registry-test/catalog.json`);
   const catalog = await catalogResponse.json();
   const slack = catalog.providers.find(
-    (provider) => provider.packagePath === "plugins/slack",
+    (provider) => provider.packagePath === "apps/slack",
   );
   if (!slack) {
-    throw new Error("fixture catalog missing plugins/slack");
+    throw new Error("fixture catalog missing apps/slack");
   }
   if (slack.docs?.[0]?.path !== "/" || slack.docs?.[1]?.path !== "/events/") {
     throw new Error("fixture catalog docs paths are not provider-relative");
@@ -144,7 +144,7 @@ async function assertRenderedDocs({ overviewSource, eventsSource }) {
   if (!overviewHtml.includes("<h2>Slack</h2>")) {
     throw new Error("renderer did not render the fixture overview heading");
   }
-  if (!overviewHtml.includes('href="/providers/plugin/slack/events/"')) {
+  if (!overviewHtml.includes('href="/providers/app/slack/events/"')) {
     throw new Error("renderer did not resolve provider-relative MDX links");
   }
   const eventsHtml = renderFixtureMarkdown(renderMarkdown, eventsSource);
@@ -176,7 +176,7 @@ function renderFixtureMarkdown(renderMarkdown, source) {
   const nodes = renderMarkdown(source, {
     resolveLink: (href) => {
       if (href === "events.mdx") {
-        return { href: "/providers/plugin/slack/events/", external: false };
+        return { href: "/providers/app/slack/events/", external: false };
       }
       if (href.startsWith("http")) {
         return { href, external: true };

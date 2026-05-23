@@ -10,10 +10,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
-	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
 )
 
 type ConnectionMaps struct {
@@ -50,15 +50,15 @@ func agentConnectionBindings(cfg *config.Config) map[string][]string {
 
 func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
 	maps := ConnectionMaps{
-		DefaultConnection: make(map[string]string, len(cfg.Plugins)),
-		APIConnection:     make(map[string]string, len(cfg.Plugins)),
-		MCPConnection:     make(map[string]string, len(cfg.Plugins)),
+		DefaultConnection: make(map[string]string, len(cfg.Apps)),
+		APIConnection:     make(map[string]string, len(cfg.Apps)),
+		MCPConnection:     make(map[string]string, len(cfg.Apps)),
 	}
 
-	for name, entry := range cfg.Plugins {
-		defaultConnection := config.PluginConnectionName
-		apiConnection := config.PluginConnectionName
-		mcpConnection := config.PluginConnectionName
+	for name, entry := range cfg.Apps {
+		defaultConnection := config.AppConnectionName
+		apiConnection := config.AppConnectionName
+		mcpConnection := config.AppConnectionName
 
 		if entry != nil {
 			plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
@@ -117,8 +117,8 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 			return nil
 		}
 
-		pluginConn := plan.PluginConnection()
-		if err := addRuntimeInfo(config.PluginConnectionName, &pluginConn); err != nil {
+		pluginConn := plan.AppConnection()
+		if err := addRuntimeInfo(config.AppConnectionName, &pluginConn); err != nil {
 			return err
 		}
 		for _, connName := range plan.NamedConnectionNames() {
@@ -130,7 +130,7 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 		return nil
 	}
 
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		if err := addProviderRuntime("integration", name, entry); err != nil {
 			return nil, err
 		}
@@ -262,11 +262,11 @@ func connectionParamDefaults(params map[string]config.ConnectionParamDef) map[st
 }
 
 func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {
-	manifestPlugin := (*providermanifestv1.Spec)(nil)
+	manifestApp := (*providermanifestv1.Spec)(nil)
 	if manifest != nil {
-		manifestPlugin = manifest.Spec
+		manifestApp = manifest.Spec
 	}
-	plan, err := config.BuildStaticConnectionPlan(entry, manifestPlugin)
+	plan, err := config.BuildStaticConnectionPlan(entry, manifestApp)
 	if err != nil {
 		return nil, fmt.Errorf("resolve connections for %q: %w", name, err)
 	}
@@ -281,10 +281,10 @@ func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *
 	}
 
 	handlers := make(map[string]OAuthHandler)
-	if handler, err := buildConnectionHandler(plan.PluginConnection(), mcpURL, pluginConfig, specAuthForConnection(config.PluginConnectionName), deps); err != nil {
-		return nil, fmt.Errorf("build plugin connection auth for %q: %w", name, err)
+	if handler, err := buildConnectionHandler(plan.AppConnection(), mcpURL, pluginConfig, specAuthForConnection(config.AppConnectionName), deps); err != nil {
+		return nil, fmt.Errorf("build app connection auth for %q: %w", name, err)
 	} else if handler != nil {
-		handlers[config.PluginConnectionName] = handler
+		handlers[config.AppConnectionName] = handler
 	}
 
 	for _, resolvedName := range plan.NamedConnectionNames() {
@@ -327,11 +327,11 @@ func buildConnectionHandler(conn config.ConnectionDef, mcpURL string, pluginConf
 }
 
 func buildManualConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, authFallback *specAuthFallback) (map[string]ManualTokenExchanger, error) {
-	manifestPlugin := (*providermanifestv1.Spec)(nil)
+	manifestApp := (*providermanifestv1.Spec)(nil)
 	if manifest != nil {
-		manifestPlugin = manifest.Spec
+		manifestApp = manifest.Spec
 	}
-	plan, err := config.BuildStaticConnectionPlan(entry, manifestPlugin)
+	plan, err := config.BuildStaticConnectionPlan(entry, manifestApp)
 	if err != nil {
 		return nil, fmt.Errorf("resolve manual token connections for %q: %w", name, err)
 	}
@@ -341,10 +341,10 @@ func buildManualConnectionAuthMap(name string, entry *config.ProviderEntry, mani
 	}
 
 	handlers := make(map[string]ManualTokenExchanger)
-	if handler, err := buildManualConnectionHandler(plan.PluginConnection(), specAuthForConnection(config.PluginConnectionName)); err != nil {
-		return nil, fmt.Errorf("build plugin manual token auth for %q: %w", name, err)
+	if handler, err := buildManualConnectionHandler(plan.AppConnection(), specAuthForConnection(config.AppConnectionName)); err != nil {
+		return nil, fmt.Errorf("build app manual token auth for %q: %w", name, err)
 	} else if handler != nil {
-		handlers[config.PluginConnectionName] = handler
+		handlers[config.AppConnectionName] = handler
 	}
 
 	for _, resolvedName := range plan.NamedConnectionNames() {

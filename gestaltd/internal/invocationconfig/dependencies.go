@@ -7,14 +7,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 )
 
-func PluginInvocationDependencies(deps []config.PluginInvocationDependency) []invocation.PluginInvocationDependency {
+func AppInvocationDependencies(deps []config.AppInvocationDependency) []invocation.AppInvocationDependency {
 	if len(deps) == 0 {
 		return nil
 	}
-	out := make([]invocation.PluginInvocationDependency, 0, len(deps))
+	out := make([]invocation.AppInvocationDependency, 0, len(deps))
 	for _, dep := range deps {
-		out = append(out, invocation.PluginInvocationDependency{
-			Plugin:                dep.Plugin,
+		out = append(out, invocation.AppInvocationDependency{
+			App:                   dep.App,
 			Operation:             dep.Operation,
 			Surface:               dep.Surface,
 			CredentialMode:        core.ConnectionMode(dep.CredentialMode),
@@ -26,7 +26,7 @@ func PluginInvocationDependencies(deps []config.PluginInvocationDependency) []in
 	return out
 }
 
-func PluginWorkflowManagerGrants(capabilities *config.PluginCapabilitiesConfig) workflowgrants.Grants {
+func AppWorkflowManagerGrants(capabilities *config.AppCapabilitiesConfig) workflowgrants.Grants {
 	if capabilities == nil || capabilities.Workflow == nil {
 		return nil
 	}

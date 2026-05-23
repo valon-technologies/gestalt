@@ -1,4 +1,4 @@
-"""Hosted HTTP subject-resolution types for authored plugins."""
+"""Hosted HTTP subject-resolution types for authored apps."""
 
 from __future__ import annotations
 

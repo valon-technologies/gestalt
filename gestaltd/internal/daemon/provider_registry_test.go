@@ -15,7 +15,7 @@ func TestUpdateProviderVersionConstraintFindsProviderCollections(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "gestalt.yaml")
 	if err := os.WriteFile(path, []byte(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providers:
   authentication:
     authn:
@@ -28,7 +28,7 @@ providers:
       source:
         package: github.com/acme/providers/dashboard
         version: "1.0.0"
-plugins:
+apps:
 `), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestUpdateProviderVersionConstraintRequiresKindForAmbiguousName(t *testing.
 
 	path := filepath.Join(t.TempDir(), "gestalt.yaml")
 	if err := os.WriteFile(path, []byte(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providers:
   ui:
     shared:
@@ -65,7 +65,7 @@ providers:
       source:
         package: github.com/acme/providers/shared-ui
         version: "1.0.0"
-plugins:
+apps:
   shared:
     source:
       package: github.com/acme/providers/shared-plugin
@@ -92,7 +92,7 @@ plugins:
 	if got := cfg.Providers.UI["shared"].Source.PackageVersionConstraint(); got != "2.0.0" {
 		t.Fatalf("ui version = %q, want 2.0.0", got)
 	}
-	if got := cfg.Plugins["shared"].Source.PackageVersionConstraint(); got != "1.0.0" {
+	if got := cfg.Apps["shared"].Source.PackageVersionConstraint(); got != "1.0.0" {
 		t.Fatalf("plugin version = %q, want 1.0.0", got)
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 )
 
 func TestApplyProviderPaginationUsesExposedAlias(t *testing.T) {
@@ -24,7 +24,7 @@ func TestApplyProviderPaginationUsesExposedAlias(t *testing.T) {
 			},
 		},
 	}
-	manifestPlugin := &providermanifestv1.Spec{
+	manifestApp := &providermanifestv1.Spec{
 		Pagination: &providermanifestv1.ManifestPaginationConfig{
 			Style:        providermanifestv1.PaginationStyleCursor,
 			CursorParam:  "cursor",
@@ -43,7 +43,7 @@ func TestApplyProviderPaginationUsesExposedAlias(t *testing.T) {
 		},
 	}
 
-	applyProviderPagination(def, manifestPlugin, allowedOperations)
+	applyProviderPagination(def, manifestApp, allowedOperations)
 
 	listOp := def.Operations["listNotes"]
 	if listOp.Pagination == nil {

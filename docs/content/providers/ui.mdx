@@ -5,7 +5,7 @@ import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
 <ActiveDevelopmentCallout verb="are">UI providers</ActiveDevelopmentCallout>
 
 UI providers mount static asset bundles. They can be configured directly under
-`providers.ui` or attached to an executable plugin as a plugin-backed app. The
+`providers.ui` or attached to an executable app as a plugin-backed app. The
 built-in admin UI at `/admin` remains available even when no public UI bundles
 are configured.
 
@@ -35,7 +35,7 @@ providers:
     roadmap:
       source: ./customer-roadmap-review/ui/manifest.yaml
 
-plugins:
+apps:
   roadmap_review:
     source: ./customer-roadmap-review/plugin/manifest.yaml
     ui:
@@ -44,11 +44,11 @@ plugins:
     authorizationPolicy: roadmap_review
 ```
 
-Or let the plugin manifest own the UI bundle and keep only the deployment mount
+Or let the app manifest own the UI bundle and keep only the deployment mount
 in config:
 
 ```yaml
-plugins:
+apps:
   roadmap_review:
     source: ./customer-roadmap-review/plugin/manifest.yaml
     ui:
@@ -56,11 +56,11 @@ plugins:
     authorizationPolicy: roadmap_review
 ```
 
-With a plugin manifest like:
+With an app manifest like:
 
 ```yaml
-kind: plugin
-source: github.com/acme/plugins/roadmap-review
+kind: app
+source: github.com/acme/apps/roadmap-review
 version: 1.0.0
 spec:
   auth:
@@ -81,13 +81,13 @@ assets.
 
 Plugin-backed mounted UIs inherit the owning plugin's dynamic grants when that
 plugin declares `authorizationPolicy`. They also inherit the plugin's route-auth
-provider when the plugin declares `auth.provider`. Direct `providers.ui` bundles
+provider when the app declares `auth.provider`. Direct `providers.ui` bundles
 and the built-in admin UI use the server-wide auth configuration.
 
 ## The Admin UI
 
 The built-in admin UI is served at `/admin` by default. It includes operator
-views such as the Prometheus metrics dashboard and the plugin authorization
+views such as the Prometheus metrics dashboard and the app authorization
 workspace at `/admin/?tab=members`.
 
 Use `server.admin.authorizationPolicy` to protect `/admin`, or `server.admin.ui`
@@ -143,14 +143,14 @@ Frameworks that require a server at runtime are not compatible with UI bundles
 because Gestalt serves static assets only.
 
 For the full UI manifest schema, see
-[Plugin Manifests](/reference/plugin-manifests#ui-metadata). For source UI
+[App Manifests](/reference/app-manifests#ui-metadata). For source UI
 build and release behavior, see
 [Source UI builds](/providers#source-ui-builds) and
 [Releasing provider packages](/providers#releasing-provider-packages).
 
 ## What to read next
 
-- [Applications](/applications): recommended plugin plus sibling UI layout
+- [Applications](/applications): recommended app plus sibling UI layout
 - [Config File](/reference/config-file#providersui): exact `providers.ui` fields
-- [Plugin Manifests](/reference/plugin-manifests#ui-metadata): UI manifest schema
+- [App Manifests](/reference/app-manifests#ui-metadata): UI manifest schema
 - [Authorization](/providers/authorization): route and role semantics

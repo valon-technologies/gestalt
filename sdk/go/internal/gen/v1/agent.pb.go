@@ -3748,7 +3748,7 @@ var File_v1_agent_proto protoreflect.FileDescriptor
 
 const file_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x0ev1/agent.proto\x12\x13gestalt.provider.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x0fv1/plugin.proto\"\xa8\x01\n" +
+	"\x0ev1/agent.proto\x12\x13gestalt.provider.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\fv1/app.proto\"\xa8\x01\n" +
 	"\fAgentMessage\x12\x12\n" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12;\n" +
@@ -4349,7 +4349,7 @@ func file_v1_agent_proto_init() {
 	if File_v1_agent_proto != nil {
 		return
 	}
-	file_v1_plugin_proto_init()
+	file_v1_app_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

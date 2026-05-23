@@ -37,7 +37,7 @@ func invocationTokenFromContext(ctx context.Context) string {
 }
 
 type invokePluginInput struct {
-	Plugin          string         `json:"plugin"`
+	App             string         `json:"app"`
 	Operation       string         `json:"operation"`
 	Connection      string         `json:"connection,omitempty"`
 	Instance        string         `json:"instance,omitempty"`
@@ -46,7 +46,7 @@ type invokePluginInput struct {
 }
 
 type invokePluginGraphQLInput struct {
-	Plugin          string         `json:"plugin"`
+	App             string         `json:"app"`
 	Document        string         `json:"document"`
 	Connection      string         `json:"connection,omitempty"`
 	Instance        string         `json:"instance,omitempty"`
@@ -55,7 +55,7 @@ type invokePluginGraphQLInput struct {
 }
 
 type workflowScheduleTargetInput struct {
-	Plugin     string         `json:"plugin"`
+	App        string         `json:"app"`
 	Operation  string         `json:"operation"`
 	Connection string         `json:"connection,omitempty"`
 	Instance   string         `json:"instance,omitempty"`
@@ -237,8 +237,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		if strings.TrimSpace(input.Plugin) == "" {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": "plugin is required"}), nil
+		if strings.TrimSpace(input.App) == "" {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": "app is required"}), nil
 		}
 		if strings.TrimSpace(input.Operation) == "" {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": "operation is required"}), nil
@@ -246,7 +246,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 
 		envelope := map[string]any{
 			"ok":                       false,
-			"target_plugin":            input.Plugin,
+			"target_app":               input.App,
 			"target_operation":         input.Operation,
 			"used_connection_override": strings.TrimSpace(input.Connection) != "",
 		}
@@ -276,7 +276,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 				Instance:   instance,
 			}
 		}
-		result, err := invoker.Invoke(ctx, input.Plugin, input.Operation, input.Params, opts)
+		result, err := invoker.Invoke(ctx, input.App, input.Operation, input.Params, opts)
 		if err != nil {
 			envelope["error"] = err.Error()
 			return jsonResult(http.StatusOK, envelope), nil
@@ -291,8 +291,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		if strings.TrimSpace(input.Plugin) == "" {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": "plugin is required"}), nil
+		if strings.TrimSpace(input.App) == "" {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": "app is required"}), nil
 		}
 		if strings.TrimSpace(input.Document) == "" {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": "document is required"}), nil
@@ -300,7 +300,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 
 		envelope := map[string]any{
 			"ok":                       false,
-			"target_plugin":            input.Plugin,
+			"target_app":               input.App,
 			"target_operation":         "graphql",
 			"used_connection_override": strings.TrimSpace(input.Connection) != "",
 		}
@@ -330,7 +330,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 				Instance:   instance,
 			}
 		}
-		result, err := invoker.InvokeGraphQL(ctx, input.Plugin, input.Document, input.Variables, opts)
+		result, err := invoker.InvokeGraphQL(ctx, input.App, input.Document, input.Variables, opts)
 		if err != nil {
 			envelope["error"] = err.Error()
 			return jsonResult(http.StatusOK, envelope), nil
@@ -784,8 +784,8 @@ func workflowManagerFromContext(ctx context.Context, invocationToken string) (*g
 
 func workflowTargetInput(target workflowScheduleTargetInput) (*gestalt.BoundWorkflowTarget, error) {
 	return &gestalt.BoundWorkflowTarget{
-		Plugin: &gestalt.BoundWorkflowPluginTarget{
-			PluginName: target.Plugin,
+		App: &gestalt.BoundWorkflowAppTarget{
+			AppName:    target.App,
 			Operation:  target.Operation,
 			Connection: target.Connection,
 			Instance:   target.Instance,
@@ -849,21 +849,21 @@ func managedWorkflowScheduleBody(value *gestalt.WorkflowManagerSchedule) map[str
 			return *schedule.NextRunAt
 		}(),
 		"target": map[string]any{
-			"plugin":     "",
+			"app":        "",
 			"operation":  "",
 			"connection": "",
 			"instance":   "",
 			"input":      map[string]any{},
 		},
 	}
-	if target != nil && target.Plugin != nil {
-		pluginTarget := target.Plugin
+	if target != nil && target.App != nil {
+		pluginTarget := target.App
 		body["schedule"].(map[string]any)["target"] = map[string]any{
-			"plugin":     pluginTarget.PluginName,
+			"app":        pluginTarget.AppName,
 			"operation":  pluginTarget.Operation,
 			"connection": pluginTarget.Connection,
 			"instance":   pluginTarget.Instance,
-			"input":      workflowPluginTargetInputMap(pluginTarget),
+			"input":      workflowAppTargetInputMap(pluginTarget),
 		}
 	}
 	return body
@@ -893,7 +893,7 @@ func managedWorkflowTriggerBody(value *gestalt.WorkflowManagerEventTrigger) map[
 			"subject": "",
 		},
 		"target": map[string]any{
-			"plugin":     "",
+			"app":        "",
 			"operation":  "",
 			"connection": "",
 			"instance":   "",
@@ -907,20 +907,20 @@ func managedWorkflowTriggerBody(value *gestalt.WorkflowManagerEventTrigger) map[
 			"subject": match.Subject,
 		}
 	}
-	if target != nil && target.Plugin != nil {
-		pluginTarget := target.Plugin
+	if target != nil && target.App != nil {
+		pluginTarget := target.App
 		body["trigger"].(map[string]any)["target"] = map[string]any{
-			"plugin":     pluginTarget.PluginName,
+			"app":        pluginTarget.AppName,
 			"operation":  pluginTarget.Operation,
 			"connection": pluginTarget.Connection,
 			"instance":   pluginTarget.Instance,
-			"input":      workflowPluginTargetInputMap(pluginTarget),
+			"input":      workflowAppTargetInputMap(pluginTarget),
 		}
 	}
 	return body
 }
 
-func workflowPluginTargetInputMap(target *gestalt.BoundWorkflowPluginTarget) map[string]any {
+func workflowAppTargetInputMap(target *gestalt.BoundWorkflowAppTarget) map[string]any {
 	if target == nil || target.Input == nil {
 		return map[string]any{}
 	}

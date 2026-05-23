@@ -22,22 +22,22 @@ func TestAuthorizationDynamicFragmentServiceUpsertsOwnerRecord(t *testing.T) {
 	relationship := coredata.AuthorizationDynamicFragmentRelationship{
 		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: "subject", ID: "user:alice"},
 		Relation: "viewer",
-		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "plugin_dynamic", ID: "github"},
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "app_dynamic", ID: "github"},
 	}
 
-	fragment, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "test"})
+	fragment, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationAppFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "test"})
 	if err != nil {
 		t.Fatalf("UpsertRelationship: %v", err)
 	}
-	if fragment.ID != "plugin/github" || fragment.Owner.Kind != coredata.AuthorizationFragmentOwnerKindPlugin || fragment.Owner.Plugin != "github" {
-		t.Fatalf("fragment owner = %#v id=%q, want plugin/github", fragment.Owner, fragment.ID)
+	if fragment.ID != "app/github" || fragment.Owner.Kind != coredata.AuthorizationFragmentOwnerKindApp || fragment.Owner.App != "github" {
+		t.Fatalf("fragment owner = %#v id=%q, want app/github", fragment.Owner, fragment.ID)
 	}
 	if fragment.Version != 1 {
 		t.Fatalf("version = %d, want 1", fragment.Version)
 	}
 
 	relationship.Relation = "admin"
-	updated, err := svc.AuthzFragments.ReplaceSubjectResourceRelationships(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "role_change"})
+	updated, err := svc.AuthzFragments.ReplaceSubjectResourceRelationships(ctx, coredata.AuthorizationAppFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "role_change"})
 	if err != nil {
 		t.Fatalf("ReplaceSubjectResourceRelationships role change: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestAuthorizationDynamicFragmentServiceUpsertsOwnerRecord(t *testing.T) {
 		t.Fatalf("relationships = %#v, want only admin role", updated.Relationships)
 	}
 
-	deleted, updated, err := svc.AuthzFragments.DeleteRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "delete"})
+	deleted, updated, err := svc.AuthzFragments.DeleteRelationship(ctx, coredata.AuthorizationAppFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "delete"})
 	if err != nil {
 		t.Fatalf("DeleteRelationship: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestAuthorizationDynamicFragmentServiceUpsertsOwnerRecord(t *testing.T) {
 	if updated != nil {
 		t.Fatalf("fragment after deleting only relationship = %#v, want deleted fragment", updated)
 	}
-	if _, err := svc.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationPluginFragmentOwner("github")); err != core.ErrNotFound {
+	if _, err := svc.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationAppFragmentOwner("github")); err != core.ErrNotFound {
 		t.Fatalf("GetFragmentByOwner after delete err = %v, want ErrNotFound", err)
 	}
 }
@@ -71,10 +71,10 @@ func TestAuthorizationDynamicFragmentServiceDeleteMissingOwnerDoesNotCreateFragm
 		t.Fatalf("coredata.New: %v", err)
 	}
 	ctx := context.Background()
-	deleted, fragment, err := svc.AuthzFragments.DeleteRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), coredata.AuthorizationDynamicFragmentRelationship{
+	deleted, fragment, err := svc.AuthzFragments.DeleteRelationship(ctx, coredata.AuthorizationAppFragmentOwner("github"), coredata.AuthorizationDynamicFragmentRelationship{
 		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: "subject", ID: "user:alice"},
 		Relation: "viewer",
-		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "plugin_dynamic", ID: "github"},
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "app_dynamic", ID: "github"},
 	}, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "delete_missing"})
 	if err != nil {
 		t.Fatalf("DeleteRelationship missing owner: %v", err)
@@ -82,7 +82,7 @@ func TestAuthorizationDynamicFragmentServiceDeleteMissingOwnerDoesNotCreateFragm
 	if deleted || fragment != nil {
 		t.Fatalf("DeleteRelationship missing owner = deleted %v fragment %#v, want false nil", deleted, fragment)
 	}
-	if _, err := svc.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationPluginFragmentOwner("github")); err != core.ErrNotFound {
+	if _, err := svc.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationAppFragmentOwner("github")); err != core.ErrNotFound {
 		t.Fatalf("GetFragmentByOwner err = %v, want ErrNotFound", err)
 	}
 }
@@ -95,11 +95,11 @@ func TestAuthorizationDynamicFragmentServiceDeleteSubjectResourceRelationships(t
 		t.Fatalf("coredata.New: %v", err)
 	}
 	ctx := context.Background()
-	owner := coredata.AuthorizationPluginFragmentOwner("github")
+	owner := coredata.AuthorizationAppFragmentOwner("github")
 	directMember := coredata.AuthorizationDynamicFragmentRelationship{
 		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: "subject", ID: "service_account:bot"},
 		Relation: "viewer",
-		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "plugin_dynamic", ID: "github"},
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "app_dynamic", ID: "github"},
 	}
 	targetedMember := directMember
 	targetedMember.Relation = "editor"
@@ -137,17 +137,17 @@ func TestAuthorizationDynamicFragmentRelationshipKeyUsesTrimmedPropertyValues(t 
 	relationship := coredata.AuthorizationDynamicFragmentRelationship{
 		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: "subject", ID: "user:alice"},
 		Relation: "viewer",
-		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "plugin_dynamic", ID: "github"},
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "app_dynamic", ID: "github"},
 		Properties: map[string]string{
 			" source ": " provider ",
 		},
 	}
 
-	if _, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "first"}); err != nil {
+	if _, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationAppFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "first"}); err != nil {
 		t.Fatalf("UpsertRelationship first: %v", err)
 	}
 	relationship.Properties[" source "] = " write_path "
-	fragment, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "second"})
+	fragment, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationAppFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "second"})
 	if err != nil {
 		t.Fatalf("UpsertRelationship second: %v", err)
 	}
@@ -167,17 +167,17 @@ func TestAuthorizationDynamicFragmentRelationshipKeyIncludesSubjectAndTarget(t *
 	relationship := coredata.AuthorizationDynamicFragmentRelationship{
 		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: "subject", ID: "user:alice"},
 		Relation: "viewer",
-		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "plugin/github/repository", ID: "gestalt"},
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "app/github/repository", ID: "gestalt"},
 		Target: coredata.AuthorizationDynamicFragmentTarget{
 			Resource: &coredata.AuthorizationDynamicFragmentResource{Type: "team", ID: "servicing"},
 		},
 	}
 
-	if _, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "first"}); err != nil {
+	if _, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationAppFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "first"}); err != nil {
 		t.Fatalf("UpsertRelationship first: %v", err)
 	}
 	relationship.Subject.ID = "user:bob"
-	fragment, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "second"})
+	fragment, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationAppFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "second"})
 	if err != nil {
 		t.Fatalf("UpsertRelationship second: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestAuthorizationDynamicFragmentRelationshipKeyIncludesSubjectAndTarget(t *
 		t.Fatalf("relationships = %#v, want distinct entries for distinct subjects with same target", fragment.Relationships)
 	}
 
-	deleted, fragment, err := svc.AuthzFragments.DeleteRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "delete_second"})
+	deleted, fragment, err := svc.AuthzFragments.DeleteRelationship(ctx, coredata.AuthorizationAppFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "delete_second"})
 	if err != nil {
 		t.Fatalf("DeleteRelationship second: %v", err)
 	}

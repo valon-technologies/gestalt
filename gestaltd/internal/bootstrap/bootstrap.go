@@ -28,17 +28,17 @@ import (
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
-	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
@@ -174,9 +174,9 @@ type Deps struct {
 	AgentManager          agentmanager.Service
 	Egress                EgressDeps
 	AuthorizationProvider core.AuthorizationProvider
-	PluginInvoker         invocation.Invoker
-	PluginRuntime         pluginruntime.Provider
-	PluginRuntimeRegistry *pluginRuntimeRegistry
+	AppInvoker            invocation.Invoker
+	AppRuntime            appruntime.Provider
+	AppRuntimeRegistry    *pluginRuntimeRegistry
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 	HostServiceTLSCAFile  string
 	HostServiceTLSCAPEM   string
@@ -192,7 +192,7 @@ type CacheFactory func(node yaml.Node) (corecache.Cache, error)
 type S3Factory func(node yaml.Node) (s3store.Client, error)
 type WorkflowFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreworkflow.Provider, error)
 type AgentFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreagent.Provider, error)
-type RuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (pluginruntime.Provider, error)
+type RuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (appruntime.Provider, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
@@ -215,7 +215,7 @@ type FactoryRegistry struct {
 func NewFactoryRegistry() *FactoryRegistry {
 	return &FactoryRegistry{
 		Secrets:   make(map[string]SecretManagerFactory),
-		Runtime:   buildExecutablePluginRuntime,
+		Runtime:   buildExecutableAppRuntime,
 		Telemetry: make(map[string]TelemetryFactory),
 	}
 }
@@ -240,12 +240,12 @@ type Result struct {
 	ConnectionAuth        func() map[string]map[string]OAuthHandler
 	ManualConnectionAuth  func() map[string]map[string]ManualTokenExchanger
 	Invoker               invocation.Invoker
-	PluginInvoker         invocation.Invoker
+	AppInvoker            invocation.Invoker
 	CapabilityLister      invocation.CapabilityLister
 	AuditSink             core.AuditSink
 	SecretManager         core.SecretManager
 	Telemetry             core.TelemetryProvider
-	PluginRuntimes        RuntimeInspector
+	AppRuntimes           RuntimeInspector
 	ProviderDevSessions   *providerdev.Manager
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 
@@ -388,7 +388,7 @@ func (r *Result) Close(ctx context.Context) error {
 		closeWorkflows(r.ExtraWorkflows...),
 		closeAgents(r.ExtraAgents...),
 		closeSecretManager(r.SecretManager),
-		closePluginRuntimeRegistry(r.pluginRuntimeRegistry),
+		closeAppRuntimeRegistry(r.pluginRuntimeRegistry),
 	)
 	if r.auditClose != nil {
 		errs = append(errs, r.auditClose(ctx))
@@ -1034,8 +1034,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 	deps.AuthorizationProvider = authzProvider
-	runtimeRegistry := newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
-	deps.PluginRuntimeRegistry = runtimeRegistry
+	runtimeRegistry := newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = runtimeRegistry
 
 	closeSM = false
 	shutdownTelemetry = false
@@ -1096,7 +1096,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeS3s(p.ExtraS3s...),
 		closeSecretManager(p.SecretManager),
-		closePluginRuntimeRegistry(p.pluginRuntimeRegistry),
+		closeAppRuntimeRegistry(p.pluginRuntimeRegistry),
 	)
 	if p.Telemetry != nil {
 		errs = append(errs, p.Telemetry.Shutdown(ctx))
@@ -1121,7 +1121,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	agentManager := newLazyAgentManager()
 	workflowTools := newWorkflowSystemTools(workflowManager, prepared.Deps.WorkflowRuntime)
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	prepared.Deps.PluginInvoker = pluginInvoker
+	prepared.Deps.AppInvoker = pluginInvoker
 	prepared.Deps.WorkflowManager = workflowManager
 	prepared.Deps.AgentManager = agentManager
 	prepared.Deps.PublicHostServices = publicHostServices
@@ -1153,7 +1153,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
 	}
-	baseAuthz, err := authorization.New(config.AuthorizationStaticConfig(cfg.Authorization, cfg.Plugins))
+	baseAuthz, err := authorization.New(config.AuthorizationStaticConfig(cfg.Authorization, cfg.Apps))
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
@@ -1209,7 +1209,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
-		PluginInvokes:     agentPluginInvokes(cfg),
+		AppInvokes:        agentPluginInvokes(cfg),
 	}))
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:                     providers,
@@ -1220,7 +1220,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Authorizer:                    authz,
 		DefaultConnection:             connMaps.DefaultConnection,
 		CatalogConnection:             connMaps.APIConnection,
-		PluginInvokes:                 agentPluginInvokes(cfg),
+		AppInvokes:                    agentPluginInvokes(cfg),
 		AgentConnections:              agentConnectionBindings(cfg),
 		SessionStart:                  agentSessionStartConfigs(cfg),
 		DefaultToolNarrowingThreshold: cfg.Server.Agent.DefaultToolNarrowingThreshold,
@@ -1246,7 +1246,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			_ = closeAgents(extraAgents...)
 		}
 	}()
-	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "plugin", audit, invocation.WithoutRateLimit()))
+	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
 		if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
 			return err
@@ -1297,12 +1297,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		ConnectionAuth:               connAuthResolver,
 		ManualConnectionAuth:         manualConnAuthResolver,
 		Invoker:                      sharedInvoker,
-		PluginInvoker:                pluginInvoker,
+		AppInvoker:                   pluginInvoker,
 		CapabilityLister:             sharedInvoker,
 		AuditSink:                    audit,
 		SecretManager:                prepared.SecretManager,
 		Telemetry:                    prepared.Telemetry,
-		PluginRuntimes:               prepared.pluginRuntimeRegistry,
+		AppRuntimes:                  prepared.pluginRuntimeRegistry,
 		ProviderDevSessions:          providerDevSessions,
 		PublicHostServices:           publicHostServices,
 		pluginRuntimeRegistry:        prepared.pluginRuntimeRegistry,
@@ -1411,16 +1411,16 @@ func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	return extraAgents, nil
 }
 
-func agentPluginInvokes(cfg *config.Config) map[string][]invocation.PluginInvocationDependency {
-	if cfg == nil || len(cfg.Plugins) == 0 {
+func agentPluginInvokes(cfg *config.Config) map[string][]invocation.AppInvocationDependency {
+	if cfg == nil || len(cfg.Apps) == 0 {
 		return nil
 	}
-	out := make(map[string][]invocation.PluginInvocationDependency, len(cfg.Plugins))
-	for pluginName, entry := range cfg.Plugins {
+	out := make(map[string][]invocation.AppInvocationDependency, len(cfg.Apps))
+	for pluginName, entry := range cfg.Apps {
 		if entry == nil || len(entry.Invokes) == 0 {
 			continue
 		}
-		out[pluginName] = invocationconfig.PluginInvocationDependencies(entry.Invokes)
+		out[pluginName] = invocationconfig.AppInvocationDependencies(entry.Invokes)
 	}
 	return out
 }

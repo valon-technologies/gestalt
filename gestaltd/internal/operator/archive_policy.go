@@ -10,7 +10,7 @@ func allowsGenericArchive(kind string, manifest *providermanifestv1.Manifest) bo
 	switch kind {
 	case providermanifestv1.KindUI:
 		return true
-	case providermanifestv1.KindPlugin:
+	case providermanifestv1.KindApp:
 		return manifest != nil && manifest.IsDeclarativeOnlyProvider()
 	default:
 		return false
@@ -44,7 +44,7 @@ func allowsStaticGenericArchive(kind string, entry LockEntry) bool {
 	switch kind {
 	case providermanifestv1.KindUI:
 		return true
-	case providermanifestv1.KindPlugin:
+	case providermanifestv1.KindApp:
 		return lockEntryRuntime(entry, kind) == providerReleaseRuntimeDeclarative
 	default:
 		return false
@@ -53,7 +53,7 @@ func allowsStaticGenericArchive(kind string, entry LockEntry) bool {
 
 func unsafeGenericArchiveError(subject, platform string) error {
 	return fmt.Errorf(
-		"generic release archives are not allowed for %s on %s; publish an explicit %s archive or keep the package platform-neutral (ui or declarative/spec-only plugin package)",
+		"generic release archives are not allowed for %s on %s; publish an explicit %s archive or keep the package platform-neutral (ui or declarative/spec-only app package)",
 		subject,
 		platform,
 		platform,

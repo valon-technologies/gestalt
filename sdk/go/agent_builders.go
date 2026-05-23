@@ -129,7 +129,7 @@ func NewAgentToolRef(input AgentToolRef) *AgentToolRef {
 		runAsExternalIdentity = &copied
 	}
 	return &AgentToolRef{
-		Plugin:                input.Plugin,
+		App:                   input.App,
 		Operation:             input.Operation,
 		Connection:            input.Connection,
 		Instance:              input.Instance,
@@ -157,7 +157,7 @@ func AgentToolRefFromRef(value *AgentToolRef) AgentToolRef {
 		runAsExternalIdentity = &copied
 	}
 	return AgentToolRef{
-		Plugin:                value.Plugin,
+		App:                   value.App,
 		Operation:             value.Operation,
 		Connection:            value.Connection,
 		Instance:              value.Instance,

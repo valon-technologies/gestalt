@@ -131,12 +131,12 @@ type EffectiveRuntimePlacement struct {
 	Workspace     *RuntimePlacementWorkspaceConfig
 }
 
-func (c *Config) EffectivePluginIndexedDB(pluginName string, entry *ProviderEntry) (EffectiveHostIndexedDBBinding, error) {
+func (c *Config) EffectiveAppIndexedDB(pluginName string, entry *ProviderEntry) (EffectiveHostIndexedDBBinding, error) {
 	selectedName, _, err := c.SelectedIndexedDBProvider()
 	if err != nil {
 		return EffectiveHostIndexedDBBinding{}, err
 	}
-	return ResolveEffectivePluginIndexedDB(pluginName, entry, selectedName, c.Providers.IndexedDB)
+	return ResolveEffectiveAppIndexedDB(pluginName, entry, selectedName, c.Providers.IndexedDB)
 }
 
 func (c *Config) EffectiveWorkflowProvider(providerName string) (string, *ProviderEntry, error) {
@@ -188,7 +188,7 @@ func (c *Config) EffectiveRuntimePlacement(configPath string, entry *ProviderEnt
 	return ResolveEffectiveRuntimePlacement(configPath, entry, selectedName, c.Runtime.Providers)
 }
 
-func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectiveHostIndexedDBBinding, error) {
+func ResolveEffectiveAppIndexedDB(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectiveHostIndexedDBBinding, error) {
 	if entry == nil {
 		return EffectiveHostIndexedDBBinding{}, nil
 	}
@@ -202,14 +202,14 @@ func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, se
 	}
 	if providerName == "" {
 		if entry.IndexedDB != nil && (strings.TrimSpace(entry.IndexedDB.DB) != "" || len(entry.IndexedDB.ObjectStores) > 0) {
-			return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: plugins.%s.indexeddb requires indexeddb.provider or an available selected/default host indexeddb", pluginName)
+			return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: apps.%s.indexeddb requires indexeddb.provider or an available selected/default host indexeddb", pluginName)
 		}
 		return EffectiveHostIndexedDBBinding{}, nil
 	}
 
 	provider, ok := entries[providerName]
 	if !ok || provider == nil {
-		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: plugins.%s.indexeddb.provider references unknown indexeddb %q", pluginName, providerName)
+		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: apps.%s.indexeddb.provider references unknown indexeddb %q", pluginName, providerName)
 	}
 
 	dbName := pluginName

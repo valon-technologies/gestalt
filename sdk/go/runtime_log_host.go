@@ -19,7 +19,7 @@ const EnvRuntimeSessionID = "GESTALT_RUNTIME_SESSION_ID"
 
 // RuntimeLogHostClient appends plugin-runtime logs to the host.
 type RuntimeLogHostClient struct {
-	client    proto.PluginRuntimeLogHostClient
+	client    proto.AppRuntimeLogHostClient
 	sourceSeq atomic.Int64
 }
 
@@ -52,7 +52,7 @@ func RuntimeLogHost() (*RuntimeLogHostClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "runtime log host", target, token, &sharedRuntimeLogHostClients, proto.NewPluginRuntimeLogHostClient)
+	client, err := managerTransportClient(ctx, "runtime log host", target, token, &sharedRuntimeLogHostClients, proto.NewAppRuntimeLogHostClient)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (c *RuntimeLogHostClient) Close() error {
 
 // AppendLogs appends runtime logs for one hosted runtime session.
 func (c *RuntimeLogHostClient) AppendLogs(ctx context.Context, sessionID string, logs []RuntimeLogEntry) error {
-	_, err := c.client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{
+	_, err := c.client.AppendLogs(ctx, &proto.AppendAppRuntimeLogsRequest{
 		SessionId: strings.TrimSpace(sessionID),
 		Logs:      runtimeLogEntriesToProto(logs),
 	})
@@ -165,10 +165,10 @@ func (c *RuntimeLogHostClient) advanceSourceSeq(sourceSeq int64) {
 	}
 }
 
-func runtimeLogEntriesToProto(logs []RuntimeLogEntry) []*proto.PluginRuntimeLogEntry {
-	out := make([]*proto.PluginRuntimeLogEntry, 0, len(logs))
+func runtimeLogEntriesToProto(logs []RuntimeLogEntry) []*proto.AppRuntimeLogEntry {
+	out := make([]*proto.AppRuntimeLogEntry, 0, len(logs))
 	for _, log := range logs {
-		entry := &proto.PluginRuntimeLogEntry{
+		entry := &proto.AppRuntimeLogEntry{
 			Stream:    runtimeLogStreamToProto(log.Stream),
 			Message:   log.Message,
 			SourceSeq: log.SourceSeq,
@@ -181,13 +181,13 @@ func runtimeLogEntriesToProto(logs []RuntimeLogEntry) []*proto.PluginRuntimeLogE
 	return out
 }
 
-func runtimeLogStreamToProto(stream RuntimeLogStream) proto.PluginRuntimeLogStream {
+func runtimeLogStreamToProto(stream RuntimeLogStream) proto.AppRuntimeLogStream {
 	switch stream {
 	case RuntimeLogStreamStdout:
-		return proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT
+		return proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT
 	case RuntimeLogStreamStderr:
-		return proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR
+		return proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR
 	default:
-		return proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME
+		return proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME
 	}
 }

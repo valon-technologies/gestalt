@@ -21,7 +21,7 @@ from gestalt import (
     ListPage,
     ObjectMeta,
     ObjectRef,
-    PluginProviderAdapter,
+    AppProviderAdapter,
     PresignMethod,
     PresignOptions,
     PresignResult,
@@ -438,8 +438,8 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
                 if str(root) in sys.path:
                     sys.path.remove(str(root))
 
-        self.assertIsInstance(target, PluginProviderAdapter)
-        adapter = cast(PluginProviderAdapter, target)
+        self.assertIsInstance(target, AppProviderAdapter)
+        adapter = cast(AppProviderAdapter, target)
         self.assertEqual(adapter.kind, ProviderKind.S3)
 
 

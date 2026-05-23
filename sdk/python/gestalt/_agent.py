@@ -11,7 +11,7 @@ import grpc
 from ._api import ExternalIdentity, Subject
 from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
-from ._gen.v1 import plugin_pb2 as _plugin_pb
+from ._gen.v1 import app_pb2 as _app_pb
 from ._grpc_transport import (
     ENV_HOST_SERVICE_SOCKET,
     ENV_HOST_SERVICE_TOKEN,
@@ -1075,7 +1075,7 @@ def subject_to_proto(
     if value is None:
         return None
     subject = _coerce(value, Subject, "Subject")
-    return _plugin_pb.SubjectContext(
+    return _app_pb.SubjectContext(
         id=subject.id,
         kind=subject.kind,
         credential_subject_id=subject.credential_subject_id,
@@ -1149,7 +1149,7 @@ def agent_tool_ref_to_proto(
     if value is None:
         return None
     ref = _coerce(value, AgentToolRef, "AgentToolRef")
-    message = _plugin_pb.AgentToolRef(
+    message = _app_pb.AgentToolRef(
         plugin=ref.plugin,
         operation=ref.operation,
         connection=ref.connection,
@@ -1179,7 +1179,7 @@ def external_identity_to_proto(
     if value is None:
         return None
     identity = _coerce(value, ExternalIdentity, "ExternalIdentity")
-    return _plugin_pb.ExternalIdentityContext(type=identity.type, id=identity.id)
+    return _app_pb.ExternalIdentityContext(type=identity.type, id=identity.id)
 
 
 def agent_turn_display_to_proto(
@@ -1564,7 +1564,7 @@ def agent_tool_ref_to_dict(tool_ref: Any) -> dict[str, Any]:
     value = _message_fields(
         tool_ref,
         (
-            "plugin",
+            "app",
             "operation",
             "connection",
             "instance",
@@ -1593,7 +1593,7 @@ def agent_tool_ref_from_dict(value: Mapping[str, Any] | None) -> Any:
 
     data = dict(_mapping_value(value, "tool_ref")) if value is not None else {}
     return AgentToolRef(
-        plugin=data.get("plugin", ""),
+        plugin=data.get("app", ""),
         operation=data.get("operation", ""),
         connection=data.get("connection", ""),
         instance=data.get("instance", ""),
@@ -1889,7 +1889,7 @@ def _agent_message_value(value: Any) -> Any:
 
 
 def _agent_tool_ref_value(value: Any) -> Any:
-    if isinstance(value, _plugin_pb.AgentToolRef):
+    if isinstance(value, _app_pb.AgentToolRef):
         return _copy(value)
     return agent_tool_ref_to_proto(value)
 

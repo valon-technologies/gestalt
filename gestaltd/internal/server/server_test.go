@@ -51,24 +51,24 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
+	"github.com/valon-technologies/gestalt/server/services/apps/composite"
+	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	gestaltmcp "github.com/valon-technologies/gestalt/server/services/apps/mcp"
+	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
+	"github.com/valon-technologies/gestalt/server/services/apps/paraminterp"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
-	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
-	"github.com/valon-technologies/gestalt/server/services/plugins/composite"
-	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
-	gestaltmcp "github.com/valon-technologies/gestalt/server/services/plugins/mcp"
-	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
-	"github.com/valon-technologies/gestalt/server/services/plugins/paraminterp"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	"github.com/valon-technologies/gestalt/server/services/ui"
@@ -92,14 +92,14 @@ func mustStruct(t *testing.T, fields map[string]any) *structpb.Struct {
 	return out
 }
 
-func configPluginInvocationDependencies(deps []invocation.PluginInvocationDependency) []config.PluginInvocationDependency {
+func configAppInvocationDependencies(deps []invocation.AppInvocationDependency) []config.AppInvocationDependency {
 	if len(deps) == 0 {
 		return nil
 	}
-	out := make([]config.PluginInvocationDependency, 0, len(deps))
+	out := make([]config.AppInvocationDependency, 0, len(deps))
 	for _, dep := range deps {
-		out = append(out, config.PluginInvocationDependency{
-			Plugin:         dep.Plugin,
+		out = append(out, config.AppInvocationDependency{
+			App:            dep.App,
 			Operation:      dep.Operation,
 			Surface:        dep.Surface,
 			CredentialMode: providermanifestv1.ConnectionMode(dep.CredentialMode),
@@ -323,7 +323,7 @@ type recordingExternalCredentialProvider struct {
 	exchangeCredentialCalls atomic.Int64
 }
 
-func TestS3ObjectAccessURLUploadsAndDownloadsPluginScopedObject(t *testing.T) {
+func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 	t.Parallel()
 
 	store := &coretesting.StubS3{}
@@ -345,7 +345,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsPluginScopedObject(t *testing.T) {
 		Key:    " workspaces/acme/tokens/token-1/content.bin ",
 	}
 	putURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
-		PluginName:  "brain",
+		AppName:     "brain",
 		BindingName: "brainStorage",
 		Ref:         targetRef,
 		Method:      s3store.PresignMethodPut,
@@ -375,7 +375,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsPluginScopedObject(t *testing.T) {
 
 	prefixed := s3store.ObjectRef{
 		Bucket: targetRef.Bucket,
-		Key:    s3.PluginObjectKey("brain", targetRef.Key),
+		Key:    s3.AppObjectKey("brain", targetRef.Key),
 	}
 	if _, err := store.HeadObject(context.Background(), prefixed); err != nil {
 		t.Fatalf("HeadObject(prefixed): %v", err)
@@ -385,7 +385,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsPluginScopedObject(t *testing.T) {
 	}
 
 	getURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
-		PluginName:  "brain",
+		AppName:     "brain",
 		BindingName: "brainStorage",
 		Ref:         targetRef,
 		Method:      s3store.PresignMethodGet,
@@ -414,7 +414,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsPluginScopedObject(t *testing.T) {
 	}
 
 	constrainedGetURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
-		PluginName:  "brain",
+		AppName:     "brain",
 		BindingName: "brainStorage",
 		Ref:         targetRef,
 		Method:      s3store.PresignMethodGet,
@@ -572,7 +572,7 @@ type staticRuntimeInspector struct {
 	err       error
 }
 
-func (s *staticRuntimeInspector) SnapshotPluginRuntimes(context.Context) ([]bootstrap.RuntimeProviderSnapshot, error) {
+func (s *staticRuntimeInspector) SnapshotAppRuntimes(context.Context) ([]bootstrap.RuntimeProviderSnapshot, error) {
 	if s == nil {
 		return nil, nil
 	}
@@ -582,9 +582,9 @@ func (s *staticRuntimeInspector) SnapshotPluginRuntimes(context.Context) ([]boot
 	out := make([]bootstrap.RuntimeProviderSnapshot, 0, len(s.snapshots))
 	for _, snapshot := range s.snapshots {
 		cloned := snapshot
-		cloned.Sessions = make([]pluginruntime.Session, 0, len(snapshot.Sessions))
+		cloned.Sessions = make([]appruntime.Session, 0, len(snapshot.Sessions))
 		for _, session := range snapshot.Sessions {
-			cloned.Sessions = append(cloned.Sessions, pluginruntime.Session{
+			cloned.Sessions = append(cloned.Sessions, appruntime.Session{
 				ID:       session.ID,
 				State:    session.State,
 				Metadata: maps.Clone(session.Metadata),
@@ -595,7 +595,7 @@ func (s *staticRuntimeInspector) SnapshotPluginRuntimes(context.Context) ([]boot
 	return out, nil
 }
 
-func (s *staticRuntimeInspector) ListPluginRuntimeSessionLogs(_ context.Context, _ string, _ string, afterSeq int64, limit int) ([]runtimelogs.Record, error) {
+func (s *staticRuntimeInspector) ListAppRuntimeSessionLogs(_ context.Context, _ string, _ string, afterSeq int64, limit int) ([]runtimelogs.Record, error) {
 	if s == nil {
 		return nil, nil
 	}
@@ -796,15 +796,15 @@ func (s relayTestAgentProviderServer) GetSession(_ context.Context, req *proto.G
 }
 
 type relayTestRuntimeLogHostServer struct {
-	proto.UnimplementedPluginRuntimeLogHostServer
+	proto.UnimplementedAppRuntimeLogHostServer
 	calls *atomic.Int64
 }
 
-func (s relayTestRuntimeLogHostServer) AppendLogs(_ context.Context, req *proto.AppendPluginRuntimeLogsRequest) (*proto.AppendPluginRuntimeLogsResponse, error) {
+func (s relayTestRuntimeLogHostServer) AppendLogs(_ context.Context, req *proto.AppendAppRuntimeLogsRequest) (*proto.AppendAppRuntimeLogsResponse, error) {
 	if s.calls != nil {
 		s.calls.Add(1)
 	}
-	return &proto.AppendPluginRuntimeLogsResponse{LastSeq: int64(len(req.GetLogs()))}, nil
+	return &proto.AppendAppRuntimeLogsResponse{LastSeq: int64(len(req.GetLogs()))}, nil
 }
 
 func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
@@ -840,7 +840,7 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		Service:      "cache",
 		MethodPrefix: "/gestalt.provider.v1.Cache/",
@@ -936,7 +936,7 @@ func TestHostServiceRelayProxiesGRPCRequestsOnManagementProfile(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		Service:      "cache",
 		MethodPrefix: "/" + proto.Cache_ServiceDesc.ServiceName + "/",
@@ -1002,7 +1002,7 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "session-2",
 		Service:      "cache",
 		MethodPrefix: "/gestalt.provider.v1.Cache/",
@@ -1029,7 +1029,7 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 
 	session2Registration.Unregister()
 	session1Token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		Service:      "cache",
 		MethodPrefix: "/gestalt.provider.v1.Cache/",
@@ -1091,7 +1091,7 @@ func TestHostServiceRelayStopsServingUnregisteredProviderService(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		Service:      "cache",
 		MethodPrefix: "/" + proto.Cache_ServiceDesc.ServiceName + "/",
@@ -1124,27 +1124,27 @@ func TestHostServiceRelayStopsServingUnregisteredProviderService(t *testing.T) {
 	}
 }
 
-func TestHostServiceRelayRoutesRegisteredPluginInvokerService(t *testing.T) {
+func TestHostServiceRelayRoutesRegisteredAppInvokerService(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	invoker := &relayTestInvoker{}
-	invokes := []invocation.PluginInvocationDependency{{
-		Plugin:         "slack",
+	invokes := []invocation.AppInvocationDependency{{
+		App:            "slack",
 		Operation:      "events.reply",
 		CredentialMode: core.ConnectionModeNone,
 	}}
-	invocationTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
+	invocationTokens, err := appinvokerservice.NewInvocationTokenManager(secret)
 	if err != nil {
 		t.Fatalf("NewInvocationTokenManager: %v", err)
 	}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	sessionVerifier := newRelayTestSessionVerifier("provider-dev-session")
 	publicHostServices.RegisterVerified("support", sessionVerifier, runtimehost.HostService{
-		Name:           "plugin_invoker",
-		MethodPrefixes: []string{"/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/"},
+		Name:           "app_invoker",
+		MethodPrefixes: []string{"/" + proto.AppInvoker_ServiceDesc.ServiceName + "/"},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer("support", invokes, invoker, invocationTokens))
+			proto.RegisterAppInvokerServer(srv, appinvokerservice.NewServer("support", invokes, invoker, invocationTokens))
 		},
 	})
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
@@ -1161,10 +1161,10 @@ func TestHostServiceRelayRoutesRegisteredPluginInvokerService(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "provider-dev-session",
-		Service:      "plugin_invoker",
-		MethodPrefix: "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/",
+		Service:      "app_invoker",
+		MethodPrefix: "/" + proto.AppInvoker_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})
 	if err != nil {
@@ -1176,7 +1176,7 @@ func TestHostServiceRelayRoutesRegisteredPluginInvokerService(t *testing.T) {
 		Kind:      principal.KindUser,
 		Source:    principal.SourceSession,
 	})
-	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "support", plugininvokerservice.InvocationDependencyGrants(invokes))
+	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "support", appinvokerservice.InvocationDependencyGrants(invokes))
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
 	}
@@ -1186,15 +1186,15 @@ func TestHostServiceRelayRoutesRegisteredPluginInvokerService(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	_, err = proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{
+	_, err = proto.NewAppInvokerClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
 		InvocationToken: invocationToken,
-		Plugin:          "slack",
+		App:             "slack",
 		Operation:       "events.reply",
 		Instance:        "prod",
 		IdempotencyKey:  "provider-dev-call",
 	})
 	if err != nil {
-		t.Fatalf("PluginInvoker.Invoke via registered relay: %v", err)
+		t.Fatalf("AppInvoker.Invoke via registered relay: %v", err)
 	}
 	if call := invoker.snapshot(); call.calls != 1 || call.providerName != "slack" || call.operation != "events.reply" || call.instance != "prod" {
 		t.Fatalf("plugin invoker call = %+v, want slack events.reply/prod", call)
@@ -1204,13 +1204,13 @@ func TestHostServiceRelayRoutesRegisteredPluginInvokerService(t *testing.T) {
 	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer staleCancel()
 	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	_, err = proto.NewPluginInvokerClient(conn).Invoke(staleCtx, &proto.PluginInvokeRequest{
+	_, err = proto.NewAppInvokerClient(conn).Invoke(staleCtx, &proto.AppInvokeRequest{
 		InvocationToken: invocationToken,
-		Plugin:          "slack",
+		App:             "slack",
 		Operation:       "events.reply",
 	})
 	if grpcstatus.Code(err) != codes.Unauthenticated {
-		t.Fatalf("PluginInvoker.Invoke stale session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
+		t.Fatalf("AppInvoker.Invoke stale session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
 	}
 	if call := invoker.snapshot(); call.calls != 1 {
 		t.Fatalf("plugin invoker calls = %d, want only the verified call", call.calls)
@@ -1270,25 +1270,25 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			name:         "runtime log host",
 			service:      "runtime_log_host",
 			envVar:       runtimehost.DefaultHostServiceSocketEnv,
-			methodPrefix: "/" + proto.PluginRuntimeLogHost_ServiceDesc.ServiceName + "/",
+			methodPrefix: "/" + proto.AppRuntimeLogHost_ServiceDesc.ServiceName + "/",
 			register: func(srv *grpc.Server, calls *atomic.Int64) {
-				proto.RegisterPluginRuntimeLogHostServer(srv, relayTestRuntimeLogHostServer{calls: calls})
+				proto.RegisterAppRuntimeLogHostServer(srv, relayTestRuntimeLogHostServer{calls: calls})
 			},
 			call: func(t *testing.T, ctx context.Context, conn *grpc.ClientConn) {
 				t.Helper()
-				resp, err := proto.NewPluginRuntimeLogHostClient(conn).AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{
+				resp, err := proto.NewAppRuntimeLogHostClient(conn).AppendLogs(ctx, &proto.AppendAppRuntimeLogsRequest{
 					SessionId: "runtime-session-1",
-					Logs: []*proto.PluginRuntimeLogEntry{{
-						Stream:    proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT,
+					Logs: []*proto.AppRuntimeLogEntry{{
+						Stream:    proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT,
 						Message:   "hello",
 						SourceSeq: 1,
 					}},
 				})
 				if err != nil {
-					t.Fatalf("PluginRuntimeLogHost.AppendLogs via relay: %v", err)
+					t.Fatalf("AppRuntimeLogHost.AppendLogs via relay: %v", err)
 				}
 				if resp.GetLastSeq() != 1 {
-					t.Fatalf("PluginRuntimeLogHost.AppendLogs last_seq = %d, want 1", resp.GetLastSeq())
+					t.Fatalf("AppRuntimeLogHost.AppendLogs last_seq = %d, want 1", resp.GetLastSeq())
 				}
 			},
 		},
@@ -1325,7 +1325,7 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 				t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 			}
 			relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-				PluginName:   "support",
+				AppName:      "support",
 				SessionID:    "session-1",
 				Service:      tc.service,
 				MethodPrefix: tc.methodPrefix,
@@ -1355,9 +1355,9 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			case "agent_provider":
 				_, err = proto.NewAgentProviderClient(conn).GetSession(staleCtx, &proto.GetAgentProviderSessionRequest{SessionId: "agent-session-1"})
 			case "runtime_log_host":
-				_, err = proto.NewPluginRuntimeLogHostClient(conn).AppendLogs(staleCtx, &proto.AppendPluginRuntimeLogsRequest{
+				_, err = proto.NewAppRuntimeLogHostClient(conn).AppendLogs(staleCtx, &proto.AppendAppRuntimeLogsRequest{
 					SessionId: "runtime-session-1",
-					Logs:      []*proto.PluginRuntimeLogEntry{{Message: "stale"}},
+					Logs:      []*proto.AppRuntimeLogEntry{{Message: "stale"}},
 				})
 			}
 			if grpcstatus.Code(err) != codes.Unauthenticated {
@@ -1375,8 +1375,8 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	invoker := &relayTestInvoker{}
-	invokes := []invocation.PluginInvocationDependency{{
-		Plugin:         "slack",
+	invokes := []invocation.AppInvocationDependency{{
+		App:            "slack",
 		Operation:      "events.reply",
 		CredentialMode: core.ConnectionModeNone,
 	}}
@@ -1384,8 +1384,8 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 		cfg.RouteProfile = server.RouteProfilePublic
 		cfg.StateSecret = secret
 		cfg.Invoker = invoker
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"support": {Invokes: configPluginInvocationDependencies(invokes)},
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"support": {Invokes: configAppInvocationDependencies(invokes)},
 		}
 	}))
 	ts.EnableHTTP2 = true
@@ -1397,10 +1397,10 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "provider-dev-session",
-		Service:      "plugin_invoker",
-		MethodPrefix: "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/",
+		Service:      "app_invoker",
+		MethodPrefix: "/" + proto.AppInvoker_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})
 	if err != nil {
@@ -1412,9 +1412,9 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	_, err = proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{})
+	_, err = proto.NewAppInvokerClient(conn).Invoke(ctx, &proto.AppInvokeRequest{})
 	if grpcstatus.Code(err) != codes.Unavailable {
-		t.Fatalf("PluginInvoker.Invoke without registered service code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
+		t.Fatalf("AppInvoker.Invoke without registered service code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
 	}
 	if call := invoker.snapshot(); call.providerName != "" {
 		t.Fatalf("invoker was called without registered relay service: %+v", call)
@@ -1475,7 +1475,7 @@ func TestHostServiceRelayRejectsMethodOutsideTokenPrefix(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		Service:      "cache",
 		MethodPrefix: "/gestalt.provider.v1.IndexedDB/",
@@ -1528,7 +1528,7 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "relay-plugin",
+		AppName:      "relay-plugin",
 		SessionID:    "session-1",
 		Service:      "indexeddb",
 		MethodPrefix: "/" + proto.IndexedDB_ServiceDesc.ServiceName + "/",
@@ -1589,7 +1589,7 @@ func TestEgressProxyProxiesHTTPRequest(t *testing.T) {
 	testutil.CloseOnCleanup(t, proxy)
 
 	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"127.0.0.1", "localhost"},
 	})
@@ -1638,7 +1638,7 @@ func TestEgressProxyProxiesHTTPRequestOnManagementProfile(t *testing.T) {
 	testutil.CloseOnCleanup(t, proxy)
 
 	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"127.0.0.1", "localhost"},
 	})
@@ -1679,7 +1679,7 @@ func TestEgressProxyRejectsDisallowedHost(t *testing.T) {
 	testutil.CloseOnCleanup(t, proxy)
 
 	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"api.github.com"},
 	})
@@ -1725,7 +1725,7 @@ func TestEgressProxySupportsHTTPSConnect(t *testing.T) {
 	testutil.CloseOnCleanup(t, proxy)
 
 	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"127.0.0.1", "localhost"},
 	})
@@ -1802,7 +1802,7 @@ func TestEgressProxyConnectForwardsBufferedClientBytes(t *testing.T) {
 		t.Fatalf("NewTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(egressproxy.TokenRequest{
-		PluginName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"127.0.0.1", "localhost"},
 	})
@@ -2578,7 +2578,7 @@ func seedSubjectToken(t *testing.T, svc *coredata.Services, subjectID, integrati
 	t.Helper()
 	resolvedConnection := config.ResolveConnectionAlias(connection)
 	if resolvedConnection == "" {
-		resolvedConnection = config.PluginConnectionName
+		resolvedConnection = config.AppConnectionName
 	}
 	seedToken(t, svc, &core.ExternalCredential{
 		ID:           integration + "-" + connection + "-" + instance,
@@ -2704,7 +2704,7 @@ func seedProviderPluginAuthorization(t *testing.T, svc *coredata.Services, authz
 	provider.putRelationship(provider.activeModelID, &core.Relationship{
 		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
 		Relation: role,
-		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: plugin},
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: plugin},
 	})
 	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
 		t.Fatalf("seedProviderPluginAuthorization authorization state reload after write: %v", err)
@@ -2724,7 +2724,7 @@ func testPluginDefsForConnections(plugin string, connections ...string) map[stri
 	entry := &config.ProviderEntry{}
 	for _, connection := range connections {
 		connection = config.ResolveConnectionAlias(connection)
-		if connection == "" || connection == config.PluginConnectionName {
+		if connection == "" || connection == config.AppConnectionName {
 			continue
 		}
 		if entry.Connections == nil {
@@ -3218,7 +3218,7 @@ func TestMountedUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *testi
 		}
 		cfg.Services = svc
 		cfg.Authorizer = baseAuthz
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_portal": {
 				AuthorizationPolicy: "sample_policy",
 				RouteAuth:           &config.RouteAuthDef{Provider: "alt"},
@@ -3227,7 +3227,7 @@ func TestMountedUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *testi
 		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
-			PluginName:          "sample_portal",
+			AppName:             "sample_portal",
 			AuthorizationPolicy: "sample_policy",
 			Routes: []server.MountedUIRoute{
 				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
@@ -3297,7 +3297,7 @@ func TestMountedUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *testi
 		t.Fatalf("body = %q, want protected sample shell", body)
 	}
 
-	resp, err = client.Get(ts.URL + "/api/v1/integrations")
+	resp, err = client.Get(ts.URL + "/api/v1/apps")
 	if err != nil {
 		t.Fatalf("GET integrations with route-auth session: %v", err)
 	}
@@ -3307,7 +3307,7 @@ func TestMountedUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *testi
 	}
 }
 
-func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithPluginName(t *testing.T) {
+func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithAppName(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -3352,7 +3352,7 @@ func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsers
 		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
-			PluginName:          "sample_portal",
+			AppName:             "sample_portal",
 			AuthorizationPolicy: "sample_policy",
 			Routes: []server.MountedUIRoute{
 				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
@@ -3464,7 +3464,7 @@ func TestMountedUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
-			PluginName:          "sample_portal",
+			AppName:             "sample_portal",
 			AuthorizationPolicy: "sample_policy",
 			Routes: []server.MountedUIRoute{
 				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
@@ -3523,7 +3523,7 @@ func TestMountedUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 	}
 }
 
-func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithoutPluginName(t *testing.T) {
+func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithoutAppName(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -3580,15 +3580,15 @@ func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsers
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("GET default-allow mounted sync without plugin name: %v", err)
+		t.Fatalf("GET default-allow mounted sync without app name: %v", err)
 	}
 	body, err := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if err != nil {
-		t.Fatalf("ReadAll default-allow mounted sync without plugin name: %v", err)
+		t.Fatalf("ReadAll default-allow mounted sync without app name: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("default-allow viewer status without plugin name = %d, want %d", resp.StatusCode, http.StatusOK)
+		t.Fatalf("default-allow viewer status without app name = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	if !strings.Contains(string(body), "protected-sample-shell") {
 		t.Fatalf("body = %q, want protected sample shell", body)
@@ -4050,7 +4050,7 @@ func TestBuiltInAdminRoute_EmbeddedAdminUIIncludesAuthorizationWorkspace(t *test
 		`data-tab-panel="authorization"`,
 		`data-tab="admins"`,
 		`data-tab-panel="admins"`,
-		"/admin/api/v1/authorization/plugins",
+		"/admin/api/v1/authorization/apps",
 		"/admin/api/v1/authorization/admins/members",
 		`window.__gestaltAdminShell.loginBase = "/api/v1/auth/login"`,
 		"Save dynamic grant",
@@ -4344,7 +4344,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.AuthorizationProvider = provider
-		cfg.PluginDefs = pluginDefs
+		cfg.AppDefs = pluginDefs
 		cfg.Admin = server.AdminRouteConfig{
 			AuthorizationPolicy: "admin_policy",
 			AllowedRoles:        []string{"admin"},
@@ -4355,7 +4355,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET admin api without auth: %v", err)
@@ -4365,7 +4365,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		t.Fatalf("unauthenticated admin api status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -4391,7 +4391,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		t.Fatalf("dynamic admin can-write header = %q, want true", got)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -4403,62 +4403,62 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		t.Fatalf("admin api status = %d, want 200: %s", resp.StatusCode, body)
 	}
 
-	var plugins []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&plugins); err != nil {
-		t.Fatalf("decoding plugins: %v", err)
+	var apps []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&apps); err != nil {
+		t.Fatalf("decoding apps: %v", err)
 	}
-	if len(plugins) != 5 || plugins[0]["name"] != "a%252Fb" || plugins[1]["name"] != "a%2Fb" || plugins[2]["name"] != "a/b" || plugins[3]["name"] != "other_plugin" || plugins[4]["name"] != "sample_plugin" {
-		t.Fatalf("plugins = %+v, want double escaped, escaped, slash, other_plugin, and sample_plugin", plugins)
+	if len(apps) != 5 || apps[0]["name"] != "a%252Fb" || apps[1]["name"] != "a%2Fb" || apps[2]["name"] != "a/b" || apps[3]["name"] != "other_plugin" || apps[4]["name"] != "sample_plugin" {
+		t.Fatalf("apps = %+v, want double escaped, escaped, slash, other_plugin, and sample_plugin", apps)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("plugin admin GET plugin members: %v", err)
+		t.Fatalf("plugin admin GET app members: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("plugin admin get plugin members status = %d, want 200: %s", resp.StatusCode, body)
+		t.Fatalf("plugin admin get app members status = %d, want 200: %s", resp.StatusCode, body)
 	}
 
 	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("plugin admin PUT plugin member: %v", err)
+		t.Fatalf("plugin admin PUT app member: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("plugin admin put plugin member status = %d, want 200: %s", resp.StatusCode, respBody)
+		t.Fatalf("plugin admin put app member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("plugin admin DELETE plugin member: %v", err)
+		t.Fatalf("plugin admin DELETE app member: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("plugin admin delete plugin member status = %d, want 200: %s", resp.StatusCode, respBody)
+		t.Fatalf("plugin admin delete app member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/a%252Fb/members", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps/a%252Fb/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "escaped-plugin-admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("escaped plugin admin GET plugin members: %v", err)
+		t.Fatalf("escaped app admin GET app members: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("escaped plugin admin get plugin members status = %d, want 200: %s", resp.StatusCode, respBody)
+		t.Fatalf("escaped app admin get app members status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
 	for _, tc := range []struct {
@@ -4466,10 +4466,10 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		session string
 		path    string
 	}{
-		{name: "plugin admin cannot manage other plugin", session: "plugin-admin-session", path: "/admin/api/v1/authorization/plugins/other_plugin/members"},
-		{name: "plugin viewer cannot manage plugin", session: "plugin-viewer-session", path: "/admin/api/v1/authorization/plugins/sample_plugin/members"},
-		{name: "escaped slash path does not authorize slash plugin", session: "slash-plugin-admin-session", path: "/admin/api/v1/authorization/plugins/a%2Fb/members"},
-		{name: "double escaped plugin admin cannot manage escaped plugin", session: "double-escaped-plugin-admin-session", path: "/admin/api/v1/authorization/plugins/a%252Fb/members"},
+		{name: "plugin admin cannot manage other plugin", session: "plugin-admin-session", path: "/admin/api/v1/authorization/apps/other_plugin/members"},
+		{name: "plugin viewer cannot manage plugin", session: "plugin-viewer-session", path: "/admin/api/v1/authorization/apps/sample_plugin/members"},
+		{name: "escaped slash path does not authorize slash plugin", session: "slash-plugin-admin-session", path: "/admin/api/v1/authorization/apps/a%2Fb/members"},
+		{name: "double escaped app admin cannot manage escaped plugin", session: "double-escaped-plugin-admin-session", path: "/admin/api/v1/authorization/apps/a%252Fb/members"},
 		{name: "plugin admin cannot manage gestaltd admins", session: "plugin-admin-session", path: "/admin/api/v1/authorization/admins/members"},
 	} {
 		req, _ = http.NewRequest(http.MethodGet, ts.URL+tc.path, nil)
@@ -4490,14 +4490,14 @@ func TestAdminAPI_RoutesMountedWithoutAdminUI(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_plugin": {AuthorizationPolicy: "sample_policy"},
 		}
 		cfg.AdminUI = nil
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/admin/api/v1/authorization/plugins")
+	resp, err := http.Get(ts.URL + "/admin/api/v1/authorization/apps")
 	if err != nil {
 		t.Fatalf("GET admin api without admin ui: %v", err)
 	}
@@ -4507,12 +4507,12 @@ func TestAdminAPI_RoutesMountedWithoutAdminUI(t *testing.T) {
 		t.Fatalf("admin api without admin ui status = %d, want 200: %s", resp.StatusCode, body)
 	}
 
-	var plugins []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&plugins); err != nil {
-		t.Fatalf("decoding plugins: %v", err)
+	var apps []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&apps); err != nil {
+		t.Fatalf("decoding apps: %v", err)
 	}
-	if len(plugins) != 1 || plugins[0]["name"] != "sample_plugin" {
-		t.Fatalf("plugins = %+v, want sample_plugin", plugins)
+	if len(apps) != 1 || apps[0]["name"] != "sample_plugin" {
+		t.Fatalf("apps = %+v, want sample_plugin", apps)
 	}
 }
 
@@ -4520,7 +4520,7 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.PluginRuntimes = &staticRuntimeInspector{
+		cfg.AppRuntimes = &staticRuntimeInspector{
 			snapshots: []bootstrap.RuntimeProviderSnapshot{
 				{
 					Name:    "local",
@@ -4533,21 +4533,21 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 					Loaded:        true,
 					SupportLoaded: true,
 					Advertised: bootstrap.RuntimeBehavior{
-						CanHostPlugins:    true,
+						CanHostApps:       true,
 						HostServiceAccess: bootstrap.RuntimeHostServiceAccessNone,
 						EgressMode:        bootstrap.RuntimeEgressModeCIDR,
 					},
 					Effective: bootstrap.RuntimeBehavior{
-						CanHostPlugins:    true,
+						CanHostApps:       true,
 						HostServiceAccess: bootstrap.RuntimeHostServiceAccessRelay,
 						EgressMode:        bootstrap.RuntimeEgressModeCIDR,
 					},
-					Sessions: []pluginruntime.Session{{
+					Sessions: []appruntime.Session{{
 						ID:    "session-1",
-						State: pluginruntime.SessionStateRunning,
+						State: appruntime.SessionStateRunning,
 						Metadata: map[string]string{
-							"plugin": "support",
-							"owner":  "support-platform",
+							"app":   "support",
+							"owner": "support-platform",
 						},
 					}},
 				},
@@ -4618,17 +4618,17 @@ func TestAdminAPI_RuntimeProviderSessions(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.PluginRuntimes = &staticRuntimeInspector{
+		cfg.AppRuntimes = &staticRuntimeInspector{
 			snapshots: []bootstrap.RuntimeProviderSnapshot{{
 				Name:   "modal",
 				Driver: config.RuntimeProviderDriver("modal"),
 				Loaded: true,
-				Sessions: []pluginruntime.Session{{
+				Sessions: []appruntime.Session{{
 					ID:    "session-1",
-					State: pluginruntime.SessionStateRunning,
+					State: appruntime.SessionStateRunning,
 					Metadata: map[string]string{
-						"plugin": "support",
-						"owner":  "support-platform",
+						"app":   "support",
+						"owner": "support-platform",
 					},
 				}},
 			}},
@@ -4656,10 +4656,10 @@ func TestAdminAPI_RuntimeProviderSessions(t *testing.T) {
 	if got := sessions[0]["id"]; got != "session-1" {
 		t.Fatalf("runtime provider sessions[0].id = %v, want session-1", got)
 	}
-	if got := sessions[0]["state"]; got != string(pluginruntime.SessionStateRunning) {
-		t.Fatalf("runtime provider sessions[0].state = %v, want %q", got, pluginruntime.SessionStateRunning)
+	if got := sessions[0]["state"]; got != string(appruntime.SessionStateRunning) {
+		t.Fatalf("runtime provider sessions[0].state = %v, want %q", got, appruntime.SessionStateRunning)
 	}
-	if got := sessions[0]["plugin"]; got != "support" {
+	if got := sessions[0]["app"]; got != "support" {
 		t.Fatalf("runtime provider sessions[0].plugin = %v, want support", got)
 	}
 	if _, ok := sessions[0]["metadata"]; ok {
@@ -4671,7 +4671,7 @@ func TestAdminAPI_RuntimeProviderInspectionError(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.PluginRuntimes = &staticRuntimeInspector{
+		cfg.AppRuntimes = &staticRuntimeInspector{
 			snapshots: []bootstrap.RuntimeProviderSnapshot{{
 				Name:   "modal",
 				Driver: config.RuntimeProviderDriver("modal"),
@@ -4727,19 +4727,19 @@ func TestAdminAPI_RuntimeProviderSessionInspectionErrorKeepsProfile(t *testing.T
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.PluginRuntimes = &staticRuntimeInspector{
+		cfg.AppRuntimes = &staticRuntimeInspector{
 			snapshots: []bootstrap.RuntimeProviderSnapshot{{
 				Name:          "modal",
 				Driver:        config.RuntimeProviderDriver("modal"),
 				Loaded:        true,
 				SupportLoaded: true,
 				Advertised: bootstrap.RuntimeBehavior{
-					CanHostPlugins:    true,
+					CanHostApps:       true,
 					HostServiceAccess: bootstrap.RuntimeHostServiceAccessNone,
 					EgressMode:        bootstrap.RuntimeEgressModeCIDR,
 				},
 				Effective: bootstrap.RuntimeBehavior{
-					CanHostPlugins:    true,
+					CanHostApps:       true,
 					HostServiceAccess: bootstrap.RuntimeHostServiceAccessRelay,
 					EgressMode:        bootstrap.RuntimeEgressModeCIDR,
 				},
@@ -4791,7 +4791,7 @@ func TestAdminAPI_RuntimeProviderSessionLogs(t *testing.T) {
 	observedAt := time.Date(2026, time.April, 23, 12, 0, 0, 0, time.UTC)
 	appendedAt := observedAt.Add(2 * time.Second)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.PluginRuntimes = &staticRuntimeInspector{
+		cfg.AppRuntimes = &staticRuntimeInspector{
 			logs: []runtimelogs.Record{
 				{
 					Seq:        1,
@@ -4872,7 +4872,7 @@ func TestAdminAPI_RuntimeProviderSessionLogsRejectsInvalidCursorAndMapsNotFound(
 		t.Parallel()
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.PluginRuntimes = &staticRuntimeInspector{}
+			cfg.AppRuntimes = &staticRuntimeInspector{}
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -4891,7 +4891,7 @@ func TestAdminAPI_RuntimeProviderSessionLogsRejectsInvalidCursorAndMapsNotFound(
 		t.Parallel()
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.PluginRuntimes = &staticRuntimeInspector{err: indexeddb.ErrNotFound}
+			cfg.AppRuntimes = &staticRuntimeInspector{err: indexeddb.ErrNotFound}
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -4947,7 +4947,7 @@ func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.AuthorizationProvider = provider
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_plugin": {AuthorizationPolicy: "sample_policy"},
 		}
 		cfg.RouteProfile = server.RouteProfileManagement
@@ -4975,7 +4975,7 @@ func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {
 		t.Fatalf("management dynamic admin api status = %d, want 200: %s", resp.StatusCode, body)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -5019,7 +5019,7 @@ func TestAdminAPI_HumanAuthorization_UserResolutionFailure(t *testing.T) {
 		}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_plugin": {AuthorizationPolicy: "sample_policy"},
 		}
 		cfg.Admin = server.AdminRouteConfig{
@@ -5036,7 +5036,7 @@ func TestAdminAPI_HumanAuthorization_UserResolutionFailure(t *testing.T) {
 	stubDB.Err = fmt.Errorf("database unavailable")
 	defer func() { stubDB.Err = nil }()
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -5054,7 +5054,7 @@ func TestAdminAPIRoutes_HiddenOnPublicProfile(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_plugin": {AuthorizationPolicy: "sample_policy"},
 		}
 		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -5063,7 +5063,7 @@ func TestAdminAPIRoutes_HiddenOnPublicProfile(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/admin/api/v1/authorization/plugins")
+	resp, err := http.Get(ts.URL + "/admin/api/v1/authorization/apps")
 	if err != nil {
 		t.Fatalf("GET public admin api: %v", err)
 	}
@@ -5100,7 +5100,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.AuthorizationProvider = provider
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
 		}
 		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -5109,9 +5109,9 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/admin/api/v1/authorization/plugins")
+	resp, err := http.Get(ts.URL + "/admin/api/v1/authorization/apps")
 	if err != nil {
-		t.Fatalf("GET plugins: %v", err)
+		t.Fatalf("GET apps: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
@@ -5120,7 +5120,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 
 	dynamicEmail := "dynamic@example.test"
 	body := bytes.NewBufferString(fmt.Sprintf(`{"email":%q,"role":"viewer"}`, dynamicEmail))
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -5140,11 +5140,11 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		} `json:"membership"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&putPluginMembershipResp); err != nil {
-		t.Fatalf("decode plugin membership response: %v", err)
+		t.Fatalf("decode app membership response: %v", err)
 	}
 	dynamicUser, err := svc.Users.FindUserByEmail(context.Background(), dynamicEmail)
 	if err != nil {
-		t.Fatalf("FindUserByEmail dynamic plugin member: %v", err)
+		t.Fatalf("FindUserByEmail dynamic app member: %v", err)
 	}
 	if putPluginMembershipResp.Membership.SelectorKind != "subject_id" {
 		t.Fatalf("plugin membership selectorKind = %q, want subject_id", putPluginMembershipResp.Membership.SelectorKind)
@@ -5158,7 +5158,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 
 	serviceAccountSubjectID := "service_account:reporting-bot"
 	body = bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, serviceAccountSubjectID))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -5190,7 +5190,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("service account membership email = %q, want empty", putServiceAccountMembershipResp.Membership.Email)
 	}
 
-	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/plugins/sample_plugin/members")
+	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/apps/sample_plugin/members")
 	if err != nil {
 		t.Fatalf("GET members: %v", err)
 	}
@@ -5216,10 +5216,10 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		case principal.UserSubjectID(dynamicUser.ID):
 			foundDynamicPluginMember = true
 			if got := member["selectorKind"]; got != "subject_id" {
-				t.Fatalf("dynamic plugin member selectorKind = %v, want subject_id", got)
+				t.Fatalf("dynamic app member selectorKind = %v, want subject_id", got)
 			}
 			if member["email"] != dynamicEmail {
-				t.Fatalf("dynamic plugin member email = %v, want %q", member["email"], dynamicEmail)
+				t.Fatalf("dynamic app member email = %v, want %q", member["email"], dynamicEmail)
 			}
 		case serviceAccountSubjectID:
 			foundDynamicServiceAccountMember = true
@@ -5232,14 +5232,14 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		}
 	}
 	if !foundDynamicPluginMember {
-		t.Fatalf("expected one dynamic plugin member, got %+v", members)
+		t.Fatalf("expected one dynamic app member, got %+v", members)
 	}
 	if !foundDynamicServiceAccountMember {
 		t.Fatalf("expected one dynamic service account member, got %+v", members)
 	}
 
 	body = bytes.NewBufferString(`{"email":"static@example.test","role":"viewer"}`)
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -5251,7 +5251,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("put static-conflict status = %d, want 409: %s", resp.StatusCode, respBody)
 	}
 
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE dynamic member: %v", err)
@@ -5262,7 +5262,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("delete dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members/"+url.PathEscape(serviceAccountSubjectID), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(serviceAccountSubjectID), nil)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE service account member: %v", err)
@@ -5273,7 +5273,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("delete service account member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/plugins/sample_plugin/members")
+	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/apps/sample_plugin/members")
 	if err != nil {
 		t.Fatalf("GET members after delete: %v", err)
 	}
@@ -5299,7 +5299,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 	seedAPITokenWithPermissions(t, svc, scopedToken, scopedHash, "scoped-user", []core.AccessPermission{{
-		Plugin:     "svc",
+		App:        "svc",
 		Operations: []string{"run"},
 	}})
 
@@ -5442,15 +5442,15 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		}
 		cfg.Providers = testutil.NewProviderRegistry(t, stub, openStub, manualStub, discoverManualStub, oauthStub)
 		cfg.DefaultConnection = map[string]string{
-			"manual-svc":          config.PluginConnectionName,
-			"discover-manual-svc": config.PluginConnectionName,
+			"manual-svc":          config.AppConnectionName,
+			"discover-manual-svc": config.AppConnectionName,
 			"oauth-svc":           testDefaultConnection,
 		}
 		cfg.ConnectionAuth = testConnectionAuth("oauth-svc", oauthHandler)
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.AuthorizationProvider = provider
-		cfg.PluginDefs = pluginDefs
+		cfg.AppDefs = pluginDefs
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -5693,7 +5693,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("managed subject discovery workspace = %q, want beta", discoveryMetadata["workspace"])
 	}
 
-	resp = doJSON(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID+"/integrations", "owner-session", "")
+	resp = doJSON(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID+"/apps", "owner-session", "")
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
@@ -5764,9 +5764,9 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("managed subject oauth credentials = %+v", managedCredentials)
 	}
 
-	expectJSONStatus(http.MethodDelete, "/api/v1/authorization/subjects/"+escapedSubjectID+"/integrations/manual-svc", "viewer-session", "", http.StatusForbidden)
+	expectJSONStatus(http.MethodDelete, "/api/v1/authorization/subjects/"+escapedSubjectID+"/apps/manual-svc", "viewer-session", "", http.StatusForbidden)
 
-	resp = doJSON(http.MethodDelete, "/api/v1/authorization/subjects/"+escapedSubjectID+"/integrations/manual-svc", "owner-session", "")
+	resp = doJSON(http.MethodDelete, "/api/v1/authorization/subjects/"+escapedSubjectID+"/apps/manual-svc", "owner-session", "")
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
@@ -5785,7 +5785,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 
 	expectJSONStatus(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/grants/svc", "blocked-session", `{"role":"viewer"}`, http.StatusForbidden)
 
-	resp = doJSON(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/tokens", "owner-session", `{"name":"open-token","permissions":[{"plugin":"open-svc","operations":["run"]}]}`)
+	resp = doJSON(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/tokens", "owner-session", `{"name":"open-token","permissions":[{"app":"open-svc","operations":["run"]}]}`)
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
@@ -5803,7 +5803,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+openTokenResp.Token)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("invoke default-allow plugin without managed subject grant: %v", err)
+		t.Fatalf("invoke default-allow app without managed subject grant: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -5819,7 +5819,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("grant subject status = %d, want 200: %s", resp.StatusCode, body)
 	}
 	var grant struct {
-		Plugin  string `json:"plugin"`
+		App     string `json:"app"`
 		Role    string `json:"role"`
 		Source  string `json:"source"`
 		Mutable bool   `json:"mutable"`
@@ -5829,11 +5829,11 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("decode grant response: %v", err)
 	}
 	_ = resp.Body.Close()
-	if grant.Plugin != "svc" || grant.Role != "viewer" || grant.Source != "dynamic" || !grant.Mutable {
+	if grant.App != "svc" || grant.Role != "viewer" || grant.Source != "dynamic" || !grant.Mutable {
 		t.Fatalf("grant response = %+v", grant)
 	}
 
-	resp = doJSON(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/tokens", "owner-session", `{"name":"reporting-token","permissions":[{"plugin":"svc","operations":["run"]}]}`)
+	resp = doJSON(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/tokens", "owner-session", `{"name":"reporting-token","permissions":[{"app":"svc","operations":["run"]}]}`)
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
@@ -5849,7 +5849,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("decode token response: %v", err)
 	}
 	_ = resp.Body.Close()
-	if tokenResp.ID == "" || tokenResp.Token == "" || len(tokenResp.Permissions) != 1 || tokenResp.Permissions[0].Plugin != "svc" {
+	if tokenResp.ID == "" || tokenResp.Token == "" || len(tokenResp.Permissions) != 1 || tokenResp.Permissions[0].App != "svc" {
 		t.Fatalf("token response = %+v", tokenResp)
 	}
 
@@ -5955,7 +5955,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.AuthorizationProvider = provider
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
 		}
 		cfg.Admin = server.AdminRouteConfig{
@@ -5971,17 +5971,17 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	rawSubjectID := principal.UserSubjectID("raw-subject")
 	provider.putRelationship(provider.activeModelID, &core.Relationship{
 		Relation: "viewer",
-		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "sample_plugin"},
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: "sample_plugin"},
 		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{
 			Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: rawSubjectID},
 		}},
 		Properties: mustStruct(t, map[string]any{"source": "provider"}),
 	})
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/fragments/"+url.PathEscape("plugin/sample_plugin"), nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/fragments/"+url.PathEscape("app/sample_plugin"), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("GET plugin fragment: %v", err)
+		t.Fatalf("GET app fragment: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
@@ -5990,7 +5990,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	}
 	var pluginFragmentResp coredata.AuthorizationDynamicFragment
 	if err := json.NewDecoder(resp.Body).Decode(&pluginFragmentResp); err != nil {
-		t.Fatalf("decoding plugin fragment: %v", err)
+		t.Fatalf("decoding app fragment: %v", err)
 	}
 	if len(pluginFragmentResp.Relationships) != 1 || pluginFragmentResp.Relationships[0].Subject.ID != rawSubjectID {
 		t.Fatalf("plugin fragment relationships = %#v, want backfilled provider relationship", pluginFragmentResp.Relationships)
@@ -6004,7 +6004,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 
 	dynamicUser := seedUser(t, svc, "dynamic@example.test")
 	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
@@ -6016,11 +6016,11 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		respBody, _ := io.ReadAll(resp.Body)
 		t.Fatalf("put dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
-	pluginFragment, err := svc.AuthzFragments.GetFragmentByOwner(context.Background(), coredata.AuthorizationPluginFragmentOwner("sample_plugin"))
+	pluginFragment, err := svc.AuthzFragments.GetFragmentByOwner(context.Background(), coredata.AuthorizationAppFragmentOwner("sample_plugin"))
 	if err != nil {
 		t.Fatalf("GetFragmentByOwner plugin: %v", err)
 	}
-	if pluginFragment.ID != "plugin/sample_plugin" || len(pluginFragment.Relationships) != 2 {
+	if pluginFragment.ID != "app/sample_plugin" || len(pluginFragment.Relationships) != 2 {
 		t.Fatalf("plugin fragment = %#v, want backfilled and write path source relationships", pluginFragment)
 	}
 	foundDynamicUser := false
@@ -6035,10 +6035,10 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	}
 
 	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
-		t.Fatalf("ReloadAuthorizationState after provider-backed plugin write: %v", err)
+		t.Fatalf("ReloadAuthorizationState after provider-backed app write: %v", err)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6125,7 +6125,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("models response = %+v, want active model %q to be listed", modelsResp.Models, providerSummary.ActiveModelID)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/relationships?resourceType=plugin_dynamic&resourceId=sample_plugin", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/relationships?resourceType=app_dynamic&resourceId=sample_plugin", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6185,7 +6185,7 @@ func TestAdminAPI_AuthorizationProviderDebugRequiresAdminPolicy(t *testing.T) {
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.AuthorizationProvider = provider
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
 		}
 		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -6551,7 +6551,7 @@ func TestAdminAPI_ProviderBackedWritesUseAuthorizationProvider(t *testing.T) {
 			cfg.Services = svc
 			cfg.Authorizer = authz
 			cfg.AuthorizationProvider = provider
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
 			}
 			cfg.Admin = server.AdminRouteConfig{
@@ -6566,7 +6566,7 @@ func TestAdminAPI_ProviderBackedWritesUseAuthorizationProvider(t *testing.T) {
 
 		dynamicUser := seedUser(t, svc, "dynamic@example.test")
 		body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
+		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
 		req.Header.Set("Content-Type", "application/json")
 		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 		resp, err := http.DefaultClient.Do(req)
@@ -6764,7 +6764,7 @@ func TestAdminAPI_PluginAuthorizationUnavailable(t *testing.T) {
 		}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
 		}
 		cfg.Admin = server.AdminRouteConfig{
@@ -6783,9 +6783,9 @@ func TestAdminAPI_PluginAuthorizationUnavailable(t *testing.T) {
 		path   string
 		body   string
 	}{
-		{name: "list", method: http.MethodGet, path: "/admin/api/v1/authorization/plugins/sample_plugin/members"},
-		{name: "put", method: http.MethodPut, path: "/admin/api/v1/authorization/plugins/sample_plugin/members", body: fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID))},
-		{name: "delete", method: http.MethodDelete, path: "/admin/api/v1/authorization/plugins/sample_plugin/members/" + url.PathEscape(principal.UserSubjectID(dynamicUser.ID))},
+		{name: "list", method: http.MethodGet, path: "/admin/api/v1/authorization/apps/sample_plugin/members"},
+		{name: "put", method: http.MethodPut, path: "/admin/api/v1/authorization/apps/sample_plugin/members", body: fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID))},
+		{name: "delete", method: http.MethodDelete, path: "/admin/api/v1/authorization/apps/sample_plugin/members/" + url.PathEscape(principal.UserSubjectID(dynamicUser.ID))},
 	} {
 		reqBody := io.Reader(nil)
 		if tc.body != "" {
@@ -6947,7 +6947,7 @@ func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) 
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.AuthorizationProvider = provider
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
 		}
 		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -6958,7 +6958,7 @@ func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) 
 
 	dynamicUser := seedUser(t, svc, "dynamic@example.test")
 	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -7714,14 +7714,14 @@ func TestMountedRootUIRoutes(t *testing.T) {
 		t.Fatalf("body = %q, want root shell", body)
 	}
 
-	resp, err = http.Get(ts.URL + "/integrations")
+	resp, err = http.Get(ts.URL + "/apps")
 	if err != nil {
-		t.Fatalf("GET /integrations: %v", err)
+		t.Fatalf("GET /apps: %v", err)
 	}
 	body, err = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if err != nil {
-		t.Fatalf("ReadAll /integrations: %v", err)
+		t.Fatalf("ReadAll /apps: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("integrations status = %d, want 200", resp.StatusCode)
@@ -7794,7 +7794,7 @@ func TestMountedRootUIRoutesHiddenOnManagementProfile(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/integrations")
+	resp, err := http.Get(ts.URL + "/apps")
 	if err != nil {
 		t.Fatalf("GET management root-mounted route: %v", err)
 	}
@@ -7990,7 +7990,7 @@ func TestAuthMiddleware_ValidSession(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	req.Header.Set("Authorization", "Bearer valid-session")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -8010,7 +8010,7 @@ func TestProviderDevAttachmentRoutesEnforceGateDispatcherSecretAndRedaction(t *t
 		t.Helper()
 		manager, err := providerdev.NewManager([]providerdev.Target{{
 			Name:   "roadmap",
-			Source: "github.com/acme/plugins/roadmap",
+			Source: "github.com/acme/apps/roadmap",
 			UIPath: "/roadmap",
 			RuntimeEnv: func(string) (providerdev.RuntimeEnv, error) {
 				return providerdev.RuntimeEnv{
@@ -8075,7 +8075,7 @@ func TestProviderDevAttachmentRoutesEnforceGateDispatcherSecretAndRedaction(t *t
 		cfg.Auth = auth
 		cfg.ProviderDevAttach = true
 		cfg.ProviderDevSessions = newManager(t)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"roadmap": {
 				AuthorizationPolicy: "provider_devs",
 				Dev: &config.ProviderEntryDevConfig{
@@ -8087,7 +8087,7 @@ func TestProviderDevAttachmentRoutesEnforceGateDispatcherSecretAndRedaction(t *t
 			Policies: map[string]config.SubjectPolicyDef{
 				"provider_devs": {Default: "allow"},
 			},
-		}, cfg.PluginDefs)
+		}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, enabledTS)
 	req, err = http.NewRequest(http.MethodPost, enabledTS.URL+providerdev.PathAttachments, bytes.NewReader(createBody))
@@ -8245,7 +8245,7 @@ func TestProviderDevAttachmentCreateRequiresAttachActionPermission(t *testing.T)
 		t.Helper()
 		manager, err := providerdev.NewManager([]providerdev.Target{{
 			Name:   "roadmap",
-			Source: "github.com/acme/plugins/roadmap",
+			Source: "github.com/acme/apps/roadmap",
 		}})
 		if err != nil {
 			t.Fatalf("NewManager: %v", err)
@@ -8264,15 +8264,15 @@ func TestProviderDevAttachmentCreateRequiresAttachActionPermission(t *testing.T)
 	broadToken, broadHash := newToken(t)
 	seedAPIToken(t, svc, broadToken, broadHash, "broad-user")
 	invokeToken, invokeHash := newToken(t)
-	seedAPITokenWithPermissions(t, svc, invokeToken, invokeHash, "invoke-user", []core.AccessPermission{{Plugin: "roadmap"}})
+	seedAPITokenWithPermissions(t, svc, invokeToken, invokeHash, "invoke-user", []core.AccessPermission{{App: "roadmap"}})
 	attachToken, attachHash := newToken(t)
 	seedAPITokenWithPermissions(t, svc, attachToken, attachHash, "attach-user", []core.AccessPermission{{
-		Plugin:  "roadmap",
+		App:     "roadmap",
 		Actions: []string{core.ProviderActionDevAttach},
 	}})
 	subjectToken, subjectHash := newToken(t)
 	seedSubjectAPITokenWithPermissions(t, svc, subjectHash, "service_account:roadmap-dev", "roadmap-dev", []core.AccessPermission{{
-		Plugin:  "roadmap",
+		App:     "roadmap",
 		Actions: []string{core.ProviderActionDevAttach},
 	}})
 
@@ -8286,7 +8286,7 @@ func TestProviderDevAttachmentCreateRequiresAttachActionPermission(t *testing.T)
 		cfg.Services = svc
 		cfg.ProviderDevAttach = true
 		cfg.ProviderDevSessions = newManager(t)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"roadmap": {
 				AuthorizationPolicy: "provider_devs",
 				Dev: &config.ProviderEntryDevConfig{
@@ -8298,7 +8298,7 @@ func TestProviderDevAttachmentCreateRequiresAttachActionPermission(t *testing.T)
 			Policies: map[string]config.SubjectPolicyDef{
 				"provider_devs": {Default: "allow"},
 			},
-		}, cfg.PluginDefs)
+		}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -8347,7 +8347,7 @@ func TestProviderDevAttachAuthorizationBrowserApprovalCreatesDispatcherSession(t
 
 	manager, err := providerdev.NewManager([]providerdev.Target{{
 		Name:   "roadmap",
-		Source: "github.com/acme/plugins/roadmap",
+		Source: "github.com/acme/apps/roadmap",
 		RuntimeEnv: func(string) (providerdev.RuntimeEnv, error) {
 			return providerdev.RuntimeEnv{Env: map[string]string{"SESSION_ENV": "ok"}}, nil
 		},
@@ -8368,7 +8368,7 @@ func TestProviderDevAttachAuthorizationBrowserApprovalCreatesDispatcherSession(t
 		cfg.Auth = auth
 		cfg.ProviderDevAttach = true
 		cfg.ProviderDevSessions = manager
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"roadmap": {
 				AuthorizationPolicy: "provider_devs",
 				Dev: &config.ProviderEntryDevConfig{
@@ -8380,7 +8380,7 @@ func TestProviderDevAttachAuthorizationBrowserApprovalCreatesDispatcherSession(t
 			Policies: map[string]config.SubjectPolicyDef{
 				"provider_devs": {Default: "allow"},
 			},
-		}, cfg.PluginDefs)
+		}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -8730,7 +8730,7 @@ func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	req.Header.Set("Authorization", "Bearer "+plaintext)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -8773,7 +8773,7 @@ func TestAuthMiddleware_ValidSubjectOwnedAPIToken(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	req.Header.Set("Authorization", "Bearer "+plaintext)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -8821,7 +8821,7 @@ func TestAuthMiddleware_SubjectOwnedAPITokenRejectsBorrowedCredentialSubject(t *
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	req.Header.Set("Authorization", "Bearer "+plaintext)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -8842,7 +8842,7 @@ func TestAuthMiddleware_NoAuth(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -8908,7 +8908,7 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedProviderOverride(t *testing.T) {
 		}
 		cfg.Services = svc
 		cfg.Providers = testutil.NewProviderRegistry(t, openProvider, lockedProvider)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"locked": {
 				RouteAuth: &config.RouteAuthDef{Provider: "alt"},
 			},
@@ -8916,10 +8916,10 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedProviderOverride(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	t.Run("server-level routes and plugins without overrides remain anonymous", func(t *testing.T) {
+	t.Run("server-level routes and apps without overrides remain anonymous", func(t *testing.T) {
 		t.Parallel()
 
-		resp, err := http.Get(ts.URL + "/api/v1/integrations")
+		resp, err := http.Get(ts.URL + "/api/v1/apps")
 		if err != nil {
 			t.Fatalf("GET integrations: %v", err)
 		}
@@ -8942,7 +8942,7 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedProviderOverride(t *testing.T) {
 			t.Fatalf("open ping body = %q, want %q", body, "open:ping")
 		}
 
-		resp, err = http.Get(ts.URL + "/api/v1/integrations/open/operations")
+		resp, err = http.Get(ts.URL + "/api/v1/apps/open/operations")
 		if err != nil {
 			t.Fatalf("GET open operations: %v", err)
 		}
@@ -8966,7 +8966,7 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedProviderOverride(t *testing.T) {
 			t.Fatalf("locked ping status = %d, want 401: %s", resp.StatusCode, body)
 		}
 
-		resp, err = http.Get(ts.URL + "/api/v1/integrations/locked/operations")
+		resp, err = http.Get(ts.URL + "/api/v1/apps/locked/operations")
 		if err != nil {
 			t.Fatalf("GET locked operations: %v", err)
 		}
@@ -8995,7 +8995,7 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedProviderOverride(t *testing.T) {
 			t.Fatalf("locked ping body = %q, want %q", body, "locked:ping")
 		}
 
-		req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/locked/operations", nil)
+		req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/locked/operations", nil)
 		req.Header.Set("Authorization", "Bearer "+plaintext)
 		resp, err = http.DefaultClient.Do(req)
 		if err != nil {
@@ -9031,7 +9031,7 @@ func TestAuthMiddleware_UnprefixedTokenRejected(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	req.Header.Set("Authorization", "Bearer unprefixed-token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -9067,7 +9067,7 @@ func TestAuthMiddleware_PrefixedAPITokenSkipsOAuth(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	req.Header.Set("Authorization", "Bearer "+plaintext)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -9178,7 +9178,7 @@ func TestListIntegrations(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -9222,22 +9222,22 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 	})
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"github": {
 				MountPath: "/github",
 			},
 		}
 		cfg.MountedUIs = []server.MountedUI{{
-			Name:       "github",
-			PluginName: "github",
-			Path:       "/github",
-			Handler:    handler,
+			Name:    "github",
+			AppName: "github",
+			Path:    "/github",
+			Handler: handler,
 		}}
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -9342,13 +9342,13 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 			},
 		}
 		cfg.Providers = providers
-		cfg.PluginDefs = pluginDefs
+		cfg.AppDefs = pluginDefs
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.MountedUIs = []server.MountedUI{
 			{
 				Name:                "ops-visible",
-				PluginName:          "ops-visible",
+				AppName:             "ops-visible",
 				Path:                "/ops-visible",
 				AuthorizationPolicy: "sample_policy",
 				Routes: []server.MountedUIRoute{
@@ -9358,7 +9358,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 			},
 			{
 				Name:                "settings-visible",
-				PluginName:          "settings-visible",
+				AppName:             "settings-visible",
 				Path:                "/settings-visible",
 				AuthorizationPolicy: "sample_policy",
 				Routes: []server.MountedUIRoute{
@@ -9368,7 +9368,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 			},
 			{
 				Name:                "ui-visible",
-				PluginName:          "ui-visible",
+				AppName:             "ui-visible",
 				Path:                "/ui-visible",
 				AuthorizationPolicy: "sample_policy",
 				Routes: []server.MountedUIRoute{
@@ -9378,7 +9378,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 			},
 			{
 				Name:                "hidden",
-				PluginName:          "hidden",
+				AppName:             "hidden",
 				Path:                "/hidden",
 				AuthorizationPolicy: "sample_policy",
 				Routes: []server.MountedUIRoute{
@@ -9390,7 +9390,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	req.Header.Set("Authorization", "Bearer viewer-session")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -9495,12 +9495,12 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 		cfg.Providers = providers
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.PluginDefs = map[string]*config.ProviderEntry{"svc": pluginDefs["svc"]}
+		cfg.AppDefs = map[string]*config.ProviderEntry{"svc": pluginDefs["svc"]}
 		cfg.DefaultConnection = map[string]string{"svc": "workspace"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	req.Header.Set("Authorization", "Bearer "+subjectToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -9579,7 +9579,7 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 		provider.GetErr = nil
 	})
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	req.Header.Set("Authorization", "Bearer "+subjectToken)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -9633,7 +9633,7 @@ func TestSubjectAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelectors
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/svc/operations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/svc/operations", nil)
 	req.Header.Set("Authorization", "Bearer "+subjectToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -9696,7 +9696,7 @@ func TestSubjectAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelectors
 	})
 	testutil.CloseOnCleanup(t, sessionTS)
 
-	req, _ = http.NewRequest(http.MethodGet, sessionTS.URL+"/api/v1/integrations/svc-session/operations", nil)
+	req, _ = http.NewRequest(http.MethodGet, sessionTS.URL+"/api/v1/apps/svc-session/operations", nil)
 	req.Header.Set("Authorization", "Bearer "+subjectToken)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -9734,12 +9734,12 @@ func TestListIntegrationsShowsConnected(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack", Desc: "Team messaging"}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.PluginDefs = testPluginDefsForConnections("slack", "default")
+		cfg.AppDefs = testPluginDefsForConnections("slack", "default")
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -9803,7 +9803,7 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = providers
-		cfg.PluginDefs = pluginDefs
+		cfg.AppDefs = pluginDefs
 		cfg.Services = svc
 		cfg.DefaultConnection = map[string]string{
 			"manual-connected": testDefaultConnection,
@@ -9812,7 +9812,7 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -9944,13 +9944,13 @@ func TestListIntegrations_StaleRefreshFailuresRequireReconnect(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = providers
-		cfg.PluginDefs = pluginDefs
+		cfg.AppDefs = pluginDefs
 		cfg.Services = svc
 		cfg.DefaultConnection = map[string]string{"named-stale": testDefaultConnection}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -10051,7 +10051,7 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -10110,14 +10110,14 @@ func TestListIntegrations_DerivesAuthTypesFromConnectionsWhenProviderOmitsThem(t
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"example": plugin,
 		}
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -10175,7 +10175,7 @@ func TestListIntegrations_ShowsCredentialedConnectionsInUserFacingMetadata(t *te
 				Surfaces: &providermanifestv1.ProviderSurfaces{
 					OpenAPI: &providermanifestv1.OpenAPISurface{
 						Document:   "https://example.com/openapi.json",
-						Connection: config.PluginConnectionName,
+						Connection: config.AppConnectionName,
 					},
 				},
 				Connections: map[string]*providermanifestv1.ManifestConnectionDef{
@@ -10192,14 +10192,14 @@ func TestListIntegrations_ShowsCredentialedConnectionsInUserFacingMetadata(t *te
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"launchdarkly": plugin,
 		}
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -10224,10 +10224,10 @@ func TestListIntegrations_ShowsCredentialedConnectionsInUserFacingMetadata(t *te
 		t.Fatalf("expected 1 integration, got %d", len(integrations))
 	}
 	if len(integrations[0].Connections) != 2 {
-		t.Fatalf("connections = %+v, want plugin and default user-facing connections", integrations[0].Connections)
+		t.Fatalf("connections = %+v, want app and default user-facing connections", integrations[0].Connections)
 	}
-	if integrations[0].Connections[0].Name != "plugin" {
-		t.Fatalf("first connection name = %q, want %q", integrations[0].Connections[0].Name, "plugin")
+	if integrations[0].Connections[0].Name != "app" {
+		t.Fatalf("first connection name = %q, want %q", integrations[0].Connections[0].Name, "app")
 	}
 	if integrations[0].Connections[1].Name != "default" {
 		t.Fatalf("second connection name = %q, want %q", integrations[0].Connections[1].Name, "default")
@@ -10248,14 +10248,14 @@ func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGeneric
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"linear": {},
 		}
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -10290,8 +10290,8 @@ func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGeneric
 	if len(integrations[0].Connections) != 1 {
 		t.Fatalf("connections = %+v, want one default connection", integrations[0].Connections)
 	}
-	if integrations[0].Connections[0].Name != config.PluginConnectionAlias {
-		t.Fatalf("connection name = %q, want %q", integrations[0].Connections[0].Name, config.PluginConnectionAlias)
+	if integrations[0].Connections[0].Name != config.AppConnectionAlias {
+		t.Fatalf("connection name = %q, want %q", integrations[0].Connections[0].Name, config.AppConnectionAlias)
 	}
 	if !reflect.DeepEqual(integrations[0].Connections[0].AuthTypes, []string{"manual"}) {
 		t.Fatalf("connection auth types = %v, want [manual]", integrations[0].Connections[0].AuthTypes)
@@ -10303,15 +10303,15 @@ func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGeneric
 
 //nolint:paralleltest // This response-shape integration test flakes under full-package parallelism in CI.
 func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T) {
-	t.Run("non manifest-backed connections still expose plugin and named auth", func(t *testing.T) {
+	t.Run("non manifest-backed connections still expose app and named auth", func(t *testing.T) {
 		stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
 		plugin := &config.ProviderEntry{
 			Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-example/v1.0.0/provider-release.yaml"),
 			Auth: &config.ConnectionAuthDef{
 				Type: providermanifestv1.AuthTypeManual,
 				Credentials: []config.CredentialFieldDef{
-					{Name: "plugin_token", Description: "Plugin Config Description"},
-					{Name: "plugin_local_only", Label: "Plugin Local Only", Description: "Plugin Local Only Description"},
+					{Name: "plugin_token", Description: "App Config Description"},
+					{Name: "plugin_local_only", Label: "App Local Only", Description: "App Local Only Description"},
 				},
 			},
 			Connections: map[string]*config.ConnectionDef{
@@ -10336,8 +10336,8 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 							Auth: &providermanifestv1.ProviderAuth{
 								Type: providermanifestv1.AuthTypeManual,
 								Credentials: []providermanifestv1.CredentialField{
-									{Name: "plugin_token", Label: "Plugin Manifest Token", Description: "Plugin Manifest Description"},
-									{Name: "plugin_manifest_only", Label: "Plugin Manifest Only", Description: "Plugin Manifest Only Description"},
+									{Name: "plugin_token", Label: "App Manifest Token", Description: "App Manifest Description"},
+									{Name: "plugin_manifest_only", Label: "App Manifest Only", Description: "App Manifest Only Description"},
 								},
 							},
 						},
@@ -10358,14 +10358,14 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"example": plugin,
 			}
 			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -10438,12 +10438,12 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			got[conn.Name] = conn
 		}
 
-		if !reflect.DeepEqual(got[config.PluginConnectionAlias].AuthTypes, []string{"manual"}) || !reflect.DeepEqual(got[config.PluginConnectionAlias].CredentialFields, []credentialField{
-			{Name: "plugin_token", Label: "Plugin Manifest Token", Description: "Plugin Config Description"},
-			{Name: "plugin_manifest_only", Label: "Plugin Manifest Only", Description: "Plugin Manifest Only Description"},
-			{Name: "plugin_local_only", Label: "Plugin Local Only", Description: "Plugin Local Only Description"},
+		if !reflect.DeepEqual(got[config.AppConnectionAlias].AuthTypes, []string{"manual"}) || !reflect.DeepEqual(got[config.AppConnectionAlias].CredentialFields, []credentialField{
+			{Name: "plugin_token", Label: "App Manifest Token", Description: "App Config Description"},
+			{Name: "plugin_manifest_only", Label: "App Manifest Only", Description: "App Manifest Only Description"},
+			{Name: "plugin_local_only", Label: "App Local Only", Description: "App Local Only Description"},
 		}) {
-			t.Fatalf("plugin connection info = %+v", got[config.PluginConnectionAlias])
+			t.Fatalf("plugin connection info = %+v", got[config.AppConnectionAlias])
 		}
 		if got["workspace"].DisplayName != "Workspace OAuth" {
 			t.Fatalf("workspace connection info = %+v", got["workspace"])
@@ -10469,7 +10469,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			Auth: &config.ConnectionAuthDef{
 				Type: providermanifestv1.AuthTypeManual,
 				Credentials: []config.CredentialFieldDef{
-					{Name: "plugin_token", Label: "Plugin Token"},
+					{Name: "plugin_token", Label: "App Token"},
 				},
 			},
 			Connections: map[string]*config.ConnectionDef{
@@ -10505,14 +10505,14 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"example": plugin,
 			}
 			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -10569,14 +10569,14 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, prov)
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"docs": {},
 			}
 			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -10617,8 +10617,8 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		if len(integrations[0].Connections) != 1 {
 			t.Fatalf("connections = %+v, want one default connection", integrations[0].Connections)
 		}
-		if integrations[0].Connections[0].Name != config.PluginConnectionAlias {
-			t.Fatalf("connection name = %q, want %q", integrations[0].Connections[0].Name, config.PluginConnectionAlias)
+		if integrations[0].Connections[0].Name != config.AppConnectionAlias {
+			t.Fatalf("connection name = %q, want %q", integrations[0].Connections[0].Name, config.AppConnectionAlias)
 		}
 		if !reflect.DeepEqual(integrations[0].Connections[0].AuthTypes, []string{"manual"}) {
 			t.Fatalf("connection auth types = %v, want [manual]", integrations[0].Connections[0].AuthTypes)
@@ -10657,14 +10657,14 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"clickhouse": plugin,
 			}
 			cfg.Services = testutil.NewStubServices(t)
 			cfg.MountedUIs = []server.MountedUI{{
-				Name:       "clickhouse",
-				PluginName: "clickhouse",
-				Path:       "/clickhouse",
+				Name:    "clickhouse",
+				AppName: "clickhouse",
+				Path:    "/clickhouse",
 				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusOK)
 				}),
@@ -10672,7 +10672,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -10726,14 +10726,14 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"clickhouse": plugin,
 			}
 			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -10792,14 +10792,14 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"httpbin": plugin,
 			}
 			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -10837,7 +10837,7 @@ func TestListIntegrations_ConnectionInfosHideOAuthConnectionsWithoutHandler(t *t
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"slack": plugin,
 		}
 		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
@@ -10851,7 +10851,7 @@ func TestListIntegrations_ConnectionInfosHideOAuthConnectionsWithoutHandler(t *t
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -11017,14 +11017,14 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 
 			ts := newTestServer(t, func(cfg *server.Config) {
 				cfg.Providers = testutil.NewProviderRegistry(t, tc.provider(t))
-				cfg.PluginDefs = map[string]*config.ProviderEntry{
+				cfg.AppDefs = map[string]*config.ProviderEntry{
 					"example": tc.plugin,
 				}
 				cfg.Services = testutil.NewStubServices(t)
 			})
 			testutil.CloseOnCleanup(t, ts)
 
-			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatalf("request: %v", err)
@@ -11054,8 +11054,8 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 			}
 
 			conn := integrations[0].Connections[0]
-			if conn.Name != config.PluginConnectionAlias {
-				t.Fatalf("expected plugin connection, got %+v", conn)
+			if conn.Name != config.AppConnectionAlias {
+				t.Fatalf("expected app connection, got %+v", conn)
 			}
 			if !reflect.DeepEqual(conn.AuthTypes, tc.wantAuth) {
 				t.Fatalf("auth types = %+v, want %+v", conn.AuthTypes, tc.wantAuth)
@@ -11099,7 +11099,7 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 		})
 		defer ts.Close()
 
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -11160,12 +11160,12 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 			},
 		}
 		cfg.Providers = testutil.NewProviderRegistry(t, stub, stub2)
-		cfg.PluginDefs = testPluginDefsForConnections("slack", "default")
+		cfg.AppDefs = testPluginDefsForConnections("slack", "default")
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -11235,7 +11235,7 @@ func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicatesFailC
 			})
 			testutil.CloseOnCleanup(t, ts)
 
-			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 			req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -11266,7 +11266,7 @@ func TestListIntegrations_FindOrCreateUserError(t *testing.T) {
 	stubDB.Err = fmt.Errorf("database unavailable")
 	defer func() { stubDB.Err = nil }()
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -11295,7 +11295,7 @@ func TestListIntegrations_ListCredentialsError(t *testing.T) {
 	stubDB.Err = fmt.Errorf("database unavailable")
 	defer func() { stubDB.Err = nil }()
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -11325,7 +11325,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:" + config.PluginConnectionName,
+			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:" + config.AppConnectionName,
 			Integration: "slack", Connection: "", Instance: "default", AccessToken: "test-token",
 			MetadataJSON: `{"team_id":"T123","user_id":"U456","gestalt.external_identity.type":"slack_identity","gestalt.external_identity.id":"team:T123:user:U456"}`,
 		})
@@ -11350,14 +11350,14 @@ func TestDisconnectIntegration(t *testing.T) {
 		stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.PluginDefs = testPluginDefsForConnections("slack")
+			cfg.AppDefs = testPluginDefsForConnections("slack")
 			cfg.Services = svc
 			cfg.Authorizer = authz
 			cfg.AuthorizationProvider = authzProvider
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/slack", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -11439,14 +11439,14 @@ func TestDisconnectIntegration(t *testing.T) {
 		stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.PluginDefs = testPluginDefsForConnections("slack", "workspace")
+			cfg.AppDefs = testPluginDefsForConnections("slack", "workspace")
 			cfg.Services = svc
 			cfg.Authorizer = authz
 			cfg.AuthorizationProvider = authzProvider
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack?_connection=workspace&_instance=team-a", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/slack?_connection=workspace&_instance=team-a", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -11495,7 +11495,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:" + config.PluginConnectionName,
+			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:" + config.AppConnectionName,
 			Integration: "slack", Connection: "", Instance: "default", AccessToken: "test-token",
 			MetadataJSON: `{"team_id":"T123","user_id":"U456","gestalt.external_identity.type":"slack_identity","gestalt.external_identity.id":"team:T123:user:U456"}`,
 		})
@@ -11530,14 +11530,14 @@ func TestDisconnectIntegration(t *testing.T) {
 		stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.PluginDefs = testPluginDefsForConnections("slack")
+			cfg.AppDefs = testPluginDefsForConnections("slack")
 			cfg.Services = svc
 			cfg.Authorizer = authz
 			cfg.AuthorizationProvider = authzProvider
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/slack", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -11592,12 +11592,12 @@ func TestDisconnectIntegration(t *testing.T) {
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "notion", DN: "Notion"})
-			cfg.PluginDefs = testPluginDefsForConnections("notion", "mcp", "default")
+			cfg.AppDefs = testPluginDefsForConnections("notion", "mcp", "default")
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/notion", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/notion", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -11622,12 +11622,12 @@ func TestDisconnectIntegration(t *testing.T) {
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
-			cfg.PluginDefs = testPluginDefsForConnections("slack", "workspace")
+			cfg.AppDefs = testPluginDefsForConnections("slack", "workspace")
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack?_connection=workspace&_instance=team-b", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/slack?_connection=workspace&_instance=team-b", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -11652,12 +11652,12 @@ func TestDisconnectIntegration(t *testing.T) {
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "notion", DN: "Notion"})
-			cfg.PluginDefs = testPluginDefsForConnections("notion", "mcp")
+			cfg.AppDefs = testPluginDefsForConnections("notion", "mcp")
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/notion?connection=mcp", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/notion?connection=mcp", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -11694,13 +11694,13 @@ func TestDisconnectIntegration(t *testing.T) {
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
-			cfg.PluginDefs = testPluginDefsForConnections("slack", "workspace")
+			cfg.AppDefs = testPluginDefsForConnections("slack", "workspace")
 			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack?_connection=workspace", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/slack?_connection=workspace", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -11745,7 +11745,7 @@ func TestDisconnectIntegration_NotConnected(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack", nil)
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/slack", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -11795,7 +11795,7 @@ func TestListOperations(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/test-int/operations", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -11915,7 +11915,7 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/test-int/operations", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -11941,7 +11941,7 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 		t.Fatalf("expected second id 'zeta_rest', got %v", ops[1]["id"])
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations?_connection="+altCatalogConnection+"&_instance="+altInstance, nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/test-int/operations?_connection="+altCatalogConnection+"&_instance="+altInstance, nil)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("override list request: %v", err)
@@ -11965,7 +11965,7 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if ops[1]["id"] != "zeta_rest" {
 		t.Fatalf("expected second id 'zeta_rest', got %v", ops[1]["id"])
 	}
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations?connection="+altCatalogConnection+"&instance="+altInstance, nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/test-int/operations?connection="+altCatalogConnection+"&instance="+altInstance, nil)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("query override list request: %v", err)
@@ -12063,8 +12063,8 @@ func TestListOperations_FallsBackToStaticCatalogWhenSessionCatalogErrors(t *test
 		}
 	}
 
-	assertListOperations("/api/v1/integrations/notion/operations")
-	assertListOperations("/api/v1/integrations/notion/operations?_connection=OAuth&_instance=OAuth")
+	assertListOperations("/api/v1/apps/notion/operations")
+	assertListOperations("/api/v1/apps/notion/operations?_connection=OAuth&_instance=OAuth")
 }
 
 func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
@@ -12119,7 +12119,7 @@ func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/sample-int/operations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/sample-int/operations", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -12186,7 +12186,7 @@ func TestListOperations_RetriesDefaultConnectionAfterBrokerCatalogError(t *testi
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/sample-int/operations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/sample-int/operations", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -12270,11 +12270,11 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog(t *testing.T) {
 		cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.PluginDefs = pluginDefs
+		cfg.AppDefs = pluginDefs
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/test-int/operations", nil)
 	req.Header.Set("Authorization", "Bearer "+plaintext)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -12367,11 +12367,11 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog_DynamicGrant(t *t
 		cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.PluginDefs = pluginDefs
+		cfg.AppDefs = pluginDefs
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/test-int/operations", nil)
 	req.Header.Set("Authorization", "Bearer "+plaintext)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -12453,7 +12453,7 @@ func TestExecuteOperation_HumanAuthorizationUsesCatalogRoles(t *testing.T) {
 		cfg.DefaultConnection = map[string]string{"test-int": testDefaultConnection}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.PluginDefs = pluginDefs
+		cfg.AppDefs = pluginDefs
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -12557,7 +12557,7 @@ func TestExecuteOperation_HumanAuthorizationUsesCanonicalSubjectOnCollision(t *t
 		cfg.DefaultConnection = map[string]string{"sample-int": testDefaultConnection}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.PluginDefs = pluginDefs
+		cfg.AppDefs = pluginDefs
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -12584,7 +12584,7 @@ func TestListOperations_NotFound(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/nonexistent/operations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/nonexistent/operations", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -12615,7 +12615,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations", nil)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/test-int/operations", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -12673,7 +12673,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations", nil)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/test-int/operations", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -12718,7 +12718,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/sample-int/operations", nil)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/sample-int/operations", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -12984,7 +12984,7 @@ func TestExecuteOperation_RejectsExplicitConnectionForStaticOperation(t *testing
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-svc/api_get_resource?_connection="+config.PluginConnectionAlias, nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-svc/api_get_resource?_connection="+config.AppConnectionAlias, nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -13003,10 +13003,10 @@ func TestExecuteOperation_RejectsExplicitConnectionForStaticOperation(t *testing
 	if !strings.Contains(body["error"], `uses connection "api-conn"`) {
 		t.Fatalf("expected connection mismatch message, got %q", body["error"])
 	}
-	if !strings.Contains(body["error"], `"`+config.PluginConnectionAlias+`"`) {
+	if !strings.Contains(body["error"], `"`+config.AppConnectionAlias+`"`) {
 		t.Fatalf("expected requested connection in error, got %q", body["error"])
 	}
-	if strings.Contains(body["error"], `"`+config.PluginConnectionName+`"`) {
+	if strings.Contains(body["error"], `"`+config.AppConnectionName+`"`) {
 		t.Fatalf("expected error to preserve caller input, got %q", body["error"])
 	}
 	if called {
@@ -13037,7 +13037,7 @@ func TestExecuteOperation_UsesResolvedConnectionForSessionCatalogOperation(t *te
 				},
 			},
 		},
-		operationConnection: config.PluginConnectionName,
+		operationConnection: config.AppConnectionName,
 		catalog: &catalog.Catalog{
 			Name: integration,
 			Operations: []catalog.CatalogOperation{{
@@ -13083,7 +13083,7 @@ func TestExecuteOperation_AllowsExplicitConnectionAliasForStaticOperation(t *tes
 		ID:          "sample-svc-plugin-default",
 		SubjectID:   principal.UserSubjectID(user.ID),
 		Integration: "sample-svc",
-		Connection:  config.PluginConnectionName,
+		Connection:  config.AppConnectionName,
 		Instance:    "default",
 		AccessToken: "plugin-token",
 	})
@@ -13108,7 +13108,7 @@ func TestExecuteOperation_AllowsExplicitConnectionAliasForStaticOperation(t *tes
 		"Sample API",
 		"",
 		"",
-		composite.BoundProvider{Provider: apiBackend, Connection: config.PluginConnectionName},
+		composite.BoundProvider{Provider: apiBackend, Connection: config.AppConnectionName},
 	)
 	if err != nil {
 		t.Fatalf("NewMergedWithConnections: %v", err)
@@ -13134,7 +13134,7 @@ func TestExecuteOperation_AllowsExplicitConnectionAliasForStaticOperation(t *tes
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-svc/api_get_resource?_connection="+config.PluginConnectionAlias, nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-svc/api_get_resource?_connection="+config.AppConnectionAlias, nil)
 	req.Header.Set("Authorization", "Bearer user-token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -13293,11 +13293,11 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if err != nil {
 		t.Fatalf("RESTOperationConnectionBindings: %v", err)
 	}
-	prov, err := pluginservice.NewDeclarativeProvider(
+	prov, err := appservice.NewDeclarativeProvider(
 		manifest,
 		upstream.Client(),
-		pluginservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
-		pluginservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
+		appservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+		appservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
 	)
 	if err != nil {
 		t.Fatalf("NewDeclarativeProvider: %v", err)
@@ -13319,7 +13319,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	})
 	seedSubjectToken(t, svc, subjectID, "slack", "bot", "default", "bot-slack-token")
 	connectionRuntime, err := bootstrap.BuildConnectionRuntime(&config.Config{
-		Plugins: map[string]*config.ProviderEntry{"slack": entry},
+		Apps: map[string]*config.ProviderEntry{"slack": entry},
 	})
 	if err != nil {
 		t.Fatalf("BuildConnectionRuntime: %v", err)
@@ -13351,12 +13351,12 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		}
 		cfg.Providers = testutil.NewProviderRegistry(t, prov)
 		cfg.Services = svc
-		cfg.PluginDefs = map[string]*config.ProviderEntry{"slack": entry}
+		cfg.AppDefs = map[string]*config.ProviderEntry{"slack": entry}
 		cfg.Invoker = broker
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	integrationsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	integrationsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	integrationsReq.Header.Set("Authorization", "Bearer api-token")
 	integrationsResp, err := http.DefaultClient.Do(integrationsReq)
 	if err != nil {
@@ -13431,7 +13431,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		t.Fatalf("bot connection metadata = %+v, want connected subject-scoped bot connection", *botConnection)
 	}
 
-	opsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/slack/operations", nil)
+	opsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/slack/operations", nil)
 	opsReq.Header.Set("Authorization", "Bearer api-token")
 	opsResp, err := http.DefaultClient.Do(opsReq)
 	if err != nil {
@@ -13920,7 +13920,7 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.PluginDefs = pluginDefs
+		cfg.AppDefs = pluginDefs
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -14054,7 +14054,7 @@ func TestHumanAuthorization_ExecuteOperation_DefaultAllowTreatsAuthenticatedUser
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.PluginDefs = pluginDefs
+		cfg.AppDefs = pluginDefs
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -14190,7 +14190,7 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.PluginDefs = pluginDefs
+		cfg.AppDefs = pluginDefs
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -15104,12 +15104,12 @@ func TestStartBrowserLogin_MissingPluginRouteAuthProviderAuditsAttemptedProvider
 		cfg.SelectedAuthProvider = "server"
 		cfg.AuditSink = auditSink
 		cfg.MountedUIs = []server.MountedUI{{
-			Name:       "sample_portal",
-			Path:       "/sample-portal",
-			PluginName: "sample_portal",
-			Handler:    http.NotFoundHandler(),
+			Name:    "sample_portal",
+			Path:    "/sample-portal",
+			AppName: "sample_portal",
+			Handler: http.NotFoundHandler(),
 		}}
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_portal": {RouteAuth: &config.RouteAuthDef{Provider: "alt"}},
 		}
 	})
@@ -15246,12 +15246,12 @@ func TestLoginCallback_MissingPluginRouteAuthProviderAuditsAttemptedProvider(t *
 			"alt": &stubHostIssuedSessionAuth{name: "alt"},
 		}
 		cfg.MountedUIs = []server.MountedUI{{
-			Name:       "sample_portal",
-			Path:       "/sample-portal",
-			PluginName: "sample_portal",
-			Handler:    http.NotFoundHandler(),
+			Name:    "sample_portal",
+			Path:    "/sample-portal",
+			AppName: "sample_portal",
+			Handler: http.NotFoundHandler(),
 		}}
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_portal": {RouteAuth: &config.RouteAuthDef{Provider: "alt"}},
 		}
 	})
@@ -15907,8 +15907,8 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("expected 303, got %d", resp.StatusCode)
 		}
 		loc := resp.Header.Get("Location")
-		if loc != "/integrations?connected=slack" {
-			t.Fatalf("expected redirect to /integrations?connected=slack, got %q", loc)
+		if loc != "/apps?connected=slack" {
+			t.Fatalf("expected redirect to /apps?connected=slack, got %q", loc)
 		}
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "user@example.com")
 		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
@@ -16568,7 +16568,7 @@ func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
 		if !strings.Contains(html, "Start a new connection from Integrations.") {
 			t.Fatalf("expected HTML response to include recovery guidance, got %q", html)
 		}
-		if !strings.Contains(html, `href="/integrations"`) {
+		if !strings.Contains(html, `href="/apps"`) {
 			t.Fatalf("expected HTML response to link back to integrations, got %q", html)
 		}
 	})
@@ -16619,7 +16619,7 @@ func TestCreateAPIToken_WithActionPermissions(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"name":"attach-token","permissions":[{"plugin":"roadmap","actions":["provider_dev.attach"]}]}`)
+	body := bytes.NewBufferString(`{"name":"attach-token","permissions":[{"app":"roadmap","actions":["provider_dev.attach"]}]}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -16643,7 +16643,7 @@ func TestCreateAPIToken_WithActionPermissions(t *testing.T) {
 	if created.ID == "" || created.Token == "" {
 		t.Fatalf("create response missing id/token: %+v", created)
 	}
-	if len(created.Permissions) != 1 || created.Permissions[0].Plugin != "roadmap" || len(created.Permissions[0].Actions) != 1 || created.Permissions[0].Actions[0] != core.ProviderActionDevAttach || len(created.Permissions[0].Operations) != 0 {
+	if len(created.Permissions) != 1 || created.Permissions[0].App != "roadmap" || len(created.Permissions[0].Actions) != 1 || created.Permissions[0].Actions[0] != core.ProviderActionDevAttach || len(created.Permissions[0].Operations) != 0 {
 		t.Fatalf("created permissions = %#v", created.Permissions)
 	}
 
@@ -17167,7 +17167,7 @@ func TestHostedHTTPBinding_HMACAckDispatchesOperationAndRejectsReplay(t *testing
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"signed": {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
 					"signed": {
@@ -17203,7 +17203,7 @@ func TestHostedHTTPBinding_HMACAckDispatchesOperationAndRejectsReplay(t *testing
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -17267,7 +17267,7 @@ func TestHostedHTTPBinding_HMACAckDispatchesOperationAndRejectsReplay(t *testing
 	}
 
 	record := waitForServerStructuredLogRecord(t, logs, "http binding async operation returned non-2xx result")
-	assertServerStructuredLogField(t, record, "plugin", "signed")
+	assertServerStructuredLogField(t, record, "app", "signed")
 	assertServerStructuredLogField(t, record, "binding", "command")
 	assertServerStructuredLogField(t, record, "operation", "handle_command")
 	assertServerStructuredLogField(t, record, "result_status_class", "5xx")
@@ -17323,7 +17323,7 @@ func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"signed": {
 				ResolvedManifest: &providermanifestv1.Manifest{
 					Spec: &providermanifestv1.Spec{
@@ -17369,7 +17369,7 @@ func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -17432,7 +17432,7 @@ func TestHostedHTTPBinding_HMACSyncRetriesReinvokeOperation(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"signed": {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
 					"signed": {
@@ -17461,7 +17461,7 @@ func TestHostedHTTPBinding_HMACSyncRetriesReinvokeOperation(t *testing.T) {
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -17540,7 +17540,7 @@ func TestHostedHTTPBinding_APIKeySyncInvokesOperation(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"events": {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
 					"eventKey": {
@@ -17566,7 +17566,7 @@ func TestHostedHTTPBinding_APIKeySyncInvokesOperation(t *testing.T) {
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -17638,7 +17638,7 @@ func TestVisibleFalseHidesOperationFromHTTPSurfacesButAllowsHostedBinding(t *tes
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"events": {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
 					"eventKey": {
@@ -17658,11 +17658,11 @@ func TestVisibleFalseHidesOperationFromHTTPSurfacesButAllowsHostedBinding(t *tes
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/api/v1/integrations/events/operations")
+	resp, err := http.Get(ts.URL + "/api/v1/apps/events/operations")
 	if err != nil {
 		t.Fatalf("list operations: %v", err)
 	}
@@ -17799,7 +17799,7 @@ func TestHostedHTTPBinding_APIKeyQueryDoesNotLeakCredentialParam(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"events": {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
 					"eventKey": {
@@ -17819,7 +17819,7 @@ func TestHostedHTTPBinding_APIKeyQueryDoesNotLeakCredentialParam(t *testing.T) {
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -17873,7 +17873,7 @@ func TestHostedHTTPBinding_RejectsReservedSystemResolvedSubject(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"events": {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
 					"public": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
@@ -17888,7 +17888,7 @@ func TestHostedHTTPBinding_RejectsReservedSystemResolvedSubject(t *testing.T) {
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -17979,7 +17979,7 @@ func TestHostedHTTPBinding_ComposedProviderPreservesSubjectResolver(t *testing.T
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"events": {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
 					"public": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
@@ -17994,7 +17994,7 @@ func TestHostedHTTPBinding_ComposedProviderPreservesSubjectResolver(t *testing.T
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -18059,7 +18059,7 @@ func TestHostedHTTPBinding_CredentialModeNoneBypassesProviderTokenLookup(t *test
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"events": {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
 					"public": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
@@ -18075,7 +18075,7 @@ func TestHostedHTTPBinding_CredentialModeNoneBypassesProviderTokenLookup(t *test
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -18127,7 +18127,7 @@ func TestHostedHTTPBinding_MergedStaticOperationSkipsSessionCatalogResolution(t 
 		catalog: serverTestCatalog("github", []catalog.CatalogOperation{{
 			ID:        "events.handle",
 			Method:    http.MethodPost,
-			Transport: catalog.TransportPlugin,
+			Transport: catalog.TransportApp,
 			Visible:   &hidden,
 		}}),
 	}
@@ -18155,7 +18155,7 @@ func TestHostedHTTPBinding_MergedStaticOperationSkipsSessionCatalogResolution(t 
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, merged)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"github": {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
 					"github_app": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
@@ -18171,7 +18171,7 @@ func TestHostedHTTPBinding_MergedStaticOperationSkipsSessionCatalogResolution(t 
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -18224,7 +18224,7 @@ func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
 		Providers:   providers,
 		Invoker:     invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials),
 		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
-		PluginDefs: map[string]*config.ProviderEntry{
+		AppDefs: map[string]*config.ProviderEntry{
 			"reports": {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
 					"none": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
@@ -18451,7 +18451,7 @@ func TestHostedHTTPBinding_RejectsInvalidConfigBindings(t *testing.T) {
 			t.Parallel()
 
 			cfg := baseConfig(t)
-			cfg.PluginDefs = map[string]*config.ProviderEntry{"events": tt.entry}
+			cfg.AppDefs = map[string]*config.ProviderEntry{"events": tt.entry}
 
 			_, err := server.New(cfg)
 			if err == nil {
@@ -19804,7 +19804,7 @@ func TestConnectManual(t *testing.T) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 			})
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
 			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 			cfg.Services = svc
 		})
@@ -19857,11 +19857,11 @@ func TestConnectManual(t *testing.T) {
 		if auditRecord["target_kind"] != "connection" {
 			t.Fatalf("expected audit target_kind connection, got %v", auditRecord["target_kind"])
 		}
-		if auditRecord["target_id"] != "manual-svc/plugin/default" {
-			t.Fatalf("expected audit target_id manual-svc/plugin/default, got %v", auditRecord["target_id"])
+		if auditRecord["target_id"] != "manual-svc/app/default" {
+			t.Fatalf("expected audit target_id manual-svc/app/default, got %v", auditRecord["target_id"])
 		}
-		if auditRecord["target_name"] != "plugin/default" {
-			t.Fatalf("expected audit target_name plugin/default, got %v", auditRecord["target_name"])
+		if auditRecord["target_name"] != "app/default" {
+			t.Fatalf("expected audit target_name app/default, got %v", auditRecord["target_name"])
 		}
 	})
 
@@ -19886,7 +19886,7 @@ func TestConnectManual(t *testing.T) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 			})
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
 			cfg.Services = svc
 			cfg.Authorizer = authz
 		})
@@ -19950,7 +19950,7 @@ func TestConnectManual(t *testing.T) {
 				},
 				postConnect: testSlackPostConnect,
 			})
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
 			cfg.Services = svc
 			cfg.Authorizer = authz
 			cfg.AuthorizationProvider = authzProvider
@@ -20012,7 +20012,7 @@ func TestConnectManual(t *testing.T) {
 				},
 				postConnect: testSlackPostConnect,
 			})
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
 			cfg.Services = svc
 			cfg.Authorizer = authz
 			cfg.AuthorizationProvider = authzProvider
@@ -20107,7 +20107,7 @@ func TestConnectManual(t *testing.T) {
 				},
 				postConnect: testSlackPostConnect,
 			})
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
 			cfg.Services = svc
 			cfg.Authorizer = authz
 			cfg.AuthorizationProvider = authzProvider
@@ -20197,7 +20197,7 @@ func TestConnectManual(t *testing.T) {
 				},
 				postConnect: testSlackPostConnect,
 			})
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
@@ -20278,7 +20278,7 @@ func TestConnectManual(t *testing.T) {
 					Metadata: map[string]string{"workspace": "workspace"},
 				},
 			})
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
 			cfg.Services = svc
 			cfg.AuditSink = auditSink
 		})
@@ -20400,11 +20400,11 @@ func TestConnectManual(t *testing.T) {
 		if noAuthAudit["target_kind"] != "connection" {
 			t.Fatalf("expected pending connection target_kind connection, got %v", noAuthAudit["target_kind"])
 		}
-		if noAuthAudit["target_id"] != "manual-svc/plugin/default" {
-			t.Fatalf("expected pending connection target_id manual-svc/plugin/default, got %v", noAuthAudit["target_id"])
+		if noAuthAudit["target_id"] != "manual-svc/app/default" {
+			t.Fatalf("expected pending connection target_id manual-svc/app/default, got %v", noAuthAudit["target_id"])
 		}
-		if noAuthAudit["target_name"] != "plugin/default" {
-			t.Fatalf("expected pending connection target_name plugin/default, got %v", noAuthAudit["target_name"])
+		if noAuthAudit["target_name"] != "app/default" {
+			t.Fatalf("expected pending connection target_name app/default, got %v", noAuthAudit["target_name"])
 		}
 
 		mismatchForm := url.Values{
@@ -20456,8 +20456,8 @@ func TestConnectManual(t *testing.T) {
 		if selectResp.StatusCode != http.StatusSeeOther {
 			t.Fatalf("expected 303, got %d", selectResp.StatusCode)
 		}
-		if loc := selectResp.Header.Get("Location"); loc != "/integrations?connected=manual-svc" {
-			t.Fatalf("expected redirect to /integrations?connected=manual-svc, got %q", loc)
+		if loc := selectResp.Header.Get("Location"); loc != "/apps?connected=manual-svc" {
+			t.Fatalf("expected redirect to /apps?connected=manual-svc, got %q", loc)
 		}
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "same@test.local")
 		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
@@ -20490,8 +20490,8 @@ func TestConnectManual(t *testing.T) {
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, prov)
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"manual-svc": {},
 			}
 			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
@@ -20517,8 +20517,8 @@ func TestConnectManual(t *testing.T) {
 		if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
 			t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
 		}
-		if auditRecord["target_id"] != "manual-svc/plugin/default" {
-			t.Fatalf("expected audit target_id manual-svc/plugin/default, got %v", auditRecord["target_id"])
+		if auditRecord["target_id"] != "manual-svc/app/default" {
+			t.Fatalf("expected audit target_id manual-svc/app/default, got %v", auditRecord["target_id"])
 		}
 	})
 
@@ -20534,8 +20534,8 @@ func TestConnectManual(t *testing.T) {
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, prov)
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"manual-svc": {},
 			}
 			cfg.Services = testutil.NewStubServices(t)
@@ -20600,8 +20600,8 @@ func TestConnectManual(t *testing.T) {
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, prov)
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"manual-svc": {},
 			}
 			cfg.Services = svc
@@ -20677,8 +20677,8 @@ func TestConnectManual(t *testing.T) {
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, prov)
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"manual-svc": {},
 			}
 			cfg.Services = svc
@@ -22704,7 +22704,7 @@ func TestCookieAuth(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	// Request without cookie should be rejected.
-	reqNoCookie, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	reqNoCookie, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	noAuthResp, err := http.DefaultClient.Do(reqNoCookie)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -22715,7 +22715,7 @@ func TestCookieAuth(t *testing.T) {
 	}
 
 	// Request with cookie should pass auth middleware.
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "valid-cookie-token"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -22728,7 +22728,7 @@ func TestCookieAuth(t *testing.T) {
 	}
 
 	// An invalid cookie should still fall back to a valid Authorization header.
-	reqWithFallback, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	reqWithFallback, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	reqWithFallback.AddCookie(&http.Cookie{Name: "session_token", Value: "invalid-cookie-token"})
 	reqWithFallback.Header.Set("Authorization", "Bearer valid-header-token")
 	fallbackResp, err := http.DefaultClient.Do(reqWithFallback)
@@ -22791,7 +22791,7 @@ func TestLoginCallback_HostIssuesSessionWhenProviderDoesNot(t *testing.T) {
 		t.Fatal("expected session_token cookie to be issued by host")
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("integrations request: %v", err)
@@ -23207,8 +23207,8 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 			svc := testutil.NewStubServices(t)
 			ts := newTestServer(t, func(cfg *server.Config) {
 				cfg.Providers = testutil.NewProviderRegistry(t, tc.provider())
-				cfg.DefaultConnection = map[string]string{tc.integration: config.PluginConnectionName}
-				cfg.PluginDefs = tc.pluginDefs
+				cfg.DefaultConnection = map[string]string{tc.integration: config.AppConnectionName}
+				cfg.AppDefs = tc.pluginDefs
 				cfg.Services = svc
 			})
 			testutil.CloseOnCleanup(t, ts)
@@ -23279,8 +23279,8 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 					"account_id": {From: "token_response", Field: "account.id", Required: true},
 				},
 			})
-			cfg.DefaultConnection = map[string]string{"looker-like": config.PluginConnectionName}
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.DefaultConnection = map[string]string{"looker-like": config.AppConnectionName}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"looker-like": {
 					Auth: &config.ConnectionAuthDef{
 						Type:          providermanifestv1.AuthTypeManual,
@@ -23377,8 +23377,8 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 				StubIntegration: coretesting.StubIntegration{N: "json-token"},
 			})
-			cfg.DefaultConnection = map[string]string{"json-token": config.PluginConnectionName}
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.DefaultConnection = map[string]string{"json-token": config.AppConnectionName}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"json-token": {
 					Auth: &config.ConnectionAuthDef{
 						Type:            providermanifestv1.AuthTypeManual,
@@ -23456,8 +23456,8 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 					{Name: "client_secret"},
 				},
 			})
-			cfg.DefaultConnection = map[string]string{"fallback-token": config.PluginConnectionName}
-			cfg.PluginDefs = map[string]*config.ProviderEntry{
+			cfg.DefaultConnection = map[string]string{"fallback-token": config.AppConnectionName}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
 				"fallback-token": {
 					Auth: &config.ConnectionAuthDef{
 						Type:     providermanifestv1.AuthTypeManual,
@@ -23544,8 +23544,8 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 					cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 						StubIntegration: coretesting.StubIntegration{N: "strict-token"},
 					})
-					cfg.DefaultConnection = map[string]string{"strict-token": config.PluginConnectionName}
-					cfg.PluginDefs = map[string]*config.ProviderEntry{
+					cfg.DefaultConnection = map[string]string{"strict-token": config.AppConnectionName}
+					cfg.AppDefs = map[string]*config.ProviderEntry{
 						"strict-token": {
 							Auth: &config.ConnectionAuthDef{
 								Type:     providermanifestv1.AuthTypeManual,

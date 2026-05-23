@@ -22,11 +22,11 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -37,14 +37,14 @@ type funcInvoker struct {
 	invoke func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error)
 }
 
-func testWorkflowPluginTarget(pluginName, operation string) coreworkflow.Target {
-	return testWorkflowPluginTargetWithPayload(pluginName, operation, "", "", nil)
+func testWorkflowAppTarget(pluginName, operation string) coreworkflow.Target {
+	return testWorkflowAppTargetWithPayload(pluginName, operation, "", "", nil)
 }
 
-func testWorkflowPluginTargetWithPayload(pluginName, operation, connection, instance string, input map[string]any) coreworkflow.Target {
+func testWorkflowAppTargetWithPayload(pluginName, operation, connection, instance string, input map[string]any) coreworkflow.Target {
 	return coreworkflow.Target{
-		Plugin: &coreworkflow.PluginTarget{
-			PluginName: pluginName,
+		App: &coreworkflow.AppTarget{
+			AppName:    pluginName,
 			Operation:  operation,
 			Connection: connection,
 			Instance:   instance,
@@ -132,10 +132,10 @@ func cloneRuntimeExecutionRef(ref *coreworkflow.ExecutionReference) *coreworkflo
 
 func cloneRuntimeTarget(target coreworkflow.Target) coreworkflow.Target {
 	clone := coreworkflow.Target{}
-	if target.Plugin != nil {
-		plugin := *target.Plugin
-		plugin.Input = cloneMapAny(plugin.Input)
-		clone.Plugin = &plugin
+	if target.App != nil {
+		appTarget := *target.App
+		appTarget.Input = cloneMapAny(appTarget.Input)
+		clone.App = &appTarget
 	}
 	if target.Agent != nil {
 		agent := *target.Agent
@@ -332,12 +332,12 @@ func (p *workflowRoundTripProvider) Execute(ctx context.Context, _ string, _ map
 	return &core.OperationResult{Status: http.StatusAccepted, Body: `{"ok":true}`}, nil
 }
 
-func newWorkflowRoundTripClient(t *testing.T, server proto.IntegrationProviderServer) proto.IntegrationProviderClient {
+func newWorkflowRoundTripClient(t *testing.T, server proto.AppProviderServer) proto.AppProviderClient {
 	t.Helper()
 
 	lis := bufconn.Listen(1024 * 1024)
 	srv := grpc.NewServer()
-	proto.RegisterIntegrationProviderServer(srv, server)
+	proto.RegisterAppProviderServer(srv, server)
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -356,7 +356,7 @@ func newWorkflowRoundTripClient(t *testing.T, server proto.IntegrationProviderSe
 		t.Fatalf("grpc.NewClient: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	return proto.NewIntegrationProviderClient(conn)
+	return proto.NewAppProviderClient(conn)
 }
 
 func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
@@ -364,8 +364,8 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 
 	scheduledFor := time.Date(2026, time.April, 15, 12, 30, 0, 0, time.UTC)
 	roundTripProvider := &workflowRoundTripProvider{}
-	roundTripClient := newWorkflowRoundTripClient(t, pluginservice.NewServer(roundTripProvider))
-	roundTripRemote, err := pluginservice.NewRemote(context.Background(), roundTripClient, pluginservice.StaticProviderSpec{
+	roundTripClient := newWorkflowRoundTripClient(t, appservice.NewServer(roundTripProvider))
+	roundTripRemote, err := appservice.NewRemote(context.Background(), roundTripClient, appservice.StaticProviderSpec{
 		Name:           "workflow-roundtrip",
 		DisplayName:    "Workflow Round Trip",
 		Description:    "workflow round trip test provider",
@@ -411,7 +411,7 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	req := coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		RunID:        "run-123",
-		Target: testWorkflowPluginTargetWithPayload(
+		Target: testWorkflowAppTargetWithPayload(
 			"roadmap",
 			"sync",
 			"analytics",
@@ -485,7 +485,7 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	configPrincipal := principal.Canonicalize(&principal.Principal{
 		SubjectID:           "system:config",
 		CredentialSubjectID: "system:config",
-		Scopes:              principal.PermissionPlugins(configPermissions),
+		Scopes:              principal.PermissionApps(configPermissions),
 		TokenPermissions:    configPermissions,
 	})
 	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), configPrincipal), req)
@@ -543,12 +543,12 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 		t.Fatalf("workflow createdBy = %#v", roundTripProvider.workflowContext["createdBy"])
 	}
 	target, ok := roundTripProvider.workflowContext["target"].(map[string]any)
-	if !ok || target["kind"] != "plugin" {
+	if !ok || target["kind"] != "app" {
 		t.Fatalf("workflow target = %#v", roundTripProvider.workflowContext["target"])
 	}
-	plugin, ok := target["plugin"].(map[string]any)
+	plugin, ok := target["app"].(map[string]any)
 	if !ok || plugin["pluginName"] != "roadmap" || plugin["operation"] != "sync" {
-		t.Fatalf("workflow target plugin = %#v", target["plugin"])
+		t.Fatalf("workflow target app = %#v", target["app"])
 	}
 	if got := plugin["connection"]; got != "analytics" {
 		t.Fatalf("workflow target connection = %#v, want %q", got, "analytics")
@@ -654,7 +654,7 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 			ProviderName:   "managed",
 			Model:          "deep",
 			Prompt:         "Send the status summary",
-			ToolRefs:       []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
+			ToolRefs:       []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
 			TimeoutSeconds: 5,
 		}},
 		Trigger: coreworkflow.RunTrigger{Manual: true},
@@ -681,10 +681,10 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 		SubjectID:           principal.UserSubjectID("ada"),
 		CredentialSubjectID: principal.UserSubjectID("ada"),
 		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}, {
-			Plugin: "managed",
+			App: "managed",
 		}}),
 	})
 
@@ -741,7 +741,7 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	if turnReq.ToolSource != coreagent.ToolSourceModeMCPCatalog {
 		t.Fatalf("turn tool source = %q, want mcp_catalog", turnReq.ToolSource)
 	}
-	if len(turnReq.ToolRefs) != 1 || turnReq.ToolRefs[0].Plugin != "roadmap" || turnReq.ToolRefs[0].Operation != "sync" {
+	if len(turnReq.ToolRefs) != 1 || turnReq.ToolRefs[0].App != "roadmap" || turnReq.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("turn tool refs = %#v", turnReq.ToolRefs)
 	}
 }
@@ -879,10 +879,10 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
 			ProviderName: "managed",
 			Prompt:       "Summarize the request",
 			OutputDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{
-					PluginName: "notification",
-					Operation:  "reply",
-					Input:      map[string]any{"format": "plain"},
+				Target: coreworkflow.AppTarget{
+					AppName:   "notification",
+					Operation: "reply",
+					Input:     map[string]any{"format": "plain"},
 				},
 				CredentialMode: core.ConnectionModeNone,
 				InputBindings: []coreworkflow.OutputBinding{
@@ -912,7 +912,7 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
 		SubjectID:           principal.UserSubjectID("ada"),
 		CredentialSubjectID: principal.UserSubjectID("ada"),
 		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-			Plugin:     "notification",
+			App:        "notification",
 			Operations: []string{"reply"},
 		}}),
 	})
@@ -969,10 +969,10 @@ func TestWorkflowRuntimeInvokeAgentTargetCarriesMaterializedInheritedOutputDeliv
 			ProviderName: "managed",
 			Prompt:       "Start a child workflow if this takes a while.",
 			OutputDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{
-					PluginName: "notification",
-					Operation:  "reply",
-					Input:      map[string]any{"format": "plain"},
+				Target: coreworkflow.AppTarget{
+					AppName:   "notification",
+					Operation: "reply",
+					Input:     map[string]any{"format": "plain"},
 				},
 				CredentialMode: core.ConnectionModeNone,
 				InputBindings: []coreworkflow.OutputBinding{
@@ -1005,7 +1005,7 @@ func TestWorkflowRuntimeInvokeAgentTargetCarriesMaterializedInheritedOutputDeliv
 	if delivery == nil {
 		t.Fatal("inherited delivery is nil")
 	}
-	if delivery.Target.PluginName != "notification" || delivery.Target.Operation != "reply" || delivery.CredentialMode != core.ConnectionModeNone {
+	if delivery.Target.AppName != "notification" || delivery.Target.Operation != "reply" || delivery.CredentialMode != core.ConnectionModeNone {
 		t.Fatalf("inherited delivery target = %#v", delivery)
 	}
 	if got := delivery.InputBindings[0].Value.AgentOutput; got != "text" {
@@ -1026,7 +1026,7 @@ func TestWorkflowRuntimeInheritedOutputDeliverySkipsNilSignalValues(t *testing.T
 	t.Parallel()
 
 	delivery := workflowInheritedOutputDelivery(&coreworkflow.OutputDelivery{
-		Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"},
+		Target: coreworkflow.AppTarget{AppName: "notification", Operation: "reply"},
 		InputBindings: []coreworkflow.OutputBinding{
 			{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
 		},
@@ -1076,10 +1076,10 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversSessionReadyBeforeTurn(t *testi
 			Model:        "deep",
 			Prompt:       "Summarize the request",
 			SessionReadyDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{
-					PluginName: "notification",
-					Operation:  "started",
-					Input:      map[string]any{"format": "plain"},
+				Target: coreworkflow.AppTarget{
+					AppName:   "notification",
+					Operation: "started",
+					Input:     map[string]any{"format": "plain"},
 				},
 				CredentialMode: core.ConnectionModeNone,
 				InputBindings: []coreworkflow.OutputBinding{
@@ -1091,9 +1091,9 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversSessionReadyBeforeTurn(t *testi
 				},
 			},
 			OutputDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{
-					PluginName: "notification",
-					Operation:  "reply",
+				Target: coreworkflow.AppTarget{
+					AppName:   "notification",
+					Operation: "reply",
 				},
 				CredentialMode: core.ConnectionModeNone,
 				InputBindings: []coreworkflow.OutputBinding{
@@ -1121,7 +1121,7 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversSessionReadyBeforeTurn(t *testi
 		SubjectID:           principal.UserSubjectID("ada"),
 		CredentialSubjectID: principal.UserSubjectID("ada"),
 		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-			Plugin:     "notification",
+			App:        "notification",
 			Operations: []string{"started", "reply"},
 		}}),
 	})
@@ -1212,7 +1212,7 @@ func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
 			ProviderName: "managed",
 			Model:        "deep",
 			SessionReadyDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "started"},
+				Target: coreworkflow.AppTarget{AppName: "notification", Operation: "started"},
 				InputBindings: []coreworkflow.OutputBinding{
 					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
 				},
@@ -1221,11 +1221,11 @@ func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
 				{
 					ID:             "diagnosis",
 					Prompt:         "Diagnose the Slack request.",
-					ToolRefs:       []coreagent.ToolRef{{Plugin: "datadog", Operation: "queryLogs"}},
+					ToolRefs:       []coreagent.ToolRef{{App: "datadog", Operation: "queryLogs"}},
 					ResponseSchema: map[string]any{"type": "object"},
 					TimeoutSeconds: 30,
 					OutputDelivery: &coreworkflow.OutputDelivery{
-						Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "diagnosis_reply"},
+						Target: coreworkflow.AppTarget{AppName: "notification", Operation: "diagnosis_reply"},
 						InputBindings: []coreworkflow.OutputBinding{
 							{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
 						},
@@ -1235,7 +1235,7 @@ func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
 					ID:             "pr_fix",
 					Prompt:         "Use the diagnosis to open a PR.",
 					Messages:       []coreagent.Message{{Role: "system", Text: "Keep route system instructions first."}},
-					ToolRefs:       []coreagent.ToolRef{{Plugin: "github", Operation: "createPullRequest"}},
+					ToolRefs:       []coreagent.ToolRef{{App: "github", Operation: "createPullRequest"}},
 					TimeoutSeconds: 120,
 					When: &coreworkflow.AgentStepWhen{
 						StepID:     "diagnosis",
@@ -1244,7 +1244,7 @@ func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
 						EqualsSet:  true,
 					},
 					OutputDelivery: &coreworkflow.OutputDelivery{
-						Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "pr_reply"},
+						Target: coreworkflow.AppTarget{AppName: "notification", Operation: "pr_reply"},
 						InputBindings: []coreworkflow.OutputBinding{
 							{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
 						},
@@ -1369,13 +1369,13 @@ func TestWorkflowRuntimeInvokeAgentTargetSessionReadyDeliveryFailureIsBestEffort
 			ProviderName: "managed",
 			Prompt:       "Summarize the request",
 			SessionReadyDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "started"},
+				Target: coreworkflow.AppTarget{AppName: "notification", Operation: "started"},
 				InputBindings: []coreworkflow.OutputBinding{
 					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
 				},
 			},
 			OutputDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"},
+				Target: coreworkflow.AppTarget{AppName: "notification", Operation: "reply"},
 				InputBindings: []coreworkflow.OutputBinding{
 					{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
 				},
@@ -1418,7 +1418,7 @@ func TestWorkflowRuntimeInvokeAgentTargetFinalOutputDeliveryFailureFailsRun(t *t
 			ProviderName: "managed",
 			Prompt:       "Summarize the request",
 			OutputDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"},
+				Target: coreworkflow.AppTarget{AppName: "notification", Operation: "reply"},
 				InputBindings: []coreworkflow.OutputBinding{
 					{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
 				},
@@ -1446,11 +1446,11 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsCanonicalTarget(
 	}
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:               "agent-ref",
-		ProviderName:     "temporal",
-		Target:           target,
-		CallerPluginName: "slack",
-		SubjectID:        "service_account:scheduler",
+		ID:            "agent-ref",
+		ProviderName:  "temporal",
+		Target:        target,
+		CallerAppName: "slack",
+		SubjectID:     "service_account:scheduler",
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
@@ -1483,8 +1483,8 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsCanonicalTarget(
 		t.Fatalf("turn requests = %d, want 1", len(agentManager.createTurnRequests))
 	}
 	turnReq := agentManager.createTurnRequests[0]
-	if turnReq.CallerPluginName != "slack" {
-		t.Fatalf("caller plugin = %q, want slack", turnReq.CallerPluginName)
+	if turnReq.CallerAppName != "slack" {
+		t.Fatalf("caller app = %q, want slack", turnReq.CallerAppName)
 	}
 	if !strings.HasPrefix(turnReq.IdempotencyKey, "workflow:temporal:run-agent-123:turn:signal-batch-") {
 		t.Fatalf("turn idempotency key = %q", turnReq.IdempotencyKey)
@@ -1523,10 +1523,10 @@ func TestWorkflowRuntimeInvokeAgentTargetHandlesMissingTurn(t *testing.T) {
 	}
 }
 
-func TestWorkflowRuntimeRejectsMixedAgentPluginTargetWithExecutionRef(t *testing.T) {
+func TestWorkflowRuntimeRejectsMixedAgentAppTargetWithExecutionRef(t *testing.T) {
 	t.Parallel()
 
-	target := testWorkflowPluginTarget("roadmap", "sync")
+	target := testWorkflowAppTarget("roadmap", "sync")
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "plugin-ref",
@@ -1545,7 +1545,7 @@ func TestWorkflowRuntimeRejectsMixedAgentPluginTargetWithExecutionRef(t *testing
 		ExecutionRef: "plugin-ref",
 		RunID:        "run-123",
 		Target: coreworkflow.Target{
-			Plugin: target.Plugin,
+			App: target.App,
 			Agent: &coreworkflow.AgentTarget{
 				ProviderName:   "managed",
 				Prompt:         "send reminder",
@@ -1566,8 +1566,8 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
-	target := testWorkflowPluginTargetWithPayload("roadmap", "sync", "analytics", "tenant-a", map[string]any{"mode": "full"})
-	target.Plugin.CredentialMode = core.ConnectionModeNone
+	target := testWorkflowAppTargetWithPayload("roadmap", "sync", "analytics", "tenant-a", map[string]any{"mode": "full"})
+	target.App.CredentialMode = core.ConnectionModeNone
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:                  "exec-ref-123",
@@ -1652,7 +1652,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredSubjectPrincipal(t *testing.
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-service-account",
 		ProviderName: "temporal",
-		Target:       testWorkflowPluginTarget("roadmap", "sync"),
+		Target:       testWorkflowAppTarget("roadmap", "sync"),
 		SubjectID:    "service_account:scheduler",
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
@@ -1673,7 +1673,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredSubjectPrincipal(t *testing.
 	if _, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		ExecutionRef: "exec-ref-service-account",
-		Target:       testWorkflowPluginTarget("roadmap", "sync"),
+		Target:       testWorkflowAppTarget("roadmap", "sync"),
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -1692,7 +1692,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredSubjectPrincipal(t *testing.
 func TestWorkflowRuntimeInvokeExecutionRefAuthorizesInternalConnections(t *testing.T) {
 	t.Parallel()
 
-	target := testWorkflowPluginTarget("brain", "sources.sync")
+	target := testWorkflowAppTarget("brain", "sources.sync")
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:                  "exec-ref-config-source-sync",
@@ -1703,7 +1703,7 @@ func TestWorkflowRuntimeInvokeExecutionRefAuthorizesInternalConnections(t *testi
 		AuthSource:          "config",
 		CredentialSubjectID: "system:config",
 		Permissions: []core.AccessPermission{{
-			Plugin:     "brain",
+			App:        "brain",
 			Operations: []string{"sources.sync"},
 		}},
 	}); err != nil {
@@ -1740,7 +1740,7 @@ func TestWorkflowRuntimeInvokeExecutionRefAuthorizesInternalConnections(t *testi
 func TestWorkflowRuntimeInvokeConfigExecutionRefRunAsUsesServiceAccountPrincipal(t *testing.T) {
 	t.Parallel()
 
-	target := testWorkflowPluginTarget("brain", "sources.sync")
+	target := testWorkflowAppTarget("brain", "sources.sync")
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:                  "exec-ref-config-runas-source-sync",
@@ -1758,7 +1758,7 @@ func TestWorkflowRuntimeInvokeConfigExecutionRefRunAsUsesServiceAccountPrincipal
 			AuthSource:  "config",
 		},
 		Permissions: []core.AccessPermission{{
-			Plugin:     "brain",
+			App:        "brain",
 			Operations: []string{"sources.sync"},
 		}},
 	}); err != nil {
@@ -1814,7 +1814,7 @@ func TestWorkflowRuntimeInvokeConfigExecutionRefRunAsUsesServiceAccountPrincipal
 func TestWorkflowRuntimeInvokeUserExecutionRefDoesNotAuthorizeInternalConnections(t *testing.T) {
 	t.Parallel()
 
-	target := testWorkflowPluginTarget("brain", "sources.sync")
+	target := testWorkflowAppTarget("brain", "sources.sync")
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-user-source-sync",
@@ -1824,7 +1824,7 @@ func TestWorkflowRuntimeInvokeUserExecutionRefDoesNotAuthorizeInternalConnection
 		SubjectKind:  string(principal.KindUser),
 		AuthSource:   "session",
 		Permissions: []core.AccessPermission{{
-			Plugin:     "brain",
+			App:        "brain",
 			Operations: []string{"sources.sync"},
 		}},
 	}); err != nil {
@@ -1863,7 +1863,7 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
-	target := testWorkflowPluginTargetWithPayload("roadmap", "sync", "analytics", "tenant-a", nil)
+	target := testWorkflowAppTargetWithPayload("roadmap", "sync", "analytics", "tenant-a", nil)
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-denied",
@@ -1946,7 +1946,7 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 	services := testutil.NewStubServices(t)
 	ctx := context.Background()
 
-	target := testWorkflowPluginTargetWithPayload("roadmap", "export", "analytics", "tenant-a", nil)
+	target := testWorkflowAppTargetWithPayload("roadmap", "export", "analytics", "tenant-a", nil)
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-123",
@@ -1954,7 +1954,7 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 		Target:       target,
 		SubjectID:    principal.UserSubjectID("user-123"),
 		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 	}); err != nil {
@@ -2018,7 +2018,7 @@ func TestWorkflowRuntimeInvokeExecutionRefLookupInfrastructureErrorIsInternal(t 
 	_, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "basic",
 		ExecutionRef: "exec-ref-123",
-		Target:       testWorkflowPluginTarget("roadmap", "sync"),
+		Target:       testWorkflowAppTarget("roadmap", "sync"),
 	})
 	if err == nil {
 		t.Fatal("expected internal error, got nil")

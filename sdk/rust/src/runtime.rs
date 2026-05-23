@@ -30,9 +30,9 @@ use crate::generated::v1::authorization_provider_server::AuthorizationProviderSe
 #[cfg(unix)]
 use crate::generated::v1::cache_server::CacheServer;
 #[cfg(unix)]
-use crate::generated::v1::integration_provider_server::IntegrationProviderServer;
+use crate::generated::v1::integration_provider_server::AppProviderServer;
 #[cfg(unix)]
-use crate::generated::v1::plugin_runtime_provider_server::PluginRuntimeProviderServer;
+use crate::generated::v1::app_runtime_provider_server::AppRuntimeProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycleServer;
 #[cfg(unix)]
@@ -44,12 +44,12 @@ use crate::generated::v1::workflow_provider_server::WorkflowProviderServer as Wo
 use crate::provider_server::ProviderServer;
 use crate::{
     AgentProvider, AuthenticationProvider, AuthorizationProvider, CacheProvider,
-    PluginRuntimeProvider, Provider, Router, S3Provider, SecretsProvider, WorkflowProvider,
+    AppRuntimeProvider, Provider, Router, S3Provider, SecretsProvider, WorkflowProvider,
 };
 #[cfg(unix)]
 use crate::{
     agent::AgentServer, auth_server::AuthenticationServer, authorization::AuthorizationServer,
-    cache_server::CacheRpcServer, plugin_runtime::PluginRuntimeServer,
+    cache_server::CacheRpcServer, app_runtime::AppRuntimeServer,
     runtime_server::RuntimeServer, s3::S3RpcServer, secrets_server::SecretsServer,
     workflow::WorkflowServer,
 };
@@ -97,8 +97,8 @@ pub fn run_s3_provider<P: S3Provider>(provider: Arc<P>) -> Result<()> {
 }
 
 /// Runs a plugin-runtime provider on the Unix socket exposed by `gestaltd`.
-pub fn run_plugin_runtime_provider<P: PluginRuntimeProvider>(provider: Arc<P>) -> Result<()> {
-    build_runtime_and_block_on(|| serve_plugin_runtime_provider(provider))
+pub fn run_app_runtime_provider<P: AppRuntimeProvider>(provider: Arc<P>) -> Result<()> {
+    build_runtime_and_block_on(|| serve_app_runtime_provider(provider))
 }
 
 /// Runs a workflow provider on the Unix socket exposed by `gestaltd`.
@@ -150,7 +150,7 @@ where
                 .add_service(ProviderLifecycleServer::new(RuntimeServer::for_provider(
                     Arc::clone(&provider),
                 )))
-                .add_service(IntegrationProviderServer::new(server))
+                .add_service(AppProviderServer::new(server))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
         },
         |provider| async move { provider.close().await },
@@ -289,18 +289,18 @@ where
 
 #[cfg(unix)]
 /// Serves a plugin-runtime provider over the configured Unix socket.
-pub async fn serve_plugin_runtime_provider<P>(provider: Arc<P>) -> Result<()>
+pub async fn serve_app_runtime_provider<P>(provider: Arc<P>) -> Result<()>
 where
-    P: PluginRuntimeProvider,
+    P: AppRuntimeProvider,
 {
     serve_unix_provider(
         provider,
         move |incoming, provider| {
             Server::builder()
                 .add_service(ProviderLifecycleServer::new(
-                    RuntimeServer::for_plugin_runtime(Arc::clone(&provider)),
+                    RuntimeServer::for_app_runtime(Arc::clone(&provider)),
                 ))
-                .add_service(PluginRuntimeProviderServer::new(PluginRuntimeServer::new(
+                .add_service(AppRuntimeProviderServer::new(AppRuntimeServer::new(
                     Arc::clone(&provider),
                 )))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
@@ -398,9 +398,9 @@ where
 }
 
 #[cfg(not(unix))]
-pub async fn serve_plugin_runtime_provider<P>(_provider: Arc<P>) -> Result<()>
+pub async fn serve_app_runtime_provider<P>(_provider: Arc<P>) -> Result<()>
 where
-    P: PluginRuntimeProvider,
+    P: AppRuntimeProvider,
 {
     Err(Error::internal(
         "unix sockets are unsupported on this platform",

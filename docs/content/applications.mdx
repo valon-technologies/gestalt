@@ -6,14 +6,14 @@ import ActiveDevelopmentCallout from '../components/ActiveDevelopmentCallout'
 <ActiveDevelopmentCallout verb="are">Applications</ActiveDevelopmentCallout>
 
 <Callout type="info">
-  Build a plugin when you need new operations. Build an application when that
-  plugin becomes the backend for a user-facing workflow with UI, policy,
+  Build an app when you need new operations. Build an application when that
+  app becomes the backend for a user-facing workflow with UI, policy,
   storage, schedules, or other provider bindings.
 </Callout>
 
 Gestalt can be used to build applications. At a minimum, an application is a
-single [plugin](/providers/plugins), or optionally a composition of
-[plugins](/providers/plugins) and [UIs](/providers/ui), using existing
+single [app](/providers/apps), or optionally a composition of
+[apps](/providers/apps) and [UIs](/providers/ui), using existing
 primitives for [authentication](/providers/authentication),
 [authorization](/providers/authorization),
 [IndexedDB](/providers/indexeddb)/[Cache](/providers/cache)/[S3](/providers/s3),
@@ -25,11 +25,11 @@ This example application, `workspace_review`, stores review items in IndexedDB,
 writes generated reports to S3, runs a nightly cron through the workflow
 provider, and serves a lightweight browser UI at `/workspace-review`.
 
-Use a `plugin/` plus sibling `ui/` layout:
+Use an `app/` plus sibling `ui/` layout:
 
 ```text
 workspace-review/
-  plugin/
+  app/
     manifest.yaml
     package.json
     provider.ts
@@ -41,12 +41,12 @@ workspace-review/
       app.tsx
 ```
 
-The plugin manifest owns the operations and points at the sibling UI bundle.
-For the full manifest schema, see [Provider Manifests](/reference/plugin-manifests).
+The app manifest owns the operations and points at the sibling UI bundle.
+For the full manifest schema, see [Provider Manifests](/reference/app-manifests).
 
 ```yaml
-kind: plugin
-source: github.com/acme/plugins/workspace-review
+kind: app
+source: github.com/acme/apps/workspace-review
 version: 0.1.0
 displayName: Workspace Review
 description: Review workspace changes and publish nightly summaries.
@@ -65,7 +65,7 @@ The UI bundle should be authored from source. Check in the UI source and
 dependency lockfile, declare a `build` command and `output` directory, and leave
 the generated `out/` or `dist/` directory out of source control. Gestalt builds
 the static assets during preparation and serves the prepared output at runtime.
-Route rules are required when the mounted plugin binds an `authorizationPolicy`.
+Route rules are required when the mounted app binds an `authorizationPolicy`.
 For UI package details, see [Providers > UI](/providers/ui).
 
 <Callout type="info">
@@ -104,7 +104,7 @@ spec:
 The deployment config wires the application into host services. Platform
 authentication protects the mounted UI and HTTP operation routes, the
 authorization policy controls who may use the application, and the provider
-bindings expose only the host services the plugin is allowed to use.
+bindings expose only the host services the app is allowed to use.
 
 ```yaml
 server:
@@ -173,9 +173,9 @@ providers:
       config:
         pollInterval: 1s
 
-plugins:
+apps:
   workspace_review:
-    source: ./workspace-review/plugin/manifest.yaml
+    source: ./workspace-review/app/manifest.yaml
     auth:
       provider: server
     authorizationPolicy: workspace_review
@@ -204,7 +204,7 @@ workflows:
         subject:
           id: service_account:workspace-review-nightly
       target:
-        plugin:
+        app:
           name: workspace_review
           operation: reports.generateNightly
           input:
@@ -219,8 +219,8 @@ For workflow schedules and event triggers, see
 
 ## Application Logic
 
-In plugin code, open host services from the request context or language SDK.
-The plugin does not know database DSNs, S3 credentials, or workflow storage
+In app code, open host services from the request context or language SDK.
+The app does not know database DSNs, S3 credentials, or workflow storage
 details. Those come from the deployment bindings.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
@@ -379,14 +379,14 @@ details. Those come from the deployment bindings.
         WorkflowManagerPublishEvent,
     )
 
-    plugin = Plugin("workspace_review")
+    app = Plugin("workspace_review")
 
     class SaveItemInput(Model):
         id: str
         title: str
         status: str
 
-    @plugin.operation(id="items.save", method="POST")
+    @app.operation(id="items.save", method="POST")
     def save_item(input: SaveItemInput) -> dict[str, bool]:
         db = IndexedDB()
         db.object_store("items").put(
@@ -403,7 +403,7 @@ details. Those come from the deployment bindings.
     class NightlyReportInput(Model):
         bucket: str
 
-    @plugin.operation(id="reports.generateNightly", method="POST")
+    @app.operation(id="reports.generateNightly", method="POST")
     def generate_nightly(
         input: NightlyReportInput, request: Request
     ) -> dict[str, str]:
@@ -563,14 +563,14 @@ details. Those come from the deployment bindings.
       PresignMethod,
       S3,
       WorkflowManager,
-      definePlugin,
+      defineApp,
       ok,
       operation,
       s,
       workflowEvent,
     } from "@valon-technologies/gestalt";
 
-    export const plugin = definePlugin({
+    export const app = defineApp({
       operations: [
         operation({
           id: "items.save",
@@ -642,25 +642,24 @@ details. Those come from the deployment bindings.
   </Tabs.Tab>
 </Tabs>
 
-## Calling Another Plugin From Your Application
+## Calling Another App From Your Application
 
-Use `PluginInvoker` when executable plugin code needs to call another
-configured plugin as part of the same request. The caller must declare the
-allowed call graph in `plugins.<caller>.invokes`; at runtime the SDK sends the
+Use `AppInvoker` when executable app code needs to call another
+configured app as part of the same request. The caller must declare the
+allowed call graph in `apps.<caller>.invokes`; at runtime the SDK sends the
 current invocation token to the host, and the host preserves the original
 subject, credential context, and permission ceiling for the nested call.
 
 ```yaml
-plugins:
+apps:
   triage:
-    source: ./plugins/triage/manifest.yaml
+    source: ./apps/triage/manifest.yaml
     invokes:
-      - plugin: github
-        operations:
-          - issues.get
+      - app: github
+        operation: issues.get
 
   github:
-    source: ./plugins/github/manifest.yaml
+    source: ./apps/github/manifest.yaml
 ```
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
@@ -760,10 +759,10 @@ plugins:
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { PluginInvoker, type Request } from "@valon-technologies/gestalt";
+    import { AppInvoker, type Request } from "@valon-technologies/gestalt";
 
     export async function loadLinkedIssue(request: Request, issueNumber: number) {
-      const invoker = new PluginInvoker(request);
+      const invoker = new AppInvoker(request);
 
       const result = await invoker.invoke(
         "github",
@@ -786,7 +785,7 @@ plugins:
 </Tabs>
 
 The nested call must fit inside the caller's configured `invokes` grant. Pass
-`connection`, `instance`, or an idempotency key when the target plugin should
+`connection`, `instance`, or an idempotency key when the target app should
 use a specific connected account, provider instance, or retry boundary. For raw
 GraphQL surfaces, use `InvokeGraphQL`, `invoke_graphql`, or `invokeGraphQL` in
 the same SDK client.
@@ -794,7 +793,7 @@ the same SDK client.
 ## Lightweight Frontend
 
 The frontend can stay small because Gestalt already handles sessions, route
-authorization, and static asset serving. A mounted UI calls the plugin
+authorization, and static asset serving. A mounted UI calls the app
 operations on the same origin:
 
 ```js
@@ -819,17 +818,17 @@ normally be checked in.
 
 ## Configuring Webhooks
 
-Applications can expose product-specific webhooks through the same plugin that
+Applications can expose product-specific webhooks through the same app that
 backs the UI, scheduled work, and host-service bindings. Declare the
-[hosted HTTP route](/providers/plugins#hosted-http-endpoints) in the
-application plugin manifest, and implement `webhooks.github` in the SDK
+[hosted HTTP route](/providers/apps#hosted-http-endpoints) in the
+application app manifest, and implement `webhooks.github` in the SDK
 language of choice like any other application operation. The following example
 configures the public webhook URL as
 `/api/v1/workspace_review/webhooks/github`.
 
 ```yaml
-kind: plugin
-source: github.com/acme/plugins/workspace-review
+kind: app
+source: github.com/acme/apps/workspace-review
 version: 0.1.0
 displayName: Workspace Review
 description: Review workspace changes and publish nightly summaries.
@@ -869,13 +868,13 @@ spec:
 
 ## Local Development
 
-Run the app locally from the plugin directory with the supporting provider
+Run the app locally from the app directory with the supporting provider
 bindings in a development config file:
 
 ```sh
-gestaltd provider validate --path ./workspace-review/plugin --config ./dev.yaml
-gestaltd serve --path ./workspace-review/plugin --config ./dev.yaml
+gestaltd provider validate --path ./workspace-review/app --config ./dev.yaml
+gestaltd serve --path ./workspace-review/app --config ./dev.yaml
 ```
 
 For local UI detection, config overlays, and remote attach workflows, see
-[Plugin > Testing locally](/providers/plugins#testing-locally).
+[App > Testing locally](/providers/apps#testing-locally).

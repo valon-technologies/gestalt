@@ -8,10 +8,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// BoundWorkflowPluginTarget contains fields for constructing a
-// BoundWorkflowPluginTarget.
-type BoundWorkflowPluginTarget struct {
-	PluginName     string
+// BoundWorkflowAppTarget contains fields for constructing a
+// BoundWorkflowAppTarget.
+type BoundWorkflowAppTarget struct {
+	AppName     string
 	Operation      string
 	Input          any
 	Connection     string
@@ -19,14 +19,14 @@ type BoundWorkflowPluginTarget struct {
 	CredentialMode string
 }
 
-// boundWorkflowPluginTargetToProto creates a plugin workflow target.
-func boundWorkflowPluginTargetToProto(input BoundWorkflowPluginTarget) (*proto.BoundWorkflowPluginTarget, error) {
+// boundWorkflowPluginTargetToProto creates an app workflow target.
+func boundWorkflowPluginTargetToProto(input BoundWorkflowAppTarget) (*proto.BoundWorkflowAppTarget, error) {
 	value, err := structFromAny(input.Input)
 	if err != nil {
 		return nil, err
 	}
-	return &proto.BoundWorkflowPluginTarget{
-		PluginName:     input.PluginName,
+	return &proto.BoundWorkflowAppTarget{
+		AppName:     input.AppName,
 		Operation:      input.Operation,
 		Input:          value,
 		Connection:     input.Connection,
@@ -37,12 +37,12 @@ func boundWorkflowPluginTargetToProto(input BoundWorkflowPluginTarget) (*proto.B
 
 // boundWorkflowPluginTargetFromProto converts an existing protocol target
 // into builder input.
-func boundWorkflowPluginTargetFromProto(value *proto.BoundWorkflowPluginTarget) BoundWorkflowPluginTarget {
+func boundWorkflowPluginTargetFromProto(value *proto.BoundWorkflowAppTarget) BoundWorkflowAppTarget {
 	if value == nil {
-		return BoundWorkflowPluginTarget{}
+		return BoundWorkflowAppTarget{}
 	}
-	return BoundWorkflowPluginTarget{
-		PluginName:     value.GetPluginName(),
+	return BoundWorkflowAppTarget{
+		AppName:     value.GetAppName(),
 		Operation:      value.GetOperation(),
 		Input:          mapFromStruct(value.GetInput()),
 		Connection:     value.GetConnection(),
@@ -54,7 +54,7 @@ func boundWorkflowPluginTargetFromProto(value *proto.BoundWorkflowPluginTarget) 
 // WorkflowOutputDelivery contains fields for constructing a
 // WorkflowOutputDelivery.
 type WorkflowOutputDelivery struct {
-	Target         *BoundWorkflowPluginTarget
+	Target         *BoundWorkflowAppTarget
 	InputBindings  []WorkflowOutputBinding
 	CredentialMode string
 }
@@ -78,7 +78,7 @@ type WorkflowOutputBinding struct {
 
 // workflowOutputDeliveryToProto creates a workflow output delivery.
 func workflowOutputDeliveryToProto(input WorkflowOutputDelivery) (*proto.WorkflowOutputDelivery, error) {
-	var target *proto.BoundWorkflowPluginTarget
+	var target *proto.BoundWorkflowAppTarget
 	if input.Target != nil {
 		value, err := boundWorkflowPluginTargetToProto(*input.Target)
 		if err != nil {
@@ -103,7 +103,7 @@ func workflowOutputDeliveryFromProto(value *proto.WorkflowOutputDelivery) *Workf
 	if value == nil {
 		return nil
 	}
-	var target *BoundWorkflowPluginTarget
+	var target *BoundWorkflowAppTarget
 	if value.GetTarget() != nil {
 		input := boundWorkflowPluginTargetFromProto(value.GetTarget())
 		target = &input
@@ -322,9 +322,9 @@ func workflowAgentStepWhenFromProto(input *proto.WorkflowAgentStepWhen) *Workflo
 }
 
 // BoundWorkflowTarget contains fields for constructing a
-// BoundWorkflowTarget. Exactly one of Plugin or Agent should be set.
+// BoundWorkflowTarget. Exactly one of App or Agent should be set.
 type BoundWorkflowTarget struct {
-	Plugin *BoundWorkflowPluginTarget
+	App *BoundWorkflowAppTarget
 	Agent  *BoundWorkflowAgentTarget
 }
 
@@ -364,12 +364,12 @@ func workflowActorFromProto(value *proto.WorkflowActor) WorkflowActor {
 // boundWorkflowTargetToProto creates a workflow target.
 func boundWorkflowTargetToProto(input BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {
 	switch {
-	case input.Plugin != nil:
-		plugin, err := boundWorkflowPluginTargetToProto(*input.Plugin)
+	case input.App != nil:
+		appTarget, err := boundWorkflowPluginTargetToProto(*input.App)
 		if err != nil {
 			return nil, err
 		}
-		return &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Plugin{Plugin: plugin}}, nil
+		return &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{App: appTarget}}, nil
 	case input.Agent != nil:
 		agent, err := boundWorkflowAgentTargetToProto(*input.Agent)
 		if err != nil {
@@ -387,9 +387,9 @@ func boundWorkflowTargetFromProto(value *proto.BoundWorkflowTarget) BoundWorkflo
 	if value == nil {
 		return BoundWorkflowTarget{}
 	}
-	if plugin := value.GetPlugin(); plugin != nil {
-		input := boundWorkflowPluginTargetFromProto(plugin)
-		return BoundWorkflowTarget{Plugin: &input}
+	if appTarget := value.GetApp(); appTarget != nil {
+		input := boundWorkflowPluginTargetFromProto(appTarget)
+		return BoundWorkflowTarget{App: &input}
 	}
 	if agent := value.GetAgent(); agent != nil {
 		input := boundWorkflowAgentTargetFromProto(agent)
@@ -947,7 +947,7 @@ type WorkflowExecutionReference struct {
 	SubjectKind         string
 	DisplayName         string
 	AuthSource          string
-	CallerPluginName    string
+	CallerAppName    string
 	RunAs               *WorkflowRunAsSubject
 	SourceDefinitionID  string
 }
@@ -955,7 +955,7 @@ type WorkflowExecutionReference struct {
 // WorkflowAccessPermission contains fields for an execution
 // reference permission.
 type WorkflowAccessPermission struct {
-	Plugin     string
+	App     string
 	Operations []string
 }
 
@@ -986,7 +986,7 @@ func workflowExecutionReferenceToProto(input WorkflowExecutionReference) (*proto
 		SubjectKind:         input.SubjectKind,
 		DisplayName:         input.DisplayName,
 		AuthSource:          input.AuthSource,
-		CallerPluginName:    input.CallerPluginName,
+		CallerAppName:    input.CallerAppName,
 		RunAs:               workflowRunAsSubjectFromInput(input.RunAs),
 		SourceDefinitionId:  input.SourceDefinitionID,
 	}, nil
@@ -1014,7 +1014,7 @@ func workflowExecutionReferenceFromProto(value *proto.WorkflowExecutionReference
 		SubjectKind:         value.GetSubjectKind(),
 		DisplayName:         value.GetDisplayName(),
 		AuthSource:          value.GetAuthSource(),
-		CallerPluginName:    value.GetCallerPluginName(),
+		CallerAppName:    value.GetCallerAppName(),
 		RunAs:               workflowRunAsSubjectInputPtrFromSubject(value.GetRunAs()),
 		SourceDefinitionID:  value.GetSourceDefinitionId(),
 	}, nil
@@ -1141,7 +1141,7 @@ func workflowAccessPermissionsFromInputs(values []WorkflowAccessPermission) []*p
 	out := make([]*proto.WorkflowAccessPermission, 0, len(values))
 	for _, value := range values {
 		out = append(out, &proto.WorkflowAccessPermission{
-			Plugin:     value.Plugin,
+			App:        value.App,
 			Operations: append([]string(nil), value.Operations...),
 		})
 	}
@@ -1158,7 +1158,7 @@ func workflowAccessPermissionInputsFromPermissions(values []*proto.WorkflowAcces
 			continue
 		}
 		out = append(out, WorkflowAccessPermission{
-			Plugin:     value.GetPlugin(),
+			App:        value.GetApp(),
 			Operations: append([]string(nil), value.GetOperations()...),
 		})
 	}

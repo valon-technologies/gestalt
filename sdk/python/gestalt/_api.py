@@ -27,7 +27,7 @@ else:
 if TYPE_CHECKING:
     from ._agent import AgentManager, AgentToolRef
     from ._authorization import AuthorizationClient
-    from ._invoker import PluginInvoker
+    from ._invoker import AppInvoker
     from ._workflow import WorkflowManager
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
@@ -92,7 +92,7 @@ class Request:
     access: Access = dataclasses.field(default_factory=Access)
     invocation_token: str = ""
     # Workflow callback metadata uses a JSON-style lowerCamelCase object such
-    # as runId, target.plugin.pluginName, trigger.scheduleId, and
+    # as runId, target.app.pluginName, trigger.scheduleId, and
     # trigger.event.specVersion.
     workflow: dict[str, Any] = dataclasses.field(default_factory=dict)
     tool_refs: list[AgentToolRef] = dataclasses.field(default_factory=list)
@@ -112,10 +112,10 @@ class Request:
 
         return self.connection_params.get(name)
 
-    def invoker(self) -> "PluginInvoker":
-        from ._invoker import PluginInvoker
+    def invoker(self) -> "AppInvoker":
+        from ._invoker import AppInvoker
 
-        return PluginInvoker(self.invocation_token)
+        return AppInvoker(self.invocation_token)
 
     def agent_manager(self) -> "AgentManager":
         from ._agent import AgentManager

@@ -12,8 +12,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 )
 
 type startupWaitTracker struct {
@@ -39,7 +39,7 @@ func (t *startupWaitTracker) beginPluginWait(pluginName, providerName string) (f
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.workflowWaits[workflowKey] > 0 {
-		return nil, fmt.Errorf("workflow startup dependency cycle between plugin %q and workflow provider %q", pluginName, providerName)
+		return nil, fmt.Errorf("workflow startup dependency cycle between app %q and workflow provider %q", pluginName, providerName)
 	}
 	t.pluginWaits[pluginKey]++
 	return func() {
@@ -63,7 +63,7 @@ func (t *startupWaitTracker) beginWorkflowWait(providerName, pluginName string) 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.pluginWaits[pluginKey] > 0 {
-		return nil, fmt.Errorf("workflow startup dependency cycle between plugin %q and workflow provider %q", pluginName, providerName)
+		return nil, fmt.Errorf("workflow startup dependency cycle between app %q and workflow provider %q", pluginName, providerName)
 	}
 	t.workflowWaits[workflowKey]++
 	return func() {
@@ -78,7 +78,7 @@ func (t *startupWaitTracker) beginWorkflowWait(providerName, pluginName string) 
 }
 
 type startupProviderProxy struct {
-	spec             pluginservice.StaticProviderSpec
+	spec             appservice.StaticProviderSpec
 	operationRouting startupOperationRouting
 	tracker          *startupWaitTracker
 
@@ -90,7 +90,7 @@ type startupProviderProxy struct {
 	err      error
 }
 
-func newStartupProviderProxy(spec pluginservice.StaticProviderSpec, operationRouting startupOperationRouting, tracker *startupWaitTracker) *startupProviderProxy {
+func newStartupProviderProxy(spec appservice.StaticProviderSpec, operationRouting startupOperationRouting, tracker *startupWaitTracker) *startupProviderProxy {
 	operationRouting.connections = maps.Clone(operationRouting.connections)
 	return &startupProviderProxy{
 		spec:             spec,
@@ -417,7 +417,7 @@ func (p *startupWorkflowProviderProxy) await(ctx context.Context) (coreworkflow.
 }
 
 func (p *startupWorkflowProviderProxy) StartRun(ctx context.Context, req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
-	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetPluginName(req.Target))
+	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetAppName(req.Target))
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +457,7 @@ func (p *startupWorkflowProviderProxy) SignalRun(ctx context.Context, req corewo
 }
 
 func (p *startupWorkflowProviderProxy) SignalOrStartRun(ctx context.Context, req coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
-	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetPluginName(req.Target))
+	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetAppName(req.Target))
 	if err != nil {
 		return nil, err
 	}
@@ -465,7 +465,7 @@ func (p *startupWorkflowProviderProxy) SignalOrStartRun(ctx context.Context, req
 }
 
 func (p *startupWorkflowProviderProxy) UpsertSchedule(ctx context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
-	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetPluginName(req.Target))
+	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetAppName(req.Target))
 	if err != nil {
 		return nil, err
 	}
@@ -513,7 +513,7 @@ func (p *startupWorkflowProviderProxy) ResumeSchedule(ctx context.Context, req c
 }
 
 func (p *startupWorkflowProviderProxy) UpsertEventTrigger(ctx context.Context, req coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetPluginName(req.Target))
+	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetAppName(req.Target))
 	if err != nil {
 		return nil, err
 	}
@@ -561,7 +561,7 @@ func (p *startupWorkflowProviderProxy) ResumeEventTrigger(ctx context.Context, r
 }
 
 func (p *startupWorkflowProviderProxy) PublishEvent(ctx context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForPlugin(ctx, req.AppName)
 	if err != nil {
 		return nil, err
 	}
@@ -571,7 +571,7 @@ func (p *startupWorkflowProviderProxy) PublishEvent(ctx context.Context, req cor
 func (p *startupWorkflowProviderProxy) PutExecutionReference(ctx context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
 	pluginName := ""
 	if ref != nil {
-		pluginName = startupWorkflowTargetPluginName(ref.Target)
+		pluginName = startupWorkflowTargetAppName(ref.Target)
 	}
 	select {
 	case <-p.ready:
@@ -692,18 +692,18 @@ func (p *startupWorkflowProviderProxy) awaitForPlugin(ctx context.Context, plugi
 }
 
 func (p *startupWorkflowProviderProxy) awaitForContextPlugin(ctx context.Context) (coreworkflow.Provider, error) {
-	pluginName := strings.TrimSpace(invocation.WorkflowContextString(invocation.WorkflowContextFromContext(ctx), "plugin"))
+	pluginName := strings.TrimSpace(invocation.WorkflowContextString(invocation.WorkflowContextFromContext(ctx), "app"))
 	if pluginName == "" {
 		return p.await(ctx)
 	}
 	return p.awaitForPlugin(ctx, pluginName)
 }
 
-func startupWorkflowTargetPluginName(target coreworkflow.Target) string {
-	if target.Plugin == nil {
+func startupWorkflowTargetAppName(target coreworkflow.Target) string {
+	if target.App == nil {
 		return ""
 	}
-	return strings.TrimSpace(target.Plugin.PluginName)
+	return strings.TrimSpace(target.App.AppName)
 }
 
 func (p *startupWorkflowProviderProxy) beginPluginWait(pluginName string) (func(), error) {
@@ -758,10 +758,10 @@ func cloneStartupWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *cor
 
 func cloneStartupWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
 	clone := coreworkflow.Target{}
-	if target.Plugin != nil {
-		plugin := *target.Plugin
-		plugin.Input = maps.Clone(plugin.Input)
-		clone.Plugin = &plugin
+	if target.App != nil {
+		appTarget := *target.App
+		appTarget.Input = maps.Clone(appTarget.Input)
+		clone.App = &appTarget
 	}
 	if target.Agent != nil {
 		agent := *target.Agent

@@ -346,7 +346,7 @@ func TestS3ServerWriteObjectPropagatesRecvErrorObservedDuringSendAndClose(t *tes
 	}
 }
 
-func TestS3ServerListDropsKeysOutsidePluginNamespace(t *testing.T) {
+func TestS3ServerListDropsKeysOutsideAppNamespace(t *testing.T) {
 	t.Parallel()
 
 	srv := NewServer(listResultS3Client{
@@ -378,7 +378,7 @@ func TestS3ServerListDropsKeysOutsidePluginNamespace(t *testing.T) {
 	}
 }
 
-func TestS3ServerRejectsForeignMetadataOutsidePluginNamespace(t *testing.T) {
+func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 	t.Parallel()
 
 	t.Run("head", func(t *testing.T) {
@@ -466,7 +466,7 @@ func TestS3ServerRejectsForeignMetadataOutsidePluginNamespace(t *testing.T) {
 	})
 }
 
-func TestS3ServerRejectsPluginScopedPresign(t *testing.T) {
+func TestS3ServerRejectsAppScopedPresign(t *testing.T) {
 	t.Parallel()
 
 	called := false
@@ -488,7 +488,7 @@ func TestS3ServerRejectsPluginScopedPresign(t *testing.T) {
 	}
 }
 
-func TestS3ServerPluginScopedPresignReturnsHostedObjectAccessURL(t *testing.T) {
+func TestS3ServerAppScopedPresignReturnsHostedObjectAccessURL(t *testing.T) {
 	t.Parallel()
 
 	manager, err := NewObjectAccessURLManager([]byte("0123456789abcdef0123456789abcdef"), "https://gestalt.example.test")
@@ -538,8 +538,8 @@ func TestS3ServerPluginScopedPresignReturnsHostedObjectAccessURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveToken: %v", err)
 	}
-	if target.PluginName != "roadmap" || target.BindingName != "docs" {
-		t.Fatalf("target scope = %s/%s, want roadmap/docs", target.PluginName, target.BindingName)
+	if target.AppName != "roadmap" || target.BindingName != "docs" {
+		t.Fatalf("target scope = %s/%s, want roadmap/docs", target.AppName, target.BindingName)
 	}
 	if target.Ref != (s3store.ObjectRef{Bucket: "docs", Key: "plans/q2.txt"}) {
 		t.Fatalf("target ref = %#v, want docs/plans/q2.txt", target.Ref)

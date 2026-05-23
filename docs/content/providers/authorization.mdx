@@ -32,7 +32,7 @@ A resource is what the subject wants to access, e.g.:
 ### Relations
 
 A relation is a named link from a subject to a resource. For example, `triage`
-on a plugin grants triage membership; `admin` on a policy grants admin
+on an app grants triage membership; `admin` on a policy grants admin
 membership.
 
 ### Relationship Tuples
@@ -46,8 +46,8 @@ A tuple stores one relation:
 Examples:
 
 ```
-user:alice viewer plugin_static:github
-user:bob editor plugin_static:github
+user:alice viewer app_static:github
+user:bob editor app_static:github
 ```
 
 The configured authorization provider stores these tuples and uses them as the
@@ -72,26 +72,26 @@ If static and dynamic grants both match the same subject and resource, static
 wins. For example, if config grants Alice `admin` on the admin policy, Gestalt
 does not ask the provider for Alice's admin role.
 
-## Grant Dynamic Plugin Access
+## Grant Dynamic App Access
 
-Use the `gestalt authorization` CLI to grant plugin access after the server is
-running. Built-in Gestalt admins can manage every plugin. Plugin admins can
-manage members for plugins they administer.
+Use the `gestalt authorization` CLI to grant app access after the server is
+running. Built-in Gestalt admins can manage every app. App admins can
+manage members for apps they administer.
 
 ```sh
-gestalt authorization plugins list
-gestalt authorization plugins members list github
+gestalt authorization apps list
+gestalt authorization apps members list github
 
-gestalt authorization plugins members set github \
+gestalt authorization apps members set github \
   --email operator@example.com \
   --role viewer
 
-gestalt authorization plugins members set github \
+gestalt authorization apps members set github \
   --subject-id service_account:release-bot \
   --role editor
 ```
 
-Create service account subjects first, then grant those subjects plugin roles:
+Create service account subjects first, then grant those subjects app roles:
 
 ```sh
 gestalt authorization subjects create release-bot \
@@ -107,7 +107,7 @@ the management base URL for these admin commands.
 
 Gestalt checks authorization before serving protected surfaces:
 
-- Plugin and operation invocation
+- App and operation invocation
 - Admin APIs and UI routes
 - External identity assumption
 - Managed subjects and [service accounts](/service-accounts)

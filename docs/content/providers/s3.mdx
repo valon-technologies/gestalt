@@ -2,9 +2,9 @@ import { Tabs } from 'nextra/components'
 
 # S3
 
-S3 providers expose portable object storage to executable plugins. Gestalt
+S3 providers expose portable object storage to executable apps. Gestalt
 models the de facto S3-compatible object API rather than a filesystem API, so
-the same plugin code can target AWS S3, MinIO, GCS XML interoperability mode,
+the same app code can target AWS S3, MinIO, GCS XML interoperability mode,
 Cloudflare R2, and other compatible backends.
 
 ## Using `S3` from a plugin
@@ -387,7 +387,7 @@ interface to the underlying gRPC service:
 `gestalt.S3Provider` adds runtime lifecycle wiring and a `serve()` helper for
 languages that expose the server-side S3 provider surface.
 
-### Plugin access
+### App access
 
 Plugin-side S3 usage is documented in
 [Using `S3` from a plugin](/providers/s3#using-s3-from-a-plugin). Provider
@@ -407,9 +407,9 @@ providers:
         endpoint: http://127.0.0.1:9000
         region: us-east-1
 
-plugins:
+apps:
   media:
-    source: ./plugins/media/manifest.yaml
+    source: ./apps/media/manifest.yaml
     s3:
       - assets
 ```

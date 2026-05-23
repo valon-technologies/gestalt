@@ -39,9 +39,9 @@ server:
   runtime:
     defaultProvider: modal
 
-plugins:
+apps:
   support:
-    source: ./plugins/support/manifest.yaml
+    source: ./apps/support/manifest.yaml
     runtime:
       image: ghcr.io/example/support-plugin:2026-04-21
       template: python-dev
@@ -62,10 +62,10 @@ provider package at the image working directory and preserve the release package
 layout.
 
 ```yaml
-plugins:
+apps:
   support:
     source:
-      package: github.com/valon-technologies/gestalt-providers/plugins/httpbin
+      package: github.com/valon-technologies/gestalt-providers/apps/httpbin
       version: 0.0.1-alpha.1
     runtime:
       provider: modal
@@ -113,5 +113,5 @@ implementing.
 
 For the config fields, see [Configuration](/reference/configuration) and
 [Config File](/reference/config-file#runtime). For plugin-side opt-in, see
-[Plugin](/providers/plugins). For the execution boundary, see
+[Plugin](/providers/apps). For the execution boundary, see
 [Security](/security).

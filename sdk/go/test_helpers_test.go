@@ -15,15 +15,15 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
-func newIntegrationProviderClient[P any, PP interface {
+func newAppProviderClient[P any, PP interface {
 	*P
 	gestalt.Provider
-}](t *testing.T, prov PP, router *gestalt.Router[P]) proto.IntegrationProviderClient {
+}](t *testing.T, prov PP, router *gestalt.Router[P]) proto.AppProviderClient {
 	t.Helper()
 
 	lis := bufconn.Listen(1024 * 1024)
 	srv := grpc.NewServer()
-	proto.RegisterIntegrationProviderServer(srv, gestalt.NewProviderServer(prov, router))
+	proto.RegisterAppProviderServer(srv, gestalt.NewProviderServer(prov, router))
 
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
@@ -40,7 +40,7 @@ func newIntegrationProviderClient[P any, PP interface {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	return proto.NewIntegrationProviderClient(conn)
+	return proto.NewAppProviderClient(conn)
 }
 
 func newUnixConn(t *testing.T, socket string) *grpc.ClientConn {

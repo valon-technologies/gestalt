@@ -143,7 +143,7 @@ Release workflows use scoped tags:
 - Python SDK: `sdk/python/v<version>`
 - Rust SDK: `sdk/rust/v<version>`
 - TypeScript SDK: `sdk/typescript/v<version>`
-- Plugins: `plugin/<plugin>/v<version>`
+- Apps: `plugin/<plugin>/v<version>`
 
 Keep the bare semantic version aligned across artifacts when they are meant to ship together.
 

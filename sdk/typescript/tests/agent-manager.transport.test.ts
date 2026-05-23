@@ -296,7 +296,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
       ],
       toolRefs: [
         {
-          plugin: "statuspage",
+          app: "statuspage",
           operation: "lookup",
         },
       ],

@@ -81,8 +81,8 @@ func (s *Server) putAdminAuthorizationFragment(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if req.Owner.Kind == "" && strings.HasPrefix(id, "plugin/") {
-		req.Owner = coredata.AuthorizationPluginFragmentOwner(strings.TrimPrefix(id, "plugin/"))
+	if req.Owner.Kind == "" && strings.HasPrefix(id, "app/") {
+		req.Owner = coredata.AuthorizationAppFragmentOwner(strings.TrimPrefix(id, "app/"))
 	}
 	if req.Owner.Kind == "" && id == coredata.AuthorizationFragmentOwnerKindGlobal {
 		req.Owner = coredata.AuthorizationGlobalFragmentOwner()
@@ -151,19 +151,19 @@ func (s *Server) deleteAdminAuthorizationFragment(w http.ResponseWriter, r *http
 
 func (s *Server) ensureAuthorizationFragmentWriteAccess(w http.ResponseWriter, r *http.Request, owner coredata.AuthorizationFragmentOwner) bool {
 	owner.Kind = strings.TrimSpace(owner.Kind)
-	owner.Plugin = strings.TrimSpace(owner.Plugin)
+	owner.App = strings.TrimSpace(owner.App)
 	access := invocation.AccessContextFromContext(r.Context())
 	if s.adminRoleCanMutate(access.Role) {
 		return true
 	}
-	if owner.Kind == coredata.AuthorizationFragmentOwnerKindPlugin && owner.Plugin != "" {
+	if owner.Kind == coredata.AuthorizationFragmentOwnerKindApp && owner.App != "" {
 		p := principal.FromContext(r.Context())
-		pluginAccess, allowed := s.authorizer.ResolveAccess(r.Context(), p, owner.Plugin)
+		pluginAccess, allowed := s.authorizer.ResolveAccess(r.Context(), p, owner.App)
 		if allowed && adminAuthorizationPluginRoleCanMutate(pluginAccess.Role) {
 			return true
 		}
 	}
-	writeError(w, http.StatusForbidden, "authorization fragment changes require admin access or plugin admin access")
+	writeError(w, http.StatusForbidden, "authorization fragment changes require admin access or app admin access")
 	return false
 }
 
@@ -266,8 +266,8 @@ func (s *Server) auditAuthorizationFragmentMutation(ctx context.Context, operati
 	if fragment != nil {
 		entry.TargetKind = "authorization_dynamic_fragment"
 		entry.TargetID = fragment.ID
-		if fragment.Owner.Kind == coredata.AuthorizationFragmentOwnerKindPlugin {
-			entry.Provider = fragment.Owner.Plugin
+		if fragment.Owner.Kind == coredata.AuthorizationFragmentOwnerKindApp {
+			entry.Provider = fragment.Owner.App
 		}
 	}
 	if p := principal.FromContext(ctx); p != nil {
@@ -286,12 +286,12 @@ func authorizationDynamicFragmentRelationshipFromProvider(rel *core.Relationship
 	}
 	resource := rel.GetResource()
 	switch resource.GetType() {
-	case authorization.ProviderResourceTypePluginDynamic:
-		plugin := strings.TrimSpace(resource.GetId())
-		if plugin == "" {
+	case authorization.ProviderResourceTypeAppDynamic:
+		app := strings.TrimSpace(resource.GetId())
+		if app == "" {
 			return coredata.AuthorizationDynamicFragmentRelationship{}, coredata.AuthorizationFragmentOwner{}, false
 		}
-		return authorizationDynamicFragmentRelationshipFromCore(rel), coredata.AuthorizationPluginFragmentOwner(plugin), true
+		return authorizationDynamicFragmentRelationshipFromCore(rel), coredata.AuthorizationAppFragmentOwner(app), true
 	case authorization.ProviderResourceTypeAdminDynamic:
 		if strings.TrimSpace(resource.GetId()) != authorization.ProviderResourceIDAdminDynamicGlobal {
 			return coredata.AuthorizationDynamicFragmentRelationship{}, coredata.AuthorizationFragmentOwner{}, false
@@ -365,11 +365,11 @@ func coredataFragmentID(owner coredata.AuthorizationFragmentOwner) string {
 	switch strings.TrimSpace(owner.Kind) {
 	case coredata.AuthorizationFragmentOwnerKindGlobal:
 		return coredata.AuthorizationFragmentOwnerKindGlobal
-	case coredata.AuthorizationFragmentOwnerKindPlugin:
-		if strings.TrimSpace(owner.Plugin) == "" {
+	case coredata.AuthorizationFragmentOwnerKindApp:
+		if strings.TrimSpace(owner.App) == "" {
 			return ""
 		}
-		return "plugin/" + strings.TrimSpace(owner.Plugin)
+		return "app/" + strings.TrimSpace(owner.App)
 	default:
 		return ""
 	}
@@ -380,8 +380,8 @@ func authorizationFragmentOwnerFromID(id string) coredata.AuthorizationFragmentO
 	if id == coredata.AuthorizationFragmentOwnerKindGlobal {
 		return coredata.AuthorizationGlobalFragmentOwner()
 	}
-	if strings.HasPrefix(id, "plugin/") {
-		return coredata.AuthorizationPluginFragmentOwner(strings.TrimSpace(strings.TrimPrefix(id, "plugin/")))
+	if strings.HasPrefix(id, "app/") {
+		return coredata.AuthorizationAppFragmentOwner(strings.TrimSpace(strings.TrimPrefix(id, "app/")))
 	}
 	return coredata.AuthorizationFragmentOwner{}
 }

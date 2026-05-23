@@ -101,12 +101,12 @@ func (s *Server) normalizeAPITokenPermissions(values []core.AccessPermission) ([
 	}
 	out := make([]core.AccessPermission, 0, len(values))
 	for i, value := range values {
-		plugin := strings.TrimSpace(value.Plugin)
-		if plugin == "" {
-			return nil, fmt.Errorf("permissions[%d].plugin is required", i)
+		app := strings.TrimSpace(value.App)
+		if app == "" {
+			return nil, fmt.Errorf("permissions[%d].app is required", i)
 		}
-		if _, err := s.providers.Get(plugin); err != nil {
-			return nil, fmt.Errorf("unknown permission plugin %q", plugin)
+		if _, err := s.providers.Get(app); err != nil {
+			return nil, fmt.Errorf("unknown permission app %q", app)
 		}
 		operations, err := normalizeAPITokenPermissionNames(fmt.Sprintf("permissions[%d].operations", i), value.Operations, nil)
 		if err != nil {
@@ -119,7 +119,7 @@ func (s *Server) normalizeAPITokenPermissions(values []core.AccessPermission) ([
 			return nil, err
 		}
 		out = append(out, core.AccessPermission{
-			Plugin:     plugin,
+			App:        app,
 			Operations: operations,
 			Actions:    actions,
 		})
@@ -245,12 +245,12 @@ func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "revoked", "count": count})
 }
 
-func (s *Server) connectionInfosForPlugin(integration string, plugin *config.ProviderEntry, instances []instanceInfo, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo, defaultConnectionParams map[string]connectionParamInfo, p *principal.Principal) []connectionDefInfo {
-	if plugin == nil {
+func (s *Server) connectionInfosForPlugin(integration string, app *config.ProviderEntry, instances []instanceInfo, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo, defaultConnectionParams map[string]connectionParamInfo, p *principal.Principal) []connectionDefInfo {
+	if app == nil {
 		return []connectionDefInfo{}
 	}
-	manifestSpec := plugin.ManifestSpec()
-	plan, err := config.BuildStaticConnectionPlan(plugin, manifestSpec)
+	manifestSpec := app.ManifestSpec()
+	plan, err := config.BuildStaticConnectionPlan(app, manifestSpec)
 	if err != nil {
 		return []connectionDefInfo{}
 	}
@@ -261,10 +261,10 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 		if !ok || shouldHidePassiveNamedConnection(plan, name, conn, integrationAuthTypes) {
 			continue
 		}
-		if name == config.PluginConnectionName {
-			conn = displayPluginConnectionDef(plugin, manifestSpec, conn)
+		if name == config.AppConnectionName {
+			conn = displayAppConnectionDef(app, manifestSpec, conn)
 		}
-		if info, ok := s.connectionInfoFromAuth(integration, name, userFacingConnectionName(name), name, conn, instances, integrationAuthTypes, defaultCredentialFields, defaultConnectionParams, name != config.PluginConnectionName, p); ok {
+		if info, ok := s.connectionInfoFromAuth(integration, name, userFacingConnectionName(name), name, conn, instances, integrationAuthTypes, defaultCredentialFields, defaultConnectionParams, name != config.AppConnectionName, p); ok {
 			infos = append(infos, info)
 		}
 	}
@@ -272,8 +272,8 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 	return infos
 }
 
-func displayPluginConnectionDef(plugin *config.ProviderEntry, manifestSpec *providermanifestv1.Spec, conn config.ConnectionDef) config.ConnectionDef {
-	if plugin == nil || manifestSpec == nil || manifestSpec.IsManifestBacked() {
+func displayAppConnectionDef(app *config.ProviderEntry, manifestSpec *providermanifestv1.Spec, conn config.ConnectionDef) config.ConnectionDef {
+	if app == nil || manifestSpec == nil || manifestSpec.IsManifestBacked() {
 		return conn
 	}
 	def := manifestSpec.DefaultConnectionDef()
@@ -285,8 +285,8 @@ func displayPluginConnectionDef(plugin *config.ProviderEntry, manifestSpec *prov
 	if def.Auth != nil {
 		config.MergeConnectionAuth(&merged.Auth, config.ManifestAuthToConnectionAuthDef(def.Auth))
 	}
-	if plugin.Auth != nil {
-		config.MergeConnectionAuth(&merged.Auth, *plugin.Auth)
+	if app.Auth != nil {
+		config.MergeConnectionAuth(&merged.Auth, *app.Auth)
 	}
 	if len(merged.Auth.Credentials) == 0 {
 		return conn
@@ -296,8 +296,8 @@ func displayPluginConnectionDef(plugin *config.ProviderEntry, manifestSpec *prov
 }
 
 func userFacingConnectionName(name string) string {
-	if name == config.PluginConnectionName {
-		return config.PluginConnectionAlias
+	if name == config.AppConnectionName {
+		return config.AppConnectionAlias
 	}
 	return name
 }
@@ -395,14 +395,14 @@ func (s *Server) providerConnectionInfo(integration string, prov core.Provider, 
 	conn := config.ConnectionDef{
 		Mode: providermanifestv1.ConnectionMode(core.NormalizeConnectionMode(prov.ConnectionMode())),
 	}
-	return s.connectionInfoFromAuth(integration, config.PluginConnectionName, config.PluginConnectionAlias, "", conn, instances, integrationAuthTypes, defaultCredentialFields, defaultConnectionParams, true, p)
+	return s.connectionInfoFromAuth(integration, config.AppConnectionName, config.AppConnectionAlias, "", conn, instances, integrationAuthTypes, defaultCredentialFields, defaultConnectionParams, true, p)
 }
 
 func (s *Server) connectionInfoFromAuth(integration, _ string, name, instanceConnection string, conn config.ConnectionDef, instances []instanceInfo, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo, defaultConnectionParams map[string]connectionParamInfo, includeWithoutAuth bool, p *principal.Principal) (connectionDefInfo, bool) {
 	mode := config.ConnectionModeForConnection(conn)
 	connectionInstances := groupInstancesForConnection(instances, instanceConnection)
 	connectionParams := connectionParamInfosFromConnection(conn)
-	if len(connectionParams) == 0 && config.ResolveConnectionAlias(name) == config.PluginConnectionName {
+	if len(connectionParams) == 0 && config.ResolveConnectionAlias(name) == config.AppConnectionName {
 		connectionParams = cloneConnectionParamInfos(defaultConnectionParams)
 	}
 	authTypes := connectionAuthTypes(conn.Auth, integrationAuthTypes)

@@ -43,7 +43,7 @@ func ServeProvider[P any, PP interface {
 	}
 	ctx = withProviderCloser(ctx, provider)
 	return serveProvider(ctx, func(srv *grpc.Server) {
-		proto.RegisterIntegrationProviderServer(srv, NewProviderServer(provider, router))
+		proto.RegisterAppProviderServer(srv, NewProviderServer(provider, router))
 	})
 }
 
@@ -83,7 +83,7 @@ func serveProvider(ctx context.Context, register func(*grpc.Server)) error {
 
 	lis, err := net.Listen("unix", socket)
 	if err != nil {
-		return fmt.Errorf("listen on plugin socket %q: %w", socket, err)
+		return fmt.Errorf("listen on app socket %q: %w", socket, err)
 	}
 	defer func() {
 		_ = lis.Close()
