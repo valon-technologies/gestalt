@@ -2,6 +2,7 @@ package workflowwire
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
@@ -77,6 +78,28 @@ func TestParseStepsRejectsForwardStepOutputRef(t *testing.T) {
 	}
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatalf("ParseSteps() error = %v, want ErrInvalid", err)
+	}
+}
+
+func TestParseStepsRejectsEmptyStepID(t *testing.T) {
+	t.Parallel()
+
+	_, err := ParseSteps([]any{
+		map[string]any{
+			"app": map[string]any{
+				"name":      "github",
+				"operation": "createIssue",
+			},
+		},
+	}, "target.steps")
+	if err == nil {
+		t.Fatal("ParseSteps() succeeded, want error")
+	}
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("ParseSteps() error = %v, want ErrInvalid", err)
+	}
+	if !strings.Contains(err.Error(), "target.steps[0].id is required") {
+		t.Fatalf("ParseSteps() error = %v, want step id required message", err)
 	}
 }
 

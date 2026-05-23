@@ -877,22 +877,6 @@ func workflowSystemToolTargetFromValue(value any) (coreworkflow.Target, error) {
 	return target, nil
 }
 
-func workflowSystemToolStepsFromValue(value any) ([]coreworkflow.Step, error) {
-	steps, err := workflowwire.ParseSteps(value, "target.steps")
-	if err != nil {
-		return nil, workflowSystemToolWireError(err)
-	}
-	return steps, nil
-}
-
-func workflowSystemToolStepWhenFromValue(value any, path string) (*coreworkflow.StepWhen, error) {
-	when, err := workflowwire.ParseStepWhen(value, path)
-	if err != nil {
-		return nil, workflowSystemToolWireError(err)
-	}
-	return when, nil
-}
-
 func workflowSystemToolInheritAgentToolRefs(req agentSystemToolExecutionRequest, target *coreworkflow.Target) {
 	if target == nil {
 		return
