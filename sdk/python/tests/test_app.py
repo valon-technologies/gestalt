@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from dataclasses import dataclass
 
-from gestalt import OK, Access, Credential, Error, Plugin, Request, Response, Subject
+from gestalt import OK, Access, Credential, Error, App, Request, Response, Subject
 
 
 class PluginOperationTests(unittest.TestCase):
@@ -12,7 +12,7 @@ class PluginOperationTests(unittest.TestCase):
 
     def test_register_and_execute_operation(self) -> None:
         """Registering an operation and executing it should return the handler's result."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         @app.operation
         def greet() -> dict[str, str]:
@@ -24,14 +24,14 @@ class PluginOperationTests(unittest.TestCase):
 
     def test_execute_missing_operation(self) -> None:
         """Executing a non-existent operation should return 404."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         result = app.execute("missing", {}, Request())
         self.assertEqual(result.status, 404)
 
     def test_operation_with_input(self) -> None:
         """Operations with typed input should decode params correctly."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         @dataclass
         class Input:
@@ -49,7 +49,7 @@ class PluginOperationTests(unittest.TestCase):
 
     def test_operation_with_response_wrapper(self) -> None:
         """Operations returning Response should preserve status and body."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         @app.operation
         def created() -> Response[dict[str, str]]:
@@ -61,7 +61,7 @@ class PluginOperationTests(unittest.TestCase):
 
     def test_ok_helper(self) -> None:
         """The OK() helper should produce status 200."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         @app.operation
         def ok_op() -> Response[str]:
@@ -72,7 +72,7 @@ class PluginOperationTests(unittest.TestCase):
 
     def test_operation_with_custom_id(self) -> None:
         """Operations can specify a custom ID separate from the function name."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         @app.operation(id="custom-id", method="GET")
         def handler() -> str:
@@ -83,7 +83,7 @@ class PluginOperationTests(unittest.TestCase):
 
     def test_duplicate_operation_id_raises(self) -> None:
         """Registering two operations with the same ID should raise."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         @app.operation(id="dup")
         def first() -> str:
@@ -97,7 +97,7 @@ class PluginOperationTests(unittest.TestCase):
 
     def test_handler_receives_request(self) -> None:
         """Operations that take Request should receive it with token and params."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         @app.operation
         def echo(req: Request) -> dict[str, str]:
@@ -131,7 +131,7 @@ class PluginOperationTests(unittest.TestCase):
         self.assertEqual(body["invocation_token"], "invoke-123")
 
     def test_async_handler(self) -> None:
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         @app.operation
         async def fetch() -> dict[str, str]:
@@ -143,7 +143,7 @@ class PluginOperationTests(unittest.TestCase):
 
     def test_handler_exception_returns_500(self) -> None:
         """Handler exceptions should preserve explicit statuses and default to 500 otherwise."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         @app.operation
         def broken() -> None:
@@ -167,7 +167,7 @@ class PluginConfigureTests(unittest.TestCase):
 
     def test_configure_handler_called(self) -> None:
         """The configure handler should be called with name and config."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
         calls: list[tuple[str, dict[str, str]]] = []
 
         @app.configure
@@ -181,7 +181,7 @@ class PluginConfigureTests(unittest.TestCase):
 
     def test_no_configure_handler_is_noop(self) -> None:
         """Without a configure handler, configure_provider should be a no-op."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
         app.configure_provider("my-provider", {"key": "value"})
 
 
@@ -190,7 +190,7 @@ class PluginCatalogTests(unittest.TestCase):
 
     def test_catalog_dict(self) -> None:
         """catalog_dict should return the app name and operation list."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         @app.operation(method="GET", description="Say hello", read_only=True)
         def greet() -> str:
@@ -205,7 +205,7 @@ class PluginCatalogTests(unittest.TestCase):
         self.assertTrue(op.get("read_only", op.get("readOnly", False)))
 
     def test_catalog_preserves_allowed_roles(self) -> None:
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         @app.operation(method="GET", allowed_roles=["viewer", "admin", "viewer"])
         def greet() -> str:
@@ -221,7 +221,7 @@ class PluginCatalogTests(unittest.TestCase):
 
     def test_write_catalog(self) -> None:
         """write_catalog should produce a file on disk."""
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
 
         @app.operation
         def noop() -> str:
@@ -239,7 +239,7 @@ class AppNameTests(unittest.TestCase):
 
     def test_slug_normalization(self) -> None:
         """App names should be slugified."""
-        app = Plugin("My Cool Plugin!")
+        app = App("My Cool Plugin!")
         self.assertEqual(app.name, "My-Cool-Plugin")
 
     def test_from_manifest_with_base_dir(self) -> None:
@@ -248,7 +248,7 @@ class AppNameTests(unittest.TestCase):
             manifest = pathlib.Path(tmpdir) / "manifest.yaml"
             manifest.write_text('display_name: "Test Plugin"\n', encoding="utf-8")
 
-            app = Plugin.from_manifest(
+            app = App.from_manifest(
                 "manifest.yaml", base_dir=pathlib.Path(tmpdir)
             )
             self.assertEqual(app.name, "Test-Plugin")

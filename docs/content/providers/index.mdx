@@ -222,7 +222,7 @@ lockfile:
 
 ```sh
 gestaltd provider list --config ./gestalt.yaml
-gestaltd provider list --config ./gestalt.yaml --kind plugin
+gestaltd provider list --config ./gestalt.yaml --kind app
 ```
 
 Run `gestaltd lock --check --config ./gestalt.yaml` in CI when you need a
@@ -256,7 +256,7 @@ more than one provider kind, pass `--kind`.
 Remove one entry from config and update the lockfile:
 
 ```sh
-gestaltd provider remove github --config ./gestalt.yaml --kind plugin
+gestaltd provider remove github --config ./gestalt.yaml --kind app
 ```
 
 Omit `--kind` only when the name is unique across provider kinds.

@@ -19,10 +19,6 @@ export interface AppInvokeOptions {
   /** Idempotency key forwarded to the target operation. */
   idempotencyKey?: string;
 }
-
-/** @deprecated Use {@link AppInvokeOptions}. */
-export type PluginInvokeOptions = AppInvokeOptions;
-
 /** Grant included when exchanging an invocation token for a child token. */
 export interface AppInvocationGrant {
   /** App name that the child token may invoke. */
@@ -40,10 +36,6 @@ export interface AppGraphQLInvokeOptions extends AppInvokeOptions {
   /** GraphQL variables encoded as a JSON object. */
   variables?: JsonObjectInput;
 }
-
-/** @deprecated Use {@link AppGraphQLInvokeOptions}. */
-export type PluginGraphQLInvokeOptions = AppGraphQLInvokeOptions;
-
 /**
  * Client for invoking sibling app operations through the host.
  *

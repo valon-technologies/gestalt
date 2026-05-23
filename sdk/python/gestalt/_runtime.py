@@ -23,7 +23,7 @@ from . import _s3 as _s3_native
 from . import _telemetry
 from . import _workflow as _workflow_native
 from ._api import Access, Credential, Error, ExternalIdentity, Host, Request, Subject
-from ._app import App, ConnectedToken, Plugin, _module_plugin
+from ._app import App, ConnectedToken, _module_plugin
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
@@ -272,12 +272,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     target = _load_target(runtime_args)
-    if runtime_args.app_name and isinstance(target, Plugin):
+    if runtime_args.app_name and isinstance(target, App):
         target.name = runtime_args.app_name
 
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
     if catalog_path:
-        if not isinstance(target, Plugin):
+        if not isinstance(target, App):
             raise RuntimeError(
                 "catalog export is only supported for integration plugins"
             )
@@ -334,7 +334,7 @@ def _load_target(args: RuntimeArgs) -> App | AppProviderAdapter | AppProvider:
     else:
         target = getattr(module, plugin_target.attribute_name, None)
 
-    if isinstance(target, (Plugin, AppProviderAdapter)):
+    if isinstance(target, (App, AppProviderAdapter)):
         return target
 
     if resolved_kind == ProviderKind.AUTHENTICATION and isinstance(
@@ -427,7 +427,7 @@ def _register_services(
     *, server: Any, servable: App | AppProviderAdapter
 ) -> None:
     _ensure_grpc_runtime()
-    if isinstance(servable, Plugin):
+    if isinstance(servable, App):
         app_pb2_grpc.add_AppProviderServicer_to_server(
             _provider_servicer(plugin=servable),
             server,
@@ -457,7 +457,7 @@ def _servable_target(
     *,
     runtime_kind: ProviderKind | str | None,
 ) -> App | AppProviderAdapter:
-    if isinstance(target, (Plugin, AppProviderAdapter)):
+    if isinstance(target, (App, AppProviderAdapter)):
         return target
 
     kind = _normalized_runtime_kind(runtime_kind)
@@ -1619,7 +1619,7 @@ def _empty_response(value: Any) -> Any:
     return empty_pb2.Empty()
 
 
-def _provider_servicer(*, plugin: Plugin) -> Any:
+def _provider_servicer(*, plugin: App) -> Any:
     _ensure_grpc_runtime()
 
     class ProviderServicer(app_pb2_grpc.AppProviderServicer):

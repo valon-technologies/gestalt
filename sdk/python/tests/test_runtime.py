@@ -43,7 +43,7 @@ from gestalt import (
     MetadataProvider,
     PauseWorkflowProviderEventTriggerRequest,
     PauseWorkflowProviderScheduleRequest,
-    Plugin,
+    App,
     ProviderKind,
     ProviderMetadata,
     Request,
@@ -175,7 +175,7 @@ class ParseRuntimeArgsTests(unittest.TestCase):
 
 class RuntimeServeTransportTests(unittest.TestCase):
     def test_runtime_serve_supports_tcp_provider_sockets(self) -> None:
-        app = Plugin("tcp-runtime")
+        app = App("tcp-runtime")
         plugin = app
 
         @app.operation
@@ -311,7 +311,7 @@ class ManifestNameTests(unittest.TestCase):
             ]
             for manifest_input, expected_name in cases:
                 with self.subTest(manifest_input=str(manifest_input)):
-                    app = Plugin.from_manifest(manifest_input)
+                    app = App.from_manifest(manifest_input)
                     self.assertEqual(app.name, expected_name)
 
 
@@ -334,7 +334,7 @@ class RequestTests(unittest.TestCase):
 
 class MainEntrypointTests(unittest.TestCase):
     def test_writes_catalog_when_env_is_set(self) -> None:
-        app = Plugin("test-plugin")
+        app = App("test-plugin")
         plugin = app
 
         @app.operation
@@ -361,7 +361,7 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(result, 2)
 
     def test_provider_servicer_reports_and_serves_session_catalogs(self) -> None:
-        app = Plugin("source-name")
+        app = App("source-name")
         plugin = app
         configured: list[tuple[str, dict[str, Any]]] = []
 
@@ -699,7 +699,7 @@ class MainEntrypointTests(unittest.TestCase):
         )
 
     def test_provider_servicer_sanitizes_unhandled_execute_exceptions(self) -> None:
-        app = Plugin("source-name")
+        app = App("source-name")
         plugin = app
 
         @app.operation
@@ -716,7 +716,7 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(json.loads(execute_response.body), {"error": "internal error"})
 
     def test_provider_servicer_rejects_missing_session_catalog_support(self) -> None:
-        app = Plugin("source-name")
+        app = App("source-name")
         plugin = app
         servicer = _runtime._provider_servicer(plugin=plugin)
         context = mock.Mock()
@@ -729,7 +729,7 @@ class MainEntrypointTests(unittest.TestCase):
         )
 
     def test_provider_servicer_rejects_missing_post_connect_support(self) -> None:
-        app = Plugin("source-name")
+        app = App("source-name")
         plugin = app
         servicer = _runtime._provider_servicer(plugin=plugin)
         context = mock.Mock()
@@ -742,11 +742,11 @@ class MainEntrypointTests(unittest.TestCase):
         )
 
     def test_provider_servicer_labels_metadata_failures(self) -> None:
-        class BrokenMetadataPlugin(Plugin):
+        class BrokenMetadataApp(App):
             def supports_post_connect(self) -> bool:
                 raise RuntimeError("metadata exploded")
 
-        app = BrokenMetadataPlugin("source-name")
+        app = BrokenMetadataApp("source-name")
         plugin = app
         servicer = _runtime._provider_servicer(plugin=plugin)
         context = AbortContext()
