@@ -128,10 +128,6 @@ export interface AppDefinitionOptions extends ProviderBaseOptions {
   operations: Array<OperationDefinition<any, any>>;
   sessionCatalog?: SessionCatalogHandler;
 }
-
-/** @deprecated Use {@link AppDefinitionOptions}. */
-export type PluginDefinitionOptions = AppDefinitionOptions;
-
 /**
  * Normalizes an app operation definition.
  */

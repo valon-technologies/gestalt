@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ConnectedToken:
-    """Normalized connection payload passed into :meth:`Plugin.post_connect`."""
+    """Normalized connection payload passed into :meth:`App.post_connect`."""
 
     id: str = ""
     subject_id: str = ""
@@ -53,20 +53,20 @@ class ConnectedToken:
     updated_at: dt.datetime | None = None
 
 
-class Plugin:
+class App:
     """Integration app definition and operation registry.
 
-    ``Plugin`` collects operation handlers, optional configuration hooks, and
+    ``App`` collects operation handlers, optional configuration hooks, and
     optional session catalog hooks before handing control to the runtime:
 
     .. code-block:: python
 
-        from gestalt import Model, Plugin
+        from gestalt import Model, App
 
         class SearchInput(Model):
             query: str
 
-        app = Plugin("search")
+        app = App("search")
 
         @app.operation(title="Search")
         def search(params: SearchInput):
@@ -93,7 +93,7 @@ class Plugin:
         path: str | pathlib.Path,
         *,
         base_dir: pathlib.Path | None = None,
-    ) -> "Plugin":
+    ) -> "App":
         """Build an app name from a manifest path."""
 
         manifest_path = pathlib.Path(path)
@@ -358,22 +358,19 @@ class Plugin:
         return self._http_subject_handler
 
 
-App = Plugin
-
-
-class _ModulePluginRegistry:
+class _ModuleAppRegistry:
     def __init__(self) -> None:
-        self._apps: dict[str, Plugin] = {}
+        self._apps: dict[str, App] = {}
 
-    def for_function(self, func: Any) -> "Plugin":
+    def for_function(self, func: Any) -> "App":
         module = sys.modules.get(func.__module__)
         if module is None:
             raise RuntimeError(f"module {func.__module__!r} is not loaded")
         return self.for_module(module)
 
-    def for_module(self, module: types.ModuleType) -> "Plugin":
+    def for_module(self, module: types.ModuleType) -> "App":
         existing_app = getattr(module, "app", None)
-        if isinstance(existing_app, Plugin):
+        if isinstance(existing_app, App):
             if existing_app._module_name is None:
                 existing_app._module_name = module.__name__
             self._apps[module.__name__] = existing_app
@@ -381,15 +378,15 @@ class _ModulePluginRegistry:
 
         app = self._apps.get(module.__name__)
         if app is None:
-            app = Plugin(_module_app_name(module), module_name=module.__name__)
+            app = App(_module_app_name(module), module_name=module.__name__)
             self._apps[module.__name__] = app
 
-        if not isinstance(getattr(module, "app", None), Plugin):
+        if not isinstance(getattr(module, "app", None), App):
             setattr(module, "app", app)
         return app
 
 
-_MODULE_PLUGINS = _ModulePluginRegistry()
+_MODULE_APPS = _ModuleAppRegistry()
 
 
 def operation(
@@ -407,7 +404,7 @@ def operation(
 ) -> Any:
     """Register an operation on the calling module's implicit app.
 
-    This decorator is useful when a module-level ``plugin`` object would be
+    This decorator is useful when a module-level ``app`` object would be
     redundant:
 
     .. code-block:: python
@@ -423,7 +420,7 @@ def operation(
     """
 
     def decorator(handler: Any) -> Any:
-        app = _MODULE_PLUGINS.for_function(handler)
+        app = _MODULE_APPS.for_function(handler)
         return app.operation(
             id=id,
             method=method,
@@ -444,7 +441,7 @@ def session_catalog(func: Any | None = None, /) -> Any:
     """Register a per-request catalog hook on the implicit module app."""
 
     def decorator(handler: Any) -> Any:
-        app = _MODULE_PLUGINS.for_function(handler)
+        app = _MODULE_APPS.for_function(handler)
         return app.session_catalog(handler)
 
     if func is None:
@@ -456,7 +453,7 @@ def post_connect(func: Any | None = None, /) -> Any:
     """Register a connect-time metadata hook on the implicit module app."""
 
     def decorator(handler: Any) -> Any:
-        app = _MODULE_PLUGINS.for_function(handler)
+        app = _MODULE_APPS.for_function(handler)
         return app.post_connect(handler)
 
     if func is None:
@@ -468,7 +465,7 @@ def http_subject(func: Any | None = None, /) -> Any:
     """Register a hosted HTTP subject hook on the implicit module app."""
 
     def decorator(handler: Any) -> Any:
-        app = _MODULE_PLUGINS.for_function(handler)
+        app = _MODULE_APPS.for_function(handler)
         return app.http_subject(handler)
 
     if func is None:
@@ -476,8 +473,8 @@ def http_subject(func: Any | None = None, /) -> Any:
     return decorator(func)
 
 
-def _module_plugin(module: types.ModuleType) -> "Plugin":
-    return _MODULE_PLUGINS.for_module(module)
+def _module_app(module: types.ModuleType) -> "App":
+    return _MODULE_APPS.for_module(module)
 
 
 def _normalize_allowed_roles(allowed_roles: list[str] | None) -> list[str]:

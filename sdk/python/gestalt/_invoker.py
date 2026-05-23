@@ -42,12 +42,12 @@ class AppInvoker:
     def __init__(self, invocation_token: str) -> None:
         trimmed_token = invocation_token.strip()
         if not trimmed_token:
-            raise RuntimeError("plugin invoker: invocation token is not available")
+            raise RuntimeError("app invoker: invocation token is not available")
 
         socket_path = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not socket_path:
             raise RuntimeError(
-                f"plugin invoker: {ENV_HOST_SERVICE_SOCKET} is not set"
+                f"app invoker: {ENV_HOST_SERVICE_SOCKET} is not set"
             )
         relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
 
@@ -106,7 +106,7 @@ class AppInvoker:
 
         trimmed_document = document.strip()
         if not trimmed_document:
-            raise RuntimeError("plugin invoker: graphql document is required")
+            raise RuntimeError("app invoker: graphql document is required")
 
         request = pb.AppInvokeGraphQLRequest(
             invocation_token=self._invocation_token,
@@ -117,7 +117,7 @@ class AppInvoker:
             idempotency_key=idempotency_key.strip(),
         )
         message = _struct_from_dict_optional(
-            variables, preserve_empty=False, path="plugin invoker variables"
+            variables, preserve_empty=False, path="app invoker variables"
         )
         if message is not None:
             request.variables.CopyFrom(message)
@@ -158,7 +158,7 @@ def _struct_from_dict(values: JsonObjectInput | None) -> Any:
         return None
 
     return _struct_from_dict_optional(
-        values, preserve_empty=True, path="plugin invoker params"
+        values, preserve_empty=True, path="app invoker params"
     )
 
 
@@ -236,12 +236,12 @@ def _grant_parts(value: Any) -> tuple[str, list[str], list[str], bool]:
 def _app_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
     target = raw_target.strip()
     if not target:
-        raise RuntimeError("plugin invoker: transport target is required")
+        raise RuntimeError("app invoker: transport target is required")
     if target.startswith("tcp://"):
         address = target[len("tcp://") :].strip()
         if not address:
             raise RuntimeError(
-                f"plugin invoker: tcp target {raw_target!r} is missing host:port"
+                f"app invoker: tcp target {raw_target!r} is missing host:port"
             )
         return _with_app_invoker_relay_token(
             insecure_internal_channel(internal_channel_target("tcp", address)),
@@ -251,7 +251,7 @@ def _app_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
         address = target[len("tls://") :].strip()
         if not address:
             raise RuntimeError(
-                f"plugin invoker: tls target {raw_target!r} is missing host:port"
+                f"app invoker: tls target {raw_target!r} is missing host:port"
             )
         return _with_app_invoker_relay_token(
             secure_internal_channel(internal_channel_target("tls", address)),
@@ -261,7 +261,7 @@ def _app_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
         socket_path = target[len("unix://") :].strip()
         if not socket_path:
             raise RuntimeError(
-                f"plugin invoker: unix target {raw_target!r} is missing a socket path"
+                f"app invoker: unix target {raw_target!r} is missing a socket path"
             )
         return _with_app_invoker_relay_token(
             insecure_internal_channel(internal_channel_target("unix", socket_path)),
@@ -270,7 +270,7 @@ def _app_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
     if "://" in target:
         parsed = _urlparse.urlparse(target)
         raise RuntimeError(
-            f"plugin invoker: unsupported target scheme {parsed.scheme!r}"
+            f"app invoker: unsupported target scheme {parsed.scheme!r}"
         )
     return _with_app_invoker_relay_token(
         insecure_internal_channel(internal_channel_target("unix", target)),

@@ -18,7 +18,7 @@ class SearchInput(gestalt.Model):
     query: str = gestalt.field(description="Search query")
 
 
-plugin = gestalt.Plugin("search")
+app = gestalt.App("search")
 
 
 @app.operation(method="GET", title="Search")
@@ -66,7 +66,7 @@ GESTALT_BUILD_CACHE_DIR="$PWD/.gestalt-build-cache" \
 
 The top-level `gestalt` package exposes the supported authoring API:
 
-- `Model`, `field`, `Plugin`, `operation`, and `Request` for integration
+- `Model`, `field`, `App`, `operation`, and `Request` for integration
   providers.
 - `AuthenticationProvider`, `CacheProvider`, `S3Provider`, `SecretsProvider`,
   `WorkflowProvider`, `AgentProvider`, and `AppRuntimeProvider` for

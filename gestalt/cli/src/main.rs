@@ -32,11 +32,9 @@ fn run() -> anyhow::Result<()> {
             ConfigCommands::Unset { key } => commands::config::unset(&key),
             ConfigCommands::List => commands::config::list(format),
         },
-        Commands::App { command } => dispatch_plugin_command(command, url, format),
-        Commands::Invoke(args) => dispatch_plugin_command(AppCommands::Invoke(args), url, format),
-        Commands::Describe(args) => {
-            dispatch_plugin_command(AppCommands::Describe(args), url, format)
-        }
+        Commands::App { command } => dispatch_app_command(command, url, format),
+        Commands::Invoke(args) => dispatch_app_command(AppCommands::Invoke(args), url, format),
+        Commands::Describe(args) => dispatch_app_command(AppCommands::Describe(args), url, format),
         Commands::Tokens { command } => {
             let client = ApiClient::from_env(url)?;
             match command {
@@ -237,7 +235,7 @@ fn dispatch_agent_command(
     }
 }
 
-fn dispatch_plugin_command(
+fn dispatch_app_command(
     command: AppCommands,
     url: Option<&str>,
     format: gestalt::output::Format,

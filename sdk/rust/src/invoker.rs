@@ -28,7 +28,7 @@ const PLUGIN_INVOKER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-to
 /// Errors returned by [`AppInvoker`].
 pub enum AppInvokerError {
     /// The invocation token was empty.
-    #[error("plugin invoker: invocation token is not available")]
+    #[error("app invoker: invocation token is not available")]
     MissingInvocationToken,
     /// The host-service transport could not be created.
     #[error("{0}")]
@@ -158,7 +158,7 @@ impl AppInvoker {
 
         let status = u16::try_from(response.status).map_err(|_| {
             AppInvokerError::Protocol(format!(
-                "plugin invoker: invalid response status {}",
+                "app invoker: invalid response status {}",
                 response.status
             ))
         })?;
@@ -183,7 +183,7 @@ impl AppInvoker {
         let document = document.trim();
         if document.is_empty() {
             return Err(AppInvokerError::Protocol(
-                "plugin invoker: graphql document is required".to_string(),
+                "app invoker: graphql document is required".to_string(),
             ));
         }
 
@@ -215,7 +215,7 @@ impl AppInvoker {
 
         let status = u16::try_from(response.status).map_err(|_| {
             AppInvokerError::Protocol(format!(
-                "plugin invoker: invalid response status {}",
+                "app invoker: invalid response status {}",
                 response.status
             ))
         })?;
@@ -260,14 +260,14 @@ fn parse_app_invoker_target(raw_target: &str) -> Result<AppInvokerTarget, AppInv
     let target = raw_target.trim();
     if target.is_empty() {
         return Err(AppInvokerError::Env(
-            "plugin invoker: transport target is required".to_string(),
+            "app invoker: transport target is required".to_string(),
         ));
     }
     if let Some(address) = target.strip_prefix("tcp://") {
         let address = address.trim();
         if address.is_empty() {
             return Err(AppInvokerError::Env(format!(
-                "plugin invoker: tcp target {raw_target:?} is missing host:port"
+                "app invoker: tcp target {raw_target:?} is missing host:port"
             )));
         }
         return Ok(AppInvokerTarget::Tcp(address.to_string()));
@@ -276,7 +276,7 @@ fn parse_app_invoker_target(raw_target: &str) -> Result<AppInvokerTarget, AppInv
         let address = address.trim();
         if address.is_empty() {
             return Err(AppInvokerError::Env(format!(
-                "plugin invoker: tls target {raw_target:?} is missing host:port"
+                "app invoker: tls target {raw_target:?} is missing host:port"
             )));
         }
         return Ok(AppInvokerTarget::Tls(address.to_string()));
@@ -285,7 +285,7 @@ fn parse_app_invoker_target(raw_target: &str) -> Result<AppInvokerTarget, AppInv
         let path = path.trim();
         if path.is_empty() {
             return Err(AppInvokerError::Env(format!(
-                "plugin invoker: unix target {raw_target:?} is missing a socket path"
+                "app invoker: unix target {raw_target:?} is missing a socket path"
             )));
         }
         return Ok(AppInvokerTarget::Unix(path.to_string()));
@@ -293,7 +293,7 @@ fn parse_app_invoker_target(raw_target: &str) -> Result<AppInvokerTarget, AppInv
     if target.contains("://") {
         let scheme = target.split("://").next().unwrap_or_default();
         return Err(AppInvokerError::Env(format!(
-            "plugin invoker: unsupported target scheme {scheme:?}"
+            "app invoker: unsupported target scheme {scheme:?}"
         )));
     }
     Ok(AppInvokerTarget::Unix(target.to_string()))
@@ -340,7 +340,7 @@ fn duration_to_ttl_seconds(ttl: Duration) -> std::result::Result<i64, AppInvoker
     let ttl_seconds = ttl.as_secs().max(1);
     i64::try_from(ttl_seconds).map_err(|_| {
         AppInvokerError::Protocol(
-            "plugin invoker: exchange token ttl exceeds supported range".to_string(),
+            "app invoker: exchange token ttl exceeds supported range".to_string(),
         )
     })
 }
@@ -389,7 +389,7 @@ fn json_to_optional_struct(
     }
     let serde_json::Value::Object(_) = &value else {
         return Err(AppInvokerError::Protocol(format!(
-            "plugin invoker: {field_name} must serialize to a JSON object"
+            "app invoker: {field_name} must serialize to a JSON object"
         )));
     };
 

@@ -19,10 +19,6 @@ export interface AppInvokeOptions {
   /** Idempotency key forwarded to the target operation. */
   idempotencyKey?: string;
 }
-
-/** @deprecated Use {@link AppInvokeOptions}. */
-export type PluginInvokeOptions = AppInvokeOptions;
-
 /** Grant included when exchanging an invocation token for a child token. */
 export interface AppInvocationGrant {
   /** App name that the child token may invoke. */
@@ -40,10 +36,6 @@ export interface AppGraphQLInvokeOptions extends AppInvokeOptions {
   /** GraphQL variables encoded as a JSON object. */
   variables?: JsonObjectInput;
 }
-
-/** @deprecated Use {@link AppGraphQLInvokeOptions}. */
-export type PluginGraphQLInvokeOptions = AppGraphQLInvokeOptions;
-
 /**
  * Client for invoking sibling app operations through the host.
  *
@@ -59,9 +51,9 @@ export class AppInvoker {
   constructor(requestOrToken: Request | string) {
     this.invocationToken = normalizeInvocationToken(requestOrToken);
 
-    const { target, token } = requireHostServiceTarget("plugin invoker");
+    const { target, token } = requireHostServiceTarget("app invoker");
     const transport = createHostServiceGrpcTransport(
-      parseHostServiceTarget("plugin invoker", target),
+      parseHostServiceTarget("app invoker", target),
       hostServiceMetadataInterceptors(token, ""),
     );
     this.client = createClient(AppInvokerService, transport);
@@ -97,7 +89,7 @@ export class AppInvoker {
   ): Promise<OperationResult> {
     const trimmedDocument = document.trim();
     if (!trimmedDocument) {
-      throw new Error("plugin invoker: graphql document is required");
+      throw new Error("app invoker: graphql document is required");
     }
 
     const response = await this.client.invokeGraphQL({
@@ -151,7 +143,7 @@ function normalizeInvocationToken(requestOrToken: Request | string): string {
       : requestOrToken.invocationToken;
   const trimmed = invocationToken.trim();
   if (!trimmed) {
-    throw new Error("plugin invoker: invocation token is not available");
+    throw new Error("app invoker: invocation token is not available");
   }
   return trimmed;
 }
