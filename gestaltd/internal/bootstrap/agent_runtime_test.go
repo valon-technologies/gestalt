@@ -2840,7 +2840,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 				Title:       "Sync roadmap",
 				Description: "Sync roadmap tasks",
 				InputSchema: json.RawMessage(`{"type":"object","properties":{"taskId":{"type":"string"}}}`),
-				Annotations: core.CapabilityAnnotations{
+				Annotations: catalog.CapabilityAnnotations{
 					ReadOnlyHint: &readOnly,
 				},
 			},

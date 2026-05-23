@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
 
@@ -91,8 +90,8 @@ type topLevelInputSchema struct {
 }
 
 // AnnotationsFromMethod derives MCP operation annotations from an HTTP method.
-func AnnotationsFromMethod(method string) core.CapabilityAnnotations {
-	a := core.CapabilityAnnotations{
+func AnnotationsFromMethod(method string) catalog.CapabilityAnnotations {
+	a := catalog.CapabilityAnnotations{
 		OpenWorldHint: boolPtr(true),
 	}
 	switch strings.ToUpper(method) {
@@ -119,7 +118,7 @@ func CompileSchemas(c *catalog.Catalog) {
 		if len(op.Parameters) == 0 {
 			op.Parameters = parametersFromInputSchema(op.InputSchema)
 		}
-		if op.Annotations == (core.CapabilityAnnotations{}) {
+		if op.Annotations == (catalog.CapabilityAnnotations{}) {
 			op.Annotations = AnnotationsFromMethod(op.Method)
 		}
 	}

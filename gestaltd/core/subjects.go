@@ -10,23 +10,6 @@ type Actor struct {
 	AuthSource  string
 }
 
-func (a Actor) IsZero() bool {
-	return a == Actor{}
-}
-
-func ActorFromRunAs(subject *RunAsSubject) Actor {
-	subject = NormalizeRunAsSubject(subject)
-	if subject == nil {
-		return Actor{}
-	}
-	return Actor{
-		SubjectID:   subject.SubjectID,
-		SubjectKind: subject.SubjectKind,
-		DisplayName: subject.DisplayName,
-		AuthSource:  subject.AuthSource,
-	}
-}
-
 // TODO(#1823): Add first-class run-as subject and external-identity grant
 // provisioning instead of relying on opaque subject IDs plus separate tuple
 // seeding.

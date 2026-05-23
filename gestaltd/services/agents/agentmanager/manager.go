@@ -2800,7 +2800,7 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 		SearchText:       agentToolSearchMetadataText(projectedCandidate),
 		InputSchemaJSON:  agentToolInputSchemaJSON(projectedOperation),
 		OutputSchemaJSON: agentToolOutputSchemaJSON(projectedOperation),
-		Annotations:      projectedOperation.Annotations,
+		Annotations:      capabilityAnnotationsFromCatalog(projectedOperation.Annotations),
 		Ref:              ref,
 		Target:           target,
 		Hidden:           !catalog.OperationVisibleByDefault(projectedOperation),
@@ -2847,6 +2847,15 @@ func (m *Manager) listedUnavailableAgentPluginTool(candidate agentToolUnavailabl
 
 func agentToolBoolPtr(value bool) *bool {
 	return &value
+}
+
+func capabilityAnnotationsFromCatalog(value catalog.CapabilityAnnotations) core.CapabilityAnnotations {
+	return core.CapabilityAnnotations{
+		ReadOnlyHint:    value.ReadOnlyHint,
+		IdempotentHint:  value.IdempotentHint,
+		DestructiveHint: value.DestructiveHint,
+		OpenWorldHint:   value.OpenWorldHint,
+	}
 }
 
 func agentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
