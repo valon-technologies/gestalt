@@ -105,7 +105,7 @@ func DecodeClaims(src []string) Grants {
 
 func (g Grants) Allows(operation string) bool {
 	if g == nil {
-		return true
+		return false
 	}
 	_, ok := g[strings.TrimSpace(operation)]
 	return ok

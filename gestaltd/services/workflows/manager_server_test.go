@@ -18,34 +18,43 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func TestManagerServerEmptyWorkflowGrantsDenyWorkflowManagerMethods(t *testing.T) {
+func TestManagerServerMissingOrEmptyWorkflowGrantsDenyWorkflowManagerMethods(t *testing.T) {
 	t.Parallel()
 
-	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-token-test-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	token, err := tokens.MintRootTokenWithWorkflowGrants(
-		principal.WithPrincipal(context.Background(), &principal.Principal{
-			SubjectID: "user:user-123",
-			UserID:    "user-123",
-			Kind:      principal.KindUser,
-			Source:    principal.SourceSession,
-		}),
-		"caller",
-		nil,
-		workflowgrants.Grants{},
-	)
-	if err != nil {
-		t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
-	}
+	for name, grants := range map[string]workflowgrants.Grants{
+		"missing grants": nil,
+		"empty grants":   {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	server := NewProviderServer("caller", nil, tokens)
-	_, err = server.UpsertSchedule(context.Background(), &proto.UpsertWorkflowProviderScheduleRequest{
-		InvocationToken: token,
-	})
-	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("CreateSchedule error = %v, want PermissionDenied", err)
+			tokens, err := NewInvocationTokenManager([]byte("workflow-manager-token-test-secret"))
+			if err != nil {
+				t.Fatalf("NewInvocationTokenManager: %v", err)
+			}
+			token, err := tokens.MintRootTokenWithWorkflowGrants(
+				principal.WithPrincipal(context.Background(), &principal.Principal{
+					SubjectID: "user:user-123",
+					UserID:    "user-123",
+					Kind:      principal.KindUser,
+					Source:    principal.SourceSession,
+				}),
+				"caller",
+				nil,
+				grants,
+			)
+			if err != nil {
+				t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
+			}
+
+			server := NewProviderServer("caller", nil, tokens)
+			_, err = server.UpsertSchedule(context.Background(), &proto.UpsertWorkflowProviderScheduleRequest{
+				InvocationToken: token,
+			})
+			if status.Code(err) != codes.PermissionDenied {
+				t.Fatalf("CreateSchedule error = %v, want PermissionDenied", err)
+			}
+		})
 	}
 }
 

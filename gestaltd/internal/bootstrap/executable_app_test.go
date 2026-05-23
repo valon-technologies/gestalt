@@ -4325,6 +4325,21 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Workflow manager CRUD")
 	manager := newStubWorkflowManager()
+	workflowManagerOperations := []string{
+		workflowgrants.OperationSchedulesCreate,
+		workflowgrants.OperationSchedulesGet,
+		workflowgrants.OperationSchedulesUpdate,
+		workflowgrants.OperationSchedulesDelete,
+		workflowgrants.OperationSchedulesPause,
+		workflowgrants.OperationSchedulesResume,
+		workflowgrants.OperationEventTriggersCreate,
+		workflowgrants.OperationEventTriggersGet,
+		workflowgrants.OperationEventTriggersUpdate,
+		workflowgrants.OperationEventTriggersDelete,
+		workflowgrants.OperationEventTriggersPause,
+		workflowgrants.OperationEventTriggersResume,
+		workflowgrants.OperationEventsPublish,
+	}
 
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{
@@ -4333,6 +4348,11 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Capabilities: &config.AppCapabilitiesConfig{
+					Workflow: &config.AppWorkflowCapabilitiesConfig{
+						Operations: workflowManagerOperations,
+					},
+				},
 			},
 		},
 	}
@@ -7921,6 +7941,14 @@ func TestAppRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testi
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Runtime:              &config.RuntimePlacementConfig{},
+				Capabilities: &config.AppCapabilitiesConfig{
+					Workflow: &config.AppWorkflowCapabilitiesConfig{
+						Operations: []string{
+							workflowgrants.OperationSchedulesCreate,
+							workflowgrants.OperationSchedulesGet,
+						},
+					},
+				},
 			},
 		},
 	}
