@@ -43,8 +43,10 @@ func TestInvocationTokenUsesCallerAppClaim(t *testing.T) {
 	if got := claims["caller_app"]; got != "caller" {
 		t.Fatalf("caller_app claim = %v, want caller", got)
 	}
-	if _, ok := claims["caller_plugin"]; ok {
-		t.Fatal("token should not include legacy caller_plugin claim")
+	for key := range claims {
+		if strings.HasPrefix(key, "caller_") && key != "caller_app" {
+			t.Fatalf("unexpected caller claim %q", key)
+		}
 	}
 }
 

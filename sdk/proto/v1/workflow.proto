@@ -10,13 +10,11 @@ import "v1/app.proto";
 
 message BoundWorkflowTarget {
   reserved 1 to 7;
-  reserved "app_name", "operation", "input", "connection", "instance", "app", "agent";
   repeated WorkflowStep steps = 8;
 }
 
 message WorkflowStep {
   reserved 5, 7, 8, 9;
-  reserved "output_delivery";
   string id = 1;
   map<string, WorkflowValue> inputs = 2;
   WorkflowStepWhen when = 3;
@@ -66,7 +64,6 @@ message WorkflowStepWhen {
 
 message WorkflowValue {
   reserved 7, 8, 10, 11;
-  reserved "signal_metadata", "workflow_context", "event", "schedule";
   oneof kind {
     google.protobuf.Value literal = 1;
     WorkflowObject object = 2;
@@ -213,7 +210,6 @@ message WorkflowAccessPermission {
 
 message WorkflowExecutionReference {
   reserved 9;
-  reserved "target_fingerprint";
 
   string id = 1;
   string provider_name = 2;
