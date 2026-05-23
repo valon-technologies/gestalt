@@ -17,6 +17,7 @@ use crate::commands::agents::fields::{
 use crate::commands::agents::types::{
     AgentInteractionInfo, AgentSessionInfo, AgentTurnDisplayInfo, AgentTurnEventInfo, AgentTurnInfo,
 };
+use crate::commands::agents::wire::is_terminal_turn_status;
 
 const MAX_TRANSCRIPT_ITEMS: usize = 500;
 const TOOL_PREVIEW_MAX_WIDTH: usize = 120;
@@ -296,7 +297,7 @@ impl AgentUiState {
     }
 
     pub(super) fn finish_turn(&mut self, turn: &AgentTurnInfo) {
-        let terminal = matches!(turn.status.as_str(), "succeeded" | "failed" | "canceled");
+        let terminal = is_terminal_turn_status(turn.status.as_str());
         match turn.status.as_str() {
             "succeeded" if !turn.output_text.is_empty() => {
                 if !self.assistant_buffer.is_empty() {

@@ -6,12 +6,14 @@ use crate::api::ApiClient;
 use super::requests::{get_turn_info, list_interactions_info};
 use super::stream::EVENT_POLL_INTERVAL;
 use super::types::{AgentInteractionInfo, AgentTurnInfo};
+use super::wire::{is_live_turn_status, is_terminal_turn_status};
 
 pub(crate) struct TurnLoopContext<'a> {
     pub client: &'a ApiClient,
     pub turn_id: &'a str,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TurnLoopOutcome {
     Continue,
     Cancelled,
@@ -39,14 +41,18 @@ pub(crate) fn run_turn_status_loop<S: TurnDriverSink>(
         }
         let latest = get_turn_info(ctx.client, ctx.turn_id)?;
         sink.on_turn_snapshot(&latest)?;
-        match latest.status.as_str() {
-            "waiting_for_input" => match sink.handle_waiting_for_input(ctx, &latest)? {
+        let status = latest.status.as_str();
+        if status == "waiting_for_input" {
+            match sink.handle_waiting_for_input(ctx, &latest)? {
                 TurnLoopOutcome::Continue => {}
                 TurnLoopOutcome::Cancelled => return Ok(()),
-            },
-            "pending" | "running" => thread::sleep(EVENT_POLL_INTERVAL),
-            "succeeded" | "failed" | "canceled" => return Ok(()),
-            other => bail!("agent turn {} has unsupported status {}", latest.id, other),
+            }
+        } else if is_live_turn_status(status) {
+            thread::sleep(EVENT_POLL_INTERVAL);
+        } else if is_terminal_turn_status(status) {
+            return Ok(());
+        } else {
+            bail!("agent turn {} has unsupported status {}", latest.id, status);
         }
     }
 }

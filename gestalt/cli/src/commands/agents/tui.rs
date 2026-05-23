@@ -29,6 +29,7 @@ mod worker;
 use state::{AgentUiState, ToolDetailMode, TranscriptItem, turn_status_label};
 use worker::{TurnWorker, WorkerCommand, WorkerEvent, spawn_turn_worker};
 
+use super::wire::is_text_input_interaction;
 use super::{
     AgentInteractionInfo, AgentShell, INTERRUPT_CANCEL_REASON, agent_model_lines,
     agent_session_lines, agent_tui_help_lines, cancel_turn_silent, compact_json, display_markdown,
@@ -318,7 +319,7 @@ impl TuiApp {
             area,
         );
 
-        if interaction.interaction_type != "approval" && area.height > 4 {
+        if is_text_input_interaction(&interaction.interaction_type) && area.height > 4 {
             let input_area = Rect {
                 x: area.x + 1,
                 y: area.y + area.height.saturating_sub(3),

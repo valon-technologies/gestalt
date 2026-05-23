@@ -6,6 +6,7 @@ use super::display_markdown;
 use super::types::{
     AgentMessageInfo, AgentMessagePartInfo, AgentTurnDisplayInfo, AgentTurnEventInfo,
 };
+use super::wire::is_private_event_visibility;
 
 pub(crate) fn decode_json<T>(value: Value) -> Result<T>
 where
@@ -40,7 +41,7 @@ pub(crate) fn turn_event_display(event: &AgentTurnEventInfo) -> Option<&AgentTur
     if display.kind.trim().is_empty() {
         return None;
     }
-    if event.visibility == "private" && !known_turn_event_type(&event.event_type) {
+    if is_private_event_visibility(&event.visibility) && !known_turn_event_type(&event.event_type) {
         return None;
     }
     Some(display)
