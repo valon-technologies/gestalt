@@ -23,8 +23,8 @@ asIndexPage: true
 | `gestalt init` | Run the interactive setup wizard. |
 | `gestalt config get\|set\|unset\|list` | Manage the local client config. |
 | `gestalt app list` | List apps from the server. |
-| `gestalt app connect NAME` | Connect a app through OAuth or interactive manual authentication. |
-| `gestalt app disconnect NAME` | Disconnect a plugin, removing stored credentials. |
+| `gestalt app connect NAME` | Connect an app through OAuth or interactive manual authentication. |
+| `gestalt app disconnect NAME` | Disconnect an app, removing stored credentials. |
 | `gestalt app invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt app describe NAME OPERATION` | Show one operation's parameter contract. |
 | `gestalt workflow schedules ...` | Create, list, inspect, update, pause, resume, or delete workflow schedules. |
@@ -93,12 +93,12 @@ gestalt app list
 gestalt app connect notion --connection MCP
 gestalt app describe slack chat.postMessage
 gestalt app invoke slack chat postMessage \
-  --connection app \
+  --connection plugin \
   -p channel=C123 \
   -p text='hello'
 gestalt workflow schedules create \
   --cron "0 */6 * * *" \
-  --plugin github \
+  --app github \
   --operation issues.list \
   -p owner=valon-technologies \
   -p repo=gestalt
@@ -106,7 +106,7 @@ gestalt workflow triggers create \
   --type roadmap.item.updated \
   --source roadmap \
   --subject item \
-  --plugin slack \
+  --app slack \
   --operation chat.postMessage \
   -p channel=C123 \
   -p text='Roadmap item updated'
@@ -116,7 +116,7 @@ gestalt workflow events publish \
   --subject item \
   -p id=item-1 \
   -e traceId=trace-1
-gestalt workflow runs list --plugin github --status failed
+gestalt workflow runs list --app github --status failed
 gestalt tokens create --name automation
 ```
 
@@ -129,12 +129,12 @@ workflow runs.
 
 ```sh
 gestalt workflow schedules list
-gestalt workflow schedules list --plugin github
+gestalt workflow schedules list --app github
 gestalt workflow schedules get <schedule-id>
 gestalt workflow schedules create \
   --cron "0 */6 * * *" \
   --timezone America/New_York \
-  --plugin github \
+  --app github \
   --operation issues.list \
   --connection default \
   --instance acme-org \
@@ -154,13 +154,13 @@ Use `-p key=value` for strings and `-p key:=json` for structured values. Use
 
 ```sh
 gestalt workflow triggers list
-gestalt workflow triggers list --plugin slack --type roadmap.item.updated
+gestalt workflow triggers list --app slack --type roadmap.item.updated
 gestalt workflow triggers get <trigger-id>
 gestalt workflow triggers create \
   --type roadmap.item.updated \
   --source roadmap \
   --subject item \
-  --plugin slack \
+  --app slack \
   --operation chat.postMessage \
   --connection default \
   -p channel=C123 \
@@ -199,7 +199,7 @@ start the next operations.
 
 ```sh
 gestalt workflow runs list
-gestalt workflow runs list --plugin github --status failed
+gestalt workflow runs list --app github --status failed
 gestalt workflow runs get <run-id>
 gestalt workflow runs cancel <run-id> --reason "operator requested"
 ```
@@ -235,7 +235,7 @@ cat <<'JSON' | gestalt --format json agent turns create session-1 --input -
     {"role": "user", "text": "Summarize the roadmap risk."}
   ],
   "toolRefs": [
-    {"pluginName": "roadmap", "operation": "sync"}
+    {"app": "roadmap", "operation": "sync"}
   ],
   "responseSchema": {
     "type": "object",
@@ -252,7 +252,7 @@ JSON
 `--provider`; `gestalt agent resume [session-id]` resumes either a specific
 session or the most recently updated active session. The first turn in a CLI
 session can include repeated `--system` messages, repeated `--message` prompts,
-and repeated `--tool plugin:operation` additions. During execution, the CLI
+and repeated `--tool app:operation` additions. During execution, the CLI
 parses the event stream, renders assistant/tool/interaction events, cancels the
 active turn on Ctrl-C, and resolves pending interactions inline. TTY sessions
 use a full-screen terminal UI with a persistent transcript, streaming assistant
@@ -270,7 +270,7 @@ prompt-and-print fallback used by scripts and tests; there, end an input line
 with `\` to continue the same user message on the next prompt.
 
 `gestalt agent turns create` is the non-interactive equivalent. It supports
-repeated `--system`, repeated `--message`, repeated `--tool plugin:operation`,
+repeated `--system`, repeated `--message`, repeated `--tool app:operation`,
 `--idempotency-key`, and `--input`. `gestalt agent turns transcript` renders a
 stored turn by combining the turn's messages from
 `GET /api/v1/agent/turns/{turnID}` with stored display-projected events from
@@ -357,11 +357,11 @@ gestalt authorization relationships list \
   --resource-id github
 ```
 
-Subject token creation accepts `--permission plugin:operation`,
-`--action plugin:action`, `--scopes`, or `--permissions-file` with a raw JSON
+Subject token creation accepts `--permission app:operation`,
+`--action app:action`, `--scopes`, or `--permissions-file` with a raw JSON
 permissions array. These inputs are mutually exclusive except
 `--permission` and `--action`, which can be combined. Provider-dev attach uses
-`--action plugin:provider_dev.attach`.
+`--action app:provider_dev.attach`.
 
 ### Local Quickstart
 

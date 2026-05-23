@@ -6,14 +6,14 @@ import ActiveDevelopmentCallout from '../components/ActiveDevelopmentCallout'
 <ActiveDevelopmentCallout verb="are">Applications</ActiveDevelopmentCallout>
 
 <Callout type="info">
-  Build a app when you need new operations. Build an application when that
+  Build an app when you need new operations. Build an application when that
   app becomes the backend for a user-facing workflow with UI, policy,
   storage, schedules, or other provider bindings.
 </Callout>
 
 Gestalt can be used to build applications. At a minimum, an application is a
-single [plugin](/providers/apps), or optionally a composition of
-[plugins](/providers/apps) and [UIs](/providers/ui), using existing
+single [app](/providers/apps), or optionally a composition of
+[apps](/providers/apps) and [UIs](/providers/ui), using existing
 primitives for [authentication](/providers/authentication),
 [authorization](/providers/authorization),
 [IndexedDB](/providers/indexeddb)/[Cache](/providers/cache)/[S3](/providers/s3),
@@ -25,11 +25,11 @@ This example application, `workspace_review`, stores review items in IndexedDB,
 writes generated reports to S3, runs a nightly cron through the workflow
 provider, and serves a lightweight browser UI at `/workspace-review`.
 
-Use a `plugin/` plus sibling `ui/` layout:
+Use an `app/` plus sibling `ui/` layout:
 
 ```text
 workspace-review/
-  plugin/
+  app/
     manifest.yaml
     package.json
     provider.ts
@@ -45,7 +45,7 @@ The app manifest owns the operations and points at the sibling UI bundle.
 For the full manifest schema, see [Provider Manifests](/reference/app-manifests).
 
 ```yaml
-kind: plugin
+kind: app
 source: github.com/acme/apps/workspace-review
 version: 0.1.0
 displayName: Workspace Review
@@ -175,7 +175,7 @@ providers:
 
 apps:
   workspace_review:
-    source: ./workspace-review/plugin/manifest.yaml
+    source: ./workspace-review/app/manifest.yaml
     auth:
       provider: server
     authorizationPolicy: workspace_review
@@ -204,7 +204,7 @@ workflows:
         subject:
           id: service_account:workspace-review-nightly
       target:
-        plugin:
+        app:
           name: workspace_review
           operation: reports.generateNightly
           input:
@@ -655,9 +655,8 @@ apps:
   triage:
     source: ./apps/triage/manifest.yaml
     invokes:
-      - plugin: github
-        operations:
-          - issues.get
+      - app: github
+        operation: issues.get
 
   github:
     source: ./apps/github/manifest.yaml
@@ -794,7 +793,7 @@ the same SDK client.
 ## Lightweight Frontend
 
 The frontend can stay small because Gestalt already handles sessions, route
-authorization, and static asset serving. A mounted UI calls the plugin
+authorization, and static asset serving. A mounted UI calls the app
 operations on the same origin:
 
 ```js
@@ -828,7 +827,7 @@ configures the public webhook URL as
 `/api/v1/workspace_review/webhooks/github`.
 
 ```yaml
-kind: plugin
+kind: app
 source: github.com/acme/apps/workspace-review
 version: 0.1.0
 displayName: Workspace Review
@@ -873,8 +872,8 @@ Run the app locally from the app directory with the supporting provider
 bindings in a development config file:
 
 ```sh
-gestaltd provider validate --path ./workspace-review/plugin --config ./dev.yaml
-gestaltd serve --path ./workspace-review/plugin --config ./dev.yaml
+gestaltd provider validate --path ./workspace-review/app --config ./dev.yaml
+gestaltd serve --path ./workspace-review/app --config ./dev.yaml
 ```
 
 For local UI detection, config overlays, and remote attach workflows, see

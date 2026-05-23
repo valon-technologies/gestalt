@@ -1,7 +1,7 @@
 import { Tabs } from 'nextra/components'
 import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
 
-# Plugins
+# Apps
 
 App providers are the packages that expose tools through Gestalt. Operators
 configure them under `apps`, while the host takes care of catalog
@@ -10,9 +10,9 @@ and MCP exposure.
 
 ## How app providers work
 
-A app package includes a manifest that defines metadata, connections, and
+An app package includes a manifest that defines metadata, connections, and
 optional passthrough API surfaces. Apps can be
-[executable](#defining-operations), [declarative](#declarative-plugins), or
+[executable](#defining-operations), [declarative](#declarative-apps), or
 [both](#hybrid-providers).
 Apps support:
 
@@ -30,11 +30,11 @@ Gestalt resolves every app request to a canonical subject, then
 the app or operation.
 
 When executable
-[apps call other configured app operations](/solutions#calling-another-app-from-your-application),
+[apps call other configured app operations](/applications#calling-another-app-from-your-application),
 authorization scopes are threaded through the call stack for both users and
 [service accounts](/service-accounts).
 
-## Configuring a app provider
+## Configuring an app provider
 
 ```yaml
 apps:
@@ -100,7 +100,7 @@ apps:
 
 <ActiveDevelopmentCallout><code>allowedHosts</code></ActiveDevelopmentCallout>
 
-Use `egress.allowedHosts` when a app needs explicit outbound access:
+Use `egress.allowedHosts` when an app needs explicit outbound access:
 
 ```yaml
 apps:
@@ -116,7 +116,7 @@ boundary when the app runs inside a [runtime](/providers/runtime) that
 supports hostname-based egress controls.
 
 
-## Building your own plugin
+## Building your own app
 
 Use this section for the app manifest and SDK implementation surface. For the
 shared package model, provider search/add commands, and release mechanics, see
@@ -130,7 +130,7 @@ You declare static metadata, connections, and passthrough surfaces in a manifest
 <Tabs items={['YAML', 'JSON']}>
   <Tabs.Tab>
     ```yaml
-    kind: plugin
+    kind: app
     source: github.com/your-org/apps/slack
     version: 0.0.1
     displayName: Slack
@@ -343,7 +343,7 @@ See [Provider Manifests](/reference/app-manifests) for the full field reference.
 
 ### Defining operations
 
-Operations are the callable units of a app. Each operation has an ID, an HTTP method, input and output types, and a handler function. Executable source apps can use SDK-native source package metadata, declare `run` for local source execution, or declare `build.command` and `entrypoint.artifactPath` when they need a compiled release artifact.
+Operations are the callable units of an app. Each operation has an ID, an HTTP method, input and output types, and a handler function. Executable source apps can use SDK-native source package metadata, declare `run` for local source execution, or declare `build.command` and `entrypoint.artifactPath` when they need a compiled release artifact.
 
 The following example defines a `conversations.getMessage` operation that fetches a single Slack message by channel and timestamp. The handler uses the resolved runtime token from the request context to call the Slack API.
 
@@ -515,7 +515,7 @@ By default, input decode failures return a structured `400` response, and unhand
 
 ### Hosted HTTP endpoints
 
-Hosted HTTP endpoints let an external product call a app through a stable
+Hosted HTTP endpoints let an external product call an app through a stable
 HTTP route, while the app still handles the request as a normal operation.
 They are useful for webhooks and other inbound requests whose path, signature
 verification, body shape, or acknowledgment response needs to match the calling
@@ -530,7 +530,7 @@ for security schemes, request decoding, subject resolution, and target
 operations.
 
 ```yaml
-kind: plugin
+kind: app
 source: github.com/your-org/apps/slack
 version: 0.0.1
 spec:
@@ -799,7 +799,7 @@ parameters, and unsupported body types are passed as `rawBody`. If `ack` is
 configured, Gestalt sends that response immediately and runs the operation
 asynchronously. Without `ack`, the caller receives the operation response.
 
-### Declarative plugins
+### Declarative apps
 
 Not every app needs executable code. If the upstream API is already reachable
 over HTTP, you can expose it as REST operations declared entirely in the
@@ -810,7 +810,7 @@ process runs.
 The following manifest exposes three Slack API endpoints as Gestalt operations, with no code at all:
 
 ```yaml
-kind: plugin
+kind: app
 source: github.com/your-org/apps/slack-readonly
 version: 0.0.1
 displayName: Slack (read-only)
@@ -890,7 +890,7 @@ You can also declare OpenAPI, GraphQL, and MCP surfaces using `spec.surfaces.ope
 
 #### Hybrid providers
 
-A app can combine declarative passthrough surfaces with executable
+An app can combine declarative passthrough surfaces with executable
 operations. The host forwards declarative operations directly to the upstream
 API, while executable operations run in the provider process. Both appear in the
 same catalog.
@@ -1138,7 +1138,7 @@ release metadata changes:
 
 ```sh
 gestaltd serve \
-  --plugin slack \
+  --app slack \
   --config ./base.yaml \
   --config ./dev/local.yaml \
   --watch
@@ -1153,7 +1153,7 @@ gestaltd serve \
 
 Use `gestaltd serve --remote` when you want a remote Gestalt instance to handle auth,
 authorization, connections, secrets, and host services, but route a selected
-plugin implementation to your local machine:
+app implementation to your local machine:
 
 ```sh
 export GESTALT_URL=https://gestalt.example.com
@@ -1162,7 +1162,7 @@ gestaltd serve --remote "$GESTALT_URL" --path ./slack
 ```
 
 With `--path` and no `--config`, Gestalt matches the local manifest `source` to
-a configured remote app and preserves the remote plugin's config. If more
+a configured remote app and preserves the remote app's config. If more
 than one remote app uses the same source, or the manifest has no source, pass
 `--name`:
 
@@ -1170,7 +1170,7 @@ than one remote app uses the same source, or the manifest has no source, pass
 gestaltd serve --remote "$GESTALT_URL" --path ./slack --name slack
 ```
 
-Use layered config files for explicit local config overrides or multi-plugin
+Use layered config files for explicit local config overrides or multi-app
 attach sessions:
 
 ```sh
@@ -1208,7 +1208,7 @@ gestalt app invoke slack conversations.getMessage -p channel=C01ABC23DEF -p ts=1
 
 ## What to read next
 
-For application composition, see [Applications](/solutions).
+For application composition, see [Applications](/applications).
 For configuration, see [Configuration](/reference/configuration). For operation
 invocation, see [HTTP API](/reference/http-api). For manifest fields, see
 [Provider Manifests](/reference/app-manifests). For authorization behavior,

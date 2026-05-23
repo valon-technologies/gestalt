@@ -56,10 +56,10 @@ apps:
     authorizationPolicy: roadmap_review
 ```
 
-With a app manifest like:
+With an app manifest like:
 
 ```yaml
-kind: plugin
+kind: app
 source: github.com/acme/apps/roadmap-review
 version: 1.0.0
 spec:
@@ -150,7 +150,7 @@ build and release behavior, see
 
 ## What to read next
 
-- [Applications](/solutions): recommended app plus sibling UI layout
+- [Applications](/applications): recommended app plus sibling UI layout
 - [Config File](/reference/config-file#providersui): exact `providers.ui` fields
 - [App Manifests](/reference/app-manifests#ui-metadata): UI manifest schema
 - [Authorization](/providers/authorization): route and role semantics

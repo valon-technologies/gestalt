@@ -65,7 +65,7 @@ For config-free local development, inferred UI mount paths use the manifest
 `source` slug rather than the API-safe provider key. A source ending in
 `vm-style-guide` mounts at `/vm-style-guide`, while the local integration key
 may still be `vm_style_guide`. Explicit `apps.<name>.ui.path` values take
-precedence for plugin-owned or sibling UI, and explicit
+precedence for app-owned or sibling UI, and explicit
 `providers.ui.<name>.path` values take precedence when developing a UI bundle
 directly.
 
@@ -90,11 +90,11 @@ server after local file changes settle. If reload preparation fails, the current
 server keeps running and the failure is logged.
 
 For faster iteration on one configured plugin, combine `--watch` with
-`--plugin NAME` so unrelated configured apps are not validated or prepared:
+`--app NAME` so unrelated configured apps are not validated or prepared:
 
 ```sh
 gestaltd serve \
-  --plugin support \
+  --app support \
   --config ./config.yaml \
   --config ./local.yaml \
   --watch
@@ -116,7 +116,7 @@ gestaltd lock --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd sync --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --config ./config.yaml --watch
-gestaltd serve --plugin support --config ./config.yaml --config ./local.yaml --watch
+gestaltd serve --app support --config ./config.yaml --config ./local.yaml --watch
 gestaltd serve --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd lock --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd sync --locked --config ./base.yaml --config ./overrides/prod.yaml
@@ -130,10 +130,10 @@ gestaltd provider add github.com/valon-technologies/gestalt-providers/apps/githu
 gestaltd provider add github.com/valon-technologies/gestalt-providers/auth/oidc --config ./config.yaml --kind authentication --name oidc --version '^1.4.0'
 gestaltd provider add github.com/acme/gestalt-providers/ui/console --config ./config.yaml --repo acme --kind ui --name console --set path=/console
 gestaltd provider list --config ./config.yaml
-gestaltd provider list --config ./config.yaml --kind plugin
+gestaltd provider list --config ./config.yaml --kind app
 gestaltd provider upgrade --config ./config.yaml
 gestaltd provider upgrade github --config ./config.yaml --kind app --version '^1.5.0'
-gestaltd provider remove github --config ./config.yaml --kind plugin
+gestaltd provider remove github --config ./config.yaml --kind app
 gestaltd provider validate --path ./apps/support
 gestaltd provider validate --path ./ui/dashboard
 gestaltd provider validate --path ./apps/support --config ./dev/support.yaml --config ./dev/local.yaml
@@ -169,7 +169,7 @@ state is not a supported server mode.
 For the interactive happy path, `gestaltd serve --remote` creates a short-lived
 attach approval request and opens the remote server in your browser. Approving
 that page with your normal browser session creates an owner-scoped attachment
-only when your resolved role is allowed by the plugin's provider-dev attach
+only when your resolved role is allowed by the app's provider-dev attach
 configuration. The terminal prints a verification code, and the browser approval
 page requires that code before approval succeeds. `--remote-token` and
 `GESTALT_API_KEY` are the non-interactive direct-attach path; those API tokens
@@ -224,7 +224,7 @@ the remote session instead of inheriting the remote server's config. Remote mode
 allows missing local environment substitutions while loading config so unrelated
 deploy-only env vars do not block attach.
 Remote mode tunnels app RPC, catalog, post-connect, host-service calls, and
-plugin-owned UI assets for mounted UIs that already exist on the remote server.
+app-owned UI assets for mounted UIs that already exist on the remote server.
 Raw GraphQL surfaces are not tunneled in v1.
 
 For source-backed providers, `gestaltd serve --path` starts the manifest `run`

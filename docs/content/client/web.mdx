@@ -2,13 +2,13 @@
 
 Open your Gestalt server's base URL in a browser to access the web client. For a local server, that's `http://localhost:8080`.
 
-The UI lets you browse plugins, connect to upstream services through OAuth or
+The UI lets you browse apps, connect to upstream services through OAuth or
 manual authentication, invoke operations, and manage personal tokens. It uses
 the same HTTP API and authentication model as the CLI.
 
 ## Dashboard
 
-The dashboard shows an overview of the workspace with authorization, plugin,
+The dashboard shows an overview of the workspace with authorization, app,
 and workflow counts.
 
 ![Dashboard](/images/web-dashboard.png)
@@ -22,7 +22,7 @@ It shows workflow schedules, event triggers, and recent run history in one
 place. You can inspect individual runs, filter by status, search recent
 activity, and cancel pending runs.
 
-## Plugins
+## Apps
 
 The apps page lists all configured providers. Connected apps show a green checkmark. Click the settings icon to manage connections or disconnect.
 
@@ -52,7 +52,7 @@ Public UI bundles are configured through the `providers.ui` map.
 - Gestalt does not serve frontend source directories at runtime. `serve --locked`
   only serves prepared assets, so build tools are needed during lock, sync, dev,
   or release preparation when the configured UI source declares `build`.
-- UI bundles use the normal `/api/v1` and `/mcp` surfaces; there is no separate plugin-local browser route surface.
+- UI bundles use the normal `/api/v1` and `/mcp` surfaces; there is no separate app-local browser route surface.
 
 The built-in admin UI at `/admin` remains available regardless. See
 [UI](/providers/ui#building-your-own-ui-bundle) for the bundle format and

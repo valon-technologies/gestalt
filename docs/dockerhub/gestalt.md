@@ -72,10 +72,10 @@ jobs:
 
 | Command | Description |
 |---|---|
-| `plugin list` | List available apps |
-| `plugin connect NAME` | Connect a app via OAuth or manual authentication |
-| `plugin disconnect NAME` | Disconnect a app |
-| `plugin invoke NAME OP` | Execute a app operation |
+| `app list` | List available apps |
+| `app connect NAME` | Connect an app via OAuth or manual authentication |
+| `app disconnect NAME` | Disconnect an app |
+| `app invoke NAME OP` | Execute an app operation |
 | `workflow ...` | Manage workflow schedules, triggers, events, and runs |
 | `agent` | Start or resume an interactive agent session |
 | `agent sessions ...` | Create, list, inspect, and update agent sessions |

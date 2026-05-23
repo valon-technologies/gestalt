@@ -144,7 +144,7 @@ impl Request {
         &self.invocation_token
     }
 
-    /// Creates a app invoker using this request's invocation token.
+    /// Creates an app invoker using this request's invocation token.
     pub async fn invoker(
         &self,
     ) -> std::result::Result<crate::AppInvoker, crate::AppInvokerError> {

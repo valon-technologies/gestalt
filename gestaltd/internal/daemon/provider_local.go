@@ -1049,7 +1049,7 @@ func resolveProviderPluginKey(configPaths []string, targetManifestPath string, m
 		}
 		return name, nil
 	}
-	return "", fmt.Errorf("unable to derive a app key for %s; pass --name", targetManifestPath)
+	return "", fmt.Errorf("unable to derive an app key for %s; pass --name", targetManifestPath)
 }
 
 func writeProviderLocalBaseConfig(path, dbPath string) error {

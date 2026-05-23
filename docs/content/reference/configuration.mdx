@@ -75,7 +75,7 @@ the field reference:
 
 | Need | Read |
 | --- | --- |
-| App setup, operation filtering, connections, and plugin-backed UIs | [Plugin](/providers/apps) |
+| App setup, operation filtering, connections, and app-backed UIs | [Apps](/providers/apps) |
 | Platform login | [Authentication](/providers/authentication) |
 | RBAC, policies, and dynamic grants | [Authorization](/providers/authorization) |
 | Service accounts, subject-owned API tokens, and `runAs` | [Service Accounts](/service-accounts) |
@@ -84,7 +84,7 @@ the field reference:
 | Secret manager providers | [Secrets](/providers/secrets) |
 | Workflow provider setup | [Workflow](/providers/workflow) |
 | Agent provider setup | [Agent](/providers/agent) |
-| Public UI bundles and plugin-backed UIs | [UI](/providers/ui) |
+| Public UI bundles and app-backed UIs | [UI](/providers/ui) |
 | Runtime placement | [Runtime](/providers/runtime) |
 | Exact YAML fields | [Config File](/reference/config-file) |
 
@@ -205,7 +205,7 @@ Gestalt. Do not use a shared placeholder value in a real deployment.
 ## Full Example
 
 A production deployment with OIDC auth, external credential storage, a GitHub
-plugin with subject-scoped connections, and MCP enabled:
+app with subject-scoped connections, and MCP enabled:
 
 ```yaml
 server:

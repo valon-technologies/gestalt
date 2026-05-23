@@ -527,7 +527,7 @@ export function createRuntimeService(
 }
 
 /**
- * Adapts a app provider to the shared protocol service implementation.
+ * Adapts an app provider to the shared protocol service implementation.
  *
  * @internal
  */
@@ -535,7 +535,7 @@ export function createProviderService(
   provider: LoadedProvider,
 ): Partial<ServiceImpl<typeof AppProviderService>> {
   if (!isAppProvider(provider)) {
-    throw new Error("provider is not a app provider");
+    throw new Error("provider is not an app provider");
   }
   return {
     async getMetadata() {

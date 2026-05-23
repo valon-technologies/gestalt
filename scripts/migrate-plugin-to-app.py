@@ -221,7 +221,7 @@ FILE_RENAMES = [
     ("gestalt/cli/tests/apps_connect.rs", "gestalt/cli/tests/apps_connect.rs"),
     ("docs/content/providers/apps.mdx", "docs/content/providers/apps.mdx"),
     ("docs/content/reference/app-manifests.mdx", "docs/content/reference/app-manifests.mdx"),
-    ("docs/content/solutions.mdx", "docs/content/solutions.mdx"),
+    ("docs/content/applications.mdx", "docs/content/applications.mdx"),
     ("gestaltd/internal/config/app_validation.go", "gestaltd/internal/config/app_validation.go"),
     ("gestaltd/internal/config/app_scope.go", "gestaltd/internal/config/app_scope.go"),
     ("gestaltd/internal/bootstrap/app_runtime.go", "gestaltd/internal/bootstrap/app_runtime.go"),

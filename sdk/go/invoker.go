@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// InvokeOptions selects a target connection for a app invocation.
+// InvokeOptions selects a target connection for an app invocation.
 type InvokeOptions struct {
 	// Connection is the connected account id or name to invoke against.
 	Connection string

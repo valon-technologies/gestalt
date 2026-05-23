@@ -31,7 +31,7 @@ import {
 import type { Schema } from "./schema.ts";
 
 /**
- * How a app provider expects to authenticate or connect.
+ * How an app provider expects to authenticate or connect.
  */
 export type ConnectionMode =
   | "unspecified"
@@ -116,7 +116,7 @@ export type PostConnectHandler = (
 ) => MaybePromise<Record<string, string> | null | undefined>;
 
 /**
- * Runtime hooks required to implement a app provider.
+ * Runtime hooks required to implement an app provider.
  */
 export interface PluginDefinitionOptions extends ProviderBaseOptions {
   connectionMode?: ConnectionMode;
@@ -130,7 +130,7 @@ export interface PluginDefinitionOptions extends ProviderBaseOptions {
 }
 
 /**
- * Normalizes a app operation definition.
+ * Normalizes an app operation definition.
  */
 export function operation<In, Out>(
   options: OperationOptions<In, Out>,
@@ -374,7 +374,7 @@ export class AppProvider extends ProviderBase {
 }
 
 /**
- * Creates a app provider.
+ * Creates an app provider.
  */
 export function defineApp(
   options: PluginDefinitionOptions,

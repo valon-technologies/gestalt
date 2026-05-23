@@ -19,7 +19,7 @@ type BoundWorkflowAppTarget struct {
 	CredentialMode string
 }
 
-// boundWorkflowPluginTargetToProto creates a app workflow target.
+// boundWorkflowPluginTargetToProto creates an app workflow target.
 func boundWorkflowPluginTargetToProto(input BoundWorkflowAppTarget) (*proto.BoundWorkflowAppTarget, error) {
 	value, err := structFromAny(input.Input)
 	if err != nil {

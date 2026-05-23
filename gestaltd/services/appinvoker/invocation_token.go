@@ -190,7 +190,7 @@ func (m *InvocationTokenManager) resolveToken(token, pluginName string) (invocat
 	}, nil
 }
 
-// TokenContext is the invocation context recovered from a app invocation token.
+// TokenContext is the invocation context recovered from an app invocation token.
 // It is intentionally opaque outside this package; manager host services use it
 // to restore caller identity and request metadata without re-parsing tokens.
 type TokenContext struct {

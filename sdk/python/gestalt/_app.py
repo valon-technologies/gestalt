@@ -94,7 +94,7 @@ class Plugin:
         *,
         base_dir: pathlib.Path | None = None,
     ) -> "Plugin":
-        """Build a app name from a manifest path."""
+        """Build an app name from a manifest path."""
 
         manifest_path = pathlib.Path(path)
         if not manifest_path.is_absolute():

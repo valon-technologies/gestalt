@@ -138,7 +138,7 @@ listeners. See the
 split-listener production pattern.
 
 The built-in `/admin` shell now includes both the Prometheus metrics dashboard
-and a app authorization workspace. For any app that already declares
+and an app authorization workspace. For any app that already declares
 `authorizationPolicy`, operators can open `/admin/?tab=members&plugin=<name>`
 to inspect merged static/dynamic rows and manage dynamic grants. Static policy
 members remain authoritative.

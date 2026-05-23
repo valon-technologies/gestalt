@@ -61,7 +61,7 @@ pub struct InvocationGrant {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-/// Options that select the target connection for a app invocation.
+/// Options that select the target connection for an app invocation.
 pub struct InvokeOptions {
     /// Connected account id or name to invoke against.
     pub connection: String,

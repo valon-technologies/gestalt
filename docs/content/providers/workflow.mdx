@@ -5,7 +5,7 @@ import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
 
 <ActiveDevelopmentCallout verb="are">Workflows</ActiveDevelopmentCallout>
 
-Gestalt workflows let you invoke a app operation or agent target later
+Gestalt workflows let you invoke an app operation or agent target later
 instead of right now.
 Today that primarily means cron-based schedules, triggers, workflow run
 history, event publishing, and run cancelation. The workflow model is global.
@@ -165,7 +165,7 @@ synthetic workflow subject.
     gestalt workflow schedules create \
       --cron "0 */6 * * *" \
       --timezone America/New_York \
-      --plugin github \
+      --app github \
       --operation issues.list \
       --connection default \
       --instance acme-org \
@@ -178,7 +178,7 @@ synthetic workflow subject.
 
     ```sh
     gestalt workflow schedules list
-    gestalt workflow schedules list --plugin github
+    gestalt workflow schedules list --app github
     ```
 
     Inspect, update, pause, resume, or delete a schedule:
@@ -258,7 +258,7 @@ subject, not as a plugin-local or synthetic workflow subject.
       --type roadmap.item.updated \
       --source roadmap \
       --subject item \
-      --plugin slack \
+      --app slack \
       --operation chat.postMessage \
       --connection default \
       -p channel=C123 \
@@ -271,7 +271,7 @@ subject, not as a plugin-local or synthetic workflow subject.
 
     ```sh
     gestalt workflow triggers list
-    gestalt workflow triggers list --plugin slack --type roadmap.item.updated
+    gestalt workflow triggers list --app slack --type roadmap.item.updated
     ```
 
     Inspect, update, pause, resume, or delete a trigger:
@@ -672,7 +672,7 @@ workflow-provider actions. The global run surface is
   <Tabs.Tab>
     ```sh
     gestalt workflow runs list
-    gestalt workflow runs list --plugin github --status failed
+    gestalt workflow runs list --app github --status failed
     gestalt workflow runs get <run-id>
     gestalt workflow runs cancel <run-id> --reason "operator requested"
     ```
@@ -1016,7 +1016,7 @@ provider owns durable workflow state and run status transitions.
     const resp = await host.invokeOperation({
       target: {
         plugin: {
-          pluginName: "roadmap",
+          app: "roadmap",
           operation: "sync_items",
         },
       },

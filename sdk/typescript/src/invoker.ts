@@ -32,7 +32,7 @@ export interface AppInvocationGrant {
   allOperations?: boolean;
 }
 
-/** Options for invoking a app GraphQL surface. */
+/** Options for invoking an app GraphQL surface. */
 export interface PluginGraphQLInvokeOptions extends PluginInvokeOptions {
   /** GraphQL variables encoded as a JSON object. */
   variables?: JsonObjectInput;

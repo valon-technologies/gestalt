@@ -18,7 +18,7 @@ When `/ready` returns `503`, the server has not finished initialization. Readine
 
 A "provider not found" error means the app key in the request does not match any entry in `apps`. Verify the spelling and confirm the app loaded without errors at startup.
 
-An "operation not found" error means the operation ID does not exist in the plugin's catalog. Check that the operation is exposed and that `allowedOperations`, if set, includes it.
+An "operation not found" error means the operation ID does not exist in the app's catalog. Check that the operation is exposed and that `allowedOperations`, if set, includes it.
 
 A "not authenticated" error on an API or MCP request means no valid session or API token was presented. Log in through the UI or pass a bearer token in the `Authorization` header.
 
@@ -26,7 +26,7 @@ A "no external credential" error means the user has not connected the app. Compl
 
 An "ambiguous instance" error means the user has more than one stored instance for that app and connection. Pass `_instance` in the HTTP request body or `--instance` in the client CLI to select the correct one.
 
-A "token scope denied" error means the operation requires an OAuth scope that was not granted during the connection flow. Disconnect and reconnect the plugin, ensuring all required scopes are approved.
+A "token scope denied" error means the operation requires an OAuth scope that was not granted during the connection flow. Disconnect and reconnect the app, ensuring all required scopes are approved.
 
 Token refresh failures indicate that the upstream provider rejected the stored refresh token. The refresh token may have been revoked, expired, or rotated by the provider. Disconnect and reconnect the app to obtain fresh credentials.
 
@@ -85,7 +85,7 @@ Common source-package checks:
 
 A sandbox 403 means the provider process made an outbound request to a host not
 listed in `allowedHosts`. Add every upstream domain the app contacts to the
-allowlist in the plugin's config entry or manifest. If the deployment does not
+allowlist in the app's config entry or manifest. If the deployment does not
 support executable-plugin sandboxing for that runtime, you may see startup or
 provider-load failures instead.
 
@@ -93,10 +93,10 @@ An input decode error means the operation received a request body that does not 
 
 Rate limit errors from upstream services are passed through to the caller. The app does not retry rate-limited requests automatically. Implement backoff in your client or reduce request volume.
 
-An invocation depth error means a plugin-to-plugin call chain exceeded the maximum allowed depth. This typically indicates a recursive loop where one provider's operation triggers another that eventually calls back into the first. Break the cycle or restructure the operation flow.
+An invocation depth error means an app-to-plugin call chain exceeded the maximum allowed depth. This typically indicates a recursive loop where one provider's operation triggers another that eventually calls back into the first. Break the cycle or restructure the operation flow.
 
 ## Connections
 
-When a app requires an explicit connection, it has more than one configured connection and no default. Pass `_connection` on the invocation request or use `--connection` in the client CLI to disambiguate.
+When an app requires an explicit connection, it has more than one configured connection and no default. Pass `_connection` on the invocation request or use `--connection` in the client CLI to disambiguate.
 
 If a managed path parameter still appears in the operation schema, the operation path template does not contain the expected placeholder. Verify that the path includes the parameter in braces, such as `/workspaces/{workspace_id}/tickets`, rather than omitting it.

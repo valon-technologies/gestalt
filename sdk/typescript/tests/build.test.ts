@@ -424,7 +424,7 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
   }
 }, 30_000);
 
-test("buildProviderBinary compiles a app provider executable without an explicit export name", async () => {
+test("buildProviderBinary compiles an app provider executable without an explicit export name", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
   const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gts-integration-fallback-");
@@ -902,7 +902,7 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
       }),
     );
     if (run.target?.kind.case !== "app") {
-      throw new Error("workflow run target is not a app target");
+      throw new Error("workflow run target is not an app target");
     }
     expect(run.target.kind.value.appName).toBe("roadmap");
     expect(run.id).toBe("roadmap:sync:1");

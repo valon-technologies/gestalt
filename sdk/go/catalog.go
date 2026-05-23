@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// Catalog describes the operations a app exposes to Gestalt.
+// Catalog describes the operations an app exposes to Gestalt.
 type Catalog struct {
 	Name        string              `json:"name,omitempty"`
 	DisplayName string              `json:"displayName,omitempty"`
@@ -52,7 +52,7 @@ func (c *Catalog) GetOperations() []*CatalogOperation {
 	return c.Operations
 }
 
-// CatalogOperation describes one callable operation in a app catalog.
+// CatalogOperation describes one callable operation in an app catalog.
 type CatalogOperation struct {
 	Id             string                `json:"id,omitempty"`
 	Method         string                `json:"method,omitempty"`
@@ -168,7 +168,7 @@ func (o *CatalogOperation) GetAllowedRoles() []string {
 	return o.AllowedRoles
 }
 
-// CatalogParameter describes one input parameter in a app catalog operation.
+// CatalogParameter describes one input parameter in an app catalog operation.
 type CatalogParameter struct {
 	Name        string `json:"name,omitempty"`
 	Type        string `json:"type,omitempty"`

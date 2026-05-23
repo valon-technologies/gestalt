@@ -45,11 +45,11 @@ pub enum Commands {
     },
 
     #[command(hide = true)]
-    /// Execute a app operation
+    /// Execute an app operation
     Invoke(InvokeArgs),
 
     #[command(hide = true)]
-    /// Describe a app operation
+    /// Describe an app operation
     Describe(DescribeArgs),
 
     /// Manage API tokens
@@ -112,7 +112,7 @@ pub enum ConfigCommands {
 pub enum AppCommands {
     /// List available plugins
     List,
-    /// Connect a app via OAuth or interactive manual auth
+    /// Connect an app via OAuth or interactive manual auth
     Connect {
         /// App name (e.g., github, slack)
         name: String,
@@ -138,9 +138,9 @@ pub enum AppCommands {
         #[arg(long)]
         instance: Option<String>,
     },
-    /// Execute a app operation
+    /// Execute an app operation
     Invoke(InvokeArgs),
-    /// Describe a app operation
+    /// Describe an app operation
     Describe(DescribeArgs),
 }
 
@@ -361,7 +361,7 @@ pub enum AuthorizationSubjectGrantCommands {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
     },
-    /// Grant a app role to a subject
+    /// Grant an app role to a subject
     Set {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
@@ -371,7 +371,7 @@ pub enum AuthorizationSubjectGrantCommands {
         #[arg(long)]
         role: String,
     },
-    /// Remove a app grant from a subject
+    /// Remove an app grant from a subject
     Remove {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
@@ -414,7 +414,7 @@ pub enum AuthorizationSubjectIntegrationCommands {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
     },
-    /// Connect a app credential for a subject
+    /// Connect an app credential for a subject
     Connect {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
@@ -427,7 +427,7 @@ pub enum AuthorizationSubjectIntegrationCommands {
         #[arg(long)]
         instance: Option<String>,
     },
-    /// Disconnect a app credential from a subject
+    /// Disconnect an app credential from a subject
     Disconnect {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
@@ -509,9 +509,9 @@ pub enum AuthorizationPluginMemberCommands {
         /// App name
         app: String,
     },
-    /// Add or update a app member
+    /// Add or update an app member
     Set(AuthorizationPluginMemberSetArgs),
-    /// Remove a app member
+    /// Remove an app member
     Remove {
         /// App name
         app: String,
