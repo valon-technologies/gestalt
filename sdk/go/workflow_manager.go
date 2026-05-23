@@ -354,7 +354,7 @@ func (c *WorkflowManagerClient) ResumeTrigger(ctx context.Context, input Workflo
 }
 
 // PublishEvent publishes an event into the workflow manager.
-func (c *WorkflowManagerClient) PublishEvent(ctx context.Context, input WorkflowManagerPublishEvent) (*WorkflowManagerPublishedEvent, error) {
+func (c *WorkflowManagerClient) PublishEvent(ctx context.Context, input WorkflowManagerPublishEvent) (*WorkflowEvent, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}

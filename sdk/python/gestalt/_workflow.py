@@ -185,9 +185,6 @@ class WorkflowEvent:
     extensions: Mapping[str, Any] | None = None
 
 
-WorkflowManagerPublishedEvent = WorkflowEvent
-
-
 @_dataclasses.dataclass(slots=True)
 class WorkflowEventMatch:
     """Native data for workflow event matching fields."""
@@ -473,22 +470,16 @@ class WorkflowManagerPublishEvent:
     event: Any | None = None
 
 
-WorkflowManagerBoundRun = BoundWorkflowRun
-WorkflowManagerBoundDefinition = BoundWorkflowDefinition
-WorkflowManagerBoundSchedule = BoundWorkflowSchedule
-WorkflowManagerBoundEventTrigger = BoundWorkflowEventTrigger
-
-
 @_dataclasses.dataclass(slots=True)
 class WorkflowManagerRun:
     provider_name: str = ""
-    run: WorkflowManagerBoundRun | None = None
+    run: BoundWorkflowRun | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class WorkflowManagerRunSignal:
     provider_name: str = ""
-    run: WorkflowManagerBoundRun | None = None
+    run: BoundWorkflowRun | None = None
     signal: WorkflowSignal | None = None
     started_run: bool = False
     workflow_key: str = ""
@@ -497,19 +488,19 @@ class WorkflowManagerRunSignal:
 @_dataclasses.dataclass(slots=True)
 class WorkflowManagerDefinition:
     provider_name: str = ""
-    definition: WorkflowManagerBoundDefinition | None = None
+    definition: BoundWorkflowDefinition | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class WorkflowManagerSchedule:
     provider_name: str = ""
-    schedule: WorkflowManagerBoundSchedule | None = None
+    schedule: BoundWorkflowSchedule | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class WorkflowManagerEventTrigger:
     provider_name: str = ""
-    trigger: WorkflowManagerBoundEventTrigger | None = None
+    trigger: BoundWorkflowEventTrigger | None = None
 
 
 @_dataclasses.dataclass(slots=True)
@@ -2719,7 +2710,7 @@ class WorkflowManager:
 
     def publish_event(
         self, request: Any | None = None, **kwargs: Any
-    ) -> WorkflowManagerPublishedEvent | None:
+    ) -> WorkflowEvent | None:
         """Publish an event into the workflow host."""
 
         request = _workflow_manager_publish_event_request(request, **kwargs)
