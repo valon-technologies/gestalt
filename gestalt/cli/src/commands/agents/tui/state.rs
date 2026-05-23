@@ -99,10 +99,12 @@ impl AgentUiState {
     pub(super) fn apply_turn_event(&mut self, event: AgentTurnEventInfo) {
         match classify_turn_event(&event) {
             ClassifiedTurnEvent::Display { event, display } => {
-                if !self.apply_display_turn_event(event, display)
-                    && let Some(effect) = classify_data_event(event)
-                {
-                    self.apply_effect(&effect);
+                if !self.apply_display_turn_event(event, display) {
+                    if let Some(effect) = classify_data_event(event) {
+                        self.apply_effect(&effect);
+                    } else {
+                        self.push_system(generic_event_text(event));
+                    }
                 }
             }
             ClassifiedTurnEvent::Data(effect) => self.apply_effect(&effect),

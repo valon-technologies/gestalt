@@ -201,10 +201,12 @@ impl AgentTurnRenderer {
             }
             match classify_turn_event(event) {
                 ClassifiedTurnEvent::Display { event, display } => {
-                    if !self.render_display_event(event, display)?
-                        && let Some(effect) = classify_data_event(event)
-                    {
-                        self.render_effect(&effect)?;
+                    if !self.render_display_event(event, display)? {
+                        if let Some(effect) = classify_data_event(event) {
+                            self.render_effect(&effect)?;
+                        } else {
+                            self.render_generic_event(event)?;
+                        }
                     }
                 }
                 ClassifiedTurnEvent::Data(effect) => self.render_effect(&effect)?,

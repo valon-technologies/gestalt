@@ -28,12 +28,39 @@ pub(crate) fn turn_event_data_summary(event: &AgentTurnEventInfo) -> Option<Stri
     match classify_turn_event(event) {
         ClassifiedTurnEvent::Display { event, display } => {
             turn_event_display_summary(event, display).or_else(|| {
-                classify_data_event(event).and_then(|effect| effect_data_summary(&effect))
+                classify_data_event(event)
+                    .and_then(|effect| effect_data_summary(&effect))
+                    .or_else(|| Some(generic_event_data_summary(event)))
             })
         }
         ClassifiedTurnEvent::Data(effect) => effect_data_summary(&effect),
         ClassifiedTurnEvent::Private => Some(String::new()),
-        ClassifiedTurnEvent::Unknown(_) => None,
+        ClassifiedTurnEvent::Unknown(event) => Some(generic_event_data_summary(event)),
+    }
+}
+
+fn generic_event_data_summary(event: &AgentTurnEventInfo) -> String {
+    let mut fields = Vec::new();
+    if !event.id.is_empty() {
+        fields.push(format!("id={}", event.id));
+    }
+    if !event.source.is_empty() {
+        fields.push(format!("source={}", event.source));
+    }
+    if !event.turn_id.is_empty() {
+        fields.push(format!("turn={}", event.turn_id));
+    }
+    let suffix = if fields.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", fields.join(" "))
+    };
+    if event.data.is_empty() {
+        format!("{}{}", event.event_type, suffix)
+    } else {
+        super::super::fields::compact_json(&Value::Object(event.data.clone()))
+            .map(|data| format!("{}{} {data}", event.event_type, suffix))
+            .unwrap_or_else(|_| format!("{}{}", event.event_type, suffix))
     }
 }
 
@@ -167,5 +194,27 @@ mod tests {
         let summary = turn_event_data_summary(&event).expect("summary");
         assert!(summary.contains("grep"));
         assert!(summary.contains("completed"));
+    }
+
+    #[test]
+    fn turn_event_data_summary_falls_back_to_generic_for_unknown_display_and_type() {
+        let event = AgentTurnEventInfo {
+            id: String::new(),
+            turn_id: String::new(),
+            seq: 0,
+            event_type: "custom.new".to_string(),
+            source: String::new(),
+            visibility: "public".to_string(),
+            data: json!({"payload": "value"}).as_object().cloned().unwrap(),
+            display: Some(AgentTurnDisplayInfo {
+                kind: "widget".to_string(),
+                phase: "ready".to_string(),
+                ..AgentTurnDisplayInfo::from_value(json!({})).unwrap()
+            }),
+        };
+
+        let summary = turn_event_data_summary(&event).expect("summary");
+        assert!(summary.contains("custom.new"));
+        assert!(summary.contains("payload"));
     }
 }
