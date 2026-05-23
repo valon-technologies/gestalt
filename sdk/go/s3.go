@@ -10,7 +10,6 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -139,13 +138,10 @@ type S3Client struct {
 }
 
 type sharedS3Transport struct {
-	mu                 sync.Mutex
-	target             string
-	token              string
-	binding            string
-	conn               *grpc.ClientConn
+	conn               sharedHostServiceConn
 	client             proto.S3Client
 	objectAccessClient proto.S3ObjectAccessClient
+	key                hostServiceConnKey
 }
 
 var sharedS3Transports sync.Map
@@ -180,37 +176,31 @@ func sharedS3Clients(ctx context.Context, target, token, binding string, transpo
 		return nil, nil, fmt.Errorf("s3: shared transport is not initialized")
 	}
 
-	transport.mu.Lock()
-	if transport.conn != nil && transport.target == target && transport.token == token && transport.binding == binding {
+	key := hostServiceConnKey{target: target, token: token, binding: binding}
+	transport.conn.mu.Lock()
+	if transport.conn.conn != nil && transport.key == key {
 		client := transport.client
 		objectAccessClient := transport.objectAccessClient
-		transport.mu.Unlock()
+		transport.conn.mu.Unlock()
 		return client, objectAccessClient, nil
 	}
-	transport.mu.Unlock()
+	transport.conn.mu.Unlock()
 
-	conn, err := dialHostService(ctx, "s3", target, token, binding)
+	conn, err := transport.conn.connFor(ctx, "s3", target, token, binding)
 	if err != nil {
 		return nil, nil, err
 	}
 	client := proto.NewS3Client(conn)
 	objectAccessClient := proto.NewS3ObjectAccessClient(conn)
 
-	transport.mu.Lock()
-	defer transport.mu.Unlock()
+	transport.conn.mu.Lock()
+	defer transport.conn.mu.Unlock()
 
-	if transport.conn != nil && transport.target == target && transport.token == token && transport.binding == binding {
-		_ = conn.Close()
+	if transport.conn.conn != nil && transport.key == key {
 		return transport.client, transport.objectAccessClient, nil
 	}
-	if transport.conn != nil {
-		_ = transport.conn.Close()
-	}
 
-	transport.target = target
-	transport.token = token
-	transport.binding = binding
-	transport.conn = conn
+	transport.key = key
 	transport.client = client
 	transport.objectAccessClient = objectAccessClient
 	return client, objectAccessClient, nil

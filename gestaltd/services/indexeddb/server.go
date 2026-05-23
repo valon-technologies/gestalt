@@ -75,22 +75,6 @@ func (s *routingIndexedDBServer) server(ctx context.Context) (proto.IndexedDBSer
 	return runtimehost.ResolveBinding(ctx, "indexeddb", s.defaultBinding, s.servers)
 }
 
-func (s *routingIndexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) error {
-	server, err := s.server(stream.Context())
-	if err != nil {
-		return err
-	}
-	return server.OpenCursor(stream)
-}
-
-func (s *routingIndexedDBServer) Transaction(stream proto.IndexedDB_TransactionServer) error {
-	server, err := s.server(stream.Context())
-	if err != nil {
-		return err
-	}
-	return server.Transaction(stream)
-}
-
 func (s *indexedDBServer) storeName(name string) string {
 	return name
 }

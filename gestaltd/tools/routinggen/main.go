@@ -47,6 +47,9 @@ func main() {
 	if needsEmpty(methods) {
 		fmt.Fprintf(&buf, "\t\"google.golang.org/protobuf/types/known/emptypb\"\n")
 	}
+	if needsGRPC(methods) {
+		fmt.Fprintf(&buf, "\t\"google.golang.org/grpc\"\n")
+	}
 	fmt.Fprintf(&buf, ")\n\n")
 
 	for _, method := range methods {
@@ -70,6 +73,15 @@ type methodSpec struct {
 	IsStreaming bool
 }
 
+func needsGRPC(methods []methodSpec) bool {
+	for _, method := range methods {
+		if method.IsStreaming {
+			return true
+		}
+	}
+	return false
+}
+
 func needsEmpty(methods []methodSpec) bool {
 	for _, method := range methods {
 		if strings.Contains(method.Params, "emptypb.") || strings.Contains(method.Results, "emptypb.") {
@@ -85,10 +97,30 @@ func qualifyMethod(method methodSpec) methodSpec {
 	return method
 }
 
-var unqualifiedProtoType = regexp.MustCompile(`\*([A-Z][A-Za-z0-9_]*)`)
+var (
+	unqualifiedProtoType = regexp.MustCompile(`\*([A-Z][A-Za-z0-9_]*)`)
+	bracketProtoTypes    = regexp.MustCompile(`\[([^\]]+)\]`)
+	namedParam           = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]* `)
+)
 
 func qualifyTypes(src string) string {
-	return unqualifiedProtoType.ReplaceAllString(src, "*proto.${1}")
+	src = unqualifiedProtoType.ReplaceAllString(src, "*proto.${1}")
+	return bracketProtoTypes.ReplaceAllStringFunc(src, func(match string) string {
+		inner := strings.TrimSpace(match[1 : len(match)-1])
+		if inner == "" || strings.Contains(inner, "grpc.") {
+			return match
+		}
+		parts := splitTopLevelComma(inner)
+		for i, part := range parts {
+			part = strings.TrimSpace(part)
+			if part == "" || strings.Contains(part, ".") {
+				parts[i] = part
+				continue
+			}
+			parts[i] = "proto." + part
+		}
+		return "[" + strings.Join(parts, ", ") + "]"
+	})
 }
 
 func parseInterfaceMethods(path, ifaceName string) ([]methodSpec, error) {
@@ -130,14 +162,11 @@ func parseInterfaceMethods(path, ifaceName string) ([]methodSpec, error) {
 				isStreaming := strings.Contains(params, "grpc.BidiStreamingServer") ||
 					strings.Contains(params, "grpc.ServerStreamingServer") ||
 					strings.Contains(params, "grpc.ClientStreamingServer")
-				if isStreaming {
-					continue
-				}
 				methods = append(methods, methodSpec{
 					Name:        name,
 					Params:      params,
 					Results:     results,
-					IsStreaming: false,
+					IsStreaming: isStreaming,
 				})
 			}
 			return methods, nil
@@ -193,7 +222,7 @@ func writeMethod(buf *bytes.Buffer, receiver, binding, serverField, serverType, 
 
 	if method.IsStreaming {
 		fmt.Fprintf(buf, "func (s *%s) %s(%s) error {\n", receiver, method.Name, sigParams)
-		fmt.Fprintf(buf, "\tserver, err := runtimehost.ResolveBinding(%s, %q, s.%s, s.%s)\n", contextParamName(sigParams), binding, defaultField, serverField)
+		fmt.Fprintf(buf, "\tserver, err := s.server(%s)\n", contextExpr(sigParams))
 		fmt.Fprintf(buf, "\tif err != nil {\n\t\treturn err\n\t}\n")
 		fmt.Fprintf(buf, "\treturn server.%s(%s)\n", method.Name, callArgs(sigParams))
 		fmt.Fprintf(buf, "}\n\n")
@@ -224,7 +253,7 @@ func nameParams(params string) string {
 	if params == "" {
 		return ""
 	}
-	parts := strings.Split(params, ",")
+	parts := splitTopLevelComma(params)
 	out := make([]string, 0, len(parts))
 	reqCount := 0
 	for _, part := range parts {
@@ -232,8 +261,7 @@ func nameParams(params string) string {
 		if part == "" {
 			continue
 		}
-		fields := strings.Fields(part)
-		if len(fields) > 1 {
+		if namedParam.MatchString(part) {
 			out = append(out, part)
 			continue
 		}
@@ -272,22 +300,51 @@ func contextParamName(params string) string {
 	return firstParamName(params)
 }
 
+func contextExpr(params string) string {
+	if strings.Contains(params, "ctx context.Context") {
+		return "ctx"
+	}
+	for _, part := range splitTopLevelComma(params) {
+		part = strings.TrimSpace(part)
+		if namedParam.MatchString(part) {
+			fields := strings.Fields(part)
+			if len(fields) >= 2 && strings.Contains(fields[1], "grpc.") {
+				return fields[0] + ".Context()"
+			}
+		}
+		if strings.Contains(part, "grpc.") {
+			if namedParam.MatchString(part) {
+				fields := strings.Fields(part)
+				return fields[0] + ".Context()"
+			}
+			return "stream.Context()"
+		}
+	}
+	return contextParamName(params)
+}
+
 func callArgs(params string) string {
 	params = strings.TrimSpace(params)
 	if params == "" {
 		return ""
 	}
 	names := make([]string, 0, 4)
-	for _, part := range strings.Split(params, ",") {
+	for _, part := range splitTopLevelComma(params) {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
-		fields := strings.Fields(part)
-		if len(fields) == 0 {
+		if namedParam.MatchString(part) {
+			fields := strings.Fields(part)
+			if len(fields) > 0 {
+				names = append(names, fields[0])
+			}
 			continue
 		}
-		names = append(names, fields[0])
+		if strings.Contains(part, "grpc.") {
+			names = append(names, "stream")
+			continue
+		}
 	}
 	return strings.Join(names, ", ")
 }
@@ -314,9 +371,40 @@ func firstParamName(params string) string {
 	if params == "" {
 		return "ctx"
 	}
-	name := strings.Fields(strings.Split(params, ",")[0])
+	parts := splitTopLevelComma(params)
+	if len(parts) == 0 {
+		return "ctx"
+	}
+	name := strings.Fields(parts[0])
 	if len(name) == 0 {
 		return "ctx"
 	}
 	return name[0]
+}
+
+func splitTopLevelComma(input string) []string {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return nil
+	}
+	var parts []string
+	depth := 0
+	start := 0
+	for i, r := range input {
+		switch r {
+		case '[', '(', '{':
+			depth++
+		case ']', ')', '}':
+			depth--
+		case ',':
+			if depth == 0 {
+				parts = append(parts, strings.TrimSpace(input[start:i]))
+				start = i + 1
+			}
+		}
+	}
+	if start <= len(input) {
+		parts = append(parts, strings.TrimSpace(input[start:]))
+	}
+	return parts
 }

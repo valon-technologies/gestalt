@@ -15,13 +15,60 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type sharedManagerTransport[C any] struct {
+type sharedHostServiceConn struct {
 	mu      sync.Mutex
 	target  string
 	token   string
 	binding string
 	conn    *grpc.ClientConn
-	client  C
+}
+
+func (s *sharedHostServiceConn) connFor(ctx context.Context, serviceName, target, token, binding string) (*grpc.ClientConn, error) {
+	if s == nil {
+		return nil, fmt.Errorf("%s: shared connection is not initialized", serviceName)
+	}
+
+	s.mu.Lock()
+	if s.conn != nil && s.target == target && s.token == token && s.binding == binding {
+		conn := s.conn
+		s.mu.Unlock()
+		return conn, nil
+	}
+	s.mu.Unlock()
+
+	conn, err := dialHostService(ctx, serviceName, target, token, binding)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.conn != nil && s.target == target && s.token == token && s.binding == binding {
+		_ = conn.Close()
+		return s.conn, nil
+	}
+	if s.conn != nil {
+		_ = s.conn.Close()
+	}
+
+	s.target = target
+	s.token = token
+	s.binding = binding
+	s.conn = conn
+	return conn, nil
+}
+
+type sharedManagerTransport[C any] struct {
+	conn   sharedHostServiceConn
+	client C
+	key    hostServiceConnKey
+}
+
+type hostServiceConnKey struct {
+	target  string
+	token   string
+	binding string
 }
 
 func managerTransportClient[C any](ctx context.Context, serviceName, target, token string, transport *sharedManagerTransport[C], newClient func(grpc.ClientConnInterface) C) (C, error) {
@@ -34,35 +81,29 @@ func hostServiceTransportClient[C any](ctx context.Context, serviceName, target,
 		return zero, fmt.Errorf("%s: shared transport is not initialized", serviceName)
 	}
 
-	transport.mu.Lock()
-	if transport.conn != nil && transport.target == target && transport.token == token && transport.binding == binding {
+	key := hostServiceConnKey{target: target, token: token, binding: binding}
+	transport.conn.mu.Lock()
+	if transport.conn.conn != nil && transport.key == key {
 		client := transport.client
-		transport.mu.Unlock()
+		transport.conn.mu.Unlock()
 		return client, nil
 	}
-	transport.mu.Unlock()
+	transport.conn.mu.Unlock()
 
-	conn, err := dialHostService(ctx, serviceName, target, token, binding)
+	conn, err := transport.conn.connFor(ctx, serviceName, target, token, binding)
 	if err != nil {
 		return zero, err
 	}
 	client := newClient(conn)
 
-	transport.mu.Lock()
-	defer transport.mu.Unlock()
+	transport.conn.mu.Lock()
+	defer transport.conn.mu.Unlock()
 
-	if transport.conn != nil && transport.target == target && transport.token == token && transport.binding == binding {
-		_ = conn.Close()
+	if transport.conn.conn != nil && transport.key == key {
 		return transport.client, nil
 	}
-	if transport.conn != nil {
-		_ = transport.conn.Close()
-	}
 
-	transport.target = target
-	transport.token = token
-	transport.binding = binding
-	transport.conn = conn
+	transport.key = key
 	transport.client = client
 	return client, nil
 }

@@ -90,22 +90,6 @@ func (s *routingS3Server) server(ctx context.Context) (proto.S3Server, error) {
 	return runtimehost.ResolveBinding(ctx, "s3", s.defaultBinding, s.servers)
 }
 
-func (s *routingS3Server) ReadObject(req *proto.ReadObjectRequest, stream proto.S3_ReadObjectServer) error {
-	server, err := s.server(stream.Context())
-	if err != nil {
-		return err
-	}
-	return server.ReadObject(req, stream)
-}
-
-func (s *routingS3Server) WriteObject(stream proto.S3_WriteObjectServer) error {
-	server, err := s.server(stream.Context())
-	if err != nil {
-		return err
-	}
-	return server.WriteObject(stream)
-}
-
 func (s *routingS3ObjectAccessServer) server(ctx context.Context) (proto.S3ObjectAccessServer, error) {
 	return runtimehost.ResolveBinding(ctx, "s3", s.defaultBinding, s.servers)
 }
