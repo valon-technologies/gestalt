@@ -5,12 +5,17 @@ use serde_json::Value;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use super::super::{
-    AgentInteractionInfo, AgentSessionInfo, AgentTurnDisplayInfo, AgentTurnEventInfo,
-    AgentTurnInfo, compact_json, display_action, display_format, display_language, display_status,
-    display_text, display_tool_error, display_tool_input, display_tool_label, display_tool_output,
-    display_tool_ref, display_value_text, number_any_field, pretty_json, string_any_field,
-    string_field, turn_event_display, value_any_field,
+use crate::commands::agents::events::{
+    ClassifiedTurnEvent, ToolEventInfo, ToolPhase, TurnEventEffect, classify_data_event,
+    classify_turn_event,
+};
+use crate::commands::agents::fields::{
+    compact_json, display_action, display_format, display_language, display_status, display_text,
+    display_tool_error, display_tool_input, display_tool_label, display_tool_output,
+    display_tool_ref, display_value_text, pretty_json,
+};
+use crate::commands::agents::types::{
+    AgentInteractionInfo, AgentSessionInfo, AgentTurnDisplayInfo, AgentTurnEventInfo, AgentTurnInfo,
 };
 
 const MAX_TRANSCRIPT_ITEMS: usize = 500;
@@ -92,129 +97,132 @@ impl AgentUiState {
     }
 
     pub(super) fn apply_turn_event(&mut self, event: AgentTurnEventInfo) {
-        if self.apply_display_turn_event(&event) {
-            return;
-        }
-        match event.event_type.as_str() {
-            "agent.message.delta" | "assistant.delta" => {
-                if let Some(text) = string_any_field(&event.data, &["text", "delta", "content"]) {
-                    self.push_assistant_delta(&text);
+        match classify_turn_event(&event) {
+            ClassifiedTurnEvent::Display { event, display } => {
+                if !self.apply_display_turn_event(event, display) {
+                    if let Some(effect) = classify_data_event(event) {
+                        self.apply_effect(&effect);
+                    } else {
+                        self.push_system(generic_event_text(event));
+                    }
                 }
             }
-            "assistant.completed" => {
-                if let Some(text) = string_field(&event.data, "text") {
-                    self.complete_assistant(&text);
+            ClassifiedTurnEvent::Data(effect) => self.apply_effect(&effect),
+            ClassifiedTurnEvent::Private => {}
+            ClassifiedTurnEvent::Unknown(event) => self.push_system(generic_event_text(event)),
+        }
+    }
+
+    fn apply_effect(&mut self, effect: &TurnEventEffect) {
+        match effect {
+            TurnEventEffect::AssistantDelta(text) => self.push_assistant_delta(text),
+            TurnEventEffect::AssistantCompleted { text } => {
+                if let Some(text) = text {
+                    self.complete_assistant(text);
                 } else {
                     self.assistant_buffer.clear();
                 }
             }
-            "turn.started" => {
-                self.status = string_any_field(&event.data, &["status", "state"])
+            TurnEventEffect::TurnStarted { status } => {
+                self.status = status
+                    .as_ref()
                     .map(|status| format!("turn {status}"))
                     .unwrap_or_else(|| "turn started".to_string());
             }
-            "tool.started" => {
-                let activity = ToolActivity::started(&event);
-                let tool = activity.name.clone();
-                self.push_tool_activity(activity);
-                self.status = format!("{tool} running");
-            }
-            "tool.completed" => {
-                let info = ToolTerminalEvent::from_completed(&event);
-                self.finish_tool_activity(info);
-            }
-            "tool.failed" => {
-                let info = ToolTerminalEvent::from_failed(&event);
-                self.finish_tool_activity(info);
-            }
-            "interaction.requested" => {
-                let id = string_any_field(&event.data, &["interaction_id", "interactionId"])
-                    .unwrap_or_else(|| "interaction".to_string());
+            TurnEventEffect::Tool(info) => match info.phase {
+                ToolPhase::Started => {
+                    let activity = ToolActivity::started_info(info);
+                    let tool = activity.name.clone();
+                    self.push_tool_activity(activity);
+                    self.status = format!("{tool} running");
+                }
+                ToolPhase::Completed | ToolPhase::Failed => {
+                    self.finish_tool_activity(ToolTerminalEvent::from_info(info));
+                }
+            },
+            TurnEventEffect::InteractionRequested { id } => {
                 self.push_interaction(format!("requested {id}"));
                 self.status = "waiting for input".to_string();
             }
-            "interaction.resolved" => {
-                let id = string_any_field(&event.data, &["interaction_id", "interactionId"])
-                    .unwrap_or_else(|| "interaction".to_string());
+            TurnEventEffect::InteractionResolved { id } => {
                 self.push_interaction(format!("resolved {id}"));
                 self.status = "interaction resolved".to_string();
             }
-            "turn.failed" => {
-                if let Some(message) = string_field(&event.data, "error") {
+            TurnEventEffect::TurnFailed { error } => {
+                if let Some(message) = error {
                     self.push_error(format!("turn failed: {message}"));
                 }
             }
-            "turn.canceled" => {
-                if let Some(reason) = string_field(&event.data, "reason") {
+            TurnEventEffect::TurnCanceled { reason } => {
+                if let Some(reason) = reason {
                     self.push_system(format!("turn canceled: {reason}"));
                 } else {
                     self.push_system("turn canceled");
                 }
             }
-            "turn.completed" => {}
-            _ if event.visibility == "private" => {}
-            _ => self.push_system(generic_event_text(&event)),
+            TurnEventEffect::TurnCompleted { .. } => {}
         }
     }
 
-    fn apply_display_turn_event(&mut self, event: &AgentTurnEventInfo) -> bool {
-        let Some(display) = turn_event_display(event) else {
-            return false;
-        };
+    fn apply_display_turn_event(
+        &mut self,
+        _event: &AgentTurnEventInfo,
+        display: &AgentTurnDisplayInfo,
+    ) -> bool {
         match display.kind.trim() {
-            "text" => {
-                match display.phase.trim() {
-                    "delta" => {
-                        if let Some(text) = display_text(display) {
-                            self.push_assistant_delta_display(text, display);
-                        } else {
-                            return false;
-                        }
-                    }
-                    "completed" => {
-                        if let Some(text) = display_text(display) {
-                            self.complete_assistant_display(text, display);
-                        } else {
-                            return false;
-                        }
-                    }
-                    _ => {
-                        if let Some(text) = display_text(display) {
-                            self.push_assistant_display(text.to_string(), display);
-                        } else {
-                            return false;
-                        }
+            "text" => match display.phase.trim() {
+                "delta" => {
+                    if let Some(text) = display_text(display) {
+                        self.push_assistant_delta_display(text, display);
+                        true
+                    } else {
+                        false
                     }
                 }
-                true
-            }
+                "completed" => {
+                    if let Some(text) = display_text(display) {
+                        self.complete_assistant_display(text, display);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => {
+                    if let Some(text) = display_text(display) {
+                        self.push_assistant_display(text.to_string(), display);
+                        true
+                    } else {
+                        false
+                    }
+                }
+            },
             "reasoning" => {
                 if let Some(text) = display_text(display) {
                     self.push_system(format!("reasoning: {text}"));
+                    true
                 } else {
-                    return false;
+                    false
                 }
-                true
             }
-            "tool" => {
-                match display.phase.trim() {
-                    "started" => {
-                        let activity = ToolActivity::started_display(event, display);
-                        let tool = activity.name.clone();
-                        self.push_tool_activity(activity);
-                        self.status = format!("{tool} running");
-                    }
-                    "progress" => {
-                        self.apply_tool_progress(event, display);
-                    }
-                    "completed" | "failed" => {
-                        let info = ToolTerminalEvent::from_display(event, display);
-                        self.finish_tool_activity(info);
-                    }
-                    _ => return false,
+            "tool" => match display.phase.trim() {
+                "started" => {
+                    let activity = ToolActivity::started_display(display);
+                    let tool = activity.name.clone();
+                    self.push_tool_activity(activity);
+                    self.status = format!("{tool} running");
+                    true
                 }
-                true
-            }
+                "progress" => {
+                    self.apply_tool_progress(display);
+                    true
+                }
+                "completed" | "failed" => {
+                    let info = ToolTerminalEvent::from_display(display);
+                    self.finish_tool_activity(info);
+                    true
+                }
+                _ => false,
+            },
             "interaction" => {
                 let id = if display.display_ref.trim().is_empty() {
                     "interaction".to_string()
@@ -225,43 +233,47 @@ impl AgentUiState {
                     "requested" => {
                         self.push_interaction(format!("requested {id}"));
                         self.status = "waiting for input".to_string();
+                        true
                     }
                     "resolved" => {
                         self.push_interaction(format!("resolved {id}"));
                         self.status = "interaction resolved".to_string();
+                        true
                     }
-                    _ => return false,
+                    _ => false,
                 }
-                true
             }
-            "status" => {
-                match display.phase.trim() {
-                    "started" => {
-                        self.status = display_text(display)
-                            .map(|status| format!("turn {status}"))
-                            .unwrap_or_else(|| "turn started".to_string());
-                    }
-                    "canceled" => {
-                        if let Some(reason) = display_text(display) {
-                            self.push_system(format!("turn canceled: {reason}"));
-                        } else {
-                            self.push_system("turn canceled");
-                        }
-                    }
-                    "progress" => {
-                        if let Some(text) = display_text(display) {
-                            self.status = text.to_string();
-                        }
-                    }
-                    "completed" => {
-                        self.status = display_text(display)
-                            .map(ToString::to_string)
-                            .unwrap_or_else(|| "completed".to_string());
-                    }
-                    _ => return false,
+            "status" => match display.phase.trim() {
+                "started" => {
+                    self.status = display_text(display)
+                        .map(|status| format!("turn {status}"))
+                        .unwrap_or_else(|| "turn started".to_string());
+                    true
                 }
-                true
-            }
+                "canceled" => {
+                    if let Some(reason) = display_text(display) {
+                        self.push_system(format!("turn canceled: {reason}"));
+                    } else {
+                        self.push_system("turn canceled");
+                    }
+                    true
+                }
+                "progress" => {
+                    if let Some(text) = display_text(display) {
+                        self.status = text.to_string();
+                        true
+                    } else {
+                        false
+                    }
+                }
+                "completed" => {
+                    self.status = display_text(display)
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| "completed".to_string());
+                    true
+                }
+                _ => false,
+            },
             "error" => {
                 let text = display_text(display).map(ToString::to_string).or_else(|| {
                     display
@@ -466,8 +478,8 @@ impl AgentUiState {
         self.status = terminal_status.unwrap_or_else(|| format!("{tool} completed"));
     }
 
-    fn apply_tool_progress(&mut self, event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) {
-        let progress = ToolTerminalEvent::from_display_progress(event, display);
+    fn apply_tool_progress(&mut self, display: &AgentTurnDisplayInfo) {
+        let progress = ToolTerminalEvent::from_display_progress(display);
         let tool = progress.name.clone();
         if let Some(item) = self.find_running_tool_activity_mut(&progress) {
             if let Some(activity) = item.tool_activity.as_mut() {
@@ -746,29 +758,29 @@ pub(super) struct ToolActivity {
 }
 
 impl ToolActivity {
-    fn started(event: &AgentTurnEventInfo) -> Self {
+    fn started_info(info: &ToolEventInfo) -> Self {
         Self {
-            key: event_tool_key(event),
-            name: event_tool_name(event),
+            key: None,
+            name: info.name.clone(),
             action: None,
             status: ToolActivityStatus::Running,
             started_at: Some(Instant::now()),
             elapsed: None,
-            args: detail_value(&event.data, &["arguments", "input", "request"]),
+            args: detail_value_from_json(info.input.as_ref()),
             output: None,
             error: None,
         }
     }
 
-    fn started_display(event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> Self {
+    fn started_display(display: &AgentTurnDisplayInfo) -> Self {
         Self {
-            key: display_tool_ref(event, display),
-            name: display_tool_label(event, display),
+            key: display_tool_ref(display),
+            name: display_tool_label(display),
             action: display_action(display).map(ToString::to_string),
             status: ToolActivityStatus::Running,
             started_at: Some(Instant::now()),
             elapsed: None,
-            args: display_detail_value(display_tool_input(event, display)),
+            args: display_detail_value(display_tool_input(display)),
             output: None,
             error: None,
         }
@@ -951,66 +963,62 @@ struct ToolTerminalEvent {
 }
 
 impl ToolTerminalEvent {
-    fn from_completed(event: &AgentTurnEventInfo) -> Self {
-        let error = string_field(&event.data, "error").map(ToolDetailValue::from_full);
-        let status = if error.is_some() {
-            ToolActivityStatus::Failed(tool_status(&event.data))
-        } else {
-            ToolActivityStatus::Completed(tool_status(&event.data))
+    fn from_info(info: &ToolEventInfo) -> Self {
+        let error = info
+            .error
+            .as_ref()
+            .map(|value| ToolDetailValue::from_full(value.clone()));
+        let status = match info.phase {
+            ToolPhase::Failed => ToolActivityStatus::Failed(info.status.clone()),
+            ToolPhase::Completed => {
+                if error.is_some() {
+                    ToolActivityStatus::Failed(info.status.clone())
+                } else {
+                    ToolActivityStatus::Completed(info.status.clone())
+                }
+            }
+            ToolPhase::Started => ToolActivityStatus::Running,
         };
         Self {
-            key: event_tool_key(event),
-            name: event_tool_name(event),
+            key: None,
+            name: info.name.clone(),
             action: None,
             status,
-            args: detail_value(&event.data, &["arguments", "input", "request"]),
-            output: detail_value(&event.data, &["output", "result", "body"]),
+            args: detail_value_from_json(info.input.as_ref()),
+            output: detail_value_from_json(info.output.as_ref()),
             error,
         }
     }
 
-    fn from_failed(event: &AgentTurnEventInfo) -> Self {
-        Self {
-            key: event_tool_key(event),
-            name: event_tool_name(event),
-            action: None,
-            status: ToolActivityStatus::Failed(tool_status(&event.data)),
-            args: detail_value(&event.data, &["arguments", "input", "request"]),
-            output: detail_value(&event.data, &["output", "result", "body"]),
-            error: string_any_field(&event.data, &["error", "message"])
-                .map(ToolDetailValue::from_full),
-        }
-    }
-
-    fn from_display(event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> Self {
-        let error = preview_display_error(display_tool_error(event, display));
+    fn from_display(display: &AgentTurnDisplayInfo) -> Self {
+        let error = preview_display_error(display_tool_error(display));
         let status = if display.phase.trim() == "failed" || error.is_some() {
-            ToolActivityStatus::Failed(display_status(event, display))
+            ToolActivityStatus::Failed(display_status(display))
         } else {
-            ToolActivityStatus::Completed(display_status(event, display))
+            ToolActivityStatus::Completed(display_status(display))
         };
         Self {
-            key: display_tool_ref(event, display),
-            name: display_tool_label(event, display),
+            key: display_tool_ref(display),
+            name: display_tool_label(display),
             action: display_action(display).map(ToString::to_string),
             status,
-            args: display_detail_value(display_tool_input(event, display)),
-            output: display_detail_value(display_tool_output(event, display)),
+            args: display_detail_value(display_tool_input(display)),
+            output: display_detail_value(display_tool_output(display)),
             error,
         }
     }
 
-    fn from_display_progress(event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> Self {
+    fn from_display_progress(display: &AgentTurnDisplayInfo) -> Self {
         Self {
-            key: display_tool_ref(event, display),
-            name: display_tool_label(event, display),
+            key: display_tool_ref(display),
+            name: display_tool_label(display),
             action: display_action(display).map(ToString::to_string),
             status: ToolActivityStatus::Running,
-            args: display_detail_value(display_tool_input(event, display)),
-            output: display_detail_value(display_tool_output(event, display)).or_else(|| {
+            args: display_detail_value(display_tool_input(display)),
+            output: display_detail_value(display_tool_output(display)).or_else(|| {
                 display_text(display).map(|value| ToolDetailValue::from_full(value.to_string()))
             }),
-            error: preview_display_error(display_tool_error(event, display)),
+            error: preview_display_error(display_tool_error(display)),
         }
     }
 
@@ -1050,46 +1058,8 @@ impl ToolActivityStatus {
     }
 }
 
-fn event_tool_name(event: &AgentTurnEventInfo) -> String {
-    string_any_field(
-        &event.data,
-        &[
-            "tool_name",
-            "toolName",
-            "name",
-            "operation",
-            "tool_id",
-            "toolId",
-        ],
-    )
-    .unwrap_or_else(|| "tool".to_string())
-}
-
-fn event_tool_key(event: &AgentTurnEventInfo) -> Option<String> {
-    string_any_field(
-        &event.data,
-        &[
-            "tool_call_id",
-            "toolCallId",
-            "call_id",
-            "callId",
-            "invocation_id",
-            "invocationId",
-            "tool_use_id",
-            "toolUseId",
-            "id",
-        ],
-    )
-}
-
-fn tool_status(data: &serde_json::Map<String, Value>) -> Option<String> {
-    string_any_field(data, &["status", "state"]).or_else(|| {
-        number_any_field(data, &["status", "statusCode"]).map(|status| status.to_string())
-    })
-}
-
-fn detail_value(data: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<ToolDetailValue> {
-    value_any_field(data, keys).and_then(|value| format_tool_detail(value).ok())
+fn detail_value_from_json(value: Option<&Value>) -> Option<ToolDetailValue> {
+    value.and_then(|value| format_tool_detail(value).ok())
 }
 
 fn display_detail_value(value: Option<&Value>) -> Option<ToolDetailValue> {

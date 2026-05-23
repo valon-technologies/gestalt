@@ -2699,8 +2699,8 @@ fn test_cli_agent_local_reports_install_guidance_for_missing_command() {
         r#"{
             "provider":"claude",
             "harness":"default",
-            "command":"claude",
-            "requiredCommands":["claude"],
+            "command":"gestalt-test-missing-claude-harness",
+            "requiredCommands":["gestalt-test-missing-claude-harness"],
             "install":{
                 "instructions":"Install Claude Code locally.",
                 "commands":[{"command":"npm","args":["install","-g","@anthropic-ai/claude-code"]}]
@@ -2717,7 +2717,7 @@ fn test_cli_agent_local_reports_install_guidance_for_missing_command() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "required command \"claude\" is not available",
+            "required command \"gestalt-test-missing-claude-harness\" is not available",
         ))
         .stderr(predicate::str::contains(
             "Install instructions for agent harness \"claude/default\"",

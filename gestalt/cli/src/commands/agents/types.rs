@@ -1,0 +1,243 @@
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::{Map, Value};
+
+use crate::cli::AgentToolArg;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentHarnessResolveRequest<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) provider: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) harness: Option<&'a str>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentHarnessPlan {
+    pub(crate) provider: String,
+    #[serde(default)]
+    pub(crate) harness: String,
+    pub(crate) command: String,
+    #[serde(default)]
+    pub(crate) args: Vec<String>,
+    #[serde(default)]
+    pub(crate) env: Map<String, Value>,
+    #[serde(default)]
+    pub(crate) working_directory: String,
+    #[serde(default)]
+    pub(crate) required_commands: Vec<String>,
+    pub(crate) install: Option<AgentHarnessInstallPlan>,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentHarnessInstallPlan {
+    #[serde(default)]
+    pub(crate) instructions: String,
+    #[serde(default)]
+    pub(crate) commands: Vec<AgentHarnessInstallCommand>,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentHarnessInstallCommand {
+    #[serde(default)]
+    pub(crate) description: String,
+    #[serde(default)]
+    pub(crate) command: String,
+    #[serde(default)]
+    pub(crate) args: Vec<String>,
+    #[serde(default)]
+    pub(crate) shell: String,
+    #[serde(default)]
+    pub(crate) env: Map<String, Value>,
+}
+
+pub(crate) fn deserialize_turn_display<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<AgentTurnDisplayInfo>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    Ok(value.and_then(AgentTurnDisplayInfo::from_value))
+}
+
+pub(crate) fn take_string_field(data: &mut Map<String, Value>, key: &str) -> String {
+    match data.remove(key) {
+        Some(Value::String(value)) => value,
+        _ => String::new(),
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentSessionInfo {
+    pub(crate) id: String,
+    pub(crate) provider: String,
+    #[serde(default)]
+    pub(crate) model: String,
+    #[serde(default)]
+    pub(crate) state: String,
+    #[serde(default)]
+    pub(crate) last_turn_at: String,
+    #[serde(default)]
+    pub(crate) created_at: String,
+    #[serde(default)]
+    pub(crate) updated_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentProviderListInfo {
+    #[serde(default)]
+    pub(crate) providers: Vec<AgentProviderInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentProviderInfo {
+    pub(crate) name: String,
+    #[serde(default)]
+    pub(crate) default: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentTurnInfo {
+    pub(crate) id: String,
+    #[serde(default)]
+    pub(crate) messages: Vec<AgentMessageInfo>,
+    #[serde(default)]
+    pub(crate) status: String,
+    #[serde(default)]
+    pub(crate) output_text: String,
+    #[serde(default)]
+    pub(crate) structured_output: Option<Value>,
+    #[serde(default)]
+    pub(crate) status_message: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentMessageInfo {
+    #[serde(default)]
+    pub(crate) role: String,
+    #[serde(default)]
+    pub(crate) text: String,
+    #[serde(default)]
+    pub(crate) parts: Vec<AgentMessagePartInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentMessagePartInfo {
+    #[serde(default)]
+    pub(crate) text: String,
+    #[serde(default)]
+    pub(crate) json: Option<Value>,
+    #[serde(default)]
+    pub(crate) tool_call: Option<Value>,
+    #[serde(default)]
+    pub(crate) tool_result: Option<Value>,
+    #[serde(default)]
+    pub(crate) image_ref: Option<Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentTurnEventInfo {
+    #[serde(default)]
+    pub(crate) id: String,
+    #[serde(default)]
+    pub(crate) turn_id: String,
+    #[serde(default)]
+    pub(crate) seq: i64,
+    #[serde(rename = "type")]
+    pub(crate) event_type: String,
+    #[serde(default)]
+    pub(crate) source: String,
+    #[serde(default)]
+    pub(crate) visibility: String,
+    #[serde(default)]
+    pub(crate) data: Map<String, Value>,
+    #[serde(default, deserialize_with = "deserialize_turn_display")]
+    pub(crate) display: Option<AgentTurnDisplayInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentTurnDisplayInfo {
+    #[serde(default)]
+    pub(crate) kind: String,
+    #[serde(default)]
+    pub(crate) phase: String,
+    #[serde(default)]
+    pub(crate) text: String,
+    #[serde(default)]
+    pub(crate) label: String,
+    #[serde(default, rename = "ref")]
+    pub(crate) display_ref: String,
+    #[allow(dead_code)]
+    #[serde(default)]
+    pub(crate) parent_ref: String,
+    #[serde(default)]
+    pub(crate) input: Option<Value>,
+    #[serde(default)]
+    pub(crate) output: Option<Value>,
+    #[serde(default)]
+    pub(crate) error: Option<Value>,
+    #[serde(default)]
+    pub(crate) action: String,
+    #[serde(default)]
+    pub(crate) format: String,
+    #[serde(default)]
+    pub(crate) language: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentInteractionInfo {
+    pub(crate) id: String,
+    #[serde(rename = "type")]
+    pub(crate) interaction_type: String,
+    #[serde(default)]
+    pub(crate) state: String,
+    #[serde(default)]
+    pub(crate) title: String,
+    #[serde(default)]
+    pub(crate) prompt: String,
+    #[serde(default)]
+    pub(crate) request: Map<String, Value>,
+}
+
+pub(crate) struct AgentShell {
+    pub(crate) session: AgentSessionInfo,
+    pub(crate) model_override: Option<String>,
+    pub(crate) system_messages: Vec<String>,
+    pub(crate) tools: Vec<AgentToolArg>,
+    pub(crate) applied_system_messages: bool,
+}
+
+impl AgentTurnDisplayInfo {
+    pub(crate) fn from_value(value: Value) -> Option<Self> {
+        let Value::Object(mut data) = value else {
+            return None;
+        };
+        Some(Self {
+            kind: take_string_field(&mut data, "kind"),
+            phase: take_string_field(&mut data, "phase"),
+            text: take_string_field(&mut data, "text"),
+            label: take_string_field(&mut data, "label"),
+            display_ref: take_string_field(&mut data, "ref"),
+            parent_ref: take_string_field(&mut data, "parentRef"),
+            input: data.remove("input"),
+            output: data.remove("output"),
+            error: data.remove("error"),
+            action: take_string_field(&mut data, "action"),
+            format: take_string_field(&mut data, "format"),
+            language: take_string_field(&mut data, "language"),
+        })
+    }
+}
