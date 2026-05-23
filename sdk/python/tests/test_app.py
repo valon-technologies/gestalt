@@ -4,10 +4,10 @@ import tempfile
 import unittest
 from dataclasses import dataclass
 
-from gestalt import OK, Access, Credential, Error, App, Request, Response, Subject
+from gestalt import Access, App, Credential, Error, OK, Request, Response, Subject
 
 
-class PluginOperationTests(unittest.TestCase):
+class AppOperationTests(unittest.TestCase):
     """Tests for App operation registration and execution using real handlers."""
 
     def test_register_and_execute_operation(self) -> None:
@@ -162,7 +162,7 @@ class PluginOperationTests(unittest.TestCase):
         self.assertEqual(json.loads(result.body), {"error": "record not found"})
 
 
-class PluginConfigureTests(unittest.TestCase):
+class AppConfigureTests(unittest.TestCase):
     """Tests for the @app.configure decorator."""
 
     def test_configure_handler_called(self) -> None:
@@ -185,7 +185,7 @@ class PluginConfigureTests(unittest.TestCase):
         app.configure_provider("my-provider", {"key": "value"})
 
 
-class PluginCatalogTests(unittest.TestCase):
+class AppCatalogTests(unittest.TestCase):
     """Tests for catalog generation."""
 
     def test_catalog_dict(self) -> None:

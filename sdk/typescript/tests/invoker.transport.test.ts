@@ -333,7 +333,7 @@ test("AppInvoker prioritizes invocation-token validation over socket configurati
   try {
     delete process.env[ENV_HOST_SERVICE_SOCKET];
     expect(() => new AppInvoker("   ")).toThrow(
-      "plugin invoker: invocation token is not available",
+      "app invoker: invocation token is not available",
     );
   } finally {
     if (previousSocket === undefined) {

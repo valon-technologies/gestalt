@@ -23,7 +23,7 @@ from . import _s3 as _s3_native
 from . import _telemetry
 from . import _workflow as _workflow_native
 from ._api import Access, Credential, Error, ExternalIdentity, Host, Request, Subject
-from ._app import App, ConnectedToken, _module_plugin
+from ._app import App, ConnectedToken, _module_app
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
@@ -279,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
     if catalog_path:
         if not isinstance(target, App):
             raise RuntimeError(
-                "catalog export is only supported for integration plugins"
+                "catalog export is only supported for integration apps"
             )
         target.write_catalog(catalog_path)
         return 0
@@ -371,7 +371,7 @@ def _module_target(
     runtime_kind: ProviderKind,
 ) -> App | AppProviderAdapter | AppProvider | Any:
     if runtime_kind == ProviderKind.INTEGRATION:
-        return _module_plugin(module)
+        return _module_app(module)
 
     for attribute_name in (runtime_kind.value, "provider", "app"):
         value = getattr(module, attribute_name, None)
@@ -429,7 +429,7 @@ def _register_services(
     _ensure_grpc_runtime()
     if isinstance(servable, App):
         app_pb2_grpc.add_AppProviderServicer_to_server(
-            _provider_servicer(plugin=servable),
+            _provider_servicer(app=servable),
             server,
         )
         return
@@ -1619,15 +1619,15 @@ def _empty_response(value: Any) -> Any:
     return empty_pb2.Empty()
 
 
-def _provider_servicer(*, plugin: App) -> Any:
+def _provider_servicer(*, app: App) -> Any:
     _ensure_grpc_runtime()
 
     class ProviderServicer(app_pb2_grpc.AppProviderServicer):
         @_grpc_handler("provider metadata")
         def GetMetadata(self, _request: Any, _context: Any) -> Any:
             return app_pb2.ProviderMetadata(
-                supports_session_catalog=plugin.supports_session_catalog(),
-                supports_post_connect=plugin.supports_post_connect(),
+                supports_session_catalog=app.supports_session_catalog(),
+                supports_post_connect=app.supports_post_connect(),
                 min_protocol_version=CURRENT_PROTOCOL_VERSION,
                 max_protocol_version=CURRENT_PROTOCOL_VERSION,
             )
@@ -1636,7 +1636,7 @@ def _provider_servicer(*, plugin: App) -> Any:
         def StartProvider(self, request: Any, context: Any) -> Any:
             if _abort_if_protocol_version_mismatch(request.protocol_version, context):
                 return None
-            plugin.configure_provider(
+            app.configure_provider(
                 request.name,
                 _message_to_dict(
                     field_name="config",
@@ -1650,7 +1650,7 @@ def _provider_servicer(*, plugin: App) -> Any:
 
         def Execute(self, request: Any, _context: Any) -> Any:
             try:
-                result = plugin.execute(
+                result = app.execute(
                     request.operation,
                     _message_to_dict(
                         field_name="params",
@@ -1667,11 +1667,11 @@ def _provider_servicer(*, plugin: App) -> Any:
             return app_pb2.OperationResult(status=result.status, body=result.body)
 
         def ResolveHTTPSubject(self, request: Any, context: Any) -> Any:
-            if not plugin.supports_http_subject():
+            if not app.supports_http_subject():
                 return app_pb2.ResolveHTTPSubjectResponse()
 
             try:
-                subject = plugin.resolve_http_subject(
+                subject = app.resolve_http_subject(
                     _http_subject_request(getattr(request, "request", None)),
                     _plugin_request(request),
                 )
@@ -1701,14 +1701,14 @@ def _provider_servicer(*, plugin: App) -> Any:
             )
 
         def GetSessionCatalog(self, request: Any, context: Any) -> Any:
-            if not plugin.supports_session_catalog():
+            if not app.supports_session_catalog():
                 return context.abort(
                     grpc.StatusCode.UNIMPLEMENTED,
                     "provider does not support session catalogs",
                 )
 
             try:
-                catalog = plugin.catalog_for_request(_plugin_request(request))
+                catalog = app.catalog_for_request(_plugin_request(request))
             except Exception as error:
                 return context.abort(
                     grpc.StatusCode.UNKNOWN,
@@ -1726,14 +1726,14 @@ def _provider_servicer(*, plugin: App) -> Any:
             return app_pb2.GetSessionCatalogResponse(catalog=proto_catalog)
 
         def PostConnect(self, request: Any, context: Any) -> Any:
-            if not plugin.supports_post_connect():
+            if not app.supports_post_connect():
                 return context.abort(
                     grpc.StatusCode.UNIMPLEMENTED,
                     "provider does not support post connect",
                 )
 
             try:
-                metadata = plugin.post_connect_metadata(_connected_token(request.token))
+                metadata = app.post_connect_metadata(_connected_token(request.token))
             except Exception as error:
                 return context.abort(
                     grpc.StatusCode.UNKNOWN,

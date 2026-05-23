@@ -18,6 +18,7 @@ from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from gestalt import (
     AgentProvider,
+    App,
     AppProviderAdapter,
     AppRuntimeProvider,
     AppRuntimeSupport,
@@ -43,7 +44,6 @@ from gestalt import (
     MetadataProvider,
     PauseWorkflowProviderEventTriggerRequest,
     PauseWorkflowProviderScheduleRequest,
-    App,
     ProviderKind,
     ProviderMetadata,
     Request,
@@ -176,7 +176,6 @@ class ParseRuntimeArgsTests(unittest.TestCase):
 class RuntimeServeTransportTests(unittest.TestCase):
     def test_runtime_serve_supports_tcp_provider_sockets(self) -> None:
         app = App("tcp-runtime")
-        plugin = app
 
         @app.operation
         def ping(request: Request) -> dict[str, str]:
@@ -201,7 +200,7 @@ class RuntimeServeTransportTests(unittest.TestCase):
                     "_register_shutdown_handlers",
                     side_effect=capture_shutdown,
                 ):
-                    _runtime.serve(plugin)
+                    _runtime.serve(app)
             except BaseException as exc:  # pragma: no cover - surfaced via assertions
                 failures.append(exc)
                 ready.set()
@@ -335,7 +334,6 @@ class RequestTests(unittest.TestCase):
 class MainEntrypointTests(unittest.TestCase):
     def test_writes_catalog_when_env_is_set(self) -> None:
         app = App("test-plugin")
-        plugin = app
 
         @app.operation
         def noop() -> str:
@@ -344,7 +342,7 @@ class MainEntrypointTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             catalog_path = pathlib.Path(tmpdir) / "catalog.yaml"
             with (
-                mock.patch.object(_runtime, "_load_target", return_value=plugin),
+                mock.patch.object(_runtime, "_load_target", return_value=app),
                 mock.patch.dict(
                     _runtime.os.environ,
                     {_runtime.ENV_WRITE_CATALOG: str(catalog_path)},
@@ -362,7 +360,6 @@ class MainEntrypointTests(unittest.TestCase):
 
     def test_provider_servicer_reports_and_serves_session_catalogs(self) -> None:
         app = App("source-name")
-        plugin = app
         configured: list[tuple[str, dict[str, Any]]] = []
 
         @app.configure
@@ -465,7 +462,7 @@ class MainEntrypointTests(unittest.TestCase):
         catalog_workflow = struct_pb2.Struct()
         catalog_workflow.update({"runId": "run-456"})
 
-        servicer = _runtime._provider_servicer(plugin=plugin)
+        servicer = _runtime._provider_servicer(app=app)
         metadata = servicer.GetMetadata(mock.Mock(), mock.Mock())
         bad_context = AbortContext()
         with self.assertRaisesRegex(
@@ -700,13 +697,12 @@ class MainEntrypointTests(unittest.TestCase):
 
     def test_provider_servicer_sanitizes_unhandled_execute_exceptions(self) -> None:
         app = App("source-name")
-        plugin = app
 
         @app.operation
         def broken() -> None:
             raise RuntimeError("sensitive details")
 
-        servicer = _runtime._provider_servicer(plugin=plugin)
+        servicer = _runtime._provider_servicer(app=app)
         execute_response = servicer.Execute(
             app_pb2.ExecuteRequest(operation="broken"),
             mock.Mock(),
@@ -717,8 +713,7 @@ class MainEntrypointTests(unittest.TestCase):
 
     def test_provider_servicer_rejects_missing_session_catalog_support(self) -> None:
         app = App("source-name")
-        plugin = app
-        servicer = _runtime._provider_servicer(plugin=plugin)
+        servicer = _runtime._provider_servicer(app=app)
         context = mock.Mock()
 
         servicer.GetSessionCatalog(app_pb2.GetSessionCatalogRequest(), context)
@@ -730,8 +725,7 @@ class MainEntrypointTests(unittest.TestCase):
 
     def test_provider_servicer_rejects_missing_post_connect_support(self) -> None:
         app = App("source-name")
-        plugin = app
-        servicer = _runtime._provider_servicer(plugin=plugin)
+        servicer = _runtime._provider_servicer(app=app)
         context = mock.Mock()
 
         servicer.PostConnect(app_pb2.PostConnectRequest(), context)
@@ -747,8 +741,7 @@ class MainEntrypointTests(unittest.TestCase):
                 raise RuntimeError("metadata exploded")
 
         app = BrokenMetadataApp("source-name")
-        plugin = app
-        servicer = _runtime._provider_servicer(plugin=plugin)
+        servicer = _runtime._provider_servicer(app=app)
         context = AbortContext()
 
         with self.assertRaisesRegex(

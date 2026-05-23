@@ -358,7 +358,7 @@ class App:
         return self._http_subject_handler
 
 
-class _ModulePluginRegistry:
+class _ModuleAppRegistry:
     def __init__(self) -> None:
         self._apps: dict[str, App] = {}
 
@@ -386,7 +386,7 @@ class _ModulePluginRegistry:
         return app
 
 
-_MODULE_PLUGINS = _ModulePluginRegistry()
+_MODULE_APPS = _ModuleAppRegistry()
 
 
 def operation(
@@ -404,7 +404,7 @@ def operation(
 ) -> Any:
     """Register an operation on the calling module's implicit app.
 
-    This decorator is useful when a module-level ``plugin`` object would be
+    This decorator is useful when a module-level ``app`` object would be
     redundant:
 
     .. code-block:: python
@@ -420,7 +420,7 @@ def operation(
     """
 
     def decorator(handler: Any) -> Any:
-        app = _MODULE_PLUGINS.for_function(handler)
+        app = _MODULE_APPS.for_function(handler)
         return app.operation(
             id=id,
             method=method,
@@ -441,7 +441,7 @@ def session_catalog(func: Any | None = None, /) -> Any:
     """Register a per-request catalog hook on the implicit module app."""
 
     def decorator(handler: Any) -> Any:
-        app = _MODULE_PLUGINS.for_function(handler)
+        app = _MODULE_APPS.for_function(handler)
         return app.session_catalog(handler)
 
     if func is None:
@@ -453,7 +453,7 @@ def post_connect(func: Any | None = None, /) -> Any:
     """Register a connect-time metadata hook on the implicit module app."""
 
     def decorator(handler: Any) -> Any:
-        app = _MODULE_PLUGINS.for_function(handler)
+        app = _MODULE_APPS.for_function(handler)
         return app.post_connect(handler)
 
     if func is None:
@@ -465,7 +465,7 @@ def http_subject(func: Any | None = None, /) -> Any:
     """Register a hosted HTTP subject hook on the implicit module app."""
 
     def decorator(handler: Any) -> Any:
-        app = _MODULE_PLUGINS.for_function(handler)
+        app = _MODULE_APPS.for_function(handler)
         return app.http_subject(handler)
 
     if func is None:
@@ -473,8 +473,8 @@ def http_subject(func: Any | None = None, /) -> Any:
     return decorator(func)
 
 
-def _module_plugin(module: types.ModuleType) -> "App":
-    return _MODULE_PLUGINS.for_module(module)
+def _module_app(module: types.ModuleType) -> "App":
+    return _MODULE_APPS.for_module(module)
 
 
 def _normalize_allowed_roles(allowed_roles: list[str] | None) -> list[str]:

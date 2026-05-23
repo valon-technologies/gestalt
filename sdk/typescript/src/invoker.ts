@@ -51,9 +51,9 @@ export class AppInvoker {
   constructor(requestOrToken: Request | string) {
     this.invocationToken = normalizeInvocationToken(requestOrToken);
 
-    const { target, token } = requireHostServiceTarget("plugin invoker");
+    const { target, token } = requireHostServiceTarget("app invoker");
     const transport = createHostServiceGrpcTransport(
-      parseHostServiceTarget("plugin invoker", target),
+      parseHostServiceTarget("app invoker", target),
       hostServiceMetadataInterceptors(token, ""),
     );
     this.client = createClient(AppInvokerService, transport);
@@ -89,7 +89,7 @@ export class AppInvoker {
   ): Promise<OperationResult> {
     const trimmedDocument = document.trim();
     if (!trimmedDocument) {
-      throw new Error("plugin invoker: graphql document is required");
+      throw new Error("app invoker: graphql document is required");
     }
 
     const response = await this.client.invokeGraphQL({
@@ -143,7 +143,7 @@ function normalizeInvocationToken(requestOrToken: Request | string): string {
       : requestOrToken.invocationToken;
   const trimmed = invocationToken.trim();
   if (!trimmed) {
-    throw new Error("plugin invoker: invocation token is not available");
+    throw new Error("app invoker: invocation token is not available");
   }
   return trimmed;
 }

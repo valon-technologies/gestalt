@@ -314,7 +314,7 @@ class AppInvokerTransportTests(unittest.TestCase):
     def test_invoke_graphql_requires_nonempty_document(self) -> None:
         with AppInvoker("invoke-graphql-empty") as client:
             with self.assertRaisesRegex(
-                RuntimeError, "plugin invoker: graphql document is required"
+                RuntimeError, "app invoker: graphql document is required"
             ):
                 client.invoke_graphql("linear", "   ")
 
@@ -339,7 +339,7 @@ class AppInvokerTransportTests(unittest.TestCase):
 
     def test_whitespace_only_invocation_token_is_rejected(self) -> None:
         with self.assertRaisesRegex(
-            RuntimeError, "plugin invoker: invocation token is not available"
+            RuntimeError, "app invoker: invocation token is not available"
         ):
             AppInvoker("   ")
 

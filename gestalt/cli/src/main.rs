@@ -35,9 +35,7 @@ fn run() -> anyhow::Result<()> {
         },
         Commands::App { command } => dispatch_app_command(command, url, format),
         Commands::Invoke(args) => dispatch_app_command(AppCommands::Invoke(args), url, format),
-        Commands::Describe(args) => {
-            dispatch_app_command(AppCommands::Describe(args), url, format)
-        }
+        Commands::Describe(args) => dispatch_app_command(AppCommands::Describe(args), url, format),
         Commands::Tokens { command } => {
             let client = ApiClient::from_env(url)?;
             match command {
