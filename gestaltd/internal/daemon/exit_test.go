@@ -9,8 +9,10 @@ import (
 	"testing"
 )
 
-func TestMainExitPolicy(t *testing.T) { //nolint:paralleltest // mutates slog.Default
-	for _, tc := range []struct { //nolint:paralleltest // subtests mutate slog.Default
+func TestMainExitPolicy(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
 		name     string
 		err      error
 		wantCode int
@@ -40,13 +42,13 @@ func TestMainExitPolicy(t *testing.T) { //nolint:paralleltest // mutates slog.De
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			var logs []string
-			origDefault := slog.Default()
-			t.Cleanup(func() { slog.SetDefault(origDefault) })
-			slog.SetDefault(slog.New(&testLogHandler{logs: &logs}))
+			t.Parallel()
 
-			if got := mainExitCode(tc.err); got != tc.wantCode {
-				t.Fatalf("mainExitCode() = %d, want %d", got, tc.wantCode)
+			var logs []string
+			logger := slog.New(&testLogHandler{logs: &logs})
+
+			if got := mainExitCodeWithLogger(tc.err, logger); got != tc.wantCode {
+				t.Fatalf("mainExitCodeWithLogger() = %d, want %d", got, tc.wantCode)
 			}
 			if tc.wantLog {
 				if len(logs) != 1 {

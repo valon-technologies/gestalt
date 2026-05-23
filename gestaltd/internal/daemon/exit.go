@@ -36,6 +36,10 @@ func Main(opts Options) int {
 }
 
 func mainExitCode(err error) int {
+	return mainExitCodeWithLogger(err, slog.Default())
+}
+
+func mainExitCodeWithLogger(err error, logger *slog.Logger) int {
 	if err == nil {
 		return 0
 	}
@@ -45,6 +49,6 @@ func mainExitCode(err error) int {
 	if code, ok := exitCode(err); ok {
 		return code
 	}
-	slog.Error("gestaltd exited", "error", err)
+	logger.Error("gestaltd exited", "error", err)
 	return 1
 }
