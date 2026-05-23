@@ -1,7 +1,7 @@
 package s3
 
-//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/s3_grpc.pb.go -service S3Server -receiver routingS3Server -binding s3 -package s3 -server-type proto.S3Server -output routing_s3_gen.go
-//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/s3_grpc.pb.go -service S3ObjectAccessServer -receiver routingS3ObjectAccessServer -binding s3 -package s3 -server-type proto.S3ObjectAccessServer -output routing_s3_object_access_gen.go
+//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/s3_grpc.pb.go -service S3Server -receiver routingS3Server -package s3 -output routing_s3_gen.go
+//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/s3_grpc.pb.go -service S3ObjectAccessServer -receiver routingS3ObjectAccessServer -package s3 -output routing_s3_object_access_gen.go
 
 import (
 	"context"
