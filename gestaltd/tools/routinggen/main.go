@@ -208,7 +208,7 @@ func formatTypeExpr(expr ast.Expr) string {
 		}
 		return formatTypeExpr(t.X) + "[" + strings.Join(indices, ", ") + "]"
 	default:
-		return "any"
+		panic(fmt.Sprintf("routinggen: unsupported AST type %T", expr))
 	}
 }
 

@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
@@ -46,7 +47,7 @@ type AgentHostResolveConnectionInput struct {
 	RunGrant   string
 }
 
-var sharedAgentHostTransport sharedManagerTransport[proto.AgentHostClient]
+var sharedAgentHostClients sync.Map
 
 // AgentHost returns a shared client for the host agent service.
 func AgentHost() (*AgentHostClient, error) {
@@ -58,7 +59,7 @@ func AgentHost() (*AgentHostClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "agent host", target, token, &sharedAgentHostTransport, proto.NewAgentHostClient)
+	client, err := managerTransportClient(ctx, "agent host", target, token, &sharedAgentHostClients, proto.NewAgentHostClient)
 	if err != nil {
 		return nil, err
 	}

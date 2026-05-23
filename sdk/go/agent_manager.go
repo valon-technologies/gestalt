@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
@@ -15,7 +16,7 @@ type AgentManagerClient struct {
 	invocationToken string
 }
 
-var sharedAgentManagerTransport sharedManagerTransport[proto.AgentProviderClient]
+var sharedAgentManagerClients sync.Map
 
 // AgentManager returns a client that attaches invocationToken to every request.
 func AgentManager(invocationToken string) (*AgentManagerClient, error) {
@@ -30,7 +31,7 @@ func AgentManager(invocationToken string) (*AgentManagerClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "agent manager", target, token, &sharedAgentManagerTransport, proto.NewAgentProviderClient)
+	client, err := managerTransportClient(ctx, "agent manager", target, token, &sharedAgentManagerClients, proto.NewAgentProviderClient)
 	if err != nil {
 		return nil, err
 	}

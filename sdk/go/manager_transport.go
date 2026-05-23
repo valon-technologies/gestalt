@@ -10,106 +10,140 @@ import (
 	"strings"
 	"sync"
 
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type sharedHostServiceConn struct {
-	mu      sync.Mutex
-	target  string
-	token   string
-	binding string
-	conn    *grpc.ClientConn
-}
-
-func (s *sharedHostServiceConn) connFor(ctx context.Context, serviceName, target, token, binding string) (*grpc.ClientConn, error) {
-	if s == nil {
-		return nil, fmt.Errorf("%s: shared connection is not initialized", serviceName)
-	}
-
-	s.mu.Lock()
-	if s.conn != nil && s.target == target && s.token == token && s.binding == binding {
-		conn := s.conn
-		s.mu.Unlock()
-		return conn, nil
-	}
-	s.mu.Unlock()
-
-	conn, err := dialHostService(ctx, serviceName, target, token, binding)
-	if err != nil {
-		return nil, err
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.conn != nil && s.target == target && s.token == token && s.binding == binding {
-		_ = conn.Close()
-		return s.conn, nil
-	}
-	if s.conn != nil {
-		_ = s.conn.Close()
-	}
-
-	s.target = target
-	s.token = token
-	s.binding = binding
-	s.conn = conn
-	return conn, nil
-}
-
-type sharedManagerTransport[C any] struct {
-	conn   sharedHostServiceConn
-	client C
-	key    hostServiceConnKey
-}
-
 type hostServiceConnKey struct {
-	target  string
-	token   string
-	binding string
+	target string
+	token  string
 }
 
-func managerTransportClient[C any](ctx context.Context, serviceName, target, token string, transport *sharedManagerTransport[C], newClient func(grpc.ClientConnInterface) C) (C, error) {
-	return hostServiceTransportClient(ctx, serviceName, target, token, "", transport, newClient)
+type pooledHostServiceConn struct {
+	mu     sync.Mutex
+	key    hostServiceConnKey
+	conn   *grpc.ClientConn
+	closed bool
 }
 
-func hostServiceTransportClient[C any](ctx context.Context, serviceName, target, token, binding string, transport *sharedManagerTransport[C], newClient func(grpc.ClientConnInterface) C) (C, error) {
+var sharedHostServiceConns sync.Map // hostServiceConnKey -> *pooledHostServiceConn
+
+func sharedHostServiceConnFor(ctx context.Context, serviceName, target, token string) (*grpc.ClientConn, error) {
+	key := hostServiceConnKey{target: target, token: token}
+
+	for {
+		if existing, ok := sharedHostServiceConns.Load(key); ok {
+			pooled := existing.(*pooledHostServiceConn)
+			pooled.mu.Lock()
+			if pooled.conn != nil && !pooled.closed && pooled.key == key {
+				conn := pooled.conn
+				pooled.mu.Unlock()
+				return conn, nil
+			}
+			pooled.mu.Unlock()
+		}
+
+		conn, err := dialHostService(ctx, serviceName, target, token)
+		if err != nil {
+			return nil, err
+		}
+
+		pooled := &pooledHostServiceConn{key: key, conn: conn}
+		actual, loaded := sharedHostServiceConns.LoadOrStore(key, pooled)
+		if !loaded {
+			return conn, nil
+		}
+
+		_ = conn.Close()
+		holder := actual.(*pooledHostServiceConn)
+		holder.mu.Lock()
+		if holder.conn != nil && !holder.closed && holder.key == key {
+			conn := holder.conn
+			holder.mu.Unlock()
+			return conn, nil
+		}
+		holder.mu.Unlock()
+	}
+}
+
+func cachedHostServiceGRPCClient[C any](
+	ctx context.Context,
+	serviceName, target, token string,
+	cache *sync.Map,
+	newClient func(grpc.ClientConnInterface) C,
+) (C, error) {
 	var zero C
-	if transport == nil {
-		return zero, fmt.Errorf("%s: shared transport is not initialized", serviceName)
+	if cache == nil {
+		return zero, fmt.Errorf("%s: client cache is not initialized", serviceName)
 	}
 
-	key := hostServiceConnKey{target: target, token: token, binding: binding}
-	transport.conn.mu.Lock()
-	if transport.conn.conn != nil && transport.key == key {
-		client := transport.client
-		transport.conn.mu.Unlock()
-		return client, nil
+	key := hostServiceConnKey{target: target, token: token}
+	if existing, ok := cache.Load(key); ok {
+		return existing.(C), nil
 	}
-	transport.conn.mu.Unlock()
 
-	conn, err := transport.conn.connFor(ctx, serviceName, target, token, binding)
+	conn, err := sharedHostServiceConnFor(ctx, serviceName, target, token)
 	if err != nil {
 		return zero, err
 	}
 	client := newClient(conn)
 
-	transport.conn.mu.Lock()
-	defer transport.conn.mu.Unlock()
-
-	if transport.conn.conn != nil && transport.key == key {
-		return transport.client, nil
+	actual, loaded := cache.LoadOrStore(key, client)
+	if loaded {
+		return actual.(C), nil
 	}
-
-	transport.key = key
-	transport.client = client
 	return client, nil
 }
 
-func dialHostService(ctx context.Context, serviceName, target, token, binding string) (*grpc.ClientConn, error) {
-	return dialManagerTransport(ctx, serviceName, target, hostServiceDialOptions(token, binding)...)
+type s3GRPCClients struct {
+	client             proto.S3Client
+	objectAccessClient proto.S3ObjectAccessClient
+}
+
+func cachedS3GRPCClients(ctx context.Context, target, token string, cache *sync.Map) (proto.S3Client, proto.S3ObjectAccessClient, error) {
+	if cache == nil {
+		return nil, nil, fmt.Errorf("s3: client cache is not initialized")
+	}
+
+	key := hostServiceConnKey{target: target, token: token}
+	if existing, ok := cache.Load(key); ok {
+		clients := existing.(s3GRPCClients)
+		return clients.client, clients.objectAccessClient, nil
+	}
+
+	conn, err := sharedHostServiceConnFor(ctx, "s3", target, token)
+	if err != nil {
+		return nil, nil, err
+	}
+	clients := s3GRPCClients{
+		client:             proto.NewS3Client(conn),
+		objectAccessClient: proto.NewS3ObjectAccessClient(conn),
+	}
+
+	actual, loaded := cache.LoadOrStore(key, clients)
+	if loaded {
+		clients = actual.(s3GRPCClients)
+	}
+	return clients.client, clients.objectAccessClient, nil
+}
+
+func managerTransportClient[C any](
+	ctx context.Context,
+	serviceName, target, token string,
+	cache *sync.Map,
+	newClient func(grpc.ClientConnInterface) C,
+) (C, error) {
+	return cachedHostServiceGRPCClient(ctx, serviceName, target, token, cache, newClient)
+}
+
+func hostServiceCallCtx(ctx context.Context, binding string) context.Context {
+	return withHostServiceBinding(ctx, binding)
+}
+
+func dialHostService(ctx context.Context, serviceName, target, token string) (*grpc.ClientConn, error) {
+	return dialManagerTransport(ctx, serviceName, target, hostServiceDialOptions(token)...)
 }
 
 func dialManagerTransport(ctx context.Context, serviceName, target string, extraOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
@@ -165,29 +199,21 @@ func hostServiceTarget(serviceName string) (string, string, error) {
 	return target, strings.TrimSpace(os.Getenv(EnvHostServiceToken)), nil
 }
 
-func hostServiceDialOptions(token string, binding string) []grpc.DialOption {
-	creds := hostServicePerRPCCredentials{
-		token:   strings.TrimSpace(token),
-		binding: strings.TrimSpace(binding),
-	}
-	if creds.token == "" && creds.binding == "" {
-		return nil
-	}
-	return []grpc.DialOption{grpc.WithPerRPCCredentials(creds)}
+func hostServiceDialOptions(token string) []grpc.DialOption {
+	return []grpc.DialOption{grpc.WithPerRPCCredentials(hostServicePerRPCCredentials{token: strings.TrimSpace(token)})}
 }
 
 type hostServicePerRPCCredentials struct {
-	token   string
-	binding string
+	token string
 }
 
-func (c hostServicePerRPCCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+func (c hostServicePerRPCCredentials) GetRequestMetadata(ctx context.Context, _ ...string) (map[string]string, error) {
 	md := make(map[string]string, 2)
 	if c.token != "" {
 		md[hostServiceRelayTokenHeader] = c.token
 	}
-	if c.binding != "" {
-		md[HostServiceBindingMetadata] = c.binding
+	if binding := hostServiceBindingFromContext(ctx); binding != "" {
+		md[HostServiceBindingMetadata] = binding
 	}
 	return md, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
@@ -16,7 +17,7 @@ type WorkflowManagerClient struct {
 	idempotencyKey  string
 }
 
-var sharedWorkflowManagerTransport sharedManagerTransport[proto.WorkflowProviderClient]
+var sharedWorkflowManagerClients sync.Map
 
 // WorkflowManager returns a client that attaches invocationToken to every request.
 func WorkflowManager(invocationToken string) (*WorkflowManagerClient, error) {
@@ -31,7 +32,7 @@ func WorkflowManager(invocationToken string) (*WorkflowManagerClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "workflow manager", target, token, &sharedWorkflowManagerTransport, proto.NewWorkflowProviderClient)
+	client, err := managerTransportClient(ctx, "workflow manager", target, token, &sharedWorkflowManagerClients, proto.NewWorkflowProviderClient)
 	if err != nil {
 		return nil, err
 	}

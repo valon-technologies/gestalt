@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
@@ -16,7 +17,7 @@ type ExternalCredentialClient struct {
 	client proto.ExternalCredentialProviderClient
 }
 
-var sharedExternalCredentialTransport sharedManagerTransport[proto.ExternalCredentialProviderClient]
+var sharedExternalCredentialClients sync.Map
 
 // ExternalCredentials connects to the ExternalCredentialProvider exposed by
 // gestaltd.
@@ -29,7 +30,7 @@ func ExternalCredentials() (*ExternalCredentialClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "external credentials", target, token, &sharedExternalCredentialTransport, proto.NewExternalCredentialProviderClient)
+	client, err := managerTransportClient(ctx, "external credentials", target, token, &sharedExternalCredentialClients, proto.NewExternalCredentialProviderClient)
 	if err != nil {
 		return nil, err
 	}

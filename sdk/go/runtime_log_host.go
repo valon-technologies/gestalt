@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -22,7 +23,7 @@ type RuntimeLogHostClient struct {
 	sourceSeq atomic.Int64
 }
 
-var sharedRuntimeLogHostTransport sharedManagerTransport[proto.PluginRuntimeLogHostClient]
+var sharedRuntimeLogHostClients sync.Map
 
 // RuntimeLogStream identifies the stream that produced a runtime log entry.
 type RuntimeLogStream string
@@ -51,7 +52,7 @@ func RuntimeLogHost() (*RuntimeLogHostClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "runtime log host", target, token, &sharedRuntimeLogHostTransport, proto.NewPluginRuntimeLogHostClient)
+	client, err := managerTransportClient(ctx, "runtime log host", target, token, &sharedRuntimeLogHostClients, proto.NewPluginRuntimeLogHostClient)
 	if err != nil {
 		return nil, err
 	}
