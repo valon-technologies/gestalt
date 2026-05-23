@@ -1,9 +1,6 @@
 package main
 
 import (
-	"errors"
-	"flag"
-	"log/slog"
 	"os"
 	_ "time/tzdata"
 
@@ -13,17 +10,8 @@ import (
 var version = "dev"
 
 func main() {
-	if err := daemon.Run(daemon.Options{
+	os.Exit(daemon.Main(daemon.Options{
 		Version: version,
 		Args:    os.Args[1:],
-	}); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return
-		}
-		if code, ok := daemon.ExitCode(err); ok {
-			os.Exit(code)
-		}
-		slog.Error("gestaltd exited", "error", err)
-		os.Exit(1)
-	}
+	}))
 }

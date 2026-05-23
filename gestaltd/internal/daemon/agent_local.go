@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -16,24 +15,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 )
-
-type exitCodeError struct {
-	code int
-}
-
-func (e exitCodeError) Error() string {
-	return fmt.Sprintf("process exited with status %d", e.code)
-}
-
-// ExitCode extracts a daemon command exit code that intentionally mirrors a
-// child process status.
-func ExitCode(err error) (int, bool) {
-	var exitErr exitCodeError
-	if errors.As(err, &exitErr) {
-		return exitErr.code, true
-	}
-	return 0, false
-}
 
 type localAgentCommandOptions struct {
 	ConfigPaths []string
