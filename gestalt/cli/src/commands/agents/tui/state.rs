@@ -5,12 +5,16 @@ use serde_json::Value;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use super::super::{
+use crate::commands::agents::fields::{
+    compact_json, display_action, display_format, display_language, display_status, display_text,
+    display_tool_error, display_tool_input, display_tool_label, display_tool_output,
+    display_tool_ref, display_value_text, extract_assistant_delta, extract_interaction_id,
+    extract_tool_name, number_any_field, pretty_json, string_any_field, string_field,
+    turn_event_display, value_any_field,
+};
+use crate::commands::agents::types::{
     AgentInteractionInfo, AgentSessionInfo, AgentTurnDisplayInfo, AgentTurnEventInfo,
-    AgentTurnInfo, compact_json, display_action, display_format, display_language, display_status,
-    display_text, display_tool_error, display_tool_input, display_tool_label, display_tool_output,
-    display_tool_ref, display_value_text, number_any_field, pretty_json, string_any_field,
-    string_field, turn_event_display, value_any_field,
+    AgentTurnInfo,
 };
 
 const MAX_TRANSCRIPT_ITEMS: usize = 500;
@@ -97,7 +101,7 @@ impl AgentUiState {
         }
         match event.event_type.as_str() {
             "agent.message.delta" | "assistant.delta" => {
-                if let Some(text) = string_any_field(&event.data, &["text", "delta", "content"]) {
+                if let Some(text) = extract_assistant_delta(&event.data) {
                     self.push_assistant_delta(&text);
                 }
             }
@@ -128,14 +132,12 @@ impl AgentUiState {
                 self.finish_tool_activity(info);
             }
             "interaction.requested" => {
-                let id = string_any_field(&event.data, &["interaction_id", "interactionId"])
-                    .unwrap_or_else(|| "interaction".to_string());
+                let id = extract_interaction_id(&event.data);
                 self.push_interaction(format!("requested {id}"));
                 self.status = "waiting for input".to_string();
             }
             "interaction.resolved" => {
-                let id = string_any_field(&event.data, &["interaction_id", "interactionId"])
-                    .unwrap_or_else(|| "interaction".to_string());
+                let id = extract_interaction_id(&event.data);
                 self.push_interaction(format!("resolved {id}"));
                 self.status = "interaction resolved".to_string();
             }
@@ -1051,18 +1053,7 @@ impl ToolActivityStatus {
 }
 
 fn event_tool_name(event: &AgentTurnEventInfo) -> String {
-    string_any_field(
-        &event.data,
-        &[
-            "tool_name",
-            "toolName",
-            "name",
-            "operation",
-            "tool_id",
-            "toolId",
-        ],
-    )
-    .unwrap_or_else(|| "tool".to_string())
+    extract_tool_name(&event.data)
 }
 
 fn event_tool_key(event: &AgentTurnEventInfo) -> Option<String> {

@@ -3,11 +3,13 @@ use serde_json::{Map, Value, json};
 
 use crate::api::ApiClient;
 use crate::cli::{
-    WorkflowEventPublishArgs, WorkflowScheduleCreateArgs, WorkflowScheduleUpdateArgs,
-    WorkflowTriggerCreateArgs, WorkflowTriggerUpdateArgs,
+    WorkflowCommands, WorkflowEventCommands, WorkflowEventPublishArgs, WorkflowRunCommands,
+    WorkflowScheduleCommands, WorkflowScheduleCreateArgs, WorkflowScheduleUpdateArgs,
+    WorkflowTriggerCommands, WorkflowTriggerCreateArgs, WorkflowTriggerUpdateArgs,
 };
 use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
+use crate::query;
 
 const EVENTS_PATH: &str = "/api/v1/workflow/events";
 const SCHEDULES_PATH: &str = "/api/v1/workflow/schedules";
@@ -206,19 +208,11 @@ fn runs_path(
         params.push(("pageSize".to_string(), page_size.to_string()));
     }
     push_query_param(&mut params, "pageToken", page_token);
-    if params.is_empty() {
-        return Ok(RUNS_PATH.to_string());
-    }
-    Ok(format!(
-        "{RUNS_PATH}?{}",
-        serde_urlencoded::to_string(params).context("failed to encode query")?
-    ))
+    query::append_query(RUNS_PATH, &params)
 }
 
 fn push_query_param(params: &mut Vec<(String, String)>, name: &str, value: Option<&str>) {
-    if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
-        params.push((name.to_string(), value.to_string()));
-    }
+    query::push_opt_param(params, name, value);
 }
 
 pub fn get_run(client: &ApiClient, id: &str, format: Format) -> Result<()> {
@@ -869,5 +863,52 @@ fn format_bool(value: Option<bool>) -> String {
         Some(true) => "yes".to_string(),
         Some(false) => "no".to_string(),
         None => "-".to_string(),
+    }
+}
+
+pub fn dispatch(client: &ApiClient, command: WorkflowCommands, format: Format) -> Result<()> {
+    match command {
+        WorkflowCommands::Schedules { command } => match command {
+            WorkflowScheduleCommands::List { app } => list(client, app.as_deref(), format),
+            WorkflowScheduleCommands::Get { id } => get(client, &id, format),
+            WorkflowScheduleCommands::Create(args) => create(client, &args, format),
+            WorkflowScheduleCommands::Update(args) => update(client, &args, format),
+            WorkflowScheduleCommands::Delete { id } => delete(client, &id, format),
+            WorkflowScheduleCommands::Pause { id } => pause(client, &id, format),
+            WorkflowScheduleCommands::Resume { id } => resume(client, &id, format),
+        },
+        WorkflowCommands::Triggers { command } => match command {
+            WorkflowTriggerCommands::List { app, event_type } => {
+                list_triggers(client, app.as_deref(), event_type.as_deref(), format)
+            }
+            WorkflowTriggerCommands::Get { id } => get_trigger(client, &id, format),
+            WorkflowTriggerCommands::Create(args) => create_trigger(client, &args, format),
+            WorkflowTriggerCommands::Update(args) => update_trigger(client, &args, format),
+            WorkflowTriggerCommands::Delete { id } => delete_trigger(client, &id, format),
+            WorkflowTriggerCommands::Pause { id } => pause_trigger(client, &id, format),
+            WorkflowTriggerCommands::Resume { id } => resume_trigger(client, &id, format),
+        },
+        WorkflowCommands::Runs { command } => match command {
+            WorkflowRunCommands::List {
+                app,
+                status,
+                page_size,
+                page_token,
+            } => list_runs(
+                client,
+                app.as_deref(),
+                status.as_deref(),
+                page_size,
+                page_token.as_deref(),
+                format,
+            ),
+            WorkflowRunCommands::Get { id } => get_run(client, &id, format),
+            WorkflowRunCommands::Cancel { id, reason } => {
+                cancel_run(client, &id, reason.as_deref(), format)
+            }
+        },
+        WorkflowCommands::Events { command } => match command {
+            WorkflowEventCommands::Publish(args) => publish_event(client, &args, format),
+        },
     }
 }

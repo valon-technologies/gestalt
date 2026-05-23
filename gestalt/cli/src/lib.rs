@@ -9,3 +9,4 @@ pub mod interactive;
 pub mod output;
 pub mod params;
 pub mod paths;
+pub mod query;
