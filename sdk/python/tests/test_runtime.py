@@ -395,7 +395,7 @@ class MainEntrypointTests(unittest.TestCase):
                 ),
                 "workflow": request.workflow,
                 "tool_refs_set": request.tool_refs_set,
-                "tool_ref_plugin": request.tool_refs[0].plugin
+                "tool_ref_app": request.tool_refs[0].app
                 if request.tool_refs
                 else "",
                 "tool_ref_operation": request.tool_refs[0].operation
@@ -658,7 +658,7 @@ class MainEntrypointTests(unittest.TestCase):
                     },
                 },
                 "tool_refs_set": True,
-                "tool_ref_plugin": "github",
+                "tool_ref_app": "github",
                 "tool_ref_operation": "bot.getPullRequest",
                 "tool_ref_run_as": "service_account:github-review",
                 "tool_ref_external_id": "user:12345678",

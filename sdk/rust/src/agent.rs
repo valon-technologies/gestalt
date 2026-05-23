@@ -445,14 +445,6 @@ pub struct AgentToolRef {
     pub run_as_external_identity: Option<ExternalIdentity>,
 }
 
-impl AgentToolRef {
-    /// Deprecated alias for [`AgentToolRef::app`].
-    #[deprecated(note = "use app instead")]
-    pub fn plugin(&self) -> &str {
-        &self.app
-    }
-}
-
 impl AgentMessage {
     /// Sets message metadata from any JSON-object-like serializable value.
     pub fn with_metadata<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
