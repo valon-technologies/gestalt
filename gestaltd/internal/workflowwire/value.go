@@ -164,8 +164,3 @@ func encodeText(text coreworkflow.Text) map[string]any {
 	}
 	return map[string]any{"template": text.Template}
 }
-
-// ValueFromCore is an alias for EncodeValue for call-site clarity.
-func ValueFromCore(value coreworkflow.Value) any {
-	return EncodeValue(value)
-}

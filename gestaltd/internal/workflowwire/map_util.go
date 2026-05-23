@@ -87,7 +87,7 @@ func objectArg(args map[string]any, key, path string) (map[string]any, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: %s must be an object", ErrInvalid, path+"."+key)
 	}
-	return out, nil
+	return mapDeepClone(out), nil
 }
 
 func deepClone(value any) any {

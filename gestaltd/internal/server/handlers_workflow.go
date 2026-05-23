@@ -16,7 +16,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -726,15 +725,62 @@ func workflowValueMapInfoFromCore(values map[string]coreworkflow.Value) map[stri
 	if len(values) == 0 {
 		return nil
 	}
+	return workflowValueObjectInfoFromCore(values)
+}
+
+func workflowValueObjectInfoFromCore(values map[string]coreworkflow.Value) map[string]any {
 	out := make(map[string]any, len(values))
 	for key := range values {
-		out[key] = workflowwire.EncodeValue(values[key])
+		out[key] = workflowValueInfoFromCore(values[key])
 	}
 	return out
 }
 
 func workflowValueInfoFromCore(value coreworkflow.Value) any {
-	return workflowwire.EncodeValue(value)
+	switch {
+	case value.LiteralSet:
+		return map[string]any{"literal": cloneWorkflowInfoJSON(value.Literal)}
+	case value.Object != nil:
+		return map[string]any{"object": workflowValueObjectInfoFromCore(value.Object)}
+	case value.Array != nil:
+		items := make([]any, 0, len(value.Array))
+		for i := range value.Array {
+			items = append(items, workflowValueInfoFromCore(value.Array[i]))
+		}
+		return map[string]any{"array": items}
+	case value.Template != nil:
+		return map[string]any{"template": workflowTextInfoFromCore(*value.Template)}
+	case strings.TrimSpace(value.RunInput) != "":
+		return map[string]any{"runInput": value.RunInput}
+	case strings.TrimSpace(value.SignalPayload) != "":
+		return map[string]any{"signalPayload": value.SignalPayload}
+	case value.StepOutput != nil:
+		return map[string]any{"stepOutput": map[string]any{
+			"stepId": value.StepOutput.StepID,
+			"path":   value.StepOutput.Path,
+		}}
+	default:
+		return nil
+	}
+}
+
+func cloneWorkflowInfoJSON(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, item := range typed {
+			out[key] = cloneWorkflowInfoJSON(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i := range typed {
+			out[i] = cloneWorkflowInfoJSON(typed[i])
+		}
+		return out
+	default:
+		return typed
+	}
 }
 
 func (s *Server) writeWorkflowScheduleProviderError(ctx context.Context, w http.ResponseWriter, appName, scheduleID string, err error) {

@@ -91,3 +91,58 @@ func TestParseStepWhenRequiresValue(t *testing.T) {
 		t.Fatalf("ParseStepWhen() error = %v, want ErrInvalid", err)
 	}
 }
+
+func TestParseTargetMapClonesObjectArgs(t *testing.T) {
+	t.Parallel()
+
+	stepMetadata := map[string]any{"nested": map[string]any{"value": "before"}}
+	responseSchema := map[string]any{"type": "object"}
+	modelOptions := map[string]any{"temperature": 0.2}
+	messageMetadata := map[string]any{"source": "before"}
+	raw := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"id":       "agent",
+				"metadata": stepMetadata,
+				"agent": map[string]any{
+					"messages": []any{
+						map[string]any{
+							"role":     "user",
+							"text":     "hello",
+							"metadata": messageMetadata,
+						},
+					},
+					"responseSchema": responseSchema,
+					"modelOptions":   modelOptions,
+				},
+			},
+		},
+	}
+
+	target, err := ParseTargetMap(raw, "target")
+	if err != nil {
+		t.Fatalf("ParseTargetMap() error = %v", err)
+	}
+	stepMetadata["added"] = true
+	stepMetadata["nested"].(map[string]any)["value"] = "after"
+	responseSchema["type"] = "array"
+	modelOptions["temperature"] = 1.0
+	messageMetadata["source"] = "after"
+
+	step := target.Steps[0]
+	if _, ok := step.Metadata["added"]; ok {
+		t.Fatalf("step metadata aliases input map: %#v", step.Metadata)
+	}
+	if nested := step.Metadata["nested"].(map[string]any); nested["value"] != "before" {
+		t.Fatalf("step metadata nested value = %#v, want before", nested["value"])
+	}
+	if step.Agent.ResponseSchema["type"] != "object" {
+		t.Fatalf("response schema = %#v, want original object type", step.Agent.ResponseSchema)
+	}
+	if step.Agent.ModelOptions["temperature"] != 0.2 {
+		t.Fatalf("model options = %#v, want original temperature", step.Agent.ModelOptions)
+	}
+	if step.Agent.Messages[0].Metadata["source"] != "before" {
+		t.Fatalf("message metadata = %#v, want original source", step.Agent.Messages[0].Metadata)
+	}
+}

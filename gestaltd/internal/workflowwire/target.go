@@ -296,16 +296,6 @@ func parseToolRefs(value any) ([]coreagent.ToolRef, error) {
 	return out, nil
 }
 
-// EncodeAppCall converts an app call into canonical JSON shape.
-func EncodeAppCall(app coreworkflow.AppCall) map[string]any {
-	return encodeAppCall(app)
-}
-
-// EncodeAgentTurn converts an agent turn into canonical JSON shape.
-func EncodeAgentTurn(agent coreworkflow.AgentTurn) map[string]any {
-	return encodeAgentTurn(agent)
-}
-
 // EncodeTargetMap converts a core workflow target into canonical JSON shape.
 func EncodeTargetMap(target coreworkflow.Target) map[string]any {
 	steps := make([]map[string]any, 0, len(target.Steps))
