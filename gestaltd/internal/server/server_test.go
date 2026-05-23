@@ -49,7 +49,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
@@ -73,7 +72,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	"github.com/valon-technologies/gestalt/server/services/ui"
 	"github.com/valon-technologies/gestalt/server/services/ui/adminui"
-	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -1223,7 +1221,6 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 	cases := []struct {
 		name         string
 		service      string
-		envVar       string
 		methodPrefix string
 		register     func(*grpc.Server, *atomic.Int64)
 		call         func(*testing.T, context.Context, *grpc.ClientConn)
@@ -1231,7 +1228,6 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 		{
 			name:         "workflow provider",
 			service:      "workflow_provider",
-			envVar:       workflowservice.DefaultProviderSocketEnv,
 			methodPrefix: "/" + proto.WorkflowProvider_ServiceDesc.ServiceName + "/",
 			register: func(srv *grpc.Server, calls *atomic.Int64) {
 				proto.RegisterWorkflowProviderServer(srv, relayTestWorkflowProviderServer{calls: calls})
@@ -1250,7 +1246,6 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 		{
 			name:         "agent provider",
 			service:      "agent_provider",
-			envVar:       agentservice.DefaultProviderSocketEnv,
 			methodPrefix: "/" + proto.AgentProvider_ServiceDesc.ServiceName + "/",
 			register: func(srv *grpc.Server, calls *atomic.Int64) {
 				proto.RegisterAgentProviderServer(srv, relayTestAgentProviderServer{calls: calls})
@@ -1269,7 +1264,6 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 		{
 			name:         "runtime log host",
 			service:      "runtime_log_host",
-			envVar:       runtimehost.DefaultHostServiceSocketEnv,
 			methodPrefix: "/" + proto.AppRuntimeLogHost_ServiceDesc.ServiceName + "/",
 			register: func(srv *grpc.Server, calls *atomic.Int64) {
 				proto.RegisterAppRuntimeLogHostServer(srv, relayTestRuntimeLogHostServer{calls: calls})

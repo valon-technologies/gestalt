@@ -56,7 +56,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
-	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
@@ -7404,7 +7403,7 @@ func TestAppRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelC
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartAppRelayEnv(t, startRequests[0], workflowservice.DefaultProviderSocketEnv)
+	assertStartAppRelayEnv(t, startRequests[0], "workflow provider relay")
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -8040,7 +8039,7 @@ func TestAppRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testi
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartAppRelayEnv(t, startRequests[0], workflowservice.DefaultProviderSocketEnv)
+	assertStartAppRelayEnv(t, startRequests[0], "workflow provider relay")
 }
 
 func TestAppRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing.T) {
