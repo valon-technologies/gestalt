@@ -4280,10 +4280,9 @@ var File_v1_workflow_proto protoreflect.FileDescriptor
 
 const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
-	"\x11v1/workflow.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x0ev1/agent.proto\x1a\fv1/app.proto\"\x92\x01\n" +
+	"\x11v1/workflow.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x0ev1/agent.proto\x1a\fv1/app.proto\"T\n" +
 	"\x13BoundWorkflowTarget\x127\n" +
-	"\x05steps\x18\b \x03(\v2!.gestalt.provider.v1.WorkflowStepR\x05stepsJ\x04\b\x01\x10\bR\bapp_nameR\toperationR\x05inputR\n" +
-	"connectionR\binstanceR\x03appR\x05agent\"\x92\x04\n" +
+	"\x05steps\x18\b \x03(\v2!.gestalt.provider.v1.WorkflowStepR\x05stepsJ\x04\b\x01\x10\b\"\x81\x04\n" +
 	"\fWorkflowStep\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12E\n" +
 	"\x06inputs\x18\x02 \x03(\v2-.gestalt.provider.v1.WorkflowStep.InputsEntryR\x06inputs\x129\n" +
@@ -4297,7 +4296,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x128\n" +
 	"\x05value\x18\x02 \x01(\v2\".gestalt.provider.v1.WorkflowValueR\x05value:\x028\x01B\b\n" +
 	"\x06actionJ\x04\b\x05\x10\x06J\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"R\x0foutput_delivery\"\xe6\x01\n" +
+	"\"\xe6\x01\n" +
 	"\x13WorkflowStepAppCall\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\toperation\x18\x02 \x01(\tR\toperation\x128\n" +
@@ -4325,7 +4324,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\btemplate\x18\x01 \x01(\tR\btemplate\"|\n" +
 	"\x10WorkflowStepWhen\x128\n" +
 	"\x05value\x18\x01 \x01(\v2\".gestalt.provider.v1.WorkflowValueR\x05value\x12.\n" +
-	"\x06equals\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x06equals\"\xbf\x04\n" +
+	"\x06equals\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x06equals\"\x8b\x04\n" +
 	"\rWorkflowValue\x122\n" +
 	"\aliteral\x18\x01 \x01(\v2\x16.google.protobuf.ValueH\x00R\aliteral\x12=\n" +
 	"\x06object\x18\x02 \x01(\v2#.gestalt.provider.v1.WorkflowObjectH\x00R\x06object\x12:\n" +
@@ -4336,7 +4335,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\vstep_output\x18\t \x01(\v2-.gestalt.provider.v1.WorkflowStepOutputSourceH\x00R\n" +
 	"stepOutputB\x06\n" +
 	"\x04kindJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fR\x0fsignal_metadataR\x10workflow_contextR\x05eventR\bschedule\"\xb8\x01\n" +
+	"\x10\vJ\x04\b\v\x10\f\"\xb8\x01\n" +
 	"\x0eWorkflowObject\x12G\n" +
 	"\x06fields\x18\x01 \x03(\v2/.gestalt.provider.v1.WorkflowObject.FieldsEntryR\x06fields\x1a]\n" +
 	"\vFieldsEntry\x12\x10\n" +
@@ -4456,7 +4455,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x12\x1e\n" +
 	"\n" +
 	"operations\x18\x02 \x03(\tR\n" +
-	"operations\"\xca\x05\n" +
+	"operations\"\xb6\x05\n" +
 	"\x1aWorkflowExecutionReference\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rprovider_name\x18\x02 \x01(\tR\fproviderName\x12@\n" +
@@ -4477,7 +4476,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x0fcaller_app_name\x18\r \x01(\tR\rcallerAppName\x12@\n" +
 	"\x06run_as\x18\x0e \x01(\v2).gestalt.provider.v1.WorkflowRunAsSubjectR\x05runAs\x120\n" +
 	"\x14source_definition_id\x18\x0f \x01(\tR\x12sourceDefinitionIdJ\x04\b\t\x10\n" +
-	"R\x12target_fingerprint\"\xdf\x02\n" +
+	"\"\xdf\x02\n" +
 	"\x0eWorkflowSignal\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x121\n" +
