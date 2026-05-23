@@ -36,7 +36,7 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 		WorkflowKeySHA256:       "workflow-key-hash",
 		CallerApp:               "slack",
 		WorkflowTargetKind:      "steps",
-		WorkflowTargetComponent: "app_target",
+		WorkflowTargetComponent: "app_step",
 		WorkflowTargetProvider:  "github",
 		WorkflowTargetOperation: "reviewPullRequest",
 	}
@@ -97,8 +97,8 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 	if record["workflow_target_kind"] != "steps" {
 		t.Errorf("expected workflow_target_kind=steps, got %v", record["workflow_target_kind"])
 	}
-	if record["workflow_target_component"] != "app_target" {
-		t.Errorf("expected workflow_target_component=app_target, got %v", record["workflow_target_component"])
+	if record["workflow_target_component"] != "app_step" {
+		t.Errorf("expected workflow_target_component=app_step, got %v", record["workflow_target_component"])
 	}
 	if record["workflow_target_provider"] != "github" {
 		t.Errorf("expected workflow_target_provider=github, got %v", record["workflow_target_provider"])

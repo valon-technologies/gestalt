@@ -741,7 +741,7 @@ const (
 	targetAuthorizationComponentTarget        = "target"
 	targetAuthorizationComponentAgentProvider = "agent_provider"
 	targetAuthorizationComponentAgentToolRef  = "agent_tool_ref"
-	targetAuthorizationComponentAppTarget     = "app_target"
+	targetAuthorizationComponentAppStep       = "app_step"
 
 	targetAuthorizationReasonMissingAgentProvider               = "missing_agent_provider"
 	targetAuthorizationReasonAuthorizerProviderDenied           = "authorizer_provider_denied"
@@ -751,7 +751,7 @@ const (
 	targetAuthorizationReasonNonExactToolRefWithSystemTools     = "non_exact_tool_ref_with_system_tools"
 	targetAuthorizationReasonAuthorizerOperationDenied          = "authorizer_operation_denied"
 	targetAuthorizationReasonPrincipalOperationPermissionDenied = "principal_operation_permission_denied"
-	targetAuthorizationReasonMissingAppTarget                   = "missing_app_target"
+	targetAuthorizationReasonMissingAppStep                     = "missing_app_step"
 	targetAuthorizationReasonMissingAppProvider                 = "missing_app_provider"
 	targetAuthorizationReasonMissingAppOperation                = "missing_app_operation"
 )
@@ -775,12 +775,12 @@ func (m *Manager) allowTarget(ctx context.Context, p *principal.Principal, targe
 
 func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target) targetAuthorizationDecision {
 	if len(target.Steps) == 0 {
-		return targetAuthorizationDenied(targetAuthorizationComponentTarget, targetAuthorizationReasonMissingAppTarget, "", "", -1)
+		return targetAuthorizationDenied(targetAuthorizationComponentTarget, targetAuthorizationReasonMissingAppStep, "", "", -1)
 	}
 	for stepIndex := range target.Steps {
 		step := target.Steps[stepIndex]
 		if step.App != nil {
-			if denied := m.checkWorkflowStepAppAuthorization(ctx, p, step.App, targetAuthorizationComponentAppTarget); !denied.allowed {
+			if denied := m.checkWorkflowStepAppAuthorization(ctx, p, step.App, targetAuthorizationComponentAppStep); !denied.allowed {
 				return denied
 			}
 		}
