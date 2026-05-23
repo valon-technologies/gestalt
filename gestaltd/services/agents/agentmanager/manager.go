@@ -2800,7 +2800,7 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 		SearchText:       agentToolSearchMetadataText(projectedCandidate),
 		InputSchemaJSON:  agentToolInputSchemaJSON(projectedOperation),
 		OutputSchemaJSON: agentToolOutputSchemaJSON(projectedOperation),
-		Annotations:      core.CapabilityAnnotationsFromCatalog(projectedOperation.Annotations),
+		Annotations:      projectedOperation.Annotations,
 		Ref:              ref,
 		Target:           target,
 		Hidden:           !catalog.OperationVisibleByDefault(projectedOperation),
