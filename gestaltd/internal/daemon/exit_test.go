@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-func TestMainExitPolicy(t *testing.T) {
-	for _, tc := range []struct {
+func TestMainExitPolicy(t *testing.T) { //nolint:paralleltest // mutates slog.Default
+	for _, tc := range []struct { //nolint:paralleltest // subtests mutate slog.Default
 		name     string
 		err      error
 		wantCode int
