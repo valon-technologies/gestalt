@@ -2,6 +2,9 @@ package appinvoker
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +15,38 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+func TestInvocationTokenUsesCallerAppClaim(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewInvocationTokenManager([]byte("invocation-token-test-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+
+	token, err := manager.MintRootToken(context.Background(), "caller", nil)
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		t.Fatalf("token has %d segments, want 3", len(parts))
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		t.Fatalf("unmarshal claims: %v", err)
+	}
+	if got := claims["caller_app"]; got != "caller" {
+		t.Fatalf("caller_app claim = %v, want caller", got)
+	}
+	if _, ok := claims["caller_plugin"]; ok {
+		t.Fatal("token should not include legacy caller_plugin claim")
+	}
+}
 
 func TestInvocationTokenExchangePreservesAbsoluteDelegationExpiry(t *testing.T) {
 	t.Parallel()

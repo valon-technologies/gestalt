@@ -3910,7 +3910,7 @@ func TestPluginInvokesExposeHostSocketEnv(t *testing.T) {
 	}
 }
 
-func TestPluginWorkflowManagerExposeHostSocketEnv(t *testing.T) {
+func TestAppWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -4301,7 +4301,7 @@ func TestPluginHostedHTTPBindingsExposeAuthorizationSocketEnv(t *testing.T) {
 	}
 }
 
-func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
+func TestAppWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -4720,7 +4720,7 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 	}
 }
 
-func TestPluginWorkflowManagerCapabilitiesRestrictHostMethods(t *testing.T) {
+func TestAppWorkflowManagerCapabilitiesRestrictHostMethods(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -4819,7 +4819,7 @@ func TestPluginWorkflowManagerCapabilitiesRestrictHostMethods(t *testing.T) {
 	}
 }
 
-func TestPluginWorkflowManagerRejectsInvalidInvocationToken(t *testing.T) {
+func TestAppWorkflowManagerRejectsInvalidInvocationToken(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
