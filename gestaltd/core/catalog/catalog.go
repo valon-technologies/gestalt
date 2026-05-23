@@ -32,23 +32,23 @@ type Catalog struct {
 }
 
 type CatalogOperation struct {
-	ID             string               `yaml:"id"                       json:"id"`
-	ProviderID     string               `yaml:"providerId,omitempty"    json:"providerId,omitempty"`
-	Method         string               `yaml:"method"                   json:"method"`
-	Path           string               `yaml:"path"                     json:"path"`
-	Title          string               `yaml:"title,omitempty"          json:"title,omitempty"`
-	Description    string               `yaml:"description,omitempty"    json:"description,omitempty"`
-	InputSchema    json.RawMessage      `yaml:"inputSchema,omitempty"    json:"inputSchema,omitempty"`
-	OutputSchema   json.RawMessage      `yaml:"outputSchema,omitempty"   json:"outputSchema,omitempty"`
-	Annotations    OperationAnnotations `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
-	AllowedRoles   []string             `yaml:"allowedRoles,omitempty"   json:"allowedRoles,omitempty"`
-	Parameters     []CatalogParameter   `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
-	RequiredScopes []string             `yaml:"requiredScopes,omitempty" json:"requiredScopes,omitempty"`
-	Tags           []string             `yaml:"tags,omitempty"           json:"tags,omitempty"`
-	ReadOnly       bool                 `yaml:"readOnly,omitempty"      json:"readOnly,omitempty"`
-	Visible        *bool                `yaml:"visible,omitempty"        json:"visible,omitempty"`
-	Transport      string               `yaml:"transport,omitempty"      json:"transport,omitempty"`
-	Query          string               `yaml:"query,omitempty"          json:"query,omitempty"`
+	ID             string                `yaml:"id"                       json:"id"`
+	ProviderID     string                `yaml:"providerId,omitempty"    json:"providerId,omitempty"`
+	Method         string                `yaml:"method"                   json:"method"`
+	Path           string                `yaml:"path"                     json:"path"`
+	Title          string                `yaml:"title,omitempty"          json:"title,omitempty"`
+	Description    string                `yaml:"description,omitempty"    json:"description,omitempty"`
+	InputSchema    json.RawMessage       `yaml:"inputSchema,omitempty"    json:"inputSchema,omitempty"`
+	OutputSchema   json.RawMessage       `yaml:"outputSchema,omitempty"   json:"outputSchema,omitempty"`
+	Annotations    CapabilityAnnotations `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
+	AllowedRoles   []string              `yaml:"allowedRoles,omitempty"   json:"allowedRoles,omitempty"`
+	Parameters     []CatalogParameter    `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
+	RequiredScopes []string              `yaml:"requiredScopes,omitempty" json:"requiredScopes,omitempty"`
+	Tags           []string              `yaml:"tags,omitempty"           json:"tags,omitempty"`
+	ReadOnly       bool                  `yaml:"readOnly,omitempty"      json:"readOnly,omitempty"`
+	Visible        *bool                 `yaml:"visible,omitempty"        json:"visible,omitempty"`
+	Transport      string                `yaml:"transport,omitempty"      json:"transport,omitempty"`
+	Query          string                `yaml:"query,omitempty"          json:"query,omitempty"`
 }
 
 func OperationVisibleByDefault(op CatalogOperation) bool {
@@ -79,23 +79,23 @@ func MergeTags(groups ...[]string) []string {
 
 func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 	type catalogOperationYAML struct {
-		ID             string               `yaml:"id"`
-		ProviderID     string               `yaml:"providerId,omitempty"`
-		Method         string               `yaml:"method"`
-		Path           string               `yaml:"path"`
-		Title          string               `yaml:"title,omitempty"`
-		Description    string               `yaml:"description,omitempty"`
-		InputSchema    any                  `yaml:"inputSchema,omitempty"`
-		OutputSchema   any                  `yaml:"outputSchema,omitempty"`
-		Annotations    OperationAnnotations `yaml:"annotations,omitempty"`
-		AllowedRoles   []string             `yaml:"allowedRoles,omitempty"`
-		Parameters     []CatalogParameter   `yaml:"parameters,omitempty"`
-		RequiredScopes []string             `yaml:"requiredScopes,omitempty"`
-		Tags           []string             `yaml:"tags,omitempty"`
-		ReadOnly       bool                 `yaml:"readOnly,omitempty"`
-		Visible        *bool                `yaml:"visible,omitempty"`
-		Transport      string               `yaml:"transport,omitempty"`
-		Query          string               `yaml:"query,omitempty"`
+		ID             string                `yaml:"id"`
+		ProviderID     string                `yaml:"providerId,omitempty"`
+		Method         string                `yaml:"method"`
+		Path           string                `yaml:"path"`
+		Title          string                `yaml:"title,omitempty"`
+		Description    string                `yaml:"description,omitempty"`
+		InputSchema    any                   `yaml:"inputSchema,omitempty"`
+		OutputSchema   any                   `yaml:"outputSchema,omitempty"`
+		Annotations    CapabilityAnnotations `yaml:"annotations,omitempty"`
+		AllowedRoles   []string              `yaml:"allowedRoles,omitempty"`
+		Parameters     []CatalogParameter    `yaml:"parameters,omitempty"`
+		RequiredScopes []string              `yaml:"requiredScopes,omitempty"`
+		Tags           []string              `yaml:"tags,omitempty"`
+		ReadOnly       bool                  `yaml:"readOnly,omitempty"`
+		Visible        *bool                 `yaml:"visible,omitempty"`
+		Transport      string                `yaml:"transport,omitempty"`
+		Query          string                `yaml:"query,omitempty"`
 	}
 
 	var aux catalogOperationYAML
@@ -134,11 +134,26 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-type OperationAnnotations struct {
-	ReadOnlyHint    *bool `yaml:"readOnlyHint,omitempty"    json:"readOnlyHint,omitempty"`
-	IdempotentHint  *bool `yaml:"idempotentHint,omitempty"   json:"idempotentHint,omitempty"`
-	DestructiveHint *bool `yaml:"destructiveHint,omitempty"  json:"destructiveHint,omitempty"`
-	OpenWorldHint   *bool `yaml:"openWorldHint,omitempty"   json:"openWorldHint,omitempty"`
+type CapabilityAnnotations struct {
+	ReadOnlyHint    *bool `yaml:"readOnlyHint,omitempty" json:"readOnlyHint,omitempty"`
+	IdempotentHint  *bool `yaml:"idempotentHint,omitempty" json:"idempotentHint,omitempty"`
+	DestructiveHint *bool `yaml:"destructiveHint,omitempty" json:"destructiveHint,omitempty"`
+	OpenWorldHint   *bool `yaml:"openWorldHint,omitempty" json:"openWorldHint,omitempty"`
+}
+
+func CloneCapabilityAnnotations(a CapabilityAnnotations) CapabilityAnnotations {
+	readOnly, idempotent, destructive, openWorld := CloneHintPointerFields(
+		a.ReadOnlyHint,
+		a.IdempotentHint,
+		a.DestructiveHint,
+		a.OpenWorldHint,
+	)
+	return CapabilityAnnotations{
+		ReadOnlyHint:    readOnly,
+		IdempotentHint:  idempotent,
+		DestructiveHint: destructive,
+		OpenWorldHint:   openWorld,
+	}
 }
 
 type CatalogParameter struct {
@@ -194,22 +209,7 @@ func (c *Catalog) Clone() *Catalog {
 			visible := *op.Visible
 			outOp.Visible = &visible
 		}
-		if op.Annotations.ReadOnlyHint != nil {
-			value := *op.Annotations.ReadOnlyHint
-			outOp.Annotations.ReadOnlyHint = &value
-		}
-		if op.Annotations.IdempotentHint != nil {
-			value := *op.Annotations.IdempotentHint
-			outOp.Annotations.IdempotentHint = &value
-		}
-		if op.Annotations.DestructiveHint != nil {
-			value := *op.Annotations.DestructiveHint
-			outOp.Annotations.DestructiveHint = &value
-		}
-		if op.Annotations.OpenWorldHint != nil {
-			value := *op.Annotations.OpenWorldHint
-			outOp.Annotations.OpenWorldHint = &value
-		}
+		outOp.Annotations = CloneCapabilityAnnotations(op.Annotations)
 		out.Operations[i] = outOp
 	}
 	return out

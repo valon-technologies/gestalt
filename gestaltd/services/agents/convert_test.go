@@ -3,6 +3,8 @@ package agents
 import (
 	"testing"
 	"time"
+
+	"github.com/valon-technologies/gestalt/server/core"
 )
 
 func TestStructFromMap_NormalizesTimeValues(t *testing.T) {
@@ -41,5 +43,36 @@ func TestStructFromMap_NormalizesTimeValues(t *testing.T) {
 	}
 	if values[0] != want || values[1] != want {
 		t.Fatalf("values = %#v, want both %#v", values, want)
+	}
+}
+
+func TestSubjectToProtoPreservesWireFieldsWithoutNormalization(t *testing.T) {
+	t.Parallel()
+
+	subject := core.RunAsSubject{
+		SubjectID:           " user:123 ",
+		SubjectKind:         "",
+		CredentialSubjectID: "",
+		DisplayName:         " Example ",
+		AuthSource:          " oauth ",
+	}
+	got := subjectToProto(subject)
+	if got == nil {
+		t.Fatal("subjectToProto returned nil")
+	}
+	if got.GetId() != subject.SubjectID {
+		t.Fatalf("Id = %q, want %q", got.GetId(), subject.SubjectID)
+	}
+	if got.GetKind() != subject.SubjectKind {
+		t.Fatalf("Kind = %q, want %q", got.GetKind(), subject.SubjectKind)
+	}
+	if got.GetCredentialSubjectId() != subject.CredentialSubjectID {
+		t.Fatalf("CredentialSubjectId = %q, want empty", got.GetCredentialSubjectId())
+	}
+	if got.GetDisplayName() != subject.DisplayName {
+		t.Fatalf("DisplayName = %q, want %q", got.GetDisplayName(), subject.DisplayName)
+	}
+	if got.GetAuthSource() != subject.AuthSource {
+		t.Fatalf("AuthSource = %q, want %q", got.GetAuthSource(), subject.AuthSource)
 	}
 }

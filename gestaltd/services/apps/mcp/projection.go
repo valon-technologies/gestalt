@@ -106,7 +106,7 @@ func toolName(prefixes map[string]string, provider, operation string) string {
 	}, raw)
 }
 
-func mapAnnotations(a catalog.OperationAnnotations) mcpgo.ToolAnnotation {
+func mapAnnotations(a catalog.CapabilityAnnotations) mcpgo.ToolAnnotation {
 	return mcpgo.ToolAnnotation{
 		ReadOnlyHint:    a.ReadOnlyHint,
 		DestructiveHint: a.DestructiveHint,

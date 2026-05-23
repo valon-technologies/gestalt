@@ -36,12 +36,7 @@ func capabilitiesFromCatalog(name string, cat *catalog.Catalog) []core.Capabilit
 			InputSchema: bytes.Clone(op.InputSchema),
 			Method:      method,
 			Transport:   transport,
-			Annotations: core.CapabilityAnnotations{
-				ReadOnlyHint:    op.Annotations.ReadOnlyHint,
-				IdempotentHint:  op.Annotations.IdempotentHint,
-				DestructiveHint: op.Annotations.DestructiveHint,
-				OpenWorldHint:   op.Annotations.OpenWorldHint,
-			},
+			Annotations: op.Annotations,
 		})
 	}
 	return caps

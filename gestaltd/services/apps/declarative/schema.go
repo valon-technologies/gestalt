@@ -90,8 +90,8 @@ type topLevelInputSchema struct {
 }
 
 // AnnotationsFromMethod derives MCP operation annotations from an HTTP method.
-func AnnotationsFromMethod(method string) catalog.OperationAnnotations {
-	a := catalog.OperationAnnotations{
+func AnnotationsFromMethod(method string) catalog.CapabilityAnnotations {
+	a := catalog.CapabilityAnnotations{
 		OpenWorldHint: boolPtr(true),
 	}
 	switch strings.ToUpper(method) {
@@ -118,7 +118,7 @@ func CompileSchemas(c *catalog.Catalog) {
 		if len(op.Parameters) == 0 {
 			op.Parameters = parametersFromInputSchema(op.InputSchema)
 		}
-		if op.Annotations == (catalog.OperationAnnotations{}) {
+		if op.Annotations == (catalog.CapabilityAnnotations{}) {
 			op.Annotations = AnnotationsFromMethod(op.Method)
 		}
 	}

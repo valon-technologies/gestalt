@@ -311,7 +311,7 @@ func buildCatalog(name string, tools []mcpgo.Tool) *catalog.Catalog {
 			OutputSchema: outputSchema,
 			Transport:    catalog.TransportMCPPassthrough,
 		}
-		catOp.Annotations = catalog.OperationAnnotations{
+		catOp.Annotations = catalog.CapabilityAnnotations{
 			ReadOnlyHint:    tools[i].Annotations.ReadOnlyHint,
 			DestructiveHint: tools[i].Annotations.DestructiveHint,
 			IdempotentHint:  tools[i].Annotations.IdempotentHint,

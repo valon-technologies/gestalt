@@ -292,7 +292,7 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 				Title:       "Search Issues",
 				Description: "Search for issues",
 				InputSchema: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}}}`),
-				Annotations: catalog.OperationAnnotations{
+				Annotations: catalog.CapabilityAnnotations{
 					ReadOnlyHint: boolPtr(true),
 				},
 			},

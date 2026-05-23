@@ -2,6 +2,14 @@ package core
 
 import "strings"
 
+// Actor identifies who performed an action without credential-scoping fields.
+type Actor struct {
+	SubjectID   string
+	SubjectKind string
+	DisplayName string
+	AuthSource  string
+}
+
 // TODO(#1823): Add first-class run-as subject and external-identity grant
 // provisioning instead of relying on opaque subject IDs plus separate tuple
 // seeding.

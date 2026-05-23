@@ -69,7 +69,7 @@ func TestCompileSchemasPreservesExistingAnnotations(t *testing.T) {
 				ID:     "op1",
 				Method: http.MethodGet,
 				Path:   "/test",
-				Annotations: catalog.OperationAnnotations{
+				Annotations: catalog.CapabilityAnnotations{
 					ReadOnlyHint:  boolPtr(false),
 					OpenWorldHint: boolPtr(false),
 				},

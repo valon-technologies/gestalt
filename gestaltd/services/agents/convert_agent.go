@@ -7,6 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
 )
@@ -64,8 +65,8 @@ func agentActorFromProto(actor *proto.AgentActor) coreagent.Actor {
 	}
 }
 
-func subjectToProto(subject coreagent.SubjectContext) *proto.SubjectContext {
-	if subject == (coreagent.SubjectContext{}) {
+func subjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
+	if subject == (core.RunAsSubject{}) {
 		return nil
 	}
 	return &proto.SubjectContext{
@@ -208,7 +209,7 @@ func agentToolSourceModesFromProto(modes []proto.AgentToolSourceMode) []coreagen
 	return out
 }
 
-func operationAnnotationsToProto(value core.CapabilityAnnotations) *proto.OperationAnnotations {
+func operationAnnotationsToProto(value catalog.CapabilityAnnotations) *proto.OperationAnnotations {
 	if value.ReadOnlyHint == nil && value.IdempotentHint == nil && value.DestructiveHint == nil && value.OpenWorldHint == nil {
 		return nil
 	}
