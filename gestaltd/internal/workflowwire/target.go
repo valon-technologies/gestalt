@@ -355,7 +355,7 @@ func encodeAgentTurn(agent coreworkflow.AgentTurn) map[string]any {
 		}
 		value["messages"] = messages
 	}
-	if len(agent.ResponseSchema) > 0 {
+	if agent.ResponseSchema != nil {
 		value["responseSchema"] = mapDeepClone(agent.ResponseSchema)
 	}
 	return value

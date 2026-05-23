@@ -110,7 +110,7 @@ func deepClone(value any) any {
 }
 
 func mapDeepClone(values map[string]any) map[string]any {
-	if len(values) == 0 {
+	if values == nil {
 		return nil
 	}
 	out := make(map[string]any, len(values))

@@ -146,3 +146,62 @@ func TestParseTargetMapClonesObjectArgs(t *testing.T) {
 		t.Fatalf("message metadata = %#v, want original source", step.Agent.Messages[0].Metadata)
 	}
 }
+
+func TestParseAndEncodeTargetMapPreservesEmptyObjectArgs(t *testing.T) {
+	t.Parallel()
+
+	raw := map[string]any{
+		"steps": []any{
+			map[string]any{
+				"id":       "agent",
+				"metadata": map[string]any{},
+				"agent": map[string]any{
+					"messages": []any{
+						map[string]any{
+							"role":     "user",
+							"text":     "hello",
+							"metadata": map[string]any{},
+						},
+					},
+					"responseSchema": map[string]any{},
+					"modelOptions":   map[string]any{},
+				},
+			},
+		},
+	}
+
+	target, err := ParseTargetMap(raw, "target")
+	if err != nil {
+		t.Fatalf("ParseTargetMap() error = %v", err)
+	}
+	step := target.Steps[0]
+	if step.Metadata == nil || len(step.Metadata) != 0 {
+		t.Fatalf("step metadata = %#v, want non-nil empty map", step.Metadata)
+	}
+	if step.Agent.Messages[0].Metadata == nil || len(step.Agent.Messages[0].Metadata) != 0 {
+		t.Fatalf("message metadata = %#v, want non-nil empty map", step.Agent.Messages[0].Metadata)
+	}
+	if step.Agent.ResponseSchema == nil || len(step.Agent.ResponseSchema) != 0 {
+		t.Fatalf("response schema = %#v, want non-nil empty map", step.Agent.ResponseSchema)
+	}
+	if step.Agent.ModelOptions == nil || len(step.Agent.ModelOptions) != 0 {
+		t.Fatalf("model options = %#v, want non-nil empty map", step.Agent.ModelOptions)
+	}
+
+	encoded := EncodeTargetMap(target)
+	encodedStep := encoded["steps"].([]map[string]any)[0]
+	if metadata, ok := encodedStep["metadata"].(map[string]any); !ok || len(metadata) != 0 {
+		t.Fatalf("encoded step metadata = %#v, want empty object", encodedStep["metadata"])
+	}
+	encodedAgent := encodedStep["agent"].(map[string]any)
+	if schema, ok := encodedAgent["responseSchema"].(map[string]any); !ok || len(schema) != 0 {
+		t.Fatalf("encoded response schema = %#v, want empty object", encodedAgent["responseSchema"])
+	}
+	if options, ok := encodedAgent["modelOptions"].(map[string]any); !ok || len(options) != 0 {
+		t.Fatalf("encoded model options = %#v, want empty object", encodedAgent["modelOptions"])
+	}
+	encodedMessages := encodedAgent["messages"].([]map[string]any)
+	if metadata, ok := encodedMessages[0]["metadata"].(map[string]any); !ok || len(metadata) != 0 {
+		t.Fatalf("encoded message metadata = %#v, want empty object", encodedMessages[0]["metadata"])
+	}
+}
