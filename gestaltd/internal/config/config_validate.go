@@ -17,14 +17,14 @@ import (
 	cronv3 "github.com/robfig/cron/v3"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
-	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 )
 
-// ValidateStructure checks config shape: integration references, plugin
+// ValidateStructure checks config shape: integration references, app
 // declarations, connection references, URL template params, egress rules.
 // Called by Load (and therefore by init, validate, and serve). Does not require
 // runtime secrets like encryption_key.
@@ -47,8 +47,8 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := normalizeConnectionBindings(cfg); err != nil {
 		return err
 	}
-	pluginOwnedUIBindings := pluginOwnedUIBindings(cfg)
-	if err := normalizeMountedUIPaths(cfg, pluginOwnedUIBindings); err != nil {
+	appOwnedUIBindings := appOwnedUIBindings(cfg)
+	if err := normalizeMountedUIPaths(cfg, appOwnedUIBindings); err != nil {
 		return err
 	}
 	return nil
@@ -57,7 +57,7 @@ func CanonicalizeStructure(cfg *Config) error {
 // ValidateCanonicalStructure checks config shape assuming canonicalization has
 // already run on the config.
 func ValidateCanonicalStructure(cfg *Config) error {
-	pluginOwnedUIBindings := pluginOwnedUIBindings(cfg)
+	appOwnedUIBindings := appOwnedUIBindings(cfg)
 	if err := validateAuthorizationPolicies(cfg); err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		if entry == nil {
 			return fmt.Errorf("config validation: ui.%s is required", name)
 		}
-		if err := validatePluginOnlyProviderFields("ui."+name, &entry.ProviderEntry); err != nil {
+		if err := validateAppOnlyProviderFields("ui."+name, &entry.ProviderEntry); err != nil {
 			return err
 		}
 		if entry.Source.IsBuiltin() {
@@ -132,13 +132,13 @@ func ValidateCanonicalStructure(cfg *Config) error {
 			return err
 		}
 		if entry.Path == "" {
-			if _, ok := pluginOwnedUIBindings[name]; ok {
+			if _, ok := appOwnedUIBindings[name]; ok {
 				continue
 			}
 			return fmt.Errorf("config validation: ui.%s.path is required", name)
 		}
 	}
-	if err := validateMountedUICollisions(cfg, pluginOwnedUIBindings); err != nil {
+	if err := validateMountedUICollisions(cfg, appOwnedUIBindings); err != nil {
 		return err
 	}
 
@@ -162,9 +162,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		return err
 	}
 
-	// Validate plugins
+	// Validate apps
 	for name, entry := range cfg.Apps {
-		if err := validatePlugin(cfg, name, entry); err != nil {
+		if err := validateApp(cfg, name, entry); err != nil {
 			return err
 		}
 	}
@@ -437,7 +437,7 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 		if entry == nil {
 			return fmt.Errorf("config validation: providers.%s.%s is required", kind, name)
 		}
-		if err := validatePluginOnlyProviderFields("providers."+string(kind)+"."+name, entry); err != nil {
+		if err := validateAppOnlyProviderFields("providers."+string(kind)+"."+name, entry); err != nil {
 			return err
 		}
 		switch kind {
@@ -732,7 +732,7 @@ func ValidateResolvedStructure(cfg *Config) error {
 		if entry == nil {
 			return fmt.Errorf("config validation: integration %q requires a source", name)
 		}
-		if err := validatePluginIntegrationConnections(name, entry); err != nil {
+		if err := validateAppIntegrationConnections(name, entry); err != nil {
 			return err
 		}
 		if strings.TrimSpace(entry.MountPath) == "" || strings.TrimSpace(entry.UI) != "" {
@@ -791,7 +791,7 @@ func validateRuntimeConfig(cfg *Config) error {
 		if entry == nil {
 			return fmt.Errorf("config validation: runtime.providers.%s is required", name)
 		}
-		if err := validatePluginOnlyProviderFields("runtime.providers."+name, &entry.ProviderEntry); err != nil {
+		if err := validateAppOnlyProviderFields("runtime.providers."+name, &entry.ProviderEntry); err != nil {
 			return err
 		}
 		entry.Driver = RuntimeProviderDriver(strings.TrimSpace(string(entry.Driver)))
@@ -849,12 +849,12 @@ func runtimeProviderUsesSource(entry *RuntimeProviderEntry) bool {
 		entry.Source.UnsupportedURL() != ""
 }
 
-func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
+func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return fmt.Errorf("config validation: app %q requires a source", name)
 	}
 	if entry.Default {
-		return fmt.Errorf("config validation: apps.%s.default is not supported on plugins", name)
+		return fmt.Errorf("config validation: apps.%s.default is not supported on apps", name)
 	}
 	if entry.Lifecycle != nil {
 		return fmt.Errorf("config validation: apps.%s.lifecycle is only supported on providers.agent.*", name)
@@ -898,7 +898,7 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 		}
 		seenInvokes[key] = i
 	}
-	if err := validatePluginCapabilities("apps."+name+".capabilities", entry.Capabilities); err != nil {
+	if err := validateAppCapabilities("apps."+name+".capabilities", entry.Capabilities); err != nil {
 		return err
 	}
 	if entry.UI != "" && entry.MountPath == "" {
@@ -907,16 +907,16 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if err := validateProviderEntrySource("app", name, entry); err != nil {
 		return err
 	}
-	if err := validatePluginRouteAuth(cfg, name, entry); err != nil {
+	if err := validateAppRouteAuth(cfg, name, entry); err != nil {
 		return err
 	}
-	if err := validatePluginIndexedDBConfig(cfg, name, entry); err != nil {
+	if err := validateAppIndexedDBConfig(cfg, name, entry); err != nil {
 		return err
 	}
-	if err := validatePluginCacheBindings(cfg, name, entry); err != nil {
+	if err := validateAppCacheBindings(cfg, name, entry); err != nil {
 		return err
 	}
-	if err := validatePluginS3Bindings(cfg, name, entry); err != nil {
+	if err := validateAppS3Bindings(cfg, name, entry); err != nil {
 		return err
 	}
 	if err := validateAuthorizationPolicyReference(cfg, "app", name, entry.AuthorizationPolicy); err != nil {
@@ -925,10 +925,10 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if _, err := cfg.EffectiveRuntimePlacement("apps."+name, entry); err != nil {
 		return err
 	}
-	return validatePluginIntegrationConnections(name, entry)
+	return validateAppIntegrationConnections(name, entry)
 }
 
-func validatePluginCapabilities(path string, capabilities *AppCapabilitiesConfig) error {
+func validateAppCapabilities(path string, capabilities *AppCapabilitiesConfig) error {
 	if capabilities == nil || capabilities.Workflow == nil {
 		return nil
 	}
@@ -954,7 +954,7 @@ func validatePluginCapabilities(path string, capabilities *AppCapabilitiesConfig
 	return nil
 }
 
-func validatePluginRouteAuth(cfg *Config, name string, entry *ProviderEntry) error {
+func validateAppRouteAuth(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry == nil || entry.RouteAuth == nil {
 		return nil
 	}
@@ -1027,7 +1027,7 @@ func validateDatastoreConfig(cfg *Config) error {
 		if entry == nil {
 			return fmt.Errorf("config validation: providers.indexeddb.%s is required", name)
 		}
-		if err := validatePluginOnlyProviderFields("providers.indexeddb."+name, entry); err != nil {
+		if err := validateAppOnlyProviderFields("providers.indexeddb."+name, entry); err != nil {
 			return err
 		}
 		if err := validateProviderEntrySource("indexeddb", name, entry); err != nil {
@@ -1048,7 +1048,7 @@ func validateCacheConfig(cfg *Config) error {
 		if entry.Default {
 			return fmt.Errorf("config validation: providers.cache.%s.default is not supported", name)
 		}
-		if err := validatePluginOnlyProviderFields("providers.cache."+name, entry); err != nil {
+		if err := validateAppOnlyProviderFields("providers.cache."+name, entry); err != nil {
 			return err
 		}
 		if err := validateProviderEntrySource("cache", name, entry); err != nil {
@@ -1063,7 +1063,7 @@ func validateS3Config(cfg *Config) error {
 		if entry == nil {
 			return fmt.Errorf("config validation: providers.s3.%s is required", name)
 		}
-		if err := validatePluginOnlyProviderFields("providers.s3."+name, entry); err != nil {
+		if err := validateAppOnlyProviderFields("providers.s3."+name, entry); err != nil {
 			return err
 		}
 		if err := validateProviderEntrySource("s3", name, entry); err != nil {
@@ -1440,7 +1440,7 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	return nil
 }
 
-func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) error {
+func validateAppOnlyProviderFields(subject string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
 	}
@@ -1967,7 +1967,7 @@ func validateAbsoluteBaseURL(label, raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func validatePluginIndexedDBConfig(cfg *Config, name string, entry *ProviderEntry) error {
+func validateAppIndexedDBConfig(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
 	}
@@ -1991,7 +1991,7 @@ func validatePluginIndexedDBConfig(cfg *Config, name string, entry *ProviderEntr
 	return nil
 }
 
-func validatePluginS3Bindings(cfg *Config, name string, entry *ProviderEntry) error {
+func validateAppS3Bindings(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
 	}
@@ -2129,16 +2129,10 @@ func validateWorkflowScheduleTarget(cfg *Config, key string, schedule *WorkflowS
 		return fmt.Errorf("config validation: workflows.schedules.%s is required", key)
 	}
 	targetPath := "workflows.schedules." + key + ".target"
-	if err := normalizeWorkflowTarget(targetPath, schedule.Target); err != nil {
+	if err := normalizeWorkflowTarget(cfg, targetPath, schedule.Target); err != nil {
 		return err
 	}
-	if schedule.Target.App != nil {
-		if _, ok := cfg.Apps[schedule.Target.App.Name]; !ok {
-			return fmt.Errorf("config validation: %s.app.name references unknown app %q", targetPath, schedule.Target.App.Name)
-		}
-		return nil
-	}
-	return validateWorkflowAgentConfig(cfg, targetPath+".agent", schedule.Target.Agent)
+	return validateWorkflowTargetApps(cfg, targetPath, schedule.Target)
 }
 
 func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *WorkflowEventTriggerConfig) error {
@@ -2146,16 +2140,23 @@ func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *Workfl
 		return fmt.Errorf("config validation: workflows.eventTriggers.%s is required", key)
 	}
 	targetPath := "workflows.eventTriggers." + key + ".target"
-	if err := normalizeWorkflowTarget(targetPath, trigger.Target); err != nil {
+	if err := normalizeWorkflowTarget(cfg, targetPath, trigger.Target); err != nil {
 		return err
 	}
-	if trigger.Target.App != nil {
-		if _, ok := cfg.Apps[trigger.Target.App.Name]; !ok {
-			return fmt.Errorf("config validation: %s.app.name references unknown app %q", targetPath, trigger.Target.App.Name)
+	return validateWorkflowTargetApps(cfg, targetPath, trigger.Target)
+}
+
+func validateWorkflowTargetApps(cfg *Config, path string, target *WorkflowTargetConfig) error {
+	for i := range target.Steps {
+		step := &target.Steps[i]
+		stepPath := fmt.Sprintf("%s.steps[%d]", path, i)
+		if step.App != nil {
+			if _, ok := cfg.Apps[step.App.Name]; !ok {
+				return fmt.Errorf("config validation: %s.app.name references unknown app %q", stepPath, step.App.Name)
+			}
 		}
-		return nil
 	}
-	return validateWorkflowAgentConfig(cfg, targetPath+".agent", trigger.Target.Agent)
+	return nil
 }
 
 func normalizeWorkflowRunAs(path string, runAs *WorkflowRunAsConfig) (*WorkflowRunAsConfig, error) {
@@ -2209,7 +2210,7 @@ func normalizeWorkflowExecutionGrants(cfg *Config, path string, invokes []Workfl
 func normalizeWorkflowExecutionInvokes(cfg *Config, path string, values []WorkflowInvokeConfig) ([]WorkflowInvokeConfig, []core.AccessPermission, error) {
 	out := make([]WorkflowInvokeConfig, 0, len(values))
 	permissions := make([]core.AccessPermission, 0, len(values))
-	pluginIndexes := make(map[string]int, len(values))
+	appIndexes := make(map[string]int, len(values))
 	seenOperations := make(map[string]map[string]struct{}, len(values))
 	for i, value := range values {
 		app := strings.TrimSpace(value.App)
@@ -2231,10 +2232,10 @@ func normalizeWorkflowExecutionInvokes(cfg *Config, path string, values []Workfl
 		}
 		seenOperations[app][operation] = struct{}{}
 		out = append(out, WorkflowInvokeConfig{App: app, Operation: operation})
-		idx, ok := pluginIndexes[app]
+		idx, ok := appIndexes[app]
 		if !ok {
 			idx = len(permissions)
-			pluginIndexes[app] = idx
+			appIndexes[app] = idx
 			permissions = append(permissions, core.AccessPermission{App: app})
 		}
 		permissions[idx].Operations = append(permissions[idx].Operations, operation)
@@ -2250,7 +2251,7 @@ func normalizeWorkflowExecutionPermissions(cfg *Config, path string, values []co
 		return nil, nil
 	}
 	out := make([]core.AccessPermission, 0, len(values))
-	pluginIndexes := make(map[string]int, len(values))
+	appIndexes := make(map[string]int, len(values))
 	seenOperations := make(map[string]map[string]struct{}, len(values))
 	for i, value := range values {
 		app := strings.TrimSpace(value.App)
@@ -2270,10 +2271,10 @@ func normalizeWorkflowExecutionPermissions(cfg *Config, path string, values []co
 		if len(operations) == 0 {
 			return nil, fmt.Errorf("config validation: %s[%d].operations is required", path, i)
 		}
-		idx, ok := pluginIndexes[app]
+		idx, ok := appIndexes[app]
 		if !ok {
 			idx = len(out)
-			pluginIndexes[app] = idx
+			appIndexes[app] = idx
 			seenOperations[app] = map[string]struct{}{}
 			out = append(out, core.AccessPermission{App: app})
 		}
@@ -2303,27 +2304,79 @@ func normalizeWorkflowExecutionPermissionNames(path string, values []string) ([]
 	return out, nil
 }
 
-func normalizeWorkflowTarget(path string, target *WorkflowTargetConfig) error {
-	if target == nil {
-		return fmt.Errorf("config validation: %s must set exactly one of app or agent", path)
+func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetConfig) error {
+	if target == nil || len(target.Steps) == 0 {
+		return fmt.Errorf("config validation: %s.steps is required", path)
 	}
-	hasApp := target.App != nil
-	hasAgent := target.Agent != nil
-	if hasApp == hasAgent {
-		return fmt.Errorf("config validation: %s must set exactly one of app or agent", path)
-	}
-	if hasApp {
-		plugin := *target.App
-		if err := normalizeWorkflowAppTargetConfig(path+".app", &plugin, true); err != nil {
+	seen := map[string]struct{}{}
+	for i := range target.Steps {
+		stepPath := fmt.Sprintf("%s.steps[%d]", path, i)
+		step := &target.Steps[i]
+		step.ID = strings.TrimSpace(step.ID)
+		if step.ID == "" {
+			return fmt.Errorf("config validation: %s.id is required", stepPath)
+		}
+		if _, exists := seen[step.ID]; exists {
+			return fmt.Errorf("config validation: %s.id duplicates %q", stepPath, step.ID)
+		}
+		if err := normalizeWorkflowValueMapConfig(stepPath+".inputs", step.Inputs); err != nil {
 			return err
 		}
-		target.App = &plugin
-		return nil
+		if err := coreworkflow.ValidateValueMapRefs(stepPath+".inputs", workflowValueConfigMapToCore(step.Inputs), seen); err != nil {
+			return fmt.Errorf("config validation: %w", err)
+		}
+		if (step.App == nil) == (step.Agent == nil) {
+			return fmt.Errorf("config validation: %s must set exactly one of app or agent", stepPath)
+		}
+		if step.App != nil {
+			if err := normalizeWorkflowStepAppCallConfig(stepPath+".app", step.App, true); err != nil {
+				return err
+			}
+			if err := coreworkflow.ValidateValueRefs(stepPath+".app.input", workflowValueConfigToCore(step.App.Input), seen); err != nil {
+				return fmt.Errorf("config validation: %w", err)
+			}
+		}
+		if step.Agent != nil {
+			if err := validateWorkflowStepAgentConfig(cfg, stepPath+".agent", step.Agent); err != nil {
+				return err
+			}
+		}
+		step.Timeout = strings.TrimSpace(step.Timeout)
+		if step.Timeout != "" {
+			if _, err := time.ParseDuration(step.Timeout); err != nil {
+				return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", stepPath, step.Timeout, err)
+			}
+		}
+		if step.When != nil {
+			if err := normalizeWorkflowValueConfig(stepPath+".when.value", &step.When.Value); err != nil {
+				return err
+			}
+			when := &coreworkflow.StepWhen{
+				Value:     workflowValueConfigToCore(step.When.Value),
+				Equals:    step.When.Equals,
+				EqualsSet: step.When.EqualsSet(),
+			}
+			if err := coreworkflow.ValidateStepWhen(stepPath+".when", when, seen); err != nil {
+				return fmt.Errorf("config validation: %w", err)
+			}
+		}
+		seen[step.ID] = struct{}{}
 	}
 	return nil
 }
 
-func normalizeWorkflowAppTargetConfig(path string, app *WorkflowAppTargetConfig, allowCredentialMode bool) error {
+func normalizeWorkflowValueMapConfig(path string, values map[string]WorkflowValueConfig) error {
+	for key := range values {
+		value := values[key]
+		if err := normalizeWorkflowValueConfig(path+"."+key, &value); err != nil {
+			return err
+		}
+		values[key] = value
+	}
+	return nil
+}
+
+func normalizeWorkflowStepAppCallConfig(path string, app *WorkflowStepAppCallConfig, allowCredentialMode bool) error {
 	if app == nil {
 		return fmt.Errorf("config validation: %s is required", path)
 	}
@@ -2347,10 +2400,13 @@ func normalizeWorkflowAppTargetConfig(path string, app *WorkflowAppTargetConfig,
 	default:
 		return fmt.Errorf("config validation: %s.credentialMode %q is not supported", path, app.CredentialMode)
 	}
+	if err := normalizeWorkflowValueConfig(path+".input", &app.Input); err != nil {
+		return err
+	}
 	return nil
 }
 
-func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentConfig) error {
+func validateWorkflowStepAgentConfig(cfg *Config, path string, agent *WorkflowStepAgentConfig) error {
 	if agent == nil {
 		return fmt.Errorf("config validation: %s is required", path)
 	}
@@ -2364,92 +2420,17 @@ func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentC
 	}
 	agent.Provider = providerName
 	agent.Model = strings.TrimSpace(agent.Model)
-	agent.Prompt = strings.TrimSpace(agent.Prompt)
+	agent.SessionKey = strings.TrimSpace(agent.SessionKey)
+	agent.Prompt.Template = strings.TrimSpace(agent.Prompt.Template)
 	for i := range agent.Messages {
 		agent.Messages[i].Role = strings.TrimSpace(agent.Messages[i].Role)
-		agent.Messages[i].Text = strings.TrimSpace(agent.Messages[i].Text)
+		agent.Messages[i].Text.Template = strings.TrimSpace(agent.Messages[i].Text.Template)
 	}
-	hasSteps := len(agent.Steps) > 0
-	if hasSteps {
-		if agent.Prompt != "" || len(agent.Messages) > 0 || len(agent.Tools) > 0 || len(agent.ResponseSchema) > 0 || len(agent.ModelOptions) > 0 || agent.OutputDelivery != nil {
-			return fmt.Errorf("config validation: %s must not set prompt, messages, tools, responseSchema, modelOptions, or outputDelivery when steps are set", path)
-		}
-	} else if agent.Prompt == "" && len(agent.Messages) == 0 {
+	if agent.Prompt.Template == "" && len(agent.Messages) == 0 {
 		return fmt.Errorf("config validation: %s.prompt or messages is required", path)
 	}
 	if err := validateWorkflowAgentToolsConfig(cfg, path+".tools", agent.Tools); err != nil {
 		return err
-	}
-	agent.Timeout = strings.TrimSpace(agent.Timeout)
-	if agent.Timeout != "" {
-		if _, err := time.ParseDuration(agent.Timeout); err != nil {
-			return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", path, agent.Timeout, err)
-		}
-	}
-	if err := normalizeWorkflowOutputDeliveryConfig(path+".outputDelivery", agent.OutputDelivery, false); err != nil {
-		return err
-	}
-	if err := normalizeWorkflowOutputDeliveryConfig(path+".sessionReadyDelivery", agent.SessionReadyDelivery, true); err != nil {
-		return err
-	}
-	if err := validateWorkflowAgentStepConfigs(cfg, path, agent.Steps); err != nil {
-		return err
-	}
-	return nil
-}
-
-func validateWorkflowAgentStepConfigs(cfg *Config, path string, steps []WorkflowAgentStepConfig) error {
-	seen := map[string]struct{}{}
-	for i := range steps {
-		stepPath := fmt.Sprintf("%s.steps[%d]", path, i)
-		step := &steps[i]
-		step.ID = strings.TrimSpace(step.ID)
-		if step.ID == "" {
-			return fmt.Errorf("config validation: %s.id is required", stepPath)
-		}
-		if _, exists := seen[step.ID]; exists {
-			return fmt.Errorf("config validation: %s.id duplicates %q", stepPath, step.ID)
-		}
-		step.Prompt = strings.TrimSpace(step.Prompt)
-		for j := range step.Messages {
-			step.Messages[j].Role = strings.TrimSpace(step.Messages[j].Role)
-			step.Messages[j].Text = strings.TrimSpace(step.Messages[j].Text)
-		}
-		if step.Prompt == "" && len(step.Messages) == 0 {
-			return fmt.Errorf("config validation: %s.prompt or messages is required", stepPath)
-		}
-		if err := validateWorkflowAgentToolsConfig(cfg, stepPath+".tools", step.Tools); err != nil {
-			return err
-		}
-		step.Timeout = strings.TrimSpace(step.Timeout)
-		if step.Timeout != "" {
-			if _, err := time.ParseDuration(step.Timeout); err != nil {
-				return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", stepPath, step.Timeout, err)
-			}
-		}
-		if err := normalizeWorkflowOutputDeliveryConfig(stepPath+".outputDelivery", step.OutputDelivery, false); err != nil {
-			return err
-		}
-		if step.When != nil {
-			step.When.StepID = strings.TrimSpace(step.When.StepID)
-			step.When.OutputPath = strings.TrimSpace(step.When.OutputPath)
-			if step.When.StepID == "" {
-				return fmt.Errorf("config validation: %s.when.stepId is required", stepPath)
-			}
-			if _, ok := seen[step.When.StepID]; !ok {
-				return fmt.Errorf("config validation: %s.when.stepId %q must reference an earlier step", stepPath, step.When.StepID)
-			}
-			if step.When.OutputPath == "" {
-				return fmt.Errorf("config validation: %s.when.outputPath is required", stepPath)
-			}
-			if !step.When.equalsSet {
-				return fmt.Errorf("config validation: %s.when.equals is required", stepPath)
-			}
-			if !jsonvalue.IsScalar(step.When.Equals) {
-				return fmt.Errorf("config validation: %s.when.equals must be a scalar JSON value", stepPath)
-			}
-		}
-		seen[step.ID] = struct{}{}
 	}
 	return nil
 }
@@ -2499,30 +2480,58 @@ func validateWorkflowAgentToolsConfig(cfg *Config, path string, tools []Workflow
 	return nil
 }
 
-func normalizeWorkflowOutputDeliveryConfig(path string, delivery *WorkflowOutputDeliveryConfig, beforeTurn bool) error {
-	if delivery == nil {
+func normalizeWorkflowValueConfig(path string, value *WorkflowValueConfig) error {
+	if value == nil {
 		return nil
 	}
-	if err := normalizeWorkflowAppTargetConfig(path+".target", &delivery.Target, false); err != nil {
-		return err
+	set := 0
+	if value.LiteralSet {
+		set++
 	}
-	delivery.CredentialMode = providermanifestv1.NormalizeOptionalConnectionMode(delivery.CredentialMode)
-	switch delivery.CredentialMode {
-	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
-	default:
-		return fmt.Errorf("config validation: %s.credentialMode %q is not supported", path, delivery.CredentialMode)
+	if value.Object != nil {
+		set++
+		for key := range value.Object {
+			nested := value.Object[key]
+			if err := normalizeWorkflowValueConfig(path+"."+key, &nested); err != nil {
+				return err
+			}
+			value.Object[key] = nested
+		}
 	}
-	if beforeTurn {
-		for i := range delivery.InputBindings {
-			if strings.TrimSpace(delivery.InputBindings[i].Value.AgentOutput) != "" {
-				return fmt.Errorf("config validation: %s.inputBindings[%d].value.agentOutput is not available before the agent turn starts", path, i)
+	if value.Array != nil {
+		set++
+		for i := range value.Array {
+			if err := normalizeWorkflowValueConfig(fmt.Sprintf("%s[%d]", path, i), &value.Array[i]); err != nil {
+				return err
 			}
 		}
+	}
+	if value.Template != nil {
+		value.Template.Template = strings.TrimSpace(value.Template.Template)
+		if value.Template.Template != "" {
+			set++
+		}
+	}
+	if strings.TrimSpace(value.RunInput) != "" {
+		value.RunInput = strings.TrimSpace(value.RunInput)
+		set++
+	}
+	if strings.TrimSpace(value.SignalPayload) != "" {
+		value.SignalPayload = strings.TrimSpace(value.SignalPayload)
+		set++
+	}
+	if value.StepOutput != nil {
+		value.StepOutput.StepID = strings.TrimSpace(value.StepOutput.StepID)
+		value.StepOutput.Path = strings.TrimSpace(value.StepOutput.Path)
+		set++
+	}
+	if set > 1 {
+		return fmt.Errorf("config validation: %s must set exactly one value kind", path)
 	}
 	return nil
 }
 
-func validatePluginCacheBindings(cfg *Config, name string, entry *ProviderEntry) error {
+func validateAppCacheBindings(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
 	}
@@ -2544,13 +2553,13 @@ func validatePluginCacheBindings(cfg *Config, name string, entry *ProviderEntry)
 	}
 	return nil
 }
-func normalizeMountedUIPaths(cfg *Config, pluginOwnedUIBindings map[string]struct{}) error {
+func normalizeMountedUIPaths(cfg *Config, appOwnedUIBindings map[string]struct{}) error {
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil {
 			continue
 		}
 		if strings.TrimSpace(entry.Path) == "" {
-			if _, ok := pluginOwnedUIBindings[name]; ok {
+			if _, ok := appOwnedUIBindings[name]; ok {
 				continue
 			}
 			return fmt.Errorf("config validation: ui.%s.path: path is required", name)
@@ -2582,7 +2591,7 @@ func normalizeMountedUIPath(path string) (string, error) {
 	return path, nil
 }
 
-func validateMountedUICollisions(cfg *Config, pluginOwnedUIBindings map[string]struct{}) error {
+func validateMountedUICollisions(cfg *Config, appOwnedUIBindings map[string]struct{}) error {
 	reserved := []string{
 		"/api",
 		"/api/v1",
@@ -2612,13 +2621,13 @@ func validateMountedUICollisions(cfg *Config, pluginOwnedUIBindings map[string]s
 			allowNestedPath: true,
 		})
 	}
-	pluginNames := slices.Sorted(maps.Keys(cfg.Apps))
-	for _, name := range pluginNames {
+	appNames := slices.Sorted(maps.Keys(cfg.Apps))
+	for _, name := range appNames {
 		entry := cfg.Apps[name]
 		if entry == nil || strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) == "" {
 			continue
 		}
-		if _, ok := pluginOwnedUIBindings[name]; ok {
+		if _, ok := appOwnedUIBindings[name]; ok {
 			if ui := cfg.Providers.UI[name]; ui != nil && mountedUIPathsMatch(ui.Path, entry.MountPath) {
 				continue
 			}
@@ -2674,7 +2683,7 @@ func mountedUIPathsMatch(uiPath, mountPath string) bool {
 	return uiPath == normalizedMountPath
 }
 
-func pluginOwnedUIBindings(cfg *Config) map[string]struct{} {
+func appOwnedUIBindings(cfg *Config) map[string]struct{} {
 	refs := make(map[string]struct{}, len(cfg.Apps))
 	for name, entry := range cfg.Apps {
 		if entry == nil || strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) == "" {
@@ -2702,7 +2711,7 @@ func validateExecutableConnectionAuthSupport(name string, plan StaticConnectionP
 	return nil
 }
 
-func validatePluginIntegrationConnections(name string, entry *ProviderEntry) error {
+func validateAppIntegrationConnections(name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
 	}

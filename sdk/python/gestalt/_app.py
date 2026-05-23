@@ -358,6 +358,9 @@ class Plugin:
         return self._http_subject_handler
 
 
+App = Plugin
+
+
 class _ModulePluginRegistry:
     def __init__(self) -> None:
         self._apps: dict[str, Plugin] = {}

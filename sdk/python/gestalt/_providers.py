@@ -44,6 +44,21 @@ if TYPE_CHECKING:
         UpdateAgentProviderSessionRequest,
     )
     from ._api import Error
+    from ._appruntime import (
+        AppRuntimeSession,
+        AppRuntimeSupport,
+        GetAppRuntimeSessionRequest,
+        GetAppRuntimeSupportRequest,
+        HostedApp,
+        ListAppRuntimeSessionsRequest,
+        ListAppRuntimeSessionsResponse,
+        PrepareAppRuntimeWorkspaceRequest,
+        PrepareAppRuntimeWorkspaceResponse,
+        RemoveAppRuntimeWorkspaceRequest,
+        StartAppRuntimeSessionRequest,
+        StartHostedAppRequest,
+        StopAppRuntimeSessionRequest,
+    )
     from ._authentication import (
         AuthenticatedUser,
         BeginLoginRequest,
@@ -75,21 +90,6 @@ if TYPE_CHECKING:
         SubjectSearchResponse,
         WriteModelRequest,
         WriteRelationshipsRequest,
-    )
-    from ._appruntime import (
-        GetAppRuntimeSessionRequest,
-        GetAppRuntimeSupportRequest,
-        HostedApp,
-        ListAppRuntimeSessionsRequest,
-        ListAppRuntimeSessionsResponse,
-        AppRuntimeSession,
-        AppRuntimeSupport,
-        PrepareAppRuntimeWorkspaceRequest,
-        PrepareAppRuntimeWorkspaceResponse,
-        RemoveAppRuntimeWorkspaceRequest,
-        StartHostedAppRequest,
-        StartAppRuntimeSessionRequest,
-        StopAppRuntimeSessionRequest,
     )
     from ._s3 import (
         CopyOptions,

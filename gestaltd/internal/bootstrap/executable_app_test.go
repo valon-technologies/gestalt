@@ -972,12 +972,13 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		Timezone:        "UTC",
 		IdempotencyKey:  "workflow-manager-roundtrip",
 		Target: &proto.BoundWorkflowTarget{
-			Kind: &proto.BoundWorkflowTarget_App{
-				App: &proto.BoundWorkflowAppTarget{
-					AppName:   "roadmap",
+			Steps: []*proto.WorkflowStep{{
+				Id: "sync",
+				Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{
+					Name:      "roadmap",
 					Operation: "sync",
-				},
-			},
+				}},
+			}},
 		},
 	})
 	if err != nil {
@@ -999,7 +1000,7 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		"provider_name": created.GetProviderName(),
 		"schedule_id":   scheduleID,
 		"cron":          fetched.GetCron(),
-		"operation":     fetched.GetTarget().GetApp().GetOperation(),
+		"operation":     fetched.GetTarget().GetSteps()[0].GetApp().GetOperation(),
 	}, nil
 }
 
@@ -2113,20 +2114,38 @@ func cloneManagedRun(value *workflowmanager.ManagedRun) *workflowmanager.Managed
 }
 
 func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
-	out := coreworkflow.Target{}
-	if value.App != nil {
-		appTarget := *value.App
-		appTarget.Input = maps.Clone(appTarget.Input)
-		out.App = &appTarget
-	}
-	if value.Agent != nil {
-		agent := *value.Agent
-		agent.Messages = slices.Clone(agent.Messages)
-		agent.ToolRefs = slices.Clone(agent.ToolRefs)
-		agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
-		agent.ModelOptions = maps.Clone(agent.ModelOptions)
-		agent.Metadata = maps.Clone(agent.Metadata)
-		out.Agent = &agent
+	out := coreworkflow.Target{Steps: make([]coreworkflow.Step, len(value.Steps))}
+	for i := range value.Steps {
+		step := value.Steps[i]
+		if step.Inputs != nil {
+			step.Inputs = make(map[string]coreworkflow.Value, len(step.Inputs))
+			for key, item := range value.Steps[i].Inputs {
+				step.Inputs[key] = coreworkflow.CloneValue(item)
+			}
+		}
+		if step.App != nil {
+			appTarget := *step.App
+			appTarget.Input = coreworkflow.CloneValue(appTarget.Input)
+			step.App = &appTarget
+		}
+		if step.Agent != nil {
+			agent := *step.Agent
+			agent.Messages = slices.Clone(agent.Messages)
+			for j := range agent.Messages {
+				agent.Messages[j].Metadata = maps.Clone(agent.Messages[j].Metadata)
+			}
+			agent.ToolRefs = slices.Clone(agent.ToolRefs)
+			agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
+			agent.ModelOptions = maps.Clone(agent.ModelOptions)
+			step.Agent = &agent
+		}
+		if step.When != nil {
+			when := *step.When
+			when.Value = coreworkflow.CloneValue(when.Value)
+			step.When = &when
+		}
+		step.Metadata = maps.Clone(step.Metadata)
+		out.Steps[i] = step
 	}
 	return out
 }
@@ -7974,11 +7993,11 @@ func TestAppRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testi
 	if len(schedules) != 1 {
 		t.Fatalf("manager schedules len = %d, want 1", len(schedules))
 	}
-	scheduleTarget := schedules[0].Schedule.Target.App
-	if scheduleTarget == nil {
-		t.Fatalf("stored target app is nil: %#v", schedules[0].Schedule.Target)
+	if len(schedules[0].Schedule.Target.Steps) == 0 || schedules[0].Schedule.Target.Steps[0].App == nil {
+		t.Fatalf("stored target app step is missing: %#v", schedules[0].Schedule.Target)
 		return
 	}
+	scheduleTarget := schedules[0].Schedule.Target.Steps[0].App
 	if got := scheduleTarget.Operation; got != "sync" {
 		t.Fatalf("stored target operation = %q, want %q", got, "sync")
 	}

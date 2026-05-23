@@ -569,14 +569,10 @@ func (r *remoteWorkflow) workflowMetricDims(operation string, dims workflowDims)
 }
 
 func workflowTargetKind(target coreworkflow.Target) string {
-	switch {
-	case target.App != nil:
-		return observability.WorkflowTargetKindApp
-	case target.Agent != nil:
-		return observability.WorkflowTargetKindAgent
-	default:
-		return observability.WorkflowTargetKindUnknown
+	if len(target.Steps) > 0 {
+		return observability.WorkflowTargetKindSteps
 	}
+	return observability.WorkflowTargetKindUnknown
 }
 
 func workflowExecutionReferenceTarget(ref *coreworkflow.ExecutionReference) coreworkflow.Target {

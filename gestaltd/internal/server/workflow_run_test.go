@@ -21,10 +21,12 @@ type workflowRunResponse struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
 	Target struct {
-		App *struct {
-			Name      string `json:"name"`
-			Operation string `json:"operation"`
-		} `json:"app"`
+		Steps []struct {
+			App *struct {
+				Name      string `json:"name"`
+				Operation string `json:"operation"`
+			} `json:"app"`
+		} `json:"steps"`
 	} `json:"target"`
 	Trigger struct {
 		Kind       string `json:"kind"`
@@ -37,18 +39,21 @@ type workflowRunListResponse struct {
 	NextPageToken string                `json:"nextPageToken,omitempty"`
 }
 
-func workflowAppTarget(pluginName, operation string) coreworkflow.Target {
-	return workflowAppTargetWithRouting(pluginName, operation, "", "")
+func workflowAppTarget(appName, operation string) coreworkflow.Target {
+	return workflowAppTargetWithRouting(appName, operation, "", "")
 }
 
-func workflowAppTargetWithRouting(pluginName, operation, connection, instance string) coreworkflow.Target {
+func workflowAppTargetWithRouting(appName, operation, connection, instance string) coreworkflow.Target {
 	return coreworkflow.Target{
-		App: &coreworkflow.AppTarget{
-			AppName:    pluginName,
-			Operation:  operation,
-			Connection: connection,
-			Instance:   instance,
-		},
+		Steps: []coreworkflow.Step{{
+			ID: "app",
+			App: &coreworkflow.AppCall{
+				Name:       appName,
+				Operation:  operation,
+				Connection: connection,
+				Instance:   instance,
+			},
+		}},
 	}
 }
 

@@ -63,14 +63,14 @@ func TestWorkflowManagerTargetOrDefinitionAllowsDefinitionOnlyRequests(t *testin
 			if err != nil {
 				t.Fatalf("workflowManagerTargetOrDefinition: %v", err)
 			}
-			if got.App != nil || got.Agent != nil {
+			if len(got.Steps) != 0 {
 				t.Fatalf("target = %#v, want empty target for definition-only request", got)
 			}
 		})
 	}
 }
 
-func TestManagerServerPublishEventThreadsCallerPluginToSelectedProvider(t *testing.T) {
+func TestManagerServerPublishEventThreadsCallerAppToSelectedProvider(t *testing.T) {
 	t.Parallel()
 
 	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-publish-selected-secret"))
@@ -130,7 +130,7 @@ func TestManagerServerPublishEventThreadsCallerPluginToSelectedProvider(t *testi
 	})
 }
 
-func TestManagerServerPublishEventThreadsCallerPluginToFanoutProviders(t *testing.T) {
+func TestManagerServerPublishEventThreadsCallerAppToFanoutProviders(t *testing.T) {
 	t.Parallel()
 
 	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-publish-fanout-secret"))
@@ -190,7 +190,7 @@ func TestManagerServerPublishEventThreadsCallerPluginToFanoutProviders(t *testin
 	}
 }
 
-func TestWorkflowManagerPublishEventSelectedProviderPreservesBlankPlugin(t *testing.T) {
+func TestWorkflowManagerPublishEventSelectedProviderPreservesBlankApp(t *testing.T) {
 	t.Parallel()
 
 	selected := &recordingWorkflowProvider{}

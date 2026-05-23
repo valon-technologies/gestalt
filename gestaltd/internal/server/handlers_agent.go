@@ -1413,7 +1413,7 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 		writeError(w, http.StatusServiceUnavailable, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentSubjectRequired):
 		writeError(w, http.StatusUnauthorized, err.Error())
-	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired),
+	case errors.Is(err, agentmanager.ErrAgentCallerAppRequired),
 		errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool),
 		errors.Is(err, agentmanager.ErrAgentInteractionRequired),
 		errors.Is(err, agentmanager.ErrAgentSessionMetadataInvalid),

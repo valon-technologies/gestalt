@@ -82,7 +82,7 @@ a host-service backend.
 | Trait | Export macro | Use it when you want to serve |
 | --- | --- | --- |
 | `AuthenticationProvider` | `export_authentication_provider!` | Login flows. |
-| `CacheProvider` | `export_cache_provider!` | Plugin-bound cache storage. |
+| `CacheProvider` | `export_cache_provider!` | App-bound cache storage. |
 | `S3Provider` | `export_s3_provider!` | S3-compatible object storage. |
 | `SecretsProvider` | `export_secrets_provider!` | Secret resolution. |
 | `WorkflowProvider` | `export_workflow_provider!` | Workflow runs, schedules, and event triggers. |
@@ -123,9 +123,9 @@ The crate exposes higher-level authoring APIs:
   `AgentManager`, and `AppInvoker` call sibling host services.
 - `RuntimeMetadata` lets provider runtimes describe their display metadata and
   version.
-- Workflow builder inputs such as `BoundWorkflowAppTarget`,
-  `BoundWorkflowAgentTarget`, `WorkflowSignal`, and
-  `BoundWorkflowRun` model provider-owned workflow state.
+- Workflow builder inputs such as `BoundWorkflowTarget`, `WorkflowStep`,
+  `WorkflowSignal`, and `BoundWorkflowRun` model provider-owned workflow
+  state.
 
 ## Package layout
 

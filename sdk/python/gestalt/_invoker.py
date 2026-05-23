@@ -79,7 +79,7 @@ class AppInvoker:
 
         request = pb.AppInvokeRequest(
             invocation_token=self._invocation_token,
-            plugin=plugin,
+            app=plugin,
             operation=operation,
             connection=connection,
             instance=instance,
@@ -110,7 +110,7 @@ class AppInvoker:
 
         request = pb.AppInvokeGraphQLRequest(
             invocation_token=self._invocation_token,
-            plugin=plugin,
+            app=plugin,
             document=trimmed_document,
             connection=connection,
             instance=instance,
@@ -190,7 +190,7 @@ def _grants_from_values(values: Sequence[Any] | None) -> list[Any]:
             continue
         grants.append(
             pb.AppInvocationGrant(
-                plugin=plugin,
+                app=plugin,
                 operations=operations,
                 surfaces=surfaces,
                 all_operations=all_operations,
@@ -226,7 +226,7 @@ def _grant_parts(value: Any) -> tuple[str, list[str], list[str], bool]:
     operations = [str(operation).strip() for operation in raw_operations or ()]
     surfaces = [str(surface).strip().lower() for surface in raw_surfaces or ()]
     return (
-        plugin,
+        app,
         [operation for operation in operations if operation],
         [surface for surface in surfaces if surface],
         bool(raw_all_operations),

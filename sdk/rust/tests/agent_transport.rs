@@ -398,7 +398,7 @@ impl AgentHostRpc for TestAgentHostService {
                 description: "Look up records".to_string(),
                 input_schema: r#"{"type":"object"}"#.to_string(),
                 r#ref: Some(pb::AgentToolRef {
-                    plugin: "search".to_string(),
+                    app: "search".to_string(),
                     operation: "lookup".to_string(),
                     ..Default::default()
                 }),

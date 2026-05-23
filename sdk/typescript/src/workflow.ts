@@ -16,10 +16,8 @@ import {
 } from "./host-service.ts";
 
 import {
-  BoundWorkflowAgentTargetSchema,
   BoundWorkflowDefinitionSchema,
   BoundWorkflowEventTriggerSchema,
-  BoundWorkflowAppTargetSchema,
   BoundWorkflowRunSchema,
   BoundWorkflowScheduleSchema,
   BoundWorkflowTargetSchema,
@@ -37,21 +35,18 @@ import {
   WorkflowExecutionReferenceSchema,
   WorkflowHost as WorkflowHostService,
   WorkflowManualTriggerSchema,
-  WorkflowAgentStepSchema,
-  WorkflowAgentStepWhenSchema,
-  WorkflowOutputBindingSchema,
-  WorkflowOutputDeliverySchema,
-  WorkflowOutputValueSourceSchema,
+  WorkflowAgentMessageSchema,
+  WorkflowArraySchema,
+  WorkflowObjectSchema,
+  WorkflowPathSourceSchema,
   WorkflowProvider as WorkflowProviderService,
   WorkflowRunAsSubjectSchema,
   WorkflowRunStatus as ProtoWorkflowRunStatus,
   WorkflowRunTriggerSchema,
   WorkflowScheduleTriggerSchema,
   WorkflowSignalSchema,
-  type BoundWorkflowAgentTarget as ProtoBoundWorkflowAgentTarget,
   type BoundWorkflowDefinition as ProtoBoundWorkflowDefinition,
   type BoundWorkflowEventTrigger as ProtoBoundWorkflowEventTrigger,
-  type BoundWorkflowAppTarget as ProtoBoundWorkflowAppTarget,
   type BoundWorkflowRun as ProtoBoundWorkflowRun,
   type BoundWorkflowSchedule as ProtoBoundWorkflowSchedule,
   type BoundWorkflowTarget as ProtoBoundWorkflowTarget,
@@ -88,23 +83,28 @@ import {
   type WorkflowEventMatch as ProtoWorkflowEventMatch,
   type WorkflowEventTriggerInvocation as ProtoWorkflowEventTriggerInvocation,
   type WorkflowExecutionReference as ProtoWorkflowExecutionReference,
-  type WorkflowAgentStep as ProtoWorkflowAgentStep,
-  type WorkflowAgentStepWhen as ProtoWorkflowAgentStepWhen,
-  type WorkflowOutputBinding as ProtoWorkflowOutputBinding,
-  type WorkflowOutputDelivery as ProtoWorkflowOutputDelivery,
-  type WorkflowOutputValueSource as ProtoWorkflowOutputValueSource,
+  WorkflowStepAgentTurnSchema,
+  WorkflowStepOutputSourceSchema,
+  WorkflowStepAppCallSchema,
+  WorkflowStepSchema,
+  WorkflowStepWhenSchema,
+  WorkflowTextSchema,
+  WorkflowValueSchema,
+  type WorkflowAgentMessage as ProtoWorkflowAgentMessage,
   type WorkflowRunAsSubject as ProtoWorkflowRunAsSubject,
   type WorkflowRunTrigger as ProtoWorkflowRunTrigger,
   type WorkflowScheduleTrigger as ProtoWorkflowScheduleTrigger,
   type WorkflowSignal as ProtoWorkflowSignal,
+  type WorkflowStep as ProtoWorkflowStep,
+  type WorkflowStepAgentTurn as ProtoWorkflowStepAgentTurn,
+  type WorkflowStepOutputSource as ProtoWorkflowStepOutputSource,
+  type WorkflowStepAppCall as ProtoWorkflowStepAppCall,
+  type WorkflowStepWhen as ProtoWorkflowStepWhen,
+  type WorkflowText as ProtoWorkflowText,
+  type WorkflowValue as ProtoWorkflowValue,
 } from "./internal/gen/v1/workflow_pb.ts";
-import type {
-  AgentMessage,
-  AgentToolRef,
-} from "./agent.ts";
+import type { AgentToolRef } from "./agent.ts";
 import {
-  agentMessageFromProto,
-  agentMessageToProto,
   agentToolRefFromProto,
   agentToolRefToProto,
 } from "./agent-conversions.ts";
@@ -141,86 +141,85 @@ export const WorkflowRunStatus = {
 export type WorkflowRunStatus =
   (typeof WorkflowRunStatus)[keyof typeof WorkflowRunStatus];
 
-export interface BoundWorkflowAppTarget {
-  appName?: string | undefined;
+export interface WorkflowText {
+  template?: string | undefined;
+}
+
+export interface WorkflowStepOutputSource {
+  stepId?: string | undefined;
+  path?: string | undefined;
+}
+
+export type WorkflowValueKind =
+  | { case: "literal"; value: JsonInput }
+  | { case: "object"; value: Record<string, WorkflowValue> }
+  | { case: "array"; value: readonly WorkflowValue[] }
+  | { case: "template"; value: WorkflowText | string }
+  | { case: "runInput"; value: string }
+  | { case: "signalPayload"; value: string }
+  | { case: "stepOutput"; value: WorkflowStepOutputSource }
+  | { case: undefined; value?: undefined };
+
+export interface WorkflowValue {
+  literal?: JsonInput | undefined;
+  object?: Record<string, WorkflowValue> | undefined;
+  array?: readonly WorkflowValue[] | undefined;
+  template?: WorkflowText | string | undefined;
+  runInput?: string | undefined;
+  signalPayload?: string | undefined;
+  stepOutput?: WorkflowStepOutputSource | undefined;
+  kind?: WorkflowValueKind | undefined;
+}
+
+export interface WorkflowStepAppCall {
+  name?: string | undefined;
   operation?: string | undefined;
-  input?: JsonObjectInput | undefined;
+  input?: WorkflowValue | undefined;
   connection?: string | undefined;
   instance?: string | undefined;
   credentialMode?: string | undefined;
 }
 
-export type WorkflowOutputValueSourceKind =
-  | { case: "agentOutput"; value: string }
-  | { case: "signalPayload"; value: string }
-  | { case: "signalMetadata"; value: string }
-  | { case: "literal"; value: JsonInput }
-  | { case: "agentSession"; value: string }
-  | { case: undefined; value?: undefined };
-
-export interface WorkflowOutputValueSource {
-  agentOutput?: string | undefined;
-  signalPayload?: string | undefined;
-  signalMetadata?: string | undefined;
-  literal?: JsonInput | undefined;
-  agentSession?: string | undefined;
-  kind?: WorkflowOutputValueSourceKind | undefined;
+export interface WorkflowAgentMessage {
+  role?: string | undefined;
+  text?: WorkflowText | string | undefined;
+  metadata?: JsonObjectInput | undefined;
 }
 
-export interface WorkflowOutputBinding {
-  inputField?: string | undefined;
-  value?: WorkflowOutputValueSource | undefined;
-}
-
-export interface WorkflowOutputDelivery {
-  target?: BoundWorkflowAppTarget | undefined;
-  inputBindings?: readonly WorkflowOutputBinding[] | undefined;
-  credentialMode?: string | undefined;
-}
-
-export interface BoundWorkflowAgentTarget {
-  providerName?: string | undefined;
+export interface WorkflowStepAgentTurn {
+  provider?: string | undefined;
   model?: string | undefined;
-  prompt?: string | undefined;
-  messages?: readonly AgentMessage[] | undefined;
-  toolRefs?: readonly AgentToolRef[] | undefined;
-  responseSchema?: JsonObjectInput | undefined;
-  metadata?: JsonObjectInput | undefined;
-  timeoutSeconds?: number | undefined;
-  outputDelivery?: WorkflowOutputDelivery | undefined;
-  modelOptions?: JsonObjectInput | undefined;
-  sessionReadyDelivery?: WorkflowOutputDelivery | undefined;
-  steps?: readonly WorkflowAgentStep[] | undefined;
-}
-
-export interface WorkflowAgentStep {
-  id?: string | undefined;
-  prompt?: string | undefined;
-  messages?: readonly AgentMessage[] | undefined;
-  toolRefs?: readonly AgentToolRef[] | undefined;
+  sessionKey?: string | undefined;
+  prompt?: WorkflowText | string | undefined;
+  messages?: readonly WorkflowAgentMessage[] | undefined;
+  tools?: readonly AgentToolRef[] | undefined;
   responseSchema?: JsonObjectInput | undefined;
   modelOptions?: JsonObjectInput | undefined;
-  timeoutSeconds?: number | undefined;
-  outputDelivery?: WorkflowOutputDelivery | undefined;
-  when?: WorkflowAgentStepWhen | undefined;
-  metadata?: JsonObjectInput | undefined;
 }
 
-export interface WorkflowAgentStepWhen {
-  stepId?: string | undefined;
-  outputPath?: string | undefined;
+export interface WorkflowStepWhen {
+  value?: WorkflowValue | undefined;
   equals?: JsonInput | undefined;
 }
 
-export type BoundWorkflowTargetKind =
-  | { case: "app"; value: BoundWorkflowAppTarget }
-  | { case: "agent"; value: BoundWorkflowAgentTarget }
+export interface BoundWorkflowTarget {
+  steps?: readonly WorkflowStep[] | undefined;
+}
+
+export type WorkflowStepActionKind =
+  | { case: "app"; value: WorkflowStepAppCall }
+  | { case: "agent"; value: WorkflowStepAgentTurn }
   | { case: undefined; value?: undefined };
 
-export interface BoundWorkflowTarget {
-  app?: BoundWorkflowAppTarget | undefined;
-  agent?: BoundWorkflowAgentTarget | undefined;
-  kind?: BoundWorkflowTargetKind | undefined;
+export interface WorkflowStep {
+  id?: string | undefined;
+  inputs?: Record<string, WorkflowValue> | undefined;
+  app?: WorkflowStepAppCall | undefined;
+  agent?: WorkflowStepAgentTurn | undefined;
+  when?: WorkflowStepWhen | undefined;
+  timeoutSeconds?: number | undefined;
+  metadata?: JsonObjectInput | undefined;
+  action?: WorkflowStepActionKind | undefined;
 }
 
 export interface WorkflowActor {
@@ -626,266 +625,311 @@ export function workflowEventMatchInputFromMatch(
   return input === undefined ? undefined : { ...input };
 }
 
-/** Creates a workflow output value source from native input. */
-export function workflowOutputValueSource(
-  input: WorkflowOutputValueSource = {},
-): WorkflowOutputValueSource {
-  if ("kind" in input && input.kind !== undefined) {
-    return { kind: cloneWorkflowOutputValueSourceKind(input.kind) };
+/** Creates a bound workflow target from native input. */
+export function workflowText(input: WorkflowText | string = {}): WorkflowText {
+  if (typeof input === "string") {
+    return { template: input };
   }
-  const sourceInput = input as WorkflowOutputValueSource;
+  return { template: input.template ?? "" };
+}
+
+/** Returns native input copied from workflow text. */
+export function workflowTextInputFromText(
+  input?: WorkflowText,
+): WorkflowText | undefined {
+  return input === undefined ? undefined : { template: input.template };
+}
+
+/** Creates a workflow step-output source from native input. */
+export function workflowStepOutputSource(
+  input: WorkflowStepOutputSource = {},
+): WorkflowStepOutputSource {
+  return {
+    stepId: input.stepId ?? "",
+    path: input.path ?? "",
+  };
+}
+
+/** Returns native input copied from a workflow step-output source. */
+export function workflowStepOutputSourceInputFromSource(
+  input?: WorkflowStepOutputSource,
+): WorkflowStepOutputSource | undefined {
+  return input === undefined ? undefined : { ...input };
+}
+
+/** Creates a workflow value expression from native input. */
+export function workflowValue(input: WorkflowValue = {}): WorkflowValue {
+  if (input.kind !== undefined) {
+    return { kind: cloneWorkflowValueKind(input.kind) };
+  }
   const selected = [
-    sourceInput.agentOutput === undefined ? undefined : "agentOutput",
-    sourceInput.signalPayload === undefined ? undefined : "signalPayload",
-    sourceInput.signalMetadata === undefined ? undefined : "signalMetadata",
-    Object.prototype.hasOwnProperty.call(sourceInput, "literal") ? "literal" : undefined,
-    sourceInput.agentSession === undefined ? undefined : "agentSession",
+    Object.prototype.hasOwnProperty.call(input, "literal") ? "literal" : undefined,
+    input.object === undefined ? undefined : "object",
+    input.array === undefined ? undefined : "array",
+    input.template === undefined ? undefined : "template",
+    input.runInput === undefined ? undefined : "runInput",
+    input.signalPayload === undefined ? undefined : "signalPayload",
+    input.stepOutput === undefined ? undefined : "stepOutput",
   ].filter((value): value is string => value !== undefined);
   if (selected.length === 0) {
     return { kind: { case: undefined } };
   }
   if (selected.length > 1) {
-    throw new Error("workflow output value source must set exactly one source");
+    throw new Error("workflow value must set exactly one value kind");
   }
   switch (selected[0]) {
-    case "agentOutput":
-      return { kind: { case: "agentOutput", value: sourceInput.agentOutput ?? "" } };
+    case "literal":
+      return { kind: { case: "literal", value: input.literal ?? null } };
+    case "object":
+      return {
+        kind: {
+          case: "object",
+          value: Object.fromEntries(
+            Object.entries(input.object ?? {}).map(([key, value]) => [
+              key,
+              workflowValue(value),
+            ]),
+          ),
+        },
+      };
+    case "array":
+      return { kind: { case: "array", value: (input.array ?? []).map(workflowValue) } };
+    case "template":
+      return { kind: { case: "template", value: workflowText(input.template ?? {}) } };
+    case "runInput":
+      return { kind: { case: "runInput", value: input.runInput ?? "" } };
     case "signalPayload":
-      return { kind: { case: "signalPayload", value: sourceInput.signalPayload ?? "" } };
-    case "signalMetadata":
-      return { kind: { case: "signalMetadata", value: sourceInput.signalMetadata ?? "" } };
-    case "agentSession":
-      return { kind: { case: "agentSession", value: sourceInput.agentSession ?? "" } };
+      return { kind: { case: "signalPayload", value: input.signalPayload ?? "" } };
     default:
-      return { kind: { case: "literal", value: sourceInput.literal ?? null } };
+      return {
+        kind: {
+          case: "stepOutput",
+          value: workflowStepOutputSource(input.stepOutput),
+        },
+      };
   }
 }
 
-/** Returns native input copied from a workflow output value source. */
-export function workflowOutputValueSourceInputFromSource(
-  input?: WorkflowOutputValueSource,
-): WorkflowOutputValueSource | undefined {
+/** Returns native input copied from a workflow value expression. */
+export function workflowValueInputFromValue(
+  input?: WorkflowValue,
+): WorkflowValue | undefined {
   if (input === undefined) {
     return undefined;
   }
   const kind = input.kind;
   switch (kind?.case) {
-    case "agentOutput":
-      return { agentOutput: kind.value };
+    case "literal":
+      return { literal: jsonClone(kind.value) };
+    case "object":
+      return {
+        object: Object.fromEntries(
+          Object.entries(kind.value).map(([key, value]) => [
+            key,
+            workflowValueInputFromValue(value)!,
+          ]),
+        ),
+      };
+    case "array":
+      return { array: kind.value.map((value) => workflowValueInputFromValue(value)!) };
+    case "template":
+      return { template: workflowTextInputFromText(workflowText(kind.value)) };
+    case "runInput":
+      return { runInput: kind.value };
     case "signalPayload":
       return { signalPayload: kind.value };
-    case "signalMetadata":
-      return { signalMetadata: kind.value };
-    case "agentSession":
-      return { agentSession: kind.value };
-    case "literal":
-      return { literal: kind.value };
+    case "stepOutput":
+      return { stepOutput: workflowStepOutputSourceInputFromSource(kind.value) };
     default:
       return {};
   }
 }
 
-/** Creates a workflow output binding from native input. */
-export function workflowOutputBinding(
-  input: WorkflowOutputBinding = {},
-): WorkflowOutputBinding {
+/** Creates a workflow app step call from native input. */
+export function workflowStepAppCall(
+  input: WorkflowStepAppCall = {},
+): WorkflowStepAppCall {
   return {
-    inputField: input.inputField ?? "",
-    value: input.value === undefined ? undefined : workflowOutputValueSource(input.value),
-  };
-}
-
-/** Returns native input copied from a workflow output binding. */
-export function workflowOutputBindingInputFromBinding(
-  input: WorkflowOutputBinding,
-): WorkflowOutputBinding {
-  return {
-    inputField: input.inputField,
-    value: input.value === undefined
-      ? undefined
-      : workflowOutputValueSourceInputFromSource(workflowOutputValueSource(input.value)),
-  };
-}
-
-/** Creates a workflow output delivery from native input. */
-export function workflowOutputDelivery(
-  input: WorkflowOutputDelivery = {},
-): WorkflowOutputDelivery {
-  return {
-    target: input.target === undefined ? undefined : boundWorkflowPluginTarget(input.target),
-    inputBindings: input.inputBindings?.map((binding) => workflowOutputBinding(binding)) ?? [],
-    credentialMode: input.credentialMode ?? "",
-  };
-}
-
-/** Returns native input copied from a workflow output delivery. */
-export function workflowOutputDeliveryInputFromDelivery(
-  input?: WorkflowOutputDelivery,
-): WorkflowOutputDelivery | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    target: boundWorkflowPluginTargetInputFromTarget(input.target),
-    inputBindings: input.inputBindings?.map((binding) => workflowOutputBindingInputFromBinding(binding)) ?? [],
-    credentialMode: input.credentialMode,
-  };
-}
-
-/** Creates a bound app workflow target from native input. */
-export function boundWorkflowPluginTarget(
-  input: BoundWorkflowAppTarget = {},
-): BoundWorkflowAppTarget {
-  return {
-    appName: input.appName ?? "",
+    name: input.name ?? "",
     operation: input.operation ?? "",
-    input: input.input === undefined ? undefined : structFromObject(input.input),
+    input: input.input === undefined ? undefined : workflowValue(input.input),
     connection: input.connection ?? "",
     instance: input.instance ?? "",
     credentialMode: input.credentialMode ?? "",
   };
 }
 
-/** Returns native input copied from a bound app workflow target. */
-export function boundWorkflowPluginTargetInputFromTarget(
-  input?: BoundWorkflowAppTarget,
-): BoundWorkflowAppTarget | undefined {
+/** Returns native input copied from a workflow app step call. */
+export function workflowStepAppCallInputFromCall(
+  input?: WorkflowStepAppCall,
+): WorkflowStepAppCall | undefined {
   if (input === undefined) {
     return undefined;
   }
   return {
-    appName: input.appName,
+    name: input.name,
     operation: input.operation,
-    input: input.input === undefined ? undefined : jsonObjectClone(input.input),
+    input: workflowValueInputFromValue(input.input),
     connection: input.connection,
     instance: input.instance,
     credentialMode: input.credentialMode,
   };
 }
 
-/** Creates a bound agent workflow target from native input. */
-export function boundWorkflowAgentTarget(
-  input: BoundWorkflowAgentTarget = {},
-): BoundWorkflowAgentTarget {
+/** Creates a workflow agent message from native input. */
+export function workflowAgentMessage(
+  input: WorkflowAgentMessage = {},
+): WorkflowAgentMessage {
   return {
-    providerName: input.providerName ?? "",
-    model: input.model ?? "",
-    prompt: input.prompt ?? "",
-    messages: [...(input.messages ?? [])],
-    toolRefs: [...(input.toolRefs ?? [])],
-    responseSchema: input.responseSchema === undefined ? undefined : structFromObject(input.responseSchema),
+    role: input.role ?? "",
+    text: input.text === undefined ? undefined : workflowText(input.text),
     metadata: input.metadata === undefined ? undefined : structFromObject(input.metadata),
-    timeoutSeconds: input.timeoutSeconds ?? 0,
-    outputDelivery: input.outputDelivery === undefined ? undefined : workflowOutputDelivery(input.outputDelivery),
-    modelOptions: input.modelOptions === undefined ? undefined : structFromObject(input.modelOptions),
-    sessionReadyDelivery: input.sessionReadyDelivery === undefined
-      ? undefined
-      : workflowOutputDelivery(input.sessionReadyDelivery),
-    steps: (input.steps ?? []).map(workflowAgentStep),
   };
 }
 
-/** Returns native input copied from a bound agent workflow target. */
-export function boundWorkflowAgentTargetInputFromTarget(
-  input?: BoundWorkflowAgentTarget,
-): BoundWorkflowAgentTarget | undefined {
+/** Returns native input copied from a workflow agent message. */
+export function workflowAgentMessageInputFromMessage(
+  input?: WorkflowAgentMessage,
+): WorkflowAgentMessage | undefined {
   if (input === undefined) {
     return undefined;
   }
   return {
-    providerName: input.providerName,
-    model: input.model,
-    prompt: input.prompt,
-    messages: [...(input.messages ?? [])],
-    toolRefs: [...(input.toolRefs ?? [])],
-    responseSchema: input.responseSchema === undefined ? undefined : jsonObjectClone(input.responseSchema),
+    role: input.role,
+    text: workflowTextInputFromText(input.text as WorkflowText | undefined),
     metadata: input.metadata === undefined ? undefined : jsonObjectClone(input.metadata),
-    timeoutSeconds: input.timeoutSeconds,
-    outputDelivery: workflowOutputDeliveryInputFromDelivery(input.outputDelivery),
-    modelOptions: input.modelOptions === undefined ? undefined : jsonObjectClone(input.modelOptions),
-    sessionReadyDelivery: workflowOutputDeliveryInputFromDelivery(input.sessionReadyDelivery),
-    steps: (input.steps ?? []).map((step) => workflowAgentStepInputFromStep(step)!),
   };
 }
 
-/** Creates one bound workflow agent step from native input. */
-export function workflowAgentStep(input: WorkflowAgentStep = {}): WorkflowAgentStep {
+/** Creates a workflow agent step turn from native input. */
+export function workflowStepAgentTurn(
+  input: WorkflowStepAgentTurn = {},
+): WorkflowStepAgentTurn {
+  return {
+    provider: input.provider ?? "",
+    model: input.model ?? "",
+    sessionKey: input.sessionKey ?? "",
+    prompt: input.prompt === undefined ? undefined : workflowText(input.prompt),
+    messages: input.messages?.map(workflowAgentMessage) ?? [],
+    tools: [...(input.tools ?? [])],
+    responseSchema: input.responseSchema === undefined ? undefined : structFromObject(input.responseSchema),
+    modelOptions: input.modelOptions === undefined ? undefined : structFromObject(input.modelOptions),
+  };
+}
+
+/** Returns native input copied from a workflow agent step turn. */
+export function workflowStepAgentTurnInputFromTurn(
+  input?: WorkflowStepAgentTurn,
+): WorkflowStepAgentTurn | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    provider: input.provider,
+    model: input.model,
+    sessionKey: input.sessionKey,
+    prompt: workflowTextInputFromText(input.prompt as WorkflowText | undefined),
+    messages: input.messages?.map((message) => workflowAgentMessageInputFromMessage(message)!) ?? [],
+    tools: [...(input.tools ?? [])],
+    responseSchema: input.responseSchema === undefined ? undefined : jsonObjectClone(input.responseSchema),
+    modelOptions: input.modelOptions === undefined ? undefined : jsonObjectClone(input.modelOptions),
+  };
+}
+
+/** Creates a condition for running one workflow step. */
+export function workflowStepWhen(input: WorkflowStepWhen = {}): WorkflowStepWhen {
+  const out: WorkflowStepWhen = {
+    value: input.value === undefined ? undefined : workflowValue(input.value),
+  };
+  if (Object.prototype.hasOwnProperty.call(input, "equals")) {
+    out.equals = input.equals === undefined ? null : jsonClone(input.equals);
+  }
+  return out;
+}
+
+/** Returns native input copied from a workflow step condition. */
+export function workflowStepWhenInputFromWhen(
+  input?: WorkflowStepWhen,
+): WorkflowStepWhen | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const out: WorkflowStepWhen = {
+    value: workflowValueInputFromValue(input.value),
+  };
+  if (Object.prototype.hasOwnProperty.call(input, "equals")) {
+    out.equals = input.equals === undefined ? null : jsonClone(input.equals);
+  }
+  return out;
+}
+
+/** Creates one bound workflow step from native input. */
+export function workflowStep(input: WorkflowStep = {}): WorkflowStep {
+  const app = input.app ?? (input.action?.case === "app" ? input.action.value : undefined);
+  const agent = input.agent ?? (input.action?.case === "agent" ? input.action.value : undefined);
+  if (app !== undefined && agent !== undefined) {
+    throw new Error("workflow step must set either app or agent");
+  }
+  const action = app !== undefined
+    ? { case: "app" as const, value: workflowStepAppCall(app) }
+    : agent !== undefined
+      ? { case: "agent" as const, value: workflowStepAgentTurn(agent) }
+      : { case: undefined };
   return {
     id: input.id ?? "",
-    prompt: input.prompt ?? "",
-    messages: [...(input.messages ?? [])],
-    toolRefs: [...(input.toolRefs ?? [])],
-    responseSchema: input.responseSchema === undefined ? undefined : structFromObject(input.responseSchema),
-    modelOptions: input.modelOptions === undefined ? undefined : structFromObject(input.modelOptions),
+    inputs: Object.fromEntries(
+      Object.entries(input.inputs ?? {}).map(([key, value]) => [
+        key,
+        workflowValue(value),
+      ]),
+    ),
+    app: action.case === "app" ? action.value : undefined,
+    agent: action.case === "agent" ? action.value : undefined,
+    action,
+    when: input.when === undefined ? undefined : workflowStepWhen(input.when),
     timeoutSeconds: input.timeoutSeconds ?? 0,
-    outputDelivery: input.outputDelivery === undefined ? undefined : workflowOutputDelivery(input.outputDelivery),
-    when: input.when === undefined ? undefined : workflowAgentStepWhen(input.when),
     metadata: input.metadata === undefined ? undefined : structFromObject(input.metadata),
   };
 }
 
-/** Returns native input copied from one bound workflow agent step. */
-export function workflowAgentStepInputFromStep(
-  input?: WorkflowAgentStep,
-): WorkflowAgentStep | undefined {
+/** Returns native input copied from one bound workflow step. */
+export function workflowStepInputFromStep(
+  input?: WorkflowStep,
+): WorkflowStep | undefined {
   if (input === undefined) {
     return undefined;
   }
+  const action = input.action;
+  const app = input.app ?? (action?.case === "app" ? action.value : undefined);
+  const agent = input.agent ?? (action?.case === "agent" ? action.value : undefined);
   return {
     id: input.id,
-    prompt: input.prompt,
-    messages: [...(input.messages ?? [])],
-    toolRefs: [...(input.toolRefs ?? [])],
-    responseSchema: input.responseSchema === undefined ? undefined : jsonObjectClone(input.responseSchema),
-    modelOptions: input.modelOptions === undefined ? undefined : jsonObjectClone(input.modelOptions),
+    inputs: Object.fromEntries(
+      Object.entries(input.inputs ?? {}).map(([key, value]) => [
+        key,
+        workflowValueInputFromValue(value)!,
+      ]),
+    ),
+    app: workflowStepAppCallInputFromCall(app),
+    agent: workflowStepAgentTurnInputFromTurn(agent),
+    action: action === undefined
+      ? undefined
+      : action.case === "app"
+        ? { case: "app", value: workflowStepAppCallInputFromCall(action.value)! }
+        : action.case === "agent"
+          ? { case: "agent", value: workflowStepAgentTurnInputFromTurn(action.value)! }
+          : { case: undefined },
+    when: workflowStepWhenInputFromWhen(input.when),
     timeoutSeconds: input.timeoutSeconds,
-    outputDelivery: workflowOutputDeliveryInputFromDelivery(input.outputDelivery),
-    when: input.when === undefined ? undefined : workflowAgentStepWhenInputFromWhen(input.when),
     metadata: input.metadata === undefined ? undefined : jsonObjectClone(input.metadata),
-  };
-}
-
-/** Creates a narrow condition for running one workflow agent step. */
-export function workflowAgentStepWhen(input: WorkflowAgentStepWhen = {}): WorkflowAgentStepWhen {
-  return {
-    stepId: input.stepId ?? "",
-    outputPath: input.outputPath ?? "",
-    equals: input.equals,
-  };
-}
-
-/** Returns native input copied from a workflow agent step condition. */
-export function workflowAgentStepWhenInputFromWhen(
-  input?: WorkflowAgentStepWhen,
-): WorkflowAgentStepWhen | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    stepId: input.stepId,
-    outputPath: input.outputPath,
-    equals: input.equals,
   };
 }
 
 /** Creates a bound workflow target from native input. */
-export function boundWorkflowTarget(
-  input: BoundWorkflowTarget = {},
-): BoundWorkflowTarget {
-  if ("kind" in input && input.kind !== undefined) {
-    return boundWorkflowTargetFromTarget({ kind: input.kind });
-  }
-  const targetInput = input as BoundWorkflowTarget;
-  if (targetInput.app !== undefined && targetInput.agent !== undefined) {
-    throw new Error("bound workflow target must set either app or agent");
-  }
-  if (targetInput.app !== undefined) {
-    return { kind: { case: "app", value: boundWorkflowPluginTarget(targetInput.app) } };
-  }
-  if (targetInput.agent !== undefined) {
-    return { kind: { case: "agent", value: boundWorkflowAgentTarget(targetInput.agent) } };
-  }
-  return { kind: { case: undefined } };
+export function boundWorkflowTarget(input: BoundWorkflowTarget = {}): BoundWorkflowTarget {
+  return {
+    steps: (input.steps ?? []).map(workflowStep),
+  };
 }
 
 /** Returns native input copied from a bound workflow target. */
@@ -895,15 +939,9 @@ export function boundWorkflowTargetInputFromTarget(
   if (input === undefined) {
     return undefined;
   }
-  const kind = input.kind;
-  switch (kind?.case) {
-    case "app":
-      return { app: boundWorkflowPluginTargetInputFromTarget(kind.value) };
-    case "agent":
-      return { agent: boundWorkflowAgentTargetInputFromTarget(kind.value) };
-    default:
-      return {};
-  }
+  return {
+    steps: input.steps?.map((step) => workflowStepInputFromStep(step)!),
+  };
 }
 
 /** Returns a deep copy of a bound workflow target. */
@@ -1967,233 +2005,305 @@ export function workflowEventMatchFromProto(
   };
 }
 
-export function workflowOutputValueSourceToProto(
-  input?: WorkflowOutputValueSource | undefined,
-): ProtoWorkflowOutputValueSource | undefined {
+export function workflowTextToProto(
+  input?: WorkflowText | string | undefined,
+): ProtoWorkflowText | undefined {
   if (input === undefined) {
     return undefined;
   }
-  const source = workflowOutputValueSource(input);
-  const kind = source.kind;
+  const text = workflowText(input);
+  return create(WorkflowTextSchema, { template: text.template ?? "" });
+}
+
+export function workflowTextFromProto(
+  input?: ProtoWorkflowText | undefined,
+): WorkflowText | undefined {
+  return input === undefined ? undefined : { template: input.template };
+}
+
+export function workflowStepOutputSourceToProto(
+  input?: WorkflowStepOutputSource | undefined,
+): ProtoWorkflowStepOutputSource | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(WorkflowStepOutputSourceSchema, {
+    stepId: input.stepId ?? "",
+    path: input.path ?? "",
+  });
+}
+
+export function workflowStepOutputSourceFromProto(
+  input?: ProtoWorkflowStepOutputSource | undefined,
+): WorkflowStepOutputSource | undefined {
+  return input === undefined
+    ? undefined
+    : { stepId: input.stepId, path: input.path };
+}
+
+export function workflowValueToProto(
+  input?: WorkflowValue | undefined,
+): ProtoWorkflowValue | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const value = workflowValue(input);
+  const kind = value.kind;
   switch (kind?.case) {
-    case "agentOutput":
-      return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "agentOutput", value: kind.value },
-      });
-    case "signalPayload":
-      return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "signalPayload", value: kind.value },
-      });
-    case "signalMetadata":
-      return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "signalMetadata", value: kind.value },
-      });
-    case "agentSession":
-      return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "agentSession", value: kind.value },
-      });
     case "literal":
-      return create(WorkflowOutputValueSourceSchema, {
+      return create(WorkflowValueSchema, {
         kind: { case: "literal", value: valueFromJson(kind.value) },
       });
+    case "object":
+      return create(WorkflowValueSchema, {
+        kind: {
+          case: "object",
+          value: create(WorkflowObjectSchema, {
+            fields: Object.fromEntries(
+              Object.entries(kind.value).map(([key, nested]) => [
+                key,
+                workflowValueToProto(nested)!,
+              ]),
+            ),
+          }),
+        },
+      });
+    case "array":
+      return create(WorkflowValueSchema, {
+        kind: {
+          case: "array",
+          value: create(WorkflowArraySchema, {
+            values: kind.value.map((nested) => workflowValueToProto(nested)!),
+          }),
+        },
+      });
+    case "template":
+      return create(WorkflowValueSchema, {
+        kind: { case: "template", value: workflowTextToProto(kind.value)! },
+      });
+    case "runInput":
+      return create(WorkflowValueSchema, {
+        kind: {
+          case: "runInput",
+          value: create(WorkflowPathSourceSchema, { path: kind.value }),
+        },
+      });
+    case "signalPayload":
+      return create(WorkflowValueSchema, {
+        kind: {
+          case: "signalPayload",
+          value: create(WorkflowPathSourceSchema, { path: kind.value }),
+        },
+      });
+    case "stepOutput":
+      return create(WorkflowValueSchema, {
+        kind: { case: "stepOutput", value: workflowStepOutputSourceToProto(kind.value)! },
+      });
     default:
-      return create(WorkflowOutputValueSourceSchema);
+      return create(WorkflowValueSchema);
   }
 }
 
-export function workflowOutputValueSourceFromProto(
-  input?: ProtoWorkflowOutputValueSource | undefined,
-): WorkflowOutputValueSource | undefined {
+export function workflowValueFromProto(
+  input?: ProtoWorkflowValue | undefined,
+): WorkflowValue | undefined {
   if (input === undefined) {
     return undefined;
   }
   switch (input.kind.case) {
-    case "agentOutput":
-      return { kind: { case: "agentOutput", value: input.kind.value } };
-    case "signalPayload":
-      return { kind: { case: "signalPayload", value: input.kind.value } };
-    case "signalMetadata":
-      return { kind: { case: "signalMetadata", value: input.kind.value } };
-    case "agentSession":
-      return { kind: { case: "agentSession", value: input.kind.value } };
     case "literal":
       return { kind: { case: "literal", value: jsonFromValue(input.kind.value) as JsonInput } };
+    case "object":
+      return {
+        kind: {
+          case: "object",
+          value: Object.fromEntries(
+            Object.entries(input.kind.value.fields).map(([key, nested]) => [
+              key,
+              workflowValueFromProto(nested)!,
+            ]),
+          ),
+        },
+      };
+    case "array":
+      return {
+        kind: {
+          case: "array",
+          value: input.kind.value.values.map((nested) => workflowValueFromProto(nested)!),
+        },
+      };
+    case "template":
+      return { kind: { case: "template", value: workflowTextFromProto(input.kind.value)! } };
+    case "runInput":
+      return { kind: { case: "runInput", value: input.kind.value.path } };
+    case "signalPayload":
+      return { kind: { case: "signalPayload", value: input.kind.value.path } };
+    case "stepOutput":
+      return { kind: { case: "stepOutput", value: workflowStepOutputSourceFromProto(input.kind.value)! } };
     default:
       return { kind: { case: undefined } };
   }
 }
 
-export function workflowOutputBindingToProto(input: WorkflowOutputBinding) {
-  return create(WorkflowOutputBindingSchema, {
-    inputField: input.inputField ?? "",
-    value: workflowOutputValueSourceToProto(input.value),
-  });
-}
-
-export function workflowOutputBindingFromProto(
-  input: ProtoWorkflowOutputBinding,
-): WorkflowOutputBinding {
-  return {
-    inputField: input.inputField,
-    value: workflowOutputValueSourceFromProto(input.value),
-  };
-}
-
-export function workflowOutputDeliveryToProto(
-  input?: WorkflowOutputDelivery | undefined,
-): ProtoWorkflowOutputDelivery | undefined {
+export function workflowStepAppCallToProto(
+  input?: WorkflowStepAppCall | undefined,
+): ProtoWorkflowStepAppCall | undefined {
   if (input === undefined) {
     return undefined;
   }
-  return create(WorkflowOutputDeliverySchema, {
-    target: boundWorkflowPluginTargetToProto(input.target),
-    inputBindings: input.inputBindings?.map(workflowOutputBindingToProto) ?? [],
-    credentialMode: input.credentialMode ?? "",
-  });
-}
-
-export function workflowOutputDeliveryFromProto(
-  input?: ProtoWorkflowOutputDelivery | undefined,
-): WorkflowOutputDelivery | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    target: boundWorkflowPluginTargetFromProto(input.target),
-    inputBindings: input.inputBindings.map(workflowOutputBindingFromProto),
-    credentialMode: input.credentialMode,
-  };
-}
-
-export function boundWorkflowPluginTargetToProto(
-  input?: BoundWorkflowAppTarget | undefined,
-): ProtoBoundWorkflowAppTarget | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return create(BoundWorkflowAppTargetSchema, {
-    appName: input.appName ?? "",
+  return create(WorkflowStepAppCallSchema, {
+    name: input.name ?? "",
     operation: input.operation ?? "",
-    input: optionalStruct(input.input),
+    input: workflowValueToProto(input.input),
     connection: input.connection ?? "",
     instance: input.instance ?? "",
     credentialMode: input.credentialMode ?? "",
   });
 }
 
-export function boundWorkflowPluginTargetFromProto(
-  input?: ProtoBoundWorkflowAppTarget | undefined,
-): BoundWorkflowAppTarget | undefined {
+export function workflowStepAppCallFromProto(
+  input?: ProtoWorkflowStepAppCall | undefined,
+): WorkflowStepAppCall | undefined {
   if (input === undefined) {
     return undefined;
   }
   return {
-    appName: input.appName,
+    name: input.name,
     operation: input.operation,
-    input: optionalObjectFromStruct(input.input),
+    input: workflowValueFromProto(input.input),
     connection: input.connection,
     instance: input.instance,
     credentialMode: input.credentialMode,
   };
 }
 
-export function boundWorkflowAgentTargetToProto(
-  input?: BoundWorkflowAgentTarget | undefined,
-): ProtoBoundWorkflowAgentTarget | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return create(BoundWorkflowAgentTargetSchema, {
-    providerName: input.providerName ?? "",
-    model: input.model ?? "",
-    prompt: input.prompt ?? "",
-    messages: input.messages?.map(agentMessageToProto) ?? [],
-    toolRefs: input.toolRefs?.map(agentToolRefToProto) ?? [],
-    responseSchema: optionalStruct(input.responseSchema),
+export function workflowAgentMessageToProto(
+  input: WorkflowAgentMessage,
+): ProtoWorkflowAgentMessage {
+  return create(WorkflowAgentMessageSchema, {
+    role: input.role ?? "",
+    text: workflowTextToProto(input.text),
     metadata: optionalStruct(input.metadata),
-    timeoutSeconds: input.timeoutSeconds ?? 0,
-    outputDelivery: workflowOutputDeliveryToProto(input.outputDelivery),
-    modelOptions: optionalStruct(input.modelOptions),
-    sessionReadyDelivery: workflowOutputDeliveryToProto(input.sessionReadyDelivery),
-    steps: input.steps?.map(workflowAgentStepToProto) ?? [],
   });
 }
 
-export function boundWorkflowAgentTargetFromProto(
-  input?: ProtoBoundWorkflowAgentTarget | undefined,
-): BoundWorkflowAgentTarget | undefined {
+export function workflowAgentMessageFromProto(
+  input: ProtoWorkflowAgentMessage,
+): WorkflowAgentMessage {
+  return {
+    role: input.role,
+    text: workflowTextFromProto(input.text),
+    metadata: optionalObjectFromStruct(input.metadata),
+  };
+}
+
+export function workflowStepAgentTurnToProto(
+  input?: WorkflowStepAgentTurn | undefined,
+): ProtoWorkflowStepAgentTurn | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(WorkflowStepAgentTurnSchema, {
+    provider: input.provider ?? "",
+    model: input.model ?? "",
+    sessionKey: input.sessionKey ?? "",
+    prompt: workflowTextToProto(input.prompt),
+    messages: input.messages?.map(workflowAgentMessageToProto) ?? [],
+    tools: input.tools?.map(agentToolRefToProto) ?? [],
+    responseSchema: optionalStruct(input.responseSchema),
+    modelOptions: optionalStruct(input.modelOptions),
+  });
+}
+
+export function workflowStepAgentTurnFromProto(
+  input?: ProtoWorkflowStepAgentTurn | undefined,
+): WorkflowStepAgentTurn | undefined {
   if (input === undefined) {
     return undefined;
   }
   return {
-    providerName: input.providerName,
+    provider: input.provider,
     model: input.model,
-    prompt: input.prompt,
-    messages: input.messages.map(agentMessageFromProto),
-    toolRefs: input.toolRefs.map(agentToolRefFromProto),
+    sessionKey: input.sessionKey,
+    prompt: workflowTextFromProto(input.prompt),
+    messages: input.messages.map(workflowAgentMessageFromProto),
+    tools: input.tools.map(agentToolRefFromProto),
     responseSchema: optionalObjectFromStruct(input.responseSchema),
-    metadata: optionalObjectFromStruct(input.metadata),
-    timeoutSeconds: input.timeoutSeconds,
-    outputDelivery: workflowOutputDeliveryFromProto(input.outputDelivery),
     modelOptions: optionalObjectFromStruct(input.modelOptions),
-    sessionReadyDelivery: workflowOutputDeliveryFromProto(input.sessionReadyDelivery),
-    steps: input.steps.map(workflowAgentStepFromProto),
   };
 }
 
-export function workflowAgentStepToProto(input: WorkflowAgentStep): ProtoWorkflowAgentStep {
-  return create(WorkflowAgentStepSchema, {
-    id: input.id ?? "",
-    prompt: input.prompt ?? "",
-    messages: input.messages?.map(agentMessageToProto) ?? [],
-    toolRefs: input.toolRefs?.map(agentToolRefToProto) ?? [],
-    responseSchema: optionalStruct(input.responseSchema),
-    modelOptions: optionalStruct(input.modelOptions),
-    timeoutSeconds: input.timeoutSeconds ?? 0,
-    outputDelivery: workflowOutputDeliveryToProto(input.outputDelivery),
-    when: workflowAgentStepWhenToProto(input.when),
-    metadata: optionalStruct(input.metadata),
+export function workflowStepWhenToProto(
+  input?: WorkflowStepWhen | undefined,
+): ProtoWorkflowStepWhen | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(WorkflowStepWhenSchema, {
+    value: workflowValueToProto(input.value),
+    equals: Object.prototype.hasOwnProperty.call(input, "equals")
+      ? valueFromJson(input.equals ?? null)
+      : undefined,
   });
 }
 
-export function workflowAgentStepFromProto(input: ProtoWorkflowAgentStep): WorkflowAgentStep {
+export function workflowStepWhenFromProto(
+  input?: ProtoWorkflowStepWhen | undefined,
+): WorkflowStepWhen | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const out: WorkflowStepWhen = {
+    value: workflowValueFromProto(input.value),
+  };
+  if (input.equals !== undefined) {
+    out.equals = jsonFromValue(input.equals) as JsonInput;
+  }
+  return out;
+}
+
+export function workflowStepToProto(input: WorkflowStep): ProtoWorkflowStep {
+  const step = workflowStep(input);
+  const action = step.action;
+  return create(WorkflowStepSchema, {
+    id: step.id ?? "",
+    inputs: Object.fromEntries(
+      Object.entries(step.inputs ?? {}).map(([key, value]) => [
+        key,
+        workflowValueToProto(value)!,
+      ]),
+    ),
+    action: action?.case === "app"
+      ? { case: "app", value: workflowStepAppCallToProto(action.value)! }
+      : action?.case === "agent"
+        ? { case: "agent", value: workflowStepAgentTurnToProto(action.value)! }
+        : { case: undefined },
+    when: workflowStepWhenToProto(step.when),
+    timeoutSeconds: step.timeoutSeconds ?? 0,
+    metadata: optionalStruct(step.metadata),
+  });
+}
+
+export function workflowStepFromProto(input: ProtoWorkflowStep): WorkflowStep {
+  const action = input.action.case === "app"
+    ? { case: "app" as const, value: workflowStepAppCallFromProto(input.action.value)! }
+    : input.action.case === "agent"
+      ? { case: "agent" as const, value: workflowStepAgentTurnFromProto(input.action.value)! }
+      : { case: undefined };
   return {
     id: input.id,
-    prompt: input.prompt,
-    messages: input.messages.map(agentMessageFromProto),
-    toolRefs: input.toolRefs.map(agentToolRefFromProto),
-    responseSchema: optionalObjectFromStruct(input.responseSchema),
-    modelOptions: optionalObjectFromStruct(input.modelOptions),
+    inputs: Object.fromEntries(
+      Object.entries(input.inputs).map(([key, value]) => [
+        key,
+        workflowValueFromProto(value)!,
+      ]),
+    ),
+    app: action.case === "app" ? action.value : undefined,
+    agent: action.case === "agent" ? action.value : undefined,
+    action,
+    when: workflowStepWhenFromProto(input.when),
     timeoutSeconds: input.timeoutSeconds,
-    outputDelivery: workflowOutputDeliveryFromProto(input.outputDelivery),
-    when: workflowAgentStepWhenFromProto(input.when),
     metadata: optionalObjectFromStruct(input.metadata),
-  };
-}
-
-export function workflowAgentStepWhenToProto(
-  input?: WorkflowAgentStepWhen | undefined,
-): ProtoWorkflowAgentStepWhen | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return create(WorkflowAgentStepWhenSchema, {
-    stepId: input.stepId ?? "",
-    outputPath: input.outputPath ?? "",
-    equals: input.equals === undefined ? undefined : valueFromJson(input.equals),
-  });
-}
-
-export function workflowAgentStepWhenFromProto(
-  input?: ProtoWorkflowAgentStepWhen | undefined,
-): WorkflowAgentStepWhen | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    stepId: input.stepId,
-    outputPath: input.outputPath,
-    equals: input.equals === undefined ? undefined : jsonFromValue(input.equals),
   };
 }
 
@@ -2204,19 +2314,9 @@ export function boundWorkflowTargetToProto(
     return undefined;
   }
   const target = boundWorkflowTarget(input);
-  const kind = target.kind;
-  switch (kind?.case) {
-    case "app":
-      return create(BoundWorkflowTargetSchema, {
-        kind: { case: "app", value: boundWorkflowPluginTargetToProto(kind.value)! },
-      });
-    case "agent":
-      return create(BoundWorkflowTargetSchema, {
-        kind: { case: "agent", value: boundWorkflowAgentTargetToProto(kind.value)! },
-      });
-    default:
-      return create(BoundWorkflowTargetSchema);
-  }
+  return create(BoundWorkflowTargetSchema, {
+    steps: target.steps?.map(workflowStepToProto) ?? [],
+  });
 }
 
 export function boundWorkflowTargetFromProto(
@@ -2225,14 +2325,9 @@ export function boundWorkflowTargetFromProto(
   if (input === undefined) {
     return undefined;
   }
-  switch (input.kind.case) {
-    case "app":
-      return { kind: { case: "app", value: boundWorkflowPluginTargetFromProto(input.kind.value)! } };
-    case "agent":
-      return { kind: { case: "agent", value: boundWorkflowAgentTargetFromProto(input.kind.value)! } };
-    default:
-      return { kind: { case: undefined } };
-  }
+  return {
+    steps: input.steps.map(workflowStepFromProto),
+  };
 }
 
 export function workflowEventToProto(input?: WorkflowEvent | undefined): ProtoWorkflowEvent | undefined {
@@ -2858,17 +2953,26 @@ export function workflowManagerRunSignalFromProto(
   };
 }
 
-function cloneWorkflowOutputValueSourceKind(
-  kind: WorkflowOutputValueSourceKind,
-): WorkflowOutputValueSourceKind {
+function cloneWorkflowValueKind(kind: WorkflowValueKind): WorkflowValueKind {
   switch (kind.case) {
     case "literal":
-      return { case: "literal", value: kind.value };
-    case "agentOutput":
+      return { case: "literal", value: jsonClone(kind.value) };
+    case "object":
+      return {
+        case: "object",
+        value: Object.fromEntries(
+          Object.entries(kind.value).map(([key, value]) => [key, workflowValue(value)]),
+        ),
+      };
+    case "array":
+      return { case: "array", value: kind.value.map(workflowValue) };
+    case "template":
+      return { case: "template", value: workflowText(kind.value) };
+    case "runInput":
     case "signalPayload":
-    case "signalMetadata":
-    case "agentSession":
       return { case: kind.case, value: kind.value };
+    case "stepOutput":
+      return { case: "stepOutput", value: workflowStepOutputSource(kind.value) };
     default:
       return { case: undefined };
   }
@@ -2880,6 +2984,10 @@ function valueMapInput(input?: Record<string, JsonInput>): Record<string, JsonIn
 
 function jsonObjectClone(input: JsonObjectInput): JsonObjectInput {
   return structFromObject(jsonObjectFromStruct(input as JsonObject));
+}
+
+function jsonClone(input: JsonInput): JsonInput {
+  return jsonFromValue(valueFromJson(input)) as JsonInput;
 }
 
 function optionalTimestamp(value?: Date | undefined) {

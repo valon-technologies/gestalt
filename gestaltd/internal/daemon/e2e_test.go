@@ -31,9 +31,9 @@ func TestE2EValidateRejectsAuditConfigWhenProviderInheritsTelemetry(t *testing.T
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginDir := setupPluginDir(t, dir)
+	appDir := setupAppDir(t, dir)
 
-	cfgPath := writeE2EConfig(t, dir, pluginDir, 18080)
+	cfgPath := writeE2EConfig(t, dir, appDir, 18080)
 	cfgBytes, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatalf("read config: %v", err)
@@ -94,9 +94,9 @@ func TestE2EValidateRejectsInvalidAuditSettings(t *testing.T) {
 			t.Parallel()
 
 			dir := t.TempDir()
-			pluginDir := setupPluginDir(t, dir)
+			appDir := setupAppDir(t, dir)
 
-			cfgPath := writeE2EConfig(t, dir, pluginDir, 18080)
+			cfgPath := writeE2EConfig(t, dir, appDir, 18080)
 			cfgBytes, err := os.ReadFile(cfgPath)
 			if err != nil {
 				t.Fatalf("read config: %v", err)
@@ -154,7 +154,7 @@ func TestE2EValidateAcceptsTelemetryBuiltins(t *testing.T) {
 
 			dir := t.TempDir()
 			indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
-			pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
+			appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, dir))
 
 			cfgPath := filepath.Join(dir, "config.yaml")
 			cfg := fmt.Sprintf(`apiVersion: %s
@@ -177,7 +177,7 @@ apps:
   example:
     source:
       path: %s
-`, config.ConfigAPIVersion, e2eLoopbackBaseURL(8080), tc.source, tc.telemetryBlock, indexedDBManifest, pluginManifest)
+`, config.ConfigAPIVersion, e2eLoopbackBaseURL(8080), tc.source, tc.telemetryBlock, indexedDBManifest, appManifest)
 			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 				t.Fatalf("write config: %v", err)
 			}
@@ -195,7 +195,7 @@ func TestE2EValidateAcceptsCanonicalConfigShapes(t *testing.T) {
 
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
-	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, filepath.Join(dir, "app")))
+	appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, filepath.Join(dir, "app")))
 	ui := setupMountedUIDir(t, dir)
 	workflowManifest := componentProviderManifestPath(t, setupExecutableProviderDir(t, dir, providermanifestv1.KindWorkflow, "workflow-indexeddb"))
 	agentManifest := componentProviderManifestPath(t, setupExecutableProviderDir(t, dir, providermanifestv1.KindAgent, "agent-simple"))
@@ -260,35 +260,41 @@ workflows:
     nightly_sync:
       cron: "0 2 * * *"
       target:
-        app:
-          name: roadmap
-          operation: sync
-          connection: default
-          instance: tenant-a
-          input:
-            mode: incremental
+        steps:
+          - id: sync
+            app:
+              name: roadmap
+              operation: sync
+              connection: default
+              instance: tenant-a
+              input:
+                mode: incremental
     nightly_summary:
       cron: "0 3 * * *"
       target:
-        agent:
-          provider: simple
-          model: fast
-          prompt: Summarize yesterday.
-          tools:
-            - app: roadmap
-              operation: sync
+        steps:
+          - id: summarize
+            agent:
+              provider: simple
+              model: fast
+              prompt: Summarize yesterday.
+              tools:
+                - app: roadmap
+                  operation: sync
   eventTriggers:
     roadmap_updated:
       match:
         type: roadmap.item.updated
         source: roadmap
       target:
-        app:
-          name: roadmap
-          operation: sync
-          input:
-            mode: event
-`, e2eLoopbackBaseURL(8080), indexedDBManifest, ui.ManifestPath, workflowManifest, agentManifest, pluginManifest)
+        steps:
+          - id: sync
+            app:
+              name: roadmap
+              operation: sync
+              input:
+                mode: event
+`, e2eLoopbackBaseURL(8080), indexedDBManifest, ui.ManifestPath, workflowManifest, agentManifest, appManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -374,14 +380,14 @@ apps:
 	}
 }
 
-func TestE2EProviderValidateIsolatedSourcePlugin(t *testing.T) {
+func TestE2EProviderValidateIsolatedSourceApp(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
-	pluginDir := setupPluginDir(t, dir)
+	appDir := setupAppDir(t, dir)
 
-	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", pluginDir)
+	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", appDir)
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -426,12 +432,12 @@ func TestE2EProviderValidateSourceUI(t *testing.T) {
 	}
 }
 
-func TestE2EProviderValidateReusesConfiguredPluginKey(t *testing.T) {
+func TestE2EProviderValidateReusesConfiguredAppKey(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
-	pluginDir := setupPluginDir(t, dir)
+	appDir := setupAppDir(t, dir)
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := `apiVersion: gestaltd.config/v6
 apps:
@@ -442,7 +448,7 @@ apps:
 		t.Fatalf("write config: %v", err)
 	}
 
-	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", pluginDir, "--config", cfgPath, "--name", "provider_go")
+	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", appDir, "--config", cfgPath, "--name", "provider_go")
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -456,7 +462,7 @@ apps:
 	}
 }
 
-func TestE2EProviderValidateRejectsNonPluginManifest(t *testing.T) {
+func TestE2EProviderValidateRejectsNonAppManifest(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -464,10 +470,10 @@ func TestE2EProviderValidateRejectsNonPluginManifest(t *testing.T) {
 
 	out, err := exec.Command(gestaltdBin, "provider", "validate", "--path", manifestPath).CombinedOutput()
 	if err == nil {
-		t.Fatalf("expected gestaltd provider validate to fail for non-plugin manifest\n%s", out)
+		t.Fatalf("expected gestaltd provider validate to fail for non-app manifest\n%s", out)
 	}
 	if !strings.Contains(string(out), "only support kind: app or ui in v1") {
-		t.Fatalf("expected plugin-only error, got: %s", out)
+		t.Fatalf("expected app-only error, got: %s", out)
 	}
 }
 
@@ -476,10 +482,10 @@ func TestE2EProviderValidateLayeredConfigSupportsNullDeletion(t *testing.T) {
 
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
-	targetDir := setupPluginDir(t, filepath.Join(dir, "target"))
-	supportDir := setupPrebuiltPluginDir(t, filepath.Join(dir, "support"))
+	targetDir := setupAppDir(t, filepath.Join(dir, "target"))
+	supportDir := setupPrebuiltAppDir(t, filepath.Join(dir, "support"))
 	mountedUI := setupMountedUIDir(t, dir)
-	attachOwnedUIToPluginSource(t, targetDir, mountedUI.ManifestPath)
+	attachOwnedUIToAppSource(t, targetDir, mountedUI.ManifestPath)
 
 	supportManifest := componentProviderManifestPath(t, supportDir)
 	supportRel, err := filepath.Rel(dir, supportManifest)
@@ -672,7 +678,7 @@ func TestE2EValidateAcceptsLayeredConfigs(t *testing.T) {
 	}
 
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, rootDir))
-	setupPluginDir(t, overrideDir)
+	setupAppDir(t, overrideDir)
 
 	baseConfigPath := filepath.Join(baseDir, "base.yaml")
 	baseConfig := fmt.Sprintf(`apiVersion: gestaltd.config/v6
@@ -702,7 +708,7 @@ apps:
 apps:
   example:
     source:
-      path: ./plugin-src/manifest.yaml
+      path: ./app-src/manifest.yaml
 `
 	if err := os.WriteFile(overrideConfigPath, []byte(overrideConfig), 0o644); err != nil {
 		t.Fatalf("WriteFile override config: %v", err)
@@ -730,7 +736,7 @@ func TestE2EValidateUsesScratchPreparedInstallsForLocalSourceConfigs(t *testing.
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginDir := setupPluginDir(t, dir)
+	appDir := setupAppDir(t, dir)
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -751,7 +757,7 @@ apps:
   example:
     source:
       path: %s
-`, e2eLoopbackBaseURL(8080), indexedDBManifest, filepath.Join(dir, "gestalt.db"), componentProviderManifestPath(t, pluginDir))
+`, e2eLoopbackBaseURL(8080), indexedDBManifest, filepath.Join(dir, "gestalt.db"), componentProviderManifestPath(t, appDir))
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -817,8 +823,8 @@ func TestE2EValidatePlatformUsesLockedStaticMetadataWithoutArchiveDownload(t *te
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	pluginDir := setupPrebuiltPluginDir(t, dir)
-	if err := writeLocalProviderReleaseMetadata(pluginDir); err != nil {
+	appDir := setupPrebuiltAppDir(t, dir)
+	if err := writeLocalProviderReleaseMetadata(appDir); err != nil {
 		t.Fatalf("write app provider-release metadata: %v", err)
 	}
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -841,7 +847,7 @@ providers:
 apps:
   example:
     source: %s
-`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, filepath.Join(pluginDir, "provider-release.yaml"))
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, filepath.Join(appDir, "provider-release.yaml"))
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -867,8 +873,8 @@ apps:
 		t.Fatalf("parse lockfile: %v", err)
 	}
 	providers := lock["providers"].(map[string]any)
-	plugins := providers["app"].(map[string]any)
-	example := plugins["example"].(map[string]any)
+	apps := providers["app"].(map[string]any)
+	example := apps["example"].(map[string]any)
 	example["archives"] = map[string]any{
 		"linux/amd64": map[string]any{
 			"url":    archiveServer.URL + "/provider.tar.gz",
@@ -899,8 +905,8 @@ func TestE2EValidateStaticRejectsStaleCatalogExposureMetadata(t *testing.T) {
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	callerManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, filepath.Join(dir, "caller")))
-	targetDir := setupPrebuiltPluginDir(t, filepath.Join(dir, "target"))
+	callerManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, filepath.Join(dir, "caller")))
+	targetDir := setupPrebuiltAppDir(t, filepath.Join(dir, "target"))
 	if err := writeLocalProviderReleaseMetadata(targetDir); err != nil {
 		t.Fatalf("write target provider-release metadata: %v", err)
 	}
@@ -1100,7 +1106,7 @@ func TestE2EValidateStaticLegacyLockAllowsUnavailableInvokesTargetCatalog(t *tes
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	callerManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
+	callerManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, dir))
 
 	var archiveHits atomic.Int64
 	archiveServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1189,12 +1195,12 @@ apps:
 	}
 }
 
-func TestE2EValidateRejectsInvalidPluginInvokesDependency(t *testing.T) {
+func TestE2EValidateRejectsInvalidAppInvokesDependency(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	callerDir := setupPluginDirWithVersion(t, filepath.Join(dir, "caller"), "0.0.1-alpha.1")
-	targetDir := setupPluginDirWithVersion(t, filepath.Join(dir, "target"), "0.0.1-alpha.1")
+	callerDir := setupAppDirWithVersion(t, filepath.Join(dir, "caller"), "0.0.1-alpha.1")
+	targetDir := setupAppDirWithVersion(t, filepath.Join(dir, "target"), "0.0.1-alpha.1")
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -1239,8 +1245,8 @@ func TestE2EValidateRejectsHybridExecutableDuplicateEffectiveOperation(t *testin
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginDir := setupPluginDir(t, filepath.Join(dir, "target"))
-	manifestPath := componentProviderManifestPath(t, pluginDir)
+	appDir := setupAppDir(t, filepath.Join(dir, "target"))
+	manifestPath := componentProviderManifestPath(t, appDir)
 	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		t.Fatalf("read source manifest: %v", err)
@@ -1254,8 +1260,8 @@ func TestE2EValidateRejectsHybridExecutableDuplicateEffectiveOperation(t *testin
 	manifest.Spec.AllowedOperations = map[string]*providermanifestv1.ManifestOperationOverride{
 		"external_echo": {Alias: "echo"},
 	}
-	writeManifestFile(t, pluginDir, manifest)
-	if err := os.WriteFile(filepath.Join(pluginDir, "openapi.yaml"), []byte(`openapi: "3.1.0"
+	writeManifestFile(t, appDir, manifest)
+	if err := os.WriteFile(filepath.Join(appDir, "openapi.yaml"), []byte(`openapi: "3.1.0"
 info:
   title: Hybrid Duplicate
   version: "1.0.0"
@@ -1303,25 +1309,25 @@ apps:
 	}
 }
 
-func setupPluginDir(t *testing.T, baseDir string) string {
+func setupAppDir(t *testing.T, baseDir string) string {
 	t.Helper()
-	return setupPluginDirWithVersion(t, baseDir, "0.0.1-alpha.1")
+	return setupAppDirWithVersion(t, baseDir, "0.0.1-alpha.1")
 }
 
-func setupPluginDirWithHostedHTTPBinding(t *testing.T, baseDir string) string {
+func setupAppDirWithHostedHTTPBinding(t *testing.T, baseDir string) string {
 	t.Helper()
 
-	pluginDir := setupPluginDir(t, baseDir)
-	addHostedHTTPBindingToPluginManifest(t, pluginDir, "echo_form", "/echo-form", "echo")
-	return pluginDir
+	appDir := setupAppDir(t, baseDir)
+	addHostedHTTPBindingToAppManifest(t, appDir, "echo_form", "/echo-form", "echo")
+	return appDir
 }
 
-func setupPluginDirWithHTTPSubjectResolution(t *testing.T, baseDir string) string {
+func setupAppDirWithHTTPSubjectResolution(t *testing.T, baseDir string) string {
 	t.Helper()
 
-	pluginDir := setupPluginDir(t, baseDir)
-	addHostedHTTPBindingToPluginManifest(t, pluginDir, "resolve_subject", "/resolve-subject", "invoke_request_context")
-	providerPath := filepath.Join(pluginDir, "provider.go")
+	appDir := setupAppDir(t, baseDir)
+	addHostedHTTPBindingToAppManifest(t, appDir, "resolve_subject", "/resolve-subject", "invoke_request_context")
+	providerPath := filepath.Join(appDir, "provider.go")
 	source, err := os.ReadFile(providerPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", providerPath, err)
@@ -1376,13 +1382,13 @@ func (p *Provider) ResolveHTTPSubject(ctx context.Context, req gestalt.HTTPSubje
 		t.Fatalf("write %s: %v", providerPath, err)
 	}
 
-	return pluginDir
+	return appDir
 }
 
-func addHostedHTTPBindingToPluginManifest(t *testing.T, pluginDir, name, path, target string) {
+func addHostedHTTPBindingToAppManifest(t *testing.T, appDir, name, path, target string) {
 	t.Helper()
 
-	manifestPath := filepath.Join(pluginDir, "manifest.yaml")
+	manifestPath := filepath.Join(appDir, "manifest.yaml")
 	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		t.Fatalf("read source manifest %s: %v", manifestPath, err)
@@ -1420,13 +1426,13 @@ func addHostedHTTPBindingToPluginManifest(t *testing.T, pluginDir, name, path, t
 	}
 }
 
-func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
+func setupAppDirWithVersion(t *testing.T, baseDir, version string) string {
 	t.Helper()
 
-	pluginDir := filepath.Join(baseDir, "plugin-src")
-	testutil.CopyExampleProviderPlugin(t, pluginDir)
+	appDir := filepath.Join(baseDir, "app-src")
+	testutil.CopyExampleProviderApp(t, appDir)
 	artifactRel := ".gestalt/build/provider"
-	writeGoPluginBuildFixture(t, pluginDir, "github.com/valon-technologies/gestalt/testdata/provider-go", "example", artifactRel)
+	writeGoAppBuildFixture(t, appDir, "github.com/valon-technologies/gestalt/testdata/provider-go", "example", artifactRel)
 	manifest := &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
 		Source:      "github.com/test/apps/provider",
@@ -1440,23 +1446,23 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 		},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}
-	writeManifestFile(t, pluginDir, manifest)
-	return pluginDir
+	writeManifestFile(t, appDir, manifest)
+	return appDir
 }
 
-func setPluginManifestSource(t *testing.T, pluginDir, source string) {
+func setAppManifestSource(t *testing.T, appDir, source string) {
 	t.Helper()
 
-	manifestPath := componentProviderManifestPath(t, pluginDir)
+	manifestPath := componentProviderManifestPath(t, appDir)
 	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		t.Fatalf("ReadSourceManifestFile(%s): %v", manifestPath, err)
 	}
 	manifest.Source = source
-	writeManifestFile(t, pluginDir, manifest)
+	writeManifestFile(t, appDir, manifest)
 }
 
-func setPluginManifestDisplayName(t *testing.T, manifestPath, displayName string) {
+func setAppManifestDisplayName(t *testing.T, manifestPath, displayName string) {
 	t.Helper()
 
 	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
@@ -1586,7 +1592,7 @@ func setupExecutableProviderDir(t *testing.T, baseDir, kind, name string) string
 			t.Fatalf("build agent provider fixture: %v", err)
 		}
 	default:
-		binData, err := os.ReadFile(pluginBin)
+		binData, err := os.ReadFile(appBin)
 		if err != nil {
 			t.Fatalf("read provider binary: %v", err)
 		}
@@ -1643,7 +1649,7 @@ func main() {
 	writeTestFile(t, providerDir, "build.sh", []byte(buildScript), 0o755)
 }
 
-func writeGoPluginBuildFixture(t *testing.T, providerDir, importPath, pluginName, artifactRel string) {
+func writeGoAppBuildFixture(t *testing.T, providerDir, importPath, appName, artifactRel string) {
 	t.Helper()
 
 	mainSource := fmt.Sprintf(`package main
@@ -1667,7 +1673,7 @@ func main() {
 		os.Exit(1)
 	}
 }
-`, importPath, pluginName)
+`, importPath, appName)
 	writeTestFile(t, providerDir, filepath.Join("cmd", "provider", "main.go"), []byte(mainSource), 0o644)
 	buildScript := fmt.Sprintf("mkdir -p %q\ngo build -o %q ./cmd/provider\n", filepath.ToSlash(filepath.Dir(artifactRel)), artifactRel)
 	writeTestFile(t, providerDir, "build.sh", []byte(buildScript), 0o755)
@@ -1853,13 +1859,13 @@ providers:
 `, serverProvidersBlock, authBlock, externalCredentialsName, externalCredentialsManifestPath, datastoreName, indexedDBManifestPath, "sqlite://"+dbPath)
 }
 
-func writeManifestFile(t *testing.T, pluginDir string, manifest *providermanifestv1.Manifest) {
+func writeManifestFile(t *testing.T, appDir string, manifest *providermanifestv1.Manifest) {
 	t.Helper()
 	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(pluginDir, "manifest.yaml"), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(appDir, "manifest.yaml"), data, 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
 }
@@ -1961,16 +1967,16 @@ func setupExternalCredentialsProviderDir(t *testing.T, baseDir string) string {
 	return providerDir
 }
 
-func setupPrebuiltPluginDir(t *testing.T, baseDir string) string {
+func setupPrebuiltAppDir(t *testing.T, baseDir string) string {
 	t.Helper()
 
-	providerDir := filepath.Join(baseDir, "plugin-prebuilt")
+	providerDir := filepath.Join(baseDir, "app-prebuilt")
 	if err := os.MkdirAll(providerDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
 	}
 
 	binDest := filepath.Join(providerDir, "gestalt-app-example")
-	binData, err := os.ReadFile(pluginBin)
+	binData, err := os.ReadFile(appBin)
 	if err != nil {
 		t.Fatalf("read app binary: %v", err)
 	}
@@ -1978,7 +1984,7 @@ func setupPrebuiltPluginDir(t *testing.T, baseDir string) string {
 		t.Fatalf("write app binary: %v", err)
 	}
 
-	srcDir := testutil.MustExampleProviderPluginPath()
+	srcDir := testutil.MustExampleProviderAppPath()
 	catalogData, err := os.ReadFile(filepath.Join(srcDir, "catalog.yaml"))
 	if err != nil {
 		t.Fatalf("read catalog.yaml: %v", err)
@@ -2013,10 +2019,10 @@ func setupMountedUIDir(t *testing.T, baseDir string) *mountedUITestConfig {
 	return setupMountedUIDirWithRoutes(t, baseDir, nil)
 }
 
-func attachOwnedUIToPluginSource(t *testing.T, pluginDir, uiManifestPath string) {
+func attachOwnedUIToAppSource(t *testing.T, appDir, uiManifestPath string) {
 	t.Helper()
 
-	manifestPath := componentProviderManifestPath(t, pluginDir)
+	manifestPath := componentProviderManifestPath(t, appDir)
 	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		t.Fatalf("ReadSourceManifestFile(%s): %v", manifestPath, err)
@@ -2024,12 +2030,12 @@ func attachOwnedUIToPluginSource(t *testing.T, pluginDir, uiManifestPath string)
 	if manifest.Spec == nil {
 		manifest.Spec = &providermanifestv1.Spec{}
 	}
-	relativeUIPath, err := filepath.Rel(pluginDir, uiManifestPath)
+	relativeUIPath, err := filepath.Rel(appDir, uiManifestPath)
 	if err != nil {
-		t.Fatalf("filepath.Rel(%s, %s): %v", pluginDir, uiManifestPath, err)
+		t.Fatalf("filepath.Rel(%s, %s): %v", appDir, uiManifestPath, err)
 	}
 	manifest.Spec.UI = &providermanifestv1.OwnedUI{Path: filepath.ToSlash(relativeUIPath)}
-	writeManifestFile(t, pluginDir, manifest)
+	writeManifestFile(t, appDir, manifest)
 }
 
 func setupMountedUIDirWithRoutes(t *testing.T, baseDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
@@ -2168,10 +2174,10 @@ func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITe
 
 	indexedDBDir := setupIndexedDBProviderDir(t, dir)
 	indexedDBManifest := componentProviderManifestPath(t, indexedDBDir)
-	pluginDir := setupPrebuiltPluginDir(t, dir)
-	pluginManifest, err := providerpkg.FindManifestFile(pluginDir)
+	appDir := setupPrebuiltAppDir(t, dir)
+	appManifest, err := providerpkg.FindManifestFile(appDir)
 	if err != nil {
-		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
+		t.Fatalf("FindManifestFile(%s): %v", appDir, err)
 	}
 	uiBlock := ""
 	if mountedUI != nil {
@@ -2200,7 +2206,7 @@ providers:
   example:
     source:
       path: %s
-`, e2eLoopbackBaseURL(port), port, indexedDBManifest, uiBlock, pluginManifest)
+`, e2eLoopbackBaseURL(port), port, indexedDBManifest, uiBlock, appManifest)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -2214,10 +2220,10 @@ func writeServeConfigWithManagement(t *testing.T, dir string, publicPort, manage
 
 	indexedDBDir := setupIndexedDBProviderDir(t, dir)
 	indexedDBManifest := componentProviderManifestPath(t, indexedDBDir)
-	pluginDir := setupPrebuiltPluginDir(t, dir)
-	pluginManifest, err := providerpkg.FindManifestFile(pluginDir)
+	appDir := setupPrebuiltAppDir(t, dir)
+	appManifest, err := providerpkg.FindManifestFile(appDir)
 	if err != nil {
-		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
+		t.Fatalf("FindManifestFile(%s): %v", appDir, err)
 	}
 	uiBlock := ""
 	if mountedUI != nil {
@@ -2249,7 +2255,7 @@ providers:
   example:
     source:
       path: %s
-`, e2eLoopbackBaseURL(publicPort), publicPort, managementPort, indexedDBManifest, uiBlock, pluginManifest)
+`, e2eLoopbackBaseURL(publicPort), publicPort, managementPort, indexedDBManifest, uiBlock, appManifest)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -2557,7 +2563,7 @@ func TestE2EServeAndHealthCheck(t *testing.T) {
 		t.Fatalf("decode integrations response: %v (body: %s)", err, body)
 	}
 	if len(integrations) == 0 {
-		t.Fatal("expected at least one integration from the example plugin")
+		t.Fatal("expected at least one integration from the example app")
 	}
 }
 
@@ -2570,11 +2576,11 @@ func TestE2EServePathServesAdminWithoutInjectingRootUI(t *testing.T) {
 
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
-	pluginDir := setupPluginDir(t, dir)
+	appDir := setupAppDir(t, dir)
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
-	cmd := exec.Command(gestaltdBin, "serve", "--path", pluginDir, "--port", fmt.Sprintf("%d", port))
+	cmd := exec.Command(gestaltdBin, "serve", "--path", appDir, "--port", fmt.Sprintf("%d", port))
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -2612,13 +2618,13 @@ func TestE2EServePathAutoMountsOwnedUI(t *testing.T) {
 
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
-	pluginDir := setupPluginDir(t, dir)
+	appDir := setupAppDir(t, dir)
 	mountedUI := setupMountedUIDir(t, dir)
-	attachOwnedUIToPluginSource(t, pluginDir, mountedUI.ManifestPath)
+	attachOwnedUIToAppSource(t, appDir, mountedUI.ManifestPath)
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
-	cmd := exec.Command(gestaltdBin, "serve", "--path", componentProviderManifestPath(t, pluginDir), "--port", fmt.Sprintf("%d", port))
+	cmd := exec.Command(gestaltdBin, "serve", "--path", componentProviderManifestPath(t, appDir), "--port", fmt.Sprintf("%d", port))
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -2677,7 +2683,7 @@ func TestE2EServePathServesSourceUI(t *testing.T) {
 	_ = waitForHTTPBody(t, client, baseURL+"/roadmap.review/sync", "Roadmap Review UI")
 }
 
-func TestE2EServePathAutoMountsSiblingUIForPlugin(t *testing.T) {
+func TestE2EServePathAutoMountsSiblingUIForApp(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
@@ -2687,13 +2693,13 @@ func TestE2EServePathAutoMountsSiblingUIForPlugin(t *testing.T) {
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
 	rootDir := filepath.Join(dir, "package")
-	pluginDir := setupPluginDir(t, filepath.Join(rootDir, "app"))
-	setPluginManifestSource(t, pluginDir, "github.com/test/apps/vm-style-guide")
+	appDir := setupAppDir(t, filepath.Join(rootDir, "app"))
+	setAppManifestSource(t, appDir, "github.com/test/apps/vm-style-guide")
 	_ = setupMountedUIDirAt(t, filepath.Join(rootDir, "ui"), nil)
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
-	cmd := exec.Command(gestaltdBin, "serve", "--path", componentProviderManifestPath(t, pluginDir), "--port", fmt.Sprintf("%d", port))
+	cmd := exec.Command(gestaltdBin, "serve", "--path", componentProviderManifestPath(t, appDir), "--port", fmt.Sprintf("%d", port))
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -2713,11 +2719,11 @@ func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.
 	}
 
 	dir := t.TempDir()
-	pluginDir := setupPluginDir(t, dir)
-	manifestPath := componentProviderManifestPath(t, pluginDir)
+	appDir := setupAppDir(t, dir)
+	manifestPath := componentProviderManifestPath(t, appDir)
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
+	cfgPath := writeE2EConfig(t, dir, appDir, port)
 	originalConfig, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatalf("read config: %v", err)
@@ -2730,7 +2736,7 @@ func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.
 	client := &http.Client{Timeout: 2 * time.Second}
 	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Example Provider")
 
-	setPluginManifestDisplayName(t, manifestPath, "Config Watch Provider")
+	setAppManifestDisplayName(t, manifestPath, "Config Watch Provider")
 	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Config Watch Provider")
 
 	invalidConfig := strings.Replace(string(originalConfig), manifestPath, filepath.Join(dir, "missing", "manifest.yaml"), 1)
@@ -2746,7 +2752,7 @@ func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.
 	if err := os.WriteFile(cfgPath, originalConfig, 0o644); err != nil {
 		t.Fatalf("restore config: %v", err)
 	}
-	setPluginManifestDisplayName(t, manifestPath, "Recovered Config Watch Provider")
+	setAppManifestDisplayName(t, manifestPath, "Recovered Config Watch Provider")
 	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Recovered Config Watch Provider")
 }
 
@@ -2758,9 +2764,9 @@ func TestE2EServeConfigWatchReloadsLocalReleaseMetadata(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	pluginDir := setupPrebuiltPluginDir(t, dir)
-	metadataPath := filepath.Join(pluginDir, "provider-release.yaml")
-	if err := writeLocalProviderReleaseMetadata(pluginDir); err != nil {
+	appDir := setupPrebuiltAppDir(t, dir)
+	metadataPath := filepath.Join(appDir, "provider-release.yaml")
+	if err := writeLocalProviderReleaseMetadata(appDir); err != nil {
 		t.Fatalf("write provider-release metadata: %v", err)
 	}
 	port, holder := reservePort(t)
@@ -2866,7 +2872,7 @@ func TestE2EDefaultServeAutoGeneratesLocalConfig(t *testing.T) {
 		t.Fatal(`Providers.UI["root"] = nil`)
 	}
 	if len(cfg.Apps) != 0 {
-		t.Fatalf("expected no default local plugins, got %#v", cfg.Apps)
+		t.Fatalf("expected no default local apps, got %#v", cfg.Apps)
 	}
 }
 
@@ -2966,16 +2972,16 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 	}
 }
 
-func TestE2EServePluginOwnedUIWiring(t *testing.T) {
+func TestE2EServeAppOwnedUIWiring(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("skipping plugin-owned mounted ui integrations test in short mode")
+		t.Skip("skipping app-owned mounted ui integrations test in short mode")
 	}
 
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
-	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
+	appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, dir))
 	mountedUI := setupMountedUIDirWithRoutes(t, dir, []providermanifestv1.UIRoute{{
 		Path:         "/*",
 		AllowedRoles: []string{"viewer"},
@@ -2988,7 +2994,7 @@ server:
   baseUrl: %s
   public:
     port: %d
-  encryptionKey: test-plugin-owned-ui-key
+  encryptionKey: test-app-owned-ui-key
   providers:
     indexeddb: inmem
 providers:
@@ -3007,7 +3013,7 @@ apps:
     ui:
       bundle: roadmap
       path: /roadmap
-`, publicURL, publicPort, indexedDBManifest, mountedUI.ManifestPath, pluginManifest)
+`, publicURL, publicPort, indexedDBManifest, mountedUI.ManifestPath, appManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write owned-ui config: %v", err)
 	}
@@ -3059,7 +3065,7 @@ apps:
 	t.Fatalf(`integration "example" mountedPath missing from response: %s`, integrationsBody)
 }
 
-func TestE2EServeStartsWithPluginBoundCacheProvider(t *testing.T) {
+func TestE2EServeStartsWithAppBoundCacheProvider(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
@@ -3069,7 +3075,7 @@ func TestE2EServeStartsWithPluginBoundCacheProvider(t *testing.T) {
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	cacheManifest := componentProviderManifestPath(t, setupCacheProviderDir(t, dir, "session"))
-	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
+	appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, dir))
 	cfgPath := filepath.Join(dir, "config-cache.yaml")
 
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
@@ -3095,7 +3101,7 @@ apps:
       path: %s
     cache:
       - session
-`, e2eLoopbackBaseURL(0), indexedDBManifest, cacheManifest, pluginManifest)
+`, e2eLoopbackBaseURL(0), indexedDBManifest, cacheManifest, appManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -3113,7 +3119,7 @@ apps:
 	}
 }
 
-func TestE2EServeMountsManifestHostedHTTPBindingsForLocalSourcePlugin(t *testing.T) {
+func TestE2EServeMountsManifestHostedHTTPBindingsForLocalSourceApp(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
@@ -3121,10 +3127,10 @@ func TestE2EServeMountsManifestHostedHTTPBindingsForLocalSourcePlugin(t *testing
 	}
 
 	dir := t.TempDir()
-	pluginDir := setupPluginDirWithHostedHTTPBinding(t, dir)
+	appDir := setupAppDirWithHostedHTTPBinding(t, dir)
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
+	cfgPath := writeE2EConfig(t, dir, appDir, port)
 
 	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
 	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
@@ -3162,10 +3168,10 @@ func TestE2EHostedHTTPSubjectResolutionUsesAuthorizationAndInheritedInvocation(t
 	}
 
 	dir := t.TempDir()
-	pluginDir := setupPluginDirWithHTTPSubjectResolution(t, dir)
+	appDir := setupAppDirWithHTTPSubjectResolution(t, dir)
 	authorizationManifest := componentProviderManifestPath(t, setupAuthorizationProviderDir(t, dir, "local"))
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
-	pluginManifest := componentProviderManifestPath(t, pluginDir)
+	appManifest := componentProviderManifestPath(t, appDir)
 
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
@@ -3197,7 +3203,7 @@ apps:
     invokes:
       - app: example
         operation: request_context
-`, baseURL, port, indexedDBManifest, "sqlite://"+filepath.Join(dir, "gestalt.db"), authorizationManifest, pluginManifest)
+`, baseURL, port, indexedDBManifest, "sqlite://"+filepath.Join(dir, "gestalt.db"), authorizationManifest, appManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -3469,24 +3475,24 @@ func TestE2ELockSyncLocalProviders(t *testing.T) {
 	}
 }
 
-func TestE2ELockSyncPluginOwnedUI(t *testing.T) {
+func TestE2ELockSyncAppOwnedUI(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("skipping E2E lock/sync plugin-owned UI test in short mode")
+		t.Skip("skipping E2E lock/sync app-owned UI test in short mode")
 	}
 
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
-	pluginDir := setupPrebuiltPluginDir(t, dir)
+	appDir := setupPrebuiltAppDir(t, dir)
 	mountedUI := setupMountedUIDirWithRoutes(t, dir, []providermanifestv1.UIRoute{{
 		Path:         "/*",
 		AllowedRoles: []string{"viewer"},
 	}})
-	attachOwnedUIToPluginSource(t, pluginDir, mountedUI.ManifestPath)
-	pluginManifest, err := providerpkg.FindManifestFile(pluginDir)
+	attachOwnedUIToAppSource(t, appDir, mountedUI.ManifestPath)
+	appManifest, err := providerpkg.FindManifestFile(appDir)
 	if err != nil {
-		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
+		t.Fatalf("FindManifestFile(%s): %v", appDir, err)
 	}
 
 	cfgPath := filepath.Join(dir, "config-owned-ui-lock-sync.yaml")
@@ -3509,7 +3515,7 @@ apps:
       path: %s
     ui:
       path: /roadmap
-`, e2eLoopbackBaseURL(0), indexedDBManifest, pluginManifest)
+`, e2eLoopbackBaseURL(0), indexedDBManifest, appManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write owned-ui lock/sync config: %v", err)
 	}
@@ -3700,7 +3706,7 @@ func TestE2ECLIToServer(t *testing.T) {
 			t.Fatalf("gestalt app list failed: %v\noutput: %s", err, out)
 		}
 		if !strings.Contains(string(out), "example") {
-			t.Fatalf("expected 'example' integration in output, got: %s", out)
+			t.Fatalf("expected 'example' app in output, got: %s", out)
 		}
 	})
 
@@ -3740,9 +3746,9 @@ func TestE2ECLIToServer(t *testing.T) {
 	})
 }
 
-func writeE2EConfig(t *testing.T, dir, pluginDir string, port int) string {
+func writeE2EConfig(t *testing.T, dir, appDir string, port int) string {
 	t.Helper()
-	return writeE2EConfigWithPaths(t, dir, pluginDir, filepath.Join(dir, "gestalt.db"), "", port)
+	return writeE2EConfigWithPaths(t, dir, appDir, filepath.Join(dir, "gestalt.db"), "", port)
 }
 
 func writeValidValidateConfig(t *testing.T, dir string) string {
@@ -3750,7 +3756,7 @@ func writeValidValidateConfig(t *testing.T, dir string) string {
 
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
+	appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
@@ -3773,7 +3779,7 @@ apps:
   example:
     source:
       path: %s
-`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, pluginManifest)
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, appManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write valid config: %v", err)
 	}
@@ -3806,7 +3812,7 @@ apps:
   example:
     source:
       path: %s
-`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, filepath.Join(dir, "missing-plugin", "manifest.yaml"))
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, filepath.Join(dir, "missing-app", "manifest.yaml"))
 	if err := os.WriteFile(path, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write invalid config: %v", err)
 	}
@@ -3823,16 +3829,16 @@ func writeLayeredE2EConfigs(t *testing.T, dir string, port int) (string, string,
 
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
+	appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, dir))
 	authManifest := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, "local"))
 
 	indexedDBRel, err := filepath.Rel(deployDir, indexedDBManifest)
 	if err != nil {
 		t.Fatalf("filepath.Rel(indexeddb): %v", err)
 	}
-	pluginRel, err := filepath.Rel(deployDir, pluginManifest)
+	appRel, err := filepath.Rel(deployDir, appManifest)
 	if err != nil {
-		t.Fatalf("filepath.Rel(plugin): %v", err)
+		t.Fatalf("filepath.Rel(app): %v", err)
 	}
 	authRel, err := filepath.Rel(overrideDir, authManifest)
 	if err != nil {
@@ -3863,7 +3869,7 @@ apps:
   example:
     source:
       path: %s
-`, e2eLoopbackBaseURL(port), port, filepath.ToSlash(externalCredentialsManifest), filepath.ToSlash(indexedDBRel), filepath.ToSlash(pluginRel))
+`, e2eLoopbackBaseURL(port), port, filepath.ToSlash(externalCredentialsManifest), filepath.ToSlash(indexedDBRel), filepath.ToSlash(appRel))
 	overrideCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   providers:
@@ -3886,15 +3892,15 @@ providers:
 	return basePath, overridePath, filepath.Join(deployDir, "gestalt.lock.json"), filepath.Join(deployDir, "artifacts", "local")
 }
 
-func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir string, port int) string {
+func writeE2EConfigWithPaths(t *testing.T, dir, appDir, dbPath, artifactsDir string, port int) string {
 	t.Helper()
 
 	if port == 0 {
 		port = 18080
 	}
-	manifestPath, err := providerpkg.FindManifestFile(pluginDir)
+	manifestPath, err := providerpkg.FindManifestFile(appDir)
 	if err != nil {
-		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
+		t.Fatalf("FindManifestFile(%s): %v", appDir, err)
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")

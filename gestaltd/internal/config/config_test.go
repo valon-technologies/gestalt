@@ -194,7 +194,7 @@ apps:
 	}
 }
 
-func TestLoadConfigParsesPluginMCPFlag(t *testing.T) {
+func TestLoadConfigParsesAppMCPFlag(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
@@ -278,7 +278,7 @@ server:
 	}
 }
 
-func TestLoadConfigParsesPluginHTTPSecuritySchemesAndBindings(t *testing.T) {
+func TestLoadConfigParsesAppHTTPSecuritySchemesAndBindings(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
@@ -319,7 +319,7 @@ apps:
 	}
 	entry := cfg.Apps["signed"]
 	if entry == nil {
-		t.Fatal("Plugins[signed] = nil")
+		t.Fatal("Apps[signed] = nil")
 		return
 	}
 	scheme := entry.SecuritySchemes["signed"]
@@ -535,7 +535,7 @@ apps:
 	}
 	wantIndexedDB := &HostIndexedDBBindingConfig{Provider: "archive"}
 	if got := cfg.Apps["service-a"].IndexedDB; !reflect.DeepEqual(got, wantIndexedDB) {
-		t.Fatalf("Plugins[service-a].IndexedDB = %#v, want %#v", got, wantIndexedDB)
+		t.Fatalf("Apps[service-a].IndexedDB = %#v, want %#v", got, wantIndexedDB)
 	}
 }
 
@@ -1519,6 +1519,7 @@ func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
+providers:
 apps:
     custom_tool:
       source:
@@ -1539,6 +1540,7 @@ apps:
 
 		path := mustWriteConfigFile(t, `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     custom_tool:
       source: ./manifest.yaml
@@ -1561,6 +1563,7 @@ apps:
 
 		path := mustWriteConfigFile(t, `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     custom_tool:
       source: demo:manifest.yaml
@@ -1580,6 +1583,7 @@ apps:
 
 		path := mustWriteConfigFile(t, `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     custom_tool:
       source: ./dist/provider-release.yaml
@@ -1648,6 +1652,7 @@ apps:
 
 		path := mustWriteConfigFile(t, `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     custom_tool:
       source:
@@ -1703,15 +1708,15 @@ apps:
 		}
 		apps, ok := roundTrippedConfig["apps"].(map[string]any)
 		if !ok {
-			t.Fatalf("plugins = %#v", roundTrippedConfig["apps"])
+			t.Fatalf("apps = %#v", roundTrippedConfig["apps"])
 		}
-		appEntry, ok := apps["custom_tool"].(map[string]any)
+		app, ok := apps["custom_tool"].(map[string]any)
 		if !ok {
 			t.Fatalf("apps.custom_tool = %#v", apps["custom_tool"])
 		}
-		source, ok = appEntry["source"].(map[string]any)
+		source, ok = app["source"].(map[string]any)
 		if !ok {
-			t.Fatalf("config round-tripped source = %#v", appEntry["source"])
+			t.Fatalf("config round-tripped source = %#v", app["source"])
 		}
 		if source["url"] != "https://example.com/providers/custom_tool/provider-release.yaml?download=1" {
 			t.Fatalf("config round-tripped source.url = %#v", source["url"])
@@ -1720,8 +1725,8 @@ apps:
 		if !ok || auth["token"] != "test-token" {
 			t.Fatalf("config round-tripped source.auth = %#v", source["auth"])
 		}
-		if _, ok := appEntry["auth"]; ok {
-			t.Fatalf("config round-tripped auth = %#v, want absent", appEntry["auth"])
+		if _, ok := app["auth"]; ok {
+			t.Fatalf("config round-tripped auth = %#v, want absent", app["auth"])
 		}
 	})
 
@@ -1783,15 +1788,15 @@ apps:
 		}
 		apps, ok := roundTrippedConfig["apps"].(map[string]any)
 		if !ok {
-			t.Fatalf("plugins = %#v", roundTrippedConfig["apps"])
+			t.Fatalf("apps = %#v", roundTrippedConfig["apps"])
 		}
-		appEntry, ok := apps["custom_tool"].(map[string]any)
+		app, ok := apps["custom_tool"].(map[string]any)
 		if !ok {
 			t.Fatalf("apps.custom_tool = %#v", apps["custom_tool"])
 		}
-		source, ok = appEntry["source"].(map[string]any)
+		source, ok = app["source"].(map[string]any)
 		if !ok {
-			t.Fatalf("config round-tripped source = %#v", appEntry["source"])
+			t.Fatalf("config round-tripped source = %#v", app["source"])
 		}
 		if source["url"] != "https://example.com/providers/custom_tool/provider-release.yaml" {
 			t.Fatalf("config round-tripped source.url = %#v", source["url"])
@@ -1799,8 +1804,8 @@ apps:
 		if _, ok := source["auth"]; ok {
 			t.Fatalf("config round-tripped source.auth = %#v, want absent", source["auth"])
 		}
-		if _, ok := appEntry["auth"]; ok {
-			t.Fatalf("config round-tripped auth = %#v, want absent", appEntry["auth"])
+		if _, ok := app["auth"]; ok {
+			t.Fatalf("config round-tripped auth = %#v, want absent", app["auth"])
 		}
 	})
 
@@ -1870,6 +1875,7 @@ apps:
 
 		path := mustWriteConfigFile(t, `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     custom_tool:
       source:
@@ -1927,6 +1933,7 @@ apps:
 
 		path := mustWriteConfigFile(t, `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     custom_tool:
       source:
@@ -1966,6 +1973,7 @@ apps:
 
 		path := mustWriteConfigFile(t, `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     custom_tool:
       source:
@@ -2215,7 +2223,7 @@ server:
 		}
 	})
 
-	t.Run("plugin ui object binds an explicit ui entry", func(t *testing.T) {
+	t.Run("app ui object binds an explicit ui entry", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2231,7 +2239,7 @@ providers:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     ui:
       bundle: roadmap
       path: /create-customer-roadmap-review/
@@ -2362,14 +2370,14 @@ server:
 		}
 	})
 
-	t.Run("plugin-owned ui overlay still validates reserved paths", func(t *testing.T) {
+	t.Run("app-owned ui overlay still validates reserved paths", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     ui:
       path: /api
 providers:
@@ -2396,14 +2404,14 @@ server:
 		}
 	})
 
-	t.Run("same-name plugin-owned ui overlay only suppresses duplicate path checks", func(t *testing.T) {
+	t.Run("same-name app-owned ui overlay only suppresses duplicate path checks", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     ui:
       path: /api
 providers:
@@ -2431,7 +2439,7 @@ server:
 		}
 	})
 
-	t.Run("plugin ui path prefix collision with mounted ui is rejected", func(t *testing.T) {
+	t.Run("app ui path prefix collision with mounted ui is rejected", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2448,7 +2456,7 @@ providers:
 apps:
   admin:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     ui:
       path: /tools/admin
 server:
@@ -2553,17 +2561,17 @@ server:
 	})
 }
 
-func TestLoadConfigPluginIndexedDBBindings(t *testing.T) {
+func TestLoadConfigAppIndexedDBBindings(t *testing.T) {
 	t.Parallel()
 
-	t.Run("plugin accepts indexeddb config object", func(t *testing.T) {
+	t.Run("app accepts indexeddb config object", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     indexeddb:
       provider: archive
       db: roadmap_review
@@ -2595,18 +2603,18 @@ server:
 		}
 		got := cfg.Apps["roadmap"].IndexedDB
 		if !reflect.DeepEqual(got, want) {
-			t.Fatalf("Plugins[roadmap].IndexedDB = %#v, want %#v", got, want)
+			t.Fatalf("Apps[roadmap].IndexedDB = %#v, want %#v", got, want)
 		}
 	})
 
-	t.Run("plugin accepts scalar indexeddb provider name", func(t *testing.T) {
+	t.Run("app accepts scalar indexeddb provider name", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     indexeddb: sqlite
 providers:
   indexeddb:
@@ -2628,11 +2636,11 @@ server:
 			Provider: "sqlite",
 		}
 		if !reflect.DeepEqual(got, want) {
-			t.Fatalf("Plugins[roadmap].IndexedDB = %#v, want %#v", got, want)
+			t.Fatalf("Apps[roadmap].IndexedDB = %#v, want %#v", got, want)
 		}
 	})
 
-	t.Run("rejects indexeddb bindings outside plugins", func(t *testing.T) {
+	t.Run("rejects indexeddb bindings outside apps", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2670,7 +2678,7 @@ server:
 apps:
   datadog:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     surfaces:
       openapi:
         baseUrl: https://api.us5.datadoghq.com
@@ -2690,10 +2698,10 @@ server:
 			t.Fatalf("Load: %v", err)
 		}
 		if cfg.Apps["datadog"].Surfaces == nil || cfg.Apps["datadog"].Surfaces.OpenAPI == nil {
-			t.Fatal("Plugins[datadog].Surfaces.OpenAPI is nil")
+			t.Fatal("Apps[datadog].Surfaces.OpenAPI is nil")
 		}
 		if got := cfg.Apps["datadog"].Surfaces.OpenAPI.BaseURL; got != "https://api.us5.datadoghq.com" {
-			t.Fatalf("Plugins[datadog].Surfaces.OpenAPI.BaseURL = %q, want %q", got, "https://api.us5.datadoghq.com")
+			t.Fatalf("Apps[datadog].Surfaces.OpenAPI.BaseURL = %q, want %q", got, "https://api.us5.datadoghq.com")
 		}
 	})
 
@@ -2704,9 +2712,9 @@ server:
 apps:
   datadog:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     indexeddb:
-      db: plugin_data
+      db: app_data
 providers:
   indexeddb:
     sqlite:
@@ -2722,13 +2730,13 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		want := &HostIndexedDBBindingConfig{DB: "plugin_data"}
+		want := &HostIndexedDBBindingConfig{DB: "app_data"}
 		if got := cfg.Apps["datadog"].IndexedDB; !reflect.DeepEqual(got, want) {
-			t.Fatalf("Plugins[datadog].IndexedDB = %#v, want %#v", got, want)
+			t.Fatalf("Apps[datadog].IndexedDB = %#v, want %#v", got, want)
 		}
 	})
 
-	t.Run("rejects surface overrides outside plugins", func(t *testing.T) {
+	t.Run("rejects surface overrides outside apps", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2760,7 +2768,7 @@ server:
 		}
 	})
 
-	t.Run("rejects app mount fields outside plugins", func(t *testing.T) {
+	t.Run("rejects app mount fields outside apps", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2797,7 +2805,7 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     indexeddb:
       provider: missing
 providers:
@@ -2833,7 +2841,7 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     indexeddb:
       db: roadmap_state
 server:
@@ -2846,7 +2854,7 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     indexeddb:
       objectStores:
         - tasks
@@ -2888,7 +2896,7 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     indexeddb: {}
 server:
   encryptionKey: server-key
@@ -2901,7 +2909,7 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
 server:
   encryptionKey: server-key
 `,
@@ -2934,7 +2942,7 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     indexeddb:
       provider: main
       objectStores:
@@ -2967,7 +2975,7 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     indexeddb:
       - main
       - archive
@@ -2994,14 +3002,14 @@ server:
 		}
 	})
 
-	t.Run("plugin accepts s3 bindings", func(t *testing.T) {
+	t.Run("app accepts s3 bindings", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     s3:
       - assets
 providers:
@@ -3024,7 +3032,7 @@ server:
 			t.Fatalf("Load: %v", err)
 		}
 		if got := cfg.Apps["roadmap"].S3; !reflect.DeepEqual(got, []string{"assets"}) {
-			t.Fatalf("Plugins[roadmap].S3 = %#v, want %#v", got, []string{"assets"})
+			t.Fatalf("Apps[roadmap].S3 = %#v, want %#v", got, []string{"assets"})
 		}
 	})
 
@@ -3035,7 +3043,7 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
   slack:
     source:
       path: ./providers/slack/manifest.yaml
@@ -3045,12 +3053,14 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        app:
-          name: roadmap
-          operation: nightly_sync
-          credentialMode: none
-          input:
-            source: yaml
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: nightly_sync
+              credentialMode: none
+              input:
+                source: yaml
       permissions:
         - app: slack
           operations:
@@ -3063,11 +3073,13 @@ workflows:
         type: roadmap.task.updated
         source: roadmap
       target:
-        app:
-          name: roadmap
-          operation: backfill_items
-          input:
-            source: event
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: backfill_items
+              input:
+                source: event
       permissions:
         - app: slack
           operations:
@@ -3094,16 +3106,9 @@ server:
 		}
 		wantSchedule := WorkflowScheduleConfig{
 			Provider: "temporal",
-			Target: &WorkflowTargetConfig{
-				App: &WorkflowAppTargetConfig{
-					Name:           "roadmap",
-					Operation:      "nightly_sync",
-					CredentialMode: providermanifestv1.ConnectionModeNone,
-					Input: map[string]any{
-						"source": "yaml",
-					},
-				},
-			},
+			Target: workflowTestAppTargetConfig("roadmap", "nightly_sync", providermanifestv1.ConnectionModeNone, map[string]any{
+				"source": "yaml",
+			}),
 			Permissions: []core.AccessPermission{{
 				App: "slack",
 				Operations: []string{
@@ -3119,15 +3124,9 @@ server:
 		}
 		wantTrigger := WorkflowEventTriggerConfig{
 			Provider: "temporal",
-			Target: &WorkflowTargetConfig{
-				App: &WorkflowAppTargetConfig{
-					Name:      "roadmap",
-					Operation: "backfill_items",
-					Input: map[string]any{
-						"source": "event",
-					},
-				},
-			},
+			Target: workflowTestAppTargetConfig("roadmap", "backfill_items", "", map[string]any{
+				"source": "event",
+			}),
 			Permissions: []core.AccessPermission{{
 				App:        "slack",
 				Operations: []string{"chat.postMessage"},
@@ -3152,7 +3151,7 @@ server:
 			want string
 		}{
 			{
-				name: "unknown schedule plugin",
+				name: "unknown schedule app",
 				yaml: `
 workflows:
   schedules:
@@ -3160,9 +3159,11 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        app:
-          name: missing
-          operation: nightly_sync
+        steps:
+          - id: main
+            app:
+              name: missing
+              operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3171,24 +3172,26 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.app.name references unknown app "missing"`,
+				want: `workflows.schedules.nightly.target.steps[0].app.name references unknown app "missing"`,
 			},
 			{
-				name: "unknown schedule permission plugin",
+				name: "unknown schedule permission app",
 				yaml: `
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
 workflows:
   schedules:
     nightly:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        app:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: nightly_sync
       permissions:
         - app: missing
           operations: [conversations.list]
@@ -3208,7 +3211,7 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
   slack:
     source:
       path: ./providers/slack/manifest.yaml
@@ -3218,9 +3221,11 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        app:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: nightly_sync
       permissions:
         - app: slack
 providers:
@@ -3239,17 +3244,19 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
 workflows:
   schedules:
     nightly:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        app:
-          name: roadmap
-          operation: nightly_sync
-          credentialMode: platform
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: nightly_sync
+              credentialMode: platform
 providers:
   workflow:
     temporal:
@@ -3258,115 +3265,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.app.credentialMode "platform" is not supported`,
-			},
-			{
-				name: "agent output delivery rejects nested target credential mode",
-				yaml: `
-apps:
-  slack:
-    source:
-      path: ./providers/slack/manifest.yaml
-workflows:
-  schedules:
-    nightly:
-      provider: temporal
-      cron: "0 2 * * *"
-      target:
-        agent:
-          provider: simple
-          prompt: "reply"
-          outputDelivery:
-            target:
-              name: slack
-              operation: chat.postMessage
-              credentialMode: none
-providers:
-  agent:
-    simple:
-      source:
-        path: ./providers/agent/simple
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`,
-				want: `workflows.schedules.nightly.target.agent.outputDelivery.target.credentialMode is not supported`,
-			},
-			{
-				name: "agent session ready delivery rejects nested target credential mode",
-				yaml: `
-apps:
-  slack:
-    source:
-      path: ./providers/slack/manifest.yaml
-workflows:
-  schedules:
-    nightly:
-      provider: temporal
-      cron: "0 2 * * *"
-      target:
-        agent:
-          provider: simple
-          prompt: "reply"
-          sessionReadyDelivery:
-            target:
-              name: slack
-              operation: events.replySessionStarted
-              credentialMode: none
-providers:
-  agent:
-    simple:
-      source:
-        path: ./providers/agent/simple
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`,
-				want: `workflows.schedules.nightly.target.agent.sessionReadyDelivery.target.credentialMode is not supported`,
-			},
-			{
-				name: "agent session ready delivery rejects agent output source",
-				yaml: `
-apps:
-  slack:
-    source:
-      path: ./providers/slack/manifest.yaml
-workflows:
-  schedules:
-    nightly:
-      provider: temporal
-      cron: "0 2 * * *"
-      target:
-        agent:
-          provider: simple
-          prompt: "reply"
-          sessionReadyDelivery:
-            target:
-              name: slack
-              operation: events.replySessionStarted
-            inputBindings:
-              - inputField: text
-                value:
-                  agentOutput: text
-providers:
-  agent:
-    simple:
-      source:
-        path: ./providers/agent/simple
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`,
-				want: `workflows.schedules.nightly.target.agent.sessionReadyDelivery.inputBindings[0].value.agentOutput is not available before the agent turn starts`,
+				want: `workflows.schedules.nightly.target.steps[0].app.credentialMode "platform" is not supported`,
 			},
 			{
 				name: "agent step when rejects self reference",
@@ -3377,15 +3276,17 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        agent:
-          provider: simple
-          steps:
-            - id: diagnosis
+        steps:
+          - id: diagnosis
+            agent:
+              provider: simple
               prompt: "diagnose"
-              when:
-                stepId: diagnosis
-                outputPath: structured_output.actionable_for_pr
-                equals: true
+            when:
+              value:
+                stepOutput:
+                  stepId: diagnosis
+                  path: agent.structuredOutput.actionable_for_pr
+              equals: true
 providers:
   agent:
     simple:
@@ -3398,7 +3299,44 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.agent.steps[0].when.stepId "diagnosis" must reference an earlier step`,
+				want: `workflows.schedules.nightly.target.steps[0].when.value.step_output.step_id "diagnosis" must reference an earlier step`,
+			},
+			{
+				name: "step inputs reject future reference",
+				yaml: `
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        steps:
+          - id: diagnosis
+            inputs:
+              source:
+                stepOutput:
+                  stepId: pr_fix
+                  path: agent.text
+            agent:
+              provider: simple
+              prompt: "diagnose"
+          - id: pr_fix
+            agent:
+              provider: simple
+              prompt: "fix"
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.target.steps[0].inputs.source.step_output.step_id "pr_fix" must reference an earlier step`,
 			},
 			{
 				name: "agent step when requires equals",
@@ -3409,16 +3347,20 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        agent:
-          provider: simple
-          steps:
-            - id: diagnosis
+        steps:
+          - id: diagnosis
+            agent:
+              provider: simple
               prompt: "diagnose"
-            - id: pr_fix
+          - id: pr_fix
+            agent:
+              provider: simple
               prompt: "fix"
-              when:
-                stepId: diagnosis
-                outputPath: structured_output.actionable_for_pr
+            when:
+              value:
+                stepOutput:
+                  stepId: diagnosis
+                  path: agent.structuredOutput.actionable_for_pr
 providers:
   agent:
     simple:
@@ -3431,7 +3373,41 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.agent.steps[1].when.equals is required`,
+				want: `workflows.schedules.nightly.target.steps[1].when.equals is required`,
+			},
+			{
+				name: "agent step when requires value",
+				yaml: `
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        steps:
+          - id: diagnosis
+            agent:
+              provider: simple
+              prompt: "diagnose"
+          - id: pr_fix
+            agent:
+              provider: simple
+              prompt: "fix"
+            when:
+              equals: null
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.target.steps[1].when.value is required`,
 			},
 			{
 				name: "event trigger agent missing provider",
@@ -3443,8 +3419,10 @@ workflows:
       match:
         type: roadmap.task.updated
       target:
-        agent:
-          model: gpt-5.5
+        steps:
+          - id: run
+            agent:
+              model: gpt-5.5
 providers:
   workflow:
     temporal:
@@ -3453,7 +3431,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.eventTriggers.task_updated.target.agent.provider is required`,
+				want: `workflows.eventTriggers.task_updated.target.steps[0].agent.provider is required`,
 			},
 		}
 
@@ -3480,16 +3458,18 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
 workflows:
   schedules:
     nightly:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        app:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3521,7 +3501,7 @@ server:
 		}
 	})
 
-	t.Run("rejects workflow bindings outside plugins", func(t *testing.T) {
+	t.Run("rejects workflow bindings outside apps", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -3565,16 +3545,18 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
 workflows:
   schedules:
     nightly:
       provider: missing
       cron: "0 2 * * *"
       target:
-        app:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3606,16 +3588,18 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
 workflows:
   schedules:
     nightly:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        app:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3652,16 +3636,18 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
 workflows:
   schedules:
     invalid:
       provider: temporal
       cron: "*/5 * * * *"
       target:
-        app:
-          name: roadmap
-          operation: backfill_items
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: backfill_items
 providers:
   workflow:
     temporal:
@@ -3690,7 +3676,7 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
 workflows:
   eventTriggers:
     invalid:
@@ -3698,9 +3684,11 @@ workflows:
       match:
         type: roadmap.task.updated
       target:
-        app:
-          name: roadmap
-          operation: backfill_items
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: backfill_items
 providers:
   workflow:
     temporal:
@@ -3729,7 +3717,7 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
 workflows:
   eventTriggers:
     invalid:
@@ -3737,9 +3725,11 @@ workflows:
       match:
         source: roadmap
       target:
-        app:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3771,7 +3761,7 @@ server:
 apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
 workflows:
   schedules:
     invalid:
@@ -3779,9 +3769,11 @@ workflows:
       cron: "0 0 0 * * *"
       timezone: Mars/Olympus
       target:
-        app:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -4855,7 +4847,7 @@ server:
 			want: "providers.agent.simple.lifecycle.sessionStart[0].id must contain only letters",
 		},
 		{
-			name: "plugin lifecycle",
+			name: "app lifecycle",
 			yaml: `
 apps:
   service:
@@ -5024,7 +5016,7 @@ apps:
 	}
 	entry := cfg.Apps["service"]
 	if entry == nil {
-		t.Fatal(`Plugins["service"] = nil`)
+		t.Fatal(`Apps["service"] = nil`)
 	}
 	if !entry.Source.IsPackage() {
 		t.Fatal("Source.IsPackage = false, want true")
@@ -5250,6 +5242,7 @@ providers:
 			name: "apiVersion scalar local source",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: ./apps/dummy/manifest.yaml
@@ -5277,6 +5270,7 @@ apps:
 			name: "apiVersion metadata url with nested source auth",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source:
@@ -5324,6 +5318,7 @@ func TestLoadConfigValidation(t *testing.T) {
 		{
 			name: "provider with no source or surfaces",
 			yaml: `
+providers:
 apps:
     service-a:
       displayName: Service A
@@ -5354,6 +5349,7 @@ providers:
 			name: "unsupported apiVersion is rejected",
 			yaml: `
 apiVersion: gestaltd.config/v99
+providers:
 apps:
     external:
       source: ./apps/dummy/manifest.yaml
@@ -5361,7 +5357,7 @@ apps:
 			want: `unsupported apiVersion "gestaltd.config/v99"`,
 		},
 		{
-			name: "provider auth override is rejected outside plugins",
+			name: "provider auth override is rejected outside apps",
 			yaml: `
 apiVersion: gestaltd.config/v6
 providers:
@@ -5401,6 +5397,7 @@ func TestLoadConfigRequiresAPIVersion(t *testing.T) {
 		{
 			name: "missing apiVersion is rejected",
 			yaml: `
+providers:
 apps:
   external:
     source: ./apps/dummy/manifest.yaml
@@ -5410,6 +5407,7 @@ apps:
 			name: "empty apiVersion is rejected",
 			yaml: `
 apiVersion: ""
+providers:
 apps:
   external:
     source: ./apps/dummy/manifest.yaml
@@ -5441,6 +5439,7 @@ func TestLoadPathsRequiresAPIVersionInEveryFile(t *testing.T) {
 	overridePath := filepath.Join(dir, "override.yaml")
 	if err := os.WriteFile(basePath, []byte(`
 apiVersion: gestaltd.config/v6
+providers:
 apps:
   external:
     source: ./apps/dummy/manifest.yaml
@@ -5541,14 +5540,16 @@ func TestValidConfigurations(t *testing.T) {
 			name: "metadata source app only",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     custom_tool:
       source: https://example.com/providers/custom_tool/provider-release.yaml
 `,
 		},
 		{
-			name: "plugin with local source",
+			name: "app with local source",
 			yaml: `
+providers:
 apps:
     service:
       source:
@@ -5569,7 +5570,7 @@ apps:
 	}
 }
 
-func TestPluginValidation(t *testing.T) {
+func TestAppValidation(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -5580,6 +5581,7 @@ func TestPluginValidation(t *testing.T) {
 		{
 			name: "integration app source path is valid",
 			yaml: `
+providers:
 apps:
     external:
       source:
@@ -5587,8 +5589,9 @@ apps:
 `,
 		},
 		{
-			name: "plugin env with local source is valid",
+			name: "app env with local source is valid",
 			yaml: `
+providers:
 apps:
     external:
       source:
@@ -5598,8 +5601,9 @@ apps:
 `,
 		},
 		{
-			name: "plugin config with source is valid",
+			name: "app config with source is valid",
 			yaml: `
+providers:
 apps:
     external:
       source:
@@ -5609,8 +5613,9 @@ apps:
 `,
 		},
 		{
-			name: "plugin source is required for external",
+			name: "app source is required for external",
 			yaml: `
+providers:
 apps:
     external:
       {}
@@ -5639,6 +5644,7 @@ apps:
 			name: "apiVersion github release source with nested source auth is valid",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source:
@@ -5654,6 +5660,7 @@ apps:
 			name: "apiVersion github release source requires repo",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source:
@@ -5667,6 +5674,7 @@ apps:
 			name: "apiVersion github release source requires owner slash name",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source:
@@ -5681,6 +5689,7 @@ apps:
 			name: "apiVersion nested source auth is valid",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source:
@@ -5690,7 +5699,7 @@ apps:
 `,
 		},
 		{
-			name: "plugin auth override is valid alongside nested source auth",
+			name: "app auth override is valid alongside nested source auth",
 			yaml: `
 apiVersion: gestaltd.config/v6
 server:
@@ -5711,9 +5720,10 @@ apps:
 `,
 		},
 		{
-			name: "plugin auth override rejects source auth token mix",
+			name: "app auth override rejects source auth token mix",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: https://example.com/providers/external/provider-release.yaml
@@ -5724,9 +5734,10 @@ apps:
 			wantErr: "field token not found",
 		},
 		{
-			name: "plugin auth override rejects unknown auth provider",
+			name: "app auth override rejects unknown auth provider",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: https://example.com/providers/external/provider-release.yaml
@@ -5736,9 +5747,10 @@ apps:
 			wantErr: `apps.external.auth.provider references unknown authentication provider "missing"`,
 		},
 		{
-			name: "plugin auth override rejects server alias without configured auth provider",
+			name: "app auth override rejects server alias without configured auth provider",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: https://example.com/providers/external/provider-release.yaml
@@ -5751,6 +5763,7 @@ apps:
 			name: "apiVersion local source rejects sibling auth",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: ./apps/dummy/manifest.yaml
@@ -5763,6 +5776,7 @@ apps:
 			name: "apiVersion v5 local provider-release metadata is valid",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: ./apps/dummy/dist/provider-release.yaml
@@ -5772,6 +5786,7 @@ apps:
 			name: "apiVersion v5 local provider-release metadata allows current-directory file",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: provider-release.yaml
@@ -5781,6 +5796,7 @@ apps:
 			name: "apiVersion v5 local provider-release metadata accepts nested source auth",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source:
@@ -5793,6 +5809,7 @@ apps:
 			name: "apiVersion accepts local source manifests",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: ./apps/dummy/manifest.yaml
@@ -5802,6 +5819,7 @@ apps:
 			name: "apiVersion accepts absolute http metadata source",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: https://example.com/providers/external/archive.tar.gz
@@ -5811,6 +5829,7 @@ apps:
 			name: "apiVersion rejects git scalar source",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: git+ssh://git@github.com/example/external.git
@@ -5821,6 +5840,7 @@ apps:
 			name: "apiVersion rejects unsupported ssh scalar source",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: ssh://github.com/example/external
@@ -5831,6 +5851,7 @@ apps:
 			name: "apiVersion rejects unsupported file scalar source",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: file:/tmp/provider-release.yaml
@@ -5841,6 +5862,7 @@ apps:
 			name: "apiVersion rejects malformed hostless https metadata source",
 			yaml: `
 apiVersion: gestaltd.config/v6
+providers:
 apps:
     external:
       source: https:///provider-release.yaml
@@ -5859,8 +5881,9 @@ apps:
 `,
 		},
 		{
-			name: "plugin source with base_url override is rejected",
+			name: "app source with base_url override is rejected",
 			yaml: `
+providers:
 apps:
     external:
       source:
@@ -5872,6 +5895,7 @@ apps:
 		{
 			name: "non-default connection params are accepted",
 			yaml: `
+providers:
 apps:
     external:
       source:
@@ -5934,7 +5958,7 @@ server:
 	}
 }
 
-func TestValidateStructure_PluginValidationDirect(t *testing.T) {
+func TestValidateStructure_AppValidationDirect(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -6007,7 +6031,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			wantErr: `source.path or provider-release metadata URL is required`,
 		},
 		{
-			name: "plugin auth rejects mcp oauth early",
+			name: "app auth rejects mcp oauth early",
 			cfg: &Config{
 				Apps: map[string]*ProviderEntry{
 					"sample": {
@@ -6016,7 +6040,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					},
 				},
 			},
-			wantErr: `integration "sample" app auth type "mcp_oauth" requires an MCP surface`,
+			wantErr: `app auth type "mcp_oauth" requires an MCP surface`,
 		},
 		{
 			name: "named connection rejects mcp oauth early",
@@ -6145,7 +6169,7 @@ func TestValidateStructureConnectionRefPreservesCredentialRefreshOverride(t *tes
 	}
 }
 
-func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
+func TestValidateStructureCanonicalizesAppInvokeRunAs(t *testing.T) {
 	t.Parallel()
 
 	applyByDefault := false
@@ -6221,7 +6245,7 @@ func TestValidateStructureCredentialRefreshDurationContract(t *testing.T) {
 	}
 }
 
-func TestValidateStructureRejectsPluginInvokeRunAsOnSurface(t *testing.T) {
+func TestValidateStructureRejectsAppInvokeRunAsOnSurface(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{
@@ -6327,7 +6351,7 @@ providers:
   authentication:
     authentication:
       source:
-        path: ../auth-plugin/provider.yaml
+        path: ../auth-app/provider.yaml
   indexeddb:
     sqlite:
       source:
@@ -6356,8 +6380,8 @@ server:
 	if auth == nil {
 		t.Fatal("SelectedAuthenticationProvider = nil")
 	}
-	if got := auth.SourcePath(); got != filepath.Join(dir, "auth-plugin", "provider.yaml") {
-		t.Fatalf("auth app source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "provider.yaml"))
+	if got := auth.SourcePath(); got != filepath.Join(dir, "auth-app", "provider.yaml") {
+		t.Fatalf("auth app source path = %q, want %q", got, filepath.Join(dir, "auth-app", "provider.yaml"))
 	}
 	if got := cfg.Apps["service-a"].SourcePath(); got != filepath.Join(dir, "bin", "manifest.yaml") {
 		t.Fatalf("integration app source path = %q, want %q", got, filepath.Join(dir, "bin", "manifest.yaml"))
@@ -6376,9 +6400,10 @@ func TestLoadPaths_ResolvesRelativePathsPerFile(t *testing.T) {
 apiVersion: gestaltd.config/v6
 server:
   artifactsDir: ../base-artifacts
+providers:
 apps:
     sample:
-      source: ../base-plugin/manifest.yaml
+      source: ../base-app/manifest.yaml
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile base: %v", err)
 	}
@@ -6391,9 +6416,10 @@ apps:
 apiVersion: gestaltd.config/v6
 server:
   artifactsDir: ./override-artifacts
+providers:
 apps:
     sample:
-      source: ./override-plugin/manifest.yaml
+      source: ./override-app/manifest.yaml
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile override: %v", err)
 	}
@@ -6403,7 +6429,7 @@ apps:
 		t.Fatalf("LoadPaths: %v", err)
 	}
 
-	wantPath := filepath.Join(filepath.Dir(overridePath), "override-plugin", "manifest.yaml")
+	wantPath := filepath.Join(filepath.Dir(overridePath), "override-app", "manifest.yaml")
 	if got := cfg.Apps["sample"].SourcePath(); got != wantPath {
 		t.Fatalf("SourcePath = %q, want %q", got, wantPath)
 	}
@@ -6569,21 +6595,22 @@ func TestLoadErrors(t *testing.T) {
 	})
 }
 
-func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
+func TestLoad_ResolvesRelativeAppSourcePath(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginDir := filepath.Join(dir, "my-plugin")
-	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+	appDir := filepath.Join(dir, "my-app")
+	if err := os.MkdirAll(appDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := `apiVersion: gestaltd.config/v6
+providers:
 apps:
     sample:
       source:
-        path: ./my-plugin/manifest.yaml
+        path: ./my-app/manifest.yaml
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -6601,13 +6628,13 @@ apps:
 	if !filepath.IsAbs(entry.SourcePath()) {
 		t.Fatalf("expected absolute path, got: %q", entry.SourcePath())
 	}
-	wantPath := filepath.Join(pluginDir, "manifest.yaml")
+	wantPath := filepath.Join(appDir, "manifest.yaml")
 	if entry.SourcePath() != wantPath {
 		t.Fatalf("entry.SourcePath() = %q, want %q", entry.SourcePath(), wantPath)
 	}
 }
 
-func TestApplyAppScopeKeepsPluginClosureAndUI(t *testing.T) {
+func TestApplyAppScopeKeepsAppClosureAndUI(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{
@@ -6638,7 +6665,7 @@ func TestApplyAppScopeKeepsPluginClosureAndUI(t *testing.T) {
 				S3:      []string{"assets"},
 				Runtime: &RuntimePlacementConfig{Provider: "runner"},
 				Env: map[string]string{
-					"TOKEN": EncodeSecretRefTransport(SecretRef{Provider: "repo_auth", Name: "plugin-token"}),
+					"TOKEN": EncodeSecretRefTransport(SecretRef{Provider: "repo_auth", Name: "app-token"}),
 				},
 				Invokes: []AppInvocationDependency{{
 					App:       "beta",
@@ -6693,6 +6720,12 @@ func TestApplyAppScopeKeepsPluginClosureAndUI(t *testing.T) {
 				"temporal": {Source: ProviderSource{Path: "providers/workflow/temporal.yaml"}},
 				"unused":   {Source: ProviderSource{Path: "providers/workflow/unused.yaml"}},
 			},
+			Agent: map[string]*ProviderEntry{
+				"agent_default": {Source: ProviderSource{Path: "providers/agent/default.yaml"}, Default: true},
+				"agent_one":     {Source: ProviderSource{Path: "providers/agent/one.yaml"}},
+				"agent_two":     {Source: ProviderSource{Path: "providers/agent/two.yaml"}},
+				"unused":        {Source: ProviderSource{Path: "providers/agent/unused.yaml"}},
+			},
 			UI: map[string]*UIEntry{
 				"admin_console": {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/admin.yaml"}}},
 				"alpha_ui":      {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/alpha.yaml"}}, OwnerApp: "alpha"},
@@ -6709,13 +6742,38 @@ func TestApplyAppScopeKeepsPluginClosureAndUI(t *testing.T) {
 			Schedules: map[string]WorkflowScheduleConfig{
 				"kept": {
 					Provider: "temporal",
-					Target:   &WorkflowTargetConfig{App: &WorkflowAppTargetConfig{Name: "alpha"}},
+					Target: &WorkflowTargetConfig{Steps: []WorkflowStepConfig{
+						{
+							ID:  "main",
+							App: &WorkflowStepAppCallConfig{Name: "alpha"},
+						},
+						{
+							ID: "agent_one",
+							Agent: &WorkflowStepAgentConfig{
+								Provider: "agent_one",
+								Prompt:   WorkflowTextConfig{Template: "first agent step"},
+							},
+						},
+						{
+							ID: "agent_default",
+							Agent: &WorkflowStepAgentConfig{
+								Prompt: WorkflowTextConfig{Template: "default agent step"},
+							},
+						},
+						{
+							ID: "agent_two",
+							Agent: &WorkflowStepAgentConfig{
+								Provider: "agent_two",
+								Prompt:   WorkflowTextConfig{Template: "second agent step"},
+							},
+						},
+					}},
 				},
 				"dropped": {
-					Target: &WorkflowTargetConfig{App: &WorkflowAppTargetConfig{Name: "gamma"}},
+					Target: workflowTestAppTargetConfig("gamma", "", "", nil),
 				},
 				"dependency_only": {
-					Target:  &WorkflowTargetConfig{App: &WorkflowAppTargetConfig{Name: "gamma"}},
+					Target:  workflowTestAppTargetConfig("gamma", "", "", nil),
 					Invokes: []WorkflowInvokeConfig{{App: "alpha", Operation: "ping"}},
 				},
 			},
@@ -6749,6 +6807,9 @@ func TestApplyAppScopeKeepsPluginClosureAndUI(t *testing.T) {
 	}
 	if got, want := sortedProviderEntryKeys(cfg.Providers.Workflow), []string{"temporal"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Providers.Workflow = %v, want %v", got, want)
+	}
+	if got, want := sortedProviderEntryKeys(cfg.Providers.Agent), []string{"agent_default", "agent_one", "agent_two"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Providers.Agent = %v, want %v", got, want)
 	}
 	if got, want := sortedRuntimeProviderEntryKeys(cfg.Runtime.Providers), []string{"runner"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Runtime.Providers = %v, want %v", got, want)
@@ -6821,6 +6882,126 @@ apps:
 	}
 	if mappingValueNode(providersUI, "noisy") != nil {
 		t.Fatal("providers.ui.noisy should be dropped")
+	}
+}
+
+func TestApplyAppScopeNodeKeepsWorkflowStepRefs(t *testing.T) {
+	t.Parallel()
+
+	var root yaml.Node
+	if err := yaml.Unmarshal([]byte(withDefaultConfigAPIVersion(`
+providers:
+  workflow:
+    temporal:
+      source:
+        path: providers/workflow/temporal.yaml
+    unused:
+      source:
+        path: providers/workflow/unused.yaml
+  agent:
+    agent_default:
+      default: true
+      source:
+        path: providers/agent/default.yaml
+    agent_one:
+      source:
+        path: providers/agent/one.yaml
+    agent_two:
+      source:
+        path: providers/agent/two.yaml
+    unused:
+      source:
+        path: providers/agent/unused.yaml
+apps:
+  alpha:
+    source:
+      path: alpha/manifest.yaml
+  beta:
+    source:
+      path: beta/manifest.yaml
+    invokes:
+      - app: delta
+        operation: ping
+  delta:
+    source:
+      path: delta/manifest.yaml
+  noisy:
+    source:
+      path: noisy/manifest.yaml
+workflows:
+  schedules:
+    kept:
+      provider: temporal
+      cron: "0 3 * * *"
+      target:
+        steps:
+          - id: call_alpha
+            app:
+              name: alpha
+              operation: sync
+          - id: explicit_agent
+            agent:
+              provider: agent_one
+              prompt: "Inspect"
+              tools:
+                - app: beta
+                  operation: search
+          - id: default_agent
+            agent:
+              prompt: "Summarize"
+          - id: second_explicit_agent
+            agent:
+              provider: agent_two
+              prompt: "Fix"
+          - id: reply
+            app:
+              name: beta
+              operation: reply
+    dropped:
+      cron: "0 4 * * *"
+      target:
+        steps:
+          - id: call_noisy
+            app:
+              name: noisy
+              operation: sync
+`)), &root); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+
+	if err := applyAppScopeNode(&root, []string{"alpha"}); err != nil {
+		t.Fatalf("applyAppScopeNode: %v", err)
+	}
+
+	doc := documentValueNode(&root)
+	appsNode := mappingValueNode(doc, "apps")
+	for _, name := range []string{"alpha", "beta", "delta"} {
+		if mappingValueNode(appsNode, name) == nil {
+			t.Fatalf("apps.%s should be retained", name)
+		}
+	}
+	if mappingValueNode(appsNode, "noisy") != nil {
+		t.Fatal("apps.noisy should be dropped")
+	}
+	schedulesNode := mappingValueNode(mappingValueNode(mappingValueNode(doc, "workflows"), "schedules"), "kept")
+	if schedulesNode == nil {
+		t.Fatal("workflows.schedules.kept should be retained")
+	}
+	if mappingValueNode(mappingValueNode(mappingValueNode(doc, "workflows"), "schedules"), "dropped") != nil {
+		t.Fatal("workflows.schedules.dropped should be dropped")
+	}
+	workflowProviders := mappingValueNode(mappingValueNode(doc, "providers"), "workflow")
+	if mappingValueNode(workflowProviders, "temporal") == nil || mappingValueNode(workflowProviders, "unused") != nil {
+		t.Fatalf("providers.workflow = %#v, want only temporal retained", mappingNodeEntries(workflowProviders))
+	}
+	agentProviders := mappingValueNode(mappingValueNode(doc, "providers"), "agent")
+	for _, name := range []string{"agent_default", "agent_one", "agent_two"} {
+		if mappingValueNode(agentProviders, name) == nil {
+			t.Fatalf("providers.agent.%s should be retained", name)
+		}
+	}
+	if mappingValueNode(agentProviders, "unused") != nil {
+		t.Fatal("providers.agent.unused should be dropped")
 	}
 }
 
@@ -6906,7 +7087,7 @@ func TestReferencedProviderRepositoriesKeepsProjectReposForUnqualifiedPackageSou
 	}
 }
 
-func TestApplyAppScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
+func TestApplyAppScopeRetainedWorkflowAddsReferencedApps(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{
@@ -6919,7 +7100,7 @@ func TestApplyAppScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
 		Workflows: WorkflowsConfig{
 			Schedules: map[string]WorkflowScheduleConfig{
 				"fanout": {
-					Target: &WorkflowTargetConfig{App: &WorkflowAppTargetConfig{Name: "alpha"}},
+					Target: workflowTestAppTargetConfig("alpha", "", "", nil),
 					Invokes: []WorkflowInvokeConfig{{
 						App:       "beta",
 						Operation: "ping",
@@ -6927,7 +7108,7 @@ func TestApplyAppScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
 					Permissions: []core.AccessPermission{{App: "gamma"}},
 				},
 				"dependency_target": {
-					Target: &WorkflowTargetConfig{App: &WorkflowAppTargetConfig{Name: "beta"}},
+					Target: workflowTestAppTargetConfig("beta", "", "", nil),
 					Invokes: []WorkflowInvokeConfig{{
 						App:       "delta",
 						Operation: "pong",
@@ -6948,14 +7129,38 @@ func TestApplyAppScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
 	}
 }
 
-func TestApplyAppScopeRejectsUnknownPlugin(t *testing.T) {
+func TestApplyAppScopeRejectsUnknownApp(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{Apps: map[string]*ProviderEntry{}}
 	err := ApplyAppScope(cfg, []string{"missing"})
 	if err == nil || !strings.Contains(err.Error(), `unknown app "missing"`) {
-		t.Fatalf("ApplyAppScope error = %v, want unknown plugin", err)
+		t.Fatalf("ApplyAppScope error = %v, want unknown app", err)
 	}
+}
+
+func workflowTestAppTargetConfig(name, operation string, credentialMode providermanifestv1.ConnectionMode, input map[string]any) *WorkflowTargetConfig {
+	step := WorkflowStepConfig{
+		ID: "main",
+		App: &WorkflowStepAppCallConfig{
+			Name:           name,
+			Operation:      operation,
+			CredentialMode: credentialMode,
+			Input:          workflowTestLiteralObjectValueConfig(input),
+		},
+	}
+	return &WorkflowTargetConfig{Steps: []WorkflowStepConfig{step}}
+}
+
+func workflowTestLiteralObjectValueConfig(input map[string]any) WorkflowValueConfig {
+	if len(input) == 0 {
+		return WorkflowValueConfig{}
+	}
+	fields := make(map[string]WorkflowValueConfig, len(input))
+	for key, value := range input {
+		fields[key] = WorkflowValueConfig{Literal: value, LiteralSet: true}
+	}
+	return WorkflowValueConfig{Object: fields}
 }
 
 func sortedProviderEntryKeys(entries map[string]*ProviderEntry) []string {

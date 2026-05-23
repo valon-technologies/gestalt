@@ -81,10 +81,10 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		SubjectID:    "subject-test",
 		SubjectKind:  "user",
 		Target: workflow.Target{
-			App: &workflow.AppTarget{
-				AppName:   "roadmap",
-				Operation: "sync_items",
-			},
+			Steps: []workflow.Step{{
+				ID:  "sync",
+				App: &workflow.AppCall{Name: "roadmap", Operation: "sync_items"},
+			}},
 		},
 	})
 	if err != nil {
@@ -614,9 +614,12 @@ func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T)
 
 func workflowConfigTestAgentTarget() *config.WorkflowTargetConfig {
 	return &config.WorkflowTargetConfig{
-		Agent: &config.WorkflowAgentConfig{
-			Prompt: "summarize",
-		},
+		Steps: []config.WorkflowStepConfig{{
+			ID: "main",
+			Agent: &config.WorkflowStepAgentConfig{
+				Prompt: config.WorkflowTextConfig{Template: "summarize"},
+			},
+		}},
 	}
 }
 

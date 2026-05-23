@@ -6,7 +6,7 @@ import ActiveDevelopmentCallout from '../components/ActiveDevelopmentCallout'
 <ActiveDevelopmentCallout verb="are">Applications</ActiveDevelopmentCallout>
 
 <Callout type="info">
-  Build an app when you need new operations. Build an application when that
+  Build a app when you need new operations. Build an application when that
   app becomes the backend for a user-facing workflow with UI, policy,
   storage, schedules, or other provider bindings.
 </Callout>
@@ -25,7 +25,7 @@ This example application, `workspace_review`, stores review items in IndexedDB,
 writes generated reports to S3, runs a nightly cron through the workflow
 provider, and serves a lightweight browser UI at `/workspace-review`.
 
-Use an `app/` plus sibling `ui/` layout:
+Use a `app/` plus sibling `ui/` layout:
 
 ```text
 workspace-review/
@@ -204,11 +204,13 @@ workflows:
         subject:
           id: service_account:workspace-review-nightly
       target:
-        app:
-          name: workspace_review
-          operation: reports.generateNightly
-          input:
-            bucket: workspace-review-reports
+        steps:
+          - id: generate_report
+            app:
+              name: workspace_review
+              operation: reports.generateNightly
+              input:
+                bucket: workspace-review-reports
 ```
 
 For the full configuration reference, see [Config File](/reference/config-file).
@@ -367,7 +369,7 @@ details. Those come from the deployment bindings.
     import json
 
     from gestalt import (
-        Plugin,
+        App,
         Model,
         IndexedDB,
         Request,
@@ -379,7 +381,7 @@ details. Those come from the deployment bindings.
         WorkflowManagerPublishEvent,
     )
 
-    app = Plugin("workspace_review")
+    app = App("workspace_review")
 
     class SaveItemInput(Model):
         id: str
@@ -656,7 +658,8 @@ apps:
     source: ./apps/triage/manifest.yaml
     invokes:
       - app: github
-        operation: issues.get
+        operations:
+          - issues.get
 
   github:
     source: ./apps/github/manifest.yaml

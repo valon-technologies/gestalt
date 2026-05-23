@@ -1178,7 +1178,7 @@ fn agent_subject_from_proto(value: Option<pb::SubjectContext>) -> Option<Subject
 
 pub(crate) fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef {
     AgentToolRef {
-        plugin: value.plugin,
+        plugin: value.app,
         operation: value.operation,
         connection: value.connection,
         instance: value.instance,
@@ -1192,7 +1192,7 @@ pub(crate) fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef
 
 pub(crate) fn agent_tool_ref_to_proto(value: AgentToolRef) -> pb::AgentToolRef {
     pb::AgentToolRef {
-        plugin: value.plugin,
+        app: value.plugin,
         operation: value.operation,
         connection: value.connection,
         instance: value.instance,

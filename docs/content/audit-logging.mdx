@@ -60,9 +60,9 @@ Workflow events also use workflow-specific fields when available:
 | --- | --- |
 | `caller_plugin` | App that called `WorkflowManager`, such as a Slack event provider. |
 | `workflow_key_sha256` | SHA-256 hash of the workflow key for run start and signal-or-start events. The raw workflow key is not emitted. |
-| `workflow_target_kind` | Target kind, currently `plugin` or `agent`. |
-| `workflow_target_component` | Target subcomponent involved in a workflow target authorization denial, such as `plugin_target`, `agent_provider`, `agent_tool_ref`, `output_delivery`, or `session_ready_delivery`. |
-| `workflow_target_provider` | Target plugin, agent provider, or tool provider involved in the workflow action or denial. |
+| `workflow_target_kind` | Target kind, currently `steps`. |
+| `workflow_target_component` | Target subcomponent involved in a workflow target authorization denial, such as `target`, `app_target`, `agent_provider`, or `agent_tool_ref`. |
+| `workflow_target_provider` | Target app, agent provider, or tool provider involved in the workflow action or denial. |
 | `workflow_target_operation` | Target operation involved in the workflow action or denial. |
 | `workflow_created_by_subject_id` | Original workflow creator subject for audited operations that execute inside a workflow context. |
 | `workflow_created_by_subject_kind` | Original workflow creator subject kind. |
@@ -138,7 +138,7 @@ Workflow object actions set the generic target fields:
 
 Run start and signal-or-start events include `workflow_key_sha256` so operators
 can correlate repeated events for the same workflow key without logging the raw
-key. Targeted workflow actions include `workflow_target_kind`, and plugin
+key. Targeted workflow actions include `workflow_target_kind`, and app
 targets include `workflow_target_provider` and `workflow_target_operation`.
 
 When `workflow.run.signal_or_start` rejects a stored or requested target during

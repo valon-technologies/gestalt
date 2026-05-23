@@ -1,7 +1,6 @@
 package workflows
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -12,269 +11,216 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func TestWorkflowTargetToProtoUsesNestedAppTarget(t *testing.T) {
+func protoValueFromAnyMust(value any) *structpb.Value {
+	out, err := protoValueFromAny(value)
+	if err != nil {
+		panic(err)
+	}
+	return out
+}
+
+func TestWorkflowTargetToProtoUsesStepAppTarget(t *testing.T) {
 	t.Parallel()
 
 	target, err := workflowTargetToProto(coreworkflow.Target{
-		App: &coreworkflow.AppTarget{
-			AppName:        "demo",
-			Operation:      "refresh",
-			Connection:     "workspace",
-			Instance:       "primary",
-			CredentialMode: core.ConnectionModeNone,
-			Input: map[string]any{
-				"customer_id": "cust_123",
+		Steps: []coreworkflow.Step{{
+			ID: "refresh",
+			App: &coreworkflow.AppCall{
+				Name:           "demo",
+				Operation:      "refresh",
+				Connection:     "workspace",
+				Instance:       "primary",
+				CredentialMode: core.ConnectionModeNone,
+				Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
+					"customer_id": {Literal: "cust_123", LiteralSet: true},
+				}},
 			},
-		},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("workflowTargetToProto: %v", err)
 	}
-	if target.GetApp() == nil {
-		t.Fatal("nested app target is nil")
+	if len(target.GetSteps()) != 1 || target.GetSteps()[0].GetApp() == nil {
+		t.Fatalf("steps target = %#v, want one app step", target)
 	}
-	if got := target.GetApp().GetAppName(); got != "demo" {
-		t.Fatalf("nested app_name = %q, want %q", got, "demo")
+	app := target.GetSteps()[0].GetApp()
+	if got := app.GetName(); got != "demo" {
+		t.Fatalf("app name = %q, want %q", got, "demo")
 	}
-	if got := target.GetApp().GetCredentialMode(); got != string(core.ConnectionModeNone) {
-		t.Fatalf("nested credential_mode = %q, want %q", got, core.ConnectionModeNone)
+	if got := app.GetCredentialMode(); got != string(core.ConnectionModeNone) {
+		t.Fatalf("credential_mode = %q, want %q", got, core.ConnectionModeNone)
 	}
-	input := mapFromStruct(target.GetApp().GetInput())
-	if got := input["customer_id"]; got != "cust_123" {
-		t.Fatalf("nested input customer_id = %#v, want %q", got, "cust_123")
-	}
-}
-
-func TestWorkflowTargetFromProtoAcceptsNestedPluginFields(t *testing.T) {
-	t.Parallel()
-
-	input, err := structpb.NewStruct(map[string]any{
-		"customer_id": "cust_123",
-	})
-	if err != nil {
-		t.Fatalf("NewStruct: %v", err)
-	}
-	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
-		Kind: &proto.BoundWorkflowTarget_App{
-			App: &proto.BoundWorkflowAppTarget{
-				AppName:        " demo ",
-				Operation:      " refresh ",
-				Connection:     " workspace ",
-				Instance:       " primary ",
-				CredentialMode: " none ",
-				Input:          input,
-			},
-		},
-	})
-	if target.App == nil {
-		t.Fatal("plugin target is nil")
-	}
-	if got := target.App.AppName; got != "demo" {
-		t.Fatalf("plugin name = %q, want %q", got, "demo")
-	}
-	if got := target.App.Operation; got != "refresh" {
-		t.Fatalf("operation = %q, want %q", got, "refresh")
-	}
-	if got := target.App.Connection; got != "workspace" {
-		t.Fatalf("connection = %q, want %q", got, "workspace")
-	}
-	if got := target.App.Instance; got != "primary" {
-		t.Fatalf("instance = %q, want %q", got, "primary")
-	}
-	if got := target.App.CredentialMode; got != core.ConnectionModeNone {
-		t.Fatalf("credential mode = %q, want %q", got, core.ConnectionModeNone)
-	}
-	if got := target.App.Input["customer_id"]; got != "cust_123" {
+	if got := app.GetInput().GetObject().GetFields()["customer_id"].GetLiteral().AsInterface(); got != "cust_123" {
 		t.Fatalf("input customer_id = %#v, want %q", got, "cust_123")
 	}
 }
 
-func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
+func TestWorkflowTargetFromProtoAcceptsStepAppFields(t *testing.T) {
 	t.Parallel()
 
-	target, err := workflowTargetToProto(coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-		ProviderName: "managed",
-		Prompt:       "Sync roadmap",
-		OutputDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.AppTarget{
-				AppName:        "notification",
-				Operation:      "reply",
-				CredentialMode: core.ConnectionModeUser,
-				Input:          map[string]any{"format": "plain"},
-			},
-			CredentialMode: core.ConnectionModeNone,
-			InputBindings: []coreworkflow.OutputBinding{
-				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-				{InputField: "ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
-				{InputField: "source", Value: coreworkflow.OutputValueSource{Literal: "workflow"}},
-			},
-		},
-		SessionReadyDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.AppTarget{
-				AppName:   "notification",
-				Operation: "started",
-				Input:     map[string]any{"format": "plain"},
-			},
-			CredentialMode: core.ConnectionModeNone,
-			InputBindings: []coreworkflow.OutputBinding{
-				{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
-				{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
-			},
-		},
-	}})
-	if err != nil {
-		t.Fatalf("workflowTargetToProto: %v", err)
+	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
+		Steps: []*proto.WorkflowStep{{
+			Id: " refresh ",
+			Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{
+				Name:           " demo ",
+				Operation:      " refresh ",
+				Connection:     " workspace ",
+				Instance:       " primary ",
+				CredentialMode: " none ",
+				Input: &proto.WorkflowValue{Kind: &proto.WorkflowValue_Object{Object: &proto.WorkflowObject{Fields: map[string]*proto.WorkflowValue{
+					"customer_id": {Kind: &proto.WorkflowValue_Literal{Literal: protoValueFromAnyMust("cust_123")}},
+				}}}},
+			}},
+		}},
+	})
+	if len(target.Steps) != 1 || target.Steps[0].App == nil {
+		t.Fatalf("target steps = %#v, want one app step", target.Steps)
 	}
-	if target.GetAgent() == nil {
-		t.Fatal("nested agent target is nil")
+	app := target.Steps[0].App
+	if got := app.Name; got != "demo" {
+		t.Fatalf("app name = %q, want %q", got, "demo")
 	}
-	if target.GetAgent().GetOutputDelivery().GetTarget().GetAppName() != "notification" {
-		t.Fatalf("output delivery = %#v", target.GetAgent().GetOutputDelivery())
+	if got := app.Operation; got != "refresh" {
+		t.Fatalf("operation = %q, want %q", got, "refresh")
 	}
-	if target.GetAgent().GetOutputDelivery().GetCredentialMode() != string(core.ConnectionModeNone) {
-		t.Fatalf("output delivery credential mode = %q", target.GetAgent().GetOutputDelivery().GetCredentialMode())
+	if got := app.Connection; got != "workspace" {
+		t.Fatalf("connection = %q, want %q", got, "workspace")
 	}
-	if target.GetAgent().GetSessionReadyDelivery().GetTarget().GetAppName() != "notification" {
-		t.Fatalf("session ready delivery = %#v", target.GetAgent().GetSessionReadyDelivery())
+	if got := app.Instance; got != "primary" {
+		t.Fatalf("instance = %q, want %q", got, "primary")
 	}
-	if target.GetAgent().GetSessionReadyDelivery().GetInputBindings()[0].GetValue().GetAgentSession() != "id" {
-		t.Fatalf("session ready delivery agent session source = %#v", target.GetAgent().GetSessionReadyDelivery().GetInputBindings())
+	if got := app.CredentialMode; got != core.ConnectionModeNone {
+		t.Fatalf("credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
-	if got := target.GetAgent().GetOutputDelivery().GetTarget().GetCredentialMode(); got != "" {
-		t.Fatalf("output delivery nested target credential mode = %q, want empty", got)
-	}
-	roundTrip := workflowTargetFromProto(target)
-	if roundTrip.Agent == nil || roundTrip.Agent.ProviderName != "managed" {
-		t.Fatalf("round trip agent target = %#v", roundTrip.Agent)
-	}
-	if roundTrip.Agent.OutputDelivery == nil {
-		t.Fatalf("round trip output delivery is nil")
-	}
-	if got := roundTrip.Agent.OutputDelivery.Target.Input["format"]; got != "plain" {
-		t.Fatalf("round trip output delivery input = %#v", roundTrip.Agent.OutputDelivery.Target.Input)
-	}
-	if len(roundTrip.Agent.OutputDelivery.InputBindings) != 3 {
-		t.Fatalf("round trip output delivery bindings = %#v", roundTrip.Agent.OutputDelivery.InputBindings)
-	}
-	if got := roundTrip.Agent.OutputDelivery.CredentialMode; got != core.ConnectionModeNone {
-		t.Fatalf("round trip output delivery credential mode = %q, want %q", got, core.ConnectionModeNone)
-	}
-	if got := roundTrip.Agent.OutputDelivery.InputBindings[2].Value.Literal; got != "workflow" {
-		t.Fatalf("round trip literal = %#v", got)
-	}
-	if roundTrip.Agent.SessionReadyDelivery == nil {
-		t.Fatalf("round trip session ready delivery is nil")
-	}
-	if got := roundTrip.Agent.SessionReadyDelivery.InputBindings[0].Value.AgentSession; got != "id" {
-		t.Fatalf("round trip agent session source = %q, want id", got)
+	if got := app.Input.Object["customer_id"].Literal; got != "cust_123" {
+		t.Fatalf("input customer_id = %#v, want %q", got, "cust_123")
 	}
 }
 
-func TestWorkflowAgentTargetStepsProtoRoundTrip(t *testing.T) {
+func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	target, err := workflowTargetToProto(coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-		ProviderName: "managed",
-		Model:        "deep",
-		Metadata:     map[string]any{"route": "datadog"},
-		Steps: []coreworkflow.AgentStep{
+	target, err := workflowTargetToProto(coreworkflow.Target{
+		Steps: []coreworkflow.Step{
 			{
-				ID:       "diagnosis",
-				Prompt:   "Diagnose the alert.",
-				Messages: []coreagent.Message{{Role: "system", Text: "Use concise replies."}},
-				ToolRefs: []coreagent.ToolRef{{App: "datadog", Operation: "queryLogs"}},
-				ResponseSchema: map[string]any{
-					"type":       "object",
-					"properties": map[string]any{"actionable_for_pr": map[string]any{"type": "boolean"}},
+				ID: "diagnosis",
+				Inputs: map[string]coreworkflow.Value{
+					"thread_ts": {SignalPayload: "event.ts"},
 				},
-				ModelOptions:   map[string]any{"temperature": 0},
+				Agent: &coreworkflow.AgentTurn{
+					ProviderName: "managed",
+					Model:        "deep",
+					Prompt:       coreworkflow.Text{Template: "Diagnose the alert."},
+					Messages:     []coreworkflow.AgentMessage{{Role: "system", Text: coreworkflow.Text{Template: "Use concise replies."}}},
+					ToolRefs:     []coreagent.ToolRef{{App: "datadog", Operation: "queryLogs"}},
+					ResponseSchema: map[string]any{
+						"type":       "object",
+						"properties": map[string]any{"actionableForPr": map[string]any{"type": "boolean"}},
+					},
+					ModelOptions: map[string]any{"temperature": 0},
+				},
 				Metadata:       map[string]any{"kind": "diagnosis"},
 				TimeoutSeconds: 45,
-				OutputDelivery: &coreworkflow.OutputDelivery{
-					Target: coreworkflow.AppTarget{AppName: "slack", Operation: "reply"},
-					InputBindings: []coreworkflow.OutputBinding{
-						{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-					},
+			},
+			{
+				ID: "reply",
+				App: &coreworkflow.AppCall{
+					Name:      "slack",
+					Operation: "reply",
+					Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
+						"text": {StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.text"}},
+					}},
 				},
 			},
 			{
-				ID:       "pr_fix",
-				Prompt:   "Open the PR.",
-				ToolRefs: []coreagent.ToolRef{{App: "github", Operation: "createPullRequest"}},
-				When: &coreworkflow.AgentStepWhen{
-					StepID:     "diagnosis",
-					OutputPath: "structured_output.actionable_for_pr",
-					Equals:     true,
-					EqualsSet:  true,
+				ID: "pr_fix",
+				Agent: &coreworkflow.AgentTurn{
+					ProviderName: "managed",
+					Model:        "deep",
+					Prompt:       coreworkflow.Text{Template: "Open the PR."},
+					ToolRefs:     []coreagent.ToolRef{{App: "github", Operation: "createPullRequest"}},
+				},
+				When: &coreworkflow.StepWhen{
+					Value:     coreworkflow.Value{StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.structuredOutput.actionableForPr"}},
+					Equals:    true,
+					EqualsSet: true,
 				},
 			},
 		},
-	}})
+	})
 	if err != nil {
 		t.Fatalf("workflowTargetToProto: %v", err)
 	}
-	if got := target.GetAgent().GetSteps()[0].GetResponseSchema().AsMap()["type"]; got != "object" {
+	if got := target.GetSteps()[0].GetAgent().GetResponseSchema().AsMap()["type"]; got != "object" {
 		t.Fatalf("step response schema = %#v, want object", got)
 	}
-	if got := target.GetAgent().GetSteps()[1].GetWhen().GetEquals().GetBoolValue(); got != true {
+	if got := target.GetSteps()[2].GetWhen().GetEquals().GetBoolValue(); got != true {
 		t.Fatalf("step when equals = %v, want true", got)
 	}
 
 	roundTrip := workflowTargetFromProto(target)
-	if roundTrip.Agent == nil || len(roundTrip.Agent.Steps) != 2 {
-		t.Fatalf("round trip agent steps = %#v", roundTrip.Agent)
+	if len(roundTrip.Steps) != 3 {
+		t.Fatalf("round trip steps = %#v", roundTrip.Steps)
 	}
-	diagnosis := roundTrip.Agent.Steps[0]
-	if diagnosis.ID != "diagnosis" || diagnosis.Prompt != "Diagnose the alert." || diagnosis.TimeoutSeconds != 45 {
+	diagnosis := roundTrip.Steps[0]
+	if diagnosis.ID != "diagnosis" || diagnosis.Agent == nil || diagnosis.Agent.Prompt.Template != "Diagnose the alert." || diagnosis.TimeoutSeconds != 45 {
 		t.Fatalf("round trip diagnosis step = %#v", diagnosis)
 	}
-	if len(diagnosis.Messages) != 1 || diagnosis.Messages[0].Role != "system" {
-		t.Fatalf("round trip diagnosis messages = %#v", diagnosis.Messages)
+	if len(diagnosis.Agent.Messages) != 1 || diagnosis.Agent.Messages[0].Role != "system" {
+		t.Fatalf("round trip diagnosis messages = %#v", diagnosis.Agent.Messages)
 	}
-	if len(diagnosis.ToolRefs) != 1 || diagnosis.ToolRefs[0].App != "datadog" || diagnosis.ToolRefs[0].Operation != "queryLogs" {
-		t.Fatalf("round trip diagnosis tool refs = %#v", diagnosis.ToolRefs)
+	if len(diagnosis.Agent.ToolRefs) != 1 || diagnosis.Agent.ToolRefs[0].App != "datadog" || diagnosis.Agent.ToolRefs[0].Operation != "queryLogs" {
+		t.Fatalf("round trip diagnosis tool refs = %#v", diagnosis.Agent.ToolRefs)
 	}
-	if diagnosis.OutputDelivery == nil || diagnosis.OutputDelivery.Target.AppName != "slack" {
-		t.Fatalf("round trip diagnosis output delivery = %#v", diagnosis.OutputDelivery)
+	reply := roundTrip.Steps[1]
+	if reply.App == nil || reply.App.Name != "slack" || reply.App.Operation != "reply" {
+		t.Fatalf("round trip reply step = %#v", reply)
 	}
-	prFix := roundTrip.Agent.Steps[1]
-	if prFix.When == nil || prFix.When.StepID != "diagnosis" || prFix.When.OutputPath != "structured_output.actionable_for_pr" || prFix.When.Equals != true {
+	prFix := roundTrip.Steps[2]
+	if prFix.When == nil || prFix.When.Value.StepOutput.StepID != "diagnosis" || prFix.When.Value.StepOutput.Path != "agent.structuredOutput.actionableForPr" || prFix.When.Equals != true {
 		t.Fatalf("round trip pr_fix when = %#v", prFix.When)
 	}
 }
 
-func TestWorkflowAgentTargetSessionReadyDeliveryProtoErrorsUseFieldName(t *testing.T) {
-	t.Parallel()
-
-	_, err := workflowTargetToProto(coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-		ProviderName: "managed",
-		Prompt:       "reply",
-		SessionReadyDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.AppTarget{
-				AppName:   "notification",
-				Operation: "started",
-			},
-			InputBindings: []coreworkflow.OutputBinding{
-				{InputField: "session_id", Value: coreworkflow.OutputValueSource{}},
-			},
-		},
-	}})
-	if err == nil {
-		t.Fatal("workflowTargetToProto error is nil")
-	}
-	if !strings.Contains(err.Error(), "workflow agent session_ready_delivery.input_bindings[0].value") {
-		t.Fatalf("workflowTargetToProto error = %v, want session_ready_delivery field name", err)
-	}
-}
-
-func TestWorkflowTargetFromProtoPreservesEmptyPluginKind(t *testing.T) {
+func TestWorkflowTargetFromProtoPreservesEmptyStepApp(t *testing.T) {
 	t.Parallel()
 
 	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
-		Kind: &proto.BoundWorkflowTarget_App{App: &proto.BoundWorkflowAppTarget{}},
+		Steps: []*proto.WorkflowStep{{Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{}}}},
 	})
-	if target.App == nil {
-		t.Fatal("plugin target is nil")
+	if len(target.Steps) != 1 || target.Steps[0].App == nil {
+		t.Fatalf("steps = %#v, want empty app step", target.Steps)
+	}
+}
+
+func TestWorkflowValueProtoRoundTripPreservesEmptyCollections(t *testing.T) {
+	t.Parallel()
+
+	value := coreworkflow.Value{Object: map[string]coreworkflow.Value{
+		"empty_object": {Object: map[string]coreworkflow.Value{}},
+		"empty_array":  {Array: []coreworkflow.Value{}},
+	}}
+
+	pb, err := workflowValueToProto(value)
+	if err != nil {
+		t.Fatalf("workflowValueToProto: %v", err)
+	}
+	if pb.GetObject() == nil {
+		t.Fatalf("proto value = %#v, want object", pb)
+	}
+	if pb.GetObject().GetFields()["empty_object"].GetObject() == nil {
+		t.Fatalf("empty object proto = %#v, want object kind", pb.GetObject().GetFields()["empty_object"])
+	}
+	if pb.GetObject().GetFields()["empty_array"].GetArray() == nil {
+		t.Fatalf("empty array proto = %#v, want array kind", pb.GetObject().GetFields()["empty_array"])
+	}
+
+	roundTrip := workflowValueFromProto(pb)
+	if got := roundTrip.Object["empty_object"].Object; got == nil || len(got) != 0 {
+		t.Fatalf("round trip empty object = %#v, want empty object", got)
+	}
+	if got := roundTrip.Object["empty_array"].Array; got == nil || len(got) != 0 {
+		t.Fatalf("round trip empty array = %#v, want empty array", got)
 	}
 }
 
@@ -284,7 +230,7 @@ func TestWorkflowExecutionReferenceProtoRoundTripsRunAsSubject(t *testing.T) {
 	ref := &coreworkflow.ExecutionReference{
 		ID:                  "workflow_schedule:cfg_123:ref",
 		ProviderName:        "temporal",
-		Target:              coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "brain", Operation: "sources.sync"}},
+		Target:              coreworkflow.Target{Steps: []coreworkflow.Step{{ID: "sync", App: &coreworkflow.AppCall{Name: "brain", Operation: "sources.sync"}}}},
 		SourceDefinitionID:  "workflow_definition:def-123",
 		SubjectID:           "system:config",
 		SubjectKind:         "system",

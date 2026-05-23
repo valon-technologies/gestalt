@@ -64,12 +64,12 @@ const (
 	secretsReleaseSchemaPath       = "schemas/secrets.schema.json"
 )
 
-func TestProviderRemoteConfigPathSynthesizesSourcePlugin(t *testing.T) {
+func TestProviderRemoteConfigPathSynthesizesSourceApp(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginDir := setupPluginDir(t, dir)
-	configPaths, cleanup, err := prepareProviderRemoteConfigPaths(providerLocalCommandOptions{Path: pluginDir})
+	appDir := setupAppDir(t, dir)
+	configPaths, cleanup, err := prepareProviderRemoteConfigPaths(providerLocalCommandOptions{Path: appDir})
 	if err != nil {
 		t.Fatalf("prepareProviderRemoteConfigPaths: %v", err)
 	}
@@ -2368,7 +2368,7 @@ func newSourceProviderReleaseFixture(t *testing.T, dir string) string {
 	writeTestFile(t, pluginDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0644)
 	writeStaticCatalogProviderMain(t, pluginDir)
 	artifactRel := ".gestalt/build/provider"
-	writeGoPluginBuildFixture(t, pluginDir, releaseTestModule, releaseTestAppName, artifactRel)
+	writeGoAppBuildFixture(t, pluginDir, releaseTestModule, releaseTestAppName, artifactRel)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
 		Source:      releaseTestSource,
@@ -2405,9 +2405,9 @@ func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
 	pluginDir := filepath.Join(dir, releaseTestAppName)
-	testutil.CopyExampleProviderPlugin(t, pluginDir)
+	testutil.CopyExampleProviderApp(t, pluginDir)
 	artifactRel := ".gestalt/build/provider"
-	writeGoPluginBuildFixture(t, pluginDir, "github.com/valon-technologies/gestalt/testdata/provider-go", releaseTestAppName, artifactRel)
+	writeGoAppBuildFixture(t, pluginDir, "github.com/valon-technologies/gestalt/testdata/provider-go", releaseTestAppName, artifactRel)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindApp,
 		Source:      releaseTestSource,

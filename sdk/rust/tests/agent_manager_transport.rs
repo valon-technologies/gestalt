@@ -778,7 +778,7 @@ async fn agent_manager_create_turn_accepts_native_values() {
     );
     assert_eq!(request.messages[0].parts[0].text, "Summarize this");
     assert_eq!(request.tool_refs.len(), 1);
-    assert_eq!(request.tool_refs[0].plugin, "github");
+    assert_eq!(request.tool_refs[0].app, "github");
     assert_eq!(request.tool_refs[0].operation, "issues.get");
     assert_eq!(request.tool_refs[0].connection, "default");
     let run_as = request.tool_refs[0]

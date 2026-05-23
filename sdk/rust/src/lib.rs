@@ -4,6 +4,7 @@
 mod agent;
 mod agent_manager;
 mod api;
+mod app_runtime;
 mod auth;
 mod auth_server;
 mod authorization;
@@ -16,7 +17,6 @@ mod generated;
 /// IndexedDB-style datastore client and provider helpers.
 pub mod indexeddb;
 mod invoker;
-mod app_runtime;
 mod protocol;
 mod provider_server;
 mod router;
@@ -72,6 +72,14 @@ pub use api::{
     Access, ConnectedToken, Credential, ExternalIdentity, HTTPSubjectRequest, Host, Provider,
     Request, Response, RuntimeMetadata, Subject, ok,
 };
+pub use app_runtime::{
+    AppRuntimeEgressMode, AppRuntimeImagePullAuth, AppRuntimeProvider, AppRuntimeSession,
+    AppRuntimeSessionLifecycle, AppRuntimeSupport, GetAppRuntimeSessionRequest, HostedApp,
+    ListAppRuntimeSessionsRequest, ListAppRuntimeSessionsResponse,
+    PrepareAppRuntimeWorkspaceRequest, PrepareAppRuntimeWorkspaceResponse,
+    RemoveAppRuntimeWorkspaceRequest, StartAppRuntimeSessionRequest, StartHostedAppRequest,
+    StopAppRuntimeSessionRequest,
+};
 pub use auth::{
     AuthSessionSettings, AuthenticatedUser, AuthenticationProvider, BeginLoginRequest,
     BeginLoginResponse, CompleteLoginRequest,
@@ -104,21 +112,13 @@ pub use indexeddb::{
     TransactionIndexClient, TransactionMode, TransactionObjectStore, TransactionOptions,
     compare_indexeddb_values, indexeddb_range_bounds, new_indexeddb_cursor_snapshot,
 };
-pub use invoker::{InvocationGrant, InvokeOptions, AppInvoker, AppInvokerError};
-pub use app_runtime::{
-    GetAppRuntimeSessionRequest, HostedApp, ListAppRuntimeSessionsRequest,
-    ListAppRuntimeSessionsResponse, AppRuntimeEgressMode, AppRuntimeImagePullAuth,
-    AppRuntimeProvider, AppRuntimeSession, AppRuntimeSessionLifecycle,
-    AppRuntimeSupport, PrepareAppRuntimeWorkspaceRequest,
-    PrepareAppRuntimeWorkspaceResponse, RemoveAppRuntimeWorkspaceRequest,
-    StartHostedAppRequest, StartAppRuntimeSessionRequest, StopAppRuntimeSessionRequest,
-};
+pub use invoker::{AppInvoker, AppInvokerError, InvocationGrant, InvokeOptions};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
 pub use runtime_log_host::{
-    AppendAppRuntimeLogsRequest, AppendAppRuntimeLogsResponse, ENV_RUNTIME_SESSION_ID,
-    AppRuntimeLogEntry, RuntimeLogHost, RuntimeLogHostError, RuntimeLogStream,
+    AppRuntimeLogEntry, AppendAppRuntimeLogsRequest, AppendAppRuntimeLogsResponse,
+    ENV_RUNTIME_SESSION_ID, RuntimeLogHost, RuntimeLogHostError, RuntimeLogStream,
     runtime_session_id,
 };
 pub use s3::{S3, S3Error, S3Provider};
@@ -126,10 +126,10 @@ pub use s3::{S3ReadObjectFrame, S3ReadObjectStream, S3WriteObjectFrame, S3WriteO
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
 pub use workflow::{
-    BoundWorkflowAgentTarget, BoundWorkflowDefinition, BoundWorkflowEventTrigger,
-    BoundWorkflowAppTarget, BoundWorkflowRun, BoundWorkflowSchedule, BoundWorkflowTarget,
-    CancelWorkflowProviderRunRequest, DeleteWorkflowProviderEventTriggerRequest,
-    DeleteWorkflowProviderScheduleRequest, GetWorkflowExecutionReferenceRequest,
+    BoundWorkflowDefinition, BoundWorkflowEventTrigger, BoundWorkflowRun, BoundWorkflowSchedule,
+    BoundWorkflowTarget, CancelWorkflowProviderRunRequest,
+    DeleteWorkflowProviderEventTriggerRequest, DeleteWorkflowProviderScheduleRequest,
+    ENV_WORKFLOW_HOST_SOCKET, GetWorkflowExecutionReferenceRequest,
     GetWorkflowProviderEventTriggerRequest, GetWorkflowProviderRunRequest,
     GetWorkflowProviderScheduleRequest, InvokeWorkflowOperationInput,
     InvokeWorkflowOperationResponse, ListWorkflowExecutionReferencesRequest,
@@ -142,34 +142,33 @@ pub use workflow::{
     ResumeWorkflowProviderScheduleRequest, SignalOrStartWorkflowProviderRunRequest,
     SignalWorkflowProviderRunRequest, SignalWorkflowRunResponse, StartWorkflowProviderRunRequest,
     UpsertWorkflowProviderEventTriggerRequest, UpsertWorkflowProviderScheduleRequest,
-    WorkflowAccessPermission, WorkflowActor, WorkflowAgentStep, WorkflowAgentStepWhen,
-    WorkflowEvent, WorkflowEventMatch, WorkflowEventTriggerInvocation, WorkflowExecutionReference,
-    WorkflowHost, WorkflowHostError, WorkflowJson, WorkflowManagerDefinition,
-    WorkflowManagerEventTrigger, WorkflowManagerRun, WorkflowManagerRunSignal,
-    WorkflowManagerSchedule, WorkflowOutputBinding, WorkflowOutputDelivery,
-    WorkflowOutputValueSource, WorkflowProvider, WorkflowRunAsSubject, WorkflowRunStatus,
-    WorkflowRunTrigger, WorkflowScheduleTrigger, WorkflowSignal,
-    bound_workflow_agent_target_input_from_target, bound_workflow_definition_input_from_definition,
-    bound_workflow_event_trigger_input_from_trigger,
-    bound_workflow_plugin_target_input_from_target, bound_workflow_run_input_from_run,
+    WorkflowAccessPermission, WorkflowActor, WorkflowAgentMessage, WorkflowEvent,
+    WorkflowEventMatch, WorkflowEventTriggerInvocation, WorkflowExecutionReference, WorkflowHost,
+    WorkflowHostError, WorkflowJson, WorkflowManagerDefinition, WorkflowManagerEventTrigger,
+    WorkflowManagerRun, WorkflowManagerRunSignal, WorkflowManagerSchedule, WorkflowProvider,
+    WorkflowRunAsSubject, WorkflowRunStatus, WorkflowRunTrigger, WorkflowScheduleTrigger,
+    WorkflowSignal, WorkflowStep, WorkflowStepAction, WorkflowStepAgentTurn, WorkflowStepAppCall,
+    WorkflowStepOutputSource, WorkflowStepWhen, WorkflowText, WorkflowValue,
+    bound_workflow_definition_input_from_definition,
+    bound_workflow_event_trigger_input_from_trigger, bound_workflow_run_input_from_run,
     bound_workflow_schedule_input_from_schedule, bound_workflow_target_input_from_target,
-    new_bound_workflow_agent_target, new_bound_workflow_event_trigger,
-    new_bound_workflow_event_trigger_from_trigger, new_bound_workflow_plugin_target,
+    new_bound_workflow_event_trigger, new_bound_workflow_event_trigger_from_trigger,
     new_bound_workflow_run, new_bound_workflow_run_from_run, new_bound_workflow_schedule,
     new_bound_workflow_schedule_from_schedule, new_bound_workflow_target,
     new_bound_workflow_target_from_target, new_workflow_access_permission, new_workflow_actor,
-    new_workflow_event, new_workflow_event_from_event, new_workflow_event_match,
-    new_workflow_event_trigger_invocation, new_workflow_execution_reference,
-    new_workflow_execution_reference_from_reference, new_workflow_output_binding,
-    new_workflow_output_delivery, new_workflow_output_value_source, new_workflow_run_as_subject,
-    new_workflow_run_trigger, new_workflow_run_trigger_from_trigger, new_workflow_schedule_trigger,
-    new_workflow_signal, new_workflow_signal_from_signal,
+    new_workflow_agent_message, new_workflow_event, new_workflow_event_from_event,
+    new_workflow_event_match, new_workflow_event_trigger_invocation,
+    new_workflow_execution_reference, new_workflow_execution_reference_from_reference,
+    new_workflow_run_as_subject, new_workflow_run_trigger, new_workflow_run_trigger_from_trigger,
+    new_workflow_schedule_trigger, new_workflow_signal, new_workflow_signal_from_signal,
+    new_workflow_step, new_workflow_step_agent_turn, new_workflow_step_app_call,
+    new_workflow_step_when, new_workflow_text, new_workflow_value,
     workflow_access_permission_input_from_permission, workflow_actor_input_from_actor,
     workflow_event_input_from_event, workflow_event_match_input_from_match,
-    workflow_execution_reference_input_from_reference, workflow_output_binding_input_from_binding,
-    workflow_output_delivery_input_from_delivery, workflow_output_value_source_input_from_source,
-    workflow_run_as_subject_input_from_subject, workflow_run_trigger_input_from_trigger,
-    workflow_signal_input_from_signal,
+    workflow_execution_reference_input_from_reference, workflow_run_as_subject_input_from_subject,
+    workflow_run_trigger_input_from_trigger, workflow_signal_input_from_signal,
+    workflow_step_agent_turn_input_from_turn, workflow_step_app_call_input_from_call,
+    workflow_step_input_from_step, workflow_value_input_from_value,
 };
 pub use workflow_manager::{
     WorkflowManager, WorkflowManagerCreateDefinition, WorkflowManagerCreateEventTrigger,
@@ -281,7 +280,7 @@ macro_rules! export_s3_provider {
     };
 }
 
-/// Exports the plugin-runtime-provider entrypoint expected by `gestaltd`.
+/// Exports the app-runtime-provider entrypoint expected by `gestaltd`.
 #[macro_export]
 macro_rules! export_app_runtime_provider {
     (constructor = $constructor:path $(,)?) => {

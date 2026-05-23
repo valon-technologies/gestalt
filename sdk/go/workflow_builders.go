@@ -2,330 +2,90 @@ package gestalt
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// BoundWorkflowAppTarget contains fields for constructing a
-// BoundWorkflowAppTarget.
-type BoundWorkflowAppTarget struct {
-	AppName     string
+// BoundWorkflowTarget contains fields for constructing a
+// BoundWorkflowTarget. The only target shape is an ordered list of steps.
+type BoundWorkflowTarget struct {
+	Steps []WorkflowStep
+}
+
+// WorkflowStep contains fields for constructing one workflow step. Exactly
+// one of App or Agent should be set.
+type WorkflowStep struct {
+	ID             string
+	Inputs         map[string]WorkflowValue
+	App            *WorkflowStepAppCall
+	Agent          *WorkflowStepAgentTurn
+	When           *WorkflowStepWhen
+	TimeoutSeconds int32
+	Metadata       any
+}
+
+// WorkflowStepAppCall contains fields for a app action. Input is a
+// WorkflowValue that must resolve to a JSON object at runtime.
+type WorkflowStepAppCall struct {
+	Name           string
 	Operation      string
-	Input          any
+	Input          WorkflowValue
 	Connection     string
 	Instance       string
 	CredentialMode string
 }
 
-// boundWorkflowPluginTargetToProto creates an app workflow target.
-func boundWorkflowPluginTargetToProto(input BoundWorkflowAppTarget) (*proto.BoundWorkflowAppTarget, error) {
-	value, err := structFromAny(input.Input)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.BoundWorkflowAppTarget{
-		AppName:     input.AppName,
-		Operation:      input.Operation,
-		Input:          value,
-		Connection:     input.Connection,
-		Instance:       input.Instance,
-		CredentialMode: input.CredentialMode,
-	}, nil
-}
-
-// boundWorkflowPluginTargetFromProto converts an existing protocol target
-// into builder input.
-func boundWorkflowPluginTargetFromProto(value *proto.BoundWorkflowAppTarget) BoundWorkflowAppTarget {
-	if value == nil {
-		return BoundWorkflowAppTarget{}
-	}
-	return BoundWorkflowAppTarget{
-		AppName:     value.GetAppName(),
-		Operation:      value.GetOperation(),
-		Input:          mapFromStruct(value.GetInput()),
-		Connection:     value.GetConnection(),
-		Instance:       value.GetInstance(),
-		CredentialMode: value.GetCredentialMode(),
-	}
-}
-
-// WorkflowOutputDelivery contains fields for constructing a
-// WorkflowOutputDelivery.
-type WorkflowOutputDelivery struct {
-	Target         *BoundWorkflowAppTarget
-	InputBindings  []WorkflowOutputBinding
-	CredentialMode string
-}
-
-// WorkflowOutputValueSource contains fields for constructing a
-// workflow output value source. Set at most one source field.
-type WorkflowOutputValueSource struct {
-	AgentOutput    string
-	SignalPayload  string
-	SignalMetadata string
-	Literal        any
-	AgentSession   string
-}
-
-// WorkflowOutputBinding contains fields for one workflow output
-// binding.
-type WorkflowOutputBinding struct {
-	InputField string
-	Value      *WorkflowOutputValueSource
-}
-
-// workflowOutputDeliveryToProto creates a workflow output delivery.
-func workflowOutputDeliveryToProto(input WorkflowOutputDelivery) (*proto.WorkflowOutputDelivery, error) {
-	var target *proto.BoundWorkflowAppTarget
-	if input.Target != nil {
-		value, err := boundWorkflowPluginTargetToProto(*input.Target)
-		if err != nil {
-			return nil, err
-		}
-		target = value
-	}
-	bindings, err := newWorkflowOutputBindings(input.InputBindings)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowOutputDelivery{
-		Target:         target,
-		InputBindings:  bindings,
-		CredentialMode: input.CredentialMode,
-	}, nil
-}
-
-// workflowOutputDeliveryFromProto converts an existing protocol delivery
-// into builder input.
-func workflowOutputDeliveryFromProto(value *proto.WorkflowOutputDelivery) *WorkflowOutputDelivery {
-	if value == nil {
-		return nil
-	}
-	var target *BoundWorkflowAppTarget
-	if value.GetTarget() != nil {
-		input := boundWorkflowPluginTargetFromProto(value.GetTarget())
-		target = &input
-	}
-	return &WorkflowOutputDelivery{
-		Target:         target,
-		InputBindings:  workflowOutputBindingInputsFromBindings(value.GetInputBindings()),
-		CredentialMode: value.GetCredentialMode(),
-	}
-}
-
-// BoundWorkflowAgentTarget contains fields for constructing a
-// BoundWorkflowAgentTarget.
-type BoundWorkflowAgentTarget struct {
-	ProviderName         string
-	Model                string
-	Prompt               string
-	Messages             []AgentMessage
-	ToolRefs             []AgentToolRef
-	ResponseSchema       any
-	Metadata             any
-	TimeoutSeconds       int32
-	OutputDelivery       *WorkflowOutputDelivery
-	ModelOptions         any
-	SessionReadyDelivery *WorkflowOutputDelivery
-	Steps                []WorkflowAgentStep
-}
-
-// WorkflowAgentStep contains fields for constructing one workflow agent step.
-type WorkflowAgentStep struct {
-	ID             string
-	Prompt         string
-	Messages       []AgentMessage
-	ToolRefs       []AgentToolRef
+// WorkflowStepAgentTurn contains fields for an agent action inside a workflow
+// step.
+type WorkflowStepAgentTurn struct {
+	Provider       string
+	Model          string
+	SessionKey     string
+	Prompt         WorkflowText
+	Messages       []WorkflowAgentMessage
+	Tools          []AgentToolRef
 	ResponseSchema any
 	ModelOptions   any
-	TimeoutSeconds int32
-	OutputDelivery *WorkflowOutputDelivery
-	When           *WorkflowAgentStepWhen
-	Metadata       any
 }
 
-// WorkflowAgentStepWhen contains the narrow condition for running a workflow
-// agent step.
-type WorkflowAgentStepWhen struct {
-	StepID     string
-	OutputPath string
-	Equals     any
+// WorkflowAgentMessage contains one rendered agent message.
+type WorkflowAgentMessage struct {
+	Role     string
+	Text     WorkflowText
+	Metadata any
 }
 
-// boundWorkflowAgentTargetToProto creates an agent workflow target.
-func boundWorkflowAgentTargetToProto(input BoundWorkflowAgentTarget) (*proto.BoundWorkflowAgentTarget, error) {
-	responseSchema, err := structFromAny(input.ResponseSchema)
-	if err != nil {
-		return nil, err
-	}
-	metadata, err := structFromAny(input.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	modelOptions, err := structFromAny(input.ModelOptions)
-	if err != nil {
-		return nil, err
-	}
-	outputDelivery, err := newOptionalWorkflowOutputDelivery(input.OutputDelivery)
-	if err != nil {
-		return nil, err
-	}
-	sessionReadyDelivery, err := newOptionalWorkflowOutputDelivery(input.SessionReadyDelivery)
-	if err != nil {
-		return nil, err
-	}
-	messageProtos, err := agentMessagesToProto(input.Messages)
-	if err != nil {
-		return nil, err
-	}
-	steps, err := workflowAgentStepsToProto(input.Steps)
-	if err != nil {
-		return nil, err
-	}
-	toolRefs := agentToolRefPtrsToProto(agentToolRefsFromInputs(input.ToolRefs))
-	return &proto.BoundWorkflowAgentTarget{
-		ProviderName:         input.ProviderName,
-		Model:                input.Model,
-		Prompt:               input.Prompt,
-		Messages:             messageProtos,
-		ToolRefs:             toolRefs,
-		ResponseSchema:       responseSchema,
-		Metadata:             metadata,
-		TimeoutSeconds:       input.TimeoutSeconds,
-		OutputDelivery:       outputDelivery,
-		ModelOptions:         modelOptions,
-		SessionReadyDelivery: sessionReadyDelivery,
-		Steps:                steps,
-	}, nil
+// WorkflowText is text rendered by the workflow template engine.
+type WorkflowText struct {
+	Template string
 }
 
-// boundWorkflowAgentTargetFromProto converts an existing protocol target
-// into builder input.
-func boundWorkflowAgentTargetFromProto(value *proto.BoundWorkflowAgentTarget) BoundWorkflowAgentTarget {
-	if value == nil {
-		return BoundWorkflowAgentTarget{}
-	}
-	return BoundWorkflowAgentTarget{
-		ProviderName:         value.GetProviderName(),
-		Model:                value.GetModel(),
-		Prompt:               value.GetPrompt(),
-		Messages:             agentMessagesFromPtrs(agentMessagePtrsFromProto(value.GetMessages())),
-		ToolRefs:             agentToolRefsFromPtrs(agentToolRefPtrsFromProto(value.GetToolRefs())),
-		ResponseSchema:       mapFromStruct(value.GetResponseSchema()),
-		Metadata:             mapFromStruct(value.GetMetadata()),
-		TimeoutSeconds:       value.GetTimeoutSeconds(),
-		OutputDelivery:       workflowOutputDeliveryFromProto(value.GetOutputDelivery()),
-		ModelOptions:         mapFromStruct(value.GetModelOptions()),
-		SessionReadyDelivery: workflowOutputDeliveryFromProto(value.GetSessionReadyDelivery()),
-		Steps:                workflowAgentStepsFromProto(value.GetSteps()),
-	}
+// WorkflowStepWhen contains a scalar equality guard for a step.
+type WorkflowStepWhen struct {
+	Value  WorkflowValue
+	Equals any
 }
 
-func workflowAgentStepsToProto(input []WorkflowAgentStep) ([]*proto.WorkflowAgentStep, error) {
-	if len(input) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowAgentStep, 0, len(input))
-	for i := range input {
-		step := input[i]
-		messages, err := agentMessagesToProto(step.Messages)
-		if err != nil {
-			return nil, err
-		}
-		responseSchema, err := structFromAny(step.ResponseSchema)
-		if err != nil {
-			return nil, err
-		}
-		modelOptions, err := structFromAny(step.ModelOptions)
-		if err != nil {
-			return nil, err
-		}
-		metadata, err := structFromAny(step.Metadata)
-		if err != nil {
-			return nil, err
-		}
-		outputDelivery, err := newOptionalWorkflowOutputDelivery(step.OutputDelivery)
-		if err != nil {
-			return nil, err
-		}
-		when, err := workflowAgentStepWhenToProto(step.When)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, &proto.WorkflowAgentStep{
-			Id:             step.ID,
-			Prompt:         step.Prompt,
-			Messages:       messages,
-			ToolRefs:       agentToolRefPtrsToProto(agentToolRefsFromInputs(step.ToolRefs)),
-			ResponseSchema: responseSchema,
-			ModelOptions:   modelOptions,
-			TimeoutSeconds: step.TimeoutSeconds,
-			OutputDelivery: outputDelivery,
-			When:           when,
-			Metadata:       metadata,
-		})
-	}
-	return out, nil
+// WorkflowValue contains one workflow value expression. LiteralSet
+// distinguishes an explicit literal null from an unset value.
+type WorkflowValue struct {
+	Literal       any
+	LiteralSet    bool
+	Object        map[string]WorkflowValue
+	Array         []WorkflowValue
+	Template      *WorkflowText
+	RunInput      string
+	SignalPayload string
+	StepOutput    *WorkflowStepOutputSource
 }
 
-func workflowAgentStepsFromProto(input []*proto.WorkflowAgentStep) []WorkflowAgentStep {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make([]WorkflowAgentStep, 0, len(input))
-	for _, step := range input {
-		if step == nil {
-			continue
-		}
-		out = append(out, WorkflowAgentStep{
-			ID:             step.GetId(),
-			Prompt:         step.GetPrompt(),
-			Messages:       agentMessagesFromPtrs(agentMessagePtrsFromProto(step.GetMessages())),
-			ToolRefs:       agentToolRefsFromPtrs(agentToolRefPtrsFromProto(step.GetToolRefs())),
-			ResponseSchema: mapFromStruct(step.GetResponseSchema()),
-			ModelOptions:   mapFromStruct(step.GetModelOptions()),
-			TimeoutSeconds: step.GetTimeoutSeconds(),
-			OutputDelivery: workflowOutputDeliveryFromProto(step.GetOutputDelivery()),
-			When:           workflowAgentStepWhenFromProto(step.GetWhen()),
-			Metadata:       mapFromStruct(step.GetMetadata()),
-		})
-	}
-	return out
-}
-
-func workflowAgentStepWhenToProto(input *WorkflowAgentStepWhen) (*proto.WorkflowAgentStepWhen, error) {
-	if input == nil {
-		return nil, nil
-	}
-	equals, err := valueFromAny(input.Equals)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowAgentStepWhen{
-		StepId:     input.StepID,
-		OutputPath: input.OutputPath,
-		Equals:     equals,
-	}, nil
-}
-
-func workflowAgentStepWhenFromProto(input *proto.WorkflowAgentStepWhen) *WorkflowAgentStepWhen {
-	if input == nil {
-		return nil
-	}
-	return &WorkflowAgentStepWhen{
-		StepID:     input.GetStepId(),
-		OutputPath: input.GetOutputPath(),
-		Equals:     anyFromValue(input.GetEquals()),
-	}
-}
-
-// BoundWorkflowTarget contains fields for constructing a
-// BoundWorkflowTarget. Exactly one of App or Agent should be set.
-type BoundWorkflowTarget struct {
-	App *BoundWorkflowAppTarget
-	Agent  *BoundWorkflowAgentTarget
+// WorkflowStepOutputSource references a previous step output envelope.
+type WorkflowStepOutputSource struct {
+	StepID string
+	Path   string
 }
 
 // WorkflowActor contains fields for constructing workflow actor
@@ -363,22 +123,11 @@ func workflowActorFromProto(value *proto.WorkflowActor) WorkflowActor {
 
 // boundWorkflowTargetToProto creates a workflow target.
 func boundWorkflowTargetToProto(input BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {
-	switch {
-	case input.App != nil:
-		appTarget, err := boundWorkflowPluginTargetToProto(*input.App)
-		if err != nil {
-			return nil, err
-		}
-		return &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{App: appTarget}}, nil
-	case input.Agent != nil:
-		agent, err := boundWorkflowAgentTargetToProto(*input.Agent)
-		if err != nil {
-			return nil, err
-		}
-		return &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Agent{Agent: agent}}, nil
-	default:
-		return &proto.BoundWorkflowTarget{}, nil
+	steps, err := workflowStepsToProto(input.Steps)
+	if err != nil {
+		return nil, err
 	}
+	return &proto.BoundWorkflowTarget{Steps: steps}, nil
 }
 
 // boundWorkflowTargetFromProto converts an existing protocol target into
@@ -387,15 +136,7 @@ func boundWorkflowTargetFromProto(value *proto.BoundWorkflowTarget) BoundWorkflo
 	if value == nil {
 		return BoundWorkflowTarget{}
 	}
-	if appTarget := value.GetApp(); appTarget != nil {
-		input := boundWorkflowPluginTargetFromProto(appTarget)
-		return BoundWorkflowTarget{App: &input}
-	}
-	if agent := value.GetAgent(); agent != nil {
-		input := boundWorkflowAgentTargetFromProto(agent)
-		return BoundWorkflowTarget{Agent: &input}
-	}
-	return BoundWorkflowTarget{}
+	return BoundWorkflowTarget{Steps: workflowStepsFromProto(value.GetSteps())}
 }
 
 // cloneBoundWorkflowTargetProto creates a copy of an existing workflow target
@@ -405,6 +146,390 @@ func cloneBoundWorkflowTargetProto(value *proto.BoundWorkflowTarget) (*proto.Bou
 		return nil, nil
 	}
 	return boundWorkflowTargetToProto(boundWorkflowTargetFromProto(value))
+}
+
+func workflowStepsToProto(steps []WorkflowStep) ([]*proto.WorkflowStep, error) {
+	if len(steps) == 0 {
+		return nil, nil
+	}
+	out := make([]*proto.WorkflowStep, 0, len(steps))
+	for i := range steps {
+		step, err := workflowStepToProto(steps[i])
+		if err != nil {
+			return nil, fmt.Errorf("steps[%d]: %w", i, err)
+		}
+		out = append(out, step)
+	}
+	return out, nil
+}
+
+func workflowStepsFromProto(steps []*proto.WorkflowStep) []WorkflowStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]WorkflowStep, 0, len(steps))
+	for _, step := range steps {
+		if step == nil {
+			continue
+		}
+		out = append(out, workflowStepFromProto(step))
+	}
+	return out
+}
+
+func workflowStepToProto(step WorkflowStep) (*proto.WorkflowStep, error) {
+	inputs, err := workflowValueMapToProto(step.Inputs)
+	if err != nil {
+		return nil, fmt.Errorf("inputs: %w", err)
+	}
+	when, err := workflowStepWhenToProto(step.When)
+	if err != nil {
+		return nil, fmt.Errorf("when: %w", err)
+	}
+	metadata, err := structFromAny(step.Metadata)
+	if err != nil {
+		return nil, fmt.Errorf("metadata: %w", err)
+	}
+	out := &proto.WorkflowStep{
+		Id:             step.ID,
+		Inputs:         inputs,
+		When:           when,
+		TimeoutSeconds: step.TimeoutSeconds,
+		Metadata:       metadata,
+	}
+	switch {
+	case step.App != nil && step.Agent != nil:
+		return nil, fmt.Errorf("cannot set both app and agent")
+	case step.App != nil:
+		app, err := workflowStepAppCallToProto(step.App)
+		if err != nil {
+			return nil, fmt.Errorf("app: %w", err)
+		}
+		out.Action = &proto.WorkflowStep_App{App: app}
+	case step.Agent != nil:
+		agent, err := workflowStepAgentTurnToProto(step.Agent)
+		if err != nil {
+			return nil, fmt.Errorf("agent: %w", err)
+		}
+		out.Action = &proto.WorkflowStep_Agent{Agent: agent}
+	}
+	return out, nil
+}
+
+func workflowStepFromProto(step *proto.WorkflowStep) WorkflowStep {
+	if step == nil {
+		return WorkflowStep{}
+	}
+	out := WorkflowStep{
+		ID:             step.GetId(),
+		Inputs:         workflowValueMapFromProto(step.GetInputs()),
+		When:           workflowStepWhenFromProto(step.GetWhen()),
+		TimeoutSeconds: step.GetTimeoutSeconds(),
+		Metadata:       mapFromStruct(step.GetMetadata()),
+	}
+	if step.GetApp() != nil {
+		out.App = workflowStepAppCallFromProto(step.GetApp())
+	}
+	if step.GetAgent() != nil {
+		out.Agent = workflowStepAgentTurnFromProto(step.GetAgent())
+	}
+	return out
+}
+
+func workflowStepAppCallToProto(input *WorkflowStepAppCall) (*proto.WorkflowStepAppCall, error) {
+	if input == nil {
+		return nil, nil
+	}
+	value, err := workflowValueToProto(input.Input)
+	if err != nil {
+		return nil, fmt.Errorf("input: %w", err)
+	}
+	return &proto.WorkflowStepAppCall{
+		Name:           input.Name,
+		Operation:      input.Operation,
+		Input:          value,
+		Connection:     input.Connection,
+		Instance:       input.Instance,
+		CredentialMode: input.CredentialMode,
+	}, nil
+}
+
+func workflowStepAppCallFromProto(value *proto.WorkflowStepAppCall) *WorkflowStepAppCall {
+	if value == nil {
+		return nil
+	}
+	return &WorkflowStepAppCall{
+		Name:           value.GetName(),
+		Operation:      value.GetOperation(),
+		Input:          workflowValueFromProto(value.GetInput()),
+		Connection:     value.GetConnection(),
+		Instance:       value.GetInstance(),
+		CredentialMode: value.GetCredentialMode(),
+	}
+}
+
+func workflowStepAgentTurnToProto(input *WorkflowStepAgentTurn) (*proto.WorkflowStepAgentTurn, error) {
+	if input == nil {
+		return nil, nil
+	}
+	messages, err := workflowAgentMessagesToProto(input.Messages)
+	if err != nil {
+		return nil, err
+	}
+	responseSchema, err := structFromAny(input.ResponseSchema)
+	if err != nil {
+		return nil, fmt.Errorf("response_schema: %w", err)
+	}
+	modelOptions, err := structFromAny(input.ModelOptions)
+	if err != nil {
+		return nil, fmt.Errorf("model_options: %w", err)
+	}
+	return &proto.WorkflowStepAgentTurn{
+		Provider:       input.Provider,
+		Model:          input.Model,
+		SessionKey:     input.SessionKey,
+		Prompt:         workflowTextToProto(input.Prompt),
+		Messages:       messages,
+		Tools:          agentToolRefsToProto(input.Tools),
+		ResponseSchema: responseSchema,
+		ModelOptions:   modelOptions,
+	}, nil
+}
+
+func workflowStepAgentTurnFromProto(value *proto.WorkflowStepAgentTurn) *WorkflowStepAgentTurn {
+	if value == nil {
+		return nil
+	}
+	return &WorkflowStepAgentTurn{
+		Provider:       value.GetProvider(),
+		Model:          value.GetModel(),
+		SessionKey:     value.GetSessionKey(),
+		Prompt:         workflowTextFromProto(value.GetPrompt()),
+		Messages:       workflowAgentMessagesFromProto(value.GetMessages()),
+		Tools:          agentToolRefsFromProto(value.GetTools()),
+		ResponseSchema: mapFromStruct(value.GetResponseSchema()),
+		ModelOptions:   mapFromStruct(value.GetModelOptions()),
+	}
+}
+
+func workflowAgentMessagesToProto(values []WorkflowAgentMessage) ([]*proto.WorkflowAgentMessage, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]*proto.WorkflowAgentMessage, 0, len(values))
+	for i, value := range values {
+		metadata, err := structFromAny(value.Metadata)
+		if err != nil {
+			return nil, fmt.Errorf("messages[%d].metadata: %w", i, err)
+		}
+		out = append(out, &proto.WorkflowAgentMessage{
+			Role:     value.Role,
+			Text:     workflowTextToProto(value.Text),
+			Metadata: metadata,
+		})
+	}
+	return out, nil
+}
+
+func workflowAgentMessagesFromProto(values []*proto.WorkflowAgentMessage) []WorkflowAgentMessage {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]WorkflowAgentMessage, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		out = append(out, WorkflowAgentMessage{
+			Role:     value.GetRole(),
+			Text:     workflowTextFromProto(value.GetText()),
+			Metadata: mapFromStruct(value.GetMetadata()),
+		})
+	}
+	return out
+}
+
+func workflowTextToProto(input WorkflowText) *proto.WorkflowText {
+	if input.Template == "" {
+		return nil
+	}
+	return &proto.WorkflowText{Template: input.Template}
+}
+
+func workflowTextFromProto(value *proto.WorkflowText) WorkflowText {
+	if value == nil {
+		return WorkflowText{}
+	}
+	return WorkflowText{Template: value.GetTemplate()}
+}
+
+func workflowStepWhenToProto(input *WorkflowStepWhen) (*proto.WorkflowStepWhen, error) {
+	if input == nil {
+		return nil, nil
+	}
+	value, err := workflowValueToProto(input.Value)
+	if err != nil {
+		return nil, fmt.Errorf("value: %w", err)
+	}
+	equals, err := valueFromAny(input.Equals)
+	if err != nil {
+		return nil, fmt.Errorf("equals: %w", err)
+	}
+	return &proto.WorkflowStepWhen{Value: value, Equals: equals}, nil
+}
+
+func workflowStepWhenFromProto(value *proto.WorkflowStepWhen) *WorkflowStepWhen {
+	if value == nil {
+		return nil
+	}
+	return &WorkflowStepWhen{
+		Value:  workflowValueFromProto(value.GetValue()),
+		Equals: anyFromValue(value.GetEquals()),
+	}
+}
+
+func workflowValueMapToProto(values map[string]WorkflowValue) (map[string]*proto.WorkflowValue, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]*proto.WorkflowValue, len(values))
+	for key, value := range values {
+		converted, err := workflowValueToProto(value)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", key, err)
+		}
+		out[key] = converted
+	}
+	return out, nil
+}
+
+func workflowValueMapFromProto(values map[string]*proto.WorkflowValue) map[string]WorkflowValue {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]WorkflowValue, len(values))
+	for key, value := range values {
+		out[key] = workflowValueFromProto(value)
+	}
+	return out
+}
+
+func workflowValueToProto(input WorkflowValue) (*proto.WorkflowValue, error) {
+	set := 0
+	if input.LiteralSet {
+		set++
+	}
+	if input.Object != nil {
+		set++
+	}
+	if input.Array != nil {
+		set++
+	}
+	if input.Template != nil {
+		set++
+	}
+	if strings.TrimSpace(input.RunInput) != "" {
+		set++
+	}
+	if strings.TrimSpace(input.SignalPayload) != "" {
+		set++
+	}
+	if input.StepOutput != nil {
+		set++
+	}
+	if set == 0 {
+		return nil, nil
+	}
+	if set != 1 {
+		return nil, fmt.Errorf("must set exactly one value kind")
+	}
+	switch {
+	case input.LiteralSet:
+		literal, err := valueFromAny(input.Literal)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Literal{Literal: literal}}, nil
+	case input.Object != nil:
+		fields, err := workflowValueMapToProto(input.Object)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Object{Object: &proto.WorkflowObject{Fields: fields}}}, nil
+	case input.Array != nil:
+		values := make([]*proto.WorkflowValue, 0, len(input.Array))
+		for i := range input.Array {
+			value, err := workflowValueToProto(input.Array[i])
+			if err != nil {
+				return nil, fmt.Errorf("[%d]: %w", i, err)
+			}
+			values = append(values, value)
+		}
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Array{Array: &proto.WorkflowArray{Values: values}}}, nil
+	case input.Template != nil:
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Template{Template: workflowTextToProto(*input.Template)}}, nil
+	case strings.TrimSpace(input.RunInput) != "":
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_RunInput{RunInput: &proto.WorkflowPathSource{Path: input.RunInput}}}, nil
+	case strings.TrimSpace(input.SignalPayload) != "":
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_SignalPayload{SignalPayload: &proto.WorkflowPathSource{Path: input.SignalPayload}}}, nil
+	case input.StepOutput != nil:
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_StepOutput{StepOutput: &proto.WorkflowStepOutputSource{
+			StepId: input.StepOutput.StepID,
+			Path:   input.StepOutput.Path,
+		}}}, nil
+	default:
+		return nil, nil
+	}
+}
+
+func workflowValueFromProto(value *proto.WorkflowValue) WorkflowValue {
+	if value == nil {
+		return WorkflowValue{}
+	}
+	switch typed := value.GetKind().(type) {
+	case *proto.WorkflowValue_Literal:
+		return WorkflowValue{Literal: anyFromValue(typed.Literal), LiteralSet: true}
+	case *proto.WorkflowValue_Object:
+		var fields map[string]*proto.WorkflowValue
+		if typed.Object != nil {
+			fields = typed.Object.GetFields()
+		}
+		return WorkflowValue{Object: workflowValueMapFromProto(fields)}
+	case *proto.WorkflowValue_Array:
+		var values []*proto.WorkflowValue
+		if typed.Array != nil {
+			values = typed.Array.GetValues()
+		}
+		out := make([]WorkflowValue, 0, len(values))
+		for _, value := range values {
+			out = append(out, workflowValueFromProto(value))
+		}
+		return WorkflowValue{Array: out}
+	case *proto.WorkflowValue_Template:
+		text := workflowTextFromProto(typed.Template)
+		return WorkflowValue{Template: &text}
+	case *proto.WorkflowValue_RunInput:
+		return WorkflowValue{RunInput: workflowPathSourcePath(typed.RunInput)}
+	case *proto.WorkflowValue_SignalPayload:
+		return WorkflowValue{SignalPayload: workflowPathSourcePath(typed.SignalPayload)}
+	case *proto.WorkflowValue_StepOutput:
+		if typed.StepOutput == nil {
+			return WorkflowValue{StepOutput: &WorkflowStepOutputSource{}}
+		}
+		return WorkflowValue{StepOutput: &WorkflowStepOutputSource{
+			StepID: typed.StepOutput.GetStepId(),
+			Path:   typed.StepOutput.GetPath(),
+		}}
+	default:
+		return WorkflowValue{}
+	}
+}
+
+func workflowPathSourcePath(value *proto.WorkflowPathSource) string {
+	if value == nil {
+		return ""
+	}
+	return value.GetPath()
 }
 
 // WorkflowEvent contains fields for constructing a WorkflowEvent.
@@ -947,7 +1072,7 @@ type WorkflowExecutionReference struct {
 	SubjectKind         string
 	DisplayName         string
 	AuthSource          string
-	CallerAppName    string
+	CallerAppName       string
 	RunAs               *WorkflowRunAsSubject
 	SourceDefinitionID  string
 }
@@ -955,7 +1080,7 @@ type WorkflowExecutionReference struct {
 // WorkflowAccessPermission contains fields for an execution
 // reference permission.
 type WorkflowAccessPermission struct {
-	App     string
+	App        string
 	Operations []string
 }
 
@@ -986,7 +1111,7 @@ func workflowExecutionReferenceToProto(input WorkflowExecutionReference) (*proto
 		SubjectKind:         input.SubjectKind,
 		DisplayName:         input.DisplayName,
 		AuthSource:          input.AuthSource,
-		CallerAppName:    input.CallerAppName,
+		CallerAppName:       input.CallerAppName,
 		RunAs:               workflowRunAsSubjectFromInput(input.RunAs),
 		SourceDefinitionId:  input.SourceDefinitionID,
 	}, nil
@@ -1014,7 +1139,7 @@ func workflowExecutionReferenceFromProto(value *proto.WorkflowExecutionReference
 		SubjectKind:         value.GetSubjectKind(),
 		DisplayName:         value.GetDisplayName(),
 		AuthSource:          value.GetAuthSource(),
-		CallerAppName:    value.GetCallerAppName(),
+		CallerAppName:       value.GetCallerAppName(),
 		RunAs:               workflowRunAsSubjectInputPtrFromSubject(value.GetRunAs()),
 		SourceDefinitionID:  value.GetSourceDefinitionId(),
 	}, nil
@@ -1042,13 +1167,6 @@ func timestampFromOptionalTime(value *time.Time) *timestamppb.Timestamp {
 		return nil
 	}
 	return timestamppb.New(*value)
-}
-
-func newOptionalWorkflowOutputDelivery(input *WorkflowOutputDelivery) (*proto.WorkflowOutputDelivery, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return workflowOutputDeliveryToProto(*input)
 }
 
 func newOptionalBoundWorkflowTarget(input *BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {
@@ -1163,103 +1281,4 @@ func workflowAccessPermissionInputsFromPermissions(values []*proto.WorkflowAcces
 		})
 	}
 	return out
-}
-
-func newWorkflowOutputBindings(values []WorkflowOutputBinding) ([]*proto.WorkflowOutputBinding, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowOutputBinding, 0, len(values))
-	for _, value := range values {
-		source, err := workflowOutputValueSourceFromInput(value.Value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, &proto.WorkflowOutputBinding{
-			InputField: value.InputField,
-			Value:      source,
-		})
-	}
-	return out, nil
-}
-
-func workflowOutputBindingInputsFromBindings(values []*proto.WorkflowOutputBinding) []WorkflowOutputBinding {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]WorkflowOutputBinding, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		out = append(out, WorkflowOutputBinding{
-			InputField: value.GetInputField(),
-			Value:      workflowOutputValueSourceInputPtrFromSource(value.GetValue()),
-		})
-	}
-	return out
-}
-
-func workflowOutputValueSourceFromInput(input *WorkflowOutputValueSource) (*proto.WorkflowOutputValueSource, error) {
-	if input == nil {
-		return nil, nil
-	}
-	selected := 0
-	if input.AgentOutput != "" {
-		selected++
-	}
-	if input.SignalPayload != "" {
-		selected++
-	}
-	if input.SignalMetadata != "" {
-		selected++
-	}
-	if input.Literal != nil {
-		selected++
-	}
-	if input.AgentSession != "" {
-		selected++
-	}
-	if selected == 0 {
-		return &proto.WorkflowOutputValueSource{}, nil
-	}
-	if selected > 1 {
-		return nil, fmt.Errorf("workflow output value source must set exactly one source")
-	}
-	switch {
-	case input.AgentOutput != "":
-		return &proto.WorkflowOutputValueSource{Kind: &proto.WorkflowOutputValueSource_AgentOutput{AgentOutput: input.AgentOutput}}, nil
-	case input.SignalPayload != "":
-		return &proto.WorkflowOutputValueSource{Kind: &proto.WorkflowOutputValueSource_SignalPayload{SignalPayload: input.SignalPayload}}, nil
-	case input.SignalMetadata != "":
-		return &proto.WorkflowOutputValueSource{Kind: &proto.WorkflowOutputValueSource_SignalMetadata{SignalMetadata: input.SignalMetadata}}, nil
-	case input.AgentSession != "":
-		return &proto.WorkflowOutputValueSource{Kind: &proto.WorkflowOutputValueSource_AgentSession{AgentSession: input.AgentSession}}, nil
-	default:
-		literal, err := valueFromAny(input.Literal)
-		if err != nil {
-			return nil, err
-		}
-		return &proto.WorkflowOutputValueSource{Kind: &proto.WorkflowOutputValueSource_Literal{Literal: literal}}, nil
-	}
-}
-
-func workflowOutputValueSourceInputPtrFromSource(value *proto.WorkflowOutputValueSource) *WorkflowOutputValueSource {
-	if value == nil {
-		return nil
-	}
-	switch kind := value.GetKind().(type) {
-	case *proto.WorkflowOutputValueSource_AgentOutput:
-		return &WorkflowOutputValueSource{AgentOutput: kind.AgentOutput}
-	case *proto.WorkflowOutputValueSource_SignalPayload:
-		return &WorkflowOutputValueSource{SignalPayload: kind.SignalPayload}
-	case *proto.WorkflowOutputValueSource_SignalMetadata:
-		return &WorkflowOutputValueSource{SignalMetadata: kind.SignalMetadata}
-	case *proto.WorkflowOutputValueSource_AgentSession:
-		return &WorkflowOutputValueSource{AgentSession: kind.AgentSession}
-	case *proto.WorkflowOutputValueSource_Literal:
-		return &WorkflowOutputValueSource{Literal: anyFromValue(kind.Literal)}
-	default:
-		return &WorkflowOutputValueSource{}
-	}
 }

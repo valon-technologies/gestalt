@@ -31,12 +31,21 @@ func ExampleProviderPluginPath(t *testing.T) string {
 	return MustExampleProviderPluginPath()
 }
 
+func ExampleProviderAppPath(t *testing.T) string {
+	t.Helper()
+	return MustExampleProviderAppPath()
+}
+
 func MustExampleProviderPluginPath() string {
 	root, ok := repoRoot()
 	if !ok {
 		panic("runtime.Caller failed")
 	}
 	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-go")
+}
+
+func MustExampleProviderAppPath() string {
+	return MustExampleProviderPluginPath()
 }
 
 func MustSDKTestProviderPath(name string) string {
@@ -96,6 +105,11 @@ func CopyExampleProviderPlugin(t *testing.T, dst string) {
 	if err := os.WriteFile(goModPath, []byte(updated), 0o644); err != nil {
 		t.Fatalf("write %s: %v", goModPath, err)
 	}
+}
+
+func CopyExampleProviderApp(t *testing.T, dst string) {
+	t.Helper()
+	CopyExampleProviderPlugin(t, dst)
 }
 
 func copyDir(src, dst string) error {

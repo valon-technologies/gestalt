@@ -87,9 +87,8 @@ impl AppInvoker {
             return Err(AppInvokerError::MissingInvocationToken);
         }
 
-        let socket_path = std::env::var(ENV_PLUGIN_INVOKER_SOCKET).map_err(|_| {
-            AppInvokerError::Env(format!("{ENV_PLUGIN_INVOKER_SOCKET} is not set"))
-        })?;
+        let socket_path = std::env::var(ENV_PLUGIN_INVOKER_SOCKET)
+            .map_err(|_| AppInvokerError::Env(format!("{ENV_PLUGIN_INVOKER_SOCKET} is not set")))?;
         let relay_token = std::env::var(ENV_PLUGIN_INVOKER_SOCKET_TOKEN).unwrap_or_default();
 
         let channel = match parse_app_invoker_target(&socket_path)? {
@@ -137,7 +136,7 @@ impl AppInvoker {
         let response = self
             .client
             .invoke(pb::AppInvokeRequest {
-                plugin: app.to_string(),
+                app: plugin.to_string(),
                 operation: operation.to_string(),
                 params: Some(serializable_to_struct(params, "params")?),
                 connection: options
@@ -190,8 +189,8 @@ impl AppInvoker {
 
         let response = self
             .client
-            .invoke_graph_ql(pb::PluginInvokeGraphQlRequest {
-                plugin: app.to_string(),
+            .invoke_graph_ql(pb::AppInvokeGraphQlRequest {
+                app: plugin.to_string(),
                 document: document.to_string(),
                 variables: variables
                     .map(|value| serializable_to_optional_struct(value, "variables"))
@@ -257,9 +256,7 @@ enum AppInvokerTarget {
     Tls(String),
 }
 
-fn parse_app_invoker_target(
-    raw_target: &str,
-) -> Result<AppInvokerTarget, AppInvokerError> {
+fn parse_app_invoker_target(raw_target: &str) -> Result<AppInvokerTarget, AppInvokerError> {
     let target = raw_target.trim();
     if target.is_empty() {
         return Err(AppInvokerError::Env(
@@ -306,7 +303,7 @@ fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::AppInvocation
     grants
         .iter()
         .filter_map(|grant| {
-            let app = grant.app.trim();
+            let app = grant.plugin.trim();
             if app.is_empty() {
                 return None;
             }
@@ -326,7 +323,7 @@ fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::AppInvocation
                 .collect();
 
             Some(pb::AppInvocationGrant {
-                plugin: app.to_owned(),
+                app: app.to_owned(),
                 operations,
                 surfaces,
                 all_operations: grant.all_operations,
@@ -353,9 +350,7 @@ fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, AppInvo
         None
     } else {
         Some(MetadataValue::try_from(token.to_string()).map_err(|err| {
-            AppInvokerError::Env(format!(
-                "invalid app invoker relay token metadata: {err}"
-            ))
+            AppInvokerError::Env(format!("invalid app invoker relay token metadata: {err}"))
         })?)
     };
     Ok(RelayTokenInterceptor { header })

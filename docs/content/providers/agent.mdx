@@ -136,7 +136,7 @@ Create a turn inside that session:
   ],
   "toolRefs": [
     {
-      "app": "roadmap",
+      "appName": "roadmap",
       "operation": "sync"
     }
   ],
@@ -199,7 +199,7 @@ cat <<'JSON' | gestalt --format json agent turns create <session-id> --input -
   ],
   "toolRefs": [
     {
-      "app": "roadmap",
+      "appName": "roadmap",
       "operation": "sync"
     }
   ]
@@ -322,9 +322,10 @@ Provider code can invoke agents through the SDK agent manager:
   </Tabs.Tab>
 </Tabs>
 
-## Agent workflow targets
+## Agent workflow steps
 
-Workflow schedules and triggers can target agents directly with `target.agent`:
+Workflow schedules and triggers can include agent turns directly as
+`target.steps[].agent`:
 
 ```yaml
 workflows:
@@ -336,15 +337,17 @@ workflows:
         source: roadmap
         subject: item
       target:
-        agent:
-          provider: simple
-          model: fast
-          prompt: "Summarize the updated roadmap item."
-          toolRefs:
-            - plugin: roadmap
-              operation: items.get
+        steps:
+          - id: summarize
+            agent:
+              provider: simple
+              model: fast
+              prompt: "Summarize the updated roadmap item."
+              tools:
+                - app: roadmap
+                  operation: items.get
       permissions:
-        - plugin: roadmap
+        - app: roadmap
           operations:
             - items.get
 ```
@@ -359,17 +362,22 @@ gestalt workflow triggers create \
   --subject item \
   --target-file - <<'JSON'
 {
-  "agent": {
-    "provider": "simple",
-    "model": "fast",
-    "prompt": "Summarize the updated roadmap item.",
-    "toolRefs": [
-      {
-        "app": "roadmap",
-        "operation": "items.get"
+  "steps": [
+    {
+      "id": "summarize",
+      "agent": {
+        "provider": "simple",
+        "model": "fast",
+        "prompt": "Summarize the updated roadmap item.",
+        "tools": [
+          {
+            "app": "roadmap",
+            "operation": "items.get"
+          }
+        ]
       }
-    ]
-  }
+    }
+  ]
 }
 JSON
 
@@ -460,5 +468,5 @@ raw event `type` and `data` remain the source of truth.
 - [HTTP API](/reference/http-api): session, turn, interaction, and event routes
 - [CLI](/client/cli): `gestalt agent`, `gestalt agent sessions`, and `gestalt agent turns`
 - [Runtime](/providers/runtime): sandboxing hosted agent providers
-- [Workflow](/providers/workflow): schedules, triggers, and `target.agent`
+- [Workflow](/providers/workflow): schedules, triggers, and workflow steps
 - [SDK](/reference/sdk): provider, host, and manager helpers by language

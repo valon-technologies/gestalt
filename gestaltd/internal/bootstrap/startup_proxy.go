@@ -18,52 +18,52 @@ import (
 
 type startupWaitTracker struct {
 	mu            sync.Mutex
-	pluginWaits   map[[2]string]int
+	appWaits      map[[2]string]int
 	workflowWaits map[[2]string]int
 }
 
 func newStartupWaitTracker() *startupWaitTracker {
 	return &startupWaitTracker{
-		pluginWaits:   make(map[[2]string]int),
+		appWaits:      make(map[[2]string]int),
 		workflowWaits: make(map[[2]string]int),
 	}
 }
 
-func (t *startupWaitTracker) beginPluginWait(pluginName, providerName string) (func(), error) {
-	if t == nil || pluginName == "" || providerName == "" {
+func (t *startupWaitTracker) beginAppWait(appName, providerName string) (func(), error) {
+	if t == nil || appName == "" || providerName == "" {
 		return func() {}, nil
 	}
-	pluginKey := [2]string{pluginName, providerName}
-	workflowKey := [2]string{providerName, pluginName}
+	appKey := [2]string{appName, providerName}
+	workflowKey := [2]string{providerName, appName}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.workflowWaits[workflowKey] > 0 {
-		return nil, fmt.Errorf("workflow startup dependency cycle between app %q and workflow provider %q", pluginName, providerName)
+		return nil, fmt.Errorf("workflow startup dependency cycle between app %q and workflow provider %q", appName, providerName)
 	}
-	t.pluginWaits[pluginKey]++
+	t.appWaits[appKey]++
 	return func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		if remaining := t.pluginWaits[pluginKey] - 1; remaining > 0 {
-			t.pluginWaits[pluginKey] = remaining
+		if remaining := t.appWaits[appKey] - 1; remaining > 0 {
+			t.appWaits[appKey] = remaining
 		} else {
-			delete(t.pluginWaits, pluginKey)
+			delete(t.appWaits, appKey)
 		}
 	}, nil
 }
 
-func (t *startupWaitTracker) beginWorkflowWait(providerName, pluginName string) (func(), error) {
-	if t == nil || pluginName == "" || providerName == "" {
+func (t *startupWaitTracker) beginWorkflowWait(providerName, appName string) (func(), error) {
+	if t == nil || appName == "" || providerName == "" {
 		return func() {}, nil
 	}
-	pluginKey := [2]string{pluginName, providerName}
-	workflowKey := [2]string{providerName, pluginName}
+	appKey := [2]string{appName, providerName}
+	workflowKey := [2]string{providerName, appName}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.pluginWaits[pluginKey] > 0 {
-		return nil, fmt.Errorf("workflow startup dependency cycle between app %q and workflow provider %q", pluginName, providerName)
+	if t.appWaits[appKey] > 0 {
+		return nil, fmt.Errorf("workflow startup dependency cycle between app %q and workflow provider %q", appName, providerName)
 	}
 	t.workflowWaits[workflowKey]++
 	return func() {
@@ -417,7 +417,7 @@ func (p *startupWorkflowProviderProxy) await(ctx context.Context) (coreworkflow.
 }
 
 func (p *startupWorkflowProviderProxy) StartRun(ctx context.Context, req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
-	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetAppName(req.Target))
+	provider, err := p.awaitForApp(ctx, startupWorkflowTargetAppName(req.Target))
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +425,7 @@ func (p *startupWorkflowProviderProxy) StartRun(ctx context.Context, req corewor
 }
 
 func (p *startupWorkflowProviderProxy) GetRun(ctx context.Context, req coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -433,7 +433,7 @@ func (p *startupWorkflowProviderProxy) GetRun(ctx context.Context, req coreworkf
 }
 
 func (p *startupWorkflowProviderProxy) ListRuns(ctx context.Context, req coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -441,7 +441,7 @@ func (p *startupWorkflowProviderProxy) ListRuns(ctx context.Context, req corewor
 }
 
 func (p *startupWorkflowProviderProxy) CancelRun(ctx context.Context, req coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +449,7 @@ func (p *startupWorkflowProviderProxy) CancelRun(ctx context.Context, req corewo
 }
 
 func (p *startupWorkflowProviderProxy) SignalRun(ctx context.Context, req coreworkflow.SignalRunRequest) (*coreworkflow.SignalRunResponse, error) {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +457,7 @@ func (p *startupWorkflowProviderProxy) SignalRun(ctx context.Context, req corewo
 }
 
 func (p *startupWorkflowProviderProxy) SignalOrStartRun(ctx context.Context, req coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
-	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetAppName(req.Target))
+	provider, err := p.awaitForApp(ctx, startupWorkflowTargetAppName(req.Target))
 	if err != nil {
 		return nil, err
 	}
@@ -465,7 +465,7 @@ func (p *startupWorkflowProviderProxy) SignalOrStartRun(ctx context.Context, req
 }
 
 func (p *startupWorkflowProviderProxy) UpsertSchedule(ctx context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
-	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetAppName(req.Target))
+	provider, err := p.awaitForApp(ctx, startupWorkflowTargetAppName(req.Target))
 	if err != nil {
 		return nil, err
 	}
@@ -473,7 +473,7 @@ func (p *startupWorkflowProviderProxy) UpsertSchedule(ctx context.Context, req c
 }
 
 func (p *startupWorkflowProviderProxy) GetSchedule(ctx context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +481,7 @@ func (p *startupWorkflowProviderProxy) GetSchedule(ctx context.Context, req core
 }
 
 func (p *startupWorkflowProviderProxy) ListSchedules(ctx context.Context, req coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -489,7 +489,7 @@ func (p *startupWorkflowProviderProxy) ListSchedules(ctx context.Context, req co
 }
 
 func (p *startupWorkflowProviderProxy) DeleteSchedule(ctx context.Context, req coreworkflow.DeleteScheduleRequest) error {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return err
 	}
@@ -497,7 +497,7 @@ func (p *startupWorkflowProviderProxy) DeleteSchedule(ctx context.Context, req c
 }
 
 func (p *startupWorkflowProviderProxy) PauseSchedule(ctx context.Context, req coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -505,7 +505,7 @@ func (p *startupWorkflowProviderProxy) PauseSchedule(ctx context.Context, req co
 }
 
 func (p *startupWorkflowProviderProxy) ResumeSchedule(ctx context.Context, req coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -513,7 +513,7 @@ func (p *startupWorkflowProviderProxy) ResumeSchedule(ctx context.Context, req c
 }
 
 func (p *startupWorkflowProviderProxy) UpsertEventTrigger(ctx context.Context, req coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetAppName(req.Target))
+	provider, err := p.awaitForApp(ctx, startupWorkflowTargetAppName(req.Target))
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +521,7 @@ func (p *startupWorkflowProviderProxy) UpsertEventTrigger(ctx context.Context, r
 }
 
 func (p *startupWorkflowProviderProxy) GetEventTrigger(ctx context.Context, req coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -529,7 +529,7 @@ func (p *startupWorkflowProviderProxy) GetEventTrigger(ctx context.Context, req 
 }
 
 func (p *startupWorkflowProviderProxy) ListEventTriggers(ctx context.Context, req coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -537,7 +537,7 @@ func (p *startupWorkflowProviderProxy) ListEventTriggers(ctx context.Context, re
 }
 
 func (p *startupWorkflowProviderProxy) DeleteEventTrigger(ctx context.Context, req coreworkflow.DeleteEventTriggerRequest) error {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return err
 	}
@@ -545,7 +545,7 @@ func (p *startupWorkflowProviderProxy) DeleteEventTrigger(ctx context.Context, r
 }
 
 func (p *startupWorkflowProviderProxy) PauseEventTrigger(ctx context.Context, req coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -553,7 +553,7 @@ func (p *startupWorkflowProviderProxy) PauseEventTrigger(ctx context.Context, re
 }
 
 func (p *startupWorkflowProviderProxy) ResumeEventTrigger(ctx context.Context, req coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	provider, err := p.awaitForContextPlugin(ctx)
+	provider, err := p.awaitForContextApp(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -561,7 +561,7 @@ func (p *startupWorkflowProviderProxy) ResumeEventTrigger(ctx context.Context, r
 }
 
 func (p *startupWorkflowProviderProxy) PublishEvent(ctx context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
-	provider, err := p.awaitForPlugin(ctx, req.AppName)
+	provider, err := p.awaitForApp(ctx, req.AppName)
 	if err != nil {
 		return nil, err
 	}
@@ -569,9 +569,9 @@ func (p *startupWorkflowProviderProxy) PublishEvent(ctx context.Context, req cor
 }
 
 func (p *startupWorkflowProviderProxy) PutExecutionReference(ctx context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
-	pluginName := ""
+	appName := ""
 	if ref != nil {
-		pluginName = startupWorkflowTargetAppName(ref.Target)
+		appName = startupWorkflowTargetAppName(ref.Target)
 	}
 	select {
 	case <-p.ready:
@@ -585,7 +585,7 @@ func (p *startupWorkflowProviderProxy) PutExecutionReference(ctx context.Context
 		p.mu.Unlock()
 		return cloneStartupWorkflowExecutionRef(stored), nil
 	}
-	provider, err := p.awaitForPlugin(ctx, pluginName)
+	provider, err := p.awaitForApp(ctx, appName)
 	if err != nil {
 		return nil, err
 	}
@@ -682,8 +682,8 @@ func (p *startupWorkflowProviderProxy) Close() error {
 	return p.provider.Close()
 }
 
-func (p *startupWorkflowProviderProxy) awaitForPlugin(ctx context.Context, pluginName string) (coreworkflow.Provider, error) {
-	done, err := p.beginPluginWait(pluginName)
+func (p *startupWorkflowProviderProxy) awaitForApp(ctx context.Context, appName string) (coreworkflow.Provider, error) {
+	done, err := p.beginAppWait(appName)
 	if err != nil {
 		return nil, err
 	}
@@ -691,26 +691,28 @@ func (p *startupWorkflowProviderProxy) awaitForPlugin(ctx context.Context, plugi
 	return p.await(ctx)
 }
 
-func (p *startupWorkflowProviderProxy) awaitForContextPlugin(ctx context.Context) (coreworkflow.Provider, error) {
-	pluginName := strings.TrimSpace(invocation.WorkflowContextString(invocation.WorkflowContextFromContext(ctx), "app"))
-	if pluginName == "" {
+func (p *startupWorkflowProviderProxy) awaitForContextApp(ctx context.Context) (coreworkflow.Provider, error) {
+	appName := strings.TrimSpace(invocation.WorkflowContextString(invocation.WorkflowContextFromContext(ctx), "app"))
+	if appName == "" {
 		return p.await(ctx)
 	}
-	return p.awaitForPlugin(ctx, pluginName)
+	return p.awaitForApp(ctx, appName)
 }
 
 func startupWorkflowTargetAppName(target coreworkflow.Target) string {
-	if target.App == nil {
-		return ""
+	for i := range target.Steps {
+		if target.Steps[i].App != nil {
+			return strings.TrimSpace(target.Steps[i].App.Name)
+		}
 	}
-	return strings.TrimSpace(target.App.AppName)
+	return ""
 }
 
-func (p *startupWorkflowProviderProxy) beginPluginWait(pluginName string) (func(), error) {
+func (p *startupWorkflowProviderProxy) beginAppWait(appName string) (func(), error) {
 	if p == nil || p.tracker == nil {
 		return func() {}, nil
 	}
-	return p.tracker.beginPluginWait(pluginName, p.providerName)
+	return p.tracker.beginAppWait(appName, p.providerName)
 }
 
 func (p *startupWorkflowProviderProxy) pendingExecutionRefsForSubject(subjectID string) []*coreworkflow.ExecutionReference {
@@ -757,20 +759,44 @@ func cloneStartupWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *cor
 }
 
 func cloneStartupWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
-	clone := coreworkflow.Target{}
-	if target.App != nil {
-		appTarget := *target.App
-		appTarget.Input = maps.Clone(appTarget.Input)
-		clone.App = &appTarget
-	}
-	if target.Agent != nil {
-		agent := *target.Agent
-		agent.Messages = slices.Clone(agent.Messages)
-		agent.ToolRefs = slices.Clone(agent.ToolRefs)
-		agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
-		agent.Metadata = maps.Clone(agent.Metadata)
-		agent.ModelOptions = maps.Clone(agent.ModelOptions)
-		clone.Agent = &agent
+	clone := coreworkflow.Target{Steps: slices.Clone(target.Steps)}
+	for i := range clone.Steps {
+		step := &clone.Steps[i]
+		step.Inputs = cloneStartupWorkflowValues(step.Inputs)
+		if step.App != nil {
+			app := *step.App
+			app.Input = cloneStartupWorkflowValue(app.Input)
+			step.App = &app
+		}
+		if step.Agent != nil {
+			agent := *step.Agent
+			agent.Messages = slices.Clone(agent.Messages)
+			agent.ToolRefs = slices.Clone(agent.ToolRefs)
+			agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
+			agent.ModelOptions = maps.Clone(agent.ModelOptions)
+			step.Agent = &agent
+		}
+		if step.When != nil {
+			when := *step.When
+			when.Value = cloneStartupWorkflowValue(when.Value)
+			step.When = &when
+		}
+		step.Metadata = maps.Clone(step.Metadata)
 	}
 	return clone
+}
+
+func cloneStartupWorkflowValues(values map[string]coreworkflow.Value) map[string]coreworkflow.Value {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]coreworkflow.Value, len(values))
+	for key := range values {
+		out[key] = cloneStartupWorkflowValue(values[key])
+	}
+	return out
+}
+
+func cloneStartupWorkflowValue(value coreworkflow.Value) coreworkflow.Value {
+	return coreworkflow.CloneValue(value)
 }

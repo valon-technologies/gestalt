@@ -13,7 +13,7 @@ The supported import surface is the top-level :mod:`gestalt` package:
 
 .. code-block:: python
 
-   from gestalt import Model, Plugin, Cache, IndexedDB, S3
+   from gestalt import Model, App, Cache, IndexedDB, S3
 
 This reference focuses on provider-facing classes, helpers, clients, and native
 input models. Transport serialization details are intentionally omitted.
@@ -60,7 +60,7 @@ Core authoring types
 
 .. autoexception:: Error
 
-.. _python-plugin-authoring:
+.. _python-app-authoring:
 
 App authoring
 ----------------
@@ -68,7 +68,7 @@ App authoring
 .. autosummary::
    :nosignatures:
 
-   Plugin
+   App
    operation
    session_catalog
    post_connect
@@ -83,7 +83,7 @@ App authoring
    CatalogParameter
    OperationAnnotations
 
-.. autoclass:: Plugin
+.. autoclass:: App
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
@@ -128,17 +128,21 @@ non-aliased message copies.
 .. autosummary::
    :nosignatures:
 
-   BoundWorkflowAppTarget
-   BoundWorkflowAgentTarget
    BoundWorkflowTarget
+   WorkflowStep
+   WorkflowStepAppCall
+   WorkflowStepAgentTurn
+   WorkflowValue
    BoundWorkflowRun
    BoundWorkflowSchedule
    BoundWorkflowEventTrigger
    WorkflowExecutionReference
-   bound_workflow_plugin_target
-   bound_workflow_agent_target
    bound_workflow_target
    bound_workflow_target_from_target
+   workflow_step
+   workflow_step_app_call
+   workflow_step_agent_turn
+   workflow_value
    workflow_event
    workflow_event_from_event
    workflow_signal
@@ -154,11 +158,15 @@ non-aliased message copies.
    workflow_execution_reference
    workflow_execution_reference_from_reference
 
-.. autoclass:: BoundWorkflowAppTarget
-
-.. autoclass:: BoundWorkflowAgentTarget
-
 .. autoclass:: BoundWorkflowTarget
+
+.. autoclass:: WorkflowStep
+
+.. autoclass:: WorkflowStepAppCall
+
+.. autoclass:: WorkflowStepAgentTurn
+
+.. autoclass:: WorkflowValue
 
 .. autoclass:: BoundWorkflowRun
 
@@ -168,13 +176,17 @@ non-aliased message copies.
 
 .. autoclass:: WorkflowExecutionReference
 
-.. autofunction:: bound_workflow_plugin_target
-
-.. autofunction:: bound_workflow_agent_target
-
 .. autofunction:: bound_workflow_target
 
 .. autofunction:: bound_workflow_target_from_target
+
+.. autofunction:: workflow_step
+
+.. autofunction:: workflow_step_app_call
+
+.. autofunction:: workflow_step_agent_turn
+
+.. autofunction:: workflow_value
 
 .. autofunction:: workflow_event
 

@@ -6,12 +6,12 @@ providers, host-service clients, and provider-owned telemetry.
 
 .. code-block:: python
 
-    from gestalt import Model, Plugin, operation
+    from gestalt import Model, App, operation
 
     class SearchInput(Model):
         query: str
 
-    app = Plugin("search")
+    app = App("search")
 
     @app.operation(title="Search")
     def search(params: SearchInput):
@@ -161,7 +161,7 @@ _AUTHORIZATION_HELPER_EXPORTS = (
     "AUTHORIZATION_SUBJECT_TYPE_SUBJECT",
 )
 
-_PLUGIN_RUNTIME_AUTHORED_EXPORTS = (
+_APP_RUNTIME_AUTHORED_EXPORTS = (
     "GetAppRuntimeSessionRequest",
     "GetAppRuntimeSupportRequest",
     "HostedApp",
@@ -184,9 +184,7 @@ _PLUGIN_RUNTIME_AUTHORED_EXPORTS = (
 )
 
 _WORKFLOW_AUTHORED_EXPORTS = (
-    "BoundWorkflowAgentTarget",
     "BoundWorkflowEventTrigger",
-    "BoundWorkflowAppTarget",
     "BoundWorkflowRun",
     "BoundWorkflowSchedule",
     "BoundWorkflowTarget",
@@ -255,11 +253,14 @@ _WORKFLOW_AUTHORED_EXPORTS = (
     "WorkflowManagerUpdateDefinition",
     "WorkflowManagerUpdateEventTrigger",
     "WorkflowManagerUpdateSchedule",
-    "WorkflowAgentStep",
-    "WorkflowAgentStepWhen",
-    "WorkflowOutputBinding",
-    "WorkflowOutputDelivery",
-    "WorkflowOutputValueSource",
+    "WorkflowAgentMessage",
+    "WorkflowStep",
+    "WorkflowStepAgentTurn",
+    "WorkflowStepOutputSource",
+    "WorkflowStepAppCall",
+    "WorkflowStepWhen",
+    "WorkflowText",
+    "WorkflowValue",
     "WorkflowRunAsSubject",
     "WorkflowRunTrigger",
     "WorkflowScheduleTrigger",
@@ -275,16 +276,12 @@ _WORKFLOW_AUTHORED_EXPORTS = (
     "WorkflowManagerRun",
     "WorkflowManagerRunSignal",
     "WorkflowManagerSchedule",
-    "bound_workflow_agent_target",
-    "bound_workflow_agent_target_input_from_target",
     "bound_workflow_definition",
     "bound_workflow_definition_from_definition",
     "bound_workflow_definition_input_from_definition",
     "bound_workflow_event_trigger",
     "bound_workflow_event_trigger_from_trigger",
     "bound_workflow_event_trigger_input_from_trigger",
-    "bound_workflow_plugin_target",
-    "bound_workflow_plugin_target_input_from_target",
     "bound_workflow_run",
     "bound_workflow_run_from_run",
     "bound_workflow_run_input_from_run",
@@ -307,16 +304,8 @@ _WORKFLOW_AUTHORED_EXPORTS = (
     "workflow_execution_reference",
     "workflow_execution_reference_from_reference",
     "workflow_execution_reference_input_from_reference",
-    "workflow_agent_step",
-    "workflow_agent_step_input_from_step",
-    "workflow_agent_step_when",
-    "workflow_agent_step_when_input_from_when",
-    "workflow_output_binding",
-    "workflow_output_binding_input_from_binding",
-    "workflow_output_delivery",
-    "workflow_output_delivery_input_from_delivery",
-    "workflow_output_value_source",
-    "workflow_output_value_source_input_from_source",
+    "workflow_agent_message",
+    "workflow_agent_message_input_from_message",
     "workflow_run_status_name",
     "workflow_run_as_subject",
     "workflow_run_as_subject_input_from_subject",
@@ -327,6 +316,20 @@ _WORKFLOW_AUTHORED_EXPORTS = (
     "workflow_signal",
     "workflow_signal_from_signal",
     "workflow_signal_input_from_signal",
+    "workflow_step",
+    "workflow_step_agent_turn",
+    "workflow_step_agent_turn_input_from_turn",
+    "workflow_step_input_from_step",
+    "workflow_step_output_source",
+    "workflow_step_output_source_input_from_source",
+    "workflow_step_app_call",
+    "workflow_step_app_call_input_from_call",
+    "workflow_step_when",
+    "workflow_step_when_input_from_when",
+    "workflow_text",
+    "workflow_text_input_from_text",
+    "workflow_value",
+    "workflow_value_input_from_value",
 )
 
 _LAZY_EXPORTS = {
@@ -389,6 +392,7 @@ _LAZY_EXPORTS = {
     "ObjectStore": ("._indexeddb", "ObjectStore"),
     "ObjectStoreSchema": ("._indexeddb", "ObjectStoreSchema"),
     "OperationAnnotations": ("._catalog", "OperationAnnotations"),
+    "App": ("._app", "App"),
     "Plugin": ("._app", "Plugin"),
     "AppInvoker": ("._invoker", "AppInvoker"),
     "AppProvider": ("._providers", "AppProvider"),
@@ -446,7 +450,7 @@ _LAZY_EXPORTS.update(
     {name: ("._authorization", name) for name in _AUTHORIZATION_HELPER_EXPORTS}
 )
 _LAZY_EXPORTS.update(
-    {name: ("._appruntime", name) for name in _PLUGIN_RUNTIME_AUTHORED_EXPORTS}
+    {name: ("._appruntime", name) for name in _APP_RUNTIME_AUTHORED_EXPORTS}
 )
 _LAZY_EXPORTS.update(
     {name: ("._workflow", name) for name in _WORKFLOW_AUTHORED_EXPORTS}
@@ -478,7 +482,7 @@ __all__ = [
     *_AGENT_HELPER_EXPORTS,
     *_AUTHENTICATION_AUTHORED_EXPORTS,
     *_AUTHORIZATION_HELPER_EXPORTS,
-    *_PLUGIN_RUNTIME_AUTHORED_EXPORTS,
+    *_APP_RUNTIME_AUTHORED_EXPORTS,
     *_WORKFLOW_AUTHORED_EXPORTS,
     "AgentHost",
     "AgentManager",
@@ -532,6 +536,7 @@ __all__ = [
     "ObjectStore",
     "ObjectStoreSchema",
     "OperationAnnotations",
+    "App",
     "Plugin",
     "AppInvoker",
     "AppProvider",

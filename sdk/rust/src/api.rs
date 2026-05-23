@@ -87,8 +87,8 @@ pub struct Request {
     /// Idempotency key supplied by the host.
     pub idempotency_key: String,
     /// Workflow callback metadata uses a JSON-style lowerCamelCase object
-    /// such as `runId`, `target.app.pluginName`, `trigger.scheduleId`, and
-    /// `trigger.event.specVersion`.
+    /// such as `runId`, `target.steps[0].app.name`,
+    /// `trigger.scheduleId`, and `trigger.event.specVersion`.
     pub workflow: serde_json::Map<String, serde_json::Value>,
     /// Agent tool refs granted to the current operation request.
     pub tool_refs: Vec<AgentToolRef>,
@@ -144,10 +144,8 @@ impl Request {
         &self.invocation_token
     }
 
-    /// Creates an app invoker using this request's invocation token.
-    pub async fn invoker(
-        &self,
-    ) -> std::result::Result<crate::AppInvoker, crate::AppInvokerError> {
+    /// Creates a app invoker using this request's invocation token.
+    pub async fn invoker(&self) -> std::result::Result<crate::AppInvoker, crate::AppInvokerError> {
         crate::AppInvoker::connect(self.invocation_token()).await
     }
 

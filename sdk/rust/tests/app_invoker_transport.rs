@@ -9,14 +9,12 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use generated::v1::app_invoker_server::{
-    AppInvoker as ProtoAppInvoker, AppInvokerServer,
-};
+use generated::v1::app_invoker_server::{AppInvoker as ProtoAppInvoker, AppInvokerServer};
 use generated::v1::{
-    ExchangeInvocationTokenRequest, ExchangeInvocationTokenResponse, OperationResult,
-    AppInvocationGrant, PluginInvokeGraphQlRequest, AppInvokeRequest,
+    AppInvocationGrant, AppInvokeGraphQlRequest, AppInvokeRequest, ExchangeInvocationTokenRequest,
+    ExchangeInvocationTokenResponse, OperationResult,
 };
-use gestalt::{InvocationGrant, InvokeOptions, AppInvoker, Request};
+use gestalt::{AppInvoker, InvocationGrant, InvokeOptions, Request};
 use prost_types::Struct;
 use serde::Serialize;
 use tokio::net::{TcpListener, UnixListener};
@@ -127,7 +125,7 @@ impl ProtoAppInvoker for TestAppInvokerServer {
             status: 207,
             body: serde_json::json!({
                 "invocation_token": request.invocation_token,
-                "app": request.plugin,
+                "app": request.app,
                 "operation": request.operation,
                 "params": request.params.map(struct_to_json).unwrap_or_else(|| serde_json::json!({})),
                 "connection": request.connection,
@@ -140,7 +138,7 @@ impl ProtoAppInvoker for TestAppInvokerServer {
 
     async fn invoke_graph_ql(
         &self,
-        request: GrpcRequest<PluginInvokeGraphQlRequest>,
+        request: GrpcRequest<AppInvokeGraphQlRequest>,
     ) -> std::result::Result<GrpcResponse<OperationResult>, Status> {
         let request = request.into_inner();
         self.seen_graphql_invokes
@@ -160,7 +158,7 @@ impl ProtoAppInvoker for TestAppInvokerServer {
             status: 208,
             body: serde_json::json!({
                 "invocation_token": request.invocation_token,
-                "app": request.plugin,
+                "app": request.app,
                 "document": request.document,
                 "variables": request.variables.map(struct_to_json).unwrap_or_else(|| serde_json::json!({})),
                 "connection": request.connection,
@@ -511,19 +509,19 @@ async fn app_invoker_exchanges_invocation_tokens_with_grants_and_ttl() {
             parent_invocation_token: "parent-token-123".to_string(),
             grants: vec![
                 AppInvocationGrant {
-                    plugin: "github".to_string(),
+                    app: "github".to_string(),
                     operations: vec!["get_issue".to_string(), "list_labels".to_string()],
                     surfaces: Vec::new(),
                     all_operations: false,
                 },
                 AppInvocationGrant {
-                    plugin: "linear".to_string(),
+                    app: "linear".to_string(),
                     operations: Vec::new(),
                     surfaces: vec!["graphql".to_string(), "mcp".to_string()],
                     all_operations: false,
                 },
                 AppInvocationGrant {
-                    plugin: "google_sheets".to_string(),
+                    app: "google_sheets".to_string(),
                     operations: Vec::new(),
                     surfaces: Vec::new(),
                     all_operations: true,
