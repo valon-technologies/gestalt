@@ -211,6 +211,18 @@ export type WorkflowStepActionKind =
   | { case: "agent"; value: WorkflowStepAgentTurn }
   | { case: undefined; value?: undefined };
 
+function workflowStepAppAction(
+  action: WorkflowStepActionKind | undefined,
+): WorkflowStepAppCall | undefined {
+  return action?.case === "app" ? action.value : undefined;
+}
+
+function workflowStepAgentAction(
+  action: WorkflowStepActionKind | undefined,
+): WorkflowStepAgentTurn | undefined {
+  return action?.case === "agent" ? action.value : undefined;
+}
+
 export interface WorkflowStep {
   id?: string | undefined;
   inputs?: Record<string, WorkflowValue> | undefined;
@@ -865,12 +877,12 @@ export function workflowStepWhenInputFromWhen(
 
 /** Creates one bound workflow step from native input. */
 export function workflowStep(input: WorkflowStep = {}): WorkflowStep {
-  const app = input.app ?? (input.action?.case === "app" ? input.action.value : undefined);
-  const agent = input.agent ?? (input.action?.case === "agent" ? input.action.value : undefined);
+  const app = input.app ?? workflowStepAppAction(input.action);
+  const agent = input.agent ?? workflowStepAgentAction(input.action);
   if (app !== undefined && agent !== undefined) {
     throw new Error("workflow step must set either app or agent");
   }
-  const action = app !== undefined
+  const action: WorkflowStepActionKind = app !== undefined
     ? { case: "app" as const, value: workflowStepAppCall(app) }
     : agent !== undefined
       ? { case: "agent" as const, value: workflowStepAgentTurn(agent) }
@@ -883,8 +895,8 @@ export function workflowStep(input: WorkflowStep = {}): WorkflowStep {
         workflowValue(value),
       ]),
     ),
-    app: action.case === "app" ? action.value : undefined,
-    agent: action.case === "agent" ? action.value : undefined,
+    app: workflowStepAppAction(action),
+    agent: workflowStepAgentAction(action),
     action,
     when: input.when === undefined ? undefined : workflowStepWhen(input.when),
     timeoutSeconds: input.timeoutSeconds ?? 0,
@@ -900,8 +912,8 @@ export function workflowStepInputFromStep(
     return undefined;
   }
   const action = input.action;
-  const app = input.app ?? (action?.case === "app" ? action.value : undefined);
-  const agent = input.agent ?? (action?.case === "agent" ? action.value : undefined);
+  const app = input.app ?? workflowStepAppAction(action);
+  const agent = input.agent ?? workflowStepAgentAction(action);
   return {
     id: input.id,
     inputs: Object.fromEntries(
@@ -2285,7 +2297,7 @@ export function workflowStepToProto(input: WorkflowStep): ProtoWorkflowStep {
 }
 
 export function workflowStepFromProto(input: ProtoWorkflowStep): WorkflowStep {
-  const action = input.action.case === "app"
+  const action: WorkflowStepActionKind = input.action.case === "app"
     ? { case: "app" as const, value: workflowStepAppCallFromProto(input.action.value)! }
     : input.action.case === "agent"
       ? { case: "agent" as const, value: workflowStepAgentTurnFromProto(input.action.value)! }
@@ -2298,8 +2310,8 @@ export function workflowStepFromProto(input: ProtoWorkflowStep): WorkflowStep {
         workflowValueFromProto(value)!,
       ]),
     ),
-    app: action.case === "app" ? action.value : undefined,
-    agent: action.case === "agent" ? action.value : undefined,
+    app: workflowStepAppAction(action),
+    agent: workflowStepAgentAction(action),
     action,
     when: workflowStepWhenFromProto(input.when),
     timeoutSeconds: input.timeoutSeconds,

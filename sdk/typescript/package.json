@@ -34,8 +34,9 @@
     "docs:build:deploy": "TYPEDOC_OUT_DIR=../../docs/public/api/typescript bun run docs:build",
     "docs:check": "bun run docs:lint && bun run docs:build",
     "typecheck": "tsc --noEmit",
+    "typecheck:loose": "tsc --noEmit --strict false --exactOptionalPropertyTypes false --noUncheckedIndexedAccess false",
     "test": "bun test --max-concurrency 1",
-    "check": "bun run test && tsc --noEmit"
+    "check": "bun run test && bun run typecheck && bun run typecheck:loose"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.11.0",
