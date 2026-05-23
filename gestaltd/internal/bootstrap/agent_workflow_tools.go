@@ -61,7 +61,7 @@ var workflowSystemToolDescriptors = map[string]workflowSystemToolDescriptor{
 	workflowSystemToolDefinitionsCreate: {
 		Operation:        workflowSystemToolDefinitionsCreate,
 		Name:             "workflow_definitions_create",
-		Description:      "Create a reusable workflow definition for a delegated target.",
+		Description:      "Create a reusable workflow definition from explicit workflow steps.",
 		ParametersSchema: workflowSystemToolCreateDefinitionSchema(),
 	},
 	workflowSystemToolDefinitionsGet: {
@@ -85,7 +85,7 @@ var workflowSystemToolDescriptors = map[string]workflowSystemToolDescriptor{
 	workflowSystemToolSchedulesCreate: {
 		Operation:        workflowSystemToolSchedulesCreate,
 		Name:             "workflow_schedules_create",
-		Description:      "Create a recurring workflow schedule for a delegated target or workflow definition.",
+		Description:      "Create a recurring workflow schedule from explicit workflow steps or a workflow definition.",
 		ParametersSchema: workflowSystemToolCreateScheduleSchema(),
 	},
 	workflowSystemToolSchedulesList: {
@@ -127,7 +127,7 @@ var workflowSystemToolDescriptors = map[string]workflowSystemToolDescriptor{
 	workflowSystemToolRunsStart: {
 		Operation:        workflowSystemToolRunsStart,
 		Name:             "workflow_runs_start",
-		Description:      "Start a one-off workflow run for a delegated workflow target or an existing workflow definition.",
+		Description:      "Start a one-off workflow run from explicit workflow steps or an existing workflow definition.",
 		ParametersSchema: workflowSystemToolStartRunSchema(),
 	},
 	workflowSystemToolRunsList: {
