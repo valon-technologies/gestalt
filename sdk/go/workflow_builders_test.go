@@ -228,7 +228,7 @@ func TestNewBoundWorkflowAgentStepCopiesNativeFields(t *testing.T) {
 	diagnosis := target.GetSteps()[0]
 	agent := diagnosis.GetAgent()
 	if agent.GetProvider() != "agent" || agent.GetModel() != "gpt-5.5" {
-		t.Fatalf("agent target = %q/%q, want agent/gpt-5.5", agent.GetProvider(), agent.GetModel())
+		t.Fatalf("agent step = %q/%q, want agent/gpt-5.5", agent.GetProvider(), agent.GetModel())
 	}
 	if got := agent.GetResponseSchema().AsMap()["type"]; got != "object" {
 		t.Fatalf("response schema type = %#v, want object", got)

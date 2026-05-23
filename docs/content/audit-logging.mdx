@@ -91,7 +91,7 @@ Non-invocation audit events use explicit operation names:
 - `api_token.revoke_all`
 
 Workflow-manager audit events use `source=workflow_manager`. Their `provider`
-field is the selected workflow backend, not the app or agent target. They
+field is the selected workflow backend, not an app or agent step. They
 emit one audit record per backend for fanout event publishes.
 
 - `workflow.definition.create`

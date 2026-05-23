@@ -924,7 +924,7 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	}
 	createdStep := requireWorkflowAgentStep(t, created.Target)
 	if createdStep.Agent.ProviderName != "managed" || createdStep.Agent.Model != "deep" {
-		t.Fatalf("created agent target = %#v", createdStep.Agent)
+		t.Fatalf("created agent step = %#v", createdStep.Agent)
 	}
 	if len(createdStep.Agent.ToolRefs) != 1 || createdStep.Agent.ToolRefs[0].App != "roadmap" || createdStep.Agent.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("created agent tools = %#v", createdStep.Agent.ToolRefs)
@@ -1041,7 +1041,7 @@ func TestWorkflowScheduleAgentTargetPreservesWorkflowSystemToolRefs(t *testing.T
 	}
 	createdStep := requireWorkflowAgentStep(t, created.Target)
 	if len(createdStep.Agent.ToolRefs) != 2 {
-		t.Fatalf("created agent target = %#v", createdStep.Agent)
+		t.Fatalf("created agent step = %#v", createdStep.Agent)
 	}
 	if createdStep.Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow || createdStep.Agent.ToolRefs[0].Operation != "schedules.list" {
 		t.Fatalf("created system tool ref = %#v", createdStep.Agent.ToolRefs[0])
@@ -1055,7 +1055,7 @@ func TestWorkflowScheduleAgentTargetPreservesWorkflowSystemToolRefs(t *testing.T
 	storedTarget := provider.upsertReqs[0].Target
 	storedStep := requireCoreWorkflowAgentStep(t, storedTarget)
 	if len(storedStep.Agent.ToolRefs) != 2 {
-		t.Fatalf("stored agent target = %#v", storedTarget)
+		t.Fatalf("stored agent step = %#v", storedTarget)
 	}
 	if storedStep.Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow || storedStep.Agent.ToolRefs[0].Operation != "schedules.list" {
 		t.Fatalf("stored system tool ref = %#v", storedStep.Agent.ToolRefs[0])
@@ -2588,7 +2588,7 @@ func TestWorkflowEventTriggerAgentThenAppStepsCreateAndList(t *testing.T) {
 	}
 	createdStep := requireWorkflowAgentStep(t, created.Target)
 	if createdStep.Agent.ProviderName != "managed" || createdStep.Agent.Model != "deep" {
-		t.Fatalf("created agent target = %#v", createdStep.Agent)
+		t.Fatalf("created agent step = %#v", createdStep.Agent)
 	}
 	createdApp := requireWorkflowAppTarget(t, created.Target)
 	if createdApp.Name != "roadmap" || createdApp.Operation != "sync" {

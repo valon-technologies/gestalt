@@ -391,10 +391,10 @@ func TestWorkflowSystemToolStartRunSchemaMatchesV1Contract(t *testing.T) {
 		t.Fatalf("target properties = %#v", target["properties"])
 	}
 	if _, ok := targetTargetProps["app"]; ok {
-		t.Fatalf("runs.start target schema exposes app target: %#v", targetTargetProps)
+		t.Fatalf("runs.start target schema exposes top-level app field: %#v", targetTargetProps)
 	}
 	if _, ok := targetTargetProps["agent"]; ok {
-		t.Fatalf("runs.start target schema exposes agent target: %#v", targetTargetProps)
+		t.Fatalf("runs.start target schema exposes top-level agent field: %#v", targetTargetProps)
 	}
 	if _, ok := targetTargetProps["steps"]; !ok {
 		t.Fatalf("runs.start target schema missing steps: %#v", targetTargetProps)
