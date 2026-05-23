@@ -1,8 +1,8 @@
 package agent
 
 type ResolveToolsRequest struct {
-	ToolRefs         []ToolRef
-	ToolSource       ToolSourceMode
+	ToolRefs      []ToolRef
+	ToolSource    ToolSourceMode
 	CallerAppName string
 }
 
