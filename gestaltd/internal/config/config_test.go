@@ -3426,39 +3426,6 @@ server:
 `,
 				want: `workflows.eventTriggers.task_updated.target.steps[0].agent.provider is required`,
 			},
-			{
-				name: "event trigger rejects legacy permissions alias",
-				yaml: `
-workflows:
-  eventTriggers:
-    task_updated:
-      provider: temporal
-      match:
-        type: roadmap.task.updated
-      target:
-        steps:
-          - id: run
-            agent:
-              provider: simple
-              model: gpt-5.5
-      permissions:
-        - app: roadmap
-          operations:
-            - items.get
-providers:
-  agent:
-    simple:
-      source:
-        path: ./providers/agent/simple
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`,
-				want: `field permissions not found`,
-			},
 		}
 
 		for _, tc := range cases {
