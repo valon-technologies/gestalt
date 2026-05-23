@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -382,7 +383,7 @@ func TestRemoteAgentListSessionsForwardsBoundedSummaryRequest(t *testing.T) {
 	}
 
 	sessions, err := agent.ListSessions(context.Background(), coreagent.ListSessionsRequest{
-		Subject:     coreagent.SubjectContext{SubjectID: "user-1"},
+		Subject:     core.RunAsSubject{SubjectID: "user-1"},
 		SessionIDs:  []string{"session-a", "session-b"},
 		State:       coreagent.SessionStateActive,
 		Limit:       25,
@@ -431,7 +432,7 @@ func TestRemoteAgentListTurnsForwardsBoundedSummaryRequest(t *testing.T) {
 
 	turns, err := agent.ListTurns(context.Background(), coreagent.ListTurnsRequest{
 		SessionID:   "session-1",
-		Subject:     coreagent.SubjectContext{SubjectID: "user-1"},
+		Subject:     core.RunAsSubject{SubjectID: "user-1"},
 		TurnIDs:     []string{"turn-1"},
 		Status:      coreagent.ExecutionStatusSucceeded,
 		Limit:       10,

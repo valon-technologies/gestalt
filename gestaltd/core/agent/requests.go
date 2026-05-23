@@ -1,5 +1,7 @@
 package agent
 
+import "github.com/valon-technologies/gestalt/server/core"
+
 type ResolveToolsRequest struct {
 	ToolRefs      []ToolRef
 	ToolSource    ToolSourceMode
@@ -13,7 +15,7 @@ type CreateSessionRequest struct {
 	ClientRef         string
 	Metadata          map[string]any
 	CreatedBy         Actor
-	Subject           SubjectContext
+	Subject           core.RunAsSubject
 	SessionStart      *SessionStartConfig
 	Workspace         *Workspace
 	PreparedWorkspace *PreparedWorkspace
@@ -21,11 +23,11 @@ type CreateSessionRequest struct {
 
 type GetSessionRequest struct {
 	SessionID string
-	Subject   SubjectContext
+	Subject   core.RunAsSubject
 }
 
 type ListSessionsRequest struct {
-	Subject    SubjectContext
+	Subject    core.RunAsSubject
 	SessionIDs []string
 	State      SessionState
 	// Limit asks providers to apply the cap before returning.
@@ -42,7 +44,7 @@ type UpdateSessionRequest struct {
 	ClientRef string
 	State     SessionState
 	Metadata  map[string]any
-	Subject   SubjectContext
+	Subject   core.RunAsSubject
 }
 
 type CreateTurnRequest struct {
@@ -61,18 +63,18 @@ type CreateTurnRequest struct {
 	TimeoutSeconds    int
 	CreatedBy         Actor
 	ExecutionRef      string
-	Subject           SubjectContext
+	Subject           core.RunAsSubject
 	RunGrant          string
 }
 
 type GetTurnRequest struct {
 	TurnID  string
-	Subject SubjectContext
+	Subject core.RunAsSubject
 }
 
 type ListTurnsRequest struct {
 	SessionID string
-	Subject   SubjectContext
+	Subject   core.RunAsSubject
 	TurnIDs   []string
 	Status    ExecutionStatus
 	// Limit asks providers to apply the cap before returning.
@@ -86,32 +88,32 @@ type ListTurnsRequest struct {
 type CancelTurnRequest struct {
 	TurnID  string
 	Reason  string
-	Subject SubjectContext
+	Subject core.RunAsSubject
 }
 
 type ListTurnEventsRequest struct {
 	TurnID   string
 	AfterSeq int64
 	Limit    int
-	Subject  SubjectContext
+	Subject  core.RunAsSubject
 }
 
 type GetCapabilitiesRequest struct{}
 
 type GetInteractionRequest struct {
 	InteractionID string
-	Subject       SubjectContext
+	Subject       core.RunAsSubject
 }
 
 type ListInteractionsRequest struct {
 	TurnID  string
-	Subject SubjectContext
+	Subject core.RunAsSubject
 }
 
 type ResolveInteractionRequest struct {
 	InteractionID string
 	Resolution    map[string]any
-	Subject       SubjectContext
+	Subject       core.RunAsSubject
 }
 
 type ExecuteToolRequest struct {

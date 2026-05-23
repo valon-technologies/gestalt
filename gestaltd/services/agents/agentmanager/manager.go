@@ -2800,7 +2800,7 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 		SearchText:       agentToolSearchMetadataText(projectedCandidate),
 		InputSchemaJSON:  agentToolInputSchemaJSON(projectedOperation),
 		OutputSchemaJSON: agentToolOutputSchemaJSON(projectedOperation),
-		Annotations:      capabilityAnnotationsFromCatalog(projectedOperation.Annotations),
+		Annotations:      core.CapabilityAnnotationsFromCatalog(projectedOperation.Annotations),
 		Ref:              ref,
 		Target:           target,
 		Hidden:           !catalog.OperationVisibleByDefault(projectedOperation),
@@ -2847,15 +2847,6 @@ func (m *Manager) listedUnavailableAgentPluginTool(candidate agentToolUnavailabl
 
 func agentToolBoolPtr(value bool) *bool {
 	return &value
-}
-
-func capabilityAnnotationsFromCatalog(value catalog.CapabilityAnnotations) core.CapabilityAnnotations {
-	return core.CapabilityAnnotations{
-		ReadOnlyHint:    value.ReadOnlyHint,
-		IdempotentHint:  value.IdempotentHint,
-		DestructiveHint: value.DestructiveHint,
-		OpenWorldHint:   value.OpenWorldHint,
-	}
 }
 
 func agentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
@@ -3800,12 +3791,12 @@ func agentActorFromPrincipal(p *principal.Principal) coreagent.Actor {
 	}
 }
 
-func agentSubjectFromPrincipal(p *principal.Principal) coreagent.SubjectContext {
+func agentSubjectFromPrincipal(p *principal.Principal) core.RunAsSubject {
 	p = principal.Canonicalized(p)
 	if p == nil {
-		return coreagent.SubjectContext{}
+		return core.RunAsSubject{}
 	}
-	return coreagent.SubjectContext{
+	return core.RunAsSubject{
 		SubjectID:           strings.TrimSpace(p.SubjectID),
 		SubjectKind:         string(p.Kind),
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),

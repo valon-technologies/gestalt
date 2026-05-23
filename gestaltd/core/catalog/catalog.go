@@ -142,24 +142,18 @@ type CapabilityAnnotations struct {
 }
 
 func CloneCapabilityAnnotations(a CapabilityAnnotations) CapabilityAnnotations {
-	out := CapabilityAnnotations{}
-	if a.ReadOnlyHint != nil {
-		value := *a.ReadOnlyHint
-		out.ReadOnlyHint = &value
+	readOnly, idempotent, destructive, openWorld := CloneHintPointerFields(
+		a.ReadOnlyHint,
+		a.IdempotentHint,
+		a.DestructiveHint,
+		a.OpenWorldHint,
+	)
+	return CapabilityAnnotations{
+		ReadOnlyHint:    readOnly,
+		IdempotentHint:  idempotent,
+		DestructiveHint: destructive,
+		OpenWorldHint:   openWorld,
 	}
-	if a.IdempotentHint != nil {
-		value := *a.IdempotentHint
-		out.IdempotentHint = &value
-	}
-	if a.DestructiveHint != nil {
-		value := *a.DestructiveHint
-		out.DestructiveHint = &value
-	}
-	if a.OpenWorldHint != nil {
-		value := *a.OpenWorldHint
-		out.OpenWorldHint = &value
-	}
-	return out
 }
 
 type CatalogParameter struct {

@@ -35,8 +35,6 @@ const (
 
 type Actor = core.Actor
 
-type SubjectContext = core.RunAsSubject
-
 type Message struct {
 	Role     string
 	Text     string

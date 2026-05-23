@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/core"
 )
 
 func TestStructFromMap_NormalizesTimeValues(t *testing.T) {
@@ -49,7 +49,7 @@ func TestStructFromMap_NormalizesTimeValues(t *testing.T) {
 func TestSubjectToProtoPreservesWireFieldsWithoutNormalization(t *testing.T) {
 	t.Parallel()
 
-	subject := coreagent.SubjectContext{
+	subject := core.RunAsSubject{
 		SubjectID:           " user:123 ",
 		SubjectKind:         "",
 		CredentialSubjectID: "",

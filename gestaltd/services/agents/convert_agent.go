@@ -64,8 +64,8 @@ func agentActorFromProto(actor *proto.AgentActor) coreagent.Actor {
 	}
 }
 
-func subjectToProto(subject coreagent.SubjectContext) *proto.SubjectContext {
-	if subject == (coreagent.SubjectContext{}) {
+func subjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
+	if subject == (core.RunAsSubject{}) {
 		return nil
 	}
 	return &proto.SubjectContext{

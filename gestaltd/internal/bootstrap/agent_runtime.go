@@ -709,7 +709,7 @@ func (r *agentRuntime) validateAgentRunGrantTurn(ctx context.Context, grant agen
 	turnID = strings.TrimSpace(turnID)
 	turn, err := provider.GetTurn(ctx, coreagent.GetTurnRequest{
 		TurnID: turnID,
-		Subject: coreagent.SubjectContext{
+		Subject: core.RunAsSubject{
 			SubjectID:           strings.TrimSpace(grant.SubjectID),
 			SubjectKind:         strings.TrimSpace(grant.SubjectKind),
 			CredentialSubjectID: strings.TrimSpace(grant.CredentialSubjectID),

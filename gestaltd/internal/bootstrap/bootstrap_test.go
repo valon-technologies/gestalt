@@ -627,7 +627,7 @@ func (p *recordingAgentProvider) ensureStateLocked() {
 	}
 }
 
-func agentProviderSessionIdempotencyScope(subject coreagent.SubjectContext, actor coreagent.Actor, idempotencyKey string) string {
+func agentProviderSessionIdempotencyScope(subject core.RunAsSubject, actor coreagent.Actor, idempotencyKey string) string {
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	if idempotencyKey == "" {
 		return ""
@@ -635,7 +635,7 @@ func agentProviderSessionIdempotencyScope(subject coreagent.SubjectContext, acto
 	return strings.Join([]string{"session", agentProviderSubjectScope(subject, actor), idempotencyKey}, "\x00")
 }
 
-func agentProviderTurnIdempotencyScope(subject coreagent.SubjectContext, actor coreagent.Actor, sessionID, idempotencyKey string) string {
+func agentProviderTurnIdempotencyScope(subject core.RunAsSubject, actor coreagent.Actor, sessionID, idempotencyKey string) string {
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	if idempotencyKey == "" {
 		return ""
@@ -643,7 +643,7 @@ func agentProviderTurnIdempotencyScope(subject coreagent.SubjectContext, actor c
 	return strings.Join([]string{"turn", agentProviderSubjectScope(subject, actor), strings.TrimSpace(sessionID), idempotencyKey}, "\x00")
 }
 
-func agentProviderSubjectScope(subject coreagent.SubjectContext, actor coreagent.Actor) string {
+func agentProviderSubjectScope(subject core.RunAsSubject, actor coreagent.Actor) string {
 	if subjectID := strings.TrimSpace(subject.SubjectID); subjectID != "" {
 		return subjectID
 	}

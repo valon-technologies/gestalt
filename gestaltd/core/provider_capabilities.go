@@ -76,6 +76,8 @@ type httpSubjectSupporter interface {
 	SupportsHTTPSubject() bool
 }
 
+// supportsOptionalProviderFeature checks optional provider capabilities.
+// When tryExplicit returns handled=false, hasFallback is used instead.
 func supportsOptionalProviderFeature(
 	prov Provider,
 	tryExplicit func(Provider) (handled bool, supported bool),

@@ -1,6 +1,10 @@
 package core
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/valon-technologies/gestalt/server/core/catalog"
+)
 
 type CapabilityAnnotations struct {
 	ReadOnlyHint    *bool
@@ -10,24 +14,27 @@ type CapabilityAnnotations struct {
 }
 
 func CloneCapabilityAnnotations(a CapabilityAnnotations) CapabilityAnnotations {
-	out := CapabilityAnnotations{}
-	if a.ReadOnlyHint != nil {
-		value := *a.ReadOnlyHint
-		out.ReadOnlyHint = &value
+	readOnly, idempotent, destructive, openWorld := catalog.CloneHintPointerFields(
+		a.ReadOnlyHint,
+		a.IdempotentHint,
+		a.DestructiveHint,
+		a.OpenWorldHint,
+	)
+	return CapabilityAnnotations{
+		ReadOnlyHint:    readOnly,
+		IdempotentHint:  idempotent,
+		DestructiveHint: destructive,
+		OpenWorldHint:   openWorld,
 	}
-	if a.IdempotentHint != nil {
-		value := *a.IdempotentHint
-		out.IdempotentHint = &value
+}
+
+func CapabilityAnnotationsFromCatalog(a catalog.CapabilityAnnotations) CapabilityAnnotations {
+	return CapabilityAnnotations{
+		ReadOnlyHint:    a.ReadOnlyHint,
+		IdempotentHint:  a.IdempotentHint,
+		DestructiveHint: a.DestructiveHint,
+		OpenWorldHint:   a.OpenWorldHint,
 	}
-	if a.DestructiveHint != nil {
-		value := *a.DestructiveHint
-		out.DestructiveHint = &value
-	}
-	if a.OpenWorldHint != nil {
-		value := *a.OpenWorldHint
-		out.OpenWorldHint = &value
-	}
-	return out
 }
 
 type Capability struct {
