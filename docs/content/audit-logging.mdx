@@ -138,8 +138,8 @@ Workflow object actions set the generic target fields:
 
 Run start and signal-or-start events include `workflow_key_sha256` so operators
 can correlate repeated events for the same workflow key without logging the raw
-key. Targeted workflow actions include `workflow_target_kind`, and app
-targets include `workflow_target_provider` and `workflow_target_operation`.
+key. Targeted workflow actions include `workflow_target_kind`, and app steps
+include `workflow_target_provider` and `workflow_target_operation`.
 
 When `workflow.run.signal_or_start` rejects a stored or requested target during
 the target authorization check, the audit record sets

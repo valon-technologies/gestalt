@@ -24,8 +24,7 @@ const (
 	WorkflowTriggerKindNone     = "none"
 	WorkflowTriggerKindUnknown  = "unknown"
 
-	WorkflowTargetKindApp  = "app"
-	WorkflowTargetKindAgent   = "agent"
+	WorkflowTargetKindSteps   = "steps"
 	WorkflowTargetKindUnknown = "unknown"
 
 	WorkflowRunStatusPending   = "pending"
