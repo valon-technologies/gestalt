@@ -9,16 +9,20 @@ use crate::commands::agents::fields::{
     turn_event_display,
 };
 use crate::commands::agents::types::{AgentTurnDisplayInfo, AgentTurnEventInfo};
+use crate::commands::agents::wire::is_private_event_visibility;
 
 pub(crate) fn fallback_turn_event_data_summary(value: &Value) -> String {
     if let Ok(event) = serde_json::from_value::<AgentTurnEventInfo>(value.clone()) {
         if let Some(summary) = turn_event_data_summary(&event) {
             return summary;
         }
-        if event.visibility == "private" {
+        if is_private_event_visibility(&event.visibility) {
             return String::new();
         }
-    } else if value["visibility"].as_str() == Some("private") {
+    } else if value["visibility"]
+        .as_str()
+        .is_some_and(is_private_event_visibility)
+    {
         return String::new();
     }
     serde_json::to_string(&value["data"]).unwrap_or_else(|_| "-".to_string())

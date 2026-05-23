@@ -5,6 +5,7 @@ use super::fields::{
     string_any_field, string_field, turn_event_display, value_any_field,
 };
 use super::types::{AgentTurnDisplayInfo, AgentTurnEventInfo};
+use super::wire::is_private_event_visibility;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ToolPhase {
@@ -54,7 +55,7 @@ pub(crate) fn classify_turn_event(event: &AgentTurnEventInfo) -> ClassifiedTurnE
     if let Some(effect) = classify_data_event(event) {
         return ClassifiedTurnEvent::Data(effect);
     }
-    if event.visibility == "private" {
+    if is_private_event_visibility(&event.visibility) {
         return ClassifiedTurnEvent::Private;
     }
     ClassifiedTurnEvent::Unknown(event)

@@ -10,6 +10,7 @@ mod shell;
 mod stream;
 mod tui;
 mod types;
+mod wire;
 
 pub use harness::{doctor_local, launch_local};
 pub use requests::{
