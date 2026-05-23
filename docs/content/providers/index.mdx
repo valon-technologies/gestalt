@@ -119,7 +119,7 @@ upgrade commands cannot move them.
 ```yaml
 apps:
   github:
-    source: https://github.com/valon-technologies/gestalt-providers/releases/download/apps/github/v0.0.1-alpha.1/provider-release.yaml
+    source: https://github.com/valon-technologies/gestalt-providers/releases/download/app/github/v0.0.1-alpha.1/provider-release.yaml
 ```
 
 ```yaml
@@ -194,7 +194,7 @@ Add `--sync` when you want to materialize artifacts immediately after adding the
 provider:
 
 ```sh
-gestaltd provider add github.com/valon-technologies/gestalt-providers/apps/github \
+gestaltd provider add github.com/valon-technologies/gestalt-providers/app/github \
   --config ./gestalt.yaml \
   --sync
 ```
@@ -272,7 +272,7 @@ apps:
   support:
     source:
       repo: acme
-      package: github.com/acme/gestalt-providers/apps/support
+      package: github.com/acme/gestalt-providers/app/support
       version: ^1.3.0
       auth:
         token: ${GESTALT_PROVIDER_TOKEN}
@@ -301,13 +301,13 @@ Search matches the package address, display name, and description. The output
 prints repository name, package address, and display name:
 
 ```text
-valon  github.com/valon-technologies/gestalt-providers/apps/github  GitHub
+valon  github.com/valon-technologies/gestalt-providers/app/github  GitHub
 ```
 
 Use `provider info` to see the versions published for one package:
 
 ```sh
-gestaltd provider info github.com/valon-technologies/gestalt-providers/apps/github
+gestaltd provider info github.com/valon-technologies/gestalt-providers/app/github
 ```
 
 ### Use provider repositories
@@ -365,7 +365,7 @@ A provider index is ordinary YAML:
 schema: gestaltd-provider-index
 schemaVersion: 1
 packages:
-  github.com/acme/gestalt-providers/apps/support:
+  github.com/acme/gestalt-providers/app/support:
     displayName: Support
     description: Internal support tools
     versions:

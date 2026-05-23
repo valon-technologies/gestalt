@@ -9,7 +9,7 @@ func TestDecodeSourceManifestPostConnectContract(t *testing.T) {
 	t.Parallel()
 
 	const manifest = `
-source: github.com/test/gestalt-providers/apps/pagerduty
+source: github.com/test/gestalt-providers/app/pagerduty
 version: 0.0.1-alpha.1
 kind: app
 spec:
@@ -56,7 +56,7 @@ func TestDecodeSourceManifestRejectsInsecurePostConnectURL(t *testing.T) {
 	t.Parallel()
 
 	const manifest = `
-source: github.com/test/gestalt-providers/apps/pagerduty
+source: github.com/test/gestalt-providers/app/pagerduty
 version: 0.0.1-alpha.1
 kind: app
 spec:

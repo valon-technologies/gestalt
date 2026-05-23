@@ -2448,7 +2448,7 @@ func TestPrepareAtPath_RejectsMetadataPackageManifestKindMismatch(t *testing.T) 
 	t.Parallel()
 
 	dir := t.TempDir()
-	const source = "github.com/testowner/gestalt-providers/apps/auth-only"
+	const source = "github.com/testowner/gestalt-providers/app/auth-only"
 	const version = "0.0.1-alpha.1"
 	pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
 		Kind:       providermanifestv1.KindAuthentication,

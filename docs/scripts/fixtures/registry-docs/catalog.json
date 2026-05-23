@@ -30,7 +30,7 @@
       "manifestUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/apps/slack/manifest.yaml",
       "manifestVersion": "0.0.1-alpha.42",
       "name": "slack",
-      "package": "github.com/valon-technologies/gestalt-providers/apps/slack",
+      "package": "github.com/valon-technologies/gestalt-providers/app/slack",
       "packagePath": "apps/slack",
       "readmeUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/apps/slack/README.md",
       "registryPath": "/providers/app/slack/",
@@ -38,7 +38,7 @@
       "versions": [
         {
           "kind": "app",
-          "metadata": "https://github.com/valon-technologies/gestalt-providers/releases/download/apps/slack/v0.0.1-alpha.42/provider-release.yaml",
+          "metadata": "https://github.com/valon-technologies/gestalt-providers/releases/download/app/slack/v0.0.1-alpha.42/provider-release.yaml",
           "platforms": [
             "darwin/amd64",
             "darwin/arm64",
