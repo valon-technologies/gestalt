@@ -261,7 +261,11 @@ pub(crate) fn agent_session_lines(shell: &AgentShell) -> Vec<String> {
     ]
 }
 
-pub(crate) fn agent_model_lines(client: &ApiClient, shell: &mut AgentShell, args: &str) -> Vec<String> {
+pub(crate) fn agent_model_lines(
+    client: &ApiClient,
+    shell: &mut AgentShell,
+    args: &str,
+) -> Vec<String> {
     let requested = args.trim();
     if !requested.is_empty() {
         shell.set_model_override(requested);
@@ -318,7 +322,9 @@ fn has_trailing_continuation(line: &str) -> bool {
     line.chars().rev().take_while(|ch| *ch == '\\').count() % 2 == 1
 }
 
-pub(crate) fn prompt_interaction_resolution(interaction: &AgentInteractionInfo) -> Result<Map<String, Value>> {
+pub(crate) fn prompt_interaction_resolution(
+    interaction: &AgentInteractionInfo,
+) -> Result<Map<String, Value>> {
     let mut stderr = io::stderr().lock();
     writeln!(stderr)?;
     writeln!(

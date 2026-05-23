@@ -3,7 +3,9 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
 use super::display_markdown;
-use super::types::{AgentMessageInfo, AgentMessagePartInfo, AgentTurnDisplayInfo, AgentTurnEventInfo};
+use super::types::{
+    AgentMessageInfo, AgentMessagePartInfo, AgentTurnDisplayInfo, AgentTurnEventInfo,
+};
 
 pub(crate) fn decode_json<T>(value: Value) -> Result<T>
 where
@@ -22,7 +24,10 @@ pub(crate) fn string_any_field(data: &Map<String, Value>, keys: &[&str]) -> Opti
     keys.iter().find_map(|key| string_field(data, key))
 }
 
-pub(crate) fn value_any_field<'a>(data: &'a Map<String, Value>, keys: &[&str]) -> Option<&'a Value> {
+pub(crate) fn value_any_field<'a>(
+    data: &'a Map<String, Value>,
+    keys: &[&str],
+) -> Option<&'a Value> {
     keys.iter().find_map(|key| data.get(*key))
 }
 
@@ -145,14 +150,20 @@ pub(crate) fn display_language(display: &AgentTurnDisplayInfo) -> Option<&str> {
     non_empty_str(&display.language)
 }
 
-pub(crate) fn display_tool_label(_event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> String {
+pub(crate) fn display_tool_label(
+    _event: &AgentTurnEventInfo,
+    display: &AgentTurnDisplayInfo,
+) -> String {
     display_label(display)
         .or_else(|| display_ref(display))
         .map(ToString::to_string)
         .unwrap_or_else(|| "tool".to_string())
 }
 
-pub(crate) fn display_tool_ref(_event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> Option<String> {
+pub(crate) fn display_tool_ref(
+    _event: &AgentTurnEventInfo,
+    display: &AgentTurnDisplayInfo,
+) -> Option<String> {
     display_ref(display).map(ToString::to_string)
 }
 
@@ -177,7 +188,10 @@ pub(crate) fn display_tool_error<'a>(
     display.error.as_ref()
 }
 
-pub(crate) fn display_status(_event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> Option<String> {
+pub(crate) fn display_status(
+    _event: &AgentTurnEventInfo,
+    display: &AgentTurnDisplayInfo,
+) -> Option<String> {
     display_text(display).map(ToString::to_string)
 }
 

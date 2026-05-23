@@ -24,8 +24,9 @@ pub(crate) fn fallback_turn_event_data_summary(value: &Value) -> String {
 
 pub(crate) fn turn_event_data_summary(event: &AgentTurnEventInfo) -> Option<String> {
     match event.event_type.as_str() {
-        "agent.message.delta" | "assistant.delta" => extract_assistant_delta(&event.data)
-            .map(|text| format!("assistant delta: {text}")),
+        "agent.message.delta" | "assistant.delta" => {
+            extract_assistant_delta(&event.data).map(|text| format!("assistant delta: {text}"))
+        }
         "assistant.completed" => {
             string_field(&event.data, "text").map(|text| format!("assistant completed: {text}"))
         }

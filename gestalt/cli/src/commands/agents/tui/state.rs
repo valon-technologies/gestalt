@@ -13,8 +13,7 @@ use crate::commands::agents::fields::{
     turn_event_display, value_any_field,
 };
 use crate::commands::agents::types::{
-    AgentInteractionInfo, AgentSessionInfo, AgentTurnDisplayInfo, AgentTurnEventInfo,
-    AgentTurnInfo,
+    AgentInteractionInfo, AgentSessionInfo, AgentTurnDisplayInfo, AgentTurnEventInfo, AgentTurnInfo,
 };
 
 const MAX_TRANSCRIPT_ITEMS: usize = 500;

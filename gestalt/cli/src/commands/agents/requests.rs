@@ -12,11 +12,11 @@ use crate::output::{self, Format};
 use crate::params;
 
 use super::fields::decode_json;
-use super::stream::DEFAULT_EVENT_PAGE_SIZE;
 use super::format::table::{
     print_session, print_sessions, print_turn, print_turn_events, print_turns,
 };
 use super::render::stdout::render_turn_transcript;
+use super::stream::DEFAULT_EVENT_PAGE_SIZE;
 use super::types::{
     AgentInteractionInfo, AgentProviderInfo, AgentProviderListInfo, AgentSessionInfo,
     AgentTurnEventInfo, AgentTurnInfo,
@@ -180,8 +180,11 @@ pub fn stream_turn_events(client: &ApiClient, args: &AgentTurnEventStreamArgs) -
     Ok(())
 }
 
-
-pub(crate) fn cancel_turn_silent(client: &ApiClient, id: &str, reason: &str) -> Result<AgentTurnInfo> {
+pub(crate) fn cancel_turn_silent(
+    client: &ApiClient,
+    id: &str,
+    reason: &str,
+) -> Result<AgentTurnInfo> {
     decode_json(
         client
             .post(
@@ -268,7 +271,10 @@ fn parse_session_time(value: &str) -> Option<OffsetDateTime> {
     OffsetDateTime::parse(value, &Rfc3339).ok()
 }
 
-pub(crate) fn create_turn_info(client: &ApiClient, args: &AgentTurnCreateArgs) -> Result<AgentTurnInfo> {
+pub(crate) fn create_turn_info(
+    client: &ApiClient,
+    args: &AgentTurnCreateArgs,
+) -> Result<AgentTurnInfo> {
     let body = build_turn_create_body(args)?;
     decode_json(
         client
@@ -287,7 +293,10 @@ pub(crate) fn get_turn_info(client: &ApiClient, id: &str) -> Result<AgentTurnInf
     )
 }
 
-pub(crate) fn list_interactions_info(client: &ApiClient, turn_id: &str) -> Result<Vec<AgentInteractionInfo>> {
+pub(crate) fn list_interactions_info(
+    client: &ApiClient,
+    turn_id: &str,
+) -> Result<Vec<AgentInteractionInfo>> {
     decode_json(
         client
             .get(&format!("{TURNS_PATH}/{turn_id}/interactions"))

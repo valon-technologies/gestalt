@@ -48,11 +48,7 @@ pub(crate) fn run_turn_status_loop<S: TurnDriverSink>(
             },
             "pending" | "running" => thread::sleep(EVENT_POLL_INTERVAL),
             "succeeded" | "failed" | "canceled" => return Ok(()),
-            other => bail!(
-                "agent turn {} has unsupported status {}",
-                latest.id,
-                other
-            ),
+            other => bail!("agent turn {} has unsupported status {}", latest.id, other),
         }
     }
 }

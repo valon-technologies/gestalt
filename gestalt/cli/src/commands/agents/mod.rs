@@ -18,6 +18,6 @@ pub use requests::{
 pub use shell::{resume_interactive, run_interactive};
 
 pub(crate) use fields::compact_json;
-pub(crate) use requests::{cancel_turn_silent, create_turn_info, INTERRUPT_CANCEL_REASON};
+pub(crate) use requests::{INTERRUPT_CANCEL_REASON, cancel_turn_silent, create_turn_info};
 pub(crate) use shell::{agent_model_lines, agent_session_lines, agent_tui_help_lines};
 pub(crate) use types::{AgentInteractionInfo, AgentShell};

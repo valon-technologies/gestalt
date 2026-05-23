@@ -150,12 +150,8 @@ fn wait_for_interaction_resolution(
                 interaction_id,
                 resolution,
             } if interaction_id == interaction.id => {
-                let resolved = resolve_interaction_info(
-                    ctx.client,
-                    ctx.turn_id,
-                    &interaction.id,
-                    resolution,
-                )?;
+                let resolved =
+                    resolve_interaction_info(ctx.client, ctx.turn_id, &interaction.id, resolution)?;
                 event_tx
                     .send(WorkerEvent::InteractionResolved(resolved))
                     .context("terminal UI closed after resolving interaction")?;

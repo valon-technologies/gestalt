@@ -10,16 +10,16 @@ use std::thread;
 use std::time::Duration;
 
 use crate::api::ApiClient;
+use crate::commands::agents::driver::{
+    TurnDriverSink, TurnLoopContext, TurnLoopOutcome, resolve_pending_interactions,
+    run_turn_status_loop,
+};
 use crate::commands::agents::fields::{
     compact_json, display_action, display_label, display_ref, display_status, display_text,
     display_tool_error, display_tool_input, display_tool_label, display_tool_output,
     display_value_text, extract_assistant_delta, extract_interaction_id, extract_tool_name,
     message_label, message_text, number_any_field, pretty_json, rendered_display_text,
     string_any_field, string_field, turn_event_display, value_any_field,
-};
-use crate::commands::agents::driver::{
-    TurnDriverSink, TurnLoopContext, TurnLoopOutcome, resolve_pending_interactions,
-    run_turn_status_loop,
 };
 use crate::commands::agents::requests::{
     INTERRUPT_CANCEL_REASON, cancel_turn_silent, resolve_interaction_info,
@@ -30,7 +30,11 @@ use crate::commands::agents::types::{
     AgentMessageInfo, AgentTurnDisplayInfo, AgentTurnEventInfo, AgentTurnInfo,
 };
 
-pub(crate) fn drive_turn(client: &ApiClient, turn: &AgentTurnInfo, interrupts: &InterruptState) -> Result<()> {
+pub(crate) fn drive_turn(
+    client: &ApiClient,
+    turn: &AgentTurnInfo,
+    interrupts: &InterruptState,
+) -> Result<()> {
     let mut renderer = AgentTurnRenderer::new();
     let _cancel_guard = TurnCancelGuard::spawn(client, &turn.id, interrupts);
     let ctx = TurnLoopContext {
@@ -603,7 +607,10 @@ impl AgentTurnRenderer {
         }
     }
 }
-pub(crate) fn render_turn_transcript(turn: &AgentTurnInfo, events: &[AgentTurnEventInfo]) -> Result<()> {
+pub(crate) fn render_turn_transcript(
+    turn: &AgentTurnInfo,
+    events: &[AgentTurnEventInfo],
+) -> Result<()> {
     let mut renderer = AgentTurnRenderer::new();
     renderer.render_messages(&turn.messages)?;
     renderer.render_events(events)?;
