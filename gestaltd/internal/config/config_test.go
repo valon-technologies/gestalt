@@ -5028,6 +5028,65 @@ apps:
 	}
 }
 
+func TestLoadConfigProviderSnapshotRepositoryPublish(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteRawConfigFile(t, `
+apiVersion: gestaltd.config/v6
+providerSnapshotRepositories:
+  valon:
+    url: https://storage.example.test/providers
+    gestaltRef: 651a5c30feb995c9364c38f63d0d5c3880bc2055
+    publish:
+      pathLayout: sourceRef
+      immutable: true
+      storage:
+        kind: objectStore
+        url: gs://provider-snapshots
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	repo := cfg.ProviderSnapshotRepositories["valon"]
+	if got := repo.Publish.PathLayout; got != "sourceRef" {
+		t.Fatalf("Publish.PathLayout = %q, want sourceRef", got)
+	}
+	if !repo.Publish.Immutable {
+		t.Fatal("Publish.Immutable = false, want true")
+	}
+	if got := repo.Publish.Storage.Kind; got != "objectStore" {
+		t.Fatalf("Publish.Storage.Kind = %q, want objectStore", got)
+	}
+	if got := repo.Publish.Storage.URL; got != "gs://provider-snapshots" {
+		t.Fatalf("Publish.Storage.URL = %q", got)
+	}
+}
+
+func TestLoadConfigProviderSnapshotRepositoryPublishRejectsUnsupportedStorageURL(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteRawConfigFile(t, `
+apiVersion: gestaltd.config/v6
+providerSnapshotRepositories:
+  valon:
+    url: https://storage.example.test/providers
+    publish:
+      pathLayout: sourceRef
+      immutable: true
+      storage:
+        kind: objectStore
+        url: s3://provider-snapshots
+`)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load: expected unsupported storage URL error, got nil")
+	}
+	if !strings.Contains(err.Error(), "publish.storage.url currently supports gs:// object store URLs") {
+		t.Fatalf("Load error = %v", err)
+	}
+}
+
 func TestLoadConfigProviderPackageSourcesDoNotGetBuiltinDefaults(t *testing.T) {
 	t.Parallel()
 

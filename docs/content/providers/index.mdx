@@ -523,6 +523,46 @@ writes `provider-release.yaml` next to the archives. It does not run source
 build commands and can run after multiple platform-specific package jobs have
 collected their archives into one dist directory.
 
+CI systems that publish commit-addressed artifacts can use `provider publish`
+instead of writing release metadata into the source dist directory:
+
+```sh
+gestaltd provider publish \
+  --config gestaltd.yaml \
+  --repo valon \
+  --manifest manifest.yaml \
+  --version 0.0.0-snapshot.g651a5c30feb995c9364c38f63d0d5c3880bc2055 \
+  --ref 651a5c30feb995c9364c38f63d0d5c3880bc2055 \
+  --dist-dir dist/linux \
+  --dist-dir dist/darwin
+```
+
+Use `--dry-run --format json` in CI when a later step needs the exact artifact,
+checksums, and metadata URLs that publish would write:
+
+```sh
+gestaltd provider publish \
+  --config gestaltd.yaml \
+  --repo valon \
+  --manifest manifest.yaml \
+  --version 0.0.0-snapshot.g651a5c30feb995c9364c38f63d0d5c3880bc2055 \
+  --ref 651a5c30feb995c9364c38f63d0d5c3880bc2055 \
+  --dist-dir dist/linux \
+  --dist-dir dist/darwin \
+  --dry-run \
+  --format json
+```
+
+The JSON plan includes the publish repository key, source repository, source
+ref, manifest path, provider directory, and URL entries for `metadata`,
+`checksums`, `artifacts`, and `files`.
+
+The repository's `providerSnapshotRepositories.<name>.publish` config controls
+the storage backend and path layout. With `pathLayout: sourceRef`, Gestalt uses
+the source checkout's GitHub origin, the full `--ref`, and the manifest path
+relative to the git root. The resulting metadata URL is the same deterministic
+location that `source.git` snapshot materialization resolves.
+
 For source manifests that declare object-form `build.command`, package runs
 that command, verifies that the declared output exists, strips `build` and
 `run` metadata from the packaged manifest, and records released artifacts. The

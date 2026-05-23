@@ -61,6 +61,7 @@ import { Callout } from 'nextra/components'
 | `gestaltd provider package --version VERSION` | Build provider release archives from a source directory. Executable source providers use SDK-native source packages or `build.command` and default to the host platform; UI and declarative providers default to a generic archive. Pass `--platform ...` with `os/arch` targets or `--platform all` for multi-platform builds. |
 | `gestaltd provider package --output DIR` | Output directory for the release archives. Defaults to `dist/`. |
 | `gestaltd provider release --dist-dir DIR` | Finalize already-built release archives by validating them and writing `checksums.txt` and `provider-release.yaml` into the dist directory. |
+| `gestaltd provider publish --repo NAME --manifest PATH --version VERSION --ref SHA --dist-dir DIR` | Validate one release bundle from one or more dist directories, write release metadata in a temporary directory, and publish archives plus metadata to a configured artifact repository. Pass `--dry-run --format json` to emit the exact publish plan for CI. |
 
 For config-free local development, inferred UI mount paths use the manifest
 `source` slug rather than the API-safe provider key. A source ending in

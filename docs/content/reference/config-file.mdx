@@ -140,12 +140,22 @@ providerSnapshotRepositories:
   valon:
     url: https://storage.googleapis.com/valon-gestalt-provider-snapshots
     gestaltRef: 651a5c30feb995c9364c38f63d0d5c3880bc2055
+    publish:
+      pathLayout: sourceRef
+      immutable: true
+      storage:
+        kind: objectStore
+        url: gs://valon-gestalt-provider-snapshots
 ```
 
 | Field | Description |
 | --- | --- |
 | `providerSnapshotRepositories.<name>.url` | HTTP(S) root containing deterministic snapshot `provider-release.yaml` files and archives. |
 | `providerSnapshotRepositories.<name>.gestaltRef` | Optional full Gestalt commit SHA expected for snapshots from this repository. |
+| `providerSnapshotRepositories.<name>.publish.pathLayout` | Publish path layout. `sourceRef` writes `github.com/<owner>/<repo>/<ref>/<provider-dir>/provider-release.yaml`, deriving `<owner>/<repo>` from the source checkout's GitHub origin and `<provider-dir>` from the manifest path relative to the git root. |
+| `providerSnapshotRepositories.<name>.publish.immutable` | Must be `true`; published artifacts are write-once. |
+| `providerSnapshotRepositories.<name>.publish.storage.kind` | Write backend kind. `objectStore` publishes files to an object-store URL. |
+| `providerSnapshotRepositories.<name>.publish.storage.url` | Authenticated write root for published artifacts. The current object-store writer supports `gs://` paths. |
 
 ## `server`
 

@@ -69,6 +69,35 @@ func TestRun_ProviderReleaseRejectsDuplicateArchiveTargets(t *testing.T) {
 	}
 }
 
+func TestCollectReleaseArchivesRejectsDuplicateArchiveFilenamesAcrossDirs(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newUIReleaseFixture(t, t.TempDir())
+	leftDir := t.TempDir()
+	rightDir := t.TempDir()
+	const testVersion = "0.0.4-duplicate-name.1"
+	runProviderPackageCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", leftDir,
+	)
+	archiveName := "gestalt-app-" + uiTestAppName + "_v" + testVersion + ".tar.gz"
+	data, err := os.ReadFile(filepath.Join(leftDir, archiveName))
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rightDir, archiveName), data, 0o644); err != nil {
+		t.Fatalf("write duplicate archive: %v", err)
+	}
+
+	_, _, _, err = collectReleaseArchivesFromDirs([]string{leftDir, rightDir}, testVersion)
+	if err == nil {
+		t.Fatal("collectReleaseArchivesFromDirs: expected duplicate filename error")
+	}
+	if !strings.Contains(err.Error(), "multiple release archives have filename") {
+		t.Fatalf("collectReleaseArchivesFromDirs error = %v", err)
+	}
+}
+
 func TestRun_ProviderReleaseRejectsMismatchedArchiveManifests(t *testing.T) {
 	t.Parallel()
 

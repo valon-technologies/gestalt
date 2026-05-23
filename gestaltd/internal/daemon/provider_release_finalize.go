@@ -50,6 +50,14 @@ func runProviderRelease(args []string) (err error) {
 }
 
 func writeChecksums(dir string, archives []releaseArchive) error {
+	return writeChecksumsWithOutput(dir, archives, true)
+}
+
+func writeChecksumsQuiet(dir string, archives []releaseArchive) error {
+	return writeChecksumsWithOutput(dir, archives, false)
+}
+
+func writeChecksumsWithOutput(dir string, archives []releaseArchive, verbose bool) error {
 	sortedArchives := append([]releaseArchive(nil), archives...)
 	sort.Slice(sortedArchives, func(i, j int) bool {
 		return filepath.Base(sortedArchives[i].Path) < filepath.Base(sortedArchives[j].Path)
@@ -68,7 +76,9 @@ func writeChecksums(dir string, archives []releaseArchive) error {
 	if err := os.WriteFile(checksumPath, []byte(content), 0644); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(os.Stdout, "created %s\n", checksumPath)
+	if verbose {
+		_, _ = fmt.Fprintf(os.Stdout, "created %s\n", checksumPath)
+	}
 	return nil
 }
 
@@ -85,9 +95,29 @@ func describeReleaseArchive(path, target string) (releaseArchive, error) {
 }
 
 func collectReleaseArchives(distDir, versionGuard string) (*providermanifestv1.Manifest, string, []releaseArchive, error) {
+	return collectReleaseArchivesFromDirs([]string{distDir}, versionGuard)
+}
+
+func collectReleaseArchivesFromDirs(distDirs []string, versionGuard string) (*providermanifestv1.Manifest, string, []releaseArchive, error) {
+	var archivePaths []string
+	for _, distDir := range distDirs {
+		paths, err := releaseArchivePathsInDir(distDir)
+		if err != nil {
+			return nil, "", nil, err
+		}
+		archivePaths = append(archivePaths, paths...)
+	}
+	sort.Strings(archivePaths)
+	if len(archivePaths) == 0 {
+		return nil, "", nil, fmt.Errorf("no .tar.gz release archives found in %s", strings.Join(distDirs, ", "))
+	}
+	return collectReleaseArchivePaths(archivePaths, versionGuard)
+}
+
+func releaseArchivePathsInDir(distDir string) ([]string, error) {
 	entries, err := os.ReadDir(distDir)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("read dist dir: %w", err)
+		return nil, fmt.Errorf("read dist dir %s: %w", distDir, err)
 	}
 	var archivePaths []string
 	for _, entry := range entries {
@@ -96,18 +126,23 @@ func collectReleaseArchives(distDir, versionGuard string) (*providermanifestv1.M
 		}
 		archivePaths = append(archivePaths, filepath.Join(distDir, entry.Name()))
 	}
-	sort.Strings(archivePaths)
-	if len(archivePaths) == 0 {
-		return nil, "", nil, fmt.Errorf("no .tar.gz release archives found in %s", distDir)
-	}
+	return archivePaths, nil
+}
 
+func collectReleaseArchivePaths(archivePaths []string, versionGuard string) (*providermanifestv1.Manifest, string, []releaseArchive, error) {
 	var releaseManifest *providermanifestv1.Manifest
 	var comparableReleaseManifest []byte
 	releaseVersion := ""
+	seenArchiveNames := map[string]string{}
 	seenTargets := map[string]string{}
 	var hasGeneric, hasPlatform bool
 	archives := make([]releaseArchive, 0, len(archivePaths))
 	for _, archivePath := range archivePaths {
+		archiveName := filepath.Base(archivePath)
+		if existingPath, ok := seenArchiveNames[archiveName]; ok {
+			return nil, "", nil, fmt.Errorf("multiple release archives have filename %s: %s and %s", archiveName, existingPath, archivePath)
+		}
+		seenArchiveNames[archiveName] = archivePath
 		manifest, target, err := inspectReleaseArchive(archivePath)
 		if err != nil {
 			return nil, "", nil, err
@@ -211,6 +246,14 @@ func releaseArchiveTargetFromManifest(manifest *providermanifestv1.Manifest) (st
 }
 
 func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive) error {
+	return writeProviderReleaseMetadataWithOutput(dir, manifest, version, archives, true)
+}
+
+func writeProviderReleaseMetadataQuiet(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive) error {
+	return writeProviderReleaseMetadataWithOutput(dir, manifest, version, archives, false)
+}
+
+func writeProviderReleaseMetadataWithOutput(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive, verbose bool) error {
 	metadata, err := buildProviderReleaseMetadata(manifest, version, archives)
 	if err != nil {
 		return err
@@ -223,7 +266,9 @@ func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manif
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(os.Stdout, "created %s\n", path)
+	if verbose {
+		_, _ = fmt.Fprintf(os.Stdout, "created %s\n", path)
+	}
 	return nil
 }
 

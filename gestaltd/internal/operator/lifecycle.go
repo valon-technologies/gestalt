@@ -4475,7 +4475,7 @@ func (l *Lifecycle) installLockedArchiveForStaticValidation(ctx context.Context,
 	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
 		return nil, nil, fmt.Errorf("no verified hash for platform %s for %s %q; run `%s --platform %s`", platform, kind, name, formatLockCommand(paths), platform)
 	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(provider), archiveLocation)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), lockedReleaseArchiveAuthToken(provider), archiveLocation)
 	if err != nil {
 		return nil, nil, staticArchiveUnavailableError{
 			err: fmt.Errorf("download locked source provider for %s %q: %w", kind, name, err),
@@ -5333,7 +5333,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyc
 	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
 		return fmt.Errorf("no verified hash for platform %s for provider %q; run `%s --platform %s`", platform, name, formatLockCommand(paths), platform)
 	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), lockedReleaseArchiveAuthToken(app), archiveLocation)
 	if err != nil {
 		return fmt.Errorf("download locked source provider for provider %q: %w", name, err)
 	}
@@ -5389,7 +5389,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecy
 	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
 		return fmt.Errorf("no verified hash for platform %s for %s %q; run `%s --platform %s`", platform, kind, name, formatLockCommand(paths), platform)
 	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), lockedReleaseArchiveAuthToken(app), archiveLocation)
 	if err != nil {
 		return fmt.Errorf("download locked source provider for %s %q: %w", kind, name, err)
 	}
@@ -5450,7 +5450,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifec
 	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
 		return fmt.Errorf("no verified hash for platform %s for ui provider; run `%s --platform %s`", platform, formatLockCommand(paths), platform)
 	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), lockedReleaseArchiveAuthToken(app), archiveLocation)
 	if err != nil {
 		return fmt.Errorf("download locked source for ui provider: %w", err)
 	}

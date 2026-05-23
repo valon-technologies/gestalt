@@ -81,6 +81,13 @@ func sourceAuthToken(entry *config.ProviderEntry) string {
 	return strings.TrimSpace(entry.Source.Auth.Token)
 }
 
+func lockedReleaseArchiveAuthToken(entry *config.ProviderEntry) string {
+	if entry == nil || entry.Source.IsGit() {
+		return ""
+	}
+	return sourceAuthToken(entry)
+}
+
 func decodeProviderReleaseMetadata(data []byte) (*providerReleaseMetadata, error) {
 	var metadata providerReleaseMetadata
 	decoder := yaml.NewDecoder(bytes.NewReader(data))

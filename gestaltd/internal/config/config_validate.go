@@ -238,6 +238,31 @@ func validateProviderSnapshotRepositories(cfg *Config) error {
 		if ref := strings.TrimSpace(repo.GestaltRef); ref != "" && !isFullGitSHA(ref) {
 			return fmt.Errorf("config validation: providerSnapshotRepositories.%s.gestaltRef must be a 40-character commit SHA", name)
 		}
+		if err := validateProviderSnapshotRepositoryPublish(name, repo.Publish); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateProviderSnapshotRepositoryPublish(name string, publish ProviderSnapshotRepositoryPublishConfig) error {
+	if publish.PathLayout == "" && !publish.Immutable && publish.Storage.Kind == "" && publish.Storage.URL == "" {
+		return nil
+	}
+	if strings.TrimSpace(publish.PathLayout) != "sourceRef" {
+		return fmt.Errorf("config validation: providerSnapshotRepositories.%s.publish.pathLayout must be sourceRef", name)
+	}
+	if !publish.Immutable {
+		return fmt.Errorf("config validation: providerSnapshotRepositories.%s.publish.immutable must be true", name)
+	}
+	if strings.TrimSpace(publish.Storage.Kind) != "objectStore" {
+		return fmt.Errorf("config validation: providerSnapshotRepositories.%s.publish.storage.kind must be objectStore", name)
+	}
+	if strings.TrimSpace(publish.Storage.URL) == "" {
+		return fmt.Errorf("config validation: providerSnapshotRepositories.%s.publish.storage.url is required", name)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(publish.Storage.URL), "gs://") {
+		return fmt.Errorf("config validation: providerSnapshotRepositories.%s.publish.storage.url currently supports gs:// object store URLs", name)
 	}
 	return nil
 }

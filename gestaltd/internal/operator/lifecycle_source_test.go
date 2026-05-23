@@ -1280,10 +1280,32 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 	}
 	var metadataCount atomic.Int64
 	var archiveCount atomic.Int64
+	handlerErrs := make(chan error, 2)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+	rejectAuth := func(w http.ResponseWriter, r *http.Request, subject string) bool {
+		t.Helper()
+		if got := r.Header.Get("Authorization"); got != "" {
+			handlerErrs <- fmt.Errorf("%s authorization = %q, want empty", subject, got)
+			http.Error(w, "unexpected authorization", http.StatusBadRequest)
+			return false
+		}
+		return true
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/snapshots/github.com/acme/providers/" + ref + "/apps/alpha/provider-release.yaml":
 			metadataCount.Add(1)
+			if !rejectAuth(w, r, "metadata") {
+				return
+			}
 			metadata := providerReleaseMetadata{
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
@@ -1305,6 +1327,9 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 			_, _ = w.Write(data)
 		case "/snapshots/github.com/acme/providers/" + ref + "/apps/alpha/alpha.tar.gz":
 			archiveCount.Add(1)
+			if !rejectAuth(w, r, "archive") {
+				return
+			}
 			_, _ = w.Write(archiveData)
 		default:
 			http.NotFound(w, r)
@@ -1335,6 +1360,8 @@ apps:
         path: apps/alpha/manifest.yaml
         artifactRepository: valon
         materialization: snapshot
+      auth:
+        token: git-source-token
 `, srv.URL, gestaltRef, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "snapshot.db")), filepath.ToSlash(artifactsDir), ref)
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -1342,7 +1369,13 @@ apps:
 
 	lock, err := NewLifecycle().WithHTTPClient(srv.Client()).LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
 	if err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
 	}
 	entry := lock.Providers["alpha"]
 	if entry.SourceRef == nil {
@@ -1365,6 +1398,31 @@ apps:
 	}
 	if got := archiveCount.Load(); got != 1 {
 		t.Fatalf("archive count = %d, want 1", got)
+	}
+
+	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
+		t.Fatalf("WriteLockfile: %v", err)
+	}
+	appRoot := filepath.Join(artifactsDir, filepath.FromSlash(PreparedProvidersDir), "alpha")
+	if err := os.RemoveAll(appRoot); err != nil {
+		t.Fatalf("RemoveAll app root: %v", err)
+	}
+	metadataBefore := metadataCount.Load()
+	archiveBefore := archiveCount.Load()
+	if err := NewLifecycle().WithHTTPClient(srv.Client()).SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := metadataCount.Load(); got != metadataBefore {
+		t.Fatalf("metadata count after locked sync = %d, want %d", got, metadataBefore)
+	}
+	if got := archiveCount.Load(); got != archiveBefore+1 {
+		t.Fatalf("archive count after locked sync = %d, want %d", got, archiveBefore+1)
 	}
 }
 

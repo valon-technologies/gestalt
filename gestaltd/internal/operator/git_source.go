@@ -28,6 +28,46 @@ type gitSnapshotSource struct {
 	GestaltRef  string
 }
 
+type SnapshotSourceRefPath struct {
+	RelRoot          string
+	SourceRepository string
+	SourceRef        string
+	ProviderDir      string
+	ManifestPath     string
+}
+
+func NewSnapshotSourceRefPath(repoURL, ref, manifestPath string) (SnapshotSourceRefPath, error) {
+	host, owner, name, err := githubRepoPath(repoURL)
+	if err != nil {
+		return SnapshotSourceRefPath{}, err
+	}
+	sourceRef := strings.ToLower(strings.TrimSpace(ref))
+	manifestPath = path.Clean(filepath.ToSlash(strings.TrimSpace(manifestPath)))
+	if manifestPath == "" || manifestPath == "." || strings.HasPrefix(manifestPath, "../") || path.IsAbs(manifestPath) {
+		return SnapshotSourceRefPath{}, fmt.Errorf("source.git.path must be a clean relative path")
+	}
+	providerDir := path.Dir(manifestPath)
+	if providerDir == "." {
+		providerDir = ""
+	}
+	sourceRepository := path.Join(host, owner, name)
+	parts := []string{sourceRepository, sourceRef}
+	if providerDir != "" {
+		parts = append(parts, strings.Split(providerDir, "/")...)
+	}
+	return SnapshotSourceRefPath{
+		RelRoot:          path.Join(parts...),
+		SourceRepository: sourceRepository,
+		SourceRef:        sourceRef,
+		ProviderDir:      providerDir,
+		ManifestPath:     manifestPath,
+	}, nil
+}
+
+func (p SnapshotSourceRefPath) FileRelPath(filename string) string {
+	return path.Join(p.RelRoot, filename)
+}
+
 func gitSourceDef(entry *config.ProviderEntry) *config.GitSourceDef {
 	if entry == nil {
 		return nil
@@ -111,41 +151,40 @@ func resolveGitSnapshotSource(cfg *config.Config, entry *config.ProviderEntry) (
 	if !ok {
 		return gitSnapshotSource{}, fmt.Errorf("providerSnapshotRepositories.%s is not configured", repoName)
 	}
-	owner, name, err := githubRepoPath(git.Repo)
+	base := strings.TrimRight(strings.TrimSpace(repo.URL), "/")
+	_, ref, manifestPath := git.NormalizedLocationParts()
+	snapshotPath, err := NewSnapshotSourceRefPath(git.Repo, ref, manifestPath)
 	if err != nil {
 		return gitSnapshotSource{}, err
 	}
-	base := strings.TrimRight(strings.TrimSpace(repo.URL), "/")
-	_, ref, manifestPath := git.NormalizedLocationParts()
-	providerDir := path.Dir(manifestPath)
-	if providerDir == "." {
-		providerDir = ""
-	}
-	parts := []string{base, "github.com", owner, name, ref}
-	if providerDir != "" {
-		parts = append(parts, strings.Split(providerDir, "/")...)
-	}
-	parts = append(parts, "provider-release.yaml")
 	return gitSnapshotSource{
-		MetadataURL: strings.Join(parts, "/"),
+		MetadataURL: base + "/" + snapshotPath.FileRelPath("provider-release.yaml"),
 		GestaltRef:  strings.TrimSpace(repo.GestaltRef),
 	}, nil
 }
 
-func githubRepoPath(raw string) (string, string, error) {
+func githubRepoPath(raw string) (string, string, string, error) {
+	raw = strings.TrimSpace(raw)
+	const sshPrefix = "git@github.com:"
+	if strings.HasPrefix(raw, sshPrefix) {
+		owner, repo, ok := strings.Cut(strings.TrimPrefix(raw, sshPrefix), "/")
+		if ok && owner != "" && repo != "" {
+			return "github.com", owner, strings.TrimSuffix(repo, ".git"), nil
+		}
+	}
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		return "", "", fmt.Errorf("parse source.git.repo: %w", err)
+		return "", "", "", fmt.Errorf("parse source.git.repo: %w", err)
 	}
 	if parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, "github.com") {
-		return "", "", fmt.Errorf("source.git snapshots require https://github.com/<owner>/<repo>[.git]")
+		return "", "", "", fmt.Errorf("source.git snapshots require https://github.com/<owner>/<repo>[.git]")
 	}
 	clean := strings.Trim(path.Clean(parsed.Path), "/")
 	parts := strings.Split(clean, "/")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("source.git snapshots require https://github.com/<owner>/<repo>[.git]")
+		return "", "", "", fmt.Errorf("source.git snapshots require https://github.com/<owner>/<repo>[.git]")
 	}
-	return parts[0], strings.TrimSuffix(parts[1], ".git"), nil
+	return "github.com", parts[0], strings.TrimSuffix(parts[1], ".git"), nil
 }
 
 func (l *Lifecycle) gitSourceManifestPath(ctx context.Context, paths lifecyclePaths, entry *config.ProviderEntry) (string, error) {
@@ -248,7 +287,6 @@ func (l *Lifecycle) lockGitSnapshotSource(ctx context.Context, cfg *config.Confi
 	}
 	metadataProvider := *app
 	metadataProvider.Source = config.NewMetadataSource(snapshot.MetadataURL)
-	metadataProvider.Source.Auth = app.Source.Auth
 	installed, entry, err := l.installMetadataSourcePackage(ctx, expectedKind, name, subject, destDir, &metadataProvider, paths.configDir)
 	if err != nil {
 		return LockEntry{}, nil, fmt.Errorf("%s source.git snapshot %s: %w", subject, snapshot.MetadataURL, err)

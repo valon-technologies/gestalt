@@ -38,6 +38,8 @@ func NormalizeKind(kind string) string {
 		return KindAuthentication
 	case KindApp:
 		return KindApp
+	case "plugin":
+		return KindApp
 	case KindAuthorization:
 		return KindAuthorization
 	case KindIndexedDB:
