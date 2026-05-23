@@ -47,7 +47,7 @@ func TestParseTargetMapRoundTrip(t *testing.T) {
 func TestParseStepsRejectsForwardStepOutputRef(t *testing.T) {
 	t.Parallel()
 
-	_, err := ParseSteps([]any{
+	_, err := parseSteps([]any{
 		map[string]any{
 			"id": "first",
 			"app": map[string]any{
@@ -74,17 +74,17 @@ func TestParseStepsRejectsForwardStepOutputRef(t *testing.T) {
 		},
 	}, "target.steps")
 	if err == nil {
-		t.Fatal("ParseSteps() succeeded, want error")
+		t.Fatal("parseSteps() succeeded, want error")
 	}
 	if !errors.Is(err, ErrInvalid) {
-		t.Fatalf("ParseSteps() error = %v, want ErrInvalid", err)
+		t.Fatalf("parseSteps() error = %v, want ErrInvalid", err)
 	}
 }
 
 func TestParseStepsRejectsEmptyStepID(t *testing.T) {
 	t.Parallel()
 
-	_, err := ParseSteps([]any{
+	_, err := parseSteps([]any{
 		map[string]any{
 			"app": map[string]any{
 				"name":      "github",
@@ -93,25 +93,25 @@ func TestParseStepsRejectsEmptyStepID(t *testing.T) {
 		},
 	}, "target.steps")
 	if err == nil {
-		t.Fatal("ParseSteps() succeeded, want error")
+		t.Fatal("parseSteps() succeeded, want error")
 	}
 	if !errors.Is(err, ErrInvalid) {
-		t.Fatalf("ParseSteps() error = %v, want ErrInvalid", err)
+		t.Fatalf("parseSteps() error = %v, want ErrInvalid", err)
 	}
 	if !strings.Contains(err.Error(), "target.steps[0].id is required") {
-		t.Fatalf("ParseSteps() error = %v, want step id required message", err)
+		t.Fatalf("parseSteps() error = %v, want step id required message", err)
 	}
 }
 
 func TestParseStepWhenRequiresValue(t *testing.T) {
 	t.Parallel()
 
-	_, err := ParseStepWhen(map[string]any{"equals": "ready"}, "target.steps[0].when")
+	_, err := parseStepWhen(map[string]any{"equals": "ready"}, "target.steps[0].when")
 	if err == nil {
-		t.Fatal("ParseStepWhen() succeeded, want error")
+		t.Fatal("parseStepWhen() succeeded, want error")
 	}
 	if !errors.Is(err, ErrInvalid) {
-		t.Fatalf("ParseStepWhen() error = %v, want ErrInvalid", err)
+		t.Fatalf("parseStepWhen() error = %v, want ErrInvalid", err)
 	}
 }
 

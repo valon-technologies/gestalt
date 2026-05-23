@@ -82,7 +82,7 @@ func workflowStepsToCore(steps []WorkflowStepConfig) []coreworkflow.Step {
 			Agent:          workflowAgentTurnToCore(step.Agent),
 			Metadata:       maps.Clone(step.Metadata),
 			TimeoutSeconds: timeoutSeconds,
-			When:           workflowStepWhenToCore(step.When),
+			When:           WorkflowStepWhenToCore(step.When),
 		})
 	}
 	return out
@@ -140,10 +140,6 @@ func workflowAgentTurnToCore(agent *WorkflowStepAgentConfig) *coreworkflow.Agent
 
 // WorkflowStepWhenToCore converts config YAML step-when form into core workflow form.
 func WorkflowStepWhenToCore(when *WorkflowStepWhenConfig) *coreworkflow.StepWhen {
-	return workflowStepWhenToCore(when)
-}
-
-func workflowStepWhenToCore(when *WorkflowStepWhenConfig) *coreworkflow.StepWhen {
 	if when == nil {
 		return nil
 	}

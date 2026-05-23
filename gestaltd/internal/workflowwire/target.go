@@ -28,16 +28,6 @@ func ParseTargetMap(value any, path string) (coreworkflow.Target, error) {
 	return coreworkflow.Target{Steps: steps}, nil
 }
 
-// ParseSteps converts a JSON-shaped steps array into core workflow steps.
-func ParseSteps(value any, path string) ([]coreworkflow.Step, error) {
-	return parseSteps(value, path)
-}
-
-// ParseStepWhen converts a JSON-shaped step when object into core form.
-func ParseStepWhen(value any, path string) (*coreworkflow.StepWhen, error) {
-	return parseStepWhen(value, path)
-}
-
 func parseSteps(value any, path string) ([]coreworkflow.Step, error) {
 	if value == nil {
 		return nil, nil
