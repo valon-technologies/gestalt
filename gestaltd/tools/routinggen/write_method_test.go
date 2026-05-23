@@ -67,7 +67,7 @@ func TestWriteMethodStreamingPatterns(t *testing.T) {
 				if !method.IsStreaming {
 					continue
 				}
-				writeMethod(&buf, tc.receiver, "binding", "servers", "proto.Server", "defaultBinding", qualifyMethod(method))
+				writeMethod(&buf, tc.receiver, qualifyMethod(method))
 			}
 
 			got := buf.String()
