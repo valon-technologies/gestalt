@@ -2399,7 +2399,7 @@ func validateWorkflowAgentToolsConfig(cfg *Config, path string, tools []Workflow
 			return fmt.Errorf("config validation: %s[%d].app references unknown app %q", path, i, tool.App)
 		}
 		if hasSystemTool && tool.Operation == "" {
-			return fmt.Errorf("config validation: %s[%d].operation is required when workflow system tools are delegated", path, i)
+			return fmt.Errorf("config validation: %s[%d].operation is required when workflow system tools are granted", path, i)
 		}
 	}
 	return nil

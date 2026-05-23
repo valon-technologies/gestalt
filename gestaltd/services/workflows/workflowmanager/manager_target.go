@@ -914,7 +914,7 @@ func validateWorkflowAgentToolRefs(refs []coreagent.ToolRef) error {
 			continue
 		}
 		if appName == "" || appName == "*" || operation == "" {
-			return fmt.Errorf("%w: workflow agent tool_refs[%d] must be an exact app operation when workflow system tools are delegated", invocation.ErrInvalidInvocation, i)
+			return fmt.Errorf("%w: workflow agent tool_refs[%d] must be an exact app operation when workflow system tools are granted", invocation.ErrInvalidInvocation, i)
 		}
 	}
 	return nil
