@@ -17,6 +17,7 @@ use crate::agent::{
     AgentToolRef, agent_tool_ref_from_proto, agent_tool_ref_to_proto, new_agent_tool_ref,
 };
 use crate::api::RuntimeMetadata;
+use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::error::Error;
 use crate::error::Result as ProviderResult;
 use crate::generated::v1::{
@@ -27,12 +28,6 @@ use crate::rpc_status::rpc_status;
 
 type WorkflowHostTransport = InterceptedService<Channel, WorkflowHostRelayTokenInterceptor>;
 
-/// Environment variable containing the workflow-host service target.
-/// Alias for [`crate::env::ENV_HOST_SERVICE_SOCKET`].
-pub const ENV_WORKFLOW_HOST_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
-/// Environment variable containing the optional workflow-host relay token.
-/// Alias for [`crate::env::ENV_HOST_SERVICE_TOKEN`].
-pub const ENV_WORKFLOW_HOST_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 const WORKFLOW_HOST_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 /// Native JSON object used by authored workflow providers.
@@ -2267,10 +2262,9 @@ pub struct WorkflowHost {
 impl WorkflowHost {
     /// Connects to the workflow host service described by the environment.
     pub async fn connect() -> std::result::Result<Self, WorkflowHostError> {
-        let target = std::env::var(ENV_WORKFLOW_HOST_SOCKET).map_err(|_| {
-            WorkflowHostError::Env(format!("{ENV_WORKFLOW_HOST_SOCKET} is not set"))
-        })?;
-        let relay_token = std::env::var(ENV_WORKFLOW_HOST_SOCKET_TOKEN).unwrap_or_default();
+        let target = std::env::var(ENV_HOST_SERVICE_SOCKET)
+            .map_err(|_| WorkflowHostError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
+        let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
         let channel = match parse_workflow_host_target(&target)? {
             WorkflowHostTarget::Unix(path) => connect_unix(path).await?,
             WorkflowHostTarget::Tcp(address) => {

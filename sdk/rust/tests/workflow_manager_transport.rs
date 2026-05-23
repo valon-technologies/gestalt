@@ -1166,7 +1166,7 @@ async fn workflow_manager_signal_or_start_accepts_native_values() {
     let step = target.steps.first().expect("workflow step");
     let agent = match step.action.as_ref().expect("step action") {
         workflow_step::Action::Agent(agent) => agent,
-        _ => panic!("expected agent target"),
+        _ => panic!("expected agent step"),
     };
     assert_eq!(agent.provider, "openai");
     assert_eq!(agent.model, "gpt-5.1");

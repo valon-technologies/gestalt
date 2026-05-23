@@ -38,14 +38,14 @@ _manager_requests: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
 
 
-class _AppTargetDict(TypedDict):
+class _AppStepDict(TypedDict):
     name: str
     operation: str
 
 
 class _WorkflowStepDict(TypedDict):
     id: str
-    app: _AppTargetDict
+    app: _AppStepDict
 
 
 class _BoundTargetDict(TypedDict):

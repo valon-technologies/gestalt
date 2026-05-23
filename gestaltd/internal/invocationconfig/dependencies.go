@@ -28,7 +28,7 @@ func AppInvocationDependencies(deps []config.AppInvocationDependency) []invocati
 
 func AppWorkflowManagerGrants(capabilities *config.AppCapabilitiesConfig) workflowgrants.Grants {
 	if capabilities == nil || capabilities.Workflow == nil {
-		return nil
+		return workflowgrants.Grants{}
 	}
 	return workflowgrants.DecodeClaims(capabilities.Workflow.Operations)
 }

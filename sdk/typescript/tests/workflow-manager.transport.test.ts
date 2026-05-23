@@ -27,13 +27,13 @@ import {
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
 
-function workflowAppTarget(name: string, operation: string) {
+function workflowAppStepTarget(name: string, operation: string) {
   return {
     steps: [{ id: operation, app: { name, operation } }],
   };
 }
 
-function workflowAgentTarget(provider: string, prompt: string) {
+function workflowAgentStepTarget(provider: string, prompt: string) {
   return {
     steps: [{ id: "agent", agent: { provider, prompt } }],
   };
@@ -313,7 +313,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       providerName: "basic",
       cron: "*/5 * * * *",
       timezone: "UTC",
-      target: workflowAppTarget("roadmap", "sync"),
+      target: workflowAppStepTarget("roadmap", "sync"),
       paused: false,
       idempotencyKey: "workflow-schedule-key-ts",
     });
@@ -336,7 +336,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     const startedRun = await fromRequest.startRun({
       providerName: "basic",
       workflowKey: "roadmap-summary:item-1",
-      target: workflowAgentTarget("simple", "Summarize item 1."),
+      target: workflowAgentStepTarget("simple", "Summarize item 1."),
     });
     const signaledRun = await fromRequest.signalRun({
       runId: "run-1",
@@ -347,14 +347,14 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     const signaledOrStartedRun = await fromRequest.signalOrStartRun({
       providerName: "basic",
       workflowKey: "roadmap-summary:item-1",
-      target: workflowAgentTarget("simple", "Summarize item 1."),
+      target: workflowAgentStepTarget("simple", "Summarize item 1."),
       signal: {
         name: "roadmap.item.updated",
       },
     });
     const createdDefinition = await fromRequest.createDefinition({
       providerName: "basic",
-      target: workflowAppTarget("roadmap", "sync"),
+      target: workflowAppStepTarget("roadmap", "sync"),
     });
     const fetchedDefinition = await fromRequest.getDefinition({
       definitionId: "def-1",
@@ -362,7 +362,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     const updatedDefinition = await fromRequest.updateDefinition({
       definitionId: "def-1",
       providerName: "secondary",
-      target: workflowAppTarget("roadmap", "status"),
+      target: workflowAppStepTarget("roadmap", "status"),
     });
     await fromRequest.deleteDefinition({ definitionId: "def-1" });
     const fetched = await fromRequest.getSchedule({ scheduleId: "sched-1" });
@@ -371,7 +371,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       providerName: "secondary",
       cron: "0 * * * *",
       timezone: "America/New_York",
-      target: workflowAppTarget("roadmap", "status"),
+      target: workflowAppStepTarget("roadmap", "status"),
       paused: true,
     });
     const paused = await fromRequest.pauseSchedule({ scheduleId: "sched-1" });
@@ -383,7 +383,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         type: "roadmap.item.updated",
         source: "roadmap",
       },
-      target: workflowAppTarget("slack", "chat.postMessage"),
+      target: workflowAppStepTarget("slack", "chat.postMessage"),
       paused: false,
     });
     const fetchedTrigger = await fromRequest.getTrigger({ triggerId: "trg-1" });
@@ -393,7 +393,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       match: {
         type: "roadmap.item.synced",
       },
-      target: workflowAppTarget("slack", "chat.postMessage"),
+      target: workflowAppStepTarget("slack", "chat.postMessage"),
       paused: true,
     });
     const pausedTrigger = await fromRequest.pauseTrigger({

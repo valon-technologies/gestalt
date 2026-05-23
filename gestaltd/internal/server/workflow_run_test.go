@@ -39,11 +39,11 @@ type workflowRunListResponse struct {
 	NextPageToken string                `json:"nextPageToken,omitempty"`
 }
 
-func workflowAppTarget(appName, operation string) coreworkflow.Target {
-	return workflowAppTargetWithRouting(appName, operation, "", "")
+func workflowAppStepTarget(appName, operation string) coreworkflow.Target {
+	return workflowAppStepTargetWithRouting(appName, operation, "", "")
 }
 
-func workflowAppTargetWithRouting(appName, operation, connection, instance string) coreworkflow.Target {
+func workflowAppStepTargetWithRouting(appName, operation, connection, instance string) coreworkflow.Target {
 	return coreworkflow.Target{
 		Steps: []coreworkflow.Step{{
 			ID: "app",
@@ -71,7 +71,7 @@ func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) 
 	provider.runs["run-new"] = &coreworkflow.Run{
 		ID:           "run-new",
 		Status:       coreworkflow.RunStatusRunning,
-		Target:       workflowAppTarget("roadmap", "sync"),
+		Target:       workflowAppStepTarget("roadmap", "sync"),
 		Trigger:      coreworkflow.RunTrigger{Schedule: &coreworkflow.ScheduleTrigger{ScheduleID: "sched-new"}},
 		ExecutionRef: "workflow_schedule:sched-new:ref-active",
 		CreatedAt:    &now,
@@ -79,7 +79,7 @@ func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) 
 	provider.runs["run-old"] = &coreworkflow.Run{
 		ID:            "run-old",
 		Status:        coreworkflow.RunStatusSucceeded,
-		Target:        workflowAppTarget("roadmap", "sync"),
+		Target:        workflowAppStepTarget("roadmap", "sync"),
 		Trigger:       coreworkflow.RunTrigger{Schedule: &coreworkflow.ScheduleTrigger{ScheduleID: "sched-old"}},
 		ExecutionRef:  "workflow_schedule:sched-old:ref-revoked",
 		CreatedAt:     &older,
@@ -90,7 +90,7 @@ func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) 
 	provider.runs["run-other"] = &coreworkflow.Run{
 		ID:           "run-other",
 		Status:       coreworkflow.RunStatusSucceeded,
-		Target:       workflowAppTarget("roadmap", "sync"),
+		Target:       workflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-other:ref-other",
 		CreatedAt:    &now,
 	}
@@ -210,7 +210,7 @@ func TestGlobalWorkflowRunListPassesPaginationAndFilters(t *testing.T) {
 	provider.runs["run-page"] = &coreworkflow.Run{
 		ID:           "run-page",
 		Status:       coreworkflow.RunStatusRunning,
-		Target:       workflowAppTarget("roadmap", "sync"),
+		Target:       workflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_run:page:ref",
 		CreatedAt:    &now,
 	}
@@ -321,14 +321,14 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 	provider.runs["run-sync"] = &coreworkflow.Run{
 		ID:           "run-sync",
 		Status:       coreworkflow.RunStatusSucceeded,
-		Target:       workflowAppTarget("roadmap", "sync"),
+		Target:       workflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-sync:ref-sync",
 		CreatedAt:    &now,
 	}
 	provider.runs["run-export"] = &coreworkflow.Run{
 		ID:           "run-export",
 		Status:       coreworkflow.RunStatusFailed,
-		Target:       workflowAppTarget("roadmap", "export"),
+		Target:       workflowAppStepTarget("roadmap", "export"),
 		ExecutionRef: "workflow_schedule:sched-export:ref-export",
 		CreatedAt:    &now,
 	}
@@ -419,7 +419,7 @@ func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
 	run := &coreworkflow.Run{
 		ID:           "run-cancel",
 		Status:       coreworkflow.RunStatusRunning,
-		Target:       workflowAppTarget("roadmap", "sync"),
+		Target:       workflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-cancel:ref-active",
 		CreatedAt:    &now,
 		StartedAt:    &now,

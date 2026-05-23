@@ -119,22 +119,14 @@ type WorkflowManagerPublishEvent struct {
 	Event        *WorkflowEvent
 }
 
-type WorkflowManagerBoundRun = BoundWorkflowRun
-
-type WorkflowManagerBoundDefinition = BoundWorkflowDefinition
-
-type WorkflowManagerBoundSchedule = BoundWorkflowSchedule
-
-type WorkflowManagerBoundEventTrigger = BoundWorkflowEventTrigger
-
 type WorkflowManagerRun struct {
 	ProviderName string
-	Run          *WorkflowManagerBoundRun
+	Run          *BoundWorkflowRun
 }
 
 type WorkflowManagerRunSignal struct {
 	ProviderName string
-	Run          *WorkflowManagerBoundRun
+	Run          *BoundWorkflowRun
 	Signal       *WorkflowSignal
 	StartedRun   bool
 	WorkflowKey  string
@@ -142,20 +134,18 @@ type WorkflowManagerRunSignal struct {
 
 type WorkflowManagerDefinition struct {
 	ProviderName string
-	Definition   *WorkflowManagerBoundDefinition
+	Definition   *BoundWorkflowDefinition
 }
 
 type WorkflowManagerSchedule struct {
 	ProviderName string
-	Schedule     *WorkflowManagerBoundSchedule
+	Schedule     *BoundWorkflowSchedule
 }
 
 type WorkflowManagerEventTrigger struct {
 	ProviderName string
-	Trigger      *WorkflowManagerBoundEventTrigger
+	Trigger      *BoundWorkflowEventTrigger
 }
-
-type WorkflowManagerPublishedEvent = WorkflowEvent
 
 func newWorkflowManagerStartRunRequest(input WorkflowManagerStartRun) (*proto.StartWorkflowProviderRunRequest, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
@@ -367,7 +357,7 @@ func workflowManagerRunSignalFromProto(value *proto.SignalWorkflowRunResponse) (
 	if value == nil {
 		return nil, nil
 	}
-	var run *WorkflowManagerBoundRun
+	var run *BoundWorkflowRun
 	if value.GetRun() != nil {
 		input, err := boundWorkflowRunFromProto(value.GetRun())
 		if err != nil {

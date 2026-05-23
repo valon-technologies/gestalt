@@ -56,7 +56,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
-	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
@@ -2124,9 +2123,9 @@ func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
 			}
 		}
 		if step.App != nil {
-			appTarget := *step.App
-			appTarget.Input = coreworkflow.CloneValue(appTarget.Input)
-			step.App = &appTarget
+			appStep := *step.App
+			appStep.Input = coreworkflow.CloneValue(appStep.Input)
+			step.App = &appStep
 		}
 		if step.Agent != nil {
 			agent := *step.Agent
@@ -3910,7 +3909,7 @@ func TestPluginInvokesExposeHostSocketEnv(t *testing.T) {
 	}
 }
 
-func TestPluginWorkflowManagerExposeHostSocketEnv(t *testing.T) {
+func TestAppWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -4301,7 +4300,7 @@ func TestPluginHostedHTTPBindingsExposeAuthorizationSocketEnv(t *testing.T) {
 	}
 }
 
-func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
+func TestAppWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -4325,6 +4324,21 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Workflow manager CRUD")
 	manager := newStubWorkflowManager()
+	workflowManagerOperations := []string{
+		workflowgrants.OperationSchedulesCreate,
+		workflowgrants.OperationSchedulesGet,
+		workflowgrants.OperationSchedulesUpdate,
+		workflowgrants.OperationSchedulesDelete,
+		workflowgrants.OperationSchedulesPause,
+		workflowgrants.OperationSchedulesResume,
+		workflowgrants.OperationEventTriggersCreate,
+		workflowgrants.OperationEventTriggersGet,
+		workflowgrants.OperationEventTriggersUpdate,
+		workflowgrants.OperationEventTriggersDelete,
+		workflowgrants.OperationEventTriggersPause,
+		workflowgrants.OperationEventTriggersResume,
+		workflowgrants.OperationEventsPublish,
+	}
 
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{
@@ -4333,6 +4347,11 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Capabilities: &config.AppCapabilitiesConfig{
+					Workflow: &config.AppWorkflowCapabilitiesConfig{
+						Operations: workflowManagerOperations,
+					},
+				},
 			},
 		},
 	}
@@ -4700,7 +4719,7 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 	}
 }
 
-func TestPluginWorkflowManagerCapabilitiesRestrictHostMethods(t *testing.T) {
+func TestAppWorkflowManagerCapabilitiesRestrictHostMethods(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -4799,7 +4818,7 @@ func TestPluginWorkflowManagerCapabilitiesRestrictHostMethods(t *testing.T) {
 	}
 }
 
-func TestPluginWorkflowManagerRejectsInvalidInvocationToken(t *testing.T) {
+func TestAppWorkflowManagerRejectsInvalidInvocationToken(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -7384,7 +7403,7 @@ func TestAppRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelC
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartAppRelayEnv(t, startRequests[0], workflowservice.DefaultProviderSocketEnv)
+	assertStartAppRelayEnv(t, startRequests[0], "workflow provider relay")
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -7921,6 +7940,14 @@ func TestAppRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testi
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Runtime:              &config.RuntimePlacementConfig{},
+				Capabilities: &config.AppCapabilitiesConfig{
+					Workflow: &config.AppWorkflowCapabilitiesConfig{
+						Operations: []string{
+							workflowgrants.OperationSchedulesCreate,
+							workflowgrants.OperationSchedulesGet,
+						},
+					},
+				},
 			},
 		},
 	}
@@ -8012,7 +8039,7 @@ func TestAppRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testi
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartAppRelayEnv(t, startRequests[0], workflowservice.DefaultProviderSocketEnv)
+	assertStartAppRelayEnv(t, startRequests[0], "workflow provider relay")
 }
 
 func TestAppRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing.T) {

@@ -92,7 +92,7 @@ async function waitForSocket(
   }
 }
 
-function workflowAppTarget(appName: string, operation: string) {
+function workflowAppStepTarget(appName: string, operation: string) {
   return boundWorkflowTargetToProto({
     steps: [{ id: operation, app: { name: appName, operation } }],
   });
@@ -896,14 +896,14 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
 
     const run = await workflow.startRun(
       create(StartWorkflowProviderRunRequestSchema, {
-        target: workflowAppTarget("roadmap", "sync"),
+        target: workflowAppStepTarget("roadmap", "sync"),
       }),
     );
     const app = run.target?.steps[0]?.action.case === "app"
       ? run.target.steps[0].action.value
       : undefined;
     if (app === undefined) {
-      throw new Error("workflow run target is not a app target");
+      throw new Error("workflow run target does not have an app step");
     }
     expect(app.name).toBe("roadmap");
     expect(run.id).toBe("roadmap:sync:1");

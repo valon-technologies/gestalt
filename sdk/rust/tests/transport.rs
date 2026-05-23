@@ -264,7 +264,7 @@ struct Output {
     workflow_event_data_content_type: String,
     workflow_created_by_subject_id: String,
     tool_refs_set: bool,
-    tool_ref_plugin: String,
+    tool_ref_app: String,
     tool_ref_operation: String,
     tool_ref_run_as: String,
     tool_ref_external_id: String,
@@ -341,10 +341,10 @@ async fn serves_provider_requests_over_unix_socket() {
                         .unwrap_or_default()
                         .to_string(),
                     tool_refs_set: request.tool_refs_set,
-                    tool_ref_plugin: request
+                    tool_ref_app: request
                         .tool_refs
                         .first()
-                        .map(|ref_| ref_.plugin.as_str())
+                        .map(|ref_| ref_.app.as_str())
                         .unwrap_or_default()
                         .to_string(),
                     tool_ref_operation: request
@@ -525,7 +525,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"user","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123","tool_refs_set":true,"tool_ref_plugin":"github","tool_ref_operation":"bot.getPullRequest","tool_ref_run_as":"service_account:github-review","tool_ref_external_id":"user:12345678"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"user","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123","tool_refs_set":true,"tool_ref_app":"github","tool_ref_operation":"bot.getPullRequest","tool_ref_run_as":"service_account:github-review","tool_ref_external_id":"user:12345678"}"#
     );
 
     let session_catalog = client

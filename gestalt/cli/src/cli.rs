@@ -760,7 +760,7 @@ pub struct AgentResumeArgs {
 pub enum WorkflowScheduleCommands {
     /// List workflow schedules
     List {
-        /// Filter schedules by target plugin
+        /// Filter schedules by target app
         #[arg(long)]
         app: Option<String>,
     },
@@ -794,7 +794,7 @@ pub enum WorkflowScheduleCommands {
 pub enum WorkflowTriggerCommands {
     /// List workflow triggers
     List {
-        /// Filter triggers by target plugin
+        /// Filter triggers by target app
         #[arg(long)]
         app: Option<String>,
         /// Filter triggers by event type
@@ -831,7 +831,7 @@ pub enum WorkflowTriggerCommands {
 pub enum WorkflowRunCommands {
     /// List workflow runs
     List {
-        /// Filter runs by target plugin
+        /// Filter runs by target app
         #[arg(long)]
         app: Option<String>,
         /// Filter runs by status
@@ -1173,6 +1173,10 @@ pub struct WorkflowScheduleUpdateArgs {
     #[arg(long)]
     pub operation: Option<String>,
 
+    /// Target step ID to update when the workflow has multiple steps
+    #[arg(long = "step-id")]
+    pub step_id: Option<String>,
+
     /// IANA timezone (leave unset to keep existing; pass empty string to clear)
     #[arg(long)]
     pub timezone: Option<String>,
@@ -1230,6 +1234,10 @@ pub struct WorkflowTriggerUpdateArgs {
     /// Target operation (leave unset to keep existing)
     #[arg(long)]
     pub operation: Option<String>,
+
+    /// Target step ID to update when the workflow has multiple steps
+    #[arg(long = "step-id")]
+    pub step_id: Option<String>,
 
     /// Named connection (leave unset to keep existing; pass empty string to clear)
     #[arg(long)]

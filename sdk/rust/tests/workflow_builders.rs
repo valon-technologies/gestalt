@@ -121,7 +121,7 @@ fn workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()> {
                         ..Default::default()
                     }],
                     tools: vec![AgentToolRef {
-                        plugin: "datadog".to_string(),
+                        app: "datadog".to_string(),
                         operation: "queryLogs".to_string(),
                         ..Default::default()
                     }],
@@ -142,7 +142,7 @@ fn workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()> {
                         template: "Open a PR.".to_string(),
                     }),
                     tools: vec![AgentToolRef {
-                        plugin: "github".to_string(),
+                        app: "github".to_string(),
                         operation: "createPullRequest".to_string(),
                         ..Default::default()
                     }],
@@ -163,7 +163,7 @@ fn workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()> {
 
     let diagnosis = agent_step(&target, 0)?;
     assert_eq!(target.steps.len(), 2);
-    assert_eq!(diagnosis.tools[0].plugin, "datadog");
+    assert_eq!(diagnosis.tools[0].app, "datadog");
     assert_eq!(
         target.steps[1]
             .when

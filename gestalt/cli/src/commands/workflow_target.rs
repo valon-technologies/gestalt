@@ -4,8 +4,20 @@ use serde_json::{Map, Value};
 type JsonMap = Map<String, Value>;
 type SingleAppStep<'a> = (&'a JsonMap, &'a JsonMap);
 
-pub(super) struct AppTargetUpdate<'a> {
+struct AppStepTargetBuild<'a> {
+    existing_step: Option<&'a JsonMap>,
+    app: &'a str,
+    operation: &'a str,
+    connection: Option<&'a str>,
+    instance: Option<&'a str>,
+    input: Option<&'a Value>,
+    existing: Option<&'a Value>,
+    step_id: Option<&'a str>,
+}
+
+pub(super) struct AppStepTargetUpdate<'a> {
     pub(super) resource: &'static str,
+    pub(super) step_id: Option<&'a str>,
     pub(super) app: Option<&'a str>,
     pub(super) operation: Option<&'a str>,
     pub(super) connection: Option<&'a str>,
@@ -15,7 +27,7 @@ pub(super) struct AppTargetUpdate<'a> {
     pub(super) input: Option<&'a Value>,
 }
 
-impl AppTargetUpdate<'_> {
+impl AppStepTargetUpdate<'_> {
     pub(super) fn has_overrides(&self) -> bool {
         self.app.is_some()
             || self.operation.is_some()
@@ -26,9 +38,9 @@ impl AppTargetUpdate<'_> {
     }
 }
 
-pub(super) fn merge_app_target_flags(
+pub(super) fn merge_app_step_target_flags(
     existing: &Value,
-    update: AppTargetUpdate<'_>,
+    update: AppStepTargetUpdate<'_>,
 ) -> Result<Value> {
     if !update.has_overrides() {
         return existing
@@ -37,9 +49,16 @@ pub(super) fn merge_app_target_flags(
             .ok_or_else(|| anyhow!("existing {} is missing target", update.resource));
     }
 
-    let (step, app_step) = target_single_app_step(existing).ok_or_else(|| {
+    let (step, app_step) = target_app_step_for_update(existing, update.step_id).ok_or_else(|| {
+        if let Some(step_id) = update.step_id {
+            return anyhow!(
+                "existing {} has no app step with id {}",
+                update.resource,
+                step_id
+            );
+        }
         anyhow!(
-            "cannot apply app target flags to an existing non-app or multi-step {}; recreate it with a full target definition",
+            "cannot apply app step target flags to an existing non-app or multi-step {}; pass --step-id to update a specific step or recreate it with a full target definition",
             update.resource
         )
     })?;
@@ -85,34 +104,49 @@ pub(super) fn merge_app_target_flags(
         app_step.get("input").cloned()
     };
 
-    Ok(build_app_target_from_step(
-        Some(step),
-        &app,
-        &operation,
-        connection.as_deref(),
-        instance.as_deref(),
-        input.as_ref(),
-    ))
+    Ok(build_app_step_target_from_step(AppStepTargetBuild {
+        existing_step: Some(step),
+        app: &app,
+        operation: &operation,
+        connection: connection.as_deref(),
+        instance: instance.as_deref(),
+        input: input.as_ref(),
+        existing: Some(existing),
+        step_id: update.step_id,
+    }))
 }
 
-pub(super) fn build_app_target(
+pub(super) fn build_app_step_target(
     app: &str,
     operation: &str,
     connection: Option<&str>,
     instance: Option<&str>,
     input: Option<&Value>,
 ) -> Value {
-    build_app_target_from_step(None, app, operation, connection, instance, input)
+    build_app_step_target_from_step(AppStepTargetBuild {
+        existing_step: None,
+        app,
+        operation,
+        connection,
+        instance,
+        input,
+        existing: None,
+        step_id: None,
+    })
 }
 
-fn build_app_target_from_step(
-    existing_step: Option<&Map<String, Value>>,
-    app: &str,
-    operation: &str,
-    connection: Option<&str>,
-    instance: Option<&str>,
-    input: Option<&Value>,
-) -> Value {
+fn build_app_step_target_from_step(args: AppStepTargetBuild<'_>) -> Value {
+    let AppStepTargetBuild {
+        existing_step,
+        app,
+        operation,
+        connection,
+        instance,
+        input,
+        existing,
+        step_id,
+    } = args;
+
     let mut step = existing_step.cloned().unwrap_or_default();
     let mut app_target = existing_step
         .and_then(|step| step.get("app"))
@@ -148,9 +182,58 @@ fn build_app_target_from_step(
     step.remove("agent");
     step.insert("app".to_string(), Value::Object(app_target));
 
+    if let (Some(existing), Some(step_id)) = (existing, step_id) {
+        let mut steps = existing
+            .get("target")
+            .and_then(|target| target.get("steps"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let mut replaced = false;
+        for item in steps.iter_mut() {
+            let Some(step_map) = item.as_object_mut() else {
+                continue;
+            };
+            if step_map.get("id").and_then(Value::as_str) == Some(step_id) {
+                *step_map = step.clone();
+                replaced = true;
+                break;
+            }
+        }
+        if replaced {
+            let mut target = Map::new();
+            target.insert("steps".to_string(), Value::Array(steps));
+            return Value::Object(target);
+        }
+    }
+
     let mut target = Map::new();
     target.insert("steps".to_string(), Value::Array(vec![Value::Object(step)]));
     Value::Object(target)
+}
+
+fn target_app_step_for_update<'a>(
+    value: &'a Value,
+    step_id: Option<&str>,
+) -> Option<SingleAppStep<'a>> {
+    if let Some(step_id) = step_id {
+        let steps = value.get("target")?.get("steps")?.as_array()?;
+        for step in steps {
+            let Some(step_map) = step.as_object() else {
+                continue;
+            };
+            if step_map.get("id").and_then(Value::as_str) != Some(step_id) {
+                continue;
+            }
+            if step_map.get("agent").is_some() {
+                return None;
+            }
+            let app = step_map.get("app").and_then(Value::as_object)?;
+            return Some((step_map, app));
+        }
+        return None;
+    }
+    target_single_app_step(value)
 }
 
 pub(super) fn literal_input(input: &Map<String, Value>) -> Value {
@@ -277,5 +360,106 @@ mod tests {
         assert_eq!(target_operation(&value, Some("slack")), Some("reply"));
         assert_eq!(target_app(&value, Some("jira")), Some("github"));
         assert_eq!(target_operation(&value, Some("jira")), Some("createIssue"));
+    }
+
+    #[test]
+    fn merge_app_step_target_flags_updates_matching_step_in_multi_step_target() {
+        let existing = json!({
+            "target": {
+                "steps": [
+                    {
+                        "id": "first",
+                        "app": {
+                            "name": "github",
+                            "operation": "createIssue",
+                            "input": {"literal": {"title": "old"}}
+                        }
+                    },
+                    {
+                        "id": "notify",
+                        "app": {
+                            "name": "slack",
+                            "operation": "reply",
+                            "input": {"literal": {"text": "hello"}}
+                        }
+                    }
+                ]
+            }
+        });
+        let update = AppStepTargetUpdate {
+            resource: "schedule",
+            step_id: Some("notify"),
+            app: Some("slack"),
+            operation: Some("postMessage"),
+            connection: None,
+            instance: None,
+            clear_input: false,
+            replace_input: false,
+            input: None,
+        };
+
+        let merged = merge_app_step_target_flags(&existing, update).expect("merge target");
+        let steps = merged
+            .get("steps")
+            .and_then(Value::as_array)
+            .expect("steps");
+        assert_eq!(steps.len(), 2);
+        assert_eq!(
+            steps[0]
+                .get("app")
+                .and_then(|app| app.get("operation"))
+                .and_then(Value::as_str),
+            Some("createIssue")
+        );
+        assert_eq!(
+            steps[1]
+                .get("app")
+                .and_then(|app| app.get("operation"))
+                .and_then(Value::as_str),
+            Some("postMessage")
+        );
+    }
+
+    #[test]
+    fn merge_app_step_target_flags_skips_non_object_steps_when_matching_by_step_id() {
+        let existing = json!({
+            "target": {
+                "steps": [
+                    "not-a-step",
+                    {
+                        "id": "notify",
+                        "app": {
+                            "name": "slack",
+                            "operation": "reply"
+                        }
+                    }
+                ]
+            }
+        });
+        let update = AppStepTargetUpdate {
+            resource: "trigger",
+            step_id: Some("notify"),
+            app: Some("slack"),
+            operation: Some("postMessage"),
+            connection: None,
+            instance: None,
+            clear_input: false,
+            replace_input: false,
+            input: None,
+        };
+
+        let merged = merge_app_step_target_flags(&existing, update).expect("merge target");
+        let steps = merged
+            .get("steps")
+            .and_then(Value::as_array)
+            .expect("steps");
+        assert_eq!(steps[0], json!("not-a-step"));
+        assert_eq!(
+            steps[1]
+                .get("app")
+                .and_then(|app| app.get("operation"))
+                .and_then(Value::as_str),
+            Some("postMessage")
+        );
     }
 }

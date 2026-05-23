@@ -921,7 +921,7 @@ func TestRun_ProviderReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 	}
 }
 
-func TestRun_ProviderReleaseBuildsGoSourceWorkflowPlugin(t *testing.T) {
+func TestRun_ProviderReleaseBuildsGoSourceWorkflowApp(t *testing.T) {
 	t.Parallel()
 
 	const workflowReleaseAppName = "workflow-release"

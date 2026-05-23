@@ -815,9 +815,6 @@ workflows:
       paused: false
 ```
 
-`permissions` is accepted as a deprecated alias for `invokes` using the older
-`{ app, operations }` shape. A workflow object must not set both fields.
-
 ### `workflows.schedules.*`
 
 | Field | Description |
@@ -836,7 +833,6 @@ workflows:
 | `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
 | `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
 | `invokes` | Optional additional app-operation grants as `{ app, operation }` entries. The direct target operation is always included. These grants are a token permission ceiling; they do not create credentials or replace `apps.<target>.invokes` for nested app calls. |
-| `permissions` | Deprecated alias for `invokes` using `{ app, operations }`. Do not set both. |
 | `cron` | **Required.** Five-field cron expression. |
 | `timezone` | IANA timezone name. Defaults to `UTC`. |
 | `paused` | When `true`, Gestalt reconciles the schedule in a paused state. |
@@ -854,7 +850,6 @@ workflows:
 | `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
 | `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
 | `invokes` | Optional additional app-operation grants as `{ app, operation }` entries. The direct target operation is always included. These grants are a token permission ceiling; they do not create credentials or replace `apps.<target>.invokes` for nested app calls. |
-| `permissions` | Deprecated alias for `invokes` using `{ app, operations }`. Do not set both. |
 | `match.type` | **Required.** Event type matcher. |
 | `match.source` | Optional event source matcher. |
 | `match.subject` | Optional event subject matcher. |

@@ -1393,7 +1393,7 @@ class AgentTransportTests(unittest.TestCase):
                     ],
                     tool_refs=[
                         AgentToolRef(
-                            plugin="github",
+                            app="github",
                             operation="issues.get",
                             connection="default",
                         )

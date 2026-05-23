@@ -36,7 +36,7 @@ type InvocationTokenManager struct {
 type invocationTokenClaims struct {
 	jwt.RegisteredClaims
 	DelegationExpiresAt *jwt.NumericDate                 `json:"delegation_expires_at,omitempty"`
-	CallerApp           string                           `json:"caller_plugin,omitempty"`
+	CallerApp           string                           `json:"caller_app,omitempty"`
 	SubjectKind         string                           `json:"subject_kind,omitempty"`
 	Email               string                           `json:"email,omitempty"`
 	DisplayName         string                           `json:"display_name,omitempty"`
@@ -105,20 +105,20 @@ func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
 	}, nil
 }
 
-func (m *InvocationTokenManager) MintRootToken(ctx context.Context, pluginName string, grants InvocationGrants) (string, error) {
-	return m.MintRootTokenWithWorkflowGrants(ctx, pluginName, grants, nil)
+func (m *InvocationTokenManager) MintRootToken(ctx context.Context, appName string, grants InvocationGrants) (string, error) {
+	return m.MintRootTokenWithWorkflowGrants(ctx, appName, grants, nil)
 }
 
-func (m *InvocationTokenManager) MintRootTokenWithWorkflowGrants(ctx context.Context, pluginName string, grants InvocationGrants, workflowGrants workflowgrants.Grants) (string, error) {
+func (m *InvocationTokenManager) MintRootTokenWithWorkflowGrants(ctx context.Context, appName string, grants InvocationGrants, workflowGrants workflowgrants.Grants) (string, error) {
 	if m == nil {
 		return "", fmt.Errorf("invocation tokens are not available")
 	}
 	now := m.now()
 	expiresAt := now.Add(m.rootTTL)
-	return m.signClaims(claimsFromContext(ctx, pluginName, grants, workflowGrants, now, expiresAt, m.delegationExpiry(expiresAt, now)))
+	return m.signClaims(claimsFromContext(ctx, appName, grants, workflowGrants, now, expiresAt, m.delegationExpiry(expiresAt, now)))
 }
 
-func (m *InvocationTokenManager) ExchangeToken(parentToken, pluginName string, grants InvocationGrants, ttl time.Duration) (string, error) {
+func (m *InvocationTokenManager) ExchangeToken(parentToken, appName string, grants InvocationGrants, ttl time.Duration) (string, error) {
 	if m == nil {
 		return "", fmt.Errorf("invocation tokens are not available")
 	}
@@ -126,8 +126,8 @@ func (m *InvocationTokenManager) ExchangeToken(parentToken, pluginName string, g
 	if err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(claims.CallerApp) != strings.TrimSpace(pluginName) {
-		return "", fmt.Errorf("plugin invocation token is not valid for %q", pluginName)
+	if strings.TrimSpace(claims.CallerApp) != strings.TrimSpace(appName) {
+		return "", fmt.Errorf("app invocation token is not valid for %q", appName)
 	}
 	parentGrants := decodeInvocationGrantClaims(claims.Grants)
 	switch {
@@ -153,7 +153,7 @@ func (m *InvocationTokenManager) ExchangeToken(parentToken, pluginName string, g
 	return m.signClaims(&child)
 }
 
-func (m *InvocationTokenManager) resolveToken(token, pluginName string) (invocationTokenContext, error) {
+func (m *InvocationTokenManager) resolveToken(token, appName string) (invocationTokenContext, error) {
 	if m == nil {
 		return invocationTokenContext{}, fmt.Errorf("invocation tokens are not available")
 	}
@@ -161,8 +161,8 @@ func (m *InvocationTokenManager) resolveToken(token, pluginName string) (invocat
 	if err != nil {
 		return invocationTokenContext{}, err
 	}
-	if strings.TrimSpace(claims.CallerApp) != strings.TrimSpace(pluginName) {
-		return invocationTokenContext{}, fmt.Errorf("plugin invocation token is not valid for %q", pluginName)
+	if strings.TrimSpace(claims.CallerApp) != strings.TrimSpace(appName) {
+		return invocationTokenContext{}, fmt.Errorf("app invocation token is not valid for %q", appName)
 	}
 	return invocationTokenContext{
 		principal: principalFromInvocationClaims(claims),
@@ -197,8 +197,8 @@ type TokenContext struct {
 	inner invocationTokenContext
 }
 
-func (m *InvocationTokenManager) ResolveToken(token, pluginName string) (TokenContext, error) {
-	tokenCtx, err := m.resolveToken(token, pluginName)
+func (m *InvocationTokenManager) ResolveToken(token, appName string) (TokenContext, error) {
+	tokenCtx, err := m.resolveToken(token, appName)
 	if err != nil {
 		return TokenContext{}, err
 	}
@@ -275,7 +275,7 @@ func (m *InvocationTokenManager) delegationExpiresAt(claims *invocationTokenClai
 	return expiresAt, nil
 }
 
-func claimsFromContext(ctx context.Context, pluginName string, grants InvocationGrants, workflowGrants workflowgrants.Grants, now, expiresAt, delegationExpiresAt time.Time) *invocationTokenClaims {
+func claimsFromContext(ctx context.Context, appName string, grants InvocationGrants, workflowGrants workflowgrants.Grants, now, expiresAt, delegationExpiresAt time.Time) *invocationTokenClaims {
 	p := principal.FromContext(ctx)
 	meta := invocation.MetaFromContext(ctx)
 	if meta == nil {
@@ -294,7 +294,7 @@ func claimsFromContext(ctx context.Context, pluginName string, grants Invocation
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
 		DelegationExpiresAt: jwt.NewNumericDate(delegationExpiresAt),
-		CallerApp:           strings.TrimSpace(pluginName),
+		CallerApp:           strings.TrimSpace(appName),
 		SubjectKind:         string(subjectKindForInvocationClaims(p)),
 		Email:               emailForInvocationClaims(p),
 		DisplayName:         displayNameForInvocationClaims(p),

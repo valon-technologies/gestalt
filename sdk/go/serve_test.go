@@ -37,7 +37,7 @@ type stubOutput struct {
 	AccessRole          string `json:"access_role"`
 	HostBaseURL         string `json:"host_base_url"`
 	ToolRefsSet         bool   `json:"tool_refs_set,omitempty"`
-	ToolRefApp       string `json:"tool_ref_plugin,omitempty"`
+	ToolRefApp       string `json:"tool_ref_app,omitempty"`
 	ToolRefOperation    string `json:"tool_ref_operation,omitempty"`
 	IdempotencyKey      string `json:"idempotency_key"`
 }
@@ -503,7 +503,7 @@ func TestProviderServerExecute(t *testing.T) {
 			name:       "success",
 			router:     stubRouter,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","subject_email":"ada@example.com","agent_subject_id":"user:user-456","agent_subject_email":"grace@example.com","agent_external_type":"github_identity","agent_external_id":"user:12345678","credential_mode":"subject","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","host_base_url":"https://gestalt.example.test","tool_refs_set":true,"tool_ref_plugin":"github","tool_ref_operation":"bot.getPullRequest","idempotency_key":"tool-call-123"}`,
+			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","subject_email":"ada@example.com","agent_subject_id":"user:user-456","agent_subject_email":"grace@example.com","agent_external_type":"github_identity","agent_external_id":"user:12345678","credential_mode":"subject","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","host_base_url":"https://gestalt.example.test","tool_refs_set":true,"tool_ref_app":"github","tool_ref_operation":"bot.getPullRequest","idempotency_key":"tool-call-123"}`,
 			request: &proto.ExecuteRequest{
 				Operation: "test_op",
 				Params: func() *structpb.Struct {

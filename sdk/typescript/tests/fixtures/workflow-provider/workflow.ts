@@ -33,7 +33,7 @@ const triggers = new Map<string, ReturnType<typeof createTrigger>>();
 const definitions = new Map<string, BoundWorkflowDefinition>();
 let publishCount = 0;
 
-function appTarget(appName: string, operation: string): BoundWorkflowTarget {
+function appStepTarget(appName: string, operation: string): BoundWorkflowTarget {
   return boundWorkflowTarget({
     steps: [{ id: operation, app: { name: appName, operation } }],
   });
@@ -186,7 +186,7 @@ export const provider = defineWorkflowProvider({
     const trigger = boundWorkflowEventTrigger({
       id: triggerId,
       ...(existing?.match ? { match: existing.match } : {}),
-      target: existing?.target ?? appTarget(request.appName, "published"),
+      target: existing?.target ?? appStepTarget(request.appName, "published"),
       paused: false,
     });
     triggers.set(triggerId, trigger);

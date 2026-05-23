@@ -264,10 +264,8 @@ class AgentToolRef:
         system: str = "",
         run_as: Subject | None = None,
         run_as_external_identity: ExternalIdentity | None = None,
-        *,
-        plugin: str = "",
     ) -> None:
-        self.app = app or plugin
+        self.app = app
         self.operation = operation
         self.connection = connection
         self.instance = instance
@@ -276,15 +274,6 @@ class AgentToolRef:
         self.system = system
         self.run_as = run_as
         self.run_as_external_identity = run_as_external_identity
-
-    @property
-    def plugin(self) -> str:
-        return self.app
-
-    @plugin.setter
-    def plugin(self, value: str) -> None:
-        self.app = value
-
 
 @dataclass(slots=True)
 class AgentProviderCapabilities:
@@ -1625,7 +1614,7 @@ def agent_tool_ref_from_dict(value: Mapping[str, Any] | None) -> Any:
 
     data = dict(_mapping_value(value, "tool_ref")) if value is not None else {}
     return AgentToolRef(
-        app=data.get("app", data.get("plugin", "")),
+        app=data.get("app", ""),
         operation=data.get("operation", ""),
         connection=data.get("connection", ""),
         instance=data.get("instance", ""),
