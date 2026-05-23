@@ -133,7 +133,7 @@ func TestDefinitionCanStartRunFromStoredTargetSnapshot(t *testing.T) {
 		t.Fatalf("StartRun by definition: %v", err)
 	}
 	if run == nil || run.Run == nil {
-		t.Fatalf("run = %#v, want app target", run)
+		t.Fatalf("run = %#v, want app step target", run)
 	}
 	runApp := requireWorkflowAppStep(t, run.Run.Target, 0)
 	if got := runApp.Operation; got != "issues.triage" {
@@ -304,7 +304,7 @@ func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *t
 		t.Fatalf("CreateSchedule by definition: %v", err)
 	}
 	if schedule == nil || schedule.Schedule == nil {
-		t.Fatalf("schedule = %#v, want app target", schedule)
+		t.Fatalf("schedule = %#v, want app step target", schedule)
 	}
 	if got := requireWorkflowAppStep(t, schedule.Schedule.Target, 0).Operation; got != "issues.triage" {
 		t.Fatalf("schedule target operation = %q, want issues.triage", got)
@@ -329,7 +329,7 @@ func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *t
 		t.Fatalf("CreateEventTrigger by definition: %v", err)
 	}
 	if trigger == nil || trigger.Trigger == nil {
-		t.Fatalf("trigger = %#v, want app target", trigger)
+		t.Fatalf("trigger = %#v, want app step target", trigger)
 	}
 	if got := requireWorkflowAppStep(t, trigger.Trigger.Target, 0).Operation; got != "issues.triage" {
 		t.Fatalf("trigger target operation = %q, want issues.triage", got)

@@ -1274,7 +1274,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedDefinitionTarget(t *tes
 		arguments map[string]any
 	}{
 		{
-			name: "app target",
+			name: "app step",
 			arguments: map[string]any{
 				"target": workflowSystemToolTestTarget(map[string]any{
 					"id": "sync",

@@ -126,7 +126,7 @@ func TestNewBoundWorkflowStepsTargetUsesNativeValues(t *testing.T) {
 	}
 	app := target.GetSteps()[0].GetApp()
 	if app.GetName() != "slack" || app.GetOperation() != "chat.postMessage" {
-		t.Fatalf("app target = %q/%q, want slack/chat.postMessage", app.GetName(), app.GetOperation())
+		t.Fatalf("app step = %q/%q, want slack/chat.postMessage", app.GetName(), app.GetOperation())
 	}
 	if got := app.GetInput().GetObject().GetFields()["channel"].GetLiteral().AsInterface(); got != "C123" {
 		t.Fatalf("app input channel = %#v, want C123", got)

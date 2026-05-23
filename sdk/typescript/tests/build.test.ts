@@ -903,7 +903,7 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
       ? run.target.steps[0].action.value
       : undefined;
     if (app === undefined) {
-      throw new Error("workflow run target is not a app target");
+      throw new Error("workflow run target does not have an app step");
     }
     expect(app.name).toBe("roadmap");
     expect(run.id).toBe("roadmap:sync:1");

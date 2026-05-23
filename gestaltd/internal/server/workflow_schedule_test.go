@@ -931,7 +931,7 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	}
 	createdApp := requireWorkflowAppTarget(t, created.Target)
 	if createdApp.Name != "roadmap" || createdApp.Operation != "sync" {
-		t.Fatalf("created app target = %#v", createdApp)
+		t.Fatalf("created app step = %#v", createdApp)
 	}
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
@@ -940,7 +940,7 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	requireCoreWorkflowAgentStep(t, storedTarget)
 	storedApp := requireCoreWorkflowAppStep(t, storedTarget)
 	if storedApp.Name != "roadmap" || storedApp.Operation != "sync" {
-		t.Fatalf("stored app target = %#v", storedApp)
+		t.Fatalf("stored app step = %#v", storedApp)
 	}
 	if provider.upsertReqs[0].ExecutionRef == "" {
 		t.Fatal("expected execution ref")
@@ -977,7 +977,7 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	}
 	listedApp := requireWorkflowAppTarget(t, listed[0].Target)
 	if listedApp.Operation != "sync" {
-		t.Fatalf("listed app target = %#v", listedApp)
+		t.Fatalf("listed app step = %#v", listedApp)
 	}
 }
 
@@ -1348,7 +1348,7 @@ func TestCreateWorkflowScheduleRejectsPublicTargetCredentialMode(t *testing.T) {
 		body string
 		want string
 	}{{
-		name: "app target",
+		name: "app step",
 		body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"steps":[{"id":"app","app":{"name":"roadmap","operation":"sync","credentialMode":"none"}}]}}`,
 		want: "workflow target.steps[0].app.credentialMode is not supported",
 	}}
@@ -2592,7 +2592,7 @@ func TestWorkflowEventTriggerAgentThenAppStepsCreateAndList(t *testing.T) {
 	}
 	createdApp := requireWorkflowAppTarget(t, created.Target)
 	if createdApp.Name != "roadmap" || createdApp.Operation != "sync" {
-		t.Fatalf("created app target = %#v", createdApp)
+		t.Fatalf("created app step = %#v", createdApp)
 	}
 	if len(provider.upsertTriggerReqs) != 1 {
 		t.Fatalf("upsert trigger requests = %d, want 1", len(provider.upsertTriggerReqs))
@@ -2601,7 +2601,7 @@ func TestWorkflowEventTriggerAgentThenAppStepsCreateAndList(t *testing.T) {
 	requireCoreWorkflowAgentStep(t, storedTarget)
 	storedApp := requireCoreWorkflowAppStep(t, storedTarget)
 	if storedApp.Name != "roadmap" || storedApp.Operation != "sync" {
-		t.Fatalf("stored app target = %#v", storedApp)
+		t.Fatalf("stored app step = %#v", storedApp)
 	}
 	ref, err := provider.GetExecutionReference(context.Background(), provider.upsertTriggerReqs[0].ExecutionRef)
 	if err != nil {
@@ -2630,7 +2630,7 @@ func TestWorkflowEventTriggerAgentThenAppStepsCreateAndList(t *testing.T) {
 	}
 	listedApp := requireWorkflowAppTarget(t, listed[0].Target)
 	if listedApp.Operation != "sync" {
-		t.Fatalf("listed app target = %#v", listedApp)
+		t.Fatalf("listed app step = %#v", listedApp)
 	}
 }
 

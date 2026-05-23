@@ -1237,7 +1237,7 @@ func TestWorkflowRuntimeRejectsMixedAgentAppTargetWithExecutionRef(t *testing.T)
 		}}},
 	})
 	if err == nil {
-		t.Fatal("Invoke mixed agent/app target succeeded, want error")
+		t.Fatal("Invoke mixed agent/app steps succeeded, want error")
 	}
 }
 
