@@ -17,7 +17,7 @@ func ParseValue(value any, path string) (coreworkflow.Value, error) {
 			for key, raw := range valueMap {
 				switch key {
 				case "literal":
-					return coreworkflow.Value{Literal: deepClone(raw), LiteralSet: true}, nil
+					return coreworkflow.Value{Literal: CloneJSON(raw), LiteralSet: true}, nil
 				case "object":
 					objectValue, err := parseValueMap(raw, path+".object")
 					return coreworkflow.Value{Object: objectValue}, err
@@ -63,7 +63,7 @@ func ParseValue(value any, path string) (coreworkflow.Value, error) {
 		}
 		return coreworkflow.Value{Array: out}, nil
 	}
-	return coreworkflow.Value{Literal: deepClone(value), LiteralSet: true}, nil
+	return coreworkflow.Value{Literal: CloneJSON(value), LiteralSet: true}, nil
 }
 
 func parseValueMap(value any, path string) (map[string]coreworkflow.Value, error) {
@@ -122,7 +122,7 @@ func parseText(value any, path string) (coreworkflow.Text, error) {
 func EncodeValue(value coreworkflow.Value) any {
 	switch {
 	case value.LiteralSet:
-		return map[string]any{"literal": deepClone(value.Literal)}
+		return map[string]any{"literal": CloneJSON(value.Literal)}
 	case value.Object != nil:
 		return map[string]any{"object": encodeValueMap(value.Object)}
 	case value.Array != nil:

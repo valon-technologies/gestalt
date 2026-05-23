@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -739,7 +740,7 @@ func workflowValueObjectInfoFromCore(values map[string]coreworkflow.Value) map[s
 func workflowValueInfoFromCore(value coreworkflow.Value) any {
 	switch {
 	case value.LiteralSet:
-		return map[string]any{"literal": cloneWorkflowInfoJSON(value.Literal)}
+		return map[string]any{"literal": workflowwire.CloneJSON(value.Literal)}
 	case value.Object != nil:
 		return map[string]any{"object": workflowValueObjectInfoFromCore(value.Object)}
 	case value.Array != nil:
@@ -761,25 +762,6 @@ func workflowValueInfoFromCore(value coreworkflow.Value) any {
 		}}
 	default:
 		return nil
-	}
-}
-
-func cloneWorkflowInfoJSON(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(typed))
-		for key, item := range typed {
-			out[key] = cloneWorkflowInfoJSON(item)
-		}
-		return out
-	case []any:
-		out := make([]any, len(typed))
-		for i := range typed {
-			out[i] = cloneWorkflowInfoJSON(typed[i])
-		}
-		return out
-	default:
-		return typed
 	}
 }
 

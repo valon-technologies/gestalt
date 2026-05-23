@@ -1423,26 +1423,7 @@ func workflowSystemToolMapDeepClone(value map[string]any) map[string]any {
 	if value == nil {
 		return nil
 	}
-	return workflowSystemToolValueDeepClone(value).(map[string]any)
-}
-
-func workflowSystemToolValueDeepClone(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(typed))
-		for key, child := range typed {
-			out[key] = workflowSystemToolValueDeepClone(child)
-		}
-		return out
-	case []any:
-		out := make([]any, len(typed))
-		for i, child := range typed {
-			out[i] = workflowSystemToolValueDeepClone(child)
-		}
-		return out
-	default:
-		return typed
-	}
+	return workflowwire.CloneJSON(value).(map[string]any)
 }
 
 func workflowSystemToolRejectUnknownKeys(args map[string]any, path string, allowed ...string) error {

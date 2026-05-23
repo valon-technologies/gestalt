@@ -90,18 +90,20 @@ func objectArg(args map[string]any, key, path string) (map[string]any, error) {
 	return mapDeepClone(out), nil
 }
 
-func deepClone(value any) any {
+// CloneJSON recursively clones JSON-shaped values without normalizing empty
+// maps or slices to nil.
+func CloneJSON(value any) any {
 	switch typed := value.(type) {
 	case map[string]any:
 		out := make(map[string]any, len(typed))
 		for key, item := range typed {
-			out[key] = deepClone(item)
+			out[key] = CloneJSON(item)
 		}
 		return out
 	case []any:
 		out := make([]any, 0, len(typed))
 		for _, item := range typed {
-			out = append(out, deepClone(item))
+			out = append(out, CloneJSON(item))
 		}
 		return out
 	default:
@@ -115,7 +117,7 @@ func mapDeepClone(values map[string]any) map[string]any {
 	}
 	out := make(map[string]any, len(values))
 	for key, value := range values {
-		out[key] = deepClone(value)
+		out[key] = CloneJSON(value)
 	}
 	return out
 }
