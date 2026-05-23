@@ -8,10 +8,7 @@ use crate::api::ApiClient;
 use crate::interactive::prompt_confirm;
 
 const HARNESSES_RESOLVE_PATH: &str = "/api/v1/agent/harnesses/resolve";
-use super::types::{
-    AgentHarnessInstallCommand, AgentHarnessInstallPlan, AgentHarnessPlan,
-    AgentHarnessResolveRequest,
-};
+use super::types::{AgentHarnessInstallCommand, AgentHarnessPlan, AgentHarnessResolveRequest};
 
 pub fn launch_local(
     client: &ApiClient,

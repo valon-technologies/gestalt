@@ -20,8 +20,7 @@ use crate::commands::agents::events::{
 use crate::commands::agents::fields::{
     compact_json, display_action, display_label, display_ref, display_status, display_text,
     display_tool_error, display_tool_input, display_tool_label, display_tool_output,
-    display_value_text, extract_interaction_id, message_label, message_text, pretty_json,
-    rendered_display_text, string_field, turn_event_display,
+    display_value_text, message_label, message_text, pretty_json, rendered_display_text,
 };
 use crate::commands::agents::requests::{
     INTERRUPT_CANCEL_REASON, cancel_turn_silent, resolve_interaction_info,

@@ -12,8 +12,7 @@ use crate::commands::agents::events::{
 use crate::commands::agents::fields::{
     compact_json, display_action, display_format, display_language, display_status, display_text,
     display_tool_error, display_tool_input, display_tool_label, display_tool_output,
-    display_tool_ref, display_value_text, extract_tool_name, number_any_field, pretty_json,
-    string_any_field, string_field, value_any_field,
+    display_tool_ref, display_value_text, pretty_json,
 };
 use crate::commands::agents::types::{
     AgentInteractionInfo, AgentSessionInfo, AgentTurnDisplayInfo, AgentTurnEventInfo, AgentTurnInfo,
@@ -101,7 +100,7 @@ impl AgentUiState {
         match classify_turn_event(&event) {
             ClassifiedTurnEvent::Display { event, display } => {
                 if !self.apply_display_turn_event(event, display)
-                    && let Some(effect) = classify_data_event(&event)
+                    && let Some(effect) = classify_data_event(event)
                 {
                     self.apply_effect(&effect);
                 }
@@ -1055,37 +1054,6 @@ impl ToolActivityStatus {
             Self::Ended(reason) => Some(reason.clone()),
         }
     }
-}
-
-fn event_tool_name(event: &AgentTurnEventInfo) -> String {
-    extract_tool_name(&event.data)
-}
-
-fn event_tool_key(event: &AgentTurnEventInfo) -> Option<String> {
-    string_any_field(
-        &event.data,
-        &[
-            "tool_call_id",
-            "toolCallId",
-            "call_id",
-            "callId",
-            "invocation_id",
-            "invocationId",
-            "tool_use_id",
-            "toolUseId",
-            "id",
-        ],
-    )
-}
-
-fn tool_status(data: &serde_json::Map<String, Value>) -> Option<String> {
-    string_any_field(data, &["status", "state"]).or_else(|| {
-        number_any_field(data, &["status", "statusCode"]).map(|status| status.to_string())
-    })
-}
-
-fn detail_value(data: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<ToolDetailValue> {
-    value_any_field(data, keys).and_then(|value| format_tool_detail(value).ok())
 }
 
 fn detail_value_from_json(value: Option<&Value>) -> Option<ToolDetailValue> {

@@ -14,7 +14,6 @@ pub(crate) struct TurnLoopContext<'a> {
 
 pub(crate) enum TurnLoopOutcome {
     Continue,
-    Done,
     Cancelled,
 }
 
@@ -43,7 +42,6 @@ pub(crate) fn run_turn_status_loop<S: TurnDriverSink>(
         match latest.status.as_str() {
             "waiting_for_input" => match sink.handle_waiting_for_input(ctx, &latest)? {
                 TurnLoopOutcome::Continue => {}
-                TurnLoopOutcome::Done => return Ok(()),
                 TurnLoopOutcome::Cancelled => return Ok(()),
             },
             "pending" | "running" => thread::sleep(EVENT_POLL_INTERVAL),

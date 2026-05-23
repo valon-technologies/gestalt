@@ -161,15 +161,15 @@ pub(crate) fn display_tool_ref(display: &AgentTurnDisplayInfo) -> Option<String>
     display_ref(display).map(ToString::to_string)
 }
 
-pub(crate) fn display_tool_input<'a>(display: &'a AgentTurnDisplayInfo) -> Option<&'a Value> {
+pub(crate) fn display_tool_input(display: &AgentTurnDisplayInfo) -> Option<&Value> {
     display.input.as_ref()
 }
 
-pub(crate) fn display_tool_output<'a>(display: &'a AgentTurnDisplayInfo) -> Option<&'a Value> {
+pub(crate) fn display_tool_output(display: &AgentTurnDisplayInfo) -> Option<&Value> {
     display.output.as_ref()
 }
 
-pub(crate) fn display_tool_error<'a>(display: &'a AgentTurnDisplayInfo) -> Option<&'a Value> {
+pub(crate) fn display_tool_error(display: &AgentTurnDisplayInfo) -> Option<&Value> {
     display.error.as_ref()
 }
 

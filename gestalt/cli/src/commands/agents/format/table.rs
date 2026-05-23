@@ -2,10 +2,7 @@ use serde_json::Value;
 
 use crate::output::{self, Format};
 
-use super::transcript::{
-    fallback_turn_event_data_summary, turn_event_data_summary,
-    turn_event_display_summary_from_value,
-};
+use super::transcript::{fallback_turn_event_data_summary, turn_event_display_summary_from_value};
 
 pub(crate) fn print_session(value: &Value, format: Format) {
     match format {
