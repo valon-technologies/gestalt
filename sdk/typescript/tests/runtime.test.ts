@@ -142,7 +142,7 @@ async function expectConnectCode(
   }
 }
 
-function workflowAppTarget(
+function workflowAppStepTarget(
   name: string,
   operation: string,
   extra: Record<string, unknown> = {},
@@ -1835,7 +1835,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
         displayName: "Ada",
         authSource: "api_token",
       },
-      target: workflowAppTarget("roadmap", "sync", {
+      target: workflowAppStepTarget("roadmap", "sync", {
         input: { object: { project: { literal: "alpha" } } },
       }),
     }),
@@ -1844,7 +1844,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
     ? run.target.steps[0].action.value
     : undefined;
   if (runApp === undefined) {
-    throw new Error("workflow run target is not a app target");
+    throw new Error("workflow run target does not have an app step");
   }
   expect(runApp.name).toBe("roadmap");
   expect(run.status).toBe(WorkflowRunStatus.PENDING);
@@ -1862,7 +1862,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
         displayName: "Planner",
         authSource: "api_token",
       },
-      target: workflowAppTarget("roadmap", "sync"),
+      target: workflowAppStepTarget("roadmap", "sync"),
     }),
   );
   expect(schedule.id).toBe("nightly");
@@ -1870,7 +1870,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
     ? schedule.target.steps[0].action.value
     : undefined;
   if (scheduleApp === undefined) {
-    throw new Error("workflow schedule target is not a app target");
+    throw new Error("workflow schedule target does not have an app step");
   }
   expect(scheduleApp.name).toBe("roadmap");
   expect(schedule.createdBy?.subjectId).toBe("service_account:planner");
@@ -1886,7 +1886,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
         displayName: "Grace",
         authSource: "api_token",
       },
-      target: workflowAppTarget("roadmap", "sync"),
+      target: workflowAppStepTarget("roadmap", "sync"),
     }),
   );
   expect(updatedSchedule.createdBy?.subjectId).toBe("service_account:planner");

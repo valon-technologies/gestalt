@@ -58,10 +58,10 @@ Workflow events also use workflow-specific fields when available:
 
 | Field | Meaning |
 | --- | --- |
-| `caller_plugin` | App that called `WorkflowManager`, such as a Slack event provider. |
+| `caller_app` | App that called `WorkflowManager`, such as a Slack event provider. |
 | `workflow_key_sha256` | SHA-256 hash of the workflow key for run start and signal-or-start events. The raw workflow key is not emitted. |
 | `workflow_target_kind` | Target kind, currently `steps`. |
-| `workflow_target_component` | Target subcomponent involved in a workflow target authorization denial, such as `target`, `app_target`, `agent_provider`, or `agent_tool_ref`. |
+| `workflow_target_component` | Target subcomponent involved in a workflow target authorization denial, such as `target`, `app_step`, `agent_provider`, or `agent_tool_ref`. |
 | `workflow_target_provider` | Target app, agent provider, or tool provider involved in the workflow action or denial. |
 | `workflow_target_operation` | Target operation involved in the workflow action or denial. |
 | `workflow_created_by_subject_id` | Original workflow creator subject for audited operations that execute inside a workflow context. |
@@ -91,7 +91,7 @@ Non-invocation audit events use explicit operation names:
 - `api_token.revoke_all`
 
 Workflow-manager audit events use `source=workflow_manager`. Their `provider`
-field is the selected workflow backend, not the app or agent target. They
+field is the selected workflow backend, not an app or agent step. They
 emit one audit record per backend for fanout event publishes.
 
 - `workflow.definition.create`
@@ -138,8 +138,8 @@ Workflow object actions set the generic target fields:
 
 Run start and signal-or-start events include `workflow_key_sha256` so operators
 can correlate repeated events for the same workflow key without logging the raw
-key. Targeted workflow actions include `workflow_target_kind`, and app
-targets include `workflow_target_provider` and `workflow_target_operation`.
+key. Targeted workflow actions include `workflow_target_kind`, and app steps
+include `workflow_target_provider` and `workflow_target_operation`.
 
 When `workflow.run.signal_or_start` rejects a stored or requested target during
 the target authorization check, the audit record sets
@@ -207,7 +207,7 @@ Workflow-manager records keep workflow routing context in audit logs:
   "operation": "workflow.event.publish",
   "target_kind": "workflow_event",
   "target_name": "slack.message.created",
-  "caller_plugin": "slack",
+  "caller_app": "slack",
   "depth": 0,
   "allowed": true,
   "trace_id": "0af7651916cd43dd8448eb211c80319c",

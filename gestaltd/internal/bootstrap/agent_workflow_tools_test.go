@@ -203,7 +203,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsForwardStepOutputRefs(t *testing.T
 	if !errors.Is(err, invocation.ErrInvalidInvocation) {
 		t.Fatalf("ExecuteTool error = %v, want invalid invocation", err)
 	}
-	if !strings.Contains(err.Error(), `target.steps[0].app.input.title.stepOutput.stepId "notify" must reference an earlier step`) {
+	if !strings.Contains(err.Error(), `target.steps[0].app.input.title.step_output.step_id "notify" must reference an earlier step`) {
 		t.Fatalf("ExecuteTool error = %v, want forward step output message", err)
 	}
 	if len(workflowProvider.startedRuns) != 0 {
@@ -274,43 +274,6 @@ func TestAgentRuntimeWorkflowSystemToolRejectsDuplicateStepIDs(t *testing.T) {
 	}
 	if len(workflowProvider.startedRuns) != 0 {
 		t.Fatalf("started runs = %d, want none", len(workflowProvider.startedRuns))
-	}
-}
-
-func TestWorkflowSystemToolStepsRejectsEmptyStepID(t *testing.T) {
-	t.Parallel()
-
-	_, err := workflowSystemToolStepsFromValue([]any{
-		map[string]any{
-			"app": map[string]any{
-				"name":      "github",
-				"operation": "createIssue",
-			},
-		},
-	})
-	if err == nil {
-		t.Fatal("workflowSystemToolStepsFromValue succeeded, want invalid invocation")
-	}
-	if !errors.Is(err, invocation.ErrInvalidInvocation) {
-		t.Fatalf("workflowSystemToolStepsFromValue error = %v, want invalid invocation", err)
-	}
-	if !strings.Contains(err.Error(), "target.steps[0].id is required") {
-		t.Fatalf("workflowSystemToolStepsFromValue error = %v, want step id required message", err)
-	}
-}
-
-func TestWorkflowSystemToolStepWhenRequiresValue(t *testing.T) {
-	t.Parallel()
-
-	_, err := workflowSystemToolStepWhenFromValue(map[string]any{"equals": "ready"}, "target.steps[0].when")
-	if err == nil {
-		t.Fatal("workflowSystemToolStepWhenFromValue succeeded, want invalid invocation")
-	}
-	if !errors.Is(err, invocation.ErrInvalidInvocation) {
-		t.Fatalf("workflowSystemToolStepWhenFromValue error = %v, want invalid invocation", err)
-	}
-	if !strings.Contains(err.Error(), "target.steps[0].when.value is required") {
-		t.Fatalf("workflowSystemToolStepWhenFromValue error = %v, want when.value required message", err)
 	}
 }
 
@@ -428,10 +391,10 @@ func TestWorkflowSystemToolStartRunSchemaMatchesV1Contract(t *testing.T) {
 		t.Fatalf("target properties = %#v", target["properties"])
 	}
 	if _, ok := targetTargetProps["app"]; ok {
-		t.Fatalf("runs.start target schema exposes app target: %#v", targetTargetProps)
+		t.Fatalf("runs.start target schema exposes top-level app field: %#v", targetTargetProps)
 	}
 	if _, ok := targetTargetProps["agent"]; ok {
-		t.Fatalf("runs.start target schema exposes agent target: %#v", targetTargetProps)
+		t.Fatalf("runs.start target schema exposes top-level agent field: %#v", targetTargetProps)
 	}
 	if _, ok := targetTargetProps["steps"]; !ok {
 		t.Fatalf("runs.start target schema missing steps: %#v", targetTargetProps)
@@ -755,7 +718,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithInheritedAgentToolRefs
 	}
 }
 
-func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithDelegatedCallerToolRefs(t *testing.T) {
+func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithGrantedCallerToolRefs(t *testing.T) {
 	t.Parallel()
 
 	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
@@ -1210,8 +1173,8 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 		},
 		Tools: []coreagent.Tool{listTool},
 	})
-	roadmapTarget := workflowSystemToolTestAppTarget("roadmap", "sync")
-	notificationTarget := workflowSystemToolTestAppTarget("notification", "reply")
+	roadmapTarget := workflowSystemToolTestAppStepTarget("roadmap", "sync")
+	notificationTarget := workflowSystemToolTestAppStepTarget("notification", "reply")
 	workflowProvider.runs = map[string]*coreworkflow.Run{
 		"run-a": {ID: "run-a", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, ExecutionRef: "ref-a"},
 		"run-b": {ID: "run-b", Status: coreworkflow.RunStatusSucceeded, Target: notificationTarget, ExecutionRef: "ref-b"},
@@ -1291,7 +1254,7 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 	}
 }
 
-func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedDefinitionTarget(t *testing.T) {
+func TestAgentRuntimeWorkflowSystemToolRejectsUngrantedDefinitionTarget(t *testing.T) {
 	t.Parallel()
 
 	runtime, _ := newWorkflowSystemToolRuntime(t)
@@ -1311,7 +1274,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedDefinitionTarget(t *tes
 		arguments map[string]any
 	}{
 		{
-			name: "app target",
+			name: "app step",
 			arguments: map[string]any{
 				"target": workflowSystemToolTestTarget(map[string]any{
 					"id": "sync",
@@ -1411,7 +1374,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsInvalidScheduleDefinitionArguments
 	}
 }
 
-func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedScheduleTarget(t *testing.T) {
+func TestAgentRuntimeWorkflowSystemToolRejectsUngrantedScheduleTarget(t *testing.T) {
 	t.Parallel()
 
 	runtime, _ := newWorkflowSystemToolRuntime(t)
@@ -1494,7 +1457,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 			},
 		},
 		{
-			name: "agent toolRefs alias",
+			name: "agent toolRefs rejected",
 			arguments: map[string]any{
 				"cron": "*/5 * * * *",
 				"target": workflowSystemToolTestTarget(map[string]any{
@@ -1782,7 +1745,7 @@ func (p *workflowSystemToolRecordingProvider) ListRuns(_ context.Context, req co
 	return &coreworkflow.ListRunsResponse{Runs: out[start:end], NextPageToken: nextPageToken}, nil
 }
 
-func workflowSystemToolTestAppTarget(appName, operation string) coreworkflow.Target {
+func workflowSystemToolTestAppStepTarget(appName, operation string) coreworkflow.Target {
 	return coreworkflow.Target{Steps: []coreworkflow.Step{{
 		ID: "run",
 		App: &coreworkflow.AppCall{

@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -25,7 +26,7 @@ type workflowScheduleTargetRequest struct {
 	Steps []workflowStepTargetRequest `json:"steps,omitempty"`
 }
 
-type workflowAppTargetRequest struct {
+type workflowAppStepRequest struct {
 	Name           string               `json:"name,omitempty"`
 	Operation      string               `json:"operation"`
 	Connection     string               `json:"connection,omitempty"`
@@ -34,7 +35,7 @@ type workflowAppTargetRequest struct {
 	Input          workflowValueRequest `json:"input,omitempty"`
 }
 
-type workflowAgentTargetRequest struct {
+type workflowAgentStepRequest struct {
 	ProviderName   string                   `json:"provider,omitempty"`
 	Model          string                   `json:"model,omitempty"`
 	SessionKey     string                   `json:"sessionKey,omitempty"`
@@ -48,8 +49,8 @@ type workflowAgentTargetRequest struct {
 type workflowStepTargetRequest struct {
 	ID             string                          `json:"id,omitempty"`
 	Inputs         map[string]workflowValueRequest `json:"inputs,omitempty"`
-	App            *workflowAppTargetRequest       `json:"app,omitempty"`
-	Agent          *workflowAgentTargetRequest     `json:"agent,omitempty"`
+	App            *workflowAppStepRequest         `json:"app,omitempty"`
+	Agent          *workflowAgentStepRequest       `json:"agent,omitempty"`
 	Metadata       map[string]any                  `json:"metadata,omitempty"`
 	TimeoutSeconds int                             `json:"timeoutSeconds,omitempty"`
 	When           *workflowStepWhenRequest        `json:"when,omitempty"`
@@ -212,7 +213,7 @@ type workflowScheduleTargetInfo struct {
 	Steps []workflowStepTargetInfo `json:"steps,omitempty"`
 }
 
-type workflowAppTargetInfo struct {
+type workflowAppStepInfo struct {
 	Name           string `json:"name"`
 	Operation      string `json:"operation"`
 	Connection     string `json:"connection,omitempty"`
@@ -221,7 +222,7 @@ type workflowAppTargetInfo struct {
 	Input          any    `json:"input,omitempty"`
 }
 
-type workflowAgentTargetInfo struct {
+type workflowAgentStepInfo struct {
 	ProviderName   string                `json:"provider,omitempty"`
 	Model          string                `json:"model,omitempty"`
 	SessionKey     string                `json:"sessionKey,omitempty"`
@@ -233,13 +234,13 @@ type workflowAgentTargetInfo struct {
 }
 
 type workflowStepTargetInfo struct {
-	ID             string                   `json:"id,omitempty"`
-	Inputs         map[string]any           `json:"inputs,omitempty"`
-	App            *workflowAppTargetInfo   `json:"app,omitempty"`
-	Agent          *workflowAgentTargetInfo `json:"agent,omitempty"`
-	Metadata       map[string]any           `json:"metadata,omitempty"`
-	TimeoutSeconds int                      `json:"timeoutSeconds,omitempty"`
-	When           *workflowStepWhenInfo    `json:"when,omitempty"`
+	ID             string                 `json:"id,omitempty"`
+	Inputs         map[string]any         `json:"inputs,omitempty"`
+	App            *workflowAppStepInfo   `json:"app,omitempty"`
+	Agent          *workflowAgentStepInfo `json:"agent,omitempty"`
+	Metadata       map[string]any         `json:"metadata,omitempty"`
+	TimeoutSeconds int                    `json:"timeoutSeconds,omitempty"`
+	When           *workflowStepWhenInfo  `json:"when,omitempty"`
 }
 
 type workflowTextInfo struct {
@@ -356,7 +357,7 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
+	if len(req.Target.Steps) == 0 {
 		writeError(w, http.StatusBadRequest, "workflow target.steps is required")
 		return
 	}
@@ -449,10 +450,6 @@ func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) cor
 	return coreworkflow.Target{Steps: steps}
 }
 
-func workflowScheduleTargetRequestHasOneKind(target workflowScheduleTargetRequest) bool {
-	return len(target.Steps) > 0
-}
-
 func decodeWorkflowJSONBody(r *http.Request, dst any) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -478,7 +475,7 @@ func validatePublicWorkflowTargetRequest(target workflowScheduleTargetRequest) e
 	return nil
 }
 
-func workflowAppCallFromRequest(target *workflowAppTargetRequest) *coreworkflow.AppCall {
+func workflowAppCallFromRequest(target *workflowAppStepRequest) *coreworkflow.AppCall {
 	if target == nil {
 		return nil
 	}
@@ -492,7 +489,7 @@ func workflowAppCallFromRequest(target *workflowAppTargetRequest) *coreworkflow.
 	}
 }
 
-func workflowAgentTurnFromRequest(target *workflowAgentTargetRequest) *coreworkflow.AgentTurn {
+func workflowAgentTurnFromRequest(target *workflowAgentStepRequest) *coreworkflow.AgentTurn {
 	if target == nil {
 		return nil
 	}
@@ -658,11 +655,11 @@ func workflowStepInfoFromCore(step coreworkflow.Step) workflowStepTargetInfo {
 	}
 }
 
-func workflowAppInfoFromCore(app *coreworkflow.AppCall) *workflowAppTargetInfo {
+func workflowAppInfoFromCore(app *coreworkflow.AppCall) *workflowAppStepInfo {
 	if app == nil {
 		return nil
 	}
-	return &workflowAppTargetInfo{
+	return &workflowAppStepInfo{
 		Name:           app.Name,
 		Operation:      app.Operation,
 		Connection:     userFacingConnectionName(app.Connection),
@@ -672,11 +669,11 @@ func workflowAppInfoFromCore(app *coreworkflow.AppCall) *workflowAppTargetInfo {
 	}
 }
 
-func workflowAgentInfoFromCore(agent *coreworkflow.AgentTurn) *workflowAgentTargetInfo {
+func workflowAgentInfoFromCore(agent *coreworkflow.AgentTurn) *workflowAgentStepInfo {
 	if agent == nil {
 		return nil
 	}
-	return &workflowAgentTargetInfo{
+	return &workflowAgentStepInfo{
 		ProviderName:   agent.ProviderName,
 		Model:          agent.Model,
 		SessionKey:     agent.SessionKey,
@@ -739,7 +736,7 @@ func workflowValueObjectInfoFromCore(values map[string]coreworkflow.Value) map[s
 func workflowValueInfoFromCore(value coreworkflow.Value) any {
 	switch {
 	case value.LiteralSet:
-		return map[string]any{"literal": value.Literal}
+		return map[string]any{"literal": workflowwire.CloneJSON(value.Literal)}
 	case value.Object != nil:
 		return map[string]any{"object": workflowValueObjectInfoFromCore(value.Object)}
 	case value.Array != nil:
@@ -755,7 +752,10 @@ func workflowValueInfoFromCore(value coreworkflow.Value) any {
 	case strings.TrimSpace(value.SignalPayload) != "":
 		return map[string]any{"signalPayload": value.SignalPayload}
 	case value.StepOutput != nil:
-		return map[string]any{"stepOutput": map[string]any{"stepId": value.StepOutput.StepID, "path": value.StepOutput.Path}}
+		return map[string]any{"stepOutput": map[string]any{
+			"stepId": value.StepOutput.StepID,
+			"path":   value.StepOutput.Path,
+		}}
 	default:
 		return nil
 	}

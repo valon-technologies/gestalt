@@ -464,7 +464,7 @@ fn test_cli_rejects_partial_schedule_target_update_for_multistep_target() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "cannot apply app target flags to an existing non-app or multi-step schedule",
+            "cannot apply app step target flags to an existing non-app or multi-step schedule",
         ));
 }
 
@@ -869,7 +869,7 @@ fn test_cli_rejects_partial_trigger_target_update_for_non_app_target() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "cannot apply app target flags to an existing non-app or multi-step trigger",
+            "cannot apply app step target flags to an existing non-app or multi-step trigger",
         ));
 }
 

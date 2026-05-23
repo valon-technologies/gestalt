@@ -865,7 +865,7 @@ func managedWorkflowScheduleBody(value *gestalt.WorkflowManagerSchedule) map[str
 			"operation":  appTarget.Operation,
 			"connection": appTarget.Connection,
 			"instance":   appTarget.Instance,
-			"input":      workflowAppTargetInputMap(appTarget),
+			"input":      workflowAppStepInputMap(appTarget),
 		}
 	}
 	return body
@@ -915,7 +915,7 @@ func managedWorkflowTriggerBody(value *gestalt.WorkflowManagerEventTrigger) map[
 			"operation":  appTarget.Operation,
 			"connection": appTarget.Connection,
 			"instance":   appTarget.Instance,
-			"input":      workflowAppTargetInputMap(appTarget),
+			"input":      workflowAppStepInputMap(appTarget),
 		}
 	}
 	return body
@@ -928,7 +928,7 @@ func workflowFirstAppStep(target *gestalt.BoundWorkflowTarget) *gestalt.Workflow
 	return target.Steps[0].App
 }
 
-func workflowAppTargetInputMap(target *gestalt.WorkflowStepAppCall) map[string]any {
+func workflowAppStepInputMap(target *gestalt.WorkflowStepAppCall) map[string]any {
 	if target == nil || target.Input.Object == nil {
 		return map[string]any{}
 	}

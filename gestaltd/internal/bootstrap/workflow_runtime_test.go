@@ -36,11 +36,11 @@ type funcInvoker struct {
 	invoke func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error)
 }
 
-func testWorkflowAppTarget(appName, operation string) coreworkflow.Target {
-	return testWorkflowAppTargetWithPayload(appName, operation, "", "", nil)
+func testWorkflowAppStepTarget(appName, operation string) coreworkflow.Target {
+	return testWorkflowAppStepTargetWithPayload(appName, operation, "", "", nil)
 }
 
-func testWorkflowAppTargetWithPayload(appName, operation, connection, instance string, input map[string]any) coreworkflow.Target {
+func testWorkflowAppStepTargetWithPayload(appName, operation, connection, instance string, input map[string]any) coreworkflow.Target {
 	return coreworkflow.Target{
 		Steps: []coreworkflow.Step{{ID: operation, App: &coreworkflow.AppCall{
 			Name:       appName,
@@ -418,7 +418,7 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	req := coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		RunID:        "run-123",
-		Target: testWorkflowAppTargetWithPayload(
+		Target: testWorkflowAppStepTargetWithPayload(
 			"roadmap",
 			"sync",
 			"analytics",
@@ -703,7 +703,7 @@ func TestWorkflowExecutionRefPermissionsForTargetIncludesAgentProvider(t *testin
 	}
 }
 
-func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) {
+func TestWorkflowRuntimeInvokeAgentStepCreatesAndSupervisesTurn(t *testing.T) {
 	t.Parallel()
 
 	reg := registry.New()
@@ -832,7 +832,7 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	}
 }
 
-func TestWorkflowRuntimeInvokeAgentTargetUsesWorkflowKeyForSessionIdempotency(t *testing.T) {
+func TestWorkflowRuntimeInvokeAgentStepUsesWorkflowKeyForSessionIdempotency(t *testing.T) {
 	t.Parallel()
 
 	agentManager := &workflowRuntimeAgentManagerStub{}
@@ -883,7 +883,7 @@ func TestWorkflowRuntimeInvokeAgentTargetUsesWorkflowKeyForSessionIdempotency(t 
 	}
 }
 
-func TestWorkflowRuntimeInvokeAgentTargetMarksProviderCallsWithWorkflowDeadline(t *testing.T) {
+func TestWorkflowRuntimeInvokeAgentStepMarksProviderCallsWithWorkflowDeadline(t *testing.T) {
 	t.Parallel()
 
 	agentManager := &workflowRuntimeAgentManagerStub{completeTurnViaGet: true}
@@ -942,7 +942,7 @@ func TestWorkflowRuntimeInvokeAgentTargetMarksProviderCallsWithWorkflowDeadline(
 	}
 }
 
-func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
+func TestWorkflowRuntimeInvokeAgentStepRunsStepsInOneSession(t *testing.T) {
 	t.Parallel()
 
 	agentManager := &workflowRuntimeAgentManagerStub{
@@ -1106,7 +1106,7 @@ func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
 	}
 }
 
-func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsCanonicalTarget(t *testing.T) {
+func TestWorkflowRuntimeInvokeAgentStepWithExecutionRefAcceptsCanonicalTarget(t *testing.T) {
 	t.Parallel()
 
 	target := coreworkflow.Target{
@@ -1170,7 +1170,7 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsCanonicalTarget(
 	}
 }
 
-func TestWorkflowRuntimeInvokeAgentTargetHandlesMissingTurn(t *testing.T) {
+func TestWorkflowRuntimeInvokeAgentStepHandlesMissingTurn(t *testing.T) {
 	t.Parallel()
 
 	agentManager := &workflowRuntimeAgentManagerStub{returnNilTurn: true}
@@ -1205,10 +1205,10 @@ func TestWorkflowRuntimeInvokeAgentTargetHandlesMissingTurn(t *testing.T) {
 	}
 }
 
-func TestWorkflowRuntimeRejectsMixedAgentAppTargetWithExecutionRef(t *testing.T) {
+func TestWorkflowRuntimeRejectsMixedAgentAppStepWithExecutionRef(t *testing.T) {
 	t.Parallel()
 
-	target := testWorkflowAppTarget("roadmap", "sync")
+	target := testWorkflowAppStepTarget("roadmap", "sync")
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "app-ref",
@@ -1237,7 +1237,7 @@ func TestWorkflowRuntimeRejectsMixedAgentAppTargetWithExecutionRef(t *testing.T)
 		}}},
 	})
 	if err == nil {
-		t.Fatal("Invoke mixed agent/app target succeeded, want error")
+		t.Fatal("Invoke mixed agent/app steps succeeded, want error")
 	}
 }
 
@@ -1249,7 +1249,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
-	target := testWorkflowAppTargetWithPayload("roadmap", "sync", "analytics", "tenant-a", map[string]any{"mode": "full"})
+	target := testWorkflowAppStepTargetWithPayload("roadmap", "sync", "analytics", "tenant-a", map[string]any{"mode": "full"})
 	target.Steps[0].App.CredentialMode = core.ConnectionModeNone
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
@@ -1335,7 +1335,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredSubjectPrincipal(t *testing.
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-service-account",
 		ProviderName: "temporal",
-		Target:       testWorkflowAppTarget("roadmap", "sync"),
+		Target:       testWorkflowAppStepTarget("roadmap", "sync"),
 		SubjectID:    "service_account:scheduler",
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
@@ -1356,7 +1356,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredSubjectPrincipal(t *testing.
 	if _, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		ExecutionRef: "exec-ref-service-account",
-		Target:       testWorkflowAppTarget("roadmap", "sync"),
+		Target:       testWorkflowAppStepTarget("roadmap", "sync"),
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -1375,7 +1375,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredSubjectPrincipal(t *testing.
 func TestWorkflowRuntimeInvokeExecutionRefAuthorizesInternalConnections(t *testing.T) {
 	t.Parallel()
 
-	target := testWorkflowAppTarget("brain", "sources.sync")
+	target := testWorkflowAppStepTarget("brain", "sources.sync")
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:                  "exec-ref-config-source-sync",
@@ -1423,7 +1423,7 @@ func TestWorkflowRuntimeInvokeExecutionRefAuthorizesInternalConnections(t *testi
 func TestWorkflowRuntimeInvokeConfigExecutionRefRunAsUsesServiceAccountPrincipal(t *testing.T) {
 	t.Parallel()
 
-	target := testWorkflowAppTarget("brain", "sources.sync")
+	target := testWorkflowAppStepTarget("brain", "sources.sync")
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:                  "exec-ref-config-runas-source-sync",
@@ -1497,7 +1497,7 @@ func TestWorkflowRuntimeInvokeConfigExecutionRefRunAsUsesServiceAccountPrincipal
 func TestWorkflowRuntimeInvokeUserExecutionRefDoesNotAuthorizeInternalConnections(t *testing.T) {
 	t.Parallel()
 
-	target := testWorkflowAppTarget("brain", "sources.sync")
+	target := testWorkflowAppStepTarget("brain", "sources.sync")
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-user-source-sync",
@@ -1546,7 +1546,7 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
-	target := testWorkflowAppTargetWithPayload("roadmap", "sync", "analytics", "tenant-a", nil)
+	target := testWorkflowAppStepTargetWithPayload("roadmap", "sync", "analytics", "tenant-a", nil)
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-denied",
@@ -1629,7 +1629,7 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 	services := testutil.NewStubServices(t)
 	ctx := context.Background()
 
-	target := testWorkflowAppTargetWithPayload("roadmap", "export", "analytics", "tenant-a", nil)
+	target := testWorkflowAppStepTargetWithPayload("roadmap", "export", "analytics", "tenant-a", nil)
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-123",
@@ -1704,7 +1704,7 @@ func TestWorkflowRuntimeInvokeExecutionRefLookupInfrastructureErrorIsInternal(t 
 	_, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "basic",
 		ExecutionRef: "exec-ref-123",
-		Target:       testWorkflowAppTarget("roadmap", "sync"),
+		Target:       testWorkflowAppStepTarget("roadmap", "sync"),
 	})
 	if err == nil {
 		t.Fatal("expected internal error, got nil")

@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -74,5 +75,20 @@ func TestWorkflowStepWhenInfoPreservesNullEquals(t *testing.T) {
 	}
 	if !strings.Contains(string(payload), `"equals":null`) {
 		t.Fatalf("payload = %s, want explicit equals null", payload)
+	}
+}
+
+func TestWorkflowValueInfoFromCoreUsesPublicTemplateWrapper(t *testing.T) {
+	t.Parallel()
+
+	got := workflowValueInfoFromCore(coreworkflow.Value{
+		Template: &coreworkflow.Text{Template: "hello {{.name}}"},
+	})
+	want := map[string]any{
+		"template": &workflowTextInfo{Template: "hello {{.name}}"},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("workflowValueInfoFromCore() = %#v, want %#v", got, want)
 	}
 }

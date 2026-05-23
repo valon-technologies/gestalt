@@ -434,7 +434,7 @@ pub struct ResolvedAgentTool {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AgentToolRef {
-    pub plugin: String,
+    pub app: String,
     pub operation: String,
     pub connection: String,
     pub instance: String,
@@ -856,7 +856,7 @@ pub fn new_agent_image_ref(input: AgentMessagePartImageRef) -> AgentMessagePartI
 /// Creates a native agent tool reference.
 pub fn new_agent_tool_ref(input: AgentToolRef) -> AgentToolRef {
     AgentToolRef {
-        plugin: input.plugin,
+        app: input.app,
         operation: input.operation,
         connection: input.connection,
         instance: input.instance,
@@ -1178,7 +1178,7 @@ fn agent_subject_from_proto(value: Option<pb::SubjectContext>) -> Option<Subject
 
 pub(crate) fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef {
     AgentToolRef {
-        plugin: value.app,
+        app: value.app,
         operation: value.operation,
         connection: value.connection,
         instance: value.instance,
@@ -1192,7 +1192,7 @@ pub(crate) fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef
 
 pub(crate) fn agent_tool_ref_to_proto(value: AgentToolRef) -> pb::AgentToolRef {
     pb::AgentToolRef {
-        app: value.plugin,
+        app: value.app,
         operation: value.operation,
         connection: value.connection,
         instance: value.instance,

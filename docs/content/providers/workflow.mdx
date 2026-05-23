@@ -112,9 +112,6 @@ direct target operation. These grants do not create credentials.
 Subject-scoped connections use credentials stored for the `runAs.subject.id`;
 `none` connections require no upstream credential.
 
-`permissions` is still accepted as a deprecated alias for `invokes` with the
-older `{ app, operations }` shape. Do not set both on the same workflow.
-
 ### Triggers
 
 ```yaml
@@ -421,10 +418,9 @@ attaches the request invocation token to each manager call, so the host keeps
 the same subject and permission ceiling.
 
 Deployments can make this host-service access explicit with app workflow
-capabilities. When `capabilities.workflow` is omitted, apps keep the legacy
-behavior and workflow-manager calls are allowed subject to the current principal
-and target authorization. When it is present, `operations` is an allowlist for
-the workflow-manager methods that app code may call:
+capabilities. When `capabilities.workflow` is omitted, workflow-manager calls
+from that app are denied. Set `operations` to the workflow-manager methods that
+app code may call:
 
 ```yaml
 apps:

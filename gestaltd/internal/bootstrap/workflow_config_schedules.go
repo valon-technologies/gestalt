@@ -16,7 +16,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
-	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -77,7 +76,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
-		permissions, err := workflowConfigExecutionPermissions(cfg, "workflows.schedules."+desiredEntry.ScheduleKey, schedule.Invokes, schedule.Permissions)
+		permissions, err := workflowConfigExecutionPermissions(cfg, "workflows.schedules."+desiredEntry.ScheduleKey, schedule.Invokes)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
@@ -266,141 +265,7 @@ func workflowConfigTargetLabel(target coreworkflow.Target) string {
 }
 
 func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Target {
-	if target == nil {
-		return coreworkflow.Target{}
-	}
-	return coreworkflow.Target{Steps: workflowConfigSteps(target.Steps)}
-}
-
-func workflowConfigSteps(steps []config.WorkflowStepConfig) []coreworkflow.Step {
-	if len(steps) == 0 {
-		return nil
-	}
-	out := make([]coreworkflow.Step, 0, len(steps))
-	for i := range steps {
-		step := &steps[i]
-		timeoutSeconds := 0
-		if timeout := strings.TrimSpace(step.Timeout); timeout != "" {
-			if parsed, err := time.ParseDuration(timeout); err == nil {
-				timeoutSeconds = int(parsed.Seconds())
-			}
-		}
-		outStep := coreworkflow.Step{
-			ID:             strings.TrimSpace(step.ID),
-			Inputs:         workflowConfigValueMap(step.Inputs),
-			App:            workflowConfigAppCall(step.App),
-			Agent:          workflowConfigAgentTurn(step.Agent),
-			Metadata:       maps.Clone(step.Metadata),
-			TimeoutSeconds: timeoutSeconds,
-			When:           workflowConfigStepWhen(step.When),
-		}
-		out = append(out, outStep)
-	}
-	return out
-}
-
-func workflowConfigAppCall(app *config.WorkflowStepAppCallConfig) *coreworkflow.AppCall {
-	if app == nil {
-		return nil
-	}
-	return &coreworkflow.AppCall{
-		Name:           strings.TrimSpace(app.Name),
-		Operation:      strings.TrimSpace(app.Operation),
-		Connection:     strings.TrimSpace(app.Connection),
-		Instance:       strings.TrimSpace(app.Instance),
-		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(app.CredentialMode)),
-		Input:          workflowConfigValue(app.Input),
-	}
-}
-
-func workflowConfigAgentTurn(agent *config.WorkflowStepAgentConfig) *coreworkflow.AgentTurn {
-	if agent == nil {
-		return nil
-	}
-	messages := make([]coreworkflow.AgentMessage, 0, len(agent.Messages))
-	for _, message := range agent.Messages {
-		messages = append(messages, coreworkflow.AgentMessage{
-			Role:     strings.TrimSpace(message.Role),
-			Text:     coreworkflow.Text{Template: strings.TrimSpace(message.Text.Template)},
-			Metadata: maps.Clone(message.Metadata),
-		})
-	}
-	tools := make([]coreagent.ToolRef, 0, len(agent.Tools))
-	for _, tool := range agent.Tools {
-		tools = append(tools, coreagent.ToolRef{
-			System:      strings.TrimSpace(tool.System),
-			App:         strings.TrimSpace(tool.App),
-			Operation:   strings.TrimSpace(tool.Operation),
-			Connection:  strings.TrimSpace(tool.Connection),
-			Instance:    strings.TrimSpace(tool.Instance),
-			Title:       strings.TrimSpace(tool.Title),
-			Description: strings.TrimSpace(tool.Description),
-		})
-	}
-	return &coreworkflow.AgentTurn{
-		ProviderName:   strings.TrimSpace(agent.Provider),
-		Model:          strings.TrimSpace(agent.Model),
-		SessionKey:     strings.TrimSpace(agent.SessionKey),
-		Prompt:         coreworkflow.Text{Template: strings.TrimSpace(agent.Prompt.Template)},
-		Messages:       messages,
-		ToolRefs:       tools,
-		ResponseSchema: maps.Clone(agent.ResponseSchema),
-		ModelOptions:   maps.Clone(agent.ModelOptions),
-	}
-}
-
-func workflowConfigStepWhen(when *config.WorkflowStepWhenConfig) *coreworkflow.StepWhen {
-	if when == nil {
-		return nil
-	}
-	return &coreworkflow.StepWhen{
-		Value:     workflowConfigValue(when.Value),
-		Equals:    when.Equals,
-		EqualsSet: when.EqualsSet(),
-	}
-}
-
-func workflowConfigValueMap(values map[string]config.WorkflowValueConfig) map[string]coreworkflow.Value {
-	if values == nil {
-		return nil
-	}
-	out := make(map[string]coreworkflow.Value, len(values))
-	for key := range values {
-		out[key] = workflowConfigValue(values[key])
-	}
-	return out
-}
-
-func workflowConfigValue(value config.WorkflowValueConfig) coreworkflow.Value {
-	out := coreworkflow.Value{
-		Literal:       value.Literal,
-		LiteralSet:    value.LiteralSet,
-		Object:        workflowConfigValueMap(value.Object),
-		Array:         workflowConfigValueArray(value.Array),
-		RunInput:      strings.TrimSpace(value.RunInput),
-		SignalPayload: strings.TrimSpace(value.SignalPayload),
-	}
-	if value.Template != nil {
-		out.Template = &coreworkflow.Text{Template: strings.TrimSpace(value.Template.Template)}
-	}
-	if value.StepOutput != nil {
-		out.StepOutput = &coreworkflow.StepOutputSource{
-			StepID: strings.TrimSpace(value.StepOutput.StepID),
-			Path:   strings.TrimSpace(value.StepOutput.Path),
-		}
-	}
-	return out
-}
-
-func workflowConfigValueArray(values []config.WorkflowValueConfig) []coreworkflow.Value {
-	if values == nil {
-		return nil
-	}
-	out := make([]coreworkflow.Value, 0, len(values))
-	for i := range values {
-		out = append(out, workflowConfigValue(values[i]))
-	}
-	return out
+	return config.WorkflowTargetToCore(target)
 }
 
 func workflowConfigRunAsSubject(path string, runAs *config.WorkflowRunAsConfig) (*core.RunAsSubject, error) {
@@ -427,12 +292,9 @@ func workflowConfigRunAsSubject(path string, runAs *config.WorkflowRunAsConfig) 
 	return subject, nil
 }
 
-func workflowConfigExecutionPermissions(cfg *config.Config, path string, invokes []config.WorkflowInvokeConfig, permissions []core.AccessPermission) ([]core.AccessPermission, error) {
-	if len(invokes) > 0 && len(permissions) > 0 {
-		return nil, fmt.Errorf("config validation: %s must not set both invokes and permissions", path)
-	}
+func workflowConfigExecutionPermissions(cfg *config.Config, path string, invokes []config.WorkflowInvokeConfig) ([]core.AccessPermission, error) {
 	if len(invokes) == 0 {
-		return permissions, nil
+		return nil, nil
 	}
 	out := make([]core.AccessPermission, 0, len(invokes))
 	appIndexes := make(map[string]int, len(invokes))

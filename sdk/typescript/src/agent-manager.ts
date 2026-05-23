@@ -58,7 +58,7 @@ export interface AgentManagerWorkspace {
   cwd?: string | undefined;
 }
 
-/** Shape accepted when creating an agent session through the host manager. */
+/** Shape accepted when creating an agent session through the manager facade. */
 export interface AgentManagerCreateSession {
   providerName: string;
   model?: string | undefined;
@@ -68,12 +68,12 @@ export interface AgentManagerCreateSession {
   workspace?: AgentManagerWorkspace | undefined;
 }
 
-/** Shape accepted when fetching an agent session through the host manager. */
+/** Shape accepted when fetching an agent session through the manager facade. */
 export interface AgentManagerGetSession {
   sessionId: string;
 }
 
-/** Shape accepted when listing agent sessions through the host manager. */
+/** Shape accepted when listing agent sessions through the manager facade. */
 export interface AgentManagerListSessions {
   providerName?: string | undefined;
   state?: AgentSessionState | undefined;
@@ -81,7 +81,7 @@ export interface AgentManagerListSessions {
   summaryOnly?: boolean | undefined;
 }
 
-/** Shape accepted when updating an agent session through the host manager. */
+/** Shape accepted when updating an agent session through the manager facade. */
 export interface AgentManagerUpdateSession {
   sessionId: string;
   clientRef?: string | undefined;
@@ -89,7 +89,7 @@ export interface AgentManagerUpdateSession {
   metadata?: JsonObjectInput | undefined;
 }
 
-/** Shape accepted when creating an agent turn through the host manager. */
+/** Shape accepted when creating an agent turn through the manager facade. */
 export interface AgentManagerCreateTurn {
   sessionId: string;
   model?: string | undefined;
@@ -104,12 +104,12 @@ export interface AgentManagerCreateTurn {
   timeoutSeconds?: number | undefined;
 }
 
-/** Shape accepted when fetching an agent turn through the host manager. */
+/** Shape accepted when fetching an agent turn through the manager facade. */
 export interface AgentManagerGetTurn {
   turnId: string;
 }
 
-/** Shape accepted when listing agent turns through the host manager. */
+/** Shape accepted when listing agent turns through the manager facade. */
 export interface AgentManagerListTurns {
   sessionId: string;
   status?: AgentExecutionStatus | undefined;
@@ -117,7 +117,7 @@ export interface AgentManagerListTurns {
   summaryOnly?: boolean | undefined;
 }
 
-/** Shape accepted when cancelling an agent turn through the host manager. */
+/** Shape accepted when cancelling an agent turn through the manager facade. */
 export interface AgentManagerCancelTurn {
   turnId: string;
   reason?: string | undefined;
@@ -146,7 +146,7 @@ export interface AgentManagerResolveInteraction {
  * Client for managing agent sessions, turns, events, and interactions.
  *
  * The constructor accepts either a Gestalt request or an invocation token. Each
- * manager call forwards that token to the host service.
+ * manager call forwards that token to the agent-provider facade.
  */
 export class AgentManager {
   private readonly client: Client<typeof AgentProviderService>;

@@ -126,7 +126,7 @@ func TestNewBoundWorkflowStepsTargetUsesNativeValues(t *testing.T) {
 	}
 	app := target.GetSteps()[0].GetApp()
 	if app.GetName() != "slack" || app.GetOperation() != "chat.postMessage" {
-		t.Fatalf("app target = %q/%q, want slack/chat.postMessage", app.GetName(), app.GetOperation())
+		t.Fatalf("app step = %q/%q, want slack/chat.postMessage", app.GetName(), app.GetOperation())
 	}
 	if got := app.GetInput().GetObject().GetFields()["channel"].GetLiteral().AsInterface(); got != "C123" {
 		t.Fatalf("app input channel = %#v, want C123", got)
@@ -176,7 +176,7 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 	}
 }
 
-func TestNewBoundWorkflowAgentStepCopiesNativeFields(t *testing.T) {
+func TestBoundWorkflowTargetAgentStepCopiesNativeFields(t *testing.T) {
 	target, err := boundWorkflowTargetToProto(BoundWorkflowTarget{
 		Steps: []WorkflowStep{
 			{
@@ -228,7 +228,7 @@ func TestNewBoundWorkflowAgentStepCopiesNativeFields(t *testing.T) {
 	diagnosis := target.GetSteps()[0]
 	agent := diagnosis.GetAgent()
 	if agent.GetProvider() != "agent" || agent.GetModel() != "gpt-5.5" {
-		t.Fatalf("agent target = %q/%q, want agent/gpt-5.5", agent.GetProvider(), agent.GetModel())
+		t.Fatalf("agent step = %q/%q, want agent/gpt-5.5", agent.GetProvider(), agent.GetModel())
 	}
 	if got := agent.GetResponseSchema().AsMap()["type"]; got != "object" {
 		t.Fatalf("response schema type = %#v, want object", got)

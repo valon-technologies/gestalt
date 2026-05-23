@@ -700,7 +700,7 @@ spec:
 	}
 }
 
-func TestManifestWorkflow_AcceptsPluginRouteAuthReference(t *testing.T) {
+func TestManifestWorkflow_AcceptsAppRouteAuthReference(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -743,7 +743,7 @@ spec:
 	}
 }
 
-func TestManifestWorkflow_AcceptsNullPluginRouteAuth(t *testing.T) {
+func TestManifestWorkflow_AcceptsNullAppRouteAuth(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()

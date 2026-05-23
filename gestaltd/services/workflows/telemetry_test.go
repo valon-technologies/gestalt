@@ -166,7 +166,7 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 	}
 	calls := []workflowProviderMetricCall{
 		{"start run", observability.WorkflowOperationStartRun, workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.StartRun(ctx, coreworkflow.StartRunRequest{Target: telemetryCoreAppTarget()})
+			_, err := p.StartRun(ctx, coreworkflow.StartRunRequest{Target: telemetryCoreAppStepTarget()})
 			return err
 		}},
 		{"get run", observability.WorkflowOperationGetRun, workflowMetricAttrs(observability.WorkflowOperationGetRun), func(ctx context.Context, p coreworkflow.Provider) error {
@@ -186,11 +186,11 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 			return err
 		}},
 		{"signal or start run", observability.WorkflowOperationSignalOrStartRun, workflowMetricAttrsWith(observability.WorkflowOperationSignalOrStartRun, observability.WorkflowTriggerKindSignal, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.SignalOrStartRun(ctx, coreworkflow.SignalOrStartRunRequest{Target: telemetryCoreAgentTarget(nil), Signal: coreworkflow.Signal{Name: "poke"}})
+			_, err := p.SignalOrStartRun(ctx, coreworkflow.SignalOrStartRunRequest{Target: telemetryCoreAgentStepTarget(nil), Signal: coreworkflow.Signal{Name: "poke"}})
 			return err
 		}},
 		{"upsert schedule", observability.WorkflowOperationUpsertSchedule, workflowMetricAttrsWith(observability.WorkflowOperationUpsertSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{Target: telemetryCoreAppTarget()})
+			_, err := p.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{Target: telemetryCoreAppStepTarget()})
 			return err
 		}},
 		{"get schedule", observability.WorkflowOperationGetSchedule, workflowMetricAttrsWith(observability.WorkflowOperationGetSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
@@ -213,7 +213,7 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 			return err
 		}},
 		{"upsert trigger", observability.WorkflowOperationUpsertEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationUpsertEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{Target: telemetryCoreAppTarget()})
+			_, err := p.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{Target: telemetryCoreAppStepTarget()})
 			return err
 		}},
 		{"get trigger", observability.WorkflowOperationGetEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationGetEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
@@ -246,7 +246,7 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 	store := workflow.(coreworkflow.ExecutionReferenceStore)
 	calls = append(calls,
 		workflowProviderMetricCall{"put execution ref", observability.WorkflowOperationPutExecutionReference, workflowMetricAttrsWith(observability.WorkflowOperationPutExecutionReference, observability.WorkflowTriggerKindNone, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, _ coreworkflow.Provider) error {
-			_, err := store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{ID: "ref-1", Target: telemetryCoreAppTarget()})
+			_, err := store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{ID: "ref-1", Target: telemetryCoreAppStepTarget()})
 			return err
 		}},
 		workflowProviderMetricCall{"get execution ref", observability.WorkflowOperationGetExecutionReference, workflowMetricAttrs(observability.WorkflowOperationGetExecutionReference), func(ctx context.Context, _ coreworkflow.Provider) error {
@@ -343,7 +343,7 @@ func TestWorkflowHostRecordsOperationMetricsAcrossTransport(t *testing.T) {
 		Trigger: &proto.WorkflowRunTrigger{Kind: &proto.WorkflowRunTrigger_Schedule{
 			Schedule: &proto.WorkflowScheduleTrigger{ScheduleId: "sched-1"},
 		}},
-		Target: telemetryProtoAppTarget("ignored", "ignored"),
+		Target: telemetryProtoAppStepTarget("ignored", "ignored"),
 	})
 	if err != nil {
 		t.Fatalf("InvokeOperation success: %v", err)
@@ -504,7 +504,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		IdempotencyKey:  "idem-invalid-target",
 		InvocationToken: token,
 		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
-		Target:          telemetryProtoAppTarget("", "run"),
+		Target:          telemetryProtoAppStepTarget("", "run"),
 	})
 	if status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("SignalOrStartRun invalid target = %v, want InvalidArgument", err)
@@ -516,7 +516,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		IdempotencyKey:  "idem-principal-denied",
 		InvocationToken: principalDeniedToken,
 		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
-		Target: telemetryProtoAgentTarget([]*proto.AgentToolRef{
+		Target: telemetryProtoAgentStepTarget([]*proto.AgentToolRef{
 			{App: "github", Operation: "reviewPullRequest"},
 		}),
 	})
@@ -530,7 +530,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		IdempotencyKey:  "idem-authorizer-denied",
 		InvocationToken: authorizerDeniedToken,
 		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
-		Target: telemetryProtoAgentTarget([]*proto.AgentToolRef{
+		Target: telemetryProtoAgentStepTarget([]*proto.AgentToolRef{
 			{App: "datadog", Operation: "listAlerts"},
 		}),
 	})
@@ -590,7 +590,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", untrustedProviderMetricAttrs)
 	for _, forbidden := range []string{
 		"subject_id",
-		"caller_plugin",
+		"caller_app",
 		"workflow_key_sha256",
 		"gestaltd.workflow.run.id",
 		"gestaltd.workflow.execution_ref",
@@ -634,7 +634,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"provider_selection",
 		"workflow_provider",
 		"target_kind",
-		"caller_plugin",
+		"caller_app",
 		"subject_id",
 		"subject_kind",
 		"execution_ref_id",
@@ -658,7 +658,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"target_kind":          "workflow_run",
 		"target_id":            "run-signal-started",
 		"allowed":              true,
-		"caller_plugin":        "slack",
+		"caller_app":           "slack",
 		"subject_id":           "user:user-123",
 		"subject_kind":         "user",
 		"workflow_target_kind": "steps",
@@ -672,7 +672,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"target_kind":          "workflow_run",
 		"allowed":              false,
 		"error":                "grpc_status",
-		"caller_plugin":        "slack",
+		"caller_app":           "slack",
 		"subject_id":           "user:user-123",
 		"subject_kind":         "user",
 		"workflow_target_kind": "steps",
@@ -687,7 +687,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"allowed":                   false,
 		"error":                     "not_found",
 		"authorization_decision":    "workflow_target_principal_operation_permission_denied",
-		"caller_plugin":             "slack",
+		"caller_app":                "slack",
 		"subject_id":                "user:restricted",
 		"subject_kind":              "user",
 		"workflow_target_kind":      "steps",
@@ -705,7 +705,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"allowed":                   false,
 		"error":                     "not_found",
 		"authorization_decision":    "workflow_target_authorizer_provider_denied",
-		"caller_plugin":             "slack",
+		"caller_app":                "slack",
 		"subject_id":                "user:authorizer-denied",
 		"subject_kind":              "user",
 		"workflow_target_kind":      "steps",
@@ -770,7 +770,7 @@ func workflowManagerTelemetrySignalOrStartRequest(token, workflowKey, idempotenc
 		IdempotencyKey:  idempotencyKey,
 		InvocationToken: token,
 		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
-		Target:          telemetryProtoAgentTarget(nil),
+		Target:          telemetryProtoAgentStepTarget(nil),
 	}
 }
 
@@ -1023,7 +1023,7 @@ func telemetryRun(id string, status proto.WorkflowRunStatus) *proto.BoundWorkflo
 		Id:        id,
 		Status:    status,
 		CreatedAt: timestamppb.Now(),
-		Target:    telemetryProtoAppTarget("ignored", "ignored"),
+		Target:    telemetryProtoAppStepTarget("ignored", "ignored"),
 	}
 }
 
@@ -1032,7 +1032,7 @@ func telemetrySchedule(id string) *proto.BoundWorkflowSchedule {
 		Id:        id,
 		CreatedAt: timestamppb.Now(),
 		UpdatedAt: timestamppb.Now(),
-		Target:    telemetryProtoAppTarget("ignored", "ignored"),
+		Target:    telemetryProtoAppStepTarget("ignored", "ignored"),
 	}
 }
 
@@ -1042,7 +1042,7 @@ func telemetryEventTrigger(id string) *proto.BoundWorkflowEventTrigger {
 		CreatedAt: timestamppb.Now(),
 		UpdatedAt: timestamppb.Now(),
 		Match:     &proto.WorkflowEventMatch{Type: "ignored"},
-		Target:    telemetryProtoAppTarget("ignored", "ignored"),
+		Target:    telemetryProtoAppStepTarget("ignored", "ignored"),
 	}
 }
 
@@ -1050,18 +1050,18 @@ func telemetryExecutionReference() *proto.WorkflowExecutionReference {
 	return &proto.WorkflowExecutionReference{
 		Id:           "ref-1",
 		ProviderName: "workflow-metrics",
-		Target:       telemetryProtoAppTarget("ignored", "ignored"),
+		Target:       telemetryProtoAppStepTarget("ignored", "ignored"),
 		CreatedAt:    timestamppb.Now(),
 	}
 }
 
-func telemetryCoreAppTarget() coreworkflow.Target {
+func telemetryCoreAppStepTarget() coreworkflow.Target {
 	return coreworkflow.Target{
 		Steps: []coreworkflow.Step{{ID: "run", App: &coreworkflow.AppCall{Name: "ignored", Operation: "ignored"}}},
 	}
 }
 
-func telemetryCoreAgentTarget(tools []coreagent.ToolRef) coreworkflow.Target {
+func telemetryCoreAgentStepTarget(tools []coreagent.ToolRef) coreworkflow.Target {
 	return coreworkflow.Target{
 		Steps: []coreworkflow.Step{{ID: "run", Agent: &coreworkflow.AgentTurn{
 			ProviderName: "simple",
@@ -1071,7 +1071,7 @@ func telemetryCoreAgentTarget(tools []coreagent.ToolRef) coreworkflow.Target {
 	}
 }
 
-func telemetryProtoAppTarget(appName, operation string) *proto.BoundWorkflowTarget {
+func telemetryProtoAppStepTarget(appName, operation string) *proto.BoundWorkflowTarget {
 	return &proto.BoundWorkflowTarget{
 		Steps: []*proto.WorkflowStep{{
 			Id:     "run",
@@ -1080,7 +1080,7 @@ func telemetryProtoAppTarget(appName, operation string) *proto.BoundWorkflowTarg
 	}
 }
 
-func telemetryProtoAgentTarget(tools []*proto.AgentToolRef) *proto.BoundWorkflowTarget {
+func telemetryProtoAgentStepTarget(tools []*proto.AgentToolRef) *proto.BoundWorkflowTarget {
 	return &proto.BoundWorkflowTarget{
 		Steps: []*proto.WorkflowStep{{
 			Id: "run",

@@ -2045,12 +2045,11 @@ func validateWorkflowsConfig(cfg *Config) error {
 				return err
 			}
 			schedule.RunAs = runAs
-			invokes, permissions, err := normalizeWorkflowExecutionGrants(cfg, "workflows.schedules."+key, schedule.Invokes, schedule.Permissions)
+			invokes, _, err := normalizeWorkflowExecutionInvokes(cfg, "workflows.schedules."+key+".invokes", schedule.Invokes)
 			if err != nil {
 				return err
 			}
 			schedule.Invokes = invokes
-			schedule.Permissions = permissions
 			schedule.Provider = strings.TrimSpace(schedule.Provider)
 			providerName, _, err := cfg.EffectiveWorkflowProvider(schedule.Provider)
 			if err != nil {
@@ -2097,12 +2096,11 @@ func validateWorkflowsConfig(cfg *Config) error {
 				return err
 			}
 			trigger.RunAs = runAs
-			invokes, permissions, err := normalizeWorkflowExecutionGrants(cfg, "workflows.eventTriggers."+key, trigger.Invokes, trigger.Permissions)
+			invokes, _, err := normalizeWorkflowExecutionInvokes(cfg, "workflows.eventTriggers."+key+".invokes", trigger.Invokes)
 			if err != nil {
 				return err
 			}
 			trigger.Invokes = invokes
-			trigger.Permissions = permissions
 			trigger.Provider = strings.TrimSpace(trigger.Provider)
 			providerName, _, err := cfg.EffectiveWorkflowProvider(trigger.Provider)
 			if err != nil {
@@ -2192,21 +2190,6 @@ func normalizeWorkflowRunAs(path string, runAs *WorkflowRunAsConfig) (*WorkflowR
 	return &WorkflowRunAsConfig{Subject: &subject}, nil
 }
 
-func normalizeWorkflowExecutionGrants(cfg *Config, path string, invokes []WorkflowInvokeConfig, permissions []core.AccessPermission) ([]WorkflowInvokeConfig, []core.AccessPermission, error) {
-	if len(invokes) > 0 && len(permissions) > 0 {
-		return nil, nil, fmt.Errorf("config validation: %s must not set both invokes and permissions", path)
-	}
-	if len(invokes) == 0 {
-		normalizedPermissions, err := normalizeWorkflowExecutionPermissions(cfg, path+".permissions", permissions)
-		return nil, normalizedPermissions, err
-	}
-	normalizedInvokes, _, err := normalizeWorkflowExecutionInvokes(cfg, path+".invokes", invokes)
-	if err != nil {
-		return nil, nil, err
-	}
-	return normalizedInvokes, nil, nil
-}
-
 func normalizeWorkflowExecutionInvokes(cfg *Config, path string, values []WorkflowInvokeConfig) ([]WorkflowInvokeConfig, []core.AccessPermission, error) {
 	out := make([]WorkflowInvokeConfig, 0, len(values))
 	permissions := make([]core.AccessPermission, 0, len(values))
@@ -2246,64 +2229,6 @@ func normalizeWorkflowExecutionInvokes(cfg *Config, path string, values []Workfl
 	return out, permissions, nil
 }
 
-func normalizeWorkflowExecutionPermissions(cfg *Config, path string, values []core.AccessPermission) ([]core.AccessPermission, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]core.AccessPermission, 0, len(values))
-	appIndexes := make(map[string]int, len(values))
-	seenOperations := make(map[string]map[string]struct{}, len(values))
-	for i, value := range values {
-		app := strings.TrimSpace(value.App)
-		if app == "" {
-			return nil, fmt.Errorf("config validation: %s[%d].app is required", path, i)
-		}
-		if _, ok := cfg.Apps[app]; !ok {
-			return nil, fmt.Errorf("config validation: %s[%d].app references unknown app %q", path, i, app)
-		}
-		if len(value.Actions) > 0 {
-			return nil, fmt.Errorf("config validation: %s[%d].actions is not supported", path, i)
-		}
-		operations, err := normalizeWorkflowExecutionPermissionNames(fmt.Sprintf("%s[%d].operations", path, i), value.Operations)
-		if err != nil {
-			return nil, err
-		}
-		if len(operations) == 0 {
-			return nil, fmt.Errorf("config validation: %s[%d].operations is required", path, i)
-		}
-		idx, ok := appIndexes[app]
-		if !ok {
-			idx = len(out)
-			appIndexes[app] = idx
-			seenOperations[app] = map[string]struct{}{}
-			out = append(out, core.AccessPermission{App: app})
-		}
-		for _, operation := range operations {
-			if _, exists := seenOperations[app][operation]; exists {
-				continue
-			}
-			seenOperations[app][operation] = struct{}{}
-			out[idx].Operations = append(out[idx].Operations, operation)
-		}
-	}
-	return out, nil
-}
-
-func normalizeWorkflowExecutionPermissionNames(path string, values []string) ([]string, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]string, 0, len(values))
-	for i, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return nil, fmt.Errorf("config validation: %s[%d] is required", path, i)
-		}
-		out = append(out, value)
-	}
-	return out, nil
-}
-
 func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetConfig) error {
 	if target == nil || len(target.Steps) == 0 {
 		return fmt.Errorf("config validation: %s.steps is required", path)
@@ -2322,7 +2247,7 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 		if err := normalizeWorkflowValueMapConfig(stepPath+".inputs", step.Inputs); err != nil {
 			return err
 		}
-		if err := coreworkflow.ValidateValueMapRefs(stepPath+".inputs", workflowValueConfigMapToCore(step.Inputs), seen); err != nil {
+		if err := coreworkflow.ValidateValueMapRefs(stepPath+".inputs", workflowValueMapToCore(step.Inputs), seen); err != nil {
 			return fmt.Errorf("config validation: %w", err)
 		}
 		if (step.App == nil) == (step.Agent == nil) {
@@ -2332,7 +2257,7 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 			if err := normalizeWorkflowStepAppCallConfig(stepPath+".app", step.App, true); err != nil {
 				return err
 			}
-			if err := coreworkflow.ValidateValueRefs(stepPath+".app.input", workflowValueConfigToCore(step.App.Input), seen); err != nil {
+			if err := coreworkflow.ValidateValueRefs(stepPath+".app.input", WorkflowValueToCore(step.App.Input), seen); err != nil {
 				return fmt.Errorf("config validation: %w", err)
 			}
 		}
@@ -2352,7 +2277,7 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 				return err
 			}
 			when := &coreworkflow.StepWhen{
-				Value:     workflowValueConfigToCore(step.When.Value),
+				Value:     WorkflowValueToCore(step.When.Value),
 				Equals:    step.When.Equals,
 				EqualsSet: step.When.EqualsSet(),
 			}
@@ -2474,7 +2399,7 @@ func validateWorkflowAgentToolsConfig(cfg *Config, path string, tools []Workflow
 			return fmt.Errorf("config validation: %s[%d].app references unknown app %q", path, i, tool.App)
 		}
 		if hasSystemTool && tool.Operation == "" {
-			return fmt.Errorf("config validation: %s[%d].operation is required when workflow system tools are delegated", path, i)
+			return fmt.Errorf("config validation: %s[%d].operation is required when workflow system tools are granted", path, i)
 		}
 	}
 	return nil

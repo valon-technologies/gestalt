@@ -91,7 +91,7 @@ func buildAppRuntimeHostServices(name string, entry *config.ProviderEntry, deps 
 		}
 	}
 	if includeWorkflowProvider {
-		hostServices = append(hostServices, buildPluginWorkflowProviderHostService(name, deps, invTokens))
+		hostServices = append(hostServices, buildWorkflowProviderHostService(name, deps, invTokens))
 	}
 	if includeAgentProvider {
 		hostServices = append(hostServices, buildPluginAgentProviderHostService(name, deps, invTokens))
@@ -499,7 +499,7 @@ func registerS3Servers(bindings map[string]s3store.Client, defaultBinding, plugi
 	return s3.NewRoutingServers(bindings, defaultBinding, pluginName, accessURLs)
 }
 
-func buildPluginWorkflowProviderHostService(pluginName string, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
+func buildWorkflowProviderHostService(appName string, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.WorkflowManager
 	if manager == nil {
 		manager = unavailableWorkflowManager{}
@@ -508,7 +508,7 @@ func buildPluginWorkflowProviderHostService(pluginName string, deps Deps, tokens
 		Name:           "workflow_provider",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowProvider_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowProviderServer(srv, workflowservice.NewProviderServer(pluginName, manager, tokens))
+			proto.RegisterWorkflowProviderServer(srv, workflowservice.NewProviderServer(appName, manager, tokens))
 		},
 	}
 }
