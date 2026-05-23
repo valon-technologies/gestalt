@@ -118,12 +118,12 @@ func TestNewBoundWorkflowAppTargetUsesNativeValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("boundWorkflowTargetToProto: %v", err)
 	}
-	plugin := target.GetApp()
+	app := target.GetApp()
 	if app.GetAppName() != "slack" || app.GetOperation() != "chat.postMessage" {
-		t.Fatalf("plugin target = %q/%q, want slack/chat.postMessage", app.GetAppName(), app.GetOperation())
+		t.Fatalf("app target = %q/%q, want slack/chat.postMessage", app.GetAppName(), app.GetOperation())
 	}
 	if got := app.GetInput().AsMap()["channel"]; got != "C123" {
-		t.Fatalf("plugin input channel = %#v, want C123", got)
+		t.Fatalf("app input channel = %#v, want C123", got)
 	}
 }
 
