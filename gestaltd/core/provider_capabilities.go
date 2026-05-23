@@ -76,15 +76,34 @@ type httpSubjectSupporter interface {
 	SupportsHTTPSubject() bool
 }
 
-func SupportsSessionCatalog(prov Provider) bool {
+func supportsOptionalProviderFeature(
+	prov Provider,
+	tryExplicit func(Provider) (handled bool, supported bool),
+	hasFallback func(Provider) bool,
+) bool {
 	if prov == nil {
 		return false
 	}
-	if aware, ok := prov.(sessionCatalogSupporter); ok {
-		return aware.SupportsSessionCatalog()
+	if handled, supported := tryExplicit(prov); handled {
+		return supported
 	}
-	_, ok := prov.(SessionCatalogProvider)
-	return ok
+	return hasFallback(prov)
+}
+
+func SupportsSessionCatalog(prov Provider) bool {
+	return supportsOptionalProviderFeature(prov,
+		func(p Provider) (bool, bool) {
+			aware, ok := p.(sessionCatalogSupporter)
+			if !ok {
+				return false, false
+			}
+			return true, aware.SupportsSessionCatalog()
+		},
+		func(p Provider) bool {
+			_, ok := p.(SessionCatalogProvider)
+			return ok
+		},
+	)
 }
 
 func CatalogForRequest(ctx context.Context, prov Provider, token string) (*catalog.Catalog, bool, error) {
@@ -100,14 +119,19 @@ func CatalogForRequest(ctx context.Context, prov Provider, token string) (*catal
 }
 
 func SupportsPostConnect(prov Provider) bool {
-	if prov == nil {
-		return false
-	}
-	if aware, ok := prov.(postConnectSupporter); ok {
-		return aware.SupportsPostConnect()
-	}
-	_, ok := prov.(PostConnectCapable)
-	return ok
+	return supportsOptionalProviderFeature(prov,
+		func(p Provider) (bool, bool) {
+			aware, ok := p.(postConnectSupporter)
+			if !ok {
+				return false, false
+			}
+			return true, aware.SupportsPostConnect()
+		},
+		func(p Provider) bool {
+			_, ok := p.(PostConnectCapable)
+			return ok
+		},
+	)
 }
 
 func PostConnect(ctx context.Context, prov Provider, token *ExternalCredential) (map[string]string, bool, error) {
@@ -129,14 +153,19 @@ func PostConnect(ctx context.Context, prov Provider, token *ExternalCredential) 
 }
 
 func SupportsHTTPSubject(prov Provider) bool {
-	if prov == nil {
-		return false
-	}
-	if aware, ok := prov.(httpSubjectSupporter); ok {
-		return aware.SupportsHTTPSubject()
-	}
-	_, ok := prov.(HTTPSubjectResolver)
-	return ok
+	return supportsOptionalProviderFeature(prov,
+		func(p Provider) (bool, bool) {
+			aware, ok := p.(httpSubjectSupporter)
+			if !ok {
+				return false, false
+			}
+			return true, aware.SupportsHTTPSubject()
+		},
+		func(p Provider) bool {
+			_, ok := p.(HTTPSubjectResolver)
+			return ok
+		},
+	)
 }
 
 func ResolveHTTPSubject(ctx context.Context, prov Provider, req *HTTPSubjectResolveRequest) (*HTTPResolvedSubject, bool, error) {

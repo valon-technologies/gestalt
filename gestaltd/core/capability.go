@@ -1,12 +1,15 @@
 package core
 
-import "encoding/json"
+import (
+	"encoding/json"
 
-type CapabilityAnnotations struct {
-	ReadOnlyHint    *bool
-	IdempotentHint  *bool
-	DestructiveHint *bool
-	OpenWorldHint   *bool
+	"github.com/valon-technologies/gestalt/server/core/catalog"
+)
+
+type CapabilityAnnotations = catalog.CapabilityAnnotations
+
+func CloneCapabilityAnnotations(a CapabilityAnnotations) CapabilityAnnotations {
+	return catalog.CloneCapabilityAnnotations(a)
 }
 
 type Capability struct {

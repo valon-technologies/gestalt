@@ -40,7 +40,7 @@ type CatalogOperation struct {
 	Description    string               `yaml:"description,omitempty"    json:"description,omitempty"`
 	InputSchema    json.RawMessage      `yaml:"inputSchema,omitempty"    json:"inputSchema,omitempty"`
 	OutputSchema   json.RawMessage      `yaml:"outputSchema,omitempty"   json:"outputSchema,omitempty"`
-	Annotations    OperationAnnotations `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
+	Annotations    CapabilityAnnotations `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
 	AllowedRoles   []string             `yaml:"allowedRoles,omitempty"   json:"allowedRoles,omitempty"`
 	Parameters     []CatalogParameter   `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
 	RequiredScopes []string             `yaml:"requiredScopes,omitempty" json:"requiredScopes,omitempty"`
@@ -87,7 +87,7 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		Description    string               `yaml:"description,omitempty"`
 		InputSchema    any                  `yaml:"inputSchema,omitempty"`
 		OutputSchema   any                  `yaml:"outputSchema,omitempty"`
-		Annotations    OperationAnnotations `yaml:"annotations,omitempty"`
+		Annotations    CapabilityAnnotations `yaml:"annotations,omitempty"`
 		AllowedRoles   []string             `yaml:"allowedRoles,omitempty"`
 		Parameters     []CatalogParameter   `yaml:"parameters,omitempty"`
 		RequiredScopes []string             `yaml:"requiredScopes,omitempty"`
@@ -134,11 +134,32 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-type OperationAnnotations struct {
-	ReadOnlyHint    *bool `yaml:"readOnlyHint,omitempty"    json:"readOnlyHint,omitempty"`
-	IdempotentHint  *bool `yaml:"idempotentHint,omitempty"   json:"idempotentHint,omitempty"`
-	DestructiveHint *bool `yaml:"destructiveHint,omitempty"  json:"destructiveHint,omitempty"`
-	OpenWorldHint   *bool `yaml:"openWorldHint,omitempty"   json:"openWorldHint,omitempty"`
+type CapabilityAnnotations struct {
+	ReadOnlyHint    *bool `yaml:"readOnlyHint,omitempty" json:"readOnlyHint,omitempty"`
+	IdempotentHint  *bool `yaml:"idempotentHint,omitempty" json:"idempotentHint,omitempty"`
+	DestructiveHint *bool `yaml:"destructiveHint,omitempty" json:"destructiveHint,omitempty"`
+	OpenWorldHint   *bool `yaml:"openWorldHint,omitempty" json:"openWorldHint,omitempty"`
+}
+
+func CloneCapabilityAnnotations(a CapabilityAnnotations) CapabilityAnnotations {
+	out := CapabilityAnnotations{}
+	if a.ReadOnlyHint != nil {
+		value := *a.ReadOnlyHint
+		out.ReadOnlyHint = &value
+	}
+	if a.IdempotentHint != nil {
+		value := *a.IdempotentHint
+		out.IdempotentHint = &value
+	}
+	if a.DestructiveHint != nil {
+		value := *a.DestructiveHint
+		out.DestructiveHint = &value
+	}
+	if a.OpenWorldHint != nil {
+		value := *a.OpenWorldHint
+		out.OpenWorldHint = &value
+	}
+	return out
 }
 
 type CatalogParameter struct {
@@ -194,22 +215,7 @@ func (c *Catalog) Clone() *Catalog {
 			visible := *op.Visible
 			outOp.Visible = &visible
 		}
-		if op.Annotations.ReadOnlyHint != nil {
-			value := *op.Annotations.ReadOnlyHint
-			outOp.Annotations.ReadOnlyHint = &value
-		}
-		if op.Annotations.IdempotentHint != nil {
-			value := *op.Annotations.IdempotentHint
-			outOp.Annotations.IdempotentHint = &value
-		}
-		if op.Annotations.DestructiveHint != nil {
-			value := *op.Annotations.DestructiveHint
-			outOp.Annotations.DestructiveHint = &value
-		}
-		if op.Annotations.OpenWorldHint != nil {
-			value := *op.Annotations.OpenWorldHint
-			outOp.Annotations.OpenWorldHint = &value
-		}
+		outOp.Annotations = CloneCapabilityAnnotations(op.Annotations)
 		out.Operations[i] = outOp
 	}
 	return out

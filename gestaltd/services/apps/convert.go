@@ -3,6 +3,7 @@ package plugins
 import (
 	"encoding/json"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
@@ -37,7 +38,7 @@ func catalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
 			Transport:      op.GetTransport(),
 		}
 		if ann := op.GetAnnotations(); ann != nil {
-			catOp.Annotations = catalog.OperationAnnotations{
+			catOp.Annotations = core.CapabilityAnnotations{
 				ReadOnlyHint:    ann.ReadOnlyHint,
 				IdempotentHint:  ann.IdempotentHint,
 				DestructiveHint: ann.DestructiveHint,

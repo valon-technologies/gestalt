@@ -25,12 +25,7 @@ const (
 	RunStatusCanceled  RunStatus = "canceled"
 )
 
-type Actor struct {
-	SubjectID   string
-	SubjectKind string
-	DisplayName string
-	AuthSource  string
-}
+type Actor = core.Actor
 
 type Target struct {
 	App   *AppTarget
