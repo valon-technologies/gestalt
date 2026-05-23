@@ -3,7 +3,8 @@ use serde_json::Value;
 use crate::output::{self, Format};
 
 use super::transcript::{
-    fallback_turn_event_data_summary, turn_event_data_summary, turn_event_display_summary,
+    fallback_turn_event_data_summary, turn_event_data_summary,
+    turn_event_display_summary_from_value,
 };
 
 pub(crate) fn print_session(value: &Value, format: Format) {
@@ -102,7 +103,7 @@ pub(crate) fn turn_row(value: &Value) -> Vec<String> {
 }
 
 pub(crate) fn turn_event_row(value: &Value) -> Vec<String> {
-    let display = turn_event_display_summary(value)
+    let display = turn_event_display_summary_from_value(value)
         .unwrap_or_else(|| fallback_turn_event_data_summary(value));
     vec![
         value["seq"]

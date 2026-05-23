@@ -1,10 +1,12 @@
 use serde_json::Value;
 
+use crate::commands::agents::events::{
+    ClassifiedTurnEvent, classify_turn_event, effect_data_summary,
+};
 use crate::commands::agents::fields::{
-    compact_json, display_action, display_label, display_ref, display_status, display_text,
-    display_tool_error, display_tool_input, display_tool_label, display_tool_output,
-    display_value_text, extract_assistant_delta, extract_interaction_id, extract_tool_name,
-    number_any_field, string_any_field, string_field, turn_event_display, value_any_field,
+    display_action, display_label, display_ref, display_status, display_text, display_tool_error,
+    display_tool_input, display_tool_label, display_tool_output, display_value_text,
+    turn_event_display,
 };
 use crate::commands::agents::types::{AgentTurnDisplayInfo, AgentTurnEventInfo};
 
@@ -23,63 +25,21 @@ pub(crate) fn fallback_turn_event_data_summary(value: &Value) -> String {
 }
 
 pub(crate) fn turn_event_data_summary(event: &AgentTurnEventInfo) -> Option<String> {
-    match event.event_type.as_str() {
-        "agent.message.delta" | "assistant.delta" => {
-            extract_assistant_delta(&event.data).map(|text| format!("assistant delta: {text}"))
+    match classify_turn_event(event) {
+        ClassifiedTurnEvent::Display { event, display } => {
+            turn_event_display_summary(event, display)
         }
-        "assistant.completed" => {
-            string_field(&event.data, "text").map(|text| format!("assistant completed: {text}"))
-        }
-        "turn.started" => string_any_field(&event.data, &["status", "state"])
-            .map(|status| format!("turn started: {status}"))
-            .or_else(|| Some("turn started".to_string())),
-        "turn.completed" => string_any_field(&event.data, &["status", "state"])
-            .map(|status| format!("turn completed: {status}"))
-            .or_else(|| Some("turn completed".to_string())),
-        "turn.failed" => string_field(&event.data, "error")
-            .map(|error| format!("turn failed: {error}"))
-            .or_else(|| Some("turn failed".to_string())),
-        "turn.canceled" => string_field(&event.data, "reason")
-            .map(|reason| format!("turn canceled: {reason}"))
-            .or_else(|| Some("turn canceled".to_string())),
-        "tool.started" => Some(tool_data_summary(event, "started")?),
-        "tool.completed" => Some(tool_data_summary(event, "completed")?),
-        "tool.failed" => Some(tool_data_summary(event, "failed")?),
-        "interaction.requested" => {
-            let id = extract_interaction_id(&event.data);
-            Some(format!("interaction requested ({id})"))
-        }
-        "interaction.resolved" => {
-            let id = extract_interaction_id(&event.data);
-            Some(format!("interaction resolved ({id})"))
-        }
-        _ => None,
+        ClassifiedTurnEvent::Data(effect) => effect_data_summary(&effect),
+        ClassifiedTurnEvent::Private => Some(String::new()),
+        ClassifiedTurnEvent::Unknown(_) => None,
     }
 }
 
-pub(crate) fn tool_data_summary(event: &AgentTurnEventInfo, phase: &str) -> Option<String> {
-    let tool = extract_tool_name(&event.data);
-    let mut summary = format!("{tool} {phase}");
-    if let Some(status) = string_any_field(&event.data, &["status", "state"]).or_else(|| {
-        number_any_field(&event.data, &["status", "statusCode"]).map(|status| status.to_string())
-    }) {
-        summary.push_str(&format!(" ({status})"));
-    }
-    if let Some(error) = string_field(&event.data, "error") {
-        summary.push_str(&format!(": {error}"));
-    } else if let Some(output) = value_any_field(&event.data, &["output", "result", "body"]) {
-        summary.push(' ');
-        summary.push_str(&compact_json(output).ok()?);
-    } else if let Some(input) = value_any_field(&event.data, &["arguments", "input", "request"]) {
-        summary.push(' ');
-        summary.push_str(&compact_json(input).ok()?);
-    }
-    Some(summary)
-}
-
-pub(crate) fn turn_event_display_summary(value: &Value) -> Option<String> {
-    let event: AgentTurnEventInfo = serde_json::from_value(value.clone()).ok()?;
-    let display = turn_event_display(&event)?;
+pub(crate) fn turn_event_display_summary(
+    event: &AgentTurnEventInfo,
+    display: &AgentTurnDisplayInfo,
+) -> Option<String> {
+    let _ = event;
     match display.kind.trim() {
         "text" => display_text(display).map(|text| match display.phase.trim() {
             "delta" => format!("assistant delta: {text}"),
@@ -88,7 +48,7 @@ pub(crate) fn turn_event_display_summary(value: &Value) -> Option<String> {
             _ => format!("assistant: {text}"),
         }),
         "reasoning" => display_text(display).map(|text| format!("reasoning: {text}")),
-        "tool" => Some(tool_display_summary(&event, display)?),
+        "tool" => Some(tool_display_summary(display)?),
         "interaction" => {
             let label = display_label(display).unwrap_or("interaction");
             let reference = display_ref(display).unwrap_or(label);
@@ -133,11 +93,14 @@ pub(crate) fn turn_event_display_summary(value: &Value) -> Option<String> {
     }
 }
 
-pub(crate) fn tool_display_summary(
-    event: &AgentTurnEventInfo,
-    display: &AgentTurnDisplayInfo,
-) -> Option<String> {
-    let tool = display_tool_label(event, display);
+pub(crate) fn turn_event_display_summary_from_value(value: &Value) -> Option<String> {
+    let event: AgentTurnEventInfo = serde_json::from_value(value.clone()).ok()?;
+    let display = turn_event_display(&event)?;
+    turn_event_display_summary(&event, display)
+}
+
+pub(crate) fn tool_display_summary(display: &AgentTurnDisplayInfo) -> Option<String> {
+    let tool = display_tool_label(display);
     let mut summary = match display.phase.trim() {
         "started" => display_action(display)
             .map(|action| format!("{action} {tool}"))
@@ -158,18 +121,18 @@ pub(crate) fn tool_display_summary(
         _ => tool,
     };
     if matches!(display.phase.trim(), "completed" | "failed")
-        && let Some(status) = display_status(event, display)
+        && let Some(status) = display_status(display)
     {
         summary.push_str(&format!(" ({status})"));
     }
-    if let Some(error) = display_tool_error(event, display) {
+    if let Some(error) = display_tool_error(display) {
         summary.push_str(&format!(": {}", display_value_text(error).ok()?));
-    } else if let Some(output) = display_tool_output(event, display) {
+    } else if let Some(output) = display_tool_output(display) {
         summary.push(' ');
-        summary.push_str(&compact_json(output).ok()?);
-    } else if let Some(input) = display_tool_input(event, display) {
+        summary.push_str(&super::super::fields::compact_json(output).ok()?);
+    } else if let Some(input) = display_tool_input(display) {
         summary.push(' ');
-        summary.push_str(&compact_json(input).ok()?);
+        summary.push_str(&super::super::fields::compact_json(input).ok()?);
     }
     Some(summary)
 }

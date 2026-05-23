@@ -1,5 +1,6 @@
 mod display_markdown;
 mod driver;
+mod events;
 mod fields;
 mod format;
 mod harness;

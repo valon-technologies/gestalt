@@ -150,48 +150,30 @@ pub(crate) fn display_language(display: &AgentTurnDisplayInfo) -> Option<&str> {
     non_empty_str(&display.language)
 }
 
-pub(crate) fn display_tool_label(
-    _event: &AgentTurnEventInfo,
-    display: &AgentTurnDisplayInfo,
-) -> String {
+pub(crate) fn display_tool_label(display: &AgentTurnDisplayInfo) -> String {
     display_label(display)
         .or_else(|| display_ref(display))
         .map(ToString::to_string)
         .unwrap_or_else(|| "tool".to_string())
 }
 
-pub(crate) fn display_tool_ref(
-    _event: &AgentTurnEventInfo,
-    display: &AgentTurnDisplayInfo,
-) -> Option<String> {
+pub(crate) fn display_tool_ref(display: &AgentTurnDisplayInfo) -> Option<String> {
     display_ref(display).map(ToString::to_string)
 }
 
-pub(crate) fn display_tool_input<'a>(
-    _event: &'a AgentTurnEventInfo,
-    display: &'a AgentTurnDisplayInfo,
-) -> Option<&'a Value> {
+pub(crate) fn display_tool_input<'a>(display: &'a AgentTurnDisplayInfo) -> Option<&'a Value> {
     display.input.as_ref()
 }
 
-pub(crate) fn display_tool_output<'a>(
-    _event: &'a AgentTurnEventInfo,
-    display: &'a AgentTurnDisplayInfo,
-) -> Option<&'a Value> {
+pub(crate) fn display_tool_output<'a>(display: &'a AgentTurnDisplayInfo) -> Option<&'a Value> {
     display.output.as_ref()
 }
 
-pub(crate) fn display_tool_error<'a>(
-    _event: &'a AgentTurnEventInfo,
-    display: &'a AgentTurnDisplayInfo,
-) -> Option<&'a Value> {
+pub(crate) fn display_tool_error<'a>(display: &'a AgentTurnDisplayInfo) -> Option<&'a Value> {
     display.error.as_ref()
 }
 
-pub(crate) fn display_status(
-    _event: &AgentTurnEventInfo,
-    display: &AgentTurnDisplayInfo,
-) -> Option<String> {
+pub(crate) fn display_status(display: &AgentTurnDisplayInfo) -> Option<String> {
     display_text(display).map(ToString::to_string)
 }
 

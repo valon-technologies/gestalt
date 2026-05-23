@@ -442,7 +442,7 @@ pub fn disconnect_subject_integration(
     if let Some(instance) = instance {
         params.push(("_instance".to_string(), instance.to_string()));
     }
-    let path = append_query(
+    let path = query::append_query(
         &format!(
             "{}/apps/{}",
             subject_path(subject)?,
@@ -642,9 +642,9 @@ pub fn get_provider(client: &ApiClient, format: Format) -> Result<()> {
 }
 
 pub fn list_models(client: &ApiClient, args: &AuthorizationPageArgs, format: Format) -> Result<()> {
-    let path = append_query(
+    let path = query::append_query(
         "/admin/api/v1/authorization/models",
-        &page_params(args.page_size, args.page_token.as_deref()),
+        &query::page_params(args.page_size, args.page_token.as_deref()),
     )?;
     let resp = client
         .get(&path)
@@ -673,14 +673,14 @@ pub fn list_relationships(
     args: &AuthorizationRelationshipListArgs,
     format: Format,
 ) -> Result<()> {
-    let mut params = page_params(args.page_size, args.page_token.as_deref());
-    push_param(&mut params, "subjectType", args.subject_type.as_deref());
-    push_param(&mut params, "subjectId", args.subject_id.as_deref());
-    push_param(&mut params, "relation", args.relation.as_deref());
-    push_param(&mut params, "resourceType", args.resource_type.as_deref());
-    push_param(&mut params, "resourceId", args.resource_id.as_deref());
-    push_param(&mut params, "modelId", args.model_id.as_deref());
-    let path = append_query("/admin/api/v1/authorization/relationships", &params)?;
+    let mut params = query::page_params(args.page_size, args.page_token.as_deref());
+    query::push_opt_param(&mut params, "subjectType", args.subject_type.as_deref());
+    query::push_opt_param(&mut params, "subjectId", args.subject_id.as_deref());
+    query::push_opt_param(&mut params, "relation", args.relation.as_deref());
+    query::push_opt_param(&mut params, "resourceType", args.resource_type.as_deref());
+    query::push_opt_param(&mut params, "resourceId", args.resource_id.as_deref());
+    query::push_opt_param(&mut params, "modelId", args.model_id.as_deref());
+    let path = query::append_query("/admin/api/v1/authorization/relationships", &params)?;
     let resp = client
         .get(&path)
         .context("failed to list authorization relationships")?;
@@ -891,18 +891,6 @@ fn read_input(path: &str) -> Result<String> {
         return Ok(input);
     }
     std::fs::read_to_string(path).with_context(|| format!("failed to read {path}"))
-}
-
-fn append_query(path: &str, params: &[(String, String)]) -> Result<String> {
-    query::append_query(path, params)
-}
-
-fn page_params(page_size: Option<u32>, page_token: Option<&str>) -> Vec<(String, String)> {
-    query::page_params(page_size, page_token)
-}
-
-fn push_param(params: &mut Vec<(String, String)>, name: &str, value: Option<&str>) {
-    query::push_opt_param(params, name, value);
 }
 
 fn object() -> Map<String, Value> {

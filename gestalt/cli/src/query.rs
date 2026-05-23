@@ -25,3 +25,19 @@ pub fn push_opt_param(params: &mut Vec<(String, String)>, name: &str, value: Opt
         params.push((name.to_string(), value.to_string()));
     }
 }
+
+pub fn push_opt_u32(params: &mut Vec<(String, String)>, name: &str, value: Option<u32>) {
+    if let Some(value) = value {
+        params.push((name.to_string(), value.to_string()));
+    }
+}
+
+pub fn push_opt_u64(params: &mut Vec<(String, String)>, name: &str, value: Option<u64>) {
+    if let Some(value) = value {
+        params.push((name.to_string(), value.to_string()));
+    }
+}
+
+pub fn with_query(path: &str, params: &[(String, String)]) -> String {
+    append_query(path, params).unwrap_or_else(|_| path.to_string())
+}

@@ -11,17 +11,6 @@ pub(crate) const DEFAULT_EVENT_PAGE_SIZE: u32 = 100;
 pub(crate) const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(250);
 pub(crate) const EVENT_STREAM_UNTIL_BLOCKED_OR_TERMINAL: &str = "blocked_or_terminal";
 
-pub(crate) fn stream_turn_events_until_blocked_or_terminal(
-    client: &ApiClient,
-    turn_id: &str,
-    renderer: &mut super::render::stdout::AgentTurnRenderer,
-) -> Result<()> {
-    let after_seq = renderer.after_seq();
-    stream_turn_event_frames(client, turn_id, after_seq, |event| {
-        renderer.render_events(&[event])
-    })
-}
-
 pub(crate) fn stream_turn_event_frames<F>(
     client: &ApiClient,
     turn_id: &str,

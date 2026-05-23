@@ -473,37 +473,21 @@ pub(crate) fn sessions_path(
     state: Option<&str>,
     summary_limit: Option<usize>,
 ) -> String {
-    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
-    if let Some(provider) = provider {
-        serializer.append_pair("provider", provider);
-    }
-    if let Some(state) = state {
-        serializer.append_pair("state", state);
-    }
+    let mut params = Vec::new();
+    crate::query::push_opt_param(&mut params, "provider", provider);
+    crate::query::push_opt_param(&mut params, "state", state);
     if let Some(limit) = summary_limit {
-        serializer.append_pair("view", "summary");
-        serializer.append_pair("limit", &limit.to_string());
+        params.push(("view".to_string(), "summary".to_string()));
+        params.push(("limit".to_string(), limit.to_string()));
     }
-    let query = serializer.finish();
-    if query.is_empty() {
-        SESSIONS_PATH.to_string()
-    } else {
-        format!("{SESSIONS_PATH}?{query}")
-    }
+    crate::query::with_query(SESSIONS_PATH, &params)
 }
 
 pub(crate) fn session_turns_path(session_id: &str, status: Option<&str>) -> String {
-    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
-    if let Some(status) = status {
-        serializer.append_pair("status", status);
-    }
-    let query = serializer.finish();
+    let mut params = Vec::new();
+    crate::query::push_opt_param(&mut params, "status", status);
     let path = format!("{SESSIONS_PATH}/{session_id}/turns");
-    if query.is_empty() {
-        path
-    } else {
-        format!("{path}?{query}")
-    }
+    crate::query::with_query(&path, &params)
 }
 
 pub(crate) fn turn_events_path(
@@ -513,22 +497,11 @@ pub(crate) fn turn_events_path(
     limit: Option<u32>,
     until: Option<&str>,
 ) -> String {
-    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
-    if let Some(after) = after {
-        serializer.append_pair("after", &after.to_string());
-    }
-    if let Some(limit) = limit {
-        serializer.append_pair("limit", &limit.to_string());
-    }
-    if let Some(until) = until {
-        serializer.append_pair("until", until);
-    }
+    let mut params = Vec::new();
+    crate::query::push_opt_u64(&mut params, "after", after);
+    crate::query::push_opt_u32(&mut params, "limit", limit);
+    crate::query::push_opt_param(&mut params, "until", until);
     let suffix = if stream { "/events/stream" } else { "/events" };
-    let query = serializer.finish();
     let path = format!("{TURNS_PATH}/{id}{suffix}");
-    if query.is_empty() {
-        path
-    } else {
-        format!("{path}?{query}")
-    }
+    crate::query::with_query(&path, &params)
 }

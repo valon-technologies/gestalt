@@ -14,18 +14,20 @@ use crate::commands::agents::driver::{
     TurnDriverSink, TurnLoopContext, TurnLoopOutcome, resolve_pending_interactions,
     run_turn_status_loop,
 };
+use crate::commands::agents::events::{
+    ClassifiedTurnEvent, ToolPhase, TurnEventEffect, classify_data_event, classify_turn_event,
+};
 use crate::commands::agents::fields::{
     compact_json, display_action, display_label, display_ref, display_status, display_text,
     display_tool_error, display_tool_input, display_tool_label, display_tool_output,
-    display_value_text, extract_assistant_delta, extract_interaction_id, extract_tool_name,
-    message_label, message_text, number_any_field, pretty_json, rendered_display_text,
-    string_any_field, string_field, turn_event_display, value_any_field,
+    display_value_text, extract_interaction_id, message_label, message_text, pretty_json,
+    rendered_display_text, string_field, turn_event_display,
 };
 use crate::commands::agents::requests::{
     INTERRUPT_CANCEL_REASON, cancel_turn_silent, resolve_interaction_info,
 };
 use crate::commands::agents::shell::prompt_interaction_resolution;
-use crate::commands::agents::stream::stream_turn_events_until_blocked_or_terminal;
+use crate::commands::agents::stream::stream_turn_event_frames;
 use crate::commands::agents::types::{
     AgentMessageInfo, AgentTurnDisplayInfo, AgentTurnEventInfo, AgentTurnInfo,
 };
@@ -55,7 +57,10 @@ struct ShellTurnDriver<'a> {
 
 impl TurnDriverSink for ShellTurnDriver<'_> {
     fn stream_events(&mut self, ctx: &TurnLoopContext<'_>) -> Result<()> {
-        stream_turn_events_until_blocked_or_terminal(ctx.client, ctx.turn_id, self.renderer)
+        let after_seq = self.renderer.after_seq();
+        stream_turn_event_frames(ctx.client, ctx.turn_id, after_seq, |event| {
+            self.renderer.render_events(&[event])
+        })
     }
 
     fn on_turn_snapshot(&mut self, turn: &AgentTurnInfo) -> Result<()> {
@@ -195,107 +200,107 @@ impl AgentTurnRenderer {
             if event.seq > 0 {
                 self.after_seq = self.after_seq.max(event.seq as u64);
             }
-            if self.render_display_event(event)? {
-                continue;
-            }
-            match event.event_type.as_str() {
-                "agent.message.delta" | "assistant.delta" => {
-                    if let Some(text) = extract_assistant_delta(&event.data) {
-                        self.start_assistant_line()?;
-                        print!("{text}");
-                        io::stdout().flush().context("failed to flush stdout")?;
-                        self.saw_assistant_output = true;
-                        self.delta_buffer.push_str(&text);
+            match classify_turn_event(event) {
+                ClassifiedTurnEvent::Display { event, display } => {
+                    if !self.render_display_event(event, display)?
+                        && let Some(effect) = classify_data_event(event)
+                    {
+                        self.render_effect(&effect)?;
                     }
                 }
-                "assistant.completed" => {
-                    let text = string_field(&event.data, "text");
-                    if self.assistant_line_open {
-                        if let Some(text) = text.as_deref() {
-                            if self.delta_buffer.is_empty() {
-                                print!("{text}");
-                            } else if let Some(suffix) = text.strip_prefix(&self.delta_buffer) {
-                                print!("{suffix}");
-                            }
+                ClassifiedTurnEvent::Data(effect) => self.render_effect(&effect)?,
+                ClassifiedTurnEvent::Private => {}
+                ClassifiedTurnEvent::Unknown(event) => self.render_generic_event(event)?,
+            }
+        }
+        Ok(())
+    }
+
+    fn render_effect(&mut self, effect: &TurnEventEffect) -> Result<()> {
+        match effect {
+            TurnEventEffect::AssistantDelta(text) => {
+                self.start_assistant_line()?;
+                print!("{text}");
+                io::stdout().flush().context("failed to flush stdout")?;
+                self.saw_assistant_output = true;
+                self.delta_buffer.push_str(text);
+            }
+            TurnEventEffect::AssistantCompleted { text } => {
+                if self.assistant_line_open {
+                    if let Some(text) = text.as_deref() {
+                        if self.delta_buffer.is_empty() {
+                            print!("{text}");
+                        } else if let Some(suffix) = text.strip_prefix(&self.delta_buffer) {
+                            print!("{suffix}");
+                        }
+                    }
+                    println!();
+                    self.assistant_line_open = false;
+                } else if let Some(text) = text {
+                    println!("{} {text}", self.label("assistant>"));
+                    self.saw_assistant_output = true;
+                }
+                self.delta_buffer.clear();
+            }
+            TurnEventEffect::TurnStarted { status } => {
+                self.finish_assistant_line();
+                match status {
+                    Some(status) => println!("{} started ({status})", self.label("turn>")),
+                    None => println!("{} started", self.label("turn>")),
+                }
+            }
+            TurnEventEffect::Tool(info) => {
+                self.finish_assistant_line();
+                match info.phase {
+                    ToolPhase::Started => {
+                        print!("{} {} started", self.label("tool>"), info.name);
+                        if let Some(input) = info.input.as_ref() {
+                            print!(" {}", compact_json(input)?);
                         }
                         println!();
-                        self.assistant_line_open = false;
-                    } else if let Some(text) = text {
-                        println!("{} {text}", self.label("assistant>"));
-                        self.saw_assistant_output = true;
                     }
-                    self.delta_buffer.clear();
-                }
-                "turn.started" => {
-                    self.finish_assistant_line();
-                    match string_any_field(&event.data, &["status", "state"]) {
-                        Some(status) => println!("{} started ({status})", self.label("turn>")),
-                        None => println!("{} started", self.label("turn>")),
-                    }
-                }
-                "tool.started" => {
-                    self.finish_assistant_line();
-                    let tool = extract_tool_name(&event.data);
-                    print!("{} {tool} started", self.label("tool>"));
-                    if let Some(input) =
-                        value_any_field(&event.data, &["arguments", "input", "request"])
-                    {
-                        print!(" {}", compact_json(input)?);
-                    }
-                    println!();
-                }
-                "tool.completed" => {
-                    self.finish_assistant_line();
-                    let tool = extract_tool_name(&event.data);
-                    let status =
-                        string_any_field(&event.data, &["status", "state"]).or_else(|| {
-                            number_any_field(&event.data, &["status", "statusCode"])
-                                .map(|status| status.to_string())
-                        });
-                    match status {
-                        Some(status) => {
-                            print!("{} {tool} completed ({status})", self.label("tool>"))
+                    ToolPhase::Completed | ToolPhase::Failed => {
+                        let phase = match info.phase {
+                            ToolPhase::Completed => "completed",
+                            ToolPhase::Failed => "failed",
+                            ToolPhase::Started => unreachable!(),
+                        };
+                        match info.status.as_deref() {
+                            Some(status) => {
+                                print!("{} {} {phase} ({status})", self.label("tool>"), info.name);
+                            }
+                            None => print!("{} {} {phase}", self.label("tool>"), info.name),
                         }
-                        None => print!("{} {tool} completed", self.label("tool>")),
-                    }
-                    if let Some(error) = string_field(&event.data, "error") {
-                        print!(": {error}");
-                    } else if let Some(output) =
-                        value_any_field(&event.data, &["output", "result", "body"])
-                    {
-                        print!(" {}", compact_json(output)?);
-                    }
-                    println!();
-                }
-                "interaction.requested" => {
-                    self.finish_assistant_line();
-                    let interaction_id = extract_interaction_id(&event.data);
-                    println!(
-                        "{} requested ({interaction_id})",
-                        self.label("interaction>")
-                    );
-                }
-                "interaction.resolved" => {
-                    self.finish_assistant_line();
-                    let interaction_id = extract_interaction_id(&event.data);
-                    println!("{} resolved ({interaction_id})", self.label("interaction>"));
-                }
-                "turn.failed" => {
-                    self.finish_assistant_line();
-                    if let Some(message) = string_field(&event.data, "error") {
-                        println!("{} failed: {message}", self.label("turn>"));
+                        if let Some(error) = info.error.as_deref() {
+                            print!(": {error}");
+                        } else if let Some(output) = info.output.as_ref() {
+                            print!(" {}", compact_json(output)?);
+                        }
+                        println!();
                     }
                 }
-                "turn.canceled" => {
-                    self.finish_assistant_line();
-                    if let Some(reason) = string_field(&event.data, "reason") {
-                        println!("{} canceled: {reason}", self.label("turn>"));
-                    }
-                }
-                "turn.completed" => {}
-                _ if event.visibility == "private" => {}
-                _ => self.render_generic_event(event)?,
             }
+            TurnEventEffect::InteractionRequested { id } => {
+                self.finish_assistant_line();
+                println!("{} requested ({id})", self.label("interaction>"));
+            }
+            TurnEventEffect::InteractionResolved { id } => {
+                self.finish_assistant_line();
+                println!("{} resolved ({id})", self.label("interaction>"));
+            }
+            TurnEventEffect::TurnFailed { error } => {
+                self.finish_assistant_line();
+                if let Some(message) = error {
+                    println!("{} failed: {message}", self.label("turn>"));
+                }
+            }
+            TurnEventEffect::TurnCanceled { reason } => {
+                self.finish_assistant_line();
+                if let Some(reason) = reason {
+                    println!("{} canceled: {reason}", self.label("turn>"));
+                }
+            }
+            TurnEventEffect::TurnCompleted { .. } => {}
         }
         Ok(())
     }
@@ -345,14 +350,15 @@ impl AgentTurnRenderer {
         }
     }
 
-    fn render_display_event(&mut self, event: &AgentTurnEventInfo) -> Result<bool> {
-        let Some(display) = turn_event_display(event) else {
-            return Ok(false);
-        };
+    fn render_display_event(
+        &mut self,
+        event: &AgentTurnEventInfo,
+        display: &AgentTurnDisplayInfo,
+    ) -> Result<bool> {
         match display.kind.trim() {
             "text" => self.render_display_text(display, "assistant>"),
             "reasoning" => self.render_display_text(display, "reasoning>"),
-            "tool" => self.render_display_tool(event, display),
+            "tool" => self.render_display_tool(display),
             "interaction" => Ok(self.render_display_interaction(event, display)),
             "status" => Ok(self.render_display_status(display)),
             "error" => Ok(self.render_display_error(display)),
@@ -420,13 +426,9 @@ impl AgentTurnRenderer {
         Ok(false)
     }
 
-    fn render_display_tool(
-        &mut self,
-        event: &AgentTurnEventInfo,
-        display: &AgentTurnDisplayInfo,
-    ) -> Result<bool> {
+    fn render_display_tool(&mut self, display: &AgentTurnDisplayInfo) -> Result<bool> {
         self.finish_assistant_line();
-        let tool = display_tool_label(event, display);
+        let tool = display_tool_label(display);
         let action = display_action(display);
         match display.phase.trim() {
             "started" => {
@@ -437,7 +439,7 @@ impl AgentTurnRenderer {
                         .map(|action| format!("{action} {tool}"))
                         .unwrap_or_else(|| format!("{tool} started"))
                 );
-                if let Some(input) = display_tool_input(event, display) {
+                if let Some(input) = display_tool_input(display) {
                     print!(" {}", compact_json(input)?);
                 }
                 println!();
@@ -450,12 +452,12 @@ impl AgentTurnRenderer {
                         .map(|action| format!("{action} {tool}"))
                         .unwrap_or_else(|| format!("{tool} completed"))
                 );
-                if let Some(status) = display_status(event, display) {
+                if let Some(status) = display_status(display) {
                     print!(" ({status})");
                 }
-                if let Some(error) = display_tool_error(event, display) {
+                if let Some(error) = display_tool_error(display) {
                     print!(": {}", display_value_text(error)?);
-                } else if let Some(output) = display_tool_output(event, display) {
+                } else if let Some(output) = display_tool_output(display) {
                     print!(" {}", compact_json(output)?);
                 }
                 println!();
@@ -468,10 +470,10 @@ impl AgentTurnRenderer {
                         .map(|action| format!("{action} {tool}"))
                         .unwrap_or_else(|| format!("{tool} failed"))
                 );
-                if let Some(status) = display_status(event, display) {
+                if let Some(status) = display_status(display) {
                     print!(" ({status})");
                 }
-                if let Some(error) = display_tool_error(event, display) {
+                if let Some(error) = display_tool_error(display) {
                     print!(": {}", display_value_text(error)?);
                 }
                 println!();
