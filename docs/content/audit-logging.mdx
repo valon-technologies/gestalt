@@ -58,7 +58,7 @@ Workflow events also use workflow-specific fields when available:
 
 | Field | Meaning |
 | --- | --- |
-| `caller_plugin` | App that called `WorkflowManager`, such as a Slack event provider. |
+| `caller_app` | App that called `WorkflowManager`, such as a Slack event provider. |
 | `workflow_key_sha256` | SHA-256 hash of the workflow key for run start and signal-or-start events. The raw workflow key is not emitted. |
 | `workflow_target_kind` | Target kind, currently `steps`. |
 | `workflow_target_component` | Target subcomponent involved in a workflow target authorization denial, such as `target`, `app_step`, `agent_provider`, or `agent_tool_ref`. |
@@ -207,7 +207,7 @@ Workflow-manager records keep workflow routing context in audit logs:
   "operation": "workflow.event.publish",
   "target_kind": "workflow_event",
   "target_name": "slack.message.created",
-  "caller_plugin": "slack",
+  "caller_app": "slack",
   "depth": 0,
   "allowed": true,
   "trace_id": "0af7651916cd43dd8448eb211c80319c",

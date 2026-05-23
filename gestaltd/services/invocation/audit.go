@@ -206,7 +206,7 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 		attrs = append(attrs, slog.String("workflow_key_sha256", entry.WorkflowKeySHA256))
 	}
 	if entry.CallerApp != "" {
-		attrs = append(attrs, slog.String("caller_plugin", entry.CallerApp))
+		attrs = append(attrs, slog.String("caller_app", entry.CallerApp))
 	}
 	if entry.WorkflowTargetKind != "" {
 		attrs = append(attrs, slog.String("workflow_target_kind", entry.WorkflowTargetKind))
