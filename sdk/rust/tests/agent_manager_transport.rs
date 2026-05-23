@@ -722,7 +722,7 @@ async fn agent_manager_create_turn_accepts_native_values() {
                 metadata: Some(serde_json::json!({ "source": "native" })),
             }],
             tool_refs: vec![AgentToolRef {
-                plugin: "github".to_string(),
+                app: "github".to_string(),
                 operation: "issues.get".to_string(),
                 connection: "default".to_string(),
                 run_as: Some(Subject {

@@ -2558,12 +2558,12 @@ func TestE2EServeAndHealthCheck(t *testing.T) {
 		t.Fatalf("expected /api/v1/apps 200, got %d: %s", intResp.StatusCode, body)
 	}
 
-	var integrations []json.RawMessage
-	if err := json.Unmarshal(body, &integrations); err != nil {
-		t.Fatalf("decode integrations response: %v (body: %s)", err, body)
+	var apps []json.RawMessage
+	if err := json.Unmarshal(body, &apps); err != nil {
+		t.Fatalf("decode apps response: %v (body: %s)", err, body)
 	}
-	if len(integrations) == 0 {
-		t.Fatal("expected at least one integration from the example app")
+	if len(apps) == 0 {
+		t.Fatal("expected /api/v1/apps to return at least one app")
 	}
 }
 
@@ -2634,28 +2634,28 @@ func TestE2EServePathAutoMountsOwnedUI(t *testing.T) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	_ = waitForHTTPBody(t, client, baseURL+"/provider/sync", "Roadmap Review UI")
 
-	integrationsResp, err := client.Get(baseURL + "/api/v1/apps")
+	appsResp, err := client.Get(baseURL + "/api/v1/apps")
 	if err != nil {
 		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
-	defer func() { _ = integrationsResp.Body.Close() }()
-	integrationsBody, _ := io.ReadAll(integrationsResp.Body)
-	if integrationsResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /api/v1/apps 200, got %d: %s", integrationsResp.StatusCode, integrationsBody)
+	defer func() { _ = appsResp.Body.Close() }()
+	appsBody, _ := io.ReadAll(appsResp.Body)
+	if appsResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", appsResp.StatusCode, appsBody)
 	}
-	var integrations []struct {
+	var apps []struct {
 		Name        string `json:"name"`
 		MountedPath string `json:"mountedPath"`
 	}
-	if err := json.Unmarshal(integrationsBody, &integrations); err != nil {
-		t.Fatalf("json.Unmarshal integrations: %v (body: %s)", err, integrationsBody)
+	if err := json.Unmarshal(appsBody, &apps); err != nil {
+		t.Fatalf("json.Unmarshal apps: %v (body: %s)", err, appsBody)
 	}
-	for _, integration := range integrations {
-		if integration.Name == "provider" && integration.MountedPath == "/provider" {
+	for _, app := range apps {
+		if app.Name == "provider" && app.MountedPath == "/provider" {
 			return
 		}
 	}
-	t.Fatalf(`integration "provider" mountedPath missing from response: %s`, integrationsBody)
+	t.Fatalf(`app "provider" mountedPath missing from response: %s`, appsBody)
 }
 
 func TestE2EServePathServesSourceUI(t *testing.T) {
@@ -2904,7 +2904,7 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 		wantContains string
 	}{
 		{
-			name:       "public serves integrations API",
+			name:       "public serves apps API",
 			url:        publicURL + "/api/v1/apps",
 			wantStatus: http.StatusOK,
 		},
@@ -2976,7 +2976,7 @@ func TestE2EServeAppOwnedUIWiring(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("skipping app-owned mounted ui integrations test in short mode")
+		t.Skip("skipping app-owned mounted ui test in short mode")
 	}
 
 	dir := t.TempDir()
@@ -3041,28 +3041,28 @@ apps:
 		t.Fatalf("expected mounted ui body to contain marker, got: %s", body)
 	}
 
-	integrationsResp, err := (&http.Client{Timeout: 2 * time.Second}).Get(publicURL + "/api/v1/apps")
+	appsResp, err := (&http.Client{Timeout: 2 * time.Second}).Get(publicURL + "/api/v1/apps")
 	if err != nil {
 		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
-	defer func() { _ = integrationsResp.Body.Close() }()
-	integrationsBody, _ := io.ReadAll(integrationsResp.Body)
-	if integrationsResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /api/v1/apps 200, got %d: %s", integrationsResp.StatusCode, integrationsBody)
+	defer func() { _ = appsResp.Body.Close() }()
+	appsBody, _ := io.ReadAll(appsResp.Body)
+	if appsResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", appsResp.StatusCode, appsBody)
 	}
-	var integrations []struct {
+	var apps []struct {
 		Name        string `json:"name"`
 		MountedPath string `json:"mountedPath"`
 	}
-	if err := json.Unmarshal(integrationsBody, &integrations); err != nil {
-		t.Fatalf("json.Unmarshal integrations: %v (body: %s)", err, integrationsBody)
+	if err := json.Unmarshal(appsBody, &apps); err != nil {
+		t.Fatalf("json.Unmarshal apps: %v (body: %s)", err, appsBody)
 	}
-	for _, integration := range integrations {
-		if integration.Name == "example" && integration.MountedPath == "/roadmap" {
+	for _, app := range apps {
+		if app.Name == "example" && app.MountedPath == "/roadmap" {
 			return
 		}
 	}
-	t.Fatalf(`integration "example" mountedPath missing from response: %s`, integrationsBody)
+	t.Fatalf(`app "example" mountedPath missing from response: %s`, appsBody)
 }
 
 func TestE2EServeStartsWithAppBoundCacheProvider(t *testing.T) {

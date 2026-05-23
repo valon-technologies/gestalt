@@ -2322,7 +2322,7 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 		if err := normalizeWorkflowValueMapConfig(stepPath+".inputs", step.Inputs); err != nil {
 			return err
 		}
-		if err := coreworkflow.ValidateValueMapRefs(stepPath+".inputs", workflowValueConfigMapToCore(step.Inputs), seen); err != nil {
+		if err := coreworkflow.ValidateValueMapRefs(stepPath+".inputs", workflowValueMapToCore(step.Inputs), seen); err != nil {
 			return fmt.Errorf("config validation: %w", err)
 		}
 		if (step.App == nil) == (step.Agent == nil) {
@@ -2332,7 +2332,7 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 			if err := normalizeWorkflowStepAppCallConfig(stepPath+".app", step.App, true); err != nil {
 				return err
 			}
-			if err := coreworkflow.ValidateValueRefs(stepPath+".app.input", workflowValueConfigToCore(step.App.Input), seen); err != nil {
+			if err := coreworkflow.ValidateValueRefs(stepPath+".app.input", WorkflowValueToCore(step.App.Input), seen); err != nil {
 				return fmt.Errorf("config validation: %w", err)
 			}
 		}
@@ -2352,7 +2352,7 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 				return err
 			}
 			when := &coreworkflow.StepWhen{
-				Value:     workflowValueConfigToCore(step.When.Value),
+				Value:     WorkflowValueToCore(step.When.Value),
 				Equals:    step.When.Equals,
 				EqualsSet: step.When.EqualsSet(),
 			}

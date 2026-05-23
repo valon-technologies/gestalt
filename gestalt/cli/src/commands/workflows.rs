@@ -535,6 +535,7 @@ fn merge_schedule_target_update(
         existing,
         AppTargetUpdate {
             resource: "schedule",
+            step_id: args.step_id.as_deref(),
             app: args.app.as_deref(),
             operation: args.operation.as_deref(),
             connection: args.connection.as_deref(),
@@ -555,6 +556,7 @@ fn merge_trigger_target_update(
         existing,
         AppTargetUpdate {
             resource: "trigger",
+            step_id: args.step_id.as_deref(),
             app: args.app.as_deref(),
             operation: args.operation.as_deref(),
             connection: args.connection.as_deref(),

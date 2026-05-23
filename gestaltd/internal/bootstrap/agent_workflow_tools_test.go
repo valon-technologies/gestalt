@@ -203,7 +203,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsForwardStepOutputRefs(t *testing.T
 	if !errors.Is(err, invocation.ErrInvalidInvocation) {
 		t.Fatalf("ExecuteTool error = %v, want invalid invocation", err)
 	}
-	if !strings.Contains(err.Error(), `target.steps[0].app.input.title.stepOutput.stepId "notify" must reference an earlier step`) {
+	if !strings.Contains(err.Error(), `target.steps[0].app.input.title.step_output.step_id "notify" must reference an earlier step`) {
 		t.Fatalf("ExecuteTool error = %v, want forward step output message", err)
 	}
 	if len(workflowProvider.startedRuns) != 0 {

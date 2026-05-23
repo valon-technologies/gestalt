@@ -344,7 +344,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     tool_ref_plugin: request
                         .tool_refs
                         .first()
-                        .map(|ref_| ref_.plugin.as_str())
+                        .map(|ref_| ref_.app.as_str())
                         .unwrap_or_default()
                         .to_string(),
                     tool_ref_operation: request
