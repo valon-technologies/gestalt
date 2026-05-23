@@ -234,7 +234,7 @@ fn target_app_field<'a>(
         .and_then(Value::as_str)
 }
 
-fn resolve_optional_string(arg: Option<&str>, existing: Option<&str>) -> Option<String> {
+pub(super) fn resolve_optional_string(arg: Option<&str>, existing: Option<&str>) -> Option<String> {
     match arg {
         Some("") => None,
         Some(value) => Some(value.to_string()),

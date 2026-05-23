@@ -225,7 +225,7 @@ func pathSegments(path string) ([]pathSegment, error) {
 			}
 			token := strings.TrimSpace(path[i+1 : i+end])
 			if strings.HasPrefix(token, "'") || strings.HasPrefix(token, "\"") {
-				unquoted, err := strconv.Unquote(token)
+				unquoted, err := unquotePathKey(token)
 				if err != nil {
 					return nil, fmt.Errorf("%w: invalid workflow path %q", ErrInvalidValue, path)
 				}
@@ -251,6 +251,26 @@ func pathSegments(path string) ([]pathSegment, error) {
 		}
 	}
 	return out, nil
+}
+
+func unquotePathKey(token string) (string, error) {
+	if strings.HasPrefix(token, "\"") {
+		return strconv.Unquote(token)
+	}
+	if len(token) < 2 || token[len(token)-1] != '\'' {
+		return "", strconv.ErrSyntax
+	}
+	remaining := token[1 : len(token)-1]
+	var out strings.Builder
+	for len(remaining) > 0 {
+		value, _, tail, err := strconv.UnquoteChar(remaining, '\'')
+		if err != nil {
+			return "", err
+		}
+		out.WriteRune(value)
+		remaining = tail
+	}
+	return out.String(), nil
 }
 
 // ScalarEqual compares scalar JSON values for workflow when-clause equality.

@@ -10,8 +10,8 @@ use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
 
 use super::workflow_target::{
-    AppTargetUpdate, build_app_target, literal_input, merge_app_target_flags, target_app,
-    target_has_app, target_operation,
+    AppTargetUpdate, build_app_target, literal_input, merge_app_target_flags,
+    resolve_optional_string, target_app, target_has_app, target_operation,
 };
 
 const EVENTS_PATH: &str = "/api/v1/workflow/events";
@@ -577,14 +577,6 @@ fn target_input_update(
         None
     };
     Ok((input, replace_input))
-}
-
-fn resolve_optional_string(arg: Option<&str>, existing: Option<&str>) -> Option<String> {
-    match arg {
-        Some("") => None,
-        Some(value) => Some(value.to_string()),
-        None => existing.map(str::to_string),
-    }
 }
 
 fn build_event_match(event_type: &str, source: Option<&str>, subject: Option<&str>) -> Value {
