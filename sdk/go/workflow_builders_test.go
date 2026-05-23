@@ -176,7 +176,7 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 	}
 }
 
-func TestNewBoundWorkflowAgentStepCopiesNativeFields(t *testing.T) {
+func TestBoundWorkflowTargetAgentStepCopiesNativeFields(t *testing.T) {
 	target, err := boundWorkflowTargetToProto(BoundWorkflowTarget{
 		Steps: []WorkflowStep{
 			{

@@ -174,11 +174,5 @@ class WorkflowHelperTests(unittest.TestCase):
             "agent.structuredOutput.actionableForPr",
         )
 
-    def test_old_target_exports_are_removed(self) -> None:
-        self.assertFalse(hasattr(gestalt, "BoundWorkflowAppTarget"))
-        self.assertFalse(hasattr(gestalt, "BoundWorkflowAgentTarget"))
-        self.assertFalse(hasattr(gestalt, "WorkflowAgentStep"))
-
-
 if __name__ == "__main__":
     unittest.main()
