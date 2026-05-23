@@ -4,7 +4,7 @@ use serde_json::{Map, Value};
 type JsonMap = Map<String, Value>;
 type SingleAppStep<'a> = (&'a JsonMap, &'a JsonMap);
 
-struct AppTargetBuild<'a> {
+struct AppStepTargetBuild<'a> {
     existing_step: Option<&'a JsonMap>,
     app: &'a str,
     operation: &'a str,
@@ -15,7 +15,7 @@ struct AppTargetBuild<'a> {
     step_id: Option<&'a str>,
 }
 
-pub(super) struct AppTargetUpdate<'a> {
+pub(super) struct AppStepTargetUpdate<'a> {
     pub(super) resource: &'static str,
     pub(super) step_id: Option<&'a str>,
     pub(super) app: Option<&'a str>,
@@ -27,7 +27,7 @@ pub(super) struct AppTargetUpdate<'a> {
     pub(super) input: Option<&'a Value>,
 }
 
-impl AppTargetUpdate<'_> {
+impl AppStepTargetUpdate<'_> {
     pub(super) fn has_overrides(&self) -> bool {
         self.app.is_some()
             || self.operation.is_some()
@@ -38,9 +38,9 @@ impl AppTargetUpdate<'_> {
     }
 }
 
-pub(super) fn merge_app_target_flags(
+pub(super) fn merge_app_step_target_flags(
     existing: &Value,
-    update: AppTargetUpdate<'_>,
+    update: AppStepTargetUpdate<'_>,
 ) -> Result<Value> {
     if !update.has_overrides() {
         return existing
@@ -58,7 +58,7 @@ pub(super) fn merge_app_target_flags(
             );
         }
         anyhow!(
-            "cannot apply app target flags to an existing non-app or multi-step {}; pass --step-id to update a specific step or recreate it with a full target definition",
+            "cannot apply app step target flags to an existing non-app or multi-step {}; pass --step-id to update a specific step or recreate it with a full target definition",
             update.resource
         )
     })?;
@@ -104,7 +104,7 @@ pub(super) fn merge_app_target_flags(
         app_step.get("input").cloned()
     };
 
-    Ok(build_app_target_from_step(AppTargetBuild {
+    Ok(build_app_step_target_from_step(AppStepTargetBuild {
         existing_step: Some(step),
         app: &app,
         operation: &operation,
@@ -116,14 +116,14 @@ pub(super) fn merge_app_target_flags(
     }))
 }
 
-pub(super) fn build_app_target(
+pub(super) fn build_app_step_target(
     app: &str,
     operation: &str,
     connection: Option<&str>,
     instance: Option<&str>,
     input: Option<&Value>,
 ) -> Value {
-    build_app_target_from_step(AppTargetBuild {
+    build_app_step_target_from_step(AppStepTargetBuild {
         existing_step: None,
         app,
         operation,
@@ -135,8 +135,8 @@ pub(super) fn build_app_target(
     })
 }
 
-fn build_app_target_from_step(args: AppTargetBuild<'_>) -> Value {
-    let AppTargetBuild {
+fn build_app_step_target_from_step(args: AppStepTargetBuild<'_>) -> Value {
+    let AppStepTargetBuild {
         existing_step,
         app,
         operation,
@@ -363,7 +363,7 @@ mod tests {
     }
 
     #[test]
-    fn merge_app_target_flags_updates_matching_step_in_multi_step_target() {
+    fn merge_app_step_target_flags_updates_matching_step_in_multi_step_target() {
         let existing = json!({
             "target": {
                 "steps": [
@@ -386,7 +386,7 @@ mod tests {
                 ]
             }
         });
-        let update = AppTargetUpdate {
+        let update = AppStepTargetUpdate {
             resource: "schedule",
             step_id: Some("notify"),
             app: Some("slack"),
@@ -398,7 +398,7 @@ mod tests {
             input: None,
         };
 
-        let merged = merge_app_target_flags(&existing, update).expect("merge target");
+        let merged = merge_app_step_target_flags(&existing, update).expect("merge target");
         let steps = merged
             .get("steps")
             .and_then(Value::as_array)
@@ -421,7 +421,7 @@ mod tests {
     }
 
     #[test]
-    fn merge_app_target_flags_skips_non_object_steps_when_matching_by_step_id() {
+    fn merge_app_step_target_flags_skips_non_object_steps_when_matching_by_step_id() {
         let existing = json!({
             "target": {
                 "steps": [
@@ -436,7 +436,7 @@ mod tests {
                 ]
             }
         });
-        let update = AppTargetUpdate {
+        let update = AppStepTargetUpdate {
             resource: "trigger",
             step_id: Some("notify"),
             app: Some("slack"),
@@ -448,7 +448,7 @@ mod tests {
             input: None,
         };
 
-        let merged = merge_app_target_flags(&existing, update).expect("merge target");
+        let merged = merge_app_step_target_flags(&existing, update).expect("merge target");
         let steps = merged
             .get("steps")
             .and_then(Value::as_array)

@@ -10,7 +10,7 @@ use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
 
 use super::workflow_target::{
-    AppTargetUpdate, build_app_target, literal_input, merge_app_target_flags,
+    AppStepTargetUpdate, build_app_step_target, literal_input, merge_app_step_target_flags,
     resolve_optional_string, target_app, target_has_app, target_operation,
 };
 
@@ -378,7 +378,7 @@ fn build_upsert_body(
     build_schedule_upsert_body(
         cron,
         timezone,
-        build_app_target(app, operation, connection, instance, input),
+        build_app_step_target(app, operation, connection, instance, input),
         paused,
     )
 }
@@ -434,7 +434,7 @@ fn build_trigger_target(args: &WorkflowTriggerCreateArgs) -> Result<Value> {
             || args.input_file.is_some()
         {
             return Err(anyhow!(
-                "--target-file cannot be combined with app target flags or input options"
+                "--target-file cannot be combined with app step target flags or input options"
             ));
         }
         let target = params::load_input_file(path)?;
@@ -451,10 +451,10 @@ fn build_trigger_target(args: &WorkflowTriggerCreateArgs) -> Result<Value> {
     let operation = args
         .operation
         .as_deref()
-        .ok_or_else(|| anyhow!("workflow trigger app target requires --operation"))?;
+        .ok_or_else(|| anyhow!("workflow trigger app step target requires --operation"))?;
     let input = build_optional_map(&args.params, args.input_file.as_deref())?;
     let input_value = input.as_ref().map(literal_input);
-    Ok(build_app_target(
+    Ok(build_app_step_target(
         app,
         operation,
         args.connection.as_deref(),
@@ -531,9 +531,9 @@ fn merge_schedule_target_update(
     existing: &Value,
 ) -> Result<Value> {
     let (input, replace_input) = target_input_update(&args.params, args.input_file.as_deref())?;
-    merge_app_target_flags(
+    merge_app_step_target_flags(
         existing,
-        AppTargetUpdate {
+        AppStepTargetUpdate {
             resource: "schedule",
             step_id: args.step_id.as_deref(),
             app: args.app.as_deref(),
@@ -552,9 +552,9 @@ fn merge_trigger_target_update(
     existing: &Value,
 ) -> Result<Value> {
     let (input, replace_input) = target_input_update(&args.params, args.input_file.as_deref())?;
-    merge_app_target_flags(
+    merge_app_step_target_flags(
         existing,
-        AppTargetUpdate {
+        AppStepTargetUpdate {
             resource: "trigger",
             step_id: args.step_id.as_deref(),
             app: args.app.as_deref(),

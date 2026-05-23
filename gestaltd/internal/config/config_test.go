@@ -3105,7 +3105,7 @@ server:
 		}
 		wantSchedule := WorkflowScheduleConfig{
 			Provider: "temporal",
-			Target: workflowTestAppTargetConfig("roadmap", "nightly_sync", providermanifestv1.ConnectionModeNone, map[string]any{
+			Target: workflowTestAppStepTargetConfig("roadmap", "nightly_sync", providermanifestv1.ConnectionModeNone, map[string]any{
 				"source": "yaml",
 			}),
 			Invokes: []WorkflowInvokeConfig{
@@ -3120,7 +3120,7 @@ server:
 		}
 		wantTrigger := WorkflowEventTriggerConfig{
 			Provider: "temporal",
-			Target: workflowTestAppTargetConfig("roadmap", "backfill_items", "", map[string]any{
+			Target: workflowTestAppStepTargetConfig("roadmap", "backfill_items", "", map[string]any{
 				"source": "event",
 			}),
 			Invokes: []WorkflowInvokeConfig{{App: "slack", Operation: "chat.postMessage"}},
@@ -6763,10 +6763,10 @@ func TestApplyAppScopeKeepsAppClosureAndUI(t *testing.T) {
 					}},
 				},
 				"dropped": {
-					Target: workflowTestAppTargetConfig("gamma", "", "", nil),
+					Target: workflowTestAppStepTargetConfig("gamma", "", "", nil),
 				},
 				"dependency_only": {
-					Target:  workflowTestAppTargetConfig("gamma", "", "", nil),
+					Target:  workflowTestAppStepTargetConfig("gamma", "", "", nil),
 					Invokes: []WorkflowInvokeConfig{{App: "alpha", Operation: "ping"}},
 				},
 			},
@@ -7093,14 +7093,14 @@ func TestApplyAppScopeRetainedWorkflowAddsReferencedApps(t *testing.T) {
 		Workflows: WorkflowsConfig{
 			Schedules: map[string]WorkflowScheduleConfig{
 				"fanout": {
-					Target: workflowTestAppTargetConfig("alpha", "", "", nil),
+					Target: workflowTestAppStepTargetConfig("alpha", "", "", nil),
 					Invokes: []WorkflowInvokeConfig{{
 						App:       "beta",
 						Operation: "ping",
 					}},
 				},
 				"dependency_target": {
-					Target: workflowTestAppTargetConfig("beta", "", "", nil),
+					Target: workflowTestAppStepTargetConfig("beta", "", "", nil),
 					Invokes: []WorkflowInvokeConfig{{
 						App:       "delta",
 						Operation: "pong",
@@ -7131,7 +7131,7 @@ func TestApplyAppScopeRejectsUnknownApp(t *testing.T) {
 	}
 }
 
-func workflowTestAppTargetConfig(name, operation string, credentialMode providermanifestv1.ConnectionMode, input map[string]any) *WorkflowTargetConfig {
+func workflowTestAppStepTargetConfig(name, operation string, credentialMode providermanifestv1.ConnectionMode, input map[string]any) *WorkflowTargetConfig {
 	step := WorkflowStepConfig{
 		ID: "main",
 		App: &WorkflowStepAppCallConfig{
