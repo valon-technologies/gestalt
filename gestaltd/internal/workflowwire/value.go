@@ -7,8 +7,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 )
 
-// ParseValue converts a JSON-shaped value into core workflow value form.
-func ParseValue(value any, path string) (coreworkflow.Value, error) {
+func parseValue(value any, path string) (coreworkflow.Value, error) {
 	if value == nil {
 		return coreworkflow.Value{}, nil
 	}
@@ -55,7 +54,7 @@ func ParseValue(value any, path string) (coreworkflow.Value, error) {
 	if arrayValue, ok := value.([]any); ok {
 		out := make([]coreworkflow.Value, 0, len(arrayValue))
 		for i, item := range arrayValue {
-			converted, err := ParseValue(item, fmt.Sprintf("%s[%d]", path, i))
+			converted, err := parseValue(item, fmt.Sprintf("%s[%d]", path, i))
 			if err != nil {
 				return coreworkflow.Value{}, err
 			}
@@ -76,7 +75,7 @@ func parseValueMap(value any, path string) (map[string]coreworkflow.Value, error
 	}
 	out := make(map[string]coreworkflow.Value, len(valueMap))
 	for key, raw := range valueMap {
-		converted, err := ParseValue(raw, path+"."+key)
+		converted, err := parseValue(raw, path+"."+key)
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +91,7 @@ func parseValueArray(value any, path string) ([]coreworkflow.Value, error) {
 	}
 	out := make([]coreworkflow.Value, 0, len(items))
 	for i, item := range items {
-		converted, err := ParseValue(item, fmt.Sprintf("%s[%d]", path, i))
+		converted, err := parseValue(item, fmt.Sprintf("%s[%d]", path, i))
 		if err != nil {
 			return nil, err
 		}

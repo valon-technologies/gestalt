@@ -133,7 +133,7 @@ func parseAppCall(value any, path string) (*coreworkflow.AppCall, error) {
 	if appName == "" || operation == "" {
 		return nil, fmt.Errorf("%w: %s.name and %s.operation are required", ErrInvalid, path, path)
 	}
-	input, err := ParseValue(appMap["input"], path+".input")
+	input, err := parseValue(appMap["input"], path+".input")
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,7 @@ func parseStepWhen(value any, path string) (*coreworkflow.StepWhen, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: %s.value is required", ErrInvalid, path)
 	}
-	whenValue, err := ParseValue(whenValueArg, path+".value")
+	whenValue, err := parseValue(whenValueArg, path+".value")
 	if err != nil {
 		return nil, err
 	}
