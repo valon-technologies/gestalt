@@ -18,6 +18,7 @@ import (
 
 const (
 	rustProjectFile       = "Cargo.toml"
+	rustLockFile          = "Cargo.lock"
 	rustWrapperBinaryName = "gestalt-provider-wrapper"
 )
 
@@ -364,11 +365,29 @@ func newRustWrapperProject(root, packageName, pluginName, kind string) (string, 
 		cleanup()
 		return "", nil, err
 	}
+	if err := copyRustLockFile(absRoot, wrapperDir); err != nil {
+		cleanup()
+		return "", nil, err
+	}
 	if err := writeRustWrapperFile(filepath.Join(srcDir, "main.rs"), rustWrapperMainTemplate, data); err != nil {
 		cleanup()
 		return "", nil, err
 	}
 	return wrapperDir, cleanup, nil
+}
+
+func copyRustLockFile(sourceRoot, wrapperDir string) error {
+	data, err := os.ReadFile(filepath.Join(sourceRoot, rustLockFile))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read %s: %w", rustLockFile, err)
+	}
+	if err := os.WriteFile(filepath.Join(wrapperDir, rustLockFile), data, 0o644); err != nil {
+		return fmt.Errorf("write wrapper %s: %w", rustLockFile, err)
+	}
+	return nil
 }
 
 func writeRustWrapperFile(path string, tmpl *template.Template, data rustWrapperData) error {

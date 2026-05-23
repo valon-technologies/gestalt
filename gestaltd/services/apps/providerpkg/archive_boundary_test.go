@@ -94,6 +94,48 @@ func TestValidatePackageDirRejectsMissingProviderSchema(t *testing.T) {
 	}
 }
 
+func TestInspectPackageValidatesArchiveWithoutExtracting(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	sourceDir, manifest := mustWriteProviderPackageDir(t, dir, "github.com/acme/apps/provider", "0.0.1-alpha.1", "provider")
+	archivePath := filepath.Join(dir, "provider.tar.gz")
+	if err := CreatePackageFromDir(sourceDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+
+	parsed, err := InspectPackage(archivePath)
+	if err != nil {
+		t.Fatalf("InspectPackage: %v", err)
+	}
+	if !ManifestEqual(parsed, manifest) {
+		t.Fatalf("unexpected manifest: %+v", parsed)
+	}
+}
+
+func TestInspectPackageRejectsMissingProviderSchema(t *testing.T) {
+	t.Parallel()
+
+	artifactPath := testArtifactPath("provider")
+	manifest := newProviderManifest("github.com/acme/apps/provider", "0.0.1-alpha.1", artifactPath, sha256Hex("provider"))
+	manifest.Spec.ConfigSchemaPath = "schemas/config.schema.json"
+
+	archivePath := filepath.Join(t.TempDir(), "missing-schema.tar.gz")
+	mustCreateArchive(t, archivePath,
+		archiveTestFile{name: ManifestFile, data: mustRawManifestJSON(t, manifest), mode: 0644},
+		archiveTestFile{name: artifactPath, data: []byte("provider"), mode: 0755},
+		archiveTestFile{name: StaticCatalogFile, data: []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), mode: 0644},
+	)
+
+	_, err := InspectPackage(archivePath)
+	if err == nil {
+		t.Fatal("expected missing provider schema error")
+	}
+	if !strings.Contains(err.Error(), "validate provider config schema") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestReadArchiveEntryRejectsDuplicateEntry(t *testing.T) {
 	t.Parallel()
 
@@ -125,6 +167,41 @@ func TestExtractPackageRejectsEscapingEntry(t *testing.T) {
 		t.Fatal("expected escaping archive entry error")
 	}
 	if !strings.Contains(err.Error(), "escapes the package root") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExtractPackageRejectsAbsoluteEntry(t *testing.T) {
+	t.Parallel()
+
+	archivePath := filepath.Join(t.TempDir(), "absolute-entry.tar.gz")
+	mustCreateArchive(t, archivePath,
+		archiveTestFile{name: "/manifest.json", data: []byte("{}"), mode: 0644},
+	)
+
+	err := ExtractPackage(archivePath, filepath.Join(t.TempDir(), "out"))
+	if err == nil {
+		t.Fatal("expected absolute archive entry error")
+	}
+	if !strings.Contains(err.Error(), "escapes the package root") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExtractPackageRejectsMultipleRootManifests(t *testing.T) {
+	t.Parallel()
+
+	archivePath := filepath.Join(t.TempDir(), "multiple-manifests.tar.gz")
+	mustCreateArchive(t, archivePath,
+		archiveTestFile{name: "manifest.json", data: []byte("{}"), mode: 0644},
+		archiveTestFile{name: "manifest.yaml", data: []byte("{}"), mode: 0644},
+	)
+
+	err := ExtractPackage(archivePath, filepath.Join(t.TempDir(), "out"))
+	if err == nil {
+		t.Fatal("expected multiple root manifest error")
+	}
+	if !strings.Contains(err.Error(), "contains multiple root provider manifests") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

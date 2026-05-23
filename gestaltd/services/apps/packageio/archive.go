@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -41,6 +42,67 @@ func ReadPackageManifestIn(packagePath string, names []string) (_ []byte, _ *pro
 		return data, manifest, nil
 	}
 	return nil, nil, firstErr
+}
+
+func InspectPackage(packagePath string) (*providermanifestv1.Manifest, error) {
+	return InspectPackageIn(packagePath, ManifestFiles)
+}
+
+func InspectPackageIn(packagePath string, names []string) (_ *providermanifestv1.Manifest, err error) {
+	rootManifests := make(map[string]struct{})
+	rootManifestData := make(map[string][]byte)
+	fileSums := make(map[string]string)
+	var staticCatalogData []byte
+	staticCatalogFound := false
+	if err := walkPackageArchive(packagePath, func(entry packageArchiveEntry) error {
+		if entry.Header.Typeflag == tar.TypeDir {
+			return nil
+		}
+		isRootManifest := !strings.Contains(entry.Path, "/") && IsManifestFileIn(entry.Path, names)
+		keepData := isRootManifest || entry.Path == StaticCatalogFile
+		sum := sha256.New()
+		var data []byte
+		var err error
+		if keepData {
+			data, err = io.ReadAll(io.TeeReader(entry.Reader, sum))
+		} else {
+			_, err = io.Copy(sum, entry.Reader)
+		}
+		if err != nil {
+			return fmt.Errorf("read %s: %w", entry.Path, err)
+		}
+		fileSums[entry.Path] = hex.EncodeToString(sum.Sum(nil))
+		if isRootManifest {
+			rootManifests[entry.Path] = struct{}{}
+			rootManifestData[entry.Path] = data
+		}
+		if entry.Path == StaticCatalogFile {
+			staticCatalogData = data
+			staticCatalogFound = true
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if err := validateSingleRootManifest(packagePath, rootManifests); err != nil {
+		return nil, err
+	}
+
+	manifestName := ""
+	for name := range rootManifests {
+		manifestName = name
+	}
+	manifest, err := DecodeManifestFormat(rootManifestData[manifestName], ManifestFormatFromPath(manifestName))
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePackageManifestReferences(manifest, fileSums); err != nil {
+		return nil, err
+	}
+	if err := validatePackageStaticCatalog(manifest, staticCatalogData, staticCatalogFound); err != nil {
+		return nil, err
+	}
+	return manifest, nil
 }
 
 func ReadManifestFile(p string) ([]byte, *providermanifestv1.Manifest, error) {
@@ -235,6 +297,86 @@ func ExtractPackage(packagePath, destDir string) (err error) {
 		return fmt.Errorf("create destination dir: %w", err)
 	}
 
+	rootManifests := make(map[string]struct{})
+	if err := walkPackageArchive(packagePath, func(entry packageArchiveEntry) error {
+		if entry.Header.Typeflag == tar.TypeReg && !strings.Contains(entry.Path, "/") && IsManifestFileIn(entry.Path, ManifestFiles) {
+			rootManifests[entry.Path] = struct{}{}
+		}
+		target := filepath.Join(destDir, filepath.FromSlash(entry.Path))
+		switch entry.Header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, os.FileMode(entry.Header.Mode)); err != nil {
+				return fmt.Errorf("create directory %s: %w", entry.Path, err)
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return fmt.Errorf("create parent dir for %s: %w", entry.Path, err)
+			}
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(entry.Header.Mode))
+			if err != nil {
+				return fmt.Errorf("create file %s: %w", entry.Path, err)
+			}
+			if _, err := io.Copy(f, entry.Reader); err != nil {
+				_ = f.Close()
+				return fmt.Errorf("extract file %s: %w", entry.Path, err)
+			}
+			if err := f.Close(); err != nil {
+				return fmt.Errorf("close file %s: %w", entry.Path, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return validateSingleRootManifest(packagePath, rootManifests)
+}
+
+func validateSingleRootManifest(packagePath string, rootManifests map[string]struct{}) error {
+	if len(rootManifests) == 0 {
+		return fmt.Errorf("package %q does not contain a root provider manifest", packagePath)
+	}
+	if len(rootManifests) == 1 {
+		return nil
+	}
+	names := make([]string, 0, len(rootManifests))
+	for name := range rootManifests {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return fmt.Errorf("package %q contains multiple root provider manifests: %s", packagePath, strings.Join(names, ", "))
+}
+
+func ReadArchiveEntry(packagePath, wanted string) (_ []byte, err error) {
+	var found []byte
+	if err := walkPackageArchive(packagePath, func(entry packageArchiveEntry) error {
+		if entry.Header.Typeflag == tar.TypeDir || entry.Path != wanted {
+			return nil
+		}
+		if found != nil {
+			return fmt.Errorf("archive entry %q appears more than once", wanted)
+		}
+		var err error
+		found, err = io.ReadAll(entry.Reader)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", wanted, err)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if found == nil {
+		return nil, fmt.Errorf("package %q does not contain %s", packagePath, wanted)
+	}
+	return found, nil
+}
+
+type packageArchiveEntry struct {
+	Header *tar.Header
+	Path   string
+	Reader io.Reader
+}
+
+func walkPackageArchive(packagePath string, visit func(packageArchiveEntry) error) (err error) {
 	file, err := os.Open(packagePath)
 	if err != nil {
 		return fmt.Errorf("open package %q: %w", packagePath, err)
@@ -252,7 +394,7 @@ func ExtractPackage(packagePath, destDir string) (err error) {
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			return nil
+			break
 		}
 		if err != nil {
 			return fmt.Errorf("read tar stream: %w", err)
@@ -266,78 +408,18 @@ func ExtractPackage(packagePath, destDir string) (err error) {
 			return fmt.Errorf("archive entry %q appears more than once", rel)
 		}
 		seen[rel] = struct{}{}
-		target := filepath.Join(destDir, filepath.FromSlash(rel))
+
 		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
-				return fmt.Errorf("create directory %s: %w", rel, err)
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return fmt.Errorf("create parent dir for %s: %w", rel, err)
-			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode))
-			if err != nil {
-				return fmt.Errorf("create file %s: %w", rel, err)
-			}
-			if _, err := io.Copy(f, tr); err != nil {
-				_ = f.Close()
-				return fmt.Errorf("extract file %s: %w", rel, err)
-			}
-			if err := f.Close(); err != nil {
-				return fmt.Errorf("close file %s: %w", rel, err)
-			}
+		case tar.TypeDir, tar.TypeReg:
 		default:
 			return fmt.Errorf("unsupported tar entry type for %s", rel)
 		}
-	}
-}
 
-func ReadArchiveEntry(packagePath, wanted string) (_ []byte, err error) {
-	file, err := os.Open(packagePath)
-	if err != nil {
-		return nil, fmt.Errorf("open package %q: %w", packagePath, err)
-	}
-	defer joinCloseError(&err, fmt.Sprintf("close package %q", packagePath), file)
-
-	gzr, err := gzip.NewReader(file)
-	if err != nil {
-		return nil, fmt.Errorf("open gzip stream: %w", err)
-	}
-	defer joinCloseError(&err, "close gzip stream", gzr)
-
-	tr := tar.NewReader(gzr)
-	var found []byte
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("read tar stream: %w", err)
-		}
-		if hdr.FileInfo().IsDir() {
-			continue
-		}
-		name, err := archiveEntryPath(hdr.Name)
-		if err != nil {
-			return nil, err
-		}
-		if name != wanted {
-			continue
-		}
-		if found != nil {
-			return nil, fmt.Errorf("archive entry %q appears more than once", wanted)
-		}
-		found, err = io.ReadAll(tr)
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", wanted, err)
+		if err := visit(packageArchiveEntry{Header: hdr, Path: rel, Reader: tr}); err != nil {
+			return err
 		}
 	}
-	if found == nil {
-		return nil, fmt.Errorf("package %q does not contain %s", packagePath, wanted)
-	}
-	return found, nil
+	return nil
 }
 
 func ValidatePackageDir(sourceDir string) (*providermanifestv1.Manifest, error) {
@@ -371,6 +453,57 @@ func ValidatePackageDir(sourceDir string) (*providermanifestv1.Manifest, error) 
 	return manifest, nil
 }
 
+func validatePackageManifestReferences(manifest *providermanifestv1.Manifest, fileSums map[string]string) error {
+	for _, artifact := range manifest.Artifacts {
+		rel, err := packageReferencePath(artifact.Path)
+		if err != nil {
+			return fmt.Errorf("validate artifact %s: %w", artifact.Path, err)
+		}
+		sum, ok := fileSums[rel]
+		if !ok {
+			return fmt.Errorf("validate artifact %s: file does not exist", artifact.Path)
+		}
+		if sum != artifact.SHA256 {
+			return fmt.Errorf("artifact %s sha256 %s does not match manifest %s", artifact.Path, sum, artifact.SHA256)
+		}
+	}
+	for _, ref := range LocalPackageReferences(manifest) {
+		rel, err := packageReferencePath(ref.Path)
+		if err != nil {
+			return fmt.Errorf("validate %s %s: %w", ref.Description, ref.Path, err)
+		}
+		if _, ok := fileSums[rel]; !ok {
+			return fmt.Errorf("validate %s %s: file does not exist", ref.Description, ref.Path)
+		}
+	}
+	return nil
+}
+
+func validatePackageStaticCatalog(manifest *providermanifestv1.Manifest, data []byte, found bool) error {
+	if !found {
+		if StaticCatalogRequired(manifest) {
+			return fmt.Errorf("validate provider static catalog %s: file does not exist", StaticCatalogFile)
+		}
+		return nil
+	}
+
+	var cat catalog.Catalog
+	if err := decodeStrict(data, ManifestFormatFromPath(StaticCatalogFile), "static catalog", &cat); err != nil {
+		return err
+	}
+	if err := cat.Validate(); err != nil {
+		return fmt.Errorf("validate static catalog %q: %w", StaticCatalogFile, err)
+	}
+	return nil
+}
+
+func packageReferencePath(value string) (string, error) {
+	if strings.TrimSpace(value) == "" {
+		return "", fmt.Errorf("path is required")
+	}
+	return archiveEntryPath(value)
+}
+
 func loadManifestFromDir(sourceDir string) ([]byte, *providermanifestv1.Manifest, error) {
 	p, err := FindManifestFile(sourceDir)
 	if err != nil {
@@ -384,7 +517,7 @@ func archiveEntryPath(name string) (string, error) {
 		return "", fmt.Errorf("archive entry %q must use forward slashes", name)
 	}
 	cleaned := path.Clean(strings.TrimPrefix(name, "./"))
-	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+	if cleaned == "." || path.IsAbs(cleaned) || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
 		return "", fmt.Errorf("archive entry %q escapes the package root", name)
 	}
 	return cleaned, nil
