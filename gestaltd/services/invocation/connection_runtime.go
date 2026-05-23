@@ -33,7 +33,7 @@ type ConnectionRuntimeInfo struct {
 
 // ConnectionRuntimeResolver resolves runtime metadata for a provider
 // connection. The connection name is the internal resolved name, such as
-// "_plugin" for the plugin connection.
+// "_plugin" for the app connection.
 type ConnectionRuntimeResolver func(provider, connection string) (ConnectionRuntimeInfo, bool)
 
 // ConnectionRuntimeMap is a small in-memory resolver built from deployment
@@ -50,7 +50,7 @@ func (m ConnectionRuntimeMap) Resolve(provider, connection string) (ConnectionRu
 	}
 	connection = strings.TrimSpace(connection)
 	if connection == "" {
-		connection = core.PluginConnectionName
+		connection = core.AppConnectionName
 	}
 	info, ok := connections[connection]
 	return info, ok

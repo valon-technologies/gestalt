@@ -35,7 +35,7 @@ The default image is a static build: just the `gestaltd` binary and CA
 certificates on a `scratch` base. There is no shell, no package manager, and
 minimal attack surface.
 
-For debugging or plugin compatibility, use the `-alpine` variant. It includes
+For debugging or app compatibility, use the `-alpine` variant. It includes
 a shell, `ca-certificates`, and a writable `/data` directory owned by `nobody`.
 
 ## Run a simple config
@@ -58,7 +58,7 @@ Generate the encryption key once with `openssl rand -hex 32` and use that value 
 Example minimal config:
 
 ```yaml
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   public:
     port: 8080
@@ -73,7 +73,7 @@ providers:
       config:
         dsn: sqlite:///data/gestalt.db
 
-plugins: {}
+apps: {}
 ```
 
 ## Compose example
@@ -138,7 +138,7 @@ listeners. See the
 split-listener production pattern.
 
 The built-in `/admin` shell now includes both the Prometheus metrics dashboard
-and a plugin authorization workspace. For any plugin that already declares
+and an app authorization workspace. For any app that already declares
 `authorizationPolicy`, operators can open `/admin/?tab=members&plugin=<name>`
 to inspect merged static/dynamic rows and manage dynamic grants. Static policy
 members remain authoritative.

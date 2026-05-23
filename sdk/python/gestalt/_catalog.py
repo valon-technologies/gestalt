@@ -1,4 +1,4 @@
-"""Catalog helpers for integration plugins."""
+"""Catalog helpers for integration apps."""
 
 from __future__ import annotations
 
@@ -30,13 +30,13 @@ else:
     json_format = _json_format
     _struct_pb2 = _google_struct_pb2
 
-plugin_pb2: Any = cast(Any, None)
+app_pb2: Any = cast(Any, None)
 try:
-    from ._gen.v1 import plugin_pb2 as _plugin_pb2_module
+    from ._gen.v1 import app_pb2 as _app_pb2_module
 except ModuleNotFoundError:
     pass
 else:
-    plugin_pb2 = _plugin_pb2_module
+    app_pb2 = _app_pb2_module
 
 struct_pb2: Any = cast(Any, _struct_pb2)
 
@@ -89,7 +89,7 @@ class Catalog:
 
 @runtime_checkable
 class SessionCatalogProvider(Protocol):
-    """Protocol for plugins that return a per-request catalog."""
+    """Protocol for apps that return a per-request catalog."""
 
     def catalog_for_request(
         self, request: Request
@@ -98,13 +98,13 @@ class SessionCatalogProvider(Protocol):
 
 def build_catalog(
     *,
-    plugin_name: str,
+    app_name: str,
     operations: Iterable[OperationDefinition],
 ) -> Catalog:
     """Build a catalog value from authored operation definitions."""
 
     return Catalog(
-        name=plugin_name,
+        name=app_name,
         operations=[_catalog_operation(op) for op in operations],
     )
 
@@ -116,7 +116,7 @@ def catalog_to_proto(catalog: Catalog | Mapping[str, Any] | None) -> Any | None:
         return None
     if _is_proto_catalog(catalog):
         return catalog
-    if plugin_pb2 is None:
+    if app_pb2 is None:
         if isinstance(catalog, Catalog):
             return _catalog_to_mapping(catalog)
         if isinstance(catalog, Mapping):
@@ -202,11 +202,11 @@ def _to_proto_value(value: Any) -> Any:
 
 
 def _is_proto_catalog(value: Any) -> bool:
-    return plugin_pb2 is not None and isinstance(value, plugin_pb2.Catalog)
+    return app_pb2 is not None and isinstance(value, app_pb2.Catalog)
 
 
 def _catalog_to_proto(catalog: Catalog) -> Any:
-    proto_catalog = plugin_pb2.Catalog(
+    proto_catalog = app_pb2.Catalog(
         name=catalog.name,
         display_name=catalog.display_name,
         description=catalog.description,
@@ -219,7 +219,7 @@ def _catalog_to_proto(catalog: Catalog) -> Any:
 
 
 def _catalog_operation_to_proto(operation: CatalogOperation) -> Any:
-    proto_operation = plugin_pb2.CatalogOperation(
+    proto_operation = app_pb2.CatalogOperation(
         id=operation.id,
         method=operation.method,
         title=operation.title,
@@ -245,7 +245,7 @@ def _catalog_operation_to_proto(operation: CatalogOperation) -> Any:
 
 
 def _operation_annotations_to_proto(annotations: OperationAnnotations) -> Any:
-    proto_annotations = plugin_pb2.OperationAnnotations()
+    proto_annotations = app_pb2.OperationAnnotations()
     if annotations.read_only_hint is not None:
         proto_annotations.read_only_hint = annotations.read_only_hint
     if annotations.idempotent_hint is not None:
@@ -258,7 +258,7 @@ def _operation_annotations_to_proto(annotations: OperationAnnotations) -> Any:
 
 
 def _catalog_parameter_to_proto(parameter: CatalogParameter) -> Any:
-    proto_parameter = plugin_pb2.CatalogParameter(
+    proto_parameter = app_pb2.CatalogParameter(
         name=parameter.name,
         type=parameter.type,
         description=parameter.description,

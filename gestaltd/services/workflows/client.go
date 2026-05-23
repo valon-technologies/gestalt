@@ -37,7 +37,7 @@ type RemoteConfig struct {
 	Name    string
 }
 
-var startWorkflowProviderProcess = runtimehost.StartPluginProcess
+var startWorkflowProviderProcess = runtimehost.StartAppProcess
 
 type remoteWorkflow struct {
 	client  proto.WorkflowProviderClient
@@ -147,10 +147,10 @@ func (r *remoteWorkflow) ListRuns(ctx context.Context, req coreworkflow.ListRuns
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{
-		PageSize:     int32(req.PageSize),
-		PageToken:    strings.TrimSpace(req.PageToken),
-		Status:       workflowRunStatusToProto(req.Status),
-		TargetPlugin: strings.TrimSpace(req.TargetPlugin),
+		PageSize:  int32(req.PageSize),
+		PageToken: strings.TrimSpace(req.PageToken),
+		Status:    workflowRunStatusToProto(req.Status),
+		TargetApp: strings.TrimSpace(req.TargetApp),
 	})
 	if err != nil {
 		return nil, err
@@ -455,7 +455,7 @@ func (r *remoteWorkflow) PublishEvent(ctx context.Context, req coreworkflow.Publ
 		return nil, err
 	}
 	resp, err := r.client.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
-		PluginName:  req.PluginName,
+		AppName:     req.AppName,
 		Event:       pbEvent,
 		PublishedBy: workflowActorToProto(req.PublishedBy),
 	})
@@ -570,8 +570,8 @@ func (r *remoteWorkflow) workflowMetricDims(operation string, dims workflowDims)
 
 func workflowTargetKind(target coreworkflow.Target) string {
 	switch {
-	case target.Plugin != nil:
-		return observability.WorkflowTargetKindPlugin
+	case target.App != nil:
+		return observability.WorkflowTargetKindApp
 	case target.Agent != nil:
 		return observability.WorkflowTargetKindAgent
 	default:

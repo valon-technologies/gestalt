@@ -27,7 +27,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	sharedEchoPluginBin = filepath.Join(tmpDir, "gestalt-plugin-echo")
+	sharedEchoPluginBin = filepath.Join(tmpDir, "gestalt-app-echo")
 	sharedExampleProviderBin = filepath.Join(tmpDir, "provider-go")
 	sharedAgentProviderBin = filepath.Join(tmpDir, "gestalt-agent-test")
 	sharedGestaltdBin = filepath.Join(tmpDir, "gestaltd")

@@ -43,7 +43,7 @@ type ExternalCredential struct {
 }
 
 type AccessPermission struct {
-	Plugin     string   `json:"plugin"`
+	App        string   `json:"app"`
 	Operations []string `json:"operations,omitempty"`
 	Actions    []string `json:"actions,omitempty"`
 }

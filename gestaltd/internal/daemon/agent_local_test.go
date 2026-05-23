@@ -19,7 +19,7 @@ func TestE2EAgentLaunchDryRunUsesLocalHarnessOnly(t *testing.T) {
 		t.Fatalf("mkdir workDir: %v", err)
 	}
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v5
+	cfg := `apiVersion: gestaltd.config/v6
 providers:
   agent:
     local:
@@ -98,7 +98,7 @@ printf 'overlay=%s\n' "$HARNESS_VALUE"
 exit 7
 `)
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v5
+	cfg := `apiVersion: gestaltd.config/v6
 providers:
   agent:
     local:
@@ -142,7 +142,7 @@ func TestE2EAgentDoctorReportsMissingRequiredCommand(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v5
+	cfg := `apiVersion: gestaltd.config/v6
 providers:
   agent:
     local:
@@ -173,7 +173,7 @@ func TestE2EAgentLaunchFailsWhenSelectedHarnessEnvIsMissing(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v5
+	cfg := `apiVersion: gestaltd.config/v6
 providers:
   agent:
     local:

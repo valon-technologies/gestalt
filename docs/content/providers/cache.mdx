@@ -3,10 +3,10 @@ import { Tabs } from 'nextra/components'
 # Cache
 
 Cache providers are plugin-bound utilities for short-lived key/value state.
-They are configured under `providers.cache` and attached to plugins with
-`plugins.<name>.cache`.
+They are configured under `providers.cache` and attached to apps with
+`apps.<name>.cache`.
 
-Cache providers use the same provider-entry plus plugin SDK binding pattern as
+Cache providers use the same provider-entry plus app SDK binding pattern as
 IndexedDB.
 
 ## Configuring `providers.cache`
@@ -28,7 +28,7 @@ providers:
       config:
         namespace: rate_limit
 
-plugins:
+apps:
   search:
     source: ./providers/search/manifest.yaml
     cache:
@@ -36,7 +36,7 @@ plugins:
       - rate_limit
 ```
 
-This example binds two caches into the `search` plugin. Both bindings use the
+This example binds two caches into the `search` app. Both bindings use the
 same provider package, but they receive different provider-specific config.
 That is a common pattern for keeping session and rate-limit state separate
 without introducing a second cache technology.
@@ -120,7 +120,7 @@ without introducing a second cache technology.
 </Tabs>
 
 The host resolves the configured cache bindings and exposes them to the plugin
-through the language SDK. Plugin code does not choose backend endpoints
+through the language SDK. App code does not choose backend endpoints
 directly at runtime. It just opens the bound cache by name.
 
 ## Building your own cache provider

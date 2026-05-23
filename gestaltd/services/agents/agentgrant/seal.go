@@ -34,7 +34,7 @@ func (m *Manager) MintToolID(target coreagent.ToolTarget) (string, error) {
 	}
 	target = coreagent.ToolTarget{
 		System:                strings.TrimSpace(target.System),
-		Plugin:                strings.TrimSpace(target.Plugin),
+		App:                   strings.TrimSpace(target.App),
 		Operation:             strings.TrimSpace(target.Operation),
 		Connection:            strings.TrimSpace(target.Connection),
 		Instance:              strings.TrimSpace(target.Instance),
@@ -44,10 +44,10 @@ func (m *Manager) MintToolID(target coreagent.ToolTarget) (string, error) {
 		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(target.RunAsExternalIdentity),
 	}
 	if target.Unavailable != nil {
-		if target.Plugin == "" || target.System != "" || target.Operation != "" {
+		if target.App == "" || target.System != "" || target.Operation != "" {
 			return "", fmt.Errorf("agent tool target is incomplete")
 		}
-	} else if target.Operation == "" || (target.Plugin == "" && target.System == "") || (target.Plugin != "" && target.System != "") {
+	} else if target.Operation == "" || (target.App == "" && target.System == "") || (target.App != "" && target.System != "") {
 		return "", fmt.Errorf("agent tool target is incomplete")
 	}
 	if target.RunAsExternalIdentity != nil && target.RunAs == nil {
@@ -74,7 +74,7 @@ func (m *Manager) ResolveToolID(id string) (coreagent.ToolTarget, error) {
 	}
 	target := binding.Target
 	target.System = strings.TrimSpace(target.System)
-	target.Plugin = strings.TrimSpace(target.Plugin)
+	target.App = strings.TrimSpace(target.App)
 	target.Operation = strings.TrimSpace(target.Operation)
 	target.Connection = strings.TrimSpace(target.Connection)
 	target.Instance = strings.TrimSpace(target.Instance)
@@ -83,10 +83,10 @@ func (m *Manager) ResolveToolID(id string) (coreagent.ToolTarget, error) {
 	target.RunAs = core.NormalizeRunAsSubject(target.RunAs)
 	target.RunAsExternalIdentity = core.NormalizeExternalIdentityRef(target.RunAsExternalIdentity)
 	if target.Unavailable != nil {
-		if target.Plugin == "" || target.System != "" || target.Operation != "" {
+		if target.App == "" || target.System != "" || target.Operation != "" {
 			return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")
 		}
-	} else if target.Operation == "" || (target.Plugin == "" && target.System == "") || (target.Plugin != "" && target.System != "") {
+	} else if target.Operation == "" || (target.App == "" && target.System == "") || (target.App != "" && target.System != "") {
 		return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")
 	}
 	if target.RunAsExternalIdentity != nil && target.RunAs == nil {

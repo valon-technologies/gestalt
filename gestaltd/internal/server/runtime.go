@@ -16,9 +16,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	gestaltmcp "github.com/valon-technologies/gestalt/server/services/apps/mcp"
+	"github.com/valon-technologies/gestalt/server/services/apps/source"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	gestaltmcp "github.com/valon-technologies/gestalt/server/services/plugins/mcp"
-	"github.com/valon-technologies/gestalt/server/services/plugins/source"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -78,9 +78,9 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		Agent:                result.AgentControl,
 		AgentManager:         result.AgentManager,
 		Workflow:             result.WorkflowControl,
-		PluginRuntimes:       result.PluginRuntimes,
+		AppRuntimes:          result.AppRuntimes,
 		Invoker:              httpInvoker,
-		PluginInvoker:        result.PluginInvoker,
+		AppInvoker:           result.AppInvoker,
 		DefaultConnection:    connMaps.DefaultConnection,
 		// HTTP routes expose REST-visible operations, so unqualified session-catalog
 		// resolution should follow the API surface by default. The MCP server keeps
@@ -88,7 +88,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		CatalogConnection:     httpCatalogConnectionMap(connMaps),
 		ConnectionAuth:        result.ConnectionAuth,
 		ManualConnectionAuth:  result.ManualConnectionAuth,
-		PluginDefs:            cfg.Plugins,
+		AppDefs:               cfg.Apps,
 		AgentDefs:             cfg.Providers.Agent,
 		Authorizer:            result.Authorizer,
 		AuthorizationProvider: result.AuthorizationProvider,
@@ -263,10 +263,10 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 	if !ok {
 		return nil, fmt.Errorf("MCP token resolution requires *invocation.Broker as invoker")
 	}
-	projectionServer := &Server{pluginDefs: cfg.Plugins}
+	projectionServer := &Server{pluginDefs: cfg.Apps}
 
-	names := make([]string, 0, len(cfg.Plugins))
-	for name := range cfg.Plugins {
+	names := make([]string, 0, len(cfg.Apps))
+	for name := range cfg.Apps {
 		names = append(names, name)
 	}
 	slices.Sort(names)
@@ -276,7 +276,7 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 	includeREST := make(map[string]bool)
 	mcpConnection := make(map[string]string)
 	for _, name := range names {
-		entry := cfg.Plugins[name]
+		entry := cfg.Apps[name]
 		if entry == nil || !entry.ExposesMCP() {
 			continue
 		}
@@ -289,7 +289,7 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 		}
 		if entry.ResolvedManifest != nil {
 			if src, err := source.Parse(strings.TrimSpace(entry.ResolvedManifest.Source)); err == nil {
-				toolPrefixes[name] = src.PluginName() + "_"
+				toolPrefixes[name] = src.AppName() + "_"
 			}
 		}
 	}

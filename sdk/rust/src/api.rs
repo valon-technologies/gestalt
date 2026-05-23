@@ -87,7 +87,7 @@ pub struct Request {
     /// Idempotency key supplied by the host.
     pub idempotency_key: String,
     /// Workflow callback metadata uses a JSON-style lowerCamelCase object
-    /// such as `runId`, `target.plugin.pluginName`, `trigger.scheduleId`, and
+    /// such as `runId`, `target.app.pluginName`, `trigger.scheduleId`, and
     /// `trigger.event.specVersion`.
     pub workflow: serde_json::Map<String, serde_json::Value>,
     /// Agent tool refs granted to the current operation request.
@@ -144,11 +144,11 @@ impl Request {
         &self.invocation_token
     }
 
-    /// Creates a plugin invoker using this request's invocation token.
+    /// Creates an app invoker using this request's invocation token.
     pub async fn invoker(
         &self,
-    ) -> std::result::Result<crate::PluginInvoker, crate::PluginInvokerError> {
-        crate::PluginInvoker::connect(self.invocation_token()).await
+    ) -> std::result::Result<crate::AppInvoker, crate::AppInvokerError> {
+        crate::AppInvoker::connect(self.invocation_token()).await
     }
 
     /// Creates a workflow manager using this request's invocation token.
@@ -173,7 +173,7 @@ impl Request {
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Carries one verified hosted HTTP request into a provider subject resolver.
 pub struct HTTPSubjectRequest {
-    /// Hosted HTTP binding name from the plugin manifest.
+    /// Hosted HTTP binding name from the app manifest.
     pub binding: String,
     /// HTTP method used for the inbound request.
     pub method: String,

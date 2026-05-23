@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use generated::v1::integration_provider_client::IntegrationProviderClient;
+use generated::v1::integration_provider_client::AppProviderClient;
 use generated::v1::{
     CredentialContext, ExecuteRequest, RequestContext, StartProviderRequest, SubjectContext,
 };
@@ -54,7 +54,7 @@ fn test_router() -> gestalt::Result<gestalt::Router<TestProvider>> {
 
 gestalt::export_provider!(constructor = TestProvider::default, router = test_router);
 
-async fn integration_client(socket: PathBuf) -> IntegrationProviderClient<Channel> {
+async fn integration_client(socket: PathBuf) -> AppProviderClient<Channel> {
     let channel = Endpoint::try_from("http://[::]:50051")
         .expect("endpoint")
         .connect_with_connector(service_fn(move |_| {
@@ -63,7 +63,7 @@ async fn integration_client(socket: PathBuf) -> IntegrationProviderClient<Channe
         }))
         .await
         .expect("connect channel");
-    IntegrationProviderClient::new(channel)
+    AppProviderClient::new(channel)
 }
 
 #[tokio::test]

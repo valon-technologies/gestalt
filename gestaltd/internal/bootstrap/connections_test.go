@@ -35,8 +35,8 @@ func TestBuildManualConnectionAuthMapIsSeparateFromOAuthHandlers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildManualConnectionAuthMap: %v", err)
 	}
-	if manualHandlers[config.PluginConnectionName] == nil {
-		t.Fatalf("manual token exchanger for plugin connection not built: %+v", manualHandlers)
+	if manualHandlers[config.AppConnectionName] == nil {
+		t.Fatalf("manual token exchanger for app connection not built: %+v", manualHandlers)
 	}
 }
 
@@ -44,7 +44,7 @@ func TestBuildConnectionRuntimeRejectsProviderNamespaceCollision(t *testing.T) {
 	t.Parallel()
 
 	cfg := &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
+		Apps: map[string]*config.ProviderEntry{
 			"shared": {},
 		},
 		Providers: config.ProvidersConfig{
@@ -67,7 +67,7 @@ func TestBuildConnectionRuntimeCarriesCredentialRefreshMetadata(t *testing.T) {
 	t.Parallel()
 
 	runtime, err := BuildConnectionRuntime(&config.Config{
-		Plugins: map[string]*config.ProviderEntry{
+		Apps: map[string]*config.ProviderEntry{
 			"gmail": {
 				Config: mustConnectionTestYAMLNode(t, map[string]any{
 					"clientId":     "config-client-id",
@@ -123,7 +123,7 @@ func TestBuildExternalCredentialsRuntimeConfigNodeResolvedConnectionsContract(t 
 	t.Parallel()
 
 	cfg := &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
+		Apps: map[string]*config.ProviderEntry{
 			"gmail": {
 				ResolvedManifest: &providermanifestv1.Manifest{
 					Spec: &providermanifestv1.Spec{
@@ -232,7 +232,7 @@ func TestBuildExternalCredentialsRuntimeConfigNodeOmitsResolvedConnectionsWithou
 	node, err := buildExternalCredentialsRuntimeConfigNode("default", &config.ProviderEntry{
 		Config: mustConnectionTestYAMLNode(t, map[string]any{"indexeddb": "creds"}),
 	}, []byte{0x01, 0x02, 0x03}, &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
+		Apps: map[string]*config.ProviderEntry{
 			"gmail": {
 				ResolvedManifest: &providermanifestv1.Manifest{
 					Spec: &providermanifestv1.Spec{

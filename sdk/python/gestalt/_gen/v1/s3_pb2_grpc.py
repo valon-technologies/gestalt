@@ -366,7 +366,7 @@ class S3(object):
 
 class S3ObjectAccessStub(object):
     """S3ObjectAccess models host-mediated object access for plugin-scoped S3
-    bindings. It is registered by gestaltd for plugins and is not implemented by
+    bindings. It is registered by gestaltd for apps and is not implemented by
     S3 providers.
     """
 
@@ -385,7 +385,7 @@ class S3ObjectAccessStub(object):
 
 class S3ObjectAccessServicer(object):
     """S3ObjectAccess models host-mediated object access for plugin-scoped S3
-    bindings. It is registered by gestaltd for plugins and is not implemented by
+    bindings. It is registered by gestaltd for apps and is not implemented by
     S3 providers.
     """
 
@@ -413,7 +413,7 @@ def add_S3ObjectAccessServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class S3ObjectAccess(object):
     """S3ObjectAccess models host-mediated object access for plugin-scoped S3
-    bindings. It is registered by gestaltd for plugins and is not implemented by
+    bindings. It is registered by gestaltd for apps and is not implemented by
     S3 providers.
     """
 

@@ -18,9 +18,9 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
 
@@ -31,12 +31,12 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
-			{Plugin: "roadmap", Operation: "sync"},
+			{App: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
 	})
@@ -52,7 +52,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 			"cron":     "*/5 * * * *",
 			"timezone": "UTC",
 			"target": map[string]any{
-				"plugin": map[string]any{
+				"app": map[string]any{
 					"name":      "roadmap",
 					"operation": "sync",
 					"input": map[string]any{
@@ -75,18 +75,18 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 			Cron     string `json:"cron"`
 			Timezone string `json:"timezone"`
 			Target   struct {
-				Plugin struct {
+				App struct {
 					Name      string         `json:"name"`
 					Operation string         `json:"operation"`
 					Input     map[string]any `json:"input"`
-				} `json:"plugin"`
+				} `json:"app"`
 			} `json:"target"`
 		} `json:"schedule"`
 	}
 	if err := json.Unmarshal([]byte(resp.Body), &body); err != nil {
 		t.Fatalf("decode response body: %v", err)
 	}
-	if body.Schedule.Cron != "*/5 * * * *" || body.Schedule.Timezone != "UTC" || body.Schedule.Target.Plugin.Name != "roadmap" || body.Schedule.Target.Plugin.Operation != "sync" {
+	if body.Schedule.Cron != "*/5 * * * *" || body.Schedule.Timezone != "UTC" || body.Schedule.Target.App.Name != "roadmap" || body.Schedule.Target.App.Operation != "sync" {
 		t.Fatalf("schedule response = %#v", body.Schedule)
 	}
 	secondResp, err := runtime.ExecuteTool(context.Background(), req)
@@ -121,18 +121,18 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
 	}
 	upsert := workflowProvider.upsertedSchedules[0]
-	if upsert.Target.Plugin == nil || upsert.Target.Plugin.PluginName != "roadmap" || upsert.Target.Plugin.Operation != "sync" {
+	if upsert.Target.App == nil || upsert.Target.App.AppName != "roadmap" || upsert.Target.App.Operation != "sync" {
 		t.Fatalf("upsert target = %#v", upsert.Target)
 	}
 	ref, err := workflowProvider.GetExecutionReference(context.Background(), upsert.ExecutionRef)
 	if err != nil {
 		t.Fatalf("GetExecutionReference: %v", err)
 	}
-	if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
+	if len(ref.Permissions) != 1 || ref.Permissions[0].App != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
 		t.Fatalf("execution ref permissions = %#v", ref.Permissions)
 	}
-	if ref.CallerPluginName != "agent:managed" {
-		t.Fatalf("execution ref caller = %q, want agent:managed", ref.CallerPluginName)
+	if ref.CallerAppName != "agent:managed" {
+		t.Fatalf("execution ref caller = %q, want agent:managed", ref.CallerAppName)
 	}
 }
 
@@ -142,22 +142,22 @@ func TestAgentRuntimeWorkflowSystemToolStartsRunWithInheritedOutputDelivery(t *t
 	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
 	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
 	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
-		CallerPluginName: "slack",
+		CallerAppName: "slack",
 		Permissions: []core.AccessPermission{
-			{Plugin: "managed"},
-			{Plugin: "roadmap", Operations: []string{"sync"}},
-			{Plugin: "notification", Operations: []string{"reply"}},
+			{App: "managed"},
+			{App: "roadmap", Operations: []string{"sync"}},
+			{App: "notification", Operations: []string{"reply"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
-			{Plugin: "roadmap", Operation: "sync"},
+			{App: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
 		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.PluginTarget{
-				PluginName: "notification",
-				Operation:  "reply",
-				Input:      map[string]any{"format": "plain"},
+			Target: coreworkflow.AppTarget{
+				AppName:   "notification",
+				Operation: "reply",
+				Input:     map[string]any{"format": "plain"},
 			},
 			CredentialMode: core.ConnectionModeNone,
 			InputBindings: []coreworkflow.OutputBinding{
@@ -180,7 +180,7 @@ func TestAgentRuntimeWorkflowSystemToolStartsRunWithInheritedOutputDelivery(t *t
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Investigate the deployment and summarize the result.",
-					"toolRefs": []any{map[string]any{"plugin": "roadmap", "operation": "sync"}},
+					"toolRefs": []any{map[string]any{"app": "roadmap", "operation": "sync"}},
 				},
 			},
 			"deliverResultToCaller": true,
@@ -228,9 +228,9 @@ func TestAgentRuntimeWorkflowSystemToolStartsRunWithInheritedOutputDelivery(t *t
 		t.Fatalf("GetExecutionReference: %v", err)
 	}
 	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
-		{Plugin: "managed"},
-		{Plugin: "notification", Operations: []string{"reply"}},
-		{Plugin: "roadmap", Operations: []string{"sync"}},
+		{App: "managed"},
+		{App: "notification", Operations: []string{"reply"}},
+		{App: "roadmap", Operations: []string{"sync"}},
 	})
 	replayResp, err := agentRuntime.ExecuteTool(context.Background(), req)
 	if err != nil {
@@ -271,7 +271,7 @@ func TestAgentRuntimeWorkflowSystemToolStartsRunWithInheritedOutputDelivery(t *t
 	p := principal.Canonicalize(&principal.Principal{
 		SubjectID: principal.UserSubjectID("ada"),
 		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
-			{Plugin: "notification", Operations: []string{"reply"}},
+			{App: "notification", Operations: []string{"reply"}},
 		}),
 	})
 	childResp, err := childRuntime.Invoke(principal.WithPrincipal(context.Background(), p), coreworkflow.InvokeOperationRequest{
@@ -296,23 +296,23 @@ func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithInheritedOutputDelive
 	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
 	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
 	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
-		CallerPluginName: "slack",
+		CallerAppName: "slack",
 		Permissions: []core.AccessPermission{
-			{Plugin: "managed"},
-			{Plugin: "datadog", Operations: []string{"queryLogs"}},
-			{Plugin: "github", Operations: []string{"createPullRequest"}},
-			{Plugin: "notification", Operations: []string{"reply"}},
+			{App: "managed"},
+			{App: "datadog", Operations: []string{"queryLogs"}},
+			{App: "github", Operations: []string{"createPullRequest"}},
+			{App: "notification", Operations: []string{"reply"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
-			{Plugin: "datadog", Operation: "queryLogs"},
-			{Plugin: "github", Operation: "createPullRequest"},
+			{App: "datadog", Operation: "queryLogs"},
+			{App: "github", Operation: "createPullRequest"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
 		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.PluginTarget{
-				PluginName: "notification",
-				Operation:  "reply",
+			Target: coreworkflow.AppTarget{
+				AppName:   "notification",
+				Operation: "reply",
 			},
 			InputBindings: []coreworkflow.OutputBinding{
 				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
@@ -338,14 +338,14 @@ func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithInheritedOutputDelive
 							"id":     "diagnosis",
 							"prompt": "Diagnose the Datadog alert.",
 							"toolRefs": []any{
-								map[string]any{"plugin": "datadog", "operation": "queryLogs"},
+								map[string]any{"app": "datadog", "operation": "queryLogs"},
 							},
 						},
 						map[string]any{
 							"id":     "pr_fix",
 							"prompt": "Open a PR if the diagnosis is actionable.",
 							"toolRefs": []any{
-								map[string]any{"plugin": "github", "operation": "createPullRequest"},
+								map[string]any{"app": "github", "operation": "createPullRequest"},
 							},
 						},
 					},
@@ -374,7 +374,7 @@ func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithInheritedOutputDelive
 		t.Fatalf("diagnosis inherited delivery = %#v, want nil", started.Target.Agent.Steps[0].OutputDelivery)
 	}
 	delivery := started.Target.Agent.Steps[1].OutputDelivery
-	if delivery == nil || delivery.Target.PluginName != "notification" || delivery.Target.Operation != "reply" {
+	if delivery == nil || delivery.Target.AppName != "notification" || delivery.Target.Operation != "reply" {
 		t.Fatalf("final step inherited delivery = %#v", delivery)
 	}
 	if got := delivery.InputBindings[1].Value.Literal; got != "signed-parent-reply-ref" {
@@ -385,10 +385,10 @@ func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithInheritedOutputDelive
 		t.Fatalf("GetExecutionReference: %v", err)
 	}
 	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
-		{Plugin: "datadog", Operations: []string{"queryLogs"}},
-		{Plugin: "github", Operations: []string{"createPullRequest"}},
-		{Plugin: "managed"},
-		{Plugin: "notification", Operations: []string{"reply"}},
+		{App: "datadog", Operations: []string{"queryLogs"}},
+		{App: "github", Operations: []string{"createPullRequest"}},
+		{App: "managed"},
+		{App: "notification", Operations: []string{"reply"}},
 	})
 }
 
@@ -398,19 +398,19 @@ func TestAgentRuntimeWorkflowSystemToolRejectsInheritedOutputDeliveryForConditio
 	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
 	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
 	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
-		CallerPluginName: "slack",
+		CallerAppName: "slack",
 		Permissions: []core.AccessPermission{
-			{Plugin: "managed"},
-			{Plugin: "notification", Operations: []string{"reply"}},
+			{App: "managed"},
+			{App: "notification", Operations: []string{"reply"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
 		},
 		Tools: []coreagent.Tool{workflowTool},
 		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.PluginTarget{
-				PluginName: "notification",
-				Operation:  "reply",
+			Target: coreworkflow.AppTarget{
+				AppName:   "notification",
+				Operation: "reply",
 			},
 			InputBindings: []coreworkflow.OutputBinding{
 				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
@@ -470,10 +470,10 @@ func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithStepOutputDelivery(t 
 	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
 	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
 	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
-		CallerPluginName: "slack",
+		CallerAppName: "slack",
 		Permissions: []core.AccessPermission{
-			{Plugin: "managed"},
-			{Plugin: "notification", Operations: []string{"reply"}},
+			{App: "managed"},
+			{App: "notification", Operations: []string{"reply"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
@@ -533,7 +533,7 @@ func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithStepOutputDelivery(t 
 		t.Fatalf("started target agent steps = %#v", started.Target.Agent)
 	}
 	delivery := started.Target.Agent.Steps[0].OutputDelivery
-	if delivery == nil || delivery.Target.PluginName != "notification" || delivery.Target.Operation != "reply" {
+	if delivery == nil || delivery.Target.AppName != "notification" || delivery.Target.Operation != "reply" {
 		t.Fatalf("step output delivery = %#v", delivery)
 	}
 	if got := delivery.InputBindings[1].Value.Literal; got != "explicit-reply-ref" {
@@ -548,19 +548,19 @@ func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
 	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
 	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{
-			{Plugin: "managed"},
-			{Plugin: "datadog", Operations: []string{"queryLogs"}},
-			{Plugin: "notification", Operations: []string{"reply"}},
+			{App: "managed"},
+			{App: "datadog", Operations: []string{"queryLogs"}},
+			{App: "notification", Operations: []string{"reply"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
-			{Plugin: "datadog", Operation: "queryLogs"},
+			{App: "datadog", Operation: "queryLogs"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
 		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.PluginTarget{
-				PluginName: "notification",
-				Operation:  "reply",
+			Target: coreworkflow.AppTarget{
+				AppName:   "notification",
+				Operation: "reply",
 			},
 			InputBindings: []coreworkflow.OutputBinding{
 				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
@@ -586,7 +586,7 @@ func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
 							"id":     "diagnosis",
 							"prompt": "Diagnose the Datadog alert.",
 							"toolRefs": []any{
-								map[string]any{"plugin": "datadog", "operation": "queryLogs"},
+								map[string]any{"app": "datadog", "operation": "queryLogs"},
 							},
 						},
 					},
@@ -612,7 +612,7 @@ func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
 						ID       string `json:"id"`
 						Prompt   string `json:"prompt"`
 						ToolRefs []struct {
-							Plugin    string `json:"plugin"`
+							App       string `json:"app"`
 							Operation string `json:"operation"`
 						} `json:"toolRefs"`
 					} `json:"steps"`
@@ -626,7 +626,7 @@ func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
 	if len(body.Run.Target.Agent.Steps) != 1 || body.Run.Target.Agent.Steps[0].ID != "diagnosis" || body.Run.Target.Agent.Steps[0].Prompt == "" {
 		t.Fatalf("run target steps = %#v", body.Run.Target.Agent.Steps)
 	}
-	if len(body.Run.Target.Agent.Steps[0].ToolRefs) != 1 || body.Run.Target.Agent.Steps[0].ToolRefs[0].Plugin != "datadog" {
+	if len(body.Run.Target.Agent.Steps[0].ToolRefs) != 1 || body.Run.Target.Agent.Steps[0].ToolRefs[0].App != "datadog" {
 		t.Fatalf("step tool refs = %#v", body.Run.Target.Agent.Steps[0].ToolRefs)
 	}
 	if len(workflowProvider.startedRuns) != 1 {
@@ -661,8 +661,8 @@ func TestWorkflowSystemToolStartRunSchemaMatchesV1Contract(t *testing.T) {
 	if !ok {
 		t.Fatalf("target properties = %#v", target["properties"])
 	}
-	if _, ok := targetTargetProps["plugin"]; ok {
-		t.Fatalf("runs.start target schema exposes plugin target: %#v", targetTargetProps)
+	if _, ok := targetTargetProps["app"]; ok {
+		t.Fatalf("runs.start target schema exposes app target: %#v", targetTargetProps)
 	}
 	if _, ok := targetTargetProps["agent"]; !ok {
 		t.Fatalf("runs.start target schema missing agent target: %#v", targetTargetProps)
@@ -689,10 +689,10 @@ func TestAgentRuntimeWorkflowSystemToolStartRunRejectsInvalidCallerDelivery(t *t
 	agentRuntime, _ := newWorkflowSystemToolRuntime(t)
 	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
 	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
-		Permissions: []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
+		Permissions: []core.AccessPermission{{App: "roadmap", Operations: []string{"sync"}}},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
-			{Plugin: "roadmap", Operation: "sync"},
+			{App: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
 	})
@@ -712,7 +712,7 @@ func TestAgentRuntimeWorkflowSystemToolStartRunRejectsInvalidCallerDelivery(t *t
 			name: "missing inherited output delivery",
 			args: map[string]any{
 				"deliverResultToCaller": true,
-				"target":                map[string]any{"agent": map[string]any{"prompt": "run", "toolRefs": []any{map[string]any{"plugin": "roadmap", "operation": "sync"}}}},
+				"target":                map[string]any{"agent": map[string]any{"prompt": "run", "toolRefs": []any{map[string]any{"app": "roadmap", "operation": "sync"}}}},
 			},
 		},
 		{
@@ -723,16 +723,16 @@ func TestAgentRuntimeWorkflowSystemToolStartRunRejectsInvalidCallerDelivery(t *t
 			},
 		},
 		{
-			name: "direct plugin target",
+			name: "direct app target",
 			args: map[string]any{
-				"target": map[string]any{"plugin": map[string]any{"name": "roadmap", "operation": "sync"}},
+				"target": map[string]any{"app": map[string]any{"name": "roadmap", "operation": "sync"}},
 			},
 		},
 		{
 			name: "non boolean callback flag",
 			args: map[string]any{
 				"deliverResultToCaller": "true",
-				"target":                map[string]any{"agent": map[string]any{"prompt": "run", "toolRefs": []any{map[string]any{"plugin": "roadmap", "operation": "sync"}}}},
+				"target":                map[string]any{"agent": map[string]any{"prompt": "run", "toolRefs": []any{map[string]any{"app": "roadmap", "operation": "sync"}}}},
 			},
 		},
 	}
@@ -762,14 +762,14 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 	runTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolRunsStart)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{
-			{Plugin: "roadmap", Operations: []string{"sync"}},
-			{Plugin: "linear", Operations: []string{"viewer"}},
+			{App: "roadmap", Operations: []string{"sync"}},
+			{App: "linear", Operations: []string{"viewer"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
-			{Plugin: "roadmap", Operation: "sync"},
+			{App: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{definitionTool, scheduleTool, runTool},
 	})
@@ -787,7 +787,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 					"provider": "managed",
 					"prompt":   "Sync the roadmap and open the needed code changes.",
 					"toolRefs": []any{
-						map[string]any{"plugin": "roadmap", "operation": "sync"},
+						map[string]any{"app": "roadmap", "operation": "sync"},
 						map[string]any{"system": coreagent.SystemToolWorkflow, "operation": workflowSystemToolSchedulesCreate},
 					},
 				},
@@ -824,8 +824,8 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 		t.Fatalf("GetExecutionReference(definition): %v", err)
 	}
 	assertWorkflowSystemPermissions(t, definitionRef.Permissions, []core.AccessPermission{
-		{Plugin: "managed"},
-		{Plugin: "roadmap", Operations: []string{"sync"}},
+		{App: "managed"},
+		{App: "roadmap", Operations: []string{"sync"}},
 	})
 
 	scheduleResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
@@ -876,8 +876,8 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 		t.Fatalf("schedule ref source definition id = %q, want %q", scheduleRef.SourceDefinitionID, definitionID)
 	}
 	assertWorkflowSystemPermissions(t, scheduleRef.Permissions, []core.AccessPermission{
-		{Plugin: "managed"},
-		{Plugin: "roadmap", Operations: []string{"sync"}},
+		{App: "managed"},
+		{App: "roadmap", Operations: []string{"sync"}},
 	})
 
 	runResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
@@ -909,8 +909,8 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 		t.Fatalf("run ref source definition id = %q, want %q", runRef.SourceDefinitionID, definitionID)
 	}
 	assertWorkflowSystemPermissions(t, runRef.Permissions, []core.AccessPermission{
-		{Plugin: "managed"},
-		{Plugin: "roadmap", Operations: []string{"sync"}},
+		{App: "managed"},
+		{App: "roadmap", Operations: []string{"sync"}},
 	})
 }
 
@@ -922,21 +922,21 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionWithInheritedAgentToolRe
 	scheduleTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{
-			{Plugin: "roadmap", Operations: []string{"sync"}},
-			{Plugin: "linear", Operations: []string{"viewer"}},
-			{Plugin: "slack", Operations: []string{"chat.postMessage"}},
+			{App: "roadmap", Operations: []string{"sync"}},
+			{App: "linear", Operations: []string{"viewer"}},
+			{App: "slack", Operations: []string{"chat.postMessage"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
-			{Plugin: "roadmap", Operation: "sync"},
-			{Plugin: "linear", Operation: "viewer"},
-			{Plugin: "*"},
+			{App: "roadmap", Operation: "sync"},
+			{App: "linear", Operation: "viewer"},
+			{App: "*"},
 		},
 		Tools: []coreagent.Tool{
 			definitionTool,
 			scheduleTool,
-			{Target: coreagent.ToolTarget{Plugin: "slack", Operation: "chat.postMessage"}},
+			{Target: coreagent.ToolTarget{App: "slack", Operation: "chat.postMessage"}},
 		},
 	})
 
@@ -980,18 +980,18 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionWithInheritedAgentToolRe
 	wantRefs := []coreagent.ToolRef{
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
-		{Plugin: "roadmap", Operation: "sync"},
-		{Plugin: "linear", Operation: "viewer"},
-		{Plugin: "slack", Operation: "chat.postMessage"},
+		{App: "roadmap", Operation: "sync"},
+		{App: "linear", Operation: "viewer"},
+		{App: "slack", Operation: "chat.postMessage"},
 	}
 	if !reflect.DeepEqual(ref.Target.Agent.ToolRefs, wantRefs) {
 		t.Fatalf("inherited tool refs = %#v, want %#v", ref.Target.Agent.ToolRefs, wantRefs)
 	}
 	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
-		{Plugin: "linear", Operations: []string{"viewer"}},
-		{Plugin: "managed"},
-		{Plugin: "roadmap", Operations: []string{"sync"}},
-		{Plugin: "slack", Operations: []string{"chat.postMessage"}},
+		{App: "linear", Operations: []string{"viewer"}},
+		{App: "managed"},
+		{App: "roadmap", Operations: []string{"sync"}},
+		{App: "slack", Operations: []string{"chat.postMessage"}},
 	})
 }
 
@@ -1002,12 +1002,12 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithInheritedAgentToolRefs
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
-			{Plugin: "roadmap", Operation: "sync"},
+			{App: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
 	})
@@ -1045,7 +1045,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithInheritedAgentToolRefs
 	}
 	wantRefs := []coreagent.ToolRef{
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
-		{Plugin: "roadmap", Operation: "sync"},
+		{App: "roadmap", Operation: "sync"},
 	}
 	if !reflect.DeepEqual(upsert.Target.Agent.ToolRefs, wantRefs) {
 		t.Fatalf("inherited tool refs = %#v, want %#v", upsert.Target.Agent.ToolRefs, wantRefs)
@@ -1066,15 +1066,15 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithDelegatedCallerToolRef
 		ID:   "repo:valon-technologies/toolshed",
 	}
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
-		CallerPluginName: "slack",
+		CallerAppName: "slack",
 		Permissions: []core.AccessPermission{{
-			Plugin:     "github",
+			App:        "github",
 			Operations: []string{"bot.createPullRequest"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
 			{
-				Plugin:                "github",
+				App:                   "github",
 				Operation:             "bot.createPullRequest",
 				CredentialMode:        core.ConnectionModeNone,
 				RunAs:                 runAs,
@@ -1117,7 +1117,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithDelegatedCallerToolRef
 	}
 	wantRefs := []coreagent.ToolRef{
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
-		{Plugin: "github", Operation: "bot.createPullRequest"},
+		{App: "github", Operation: "bot.createPullRequest"},
 	}
 	if !reflect.DeepEqual(upsert.Target.Agent.ToolRefs, wantRefs) {
 		t.Fatalf("inherited tool refs = %#v, want %#v", upsert.Target.Agent.ToolRefs, wantRefs)
@@ -1126,8 +1126,8 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithDelegatedCallerToolRef
 	if err != nil {
 		t.Fatalf("GetExecutionReference(schedule): %v", err)
 	}
-	if ref.CallerPluginName != "slack" {
-		t.Fatalf("schedule caller plugin = %q, want slack", ref.CallerPluginName)
+	if ref.CallerAppName != "slack" {
+		t.Fatalf("schedule caller app = %q, want slack", ref.CallerAppName)
 	}
 }
 
@@ -1138,12 +1138,12 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithExplicitEmptyAgentTool
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
-			{Plugin: "roadmap", Operation: "sync"},
+			{App: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
 	})
@@ -1187,7 +1187,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithExplicitEmptyAgentTool
 	if err != nil {
 		t.Fatalf("GetExecutionReference: %v", err)
 	}
-	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{{Plugin: "managed"}})
+	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{{App: "managed"}})
 }
 
 func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T) {
@@ -1199,13 +1199,13 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T)
 	updateTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolDefinitionsUpdate)
 	deleteTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolDefinitionsDelete)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
-		Permissions: []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
+		Permissions: []core.AccessPermission{{App: "roadmap", Operations: []string{"sync"}}},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsGet},
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsUpdate},
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsDelete},
-			{Plugin: "roadmap", Operation: "sync"},
+			{App: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{createTool, getTool, updateTool, deleteTool},
 	})
@@ -1277,14 +1277,14 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T)
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsGet},
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsUpdate},
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsDelete},
-		{Plugin: "roadmap", Operation: "sync"},
+		{App: "roadmap", Operation: "sync"},
 	}
 	if !reflect.DeepEqual(ref.Target.Agent.ToolRefs, wantRefs) {
 		t.Fatalf("updated definition inherited tool refs = %#v, want %#v", ref.Target.Agent.ToolRefs, wantRefs)
 	}
 	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
-		{Plugin: "managed"},
-		{Plugin: "roadmap", Operations: []string{"sync"}},
+		{App: "managed"},
+		{App: "roadmap", Operations: []string{"sync"}},
 	})
 
 	getResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
@@ -1342,14 +1342,14 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesSchedule(t *testing.T) {
 	updateTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesUpdate)
 	deleteTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesDelete)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
-		Permissions: []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
+		Permissions: []core.AccessPermission{{App: "roadmap", Operations: []string{"sync"}}},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesGet},
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesUpdate},
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesDelete},
-			{Plugin: "roadmap", Operation: "sync"},
+			{App: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{definitionTool, createTool, getTool, updateTool, deleteTool},
 	})
@@ -1495,15 +1495,15 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
 	listTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolRunsList)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
-		Permissions: []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
+		Permissions: []core.AccessPermission{{App: "roadmap", Operations: []string{"sync"}}},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsList},
-			{Plugin: "roadmap", Operation: "sync"},
+			{App: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{listTool},
 	})
-	roadmapTarget := coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{PluginName: "roadmap", Operation: "sync"}}
-	notificationTarget := coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"}}
+	roadmapTarget := coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "roadmap", Operation: "sync"}}
+	notificationTarget := coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "notification", Operation: "reply"}}
 	workflowProvider.runs = map[string]*coreworkflow.Run{
 		"run-a": {ID: "run-a", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, ExecutionRef: "ref-a"},
 		"run-b": {ID: "run-b", Status: coreworkflow.RunStatusSucceeded, Target: notificationTarget, ExecutionRef: "ref-b"},
@@ -1532,7 +1532,7 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 		RunGrant:     runGrant,
 		Arguments: map[string]any{
 			"pageSize": 1,
-			"plugin":   "roadmap",
+			"app":      "roadmap",
 			"status":   string(coreworkflow.RunStatusSucceeded),
 		},
 	})
@@ -1562,7 +1562,7 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 		Arguments: map[string]any{
 			"pageSize":  1,
 			"pageToken": firstBody.NextPageToken,
-			"plugin":    "roadmap",
+			"app":       "roadmap",
 			"status":    string(coreworkflow.RunStatusSucceeded),
 		},
 	})
@@ -1590,7 +1590,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedDefinitionTarget(t *tes
 	definitionTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolDefinitionsCreate)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{
-			{Plugin: "roadmap", Operations: []string{"sync"}},
+			{App: "roadmap", Operations: []string{"sync"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
@@ -1606,7 +1606,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedDefinitionTarget(t *tes
 			name: "plugin target",
 			arguments: map[string]any{
 				"target": map[string]any{
-					"plugin": map[string]any{
+					"app": map[string]any{
 						"name":      "roadmap",
 						"operation": "sync",
 					},
@@ -1674,7 +1674,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsInvalidScheduleDefinitionArguments
 				"cron":         "*/5 * * * *",
 				"definitionId": "workflow_definition:def-1",
 				"target": map[string]any{
-					"plugin": map[string]any{
+					"app": map[string]any{
 						"name":      "roadmap",
 						"operation": "sync",
 					},
@@ -1707,7 +1707,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedScheduleTarget(t *testi
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
@@ -1725,7 +1725,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedScheduleTarget(t *testi
 		Arguments: map[string]any{
 			"cron": "*/5 * * * *",
 			"target": map[string]any{
-				"plugin": map[string]any{
+				"app": map[string]any{
 					"name":      "roadmap",
 					"operation": "sync",
 				},
@@ -1747,12 +1747,12 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
-			{Plugin: "roadmap", Operation: "sync"},
+			{App: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
 	})
@@ -1771,7 +1771,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 						"prompt":   "Sync roadmap",
 						"toolRefs": []any{
 							map[string]any{
-								"plugin":         "roadmap",
+								"app":            "roadmap",
 								"operation":      "sync",
 								"credentialMode": "subject",
 							},
@@ -1789,7 +1789,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 						"provider": "managed",
 						"prompt":   "Sync roadmap",
 						"tools": []any{
-							map[string]any{"plugin": "roadmap", "operation": "sync"},
+							map[string]any{"app": "roadmap", "operation": "sync"},
 						},
 					},
 				},
@@ -1912,9 +1912,9 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 		Workflow:     workflowRuntime,
 		Agent:        runtime,
 		AgentManager: agentManager,
-		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {
-				{Plugin: "notification", Operation: "reply", CredentialMode: core.ConnectionModeNone},
+				{App: "notification", Operation: "reply", CredentialMode: core.ConnectionModeNone},
 			},
 		},
 	})
@@ -2005,7 +2005,7 @@ func (p *workflowSystemToolRecordingProvider) ListRuns(_ context.Context, req co
 	sort.Strings(ids)
 	for _, id := range ids {
 		run := p.runs[id]
-		if req.TargetPlugin != "" && (run.Target.Plugin == nil || run.Target.Plugin.PluginName != req.TargetPlugin) {
+		if req.TargetApp != "" && (run.Target.App == nil || run.Target.App.AppName != req.TargetApp) {
 			continue
 		}
 		if req.Status != "" && run.Status != req.Status {
@@ -2138,7 +2138,7 @@ func (p *workflowSystemToolRecordingProvider) Ping(context.Context) error { retu
 func (p *workflowSystemToolRecordingProvider) Close() error               { return nil }
 
 type workflowSystemRunGrantScope struct {
-	CallerPluginName        string
+	CallerAppName           string
 	Permissions             []core.AccessPermission
 	ToolRefs                []coreagent.ToolRef
 	Tools                   []coreagent.Tool
@@ -2153,7 +2153,7 @@ func mustMintWorkflowSystemRunGrant(t *testing.T, runtime *agentRuntime, scope w
 		ProviderName:            "managed",
 		SessionID:               "session-1",
 		TurnID:                  "turn-1",
-		CallerPluginName:        strings.TrimSpace(scope.CallerPluginName),
+		CallerAppName:           strings.TrimSpace(scope.CallerAppName),
 		SubjectID:               principal.UserSubjectID("ada"),
 		SubjectKind:             string(principal.KindUser),
 		CredentialSubjectID:     principal.UserSubjectID("ada"),

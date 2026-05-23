@@ -16,7 +16,7 @@ mod generated;
 /// IndexedDB-style datastore client and provider helpers.
 pub mod indexeddb;
 mod invoker;
-mod plugin_runtime;
+mod app_runtime;
 mod protocol;
 mod provider_server;
 mod router;
@@ -104,21 +104,21 @@ pub use indexeddb::{
     TransactionIndexClient, TransactionMode, TransactionObjectStore, TransactionOptions,
     compare_indexeddb_values, indexeddb_range_bounds, new_indexeddb_cursor_snapshot,
 };
-pub use invoker::{InvocationGrant, InvokeOptions, PluginInvoker, PluginInvokerError};
-pub use plugin_runtime::{
-    GetPluginRuntimeSessionRequest, HostedPlugin, ListPluginRuntimeSessionsRequest,
-    ListPluginRuntimeSessionsResponse, PluginRuntimeEgressMode, PluginRuntimeImagePullAuth,
-    PluginRuntimeProvider, PluginRuntimeSession, PluginRuntimeSessionLifecycle,
-    PluginRuntimeSupport, PreparePluginRuntimeWorkspaceRequest,
-    PreparePluginRuntimeWorkspaceResponse, RemovePluginRuntimeWorkspaceRequest,
-    StartHostedPluginRequest, StartPluginRuntimeSessionRequest, StopPluginRuntimeSessionRequest,
+pub use invoker::{InvocationGrant, InvokeOptions, AppInvoker, AppInvokerError};
+pub use app_runtime::{
+    GetAppRuntimeSessionRequest, HostedApp, ListAppRuntimeSessionsRequest,
+    ListAppRuntimeSessionsResponse, AppRuntimeEgressMode, AppRuntimeImagePullAuth,
+    AppRuntimeProvider, AppRuntimeSession, AppRuntimeSessionLifecycle,
+    AppRuntimeSupport, PrepareAppRuntimeWorkspaceRequest,
+    PrepareAppRuntimeWorkspaceResponse, RemoveAppRuntimeWorkspaceRequest,
+    StartHostedAppRequest, StartAppRuntimeSessionRequest, StopAppRuntimeSessionRequest,
 };
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
 pub use runtime_log_host::{
-    AppendPluginRuntimeLogsRequest, AppendPluginRuntimeLogsResponse, ENV_RUNTIME_SESSION_ID,
-    PluginRuntimeLogEntry, RuntimeLogHost, RuntimeLogHostError, RuntimeLogStream,
+    AppendAppRuntimeLogsRequest, AppendAppRuntimeLogsResponse, ENV_RUNTIME_SESSION_ID,
+    AppRuntimeLogEntry, RuntimeLogHost, RuntimeLogHostError, RuntimeLogStream,
     runtime_session_id,
 };
 pub use s3::{S3, S3Error, S3Provider};
@@ -127,7 +127,7 @@ pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
 pub use workflow::{
     BoundWorkflowAgentTarget, BoundWorkflowDefinition, BoundWorkflowEventTrigger,
-    BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowSchedule, BoundWorkflowTarget,
+    BoundWorkflowAppTarget, BoundWorkflowRun, BoundWorkflowSchedule, BoundWorkflowTarget,
     CancelWorkflowProviderRunRequest, DeleteWorkflowProviderEventTriggerRequest,
     DeleteWorkflowProviderScheduleRequest, GetWorkflowExecutionReferenceRequest,
     GetWorkflowProviderEventTriggerRequest, GetWorkflowProviderRunRequest,
@@ -283,11 +283,11 @@ macro_rules! export_s3_provider {
 
 /// Exports the plugin-runtime-provider entrypoint expected by `gestaltd`.
 #[macro_export]
-macro_rules! export_plugin_runtime_provider {
+macro_rules! export_app_runtime_provider {
     (constructor = $constructor:path $(,)?) => {
         pub fn __gestalt_serve_runtime(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_plugin_runtime_provider(provider)
+            $crate::runtime::run_app_runtime_provider(provider)
         }
     };
 }

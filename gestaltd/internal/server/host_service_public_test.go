@@ -18,9 +18,9 @@ func TestUnifiedHostServiceHandlerReturnsVerifierError(t *testing.T) {
 	s := &Server{publicHostServices: registry}
 
 	handler, err := s.unifiedHostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
-		PluginName: "support",
-		SessionID:  "session-1",
-		Service:    "cache",
+		AppName:   "support",
+		SessionID: "session-1",
+		Service:   "cache",
 	}, "/gestalt.provider.v1.Cache/Get")
 	if err == nil || !strings.Contains(err.Error(), `runtime session "session-1" is not active`) {
 		t.Fatalf("unifiedHostServiceHandler err = %v, want verifier failure", err)
@@ -38,9 +38,9 @@ func TestUnifiedHostServiceHandlerRoutesByGRPCMethod(t *testing.T) {
 	s := &Server{publicHostServices: registry}
 
 	handler, err := s.unifiedHostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
-		PluginName: "support",
-		SessionID:  "session-1",
-		Service:    "host_service",
+		AppName:   "support",
+		SessionID: "session-1",
+		Service:   "host_service",
 	}, "/gestalt.provider.v1.Cache/Get")
 	if err != nil {
 		t.Fatalf("unifiedHostServiceHandler: %v", err)
@@ -50,9 +50,9 @@ func TestUnifiedHostServiceHandlerRoutesByGRPCMethod(t *testing.T) {
 	}
 
 	handler, err = s.unifiedHostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
-		PluginName: "support",
-		SessionID:  "session-1",
-		Service:    "host_service",
+		AppName:   "support",
+		SessionID: "session-1",
+		Service:   "host_service",
 	}, "/gestalt.provider.v1.S3/ListObjects")
 	if err != nil {
 		t.Fatalf("unifiedHostServiceHandler unregistered method: %v", err)
@@ -87,7 +87,7 @@ func TestValidatePublicHostServicesAllowsDuplicateVerifiedServices(t *testing.T)
 
 func testPublicHostService(pluginName string, verifier runtimehost.PublicHostServiceSessionVerifier) runtimehost.PublicHostService {
 	return runtimehost.PublicHostService{
-		PluginName:      pluginName,
+		AppName:         pluginName,
 		SessionVerifier: verifier,
 		Service:         testHostService(),
 	}

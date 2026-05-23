@@ -42,7 +42,7 @@ jobs:
         sdk/go
         sdk/proto
       component-summary: |
-        Go SDK for building against Gestalt's plugin and protocol surfaces, including the generated protobuf types used by the server and plugins.
+        Go SDK for building against Gestalt's app and protocol surfaces, including the generated protobuf types used by the server and apps.
       install-markdown: |
         - Go modules: `go get github.com/valon-technologies/gestalt/sdk/go@v${version}`
         - Package docs: [pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go@v${version}](https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go@v${version})

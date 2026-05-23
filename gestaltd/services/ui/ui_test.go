@@ -106,12 +106,12 @@ func TestDirHandler_ServesFilesAndFallbacks(t *testing.T) {
 		{
 			name: "html fallback preferred over directory",
 			files: map[string]string{
-				"index.html":                    "<html>home</html>",
-				"integrations.html":             "<html>integrations</html>",
-				"integrations/__next._full.txt": "metadata",
+				"index.html":            "<html>home</html>",
+				"apps.html":             "<html>apps</html>",
+				"apps/__next._full.txt": "metadata",
 			},
-			path: "/integrations",
-			want: "integrations",
+			path: "/apps",
+			want: "apps",
 		},
 		{
 			name: "directory index fallback",

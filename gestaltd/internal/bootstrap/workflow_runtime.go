@@ -207,7 +207,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	agentManager := r.agentManager
 	r.mu.RUnlock()
 	if workflowTargetHasMixedKinds(req.Target) {
-		return nil, fmt.Errorf("workflow target cannot include both agent and plugin fields")
+		return nil, fmt.Errorf("workflow target cannot include both agent and app fields")
 	}
 	if req.Target.Agent != nil {
 		return r.invokeAgent(ctx, req, agentManager, invoker)
@@ -215,8 +215,8 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	if invoker == nil {
 		return nil, fmt.Errorf("workflow runtime invoker is not configured")
 	}
-	if req.Target.Plugin == nil || strings.TrimSpace(req.Target.Plugin.PluginName) == "" {
-		return nil, fmt.Errorf("workflow target plugin is required")
+	if req.Target.App == nil || strings.TrimSpace(req.Target.App.AppName) == "" {
+		return nil, fmt.Errorf("workflow target app is required")
 	}
 	principalValue := principal.Canonicalized(principal.FromContext(ctx))
 	target := req.Target
@@ -233,9 +233,9 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		if workflowExecutionRefAllowsInternalConnectionAccess(resolvedRef) {
 			ctx = invocation.WithInternalConnectionAccess(ctx)
 		}
-		if target.Plugin != nil {
-			invokeConnection = strings.TrimSpace(target.Plugin.Connection)
-			invokeInstance = strings.TrimSpace(target.Plugin.Instance)
+		if target.App != nil {
+			invokeConnection = strings.TrimSpace(target.App.Connection)
+			invokeInstance = strings.TrimSpace(target.App.Instance)
 		}
 	} else if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)
@@ -247,10 +247,10 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		ctx = invocation.WithConnection(ctx, invokeConnection)
 	}
 	params := workflowInvocationParams(req)
-	if target.Plugin == nil {
-		return nil, fmt.Errorf("workflow target plugin is required")
+	if target.App == nil {
+		return nil, fmt.Errorf("workflow target app is required")
 	}
-	pluginTarget := target.Plugin
+	pluginTarget := target.App
 	credentialMode := core.NormalizeOptionalConnectionMode(pluginTarget.CredentialMode)
 	switch credentialMode {
 	case "":
@@ -259,7 +259,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	default:
 		return nil, fmt.Errorf("%w: workflow target credential_mode %q is not supported", invocation.ErrInvalidInvocation, credentialMode)
 	}
-	result, err := invoker.Invoke(ctx, principalValue, pluginTarget.PluginName, invokeInstance, pluginTarget.Operation, params)
+	result, err := invoker.Invoke(ctx, principalValue, pluginTarget.AppName, invokeInstance, pluginTarget.Operation, params)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +309,7 @@ func (r *workflowRuntime) resolveWorkflowExecutionRef(ctx context.Context, req c
 }
 
 func workflowTargetHasMixedKinds(target coreworkflow.Target) bool {
-	return target.Agent != nil && target.Plugin != nil
+	return target.Agent != nil && target.App != nil
 }
 
 func workflowExecutionRefAllowsInternalConnectionAccess(ref *coreworkflow.ExecutionReference) bool {
@@ -349,7 +349,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	}
 	principalValue := principal.Canonicalized(principal.FromContext(ctx))
 	target := req.Target
-	callerPluginName := ""
+	callerAppName := ""
 	if strings.TrimSpace(req.ExecutionRef) != "" {
 		resolvedRef, err := r.resolveWorkflowExecutionRef(ctx, req)
 		if err != nil {
@@ -357,7 +357,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		}
 		principalValue = workflowprincipal.RuntimePrincipalFromExecutionReference(resolvedRef)
 		target = resolvedRef.Target
-		callerPluginName = strings.TrimSpace(resolvedRef.CallerPluginName)
+		callerAppName = strings.TrimSpace(resolvedRef.CallerAppName)
 		ctx = workflowExecutionRefWithRunAsAudit(ctx, resolvedRef)
 		if workflowExecutionRefAllowsInternalConnectionAccess(resolvedRef) {
 			ctx = invocation.WithInternalConnectionAccess(ctx)
@@ -401,7 +401,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		}
 	}
 	if len(agentTarget.Steps) > 0 {
-		return r.invokeAgentSteps(runCtx, ctx, req, agentManager, invoker, principalValue, callerPluginName, agentTarget, session, metadata)
+		return r.invokeAgentSteps(runCtx, ctx, req, agentManager, invoker, principalValue, callerAppName, agentTarget, session, metadata)
 	}
 	messages := append([]coreagent.Message(nil), agentTarget.Messages...)
 	if prompt := strings.TrimSpace(agentTarget.Prompt); prompt != "" {
@@ -415,7 +415,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		turnCtx = agentmanager.WithInheritedOutputDelivery(turnCtx, inheritedDelivery)
 	}
 	turn, err := agentManager.CreateTurn(turnCtx, principalValue, coreagent.ManagerCreateTurnRequest{
-		CallerPluginName:  callerPluginName,
+		CallerAppName:     callerAppName,
 		SessionID:         session.ID,
 		Model:             agentTarget.Model,
 		Messages:          messages,
@@ -491,7 +491,7 @@ type workflowAgentStepsResult struct {
 	FinalOutputText string                             `json:"final_output_text,omitempty"`
 }
 
-func (r *workflowRuntime) invokeAgentSteps(runCtx, rootCtx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service, invoker invocation.Invoker, p *principal.Principal, callerPluginName string, agentTarget coreworkflow.AgentTarget, session *coreagent.Session, metadata map[string]any) (*coreworkflow.InvokeOperationResponse, error) {
+func (r *workflowRuntime) invokeAgentSteps(runCtx, rootCtx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service, invoker invocation.Invoker, p *principal.Principal, callerAppName string, agentTarget coreworkflow.AgentTarget, session *coreagent.Session, metadata map[string]any) (*coreworkflow.InvokeOperationResponse, error) {
 	result := workflowAgentStepsResult{
 		Steps:   make([]workflowAgentStepResult, 0, len(agentTarget.Steps)),
 		Outputs: map[string]workflowAgentStepOutput{},
@@ -522,7 +522,7 @@ func (r *workflowRuntime) invokeAgentSteps(runCtx, rootCtx context.Context, req 
 			turnCtx = agentmanager.WithInheritedOutputDelivery(turnCtx, inheritedDelivery)
 		}
 		turn, err := agentManager.CreateTurn(turnCtx, p, coreagent.ManagerCreateTurnRequest{
-			CallerPluginName:  callerPluginName,
+			CallerAppName:     callerAppName,
 			SessionID:         session.ID,
 			Model:             agentTarget.Model,
 			Messages:          messages,
@@ -750,7 +750,7 @@ func (r *workflowRuntime) deliverWorkflowAgentDelivery(ctx context.Context, req 
 		return nil
 	}
 	target := delivery.Target
-	pluginName := strings.TrimSpace(target.PluginName)
+	pluginName := strings.TrimSpace(target.AppName)
 	operation := strings.TrimSpace(target.Operation)
 	if pluginName == "" || operation == "" {
 		return fmt.Errorf("%w: workflow agent %s target is incomplete", invocation.ErrInvalidInvocation, fieldName)
@@ -1116,8 +1116,8 @@ func waitForWorkflowAgentTurn(ctx context.Context, agentManager agentmanager.Ser
 
 func workflowInvocationParams(req coreworkflow.InvokeOperationRequest) map[string]any {
 	var params map[string]any
-	if req.Target.Plugin != nil {
-		params = maps.Clone(req.Target.Plugin.Input)
+	if req.Target.App != nil {
+		params = maps.Clone(req.Target.App.Input)
 	}
 	if req.Input != nil {
 		if params == nil {
@@ -1271,8 +1271,8 @@ func workflowAgentDeliveryTargetLogValue(delivery *coreworkflow.OutputDelivery) 
 	}
 	target := delivery.Target
 	out := map[string]any{}
-	if pluginName := strings.TrimSpace(target.PluginName); pluginName != "" {
-		out["plugin"] = pluginName
+	if pluginName := strings.TrimSpace(target.AppName); pluginName != "" {
+		out["app"] = pluginName
 	}
 	if operation := strings.TrimSpace(target.Operation); operation != "" {
 		out["operation"] = operation
@@ -1307,7 +1307,7 @@ func workflowAgentDeliveryLogAttrs(req coreworkflow.InvokeOperationRequest, p *p
 	target := delivery.Target
 	attrs = append(attrs,
 		"delivery_field", strings.TrimSpace(fieldName),
-		"delivery_plugin", strings.TrimSpace(target.PluginName),
+		"delivery_plugin", strings.TrimSpace(target.AppName),
 		"delivery_operation", strings.TrimSpace(target.Operation),
 		"delivery_connection", strings.TrimSpace(target.Connection),
 		"delivery_instance", strings.TrimSpace(target.Instance),
@@ -1606,8 +1606,8 @@ func workflowTargetContext(target coreworkflow.Target) map[string]any {
 				if systemName := strings.TrimSpace(ref.System); systemName != "" {
 					tool["system"] = systemName
 				}
-				if pluginName := strings.TrimSpace(ref.Plugin); pluginName != "" {
-					tool["plugin"] = pluginName
+				if pluginName := strings.TrimSpace(ref.App); pluginName != "" {
+					tool["app"] = pluginName
 				}
 				if operation := strings.TrimSpace(ref.Operation); operation != "" {
 					tool["operation"] = operation
@@ -1620,8 +1620,8 @@ func workflowTargetContext(target coreworkflow.Target) map[string]any {
 		}
 		if delivery := agentTarget.OutputDelivery; delivery != nil {
 			outputDelivery := map[string]any{}
-			if pluginName := strings.TrimSpace(delivery.Target.PluginName); pluginName != "" {
-				outputDelivery["plugin"] = pluginName
+			if pluginName := strings.TrimSpace(delivery.Target.AppName); pluginName != "" {
+				outputDelivery["app"] = pluginName
 			}
 			if operation := strings.TrimSpace(delivery.Target.Operation); operation != "" {
 				outputDelivery["operation"] = operation
@@ -1632,13 +1632,13 @@ func workflowTargetContext(target coreworkflow.Target) map[string]any {
 		}
 		return value
 	}
-	if target.Plugin == nil {
+	if target.App == nil {
 		return value
 	}
-	pluginTarget := *target.Plugin
+	pluginTarget := *target.App
 	plugin := map[string]any{}
-	if pluginName := strings.TrimSpace(pluginTarget.PluginName); pluginName != "" {
-		value["kind"] = "plugin"
+	if pluginName := strings.TrimSpace(pluginTarget.AppName); pluginName != "" {
+		value["kind"] = "app"
 		plugin["pluginName"] = pluginName
 	}
 	if operation := strings.TrimSpace(pluginTarget.Operation); operation != "" {
@@ -1654,7 +1654,7 @@ func workflowTargetContext(target coreworkflow.Target) map[string]any {
 		plugin["input"] = maps.Clone(pluginTarget.Input)
 	}
 	if len(plugin) > 0 {
-		value["plugin"] = plugin
+		value["app"] = plugin
 	}
 	return value
 }

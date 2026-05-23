@@ -43,24 +43,24 @@ type embeddedIssueParams struct {
 }
 
 type pluginInvokerTransportHarness struct {
-	proto.UnimplementedPluginInvokerServer
+	proto.UnimplementedAppInvokerServer
 
 	mu       sync.Mutex
-	requests []*proto.PluginInvokeRequest
-	graphQL  []*proto.PluginInvokeGraphQLRequest
+	requests []*proto.AppInvokeRequest
+	graphQL  []*proto.AppInvokeGraphQLRequest
 	tokens   []string
 }
 
-func (h *pluginInvokerTransportHarness) Invoke(ctx context.Context, req *proto.PluginInvokeRequest) (*proto.OperationResult, error) {
+func (h *pluginInvokerTransportHarness) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*proto.OperationResult, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
 	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
 		h.tokens = append(h.tokens, values...)
 	}
-	h.requests = append(h.requests, &proto.PluginInvokeRequest{
+	h.requests = append(h.requests, &proto.AppInvokeRequest{
 		InvocationToken: req.GetInvocationToken(),
-		Plugin:          req.GetPlugin(),
+		App: req.GetApp(),
 		Operation:       req.GetOperation(),
 		Params:          cloneStruct(req.GetParams()),
 		Connection:      req.GetConnection(),
@@ -72,16 +72,16 @@ func (h *pluginInvokerTransportHarness) Invoke(ctx context.Context, req *proto.P
 	return &proto.OperationResult{Status: 207, Body: "relay-ok"}, nil
 }
 
-func (h *pluginInvokerTransportHarness) InvokeGraphQL(ctx context.Context, req *proto.PluginInvokeGraphQLRequest) (*proto.OperationResult, error) {
+func (h *pluginInvokerTransportHarness) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraphQLRequest) (*proto.OperationResult, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
 	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
 		h.tokens = append(h.tokens, values...)
 	}
-	h.graphQL = append(h.graphQL, &proto.PluginInvokeGraphQLRequest{
+	h.graphQL = append(h.graphQL, &proto.AppInvokeGraphQLRequest{
 		InvocationToken: req.GetInvocationToken(),
-		Plugin:          req.GetPlugin(),
+		App: req.GetApp(),
 		Document:        req.GetDocument(),
 		Variables:       cloneStruct(req.GetVariables()),
 		Connection:      req.GetConnection(),
@@ -100,7 +100,7 @@ func cloneStruct(src *structpb.Struct) *structpb.Struct {
 	return gproto.Clone(src).(*structpb.Struct)
 }
 
-func TestTransport_PluginInvokerTCPTargetTokenEnv(t *testing.T) {
+func TestTransport_AppInvokerTCPTargetTokenEnv(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -110,7 +110,7 @@ func TestTransport_PluginInvokerTCPTargetTokenEnv(t *testing.T) {
 
 	harness := &pluginInvokerTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterPluginInvokerServer(srv, harness)
+	proto.RegisterAppInvokerServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -195,8 +195,8 @@ func TestTransport_PluginInvokerTCPTargetTokenEnv(t *testing.T) {
 	if harness.requests[0].GetInvocationToken() != "parent-token" {
 		t.Fatalf("invocation token = %q, want %q", harness.requests[0].GetInvocationToken(), "parent-token")
 	}
-	if harness.requests[0].GetPlugin() != "github" || harness.requests[0].GetOperation() != "get_issue" {
-		t.Fatalf("invoke target = %s.%s, want github.get_issue", harness.requests[0].GetPlugin(), harness.requests[0].GetOperation())
+	if harness.requests[0].GetApp() != "github" || harness.requests[0].GetOperation() != "get_issue" {
+		t.Fatalf("invoke target = %s.%s, want github.get_issue", harness.requests[0].GetApp(), harness.requests[0].GetOperation())
 	}
 	if harness.requests[0].GetIdempotencyKey() != "issue-42-create" {
 		t.Fatalf("idempotency key = %q, want issue-42-create", harness.requests[0].GetIdempotencyKey())
@@ -213,8 +213,8 @@ func TestTransport_PluginInvokerTCPTargetTokenEnv(t *testing.T) {
 	if harness.graphQL[0].GetInvocationToken() != "parent-token" {
 		t.Fatalf("graphql invocation token = %q, want parent-token", harness.graphQL[0].GetInvocationToken())
 	}
-	if harness.graphQL[0].GetPlugin() != "linear" || harness.graphQL[0].GetDocument() != "query { viewer { id } }" {
-		t.Fatalf("graphql request = %s %q, want linear trimmed document", harness.graphQL[0].GetPlugin(), harness.graphQL[0].GetDocument())
+	if harness.graphQL[0].GetApp() != "linear" || harness.graphQL[0].GetDocument() != "query { viewer { id } }" {
+		t.Fatalf("graphql request = %s %q, want linear trimmed document", harness.graphQL[0].GetApp(), harness.graphQL[0].GetDocument())
 	}
 	if harness.graphQL[0].GetIdempotencyKey() != "graphql-call-42" {
 		t.Fatalf("graphql idempotency key = %q, want graphql-call-42", harness.graphQL[0].GetIdempotencyKey())

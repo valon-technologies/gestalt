@@ -24,7 +24,7 @@ const (
 	WorkflowTriggerKindNone     = "none"
 	WorkflowTriggerKindUnknown  = "unknown"
 
-	WorkflowTargetKindPlugin  = "plugin"
+	WorkflowTargetKindApp     = "app"
 	WorkflowTargetKindAgent   = "agent"
 	WorkflowTargetKindUnknown = "unknown"
 

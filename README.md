@@ -27,7 +27,7 @@ When you need production controls, add them through the [provider](https://gesta
 ### What Gestalt provides
 
 - Plug-and-play [providers](https://gestaltd.ai/providers), inspired by [Terraform providers](https://developer.hashicorp.com/terraform/language/providers), so you add only what you need.
-- A [unified tool surface](https://gestaltd.ai/providers/plugins) over MCP, HTTP, and CLI, usable by cloud agents, local coding assistants, and human operators.
+- A [unified tool surface](https://gestaltd.ai/providers/apps) over MCP, HTTP, and CLI, usable by cloud agents, local coding assistants, and human operators.
 - [Authentication](https://gestaltd.ai/providers/authentication) flows, [credential storage](https://gestaltd.ai/providers/external-credentials), encryption at rest, token refresh, and [RBAC](https://gestaltd.ai/providers/authorization) on infrastructure you control.
 - [OpenTelemetry](https://opentelemetry.io/) compatible [observability](https://gestaltd.ai/observability) and [audit logging](https://gestaltd.ai/audit-logging).
 - [Runtimes](https://gestaltd.ai/providers/runtime) for agent and code sandboxing.<sup><a href="#runtimes-alpha-note">*</a></sup>
@@ -68,8 +68,8 @@ In a second terminal, connect the CLI to the server:
 
 ```sh
 gestalt init
-gestalt plugin list
-gestalt plugin invoke httpbin get_ip
+gestalt app list
+gestalt app invoke httpbin get_ip
 ```
 
 For the full walkthrough, see [Getting Started](https://gestaltd.ai/getting-started).
@@ -79,7 +79,7 @@ For the full walkthrough, see [Getting Started](https://gestaltd.ai/getting-star
 | Path | Description |
 | --- | --- |
 | [`gestaltd`](./gestaltd) | Go server daemon, config loading, provider bootstrap, HTTP API, MCP surface, deployment assets, and admin UI serving code. |
-| [`gestalt`](./gestalt) | Rust CLI client for setup, auth, plugin invocation, workflow and agent runs, and token management. |
+| [`gestalt`](./gestalt) | Rust CLI client for setup, auth, app invocation, workflow and agent runs, and token management. |
 | [`sdk`](./sdk) | Go, Python, Rust, and TypeScript SDKs plus shared protocol definitions. |
 | [`docs`](./docs) | Source for the public documentation site at [gestaltd.ai](https://gestaltd.ai). |
 

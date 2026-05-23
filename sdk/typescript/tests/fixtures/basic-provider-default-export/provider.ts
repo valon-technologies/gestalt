@@ -1,6 +1,6 @@
-import { definePlugin, ok, operation, s } from "../../../src/index.ts";
+import { defineApp, ok, operation, s } from "../../../src/index.ts";
 
-const provider = definePlugin({
+const provider = defineApp({
   displayName: "Fixture Provider Default Export",
   operations: [
     operation({

@@ -141,7 +141,7 @@ func (p *StubExternalCredentialProvider) storeCredential(credential *core.Extern
 	if cloned.ConnectionID == "" {
 		connection := cloned.Connection
 		if connection == "" {
-			connection = core.PluginConnectionName
+			connection = core.AppConnectionName
 		}
 		cloned.ConnectionID = cloned.Integration + ":" + connection
 	}

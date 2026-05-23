@@ -13,8 +13,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -157,7 +157,7 @@ func TestNewHTTPServerSupportsH2CHostServiceRelay(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "relay-plugin",
+		AppName:      "relay-plugin",
 		SessionID:    "session-1",
 		Service:      "cache",
 		MethodPrefix: "/" + proto.Cache_ServiceDesc.ServiceName + "/",

@@ -34,8 +34,8 @@ func workflowRunStatusFromProto(status proto.WorkflowRunStatus) (coreworkflow.Ru
 }
 
 func workflowTargetToProto(target coreworkflow.Target) (*proto.BoundWorkflowTarget, error) {
-	if target.Agent != nil && target.Plugin != nil {
-		return nil, fmt.Errorf("workflow target cannot include both agent and plugin fields")
+	if target.Agent != nil && target.App != nil {
+		return nil, fmt.Errorf("workflow target cannot include both agent and app fields")
 	}
 
 	value := &proto.BoundWorkflowTarget{}
@@ -47,12 +47,12 @@ func workflowTargetToProto(target coreworkflow.Target) (*proto.BoundWorkflowTarg
 		value.Kind = &proto.BoundWorkflowTarget_Agent{Agent: agent}
 		return value, nil
 	}
-	if target.Plugin != nil {
-		plugin, err := workflowPluginTargetToProto(target.Plugin)
+	if target.App != nil {
+		appTarget, err := workflowAppTargetToProto(target.App)
 		if err != nil {
 			return nil, err
 		}
-		value.Kind = &proto.BoundWorkflowTarget_Plugin{Plugin: plugin}
+		value.Kind = &proto.BoundWorkflowTarget_App{App: appTarget}
 	}
 	return value, nil
 }
@@ -64,14 +64,14 @@ func workflowTargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Tar
 	if agent := workflowAgentTargetFromProto(target.GetAgent()); agent != nil {
 		return coreworkflow.Target{Agent: agent}
 	}
-	if target.GetPlugin() != nil {
-		plugin := workflowPluginTargetFromProto(target.GetPlugin())
-		return coreworkflow.Target{Plugin: &plugin}
+	if target.GetApp() != nil {
+		appTarget := workflowAppTargetFromProto(target.GetApp())
+		return coreworkflow.Target{App: &appTarget}
 	}
 	return coreworkflow.Target{}
 }
 
-func workflowPluginTargetToProto(target *coreworkflow.PluginTarget) (*proto.BoundWorkflowPluginTarget, error) {
+func workflowAppTargetToProto(target *coreworkflow.AppTarget) (*proto.BoundWorkflowAppTarget, error) {
 	if target == nil {
 		return nil, nil
 	}
@@ -79,8 +79,8 @@ func workflowPluginTargetToProto(target *coreworkflow.PluginTarget) (*proto.Boun
 	if err != nil {
 		return nil, fmt.Errorf("workflow target input: %w", err)
 	}
-	return &proto.BoundWorkflowPluginTarget{
-		PluginName:     target.PluginName,
+	return &proto.BoundWorkflowAppTarget{
+		AppName:        target.AppName,
 		Operation:      target.Operation,
 		Input:          input,
 		Connection:     target.Connection,
@@ -89,12 +89,12 @@ func workflowPluginTargetToProto(target *coreworkflow.PluginTarget) (*proto.Boun
 	}, nil
 }
 
-func workflowPluginTargetFromProto(target *proto.BoundWorkflowPluginTarget) coreworkflow.PluginTarget {
+func workflowAppTargetFromProto(target *proto.BoundWorkflowAppTarget) coreworkflow.AppTarget {
 	if target == nil {
-		return coreworkflow.PluginTarget{}
+		return coreworkflow.AppTarget{}
 	}
-	return coreworkflow.PluginTarget{
-		PluginName:     strings.TrimSpace(target.GetPluginName()),
+	return coreworkflow.AppTarget{
+		AppName:        strings.TrimSpace(target.GetAppName()),
 		Operation:      strings.TrimSpace(target.GetOperation()),
 		Connection:     strings.TrimSpace(target.GetConnection()),
 		Instance:       strings.TrimSpace(target.GetInstance()),
@@ -291,7 +291,7 @@ func workflowOutputDeliveryToProto(delivery *coreworkflow.OutputDelivery, fieldN
 	}
 	deliveryTarget := delivery.Target
 	deliveryTarget.CredentialMode = ""
-	target, err := workflowPluginTargetToProto(&deliveryTarget)
+	target, err := workflowAppTargetToProto(&deliveryTarget)
 	if err != nil {
 		return nil, fmt.Errorf("workflow agent %s.target: %w", fieldName, err)
 	}
@@ -307,7 +307,7 @@ func workflowOutputDeliveryFromProto(delivery *proto.WorkflowOutputDelivery) *co
 		return nil
 	}
 	out := &coreworkflow.OutputDelivery{
-		Target:         workflowPluginTargetFromProto(delivery.GetTarget()),
+		Target:         workflowAppTargetFromProto(delivery.GetTarget()),
 		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(delivery.GetCredentialMode())),
 	}
 	for _, binding := range delivery.GetInputBindings() {
@@ -452,7 +452,7 @@ func workflowExecutionReferenceToProto(ref *coreworkflow.ExecutionReference) (*p
 		Id:                  ref.ID,
 		ProviderName:        ref.ProviderName,
 		Target:              target,
-		CallerPluginName:    ref.CallerPluginName,
+		CallerAppName:       ref.CallerAppName,
 		SourceDefinitionId:  ref.SourceDefinitionID,
 		SubjectId:           ref.SubjectID,
 		SubjectKind:         ref.SubjectKind,
@@ -475,7 +475,7 @@ func workflowExecutionReferenceFromProto(ref *proto.WorkflowExecutionReference) 
 		ID:                  strings.TrimSpace(ref.GetId()),
 		ProviderName:        strings.TrimSpace(ref.GetProviderName()),
 		Target:              target,
-		CallerPluginName:    strings.TrimSpace(ref.GetCallerPluginName()),
+		CallerAppName:       strings.TrimSpace(ref.GetCallerAppName()),
 		SourceDefinitionID:  strings.TrimSpace(ref.GetSourceDefinitionId()),
 		SubjectID:           strings.TrimSpace(ref.GetSubjectId()),
 		SubjectKind:         strings.TrimSpace(ref.GetSubjectKind()),
@@ -495,12 +495,12 @@ func workflowAccessPermissionsToProto(values []core.AccessPermission) []*proto.W
 	}
 	out := make([]*proto.WorkflowAccessPermission, 0, len(values))
 	for _, value := range values {
-		pluginName := strings.TrimSpace(value.Plugin)
+		pluginName := strings.TrimSpace(value.App)
 		if pluginName == "" {
 			continue
 		}
 		out = append(out, &proto.WorkflowAccessPermission{
-			Plugin:     pluginName,
+			App:        pluginName,
 			Operations: append([]string(nil), value.Operations...),
 		})
 	}
@@ -516,12 +516,12 @@ func workflowAccessPermissionsFromProto(values []*proto.WorkflowAccessPermission
 		if value == nil {
 			continue
 		}
-		pluginName := strings.TrimSpace(value.GetPlugin())
+		pluginName := strings.TrimSpace(value.GetApp())
 		if pluginName == "" {
 			continue
 		}
 		out = append(out, core.AccessPermission{
-			Plugin:     pluginName,
+			App:        pluginName,
 			Operations: append([]string(nil), value.GetOperations()...),
 		})
 	}

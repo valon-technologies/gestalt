@@ -69,16 +69,16 @@ type providerProcess struct {
 	closeErr       error
 }
 
-type PluginProcess struct {
+type AppProcess struct {
 	proc *providerProcess
 }
 
-func StartPluginProcess(ctx context.Context, cfg ProcessConfig) (*PluginProcess, error) {
+func StartAppProcess(ctx context.Context, cfg ProcessConfig) (*AppProcess, error) {
 	proc, err := startProviderProcess(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	return &PluginProcess{proc: proc}, nil
+	return &AppProcess{proc: proc}, nil
 }
 
 func (c ProcessConfig) egressPolicy() egress.Policy {
@@ -92,28 +92,28 @@ func cloneEgressPolicy(policy egress.Policy) egress.Policy {
 	}
 }
 
-func (p *PluginProcess) Lifecycle() proto.ProviderLifecycleClient {
+func (p *AppProcess) Lifecycle() proto.ProviderLifecycleClient {
 	if p == nil || p.proc == nil {
 		return nil
 	}
 	return proto.NewProviderLifecycleClient(p.proc.conn)
 }
 
-func (p *PluginProcess) Integration() proto.IntegrationProviderClient {
+func (p *AppProcess) Integration() proto.AppProviderClient {
 	if p == nil || p.proc == nil {
 		return nil
 	}
-	return proto.NewIntegrationProviderClient(p.proc.conn)
+	return proto.NewAppProviderClient(p.proc.conn)
 }
 
-func (p *PluginProcess) Conn() *grpc.ClientConn {
+func (p *AppProcess) Conn() *grpc.ClientConn {
 	if p == nil || p.proc == nil {
 		return nil
 	}
 	return p.proc.conn
 }
 
-func (p *PluginProcess) Close() error {
+func (p *AppProcess) Close() error {
 	if p == nil || p.proc == nil {
 		return nil
 	}
@@ -138,7 +138,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 	} else if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create socket dir: %w", err)
 	}
-	pluginSocket := filepath.Join(dir, "plugin.sock")
+	pluginSocket := filepath.Join(dir, "app.sock")
 	execEnv := map[string]string{
 		proto.EnvProviderSocket:    pluginSocket,
 		proto.EnvProviderParentPID: strconv.Itoa(os.Getpid()),
@@ -236,7 +236,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 		})
 		if err != nil {
 			_ = proc.Close()
-			return nil, fmt.Errorf("start plugin process: %w", err)
+			return nil, fmt.Errorf("start app process: %w", err)
 		}
 		proc.sandboxCleanup = cleanup
 		proc.cmd = cmd
@@ -251,7 +251,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 		})
 		if err != nil {
 			_ = proc.Close()
-			return nil, fmt.Errorf("start plugin process: %w", err)
+			return nil, fmt.Errorf("start app process: %w", err)
 		}
 		proc.cmd = cmd
 	}
@@ -299,7 +299,7 @@ func (p *providerProcess) Close() error {
 		var errs []error
 		if p.conn != nil {
 			if err := p.conn.Close(); err != nil {
-				errs = append(errs, fmt.Errorf("close plugin connection: %w", err))
+				errs = append(errs, fmt.Errorf("close app connection: %w", err))
 			}
 		}
 		for _, hostSrv := range p.hostSrvs {
@@ -321,7 +321,7 @@ func (p *providerProcess) Close() error {
 				if err != nil && !errors.Is(err, context.Canceled) {
 					var exitErr *exec.ExitError
 					if !errors.As(err, &exitErr) || (exitErr.ExitCode() != 0 && exitErr.ExitCode() != -1) {
-						errs = append(errs, fmt.Errorf("wait for plugin process: %w", err))
+						errs = append(errs, fmt.Errorf("wait for app process: %w", err))
 					}
 				}
 			case <-time.After(processShutdownTimeout):
@@ -329,13 +329,13 @@ func (p *providerProcess) Close() error {
 					_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
 				} else {
 					if err := p.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-						errs = append(errs, fmt.Errorf("kill plugin process: %w", err))
+						errs = append(errs, fmt.Errorf("kill app process: %w", err))
 					}
 				}
 				if err := <-p.waitCh; err != nil && !errors.Is(err, context.Canceled) {
 					var exitErr *exec.ExitError
 					if !errors.As(err, &exitErr) || exitErr.ExitCode() != -1 {
-						errs = append(errs, fmt.Errorf("wait for killed plugin process: %w", err))
+						errs = append(errs, fmt.Errorf("wait for killed app process: %w", err))
 					}
 				}
 			}
@@ -358,7 +358,7 @@ func (p *providerProcess) Close() error {
 		}
 		if p.dir != "" {
 			if err := os.RemoveAll(p.dir); err != nil {
-				errs = append(errs, fmt.Errorf("remove plugin temp dir: %w", err))
+				errs = append(errs, fmt.Errorf("remove app temp dir: %w", err))
 			}
 		}
 		p.closeErr = errors.Join(errs...)
@@ -433,7 +433,7 @@ func newPluginTempDir(pattern string) (string, error) {
 	}
 	dir, err := os.MkdirTemp(base, pattern)
 	if err != nil {
-		return "", fmt.Errorf("create plugin temp dir: %w", err)
+		return "", fmt.Errorf("create app temp dir: %w", err)
 	}
 	return dir, nil
 }
@@ -474,9 +474,9 @@ func resolvePluginTempBaseDir(candidates []string) (string, error) {
 		}
 	}
 	if len(errs) == 0 {
-		return "", fmt.Errorf("resolve plugin temp dir base: no directory candidates")
+		return "", fmt.Errorf("resolve app temp dir base: no directory candidates")
 	}
-	return "", fmt.Errorf("resolve plugin temp dir base: %w", errors.Join(errs...))
+	return "", fmt.Errorf("resolve app temp dir base: %w", errors.Join(errs...))
 }
 
 func mergeExecEnv(base, extra map[string]string) map[string]string {
@@ -553,7 +553,7 @@ func waitForPluginConn(ctx context.Context, socket string, waitCh <-chan error, 
 			}
 			var pathErr *os.PathError
 			if !errors.As(dialErr, &pathErr) {
-				return nil, fmt.Errorf("dial plugin socket: %w", dialErr)
+				return nil, fmt.Errorf("dial app socket: %w", dialErr)
 			}
 		}
 
@@ -564,7 +564,7 @@ func waitForPluginConn(ctx context.Context, socket string, waitCh <-chan error, 
 			}
 			return nil, fmt.Errorf("plugin process exited before serving gRPC: %w", err)
 		case <-ctx.Done():
-			return nil, fmt.Errorf("waiting for plugin socket: %w", ctx.Err())
+			return nil, fmt.Errorf("waiting for app socket: %w", ctx.Err())
 		case <-time.After(25 * time.Millisecond):
 		}
 	}
@@ -627,7 +627,7 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn, waitCh <-chan 
 		changed := conn.WaitForStateChange(waitCtx, state)
 		cancel()
 		if !changed && ctx.Err() != nil {
-			return fmt.Errorf("waiting for plugin gRPC ready: %w", ctx.Err())
+			return fmt.Errorf("waiting for app gRPC ready: %w", ctx.Err())
 		}
 	}
 }

@@ -172,7 +172,7 @@ try {
     excludes: "registry_shell__",
   });
   await assertResponse({
-    url: `${baseUrl}/providers/plugin/slack/`,
+    url: `${baseUrl}/providers/app/slack/`,
     host: "gestaltd.ai",
     status: 404,
     excludes: "registry_shell__",
@@ -184,7 +184,7 @@ try {
     location: "/api/python/index.html",
   });
   await assertResponse({
-    url: `${baseUrl}/providers/plugin/slack/`,
+    url: `${baseUrl}/providers/app/slack/`,
     host: "registry.gestaltd.ai",
     status: 200,
     cacheControlIncludes: "no-cache",

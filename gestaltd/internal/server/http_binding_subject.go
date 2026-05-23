@@ -15,12 +15,12 @@ import (
 func (s *Server) resolveHTTPBindingPrincipal(ctx context.Context, binding MountedHTTPBinding, r *http.Request, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) (*principal.Principal, error) {
 	bindingPrincipal := s.httpBindingPrincipal(binding, verified)
 
-	prov, err := s.providers.Get(binding.PluginName)
+	prov, err := s.providers.Get(binding.AppName)
 	if err != nil {
 		return nil, err
 	}
 	resolveCtx := principal.WithPrincipal(ctx, bindingPrincipal)
-	resolveCtx = invocation.WithAccessContext(resolveCtx, s.providerAccessContextWithContext(resolveCtx, bindingPrincipal, binding.PluginName))
+	resolveCtx = invocation.WithAccessContext(resolveCtx, s.providerAccessContextWithContext(resolveCtx, bindingPrincipal, binding.AppName))
 	resolveCtx = invocation.WithWorkflowContext(resolveCtx, httpBindingContextValue(binding, verified, parsed))
 	resolveCtx = invocation.WithInvocationSurface(resolveCtx, invocation.InvocationSurfaceHTTP)
 	resolveCtx = invocation.WithHTTPBinding(resolveCtx, binding.Name)

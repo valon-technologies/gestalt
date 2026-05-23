@@ -4,7 +4,7 @@ from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from . import agent_pb2 as _agent_pb2
-from . import plugin_pb2 as _plugin_pb2
+from . import app_pb2 as _app_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -31,27 +31,27 @@ WORKFLOW_RUN_STATUS_CANCELED: WorkflowRunStatus
 
 class BoundWorkflowTarget(_message.Message):
     __slots__ = ()
-    PLUGIN_FIELD_NUMBER: _ClassVar[int]
+    APP_FIELD_NUMBER: _ClassVar[int]
     AGENT_FIELD_NUMBER: _ClassVar[int]
-    plugin: BoundWorkflowPluginTarget
+    app: BoundWorkflowAppTarget
     agent: BoundWorkflowAgentTarget
-    def __init__(self, plugin: _Optional[_Union[BoundWorkflowPluginTarget, _Mapping]] = ..., agent: _Optional[_Union[BoundWorkflowAgentTarget, _Mapping]] = ...) -> None: ...
+    def __init__(self, app: _Optional[_Union[BoundWorkflowAppTarget, _Mapping]] = ..., agent: _Optional[_Union[BoundWorkflowAgentTarget, _Mapping]] = ...) -> None: ...
 
-class BoundWorkflowPluginTarget(_message.Message):
+class BoundWorkflowAppTarget(_message.Message):
     __slots__ = ()
-    PLUGIN_NAME_FIELD_NUMBER: _ClassVar[int]
+    APP_NAME_FIELD_NUMBER: _ClassVar[int]
     OPERATION_FIELD_NUMBER: _ClassVar[int]
     INPUT_FIELD_NUMBER: _ClassVar[int]
     CONNECTION_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_FIELD_NUMBER: _ClassVar[int]
     CREDENTIAL_MODE_FIELD_NUMBER: _ClassVar[int]
-    plugin_name: str
+    app_name: str
     operation: str
     input: _struct_pb2.Struct
     connection: str
     instance: str
     credential_mode: str
-    def __init__(self, plugin_name: _Optional[str] = ..., operation: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., credential_mode: _Optional[str] = ...) -> None: ...
+    def __init__(self, app_name: _Optional[str] = ..., operation: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., credential_mode: _Optional[str] = ...) -> None: ...
 
 class BoundWorkflowAgentTarget(_message.Message):
     __slots__ = ()
@@ -71,7 +71,7 @@ class BoundWorkflowAgentTarget(_message.Message):
     model: str
     prompt: str
     messages: _containers.RepeatedCompositeFieldContainer[_agent_pb2.AgentMessage]
-    tool_refs: _containers.RepeatedCompositeFieldContainer[_plugin_pb2.AgentToolRef]
+    tool_refs: _containers.RepeatedCompositeFieldContainer[_app_pb2.AgentToolRef]
     response_schema: _struct_pb2.Struct
     metadata: _struct_pb2.Struct
     timeout_seconds: int
@@ -79,7 +79,7 @@ class BoundWorkflowAgentTarget(_message.Message):
     model_options: _struct_pb2.Struct
     session_ready_delivery: WorkflowOutputDelivery
     steps: _containers.RepeatedCompositeFieldContainer[WorkflowAgentStep]
-    def __init__(self, provider_name: _Optional[str] = ..., model: _Optional[str] = ..., prompt: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[_agent_pb2.AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., session_ready_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., steps: _Optional[_Iterable[_Union[WorkflowAgentStep, _Mapping]]] = ...) -> None: ...
+    def __init__(self, provider_name: _Optional[str] = ..., model: _Optional[str] = ..., prompt: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[_agent_pb2.AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., session_ready_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., steps: _Optional[_Iterable[_Union[WorkflowAgentStep, _Mapping]]] = ...) -> None: ...
 
 class WorkflowAgentStep(_message.Message):
     __slots__ = ()
@@ -96,14 +96,14 @@ class WorkflowAgentStep(_message.Message):
     id: str
     prompt: str
     messages: _containers.RepeatedCompositeFieldContainer[_agent_pb2.AgentMessage]
-    tool_refs: _containers.RepeatedCompositeFieldContainer[_plugin_pb2.AgentToolRef]
+    tool_refs: _containers.RepeatedCompositeFieldContainer[_app_pb2.AgentToolRef]
     response_schema: _struct_pb2.Struct
     model_options: _struct_pb2.Struct
     timeout_seconds: int
     output_delivery: WorkflowOutputDelivery
     when: WorkflowAgentStepWhen
     metadata: _struct_pb2.Struct
-    def __init__(self, id: _Optional[str] = ..., prompt: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[_agent_pb2.AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., when: _Optional[_Union[WorkflowAgentStepWhen, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., prompt: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[_agent_pb2.AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., when: _Optional[_Union[WorkflowAgentStepWhen, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class WorkflowAgentStepWhen(_message.Message):
     __slots__ = ()
@@ -120,10 +120,10 @@ class WorkflowOutputDelivery(_message.Message):
     TARGET_FIELD_NUMBER: _ClassVar[int]
     INPUT_BINDINGS_FIELD_NUMBER: _ClassVar[int]
     CREDENTIAL_MODE_FIELD_NUMBER: _ClassVar[int]
-    target: BoundWorkflowPluginTarget
+    target: BoundWorkflowAppTarget
     input_bindings: _containers.RepeatedCompositeFieldContainer[WorkflowOutputBinding]
     credential_mode: str
-    def __init__(self, target: _Optional[_Union[BoundWorkflowPluginTarget, _Mapping]] = ..., input_bindings: _Optional[_Iterable[_Union[WorkflowOutputBinding, _Mapping]]] = ..., credential_mode: _Optional[str] = ...) -> None: ...
+    def __init__(self, target: _Optional[_Union[BoundWorkflowAppTarget, _Mapping]] = ..., input_bindings: _Optional[_Iterable[_Union[WorkflowOutputBinding, _Mapping]]] = ..., credential_mode: _Optional[str] = ...) -> None: ...
 
 class WorkflowOutputBinding(_message.Message):
     __slots__ = ()
@@ -334,11 +334,11 @@ class BoundWorkflowDefinition(_message.Message):
 
 class WorkflowAccessPermission(_message.Message):
     __slots__ = ()
-    PLUGIN_FIELD_NUMBER: _ClassVar[int]
+    APP_FIELD_NUMBER: _ClassVar[int]
     OPERATIONS_FIELD_NUMBER: _ClassVar[int]
-    plugin: str
+    app: str
     operations: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, plugin: _Optional[str] = ..., operations: _Optional[_Iterable[str]] = ...) -> None: ...
+    def __init__(self, app: _Optional[str] = ..., operations: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class WorkflowExecutionReference(_message.Message):
     __slots__ = ()
@@ -353,7 +353,7 @@ class WorkflowExecutionReference(_message.Message):
     SUBJECT_KIND_FIELD_NUMBER: _ClassVar[int]
     DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
     AUTH_SOURCE_FIELD_NUMBER: _ClassVar[int]
-    CALLER_PLUGIN_NAME_FIELD_NUMBER: _ClassVar[int]
+    CALLER_APP_NAME_FIELD_NUMBER: _ClassVar[int]
     RUN_AS_FIELD_NUMBER: _ClassVar[int]
     SOURCE_DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     id: str
@@ -367,10 +367,10 @@ class WorkflowExecutionReference(_message.Message):
     subject_kind: str
     display_name: str
     auth_source: str
-    caller_plugin_name: str
+    caller_app_name: str
     run_as: WorkflowRunAsSubject
     source_definition_id: str
-    def __init__(self, id: _Optional[str] = ..., provider_name: _Optional[str] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., subject_id: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., permissions: _Optional[_Iterable[_Union[WorkflowAccessPermission, _Mapping]]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., subject_kind: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ..., caller_plugin_name: _Optional[str] = ..., run_as: _Optional[_Union[WorkflowRunAsSubject, _Mapping]] = ..., source_definition_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., provider_name: _Optional[str] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., subject_id: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., permissions: _Optional[_Iterable[_Union[WorkflowAccessPermission, _Mapping]]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., subject_kind: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ..., caller_app_name: _Optional[str] = ..., run_as: _Optional[_Union[WorkflowRunAsSubject, _Mapping]] = ..., source_definition_id: _Optional[str] = ...) -> None: ...
 
 class WorkflowSignal(_message.Message):
     __slots__ = ()
@@ -426,13 +426,13 @@ class ListWorkflowProviderRunsRequest(_message.Message):
     PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    TARGET_PLUGIN_FIELD_NUMBER: _ClassVar[int]
+    TARGET_APP_FIELD_NUMBER: _ClassVar[int]
     page_size: int
     page_token: str
     status: WorkflowRunStatus
     invocation_token: str
-    target_plugin: str
-    def __init__(self, page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ..., invocation_token: _Optional[str] = ..., target_plugin: _Optional[str] = ...) -> None: ...
+    target_app: str
+    def __init__(self, page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ..., invocation_token: _Optional[str] = ..., target_app: _Optional[str] = ...) -> None: ...
 
 class ListWorkflowProviderRunsResponse(_message.Message):
     __slots__ = ()
@@ -660,17 +660,17 @@ class ResumeWorkflowProviderEventTriggerRequest(_message.Message):
 
 class PublishWorkflowProviderEventRequest(_message.Message):
     __slots__ = ()
-    PLUGIN_NAME_FIELD_NUMBER: _ClassVar[int]
+    APP_NAME_FIELD_NUMBER: _ClassVar[int]
     EVENT_FIELD_NUMBER: _ClassVar[int]
     PUBLISHED_BY_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
-    plugin_name: str
+    app_name: str
     event: WorkflowEvent
     published_by: WorkflowActor
     invocation_token: str
     provider_name: str
-    def __init__(self, plugin_name: _Optional[str] = ..., event: _Optional[_Union[WorkflowEvent, _Mapping]] = ..., published_by: _Optional[_Union[WorkflowActor, _Mapping]] = ..., invocation_token: _Optional[str] = ..., provider_name: _Optional[str] = ...) -> None: ...
+    def __init__(self, app_name: _Optional[str] = ..., event: _Optional[_Union[WorkflowEvent, _Mapping]] = ..., published_by: _Optional[_Union[WorkflowActor, _Mapping]] = ..., invocation_token: _Optional[str] = ..., provider_name: _Optional[str] = ...) -> None: ...
 
 class InvokeWorkflowOperationRequest(_message.Message):
     __slots__ = ()

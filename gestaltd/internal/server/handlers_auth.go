@@ -368,7 +368,7 @@ type StatefulCallbackHandler interface {
 }
 
 // RequestCallbackHandler is an optional interface for authentication providers that need
-// the full callback query map. This is used by executable authentication plugins so the
+// the full callback query map. This is used by executable authentication apps so the
 // host can preserve callback state and provider-specific query parameters.
 type RequestCallbackHandler interface {
 	HandleCallbackRequest(ctx context.Context, query url.Values) (*core.UserIdentity, string, error)

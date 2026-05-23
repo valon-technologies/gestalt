@@ -33,7 +33,7 @@ type ObjectAccessURLManager struct {
 }
 
 type ObjectAccessURLRequest struct {
-	PluginName         string
+	AppName            string
 	BindingName        string
 	Ref                s3store.ObjectRef
 	Method             s3store.PresignMethod
@@ -44,7 +44,7 @@ type ObjectAccessURLRequest struct {
 }
 
 type ObjectAccessTarget struct {
-	PluginName         string
+	AppName            string
 	BindingName        string
 	Ref                s3store.ObjectRef
 	Method             s3store.PresignMethod
@@ -57,7 +57,7 @@ type ObjectAccessTarget struct {
 type s3ObjectAccessURLClaims struct {
 	Version            int               `json:"v"`
 	Audience           string            `json:"aud"`
-	PluginName         string            `json:"plugin"`
+	AppName            string            `json:"app"`
 	BindingName        string            `json:"binding"`
 	Bucket             string            `json:"bucket"`
 	Key                string            `json:"key"`
@@ -100,7 +100,7 @@ func (m *ObjectAccessURLManager) MintURL(req ObjectAccessURLRequest) (s3store.Pr
 	claims := s3ObjectAccessURLClaims{
 		Version:            s3ObjectAccessVersion,
 		Audience:           s3ObjectAccessAudience,
-		PluginName:         target.PluginName,
+		AppName:            target.AppName,
 		BindingName:        target.BindingName,
 		Bucket:             target.Ref.Bucket,
 		Key:                target.Ref.Key,
@@ -151,7 +151,7 @@ func (m *ObjectAccessURLManager) ResolveToken(token string) (ObjectAccessTarget,
 		return ObjectAccessTarget{}, fmt.Errorf("s3 object access token is invalid or expired")
 	}
 	return normalizeS3ObjectAccessRequest(ObjectAccessURLRequest{
-		PluginName:         claims.PluginName,
+		AppName:            claims.AppName,
 		BindingName:        claims.BindingName,
 		Ref:                s3store.ObjectRef{Bucket: claims.Bucket, Key: claims.Key, VersionID: claims.VersionID},
 		Method:             s3store.PresignMethod(claims.Method),
@@ -171,12 +171,12 @@ func (m *ObjectAccessURLManager) tokenTTL(ttl time.Duration) time.Duration {
 	return ttl
 }
 
-func PluginObjectKey(pluginName, key string) string {
-	return s3NamespacePrefix(pluginName) + key
+func AppObjectKey(appName, key string) string {
+	return s3NamespacePrefix(appName) + key
 }
 
 func normalizeS3ObjectAccessRequest(req ObjectAccessURLRequest, expiresAt time.Time) (ObjectAccessTarget, error) {
-	pluginName := strings.TrimSpace(req.PluginName)
+	pluginName := strings.TrimSpace(req.AppName)
 	if pluginName == "" {
 		return ObjectAccessTarget{}, fmt.Errorf("plugin name is required")
 	}
@@ -197,7 +197,7 @@ func normalizeS3ObjectAccessRequest(req ObjectAccessURLRequest, expiresAt time.T
 		return ObjectAccessTarget{}, fmt.Errorf("unsupported s3 object access method %q", req.Method)
 	}
 	return ObjectAccessTarget{
-		PluginName:         pluginName,
+		AppName:            pluginName,
 		BindingName:        bindingName,
 		Ref:                ref,
 		Method:             method,
@@ -243,7 +243,7 @@ func (s *s3ObjectAccessServer) CreateObjectAccessURL(_ context.Context, req *pro
 		return nil, status.Error(codes.FailedPrecondition, "s3 object access URLs are not available")
 	}
 	result, err := s.manager.MintURL(ObjectAccessURLRequest{
-		PluginName:         s.pluginName,
+		AppName:            s.pluginName,
 		BindingName:        s.bindingName,
 		Ref:                objectRefFromProto(req.GetRef()),
 		Method:             presignMethodFromProto(req.GetMethod()),

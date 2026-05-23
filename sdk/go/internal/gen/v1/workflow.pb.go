@@ -86,7 +86,7 @@ type BoundWorkflowTarget struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Kind:
 	//
-	//	*BoundWorkflowTarget_Plugin
+	//	*BoundWorkflowTarget_App
 	//	*BoundWorkflowTarget_Agent
 	Kind          isBoundWorkflowTarget_Kind `protobuf_oneof:"kind"`
 	unknownFields protoimpl.UnknownFields
@@ -130,10 +130,10 @@ func (x *BoundWorkflowTarget) GetKind() isBoundWorkflowTarget_Kind {
 	return nil
 }
 
-func (x *BoundWorkflowTarget) GetPlugin() *BoundWorkflowPluginTarget {
+func (x *BoundWorkflowTarget) GetApp() *BoundWorkflowAppTarget {
 	if x != nil {
-		if x, ok := x.Kind.(*BoundWorkflowTarget_Plugin); ok {
-			return x.Plugin
+		if x, ok := x.Kind.(*BoundWorkflowTarget_App); ok {
+			return x.App
 		}
 	}
 	return nil
@@ -152,21 +152,21 @@ type isBoundWorkflowTarget_Kind interface {
 	isBoundWorkflowTarget_Kind()
 }
 
-type BoundWorkflowTarget_Plugin struct {
-	Plugin *BoundWorkflowPluginTarget `protobuf:"bytes,6,opt,name=plugin,proto3,oneof"`
+type BoundWorkflowTarget_App struct {
+	App *BoundWorkflowAppTarget `protobuf:"bytes,6,opt,name=app,proto3,oneof"`
 }
 
 type BoundWorkflowTarget_Agent struct {
 	Agent *BoundWorkflowAgentTarget `protobuf:"bytes,7,opt,name=agent,proto3,oneof"`
 }
 
-func (*BoundWorkflowTarget_Plugin) isBoundWorkflowTarget_Kind() {}
+func (*BoundWorkflowTarget_App) isBoundWorkflowTarget_Kind() {}
 
 func (*BoundWorkflowTarget_Agent) isBoundWorkflowTarget_Kind() {}
 
-type BoundWorkflowPluginTarget struct {
+type BoundWorkflowAppTarget struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	PluginName     string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	AppName        string                 `protobuf:"bytes,1,opt,name=app_name,json=appName,proto3" json:"app_name,omitempty"`
 	Operation      string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
 	Input          *structpb.Struct       `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
 	Connection     string                 `protobuf:"bytes,4,opt,name=connection,proto3" json:"connection,omitempty"`
@@ -176,20 +176,20 @@ type BoundWorkflowPluginTarget struct {
 	sizeCache      protoimpl.SizeCache
 }
 
-func (x *BoundWorkflowPluginTarget) Reset() {
-	*x = BoundWorkflowPluginTarget{}
+func (x *BoundWorkflowAppTarget) Reset() {
+	*x = BoundWorkflowAppTarget{}
 	mi := &file_v1_workflow_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BoundWorkflowPluginTarget) String() string {
+func (x *BoundWorkflowAppTarget) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BoundWorkflowPluginTarget) ProtoMessage() {}
+func (*BoundWorkflowAppTarget) ProtoMessage() {}
 
-func (x *BoundWorkflowPluginTarget) ProtoReflect() protoreflect.Message {
+func (x *BoundWorkflowAppTarget) ProtoReflect() protoreflect.Message {
 	mi := &file_v1_workflow_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -201,47 +201,47 @@ func (x *BoundWorkflowPluginTarget) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BoundWorkflowPluginTarget.ProtoReflect.Descriptor instead.
-func (*BoundWorkflowPluginTarget) Descriptor() ([]byte, []int) {
+// Deprecated: Use BoundWorkflowAppTarget.ProtoReflect.Descriptor instead.
+func (*BoundWorkflowAppTarget) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *BoundWorkflowPluginTarget) GetPluginName() string {
+func (x *BoundWorkflowAppTarget) GetAppName() string {
 	if x != nil {
-		return x.PluginName
+		return x.AppName
 	}
 	return ""
 }
 
-func (x *BoundWorkflowPluginTarget) GetOperation() string {
+func (x *BoundWorkflowAppTarget) GetOperation() string {
 	if x != nil {
 		return x.Operation
 	}
 	return ""
 }
 
-func (x *BoundWorkflowPluginTarget) GetInput() *structpb.Struct {
+func (x *BoundWorkflowAppTarget) GetInput() *structpb.Struct {
 	if x != nil {
 		return x.Input
 	}
 	return nil
 }
 
-func (x *BoundWorkflowPluginTarget) GetConnection() string {
+func (x *BoundWorkflowAppTarget) GetConnection() string {
 	if x != nil {
 		return x.Connection
 	}
 	return ""
 }
 
-func (x *BoundWorkflowPluginTarget) GetInstance() string {
+func (x *BoundWorkflowAppTarget) GetInstance() string {
 	if x != nil {
 		return x.Instance
 	}
 	return ""
 }
 
-func (x *BoundWorkflowPluginTarget) GetCredentialMode() string {
+func (x *BoundWorkflowAppTarget) GetCredentialMode() string {
 	if x != nil {
 		return x.CredentialMode
 	}
@@ -557,10 +557,10 @@ func (x *WorkflowAgentStepWhen) GetEquals() *structpb.Value {
 }
 
 type WorkflowOutputDelivery struct {
-	state          protoimpl.MessageState     `protogen:"open.v1"`
-	Target         *BoundWorkflowPluginTarget `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
-	InputBindings  []*WorkflowOutputBinding   `protobuf:"bytes,2,rep,name=input_bindings,json=inputBindings,proto3" json:"input_bindings,omitempty"`
-	CredentialMode string                     `protobuf:"bytes,3,opt,name=credential_mode,json=credentialMode,proto3" json:"credential_mode,omitempty"`
+	state          protoimpl.MessageState   `protogen:"open.v1"`
+	Target         *BoundWorkflowAppTarget  `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	InputBindings  []*WorkflowOutputBinding `protobuf:"bytes,2,rep,name=input_bindings,json=inputBindings,proto3" json:"input_bindings,omitempty"`
+	CredentialMode string                   `protobuf:"bytes,3,opt,name=credential_mode,json=credentialMode,proto3" json:"credential_mode,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -595,7 +595,7 @@ func (*WorkflowOutputDelivery) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *WorkflowOutputDelivery) GetTarget() *BoundWorkflowPluginTarget {
+func (x *WorkflowOutputDelivery) GetTarget() *BoundWorkflowAppTarget {
 	if x != nil {
 		return x.Target
 	}
@@ -1790,7 +1790,7 @@ func (x *BoundWorkflowDefinition) GetProviderName() string {
 
 type WorkflowAccessPermission struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Plugin        string                 `protobuf:"bytes,1,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	App           string                 `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
 	Operations    []string               `protobuf:"bytes,2,rep,name=operations,proto3" json:"operations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1826,9 +1826,9 @@ func (*WorkflowAccessPermission) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{20}
 }
 
-func (x *WorkflowAccessPermission) GetPlugin() string {
+func (x *WorkflowAccessPermission) GetApp() string {
 	if x != nil {
-		return x.Plugin
+		return x.App
 	}
 	return ""
 }
@@ -1853,7 +1853,7 @@ type WorkflowExecutionReference struct {
 	SubjectKind         string                      `protobuf:"bytes,10,opt,name=subject_kind,json=subjectKind,proto3" json:"subject_kind,omitempty"`
 	DisplayName         string                      `protobuf:"bytes,11,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	AuthSource          string                      `protobuf:"bytes,12,opt,name=auth_source,json=authSource,proto3" json:"auth_source,omitempty"`
-	CallerPluginName    string                      `protobuf:"bytes,13,opt,name=caller_plugin_name,json=callerPluginName,proto3" json:"caller_plugin_name,omitempty"`
+	CallerAppName       string                      `protobuf:"bytes,13,opt,name=caller_app_name,json=callerAppName,proto3" json:"caller_app_name,omitempty"`
 	RunAs               *WorkflowRunAsSubject       `protobuf:"bytes,14,opt,name=run_as,json=runAs,proto3" json:"run_as,omitempty"`
 	SourceDefinitionId  string                      `protobuf:"bytes,15,opt,name=source_definition_id,json=sourceDefinitionId,proto3" json:"source_definition_id,omitempty"`
 	unknownFields       protoimpl.UnknownFields
@@ -1967,9 +1967,9 @@ func (x *WorkflowExecutionReference) GetAuthSource() string {
 	return ""
 }
 
-func (x *WorkflowExecutionReference) GetCallerPluginName() string {
+func (x *WorkflowExecutionReference) GetCallerAppName() string {
 	if x != nil {
-		return x.CallerPluginName
+		return x.CallerAppName
 	}
 	return ""
 }
@@ -2246,7 +2246,7 @@ type ListWorkflowProviderRunsRequest struct {
 	PageToken       string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	Status          WorkflowRunStatus      `protobuf:"varint,3,opt,name=status,proto3,enum=gestalt.provider.v1.WorkflowRunStatus" json:"status,omitempty"`
 	InvocationToken string                 `protobuf:"bytes,4,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	TargetPlugin    string                 `protobuf:"bytes,5,opt,name=target_plugin,json=targetPlugin,proto3" json:"target_plugin,omitempty"`
+	TargetApp       string                 `protobuf:"bytes,5,opt,name=target_app,json=targetApp,proto3" json:"target_app,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2309,9 +2309,9 @@ func (x *ListWorkflowProviderRunsRequest) GetInvocationToken() string {
 	return ""
 }
 
-func (x *ListWorkflowProviderRunsRequest) GetTargetPlugin() string {
+func (x *ListWorkflowProviderRunsRequest) GetTargetApp() string {
 	if x != nil {
-		return x.TargetPlugin
+		return x.TargetApp
 	}
 	return ""
 }
@@ -3674,7 +3674,7 @@ func (x *ResumeWorkflowProviderEventTriggerRequest) GetInvocationToken() string 
 
 type PublishWorkflowProviderEventRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	PluginName      string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	AppName         string                 `protobuf:"bytes,1,opt,name=app_name,json=appName,proto3" json:"app_name,omitempty"`
 	Event           *WorkflowEvent         `protobuf:"bytes,2,opt,name=event,proto3" json:"event,omitempty"`
 	PublishedBy     *WorkflowActor         `protobuf:"bytes,3,opt,name=published_by,json=publishedBy,proto3" json:"published_by,omitempty"`
 	InvocationToken string                 `protobuf:"bytes,4,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
@@ -3713,9 +3713,9 @@ func (*PublishWorkflowProviderEventRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{49}
 }
 
-func (x *PublishWorkflowProviderEventRequest) GetPluginName() string {
+func (x *PublishWorkflowProviderEventRequest) GetAppName() string {
 	if x != nil {
-		return x.PluginName
+		return x.AppName
 	}
 	return ""
 }
@@ -4144,15 +4144,14 @@ var File_v1_workflow_proto protoreflect.FileDescriptor
 
 const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
-	"\x11v1/workflow.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x0ev1/agent.proto\x1a\x0fv1/plugin.proto\"\xe9\x01\n" +
-	"\x13BoundWorkflowTarget\x12H\n" +
-	"\x06plugin\x18\x06 \x01(\v2..gestalt.provider.v1.BoundWorkflowPluginTargetH\x00R\x06plugin\x12E\n" +
+	"\x11v1/workflow.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x0ev1/agent.proto\x1a\fv1/app.proto\"\xdd\x01\n" +
+	"\x13BoundWorkflowTarget\x12?\n" +
+	"\x03app\x18\x06 \x01(\v2+.gestalt.provider.v1.BoundWorkflowAppTargetH\x00R\x03app\x12E\n" +
 	"\x05agent\x18\a \x01(\v2-.gestalt.provider.v1.BoundWorkflowAgentTargetH\x00R\x05agentB\x06\n" +
-	"\x04kindJ\x04\b\x01\x10\x06R\vplugin_nameR\toperationR\x05inputR\n" +
-	"connectionR\binstance\"\xee\x01\n" +
-	"\x19BoundWorkflowPluginTarget\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x1c\n" +
+	"\x04kindJ\x04\b\x01\x10\x06R\bapp_nameR\toperationR\x05inputR\n" +
+	"connectionR\binstance\"\xe5\x01\n" +
+	"\x16BoundWorkflowAppTarget\x12\x19\n" +
+	"\bapp_name\x18\x01 \x01(\tR\aappName\x12\x1c\n" +
 	"\toperation\x18\x02 \x01(\tR\toperation\x12-\n" +
 	"\x05input\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x05input\x12\x1e\n" +
 	"\n" +
@@ -4191,9 +4190,9 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\astep_id\x18\x01 \x01(\tR\x06stepId\x12\x1f\n" +
 	"\voutput_path\x18\x02 \x01(\tR\n" +
 	"outputPath\x12.\n" +
-	"\x06equals\x18\x03 \x01(\v2\x16.google.protobuf.ValueR\x06equals\"\xdc\x01\n" +
-	"\x16WorkflowOutputDelivery\x12F\n" +
-	"\x06target\x18\x01 \x01(\v2..gestalt.provider.v1.BoundWorkflowPluginTargetR\x06target\x12Q\n" +
+	"\x06equals\x18\x03 \x01(\v2\x16.google.protobuf.ValueR\x06equals\"\xd9\x01\n" +
+	"\x16WorkflowOutputDelivery\x12C\n" +
+	"\x06target\x18\x01 \x01(\v2+.gestalt.provider.v1.BoundWorkflowAppTargetR\x06target\x12Q\n" +
 	"\x0einput_bindings\x18\x02 \x03(\v2*.gestalt.provider.v1.WorkflowOutputBindingR\rinputBindings\x12'\n" +
 	"\x0fcredential_mode\x18\x03 \x01(\tR\x0ecredentialMode\"~\n" +
 	"\x15WorkflowOutputBinding\x12\x1f\n" +
@@ -4309,12 +4308,12 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"created_by\x18\x03 \x01(\v2\".gestalt.provider.v1.WorkflowActorR\tcreatedBy\x129\n" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12#\n" +
-	"\rprovider_name\x18\x05 \x01(\tR\fproviderName\"R\n" +
-	"\x18WorkflowAccessPermission\x12\x16\n" +
-	"\x06plugin\x18\x01 \x01(\tR\x06plugin\x12\x1e\n" +
+	"\rprovider_name\x18\x05 \x01(\tR\fproviderName\"L\n" +
+	"\x18WorkflowAccessPermission\x12\x10\n" +
+	"\x03app\x18\x01 \x01(\tR\x03app\x12\x1e\n" +
 	"\n" +
 	"operations\x18\x02 \x03(\tR\n" +
-	"operations\"\xd0\x05\n" +
+	"operations\"\xca\x05\n" +
 	"\x1aWorkflowExecutionReference\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rprovider_name\x18\x02 \x01(\tR\fproviderName\x12@\n" +
@@ -4331,8 +4330,8 @@ const file_v1_workflow_proto_rawDesc = "" +
 	" \x01(\tR\vsubjectKind\x12!\n" +
 	"\fdisplay_name\x18\v \x01(\tR\vdisplayName\x12\x1f\n" +
 	"\vauth_source\x18\f \x01(\tR\n" +
-	"authSource\x12,\n" +
-	"\x12caller_plugin_name\x18\r \x01(\tR\x10callerPluginName\x12@\n" +
+	"authSource\x12&\n" +
+	"\x0fcaller_app_name\x18\r \x01(\tR\rcallerAppName\x12@\n" +
 	"\x06run_as\x18\x0e \x01(\v2).gestalt.provider.v1.WorkflowRunAsSubjectR\x05runAs\x120\n" +
 	"\x14source_definition_id\x18\x0f \x01(\tR\x12sourceDefinitionIdJ\x04\b\t\x10\n" +
 	"R\x12target_fingerprint\"\xdf\x02\n" +
@@ -4359,14 +4358,15 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\rdefinition_id\x18\t \x01(\tR\fdefinitionId\"a\n" +
 	"\x1dGetWorkflowProviderRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\"\xed\x01\n" +
+	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\"\xe7\x01\n" +
 	"\x1fListWorkflowProviderRunsRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\x12>\n" +
 	"\x06status\x18\x03 \x01(\x0e2&.gestalt.provider.v1.WorkflowRunStatusR\x06status\x12)\n" +
-	"\x10invocation_token\x18\x04 \x01(\tR\x0finvocationToken\x12#\n" +
-	"\rtarget_plugin\x18\x05 \x01(\tR\ftargetPlugin\"\x85\x01\n" +
+	"\x10invocation_token\x18\x04 \x01(\tR\x0finvocationToken\x12\x1d\n" +
+	"\n" +
+	"target_app\x18\x05 \x01(\tR\ttargetApp\"\x85\x01\n" +
 	" ListWorkflowProviderRunsResponse\x129\n" +
 	"\x04runs\x18\x01 \x03(\v2%.gestalt.provider.v1.BoundWorkflowRunR\x04runs\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"|\n" +
@@ -4472,10 +4472,9 @@ const file_v1_workflow_proto_rawDesc = "" +
 	")ResumeWorkflowProviderEventTriggerRequest\x12\x1d\n" +
 	"\n" +
 	"trigger_id\x18\x02 \x01(\tR\ttriggerId\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\"\x97\x02\n" +
-	"#PublishWorkflowProviderEventRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x128\n" +
+	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\"\x91\x02\n" +
+	"#PublishWorkflowProviderEventRequest\x12\x19\n" +
+	"\bapp_name\x18\x01 \x01(\tR\aappName\x128\n" +
 	"\x05event\x18\x02 \x01(\v2\".gestalt.provider.v1.WorkflowEventR\x05event\x12E\n" +
 	"\fpublished_by\x18\x03 \x01(\v2\".gestalt.provider.v1.WorkflowActorR\vpublishedBy\x12)\n" +
 	"\x10invocation_token\x18\x04 \x01(\tR\x0finvocationToken\x12#\n" +
@@ -4564,7 +4563,7 @@ var file_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 57)
 var file_v1_workflow_proto_goTypes = []any{
 	(WorkflowRunStatus)(0),                            // 0: gestalt.provider.v1.WorkflowRunStatus
 	(*BoundWorkflowTarget)(nil),                       // 1: gestalt.provider.v1.BoundWorkflowTarget
-	(*BoundWorkflowPluginTarget)(nil),                 // 2: gestalt.provider.v1.BoundWorkflowPluginTarget
+	(*BoundWorkflowAppTarget)(nil),                    // 2: gestalt.provider.v1.BoundWorkflowAppTarget
 	(*BoundWorkflowAgentTarget)(nil),                  // 3: gestalt.provider.v1.BoundWorkflowAgentTarget
 	(*WorkflowAgentStep)(nil),                         // 4: gestalt.provider.v1.WorkflowAgentStep
 	(*WorkflowAgentStepWhen)(nil),                     // 5: gestalt.provider.v1.WorkflowAgentStepWhen
@@ -4628,9 +4627,9 @@ var file_v1_workflow_proto_goTypes = []any{
 	(*emptypb.Empty)(nil),         // 63: google.protobuf.Empty
 }
 var file_v1_workflow_proto_depIdxs = []int32{
-	2,   // 0: gestalt.provider.v1.BoundWorkflowTarget.plugin:type_name -> gestalt.provider.v1.BoundWorkflowPluginTarget
+	2,   // 0: gestalt.provider.v1.BoundWorkflowTarget.app:type_name -> gestalt.provider.v1.BoundWorkflowAppTarget
 	3,   // 1: gestalt.provider.v1.BoundWorkflowTarget.agent:type_name -> gestalt.provider.v1.BoundWorkflowAgentTarget
-	58,  // 2: gestalt.provider.v1.BoundWorkflowPluginTarget.input:type_name -> google.protobuf.Struct
+	58,  // 2: gestalt.provider.v1.BoundWorkflowAppTarget.input:type_name -> google.protobuf.Struct
 	59,  // 3: gestalt.provider.v1.BoundWorkflowAgentTarget.messages:type_name -> gestalt.provider.v1.AgentMessage
 	60,  // 4: gestalt.provider.v1.BoundWorkflowAgentTarget.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
 	58,  // 5: gestalt.provider.v1.BoundWorkflowAgentTarget.response_schema:type_name -> google.protobuf.Struct
@@ -4647,7 +4646,7 @@ var file_v1_workflow_proto_depIdxs = []int32{
 	5,   // 16: gestalt.provider.v1.WorkflowAgentStep.when:type_name -> gestalt.provider.v1.WorkflowAgentStepWhen
 	58,  // 17: gestalt.provider.v1.WorkflowAgentStep.metadata:type_name -> google.protobuf.Struct
 	61,  // 18: gestalt.provider.v1.WorkflowAgentStepWhen.equals:type_name -> google.protobuf.Value
-	2,   // 19: gestalt.provider.v1.WorkflowOutputDelivery.target:type_name -> gestalt.provider.v1.BoundWorkflowPluginTarget
+	2,   // 19: gestalt.provider.v1.WorkflowOutputDelivery.target:type_name -> gestalt.provider.v1.BoundWorkflowAppTarget
 	7,   // 20: gestalt.provider.v1.WorkflowOutputDelivery.input_bindings:type_name -> gestalt.provider.v1.WorkflowOutputBinding
 	8,   // 21: gestalt.provider.v1.WorkflowOutputBinding.value:type_name -> gestalt.provider.v1.WorkflowOutputValueSource
 	61,  // 22: gestalt.provider.v1.WorkflowOutputValueSource.literal:type_name -> google.protobuf.Value
@@ -4785,9 +4784,9 @@ func file_v1_workflow_proto_init() {
 		return
 	}
 	file_v1_agent_proto_init()
-	file_v1_plugin_proto_init()
+	file_v1_app_proto_init()
 	file_v1_workflow_proto_msgTypes[0].OneofWrappers = []any{
-		(*BoundWorkflowTarget_Plugin)(nil),
+		(*BoundWorkflowTarget_App)(nil),
 		(*BoundWorkflowTarget_Agent)(nil),
 	}
 	file_v1_workflow_proto_msgTypes[7].OneofWrappers = []any{

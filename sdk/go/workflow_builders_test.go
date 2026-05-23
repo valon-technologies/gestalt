@@ -102,10 +102,10 @@ func TestNewWorkflowEventUsesNativeDataExtensionsAndTime(t *testing.T) {
 	}
 }
 
-func TestNewBoundWorkflowPluginTargetUsesNativeValues(t *testing.T) {
+func TestNewBoundWorkflowAppTargetUsesNativeValues(t *testing.T) {
 	target, err := boundWorkflowTargetToProto(BoundWorkflowTarget{
-		Plugin: &BoundWorkflowPluginTarget{
-			PluginName: "slack",
+		App: &BoundWorkflowAppTarget{
+			AppName: "slack",
 			Operation:  "chat.postMessage",
 			Input: struct {
 				Channel string `json:"channel"`
@@ -118,18 +118,18 @@ func TestNewBoundWorkflowPluginTargetUsesNativeValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("boundWorkflowTargetToProto: %v", err)
 	}
-	plugin := target.GetPlugin()
-	if plugin.GetPluginName() != "slack" || plugin.GetOperation() != "chat.postMessage" {
-		t.Fatalf("plugin target = %q/%q, want slack/chat.postMessage", plugin.GetPluginName(), plugin.GetOperation())
+	plugin := target.GetApp()
+	if app.GetAppName() != "slack" || app.GetOperation() != "chat.postMessage" {
+		t.Fatalf("plugin target = %q/%q, want slack/chat.postMessage", app.GetAppName(), app.GetOperation())
 	}
-	if got := plugin.GetInput().AsMap()["channel"]; got != "C123" {
+	if got := app.GetInput().AsMap()["channel"]; got != "C123" {
 		t.Fatalf("plugin input channel = %#v, want C123", got)
 	}
 }
 
 func TestAgentToolRefCarriesRunAs(t *testing.T) {
 	input := AgentToolRef{
-		Plugin:    "notion",
+		App: "notion",
 		Operation: "search",
 		RunAs: &Subject{
 			ID:                  "service_account:gestalt-support-notion",
@@ -179,13 +179,13 @@ func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 			Messages: []AgentMessage{
 				{Role: "user", Parts: []AgentMessagePart{{Type: AgentMessagePartTypeText, Text: "hello"}}},
 			},
-			ToolRefs:       []AgentToolRef{{Plugin: "search", Operation: "query"}},
+			ToolRefs:       []AgentToolRef{{App: "search", Operation: "query"}},
 			ResponseSchema: map[string]any{"type": "object"},
 			Metadata:       map[string]any{"source": "test"},
 			TimeoutSeconds: 30,
 			OutputDelivery: &WorkflowOutputDelivery{
-				Target: &BoundWorkflowPluginTarget{
-					PluginName: "slack",
+				Target: &BoundWorkflowAppTarget{
+					AppName: "slack",
 					Operation:  "chat.postMessage",
 					Input:      map[string]any{"channel": "C123"},
 				},
@@ -197,8 +197,8 @@ func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 				},
 			},
 			SessionReadyDelivery: &WorkflowOutputDelivery{
-				Target: &BoundWorkflowPluginTarget{
-					PluginName: "slack",
+				Target: &BoundWorkflowAppTarget{
+					AppName: "slack",
 					Operation:  "chat.postMessage",
 					Input:      map[string]any{"channel": "C123"},
 				},
@@ -214,14 +214,14 @@ func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 					ID:             "diagnosis",
 					Prompt:         "Diagnose",
 					Messages:       []AgentMessage{{Role: "system", Parts: []AgentMessagePart{{Type: AgentMessagePartTypeText, Text: "brief"}}}},
-					ToolRefs:       []AgentToolRef{{Plugin: "datadog", Operation: "queryLogs"}},
+					ToolRefs:       []AgentToolRef{{App: "datadog", Operation: "queryLogs"}},
 					ResponseSchema: map[string]any{"type": "object"},
 					ModelOptions:   map[string]any{"temperature": 0},
 					TimeoutSeconds: 45,
 					Metadata:       map[string]any{"kind": "diagnosis"},
 					OutputDelivery: &WorkflowOutputDelivery{
-						Target: &BoundWorkflowPluginTarget{
-							PluginName: "slack",
+						Target: &BoundWorkflowAppTarget{
+							AppName: "slack",
 							Operation:  "chat.postMessage",
 						},
 						InputBindings: []WorkflowOutputBinding{
@@ -235,7 +235,7 @@ func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 				{
 					ID:       "pr_fix",
 					Prompt:   "Open a PR",
-					ToolRefs: []AgentToolRef{{Plugin: "github", Operation: "createPullRequest"}},
+					ToolRefs: []AgentToolRef{{App: "github", Operation: "createPullRequest"}},
 					When: &WorkflowAgentStepWhen{
 						StepID:     "diagnosis",
 						OutputPath: "structured_output.actionable_for_pr",
@@ -261,8 +261,8 @@ func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 	if got := agent.GetSessionReadyDelivery().GetInputBindings()[0].GetValue().GetAgentSession(); got != "id" {
 		t.Fatalf("session ready binding = %#v, want id", got)
 	}
-	if got := agent.GetSteps()[0].GetToolRefs()[0].GetPlugin(); got != "datadog" {
-		t.Fatalf("step tool ref plugin = %q, want datadog", got)
+	if got := agent.GetSteps()[0].GetToolRefs()[0].GetApp(); got != "datadog" {
+		t.Fatalf("step tool ref app = %q, want datadog", got)
 	}
 	if got := agent.GetSteps()[1].GetWhen().GetEquals().GetBoolValue(); got != true {
 		t.Fatalf("step when equals = %v, want true", got)
@@ -281,8 +281,8 @@ func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 
 func TestBoundWorkflowTargetFromTargetDoesNotAliasJSONFields(t *testing.T) {
 	original, err := boundWorkflowTargetToProto(BoundWorkflowTarget{
-		Plugin: &BoundWorkflowPluginTarget{
-			PluginName: "slack",
+		App: &BoundWorkflowAppTarget{
+			AppName: "slack",
 			Operation:  "chat.postMessage",
 			Input:      map[string]any{"channel": "C123"},
 		},
@@ -295,11 +295,11 @@ func TestBoundWorkflowTargetFromTargetDoesNotAliasJSONFields(t *testing.T) {
 		t.Fatalf("boundWorkflowTargetToProto(roundTrip): %v", err)
 	}
 
-	original.GetPlugin().GetInput().Fields["channel"], err = valueFromAny("C999")
+	original.GetApp().GetInput().Fields["channel"], err = valueFromAny("C999")
 	if err != nil {
 		t.Fatalf("valueFromAny: %v", err)
 	}
-	if got := roundTrip.GetPlugin().GetInput().AsMap()["channel"]; got != "C123" {
+	if got := roundTrip.GetApp().GetInput().AsMap()["channel"]; got != "C123" {
 		t.Fatalf("round-trip input channel = %#v, want C123", got)
 	}
 }
@@ -309,8 +309,8 @@ func TestWorkflowRunFromRunDoesNotAliasNestedFields(t *testing.T) {
 	run, err := boundWorkflowRunToProto(BoundWorkflowRun{
 		ID: "run-1",
 		Target: &BoundWorkflowTarget{
-			Plugin: &BoundWorkflowPluginTarget{
-				PluginName: "slack",
+			App: &BoundWorkflowAppTarget{
+				AppName: "slack",
 				Operation:  "chat.postMessage",
 				Input:      map[string]any{"channel": "C123"},
 			},
@@ -337,7 +337,7 @@ func TestWorkflowRunFromRunDoesNotAliasNestedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cloneBoundWorkflowRunProto: %v", err)
 	}
-	run.GetTarget().GetPlugin().GetInput().Fields["channel"], err = valueFromAny("C999")
+	run.GetTarget().GetApp().GetInput().Fields["channel"], err = valueFromAny("C999")
 	if err != nil {
 		t.Fatalf("valueFromAny(channel): %v", err)
 	}
@@ -346,7 +346,7 @@ func TestWorkflowRunFromRunDoesNotAliasNestedFields(t *testing.T) {
 		t.Fatalf("valueFromAny(ok): %v", err)
 	}
 
-	if got := copied.GetTarget().GetPlugin().GetInput().AsMap()["channel"]; got != "C123" {
+	if got := copied.GetTarget().GetApp().GetInput().AsMap()["channel"]; got != "C123" {
 		t.Fatalf("copied target channel = %#v, want C123", got)
 	}
 	if got := copied.GetTrigger().GetEvent().GetEvent().GetData().AsMap()["ok"]; got != true {
@@ -358,13 +358,13 @@ func TestWorkflowExecutionReferenceFromReferenceDoesNotAliasNestedFields(t *test
 	ref, err := workflowExecutionReferenceToProto(WorkflowExecutionReference{
 		ID: "ref-1",
 		Target: &BoundWorkflowTarget{
-			Plugin: &BoundWorkflowPluginTarget{
-				PluginName: "slack",
+			App: &BoundWorkflowAppTarget{
+				AppName: "slack",
 				Operation:  "chat.postMessage",
 				Input:      map[string]any{"channel": "C123"},
 			},
 		},
-		Permissions: []WorkflowAccessPermission{{Plugin: "slack", Operations: []string{"chat.postMessage"}}},
+		Permissions: []WorkflowAccessPermission{{App: "slack", Operations: []string{"chat.postMessage"}}},
 		RunAs:       &WorkflowRunAsSubject{SubjectID: "service_account:slack"},
 	})
 	if err != nil {
@@ -375,14 +375,14 @@ func TestWorkflowExecutionReferenceFromReferenceDoesNotAliasNestedFields(t *test
 	if err != nil {
 		t.Fatalf("cloneWorkflowExecutionReferenceProto: %v", err)
 	}
-	ref.GetTarget().GetPlugin().GetInput().Fields["channel"], err = valueFromAny("C999")
+	ref.GetTarget().GetApp().GetInput().Fields["channel"], err = valueFromAny("C999")
 	if err != nil {
 		t.Fatalf("valueFromAny(channel): %v", err)
 	}
 	ref.GetPermissions()[0].Operations[0] = "changed"
 	ref.GetRunAs().SubjectId = "changed"
 
-	if got := copied.GetTarget().GetPlugin().GetInput().AsMap()["channel"]; got != "C123" {
+	if got := copied.GetTarget().GetApp().GetInput().AsMap()["channel"]; got != "C123" {
 		t.Fatalf("copied target channel = %#v, want C123", got)
 	}
 	if got := copied.GetPermissions()[0].GetOperations()[0]; got != "chat.postMessage" {

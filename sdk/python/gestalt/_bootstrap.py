@@ -15,7 +15,7 @@ class PluginTarget:
 @dataclass(frozen=True)
 class BundledPluginConfig:
     target: str
-    plugin_name: str | None = None
+    app_name: str | None = None
     runtime_kind: str | None = None
 
 
@@ -44,9 +44,9 @@ def read_bundled_plugin_config(*, bundle_root: pathlib.Path) -> BundledPluginCon
     if not target:
         raise RuntimeError(f"{config_path} is missing target")
 
-    plugin_name = data.get("plugin_name")
-    if plugin_name is not None:
-        plugin_name = str(plugin_name).strip() or None
+    app_name = data.get("app_name")
+    if app_name is not None:
+        app_name = str(app_name).strip() or None
 
     runtime_kind = data.get("runtime_kind")
     if runtime_kind is not None:
@@ -54,7 +54,7 @@ def read_bundled_plugin_config(*, bundle_root: pathlib.Path) -> BundledPluginCon
 
     return BundledPluginConfig(
         target=target,
-        plugin_name=plugin_name,
+        app_name=app_name,
         runtime_kind=runtime_kind,
     )
 
@@ -63,14 +63,14 @@ def write_bundled_plugin_config(
     path: pathlib.Path,
     *,
     target: str,
-    plugin_name: str,
+    app_name: str,
     runtime_kind: str,
 ) -> None:
     path.write_text(
         json.dumps(
             {
                 "target": target,
-                "plugin_name": plugin_name,
+                "app_name": app_name,
                 "runtime_kind": runtime_kind,
             }
         ),

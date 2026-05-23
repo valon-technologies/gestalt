@@ -11,7 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/server"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
@@ -102,11 +102,11 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	var remoteTokenFlag *string
 	var watchFlag *bool
 	if opts.allowProviderLocal {
-		pluginFlag = fs.String("plugin", "", "run only the named plugin and its local dependency closure")
+		pluginFlag = fs.String("app", "", "run only the named app and its local dependency closure")
 		pathFlag = fs.String("path", "", "provider manifest path or directory for local source serve")
 		nameFlag = fs.String("name", "", "provider key override for --path or --remote")
 		portFlag = fs.Int("port", 0, "public port for --path (defaults to a free localhost port)")
-		remoteFlag = fs.String("remote", "", "remote gestaltd base URL to attach local source plugins to")
+		remoteFlag = fs.String("remote", "", "remote gestaltd base URL to attach local source apps to")
 		remoteTokenFlag = fs.String("remote-token", "", "bearer token for --remote (defaults to GESTALT_API_KEY)")
 		watchFlag = fs.Bool("watch", false, "watch local source files and restart/rebuild after changes")
 	}
@@ -146,7 +146,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 			ConfigPaths:   []string(configPaths),
 			Path:          flagStringValue(pathFlag),
 			Name:          flagStringValue(nameFlag),
-			Plugin:        flagStringValue(pluginFlag),
+			App:           flagStringValue(pluginFlag),
 			Port:          flagIntValue(portFlag),
 			Remote:        flagStringValue(remoteFlag),
 			RemoteToken:   flagStringValue(remoteTokenFlag),
@@ -164,14 +164,14 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 		return runServeWatch(resolvedConfigPaths, operator.StatePaths{
 			ArtifactsDir: *artifactsDir,
 			LockfilePath: *lockfilePath,
-			PluginScope:  []string{flagStringValue(pluginFlag)},
+			AppScope:     []string{flagStringValue(pluginFlag)},
 		})
 	}
 
 	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, operator.StatePaths{
 		ArtifactsDir: *artifactsDir,
 		LockfilePath: *lockfilePath,
-		PluginScope:  []string{flagStringValue(pluginFlag)},
+		AppScope:     []string{flagStringValue(pluginFlag)},
 	}, locked)
 	if err != nil {
 		return err
@@ -183,7 +183,7 @@ type serveProviderLocalOptions struct {
 	ConfigPaths   []string
 	Path          string
 	Name          string
-	Plugin        string
+	App           string
 	Port          int
 	Remote        string
 	RemoteToken   string
@@ -197,7 +197,7 @@ type serveProviderLocalOptions struct {
 func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 	path := strings.TrimSpace(opts.Path)
 	name := strings.TrimSpace(opts.Name)
-	plugin := strings.TrimSpace(opts.Plugin)
+	app := strings.TrimSpace(opts.App)
 	remote := strings.TrimSpace(opts.Remote)
 	remoteToken := strings.TrimSpace(opts.RemoteToken)
 
@@ -217,28 +217,28 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 		if opts.Watch {
 			return true, fmt.Errorf("--watch cannot be combined with --remote")
 		}
-		if plugin != "" && path != "" {
-			return true, fmt.Errorf("--plugin cannot be combined with --path")
+		if app != "" && path != "" {
+			return true, fmt.Errorf("--app cannot be combined with --path")
 		}
-		if plugin != "" && name != "" {
-			return true, fmt.Errorf("--plugin cannot be combined with --name")
+		if app != "" && name != "" {
+			return true, fmt.Errorf("--app cannot be combined with --name")
 		}
-		if plugin != "" {
-			name = plugin
+		if app != "" {
+			name = app
 		}
 		return true, runProviderRemoteDev(providerLocalCommandOptions{
 			Path:        opts.Path,
 			ConfigPaths: opts.ConfigPaths,
 			Name:        name,
-			Plugin:      plugin,
+			App:         app,
 			Remote:      opts.Remote,
 			RemoteToken: opts.RemoteToken,
 		})
 	}
 
 	if path != "" {
-		if plugin != "" {
-			return true, fmt.Errorf("--plugin cannot be combined with --path")
+		if app != "" {
+			return true, fmt.Errorf("--app cannot be combined with --path")
 		}
 		if opts.Watch {
 			return true, fmt.Errorf("--watch cannot be combined with --path")
@@ -360,7 +360,7 @@ func runValidate(args []string) error {
 	var configPaths repeatedStringFlag
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
-	pluginFlag := fs.String("plugin", "", "validate only the named plugin and its local dependency closure")
+	pluginFlag := fs.String("app", "", "validate only the named app and its local dependency closure")
 	platform := fs.String("platform", "", "target platform for static validation, formatted os/arch")
 	runtimeValidation := fs.Bool("runtime", false, "run deep runtime validation that starts configured providers")
 	if err := fs.Parse(args); err != nil {
@@ -376,7 +376,7 @@ func runValidate(args []string) error {
 	}
 	return validateConfig(configPaths, operator.StatePaths{
 		LockfilePath: *lockfilePath,
-		PluginScope:  []string{*pluginFlag},
+		AppScope:     []string{*pluginFlag},
 	}, opts)
 }
 
@@ -410,7 +410,7 @@ func validateConfig(configFlags []string, state operator.StatePaths, opts valida
 	result, err := validateConfigWithStatePaths(configFlags, operator.StatePaths{
 		ArtifactsDir: scratchDir,
 		LockfilePath: state.LockfilePath,
-		PluginScope:  state.PluginScope,
+		AppScope:     state.AppScope,
 	}, opts)
 	if err != nil {
 		return err
@@ -437,9 +437,9 @@ func logConfigSummary(paths []string, cfg *config.Config) {
 		"telemetry_provider", selectedProviderLabel(cfg.SelectedTelemetryProvider()),
 	)
 
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		if entry != nil {
-			slog.Info("integration configured", "integration", name, "type", "plugin")
+			slog.Info("integration configured", "integration", name, "type", "app")
 		}
 	}
 
@@ -486,12 +486,12 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--platform PLATFORMS] [--check]")
 	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--check]")
-	writeUsageLine(w, "  gestaltd serve [--plugin NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
+	writeUsageLine(w, "  gestaltd serve [--app NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
 	writeUsageLine(w, "  gestaltd serve --remote URL (--path PATH | --config PATH...) [--name NAME]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
-	writeUsageLine(w, "  gestaltd validate [--plugin NAME] [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
+	writeUsageLine(w, "  gestaltd validate [--app NAME] [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  agent       Launch or inspect local agent harnesses")
@@ -510,16 +510,16 @@ func printMainUsage(w io.Writer) {
 
 func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd serve [--plugin NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
+	writeUsageLine(w, "  gestaltd serve [--app NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
 	writeUsageLine(w, "  gestaltd serve --remote URL --config PATH [--config PATH]... [--name NAME]")
 	writeUsageLine(w, "  gestaltd serve --remote URL --path PATH [--config PATH]... [--name NAME]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Without --locked, auto lock/syncs if state is missing or stale.")
-	writeUsageLine(w, "Use --plugin for local scoped development of one configured plugin without preparing the full config.")
-	writeUsageLine(w, "Use --path to serve one local source plugin or UI bundle inside a synthesized Gestalt config.")
+	writeUsageLine(w, "Use --app for local scoped development of one configured app without preparing the full config.")
+	writeUsageLine(w, "Use --path to serve one local source app or UI bundle inside a synthesized Gestalt config.")
 	writeUsageLine(w, "Use --watch to rebuild/restart after debounced local file changes.")
-	writeUsageLine(w, "Use --remote to attach local source plugins to an authenticated remote gestaltd session.")
+	writeUsageLine(w, "Use --remote to attach local source apps to an authenticated remote gestaltd session.")
 	writeUsageLine(w, "For production, strongly prefer --locked so startup uses the pinned")
 	writeUsageLine(w, "lockfile and prepared artifacts instead of resolving or mutating state.")
 	writeUsageLine(w, "When locked, run `gestaltd lock` before deploy and `gestaltd sync --locked` during build.")
@@ -563,10 +563,10 @@ func printSyncUsage(w io.Writer) {
 
 func printValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd validate [--plugin NAME] [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
+	writeUsageLine(w, "  gestaltd validate [--app NAME] [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Validate configuration without starting the server or running migrations.")
-	writeUsageLine(w, "Use --plugin for scoped validation of one plugin closure; it does not validate the full deployment.")
+	writeUsageLine(w, "Use --app for scoped validation of one app closure; it does not validate the full deployment.")
 	writeUsageLine(w, "Static validation uses locked provider metadata and temporary scratch state.")
 	writeUsageLine(w, "Use --runtime to opt into deep validation that starts configured providers.")
 	writeUsageLine(w, "Repeated --config flags merge left-to-right.")

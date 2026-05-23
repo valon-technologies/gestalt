@@ -298,7 +298,7 @@ fn test_cli_creates_agent_turn_from_input() {
         ],
         "toolRefs":[
             {
-                "plugin":"roadmap",
+                "app":"roadmap",
                 "operation":"sync",
                 "connection":"workspace",
                 "instance":"prod",
@@ -666,7 +666,7 @@ fn test_cli_runs_interactive_agent_session() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello\nthere"}],"toolRefs":[{"plugin":"tracker","operation":"searchItems"}]}"#.to_string(),
+        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello\nthere"}],"toolRefs":[{"app":"tracker","operation":"searchItems"}]}"#.to_string(),
     ))
     .with_body(TURN_JSON)
     .create();

@@ -15,7 +15,7 @@ import (
 const agentToolSearchMetadataTextMaxBytes = 1200
 
 type agentToolSearchDocument struct {
-	Plugin      string `json:"plugin"`
+	App         string `json:"app"`
 	Operation   string `json:"operation"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
@@ -116,7 +116,7 @@ type agentToolSearchRankedCandidate struct {
 
 func agentToolSearchQuery(searchText string) blevequery.Query {
 	queries := []blevequery.Query{
-		agentToolSearchMatchQuery("plugin", searchText, 12),
+		agentToolSearchMatchQuery("app", searchText, 12),
 		agentToolSearchMatchQuery("operation", searchText, 9),
 		agentToolSearchMatchQuery("title", searchText, 8),
 		agentToolSearchMatchQuery("parameters", searchText, 5),
@@ -143,7 +143,7 @@ func agentToolSearchDoc(candidate agentToolSearchCandidate) agentToolSearchDocum
 		catalogDescription = cat.Description
 	}
 	return agentToolSearchDocument{
-		Plugin:      agentToolSearchText(candidate.ref.Plugin + " " + catalogName + " " + catalogDisplayName),
+		App:         agentToolSearchText(candidate.ref.App + " " + catalogName + " " + catalogDisplayName),
 		Operation:   agentToolSearchText(candidate.ref.Operation + " " + op.ID + " " + op.ProviderID + " " + op.Path),
 		Title:       agentToolSearchText(op.Title),
 		Description: agentToolSearchText(catalogDescription + " " + op.Description),
@@ -155,7 +155,7 @@ func agentToolSearchDoc(candidate agentToolSearchCandidate) agentToolSearchDocum
 func agentToolSearchMetadataText(candidate agentToolSearchCandidate) string {
 	doc := agentToolSearchDoc(candidate)
 	parts := []string{
-		doc.Plugin,
+		doc.App,
 		doc.Operation,
 		doc.Title,
 		doc.Description,
@@ -224,8 +224,8 @@ func sortAgentToolSearchCandidates(candidates []agentToolSearchCandidate) {
 }
 
 func compareAgentToolSearchCandidates(a, b agentToolSearchCandidate) int {
-	if a.ref.Plugin != b.ref.Plugin {
-		return strings.Compare(a.ref.Plugin, b.ref.Plugin)
+	if a.ref.App != b.ref.App {
+		return strings.Compare(a.ref.App, b.ref.App)
 	}
 	if a.ref.Operation != b.ref.Operation {
 		return strings.Compare(a.ref.Operation, b.ref.Operation)

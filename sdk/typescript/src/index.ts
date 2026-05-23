@@ -6,9 +6,9 @@
  *
  * @example
  * ```ts
- * import { definePlugin, ok, operation, s } from "@valon-technologies/gestalt";
+ * import { defineApp, ok, operation, s } from "@valon-technologies/gestalt";
  *
- * export const plugin = definePlugin({
+ * export const app = defineApp({
  *   displayName: "Example Provider",
  *   operations: [
  *     operation({
@@ -137,9 +137,9 @@ export {
   parseBuildArgs,
 } from "./build.ts";
 export {
-  PluginInvoker,
+  AppInvoker,
   type PluginGraphQLInvokeOptions,
-  type PluginInvocationGrant,
+  type AppInvocationGrant,
   type PluginInvokeOptions,
 } from "./invoker.ts";
 export {
@@ -224,9 +224,9 @@ export {
 } from "./secrets.ts";
 export {
   type ConnectedToken,
-  PluginProvider,
-  definePlugin,
-  isPluginProvider,
+  AppProvider,
+  defineApp,
+  isAppProvider,
   operation,
   type ConnectionMode,
   type ConnectionParamDefinition,
@@ -236,7 +236,7 @@ export {
   type PluginDefinitionOptions,
   type SessionCatalog,
   type SessionCatalogHandler,
-} from "./plugin.ts";
+} from "./app.ts";
 export {
   ProviderBase,
   isProviderBase,
@@ -251,29 +251,29 @@ export {
   type WarningsHandler,
 } from "./provider.ts";
 export {
-  PluginRuntimeEgressMode,
-  PluginRuntimeProvider,
-  createPluginRuntimeProviderService,
-  definePluginRuntimeProvider,
-  isPluginRuntimeProvider,
-  type GetPluginRuntimeSessionRequest,
-  type HostedPlugin,
-  type ListPluginRuntimeSessionsRequest,
-  type PluginRuntimeAgentWorkspace,
-  type PluginRuntimeAgentWorkspaceGitCheckout,
-  type PluginRuntimeImagePullAuth,
-  type PluginRuntimePreparedAgentWorkspace,
-  type PluginRuntimeProviderOptions,
-  type PluginRuntimeSession,
-  type PluginRuntimeSessionLifecycle,
-  type PluginRuntimeSupport,
-  type PreparePluginRuntimeWorkspaceRequest,
-  type PreparePluginRuntimeWorkspaceResponse,
-  type RemovePluginRuntimeWorkspaceRequest,
-  type StartHostedPluginRequest,
-  type StartPluginRuntimeSessionRequest,
-  type StopPluginRuntimeSessionRequest,
-} from "./pluginruntime.ts";
+  AppRuntimeEgressMode,
+  AppRuntimeProvider,
+  createAppRuntimeProviderService,
+  defineAppRuntimeProvider,
+  isAppRuntimeProvider,
+  type GetAppRuntimeSessionRequest,
+  type HostedApp,
+  type ListAppRuntimeSessionsRequest,
+  type AppRuntimeAgentWorkspace,
+  type AppRuntimeAgentWorkspaceGitCheckout,
+  type AppRuntimeImagePullAuth,
+  type AppRuntimePreparedAgentWorkspace,
+  type AppRuntimeProviderOptions,
+  type AppRuntimeSession,
+  type AppRuntimeSessionLifecycle,
+  type AppRuntimeSupport,
+  type PrepareAppRuntimeWorkspaceRequest,
+  type PrepareAppRuntimeWorkspaceResponse,
+  type RemoveAppRuntimeWorkspaceRequest,
+  type StartHostedAppRequest,
+  type StartAppRuntimeSessionRequest,
+  type StopAppRuntimeSessionRequest,
+} from "./appruntime.ts";
 export {
   array,
   boolean,
@@ -500,7 +500,7 @@ export {
   type BoundWorkflowAgentTarget,
   type BoundWorkflowDefinition,
   type BoundWorkflowEventTrigger,
-  type BoundWorkflowPluginTarget,
+  type BoundWorkflowAppTarget,
   type BoundWorkflowRun,
   type BoundWorkflowSchedule,
   type BoundWorkflowTarget,

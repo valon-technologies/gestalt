@@ -16,7 +16,7 @@ import (
 type RuntimeLogAppendFunc func(ctx context.Context, runtimeProviderName, sessionID string, entries []AppendRuntimeLogEntry) (int64, error)
 
 type RuntimeLogHostServer struct {
-	proto.UnimplementedPluginRuntimeLogHostServer
+	proto.UnimplementedAppRuntimeLogHostServer
 	runtimeProviderName string
 	appendLogs          RuntimeLogAppendFunc
 }
@@ -28,7 +28,7 @@ func NewRuntimeLogHostServer(runtimeProviderName string, appendLogs RuntimeLogAp
 	}
 }
 
-func (s *RuntimeLogHostServer) AppendLogs(ctx context.Context, req *proto.AppendPluginRuntimeLogsRequest) (*proto.AppendPluginRuntimeLogsResponse, error) {
+func (s *RuntimeLogHostServer) AppendLogs(ctx context.Context, req *proto.AppendAppRuntimeLogsRequest) (*proto.AppendAppRuntimeLogsResponse, error) {
 	if s == nil || s.appendLogs == nil {
 		return nil, status.Error(codes.FailedPrecondition, "runtime log host is not available")
 	}
@@ -61,20 +61,20 @@ func (s *RuntimeLogHostServer) AppendLogs(ctx context.Context, req *proto.Append
 			return nil, status.Errorf(codes.Internal, "append runtime session logs: %v", err)
 		}
 	}
-	return &proto.AppendPluginRuntimeLogsResponse{LastSeq: lastSeq}, nil
+	return &proto.AppendAppRuntimeLogsResponse{LastSeq: lastSeq}, nil
 }
 
-func logStreamFromProto(stream proto.PluginRuntimeLogStream) runtimelogs.Stream {
+func logStreamFromProto(stream proto.AppRuntimeLogStream) runtimelogs.Stream {
 	switch stream {
-	case proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT:
+	case proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT:
 		return runtimelogs.StreamStdout
-	case proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR:
+	case proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR:
 		return runtimelogs.StreamStderr
-	case proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME:
+	case proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME:
 		return runtimelogs.StreamRuntime
 	default:
 		return runtimelogs.StreamRuntime
 	}
 }
 
-var _ proto.PluginRuntimeLogHostServer = (*RuntimeLogHostServer)(nil)
+var _ proto.AppRuntimeLogHostServer = (*RuntimeLogHostServer)(nil)

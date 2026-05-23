@@ -29,7 +29,7 @@ type remoteSecretManager struct {
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (core.SecretManager, error) {
-	proc, err := runtimehost.StartPluginProcess(ctx, runtimehost.ProcessConfig{
+	proc, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Workdir:      cfg.Workdir,

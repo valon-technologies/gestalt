@@ -33,7 +33,7 @@ use generated::v1::{
     WorkflowExecutionReference, bound_workflow_target,
 };
 use gestalt::{
-    AgentMessage, AgentMessagePart, BoundWorkflowAgentTarget, BoundWorkflowPluginTarget,
+    AgentMessage, AgentMessagePart, BoundWorkflowAgentTarget, BoundWorkflowAppTarget,
     BoundWorkflowTarget, Request, WorkflowEvent, WorkflowEventMatch, WorkflowManager,
     WorkflowManagerCreateDefinition, WorkflowManagerCreateEventTrigger,
     WorkflowManagerCreateSchedule, WorkflowManagerDeleteDefinition,
@@ -67,9 +67,9 @@ struct TestWorkflowManagerServer {
     signal_or_start_requests: Arc<Mutex<Vec<SignalOrStartWorkflowProviderRunRequest>>>,
 }
 
-fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
-    BoundWorkflowTarget::Plugin(BoundWorkflowPluginTarget {
-        plugin_name: plugin_name.to_string(),
+fn plugin_target(app_name: &str, operation: &str) -> BoundWorkflowTarget {
+    BoundWorkflowTarget::Plugin(BoundWorkflowAppTarget {
+        app_name: app_name.to_string(),
         operation: operation.to_string(),
         ..Default::default()
     })

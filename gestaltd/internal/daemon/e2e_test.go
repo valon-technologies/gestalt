@@ -24,7 +24,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
 func TestE2EValidateRejectsAuditConfigWhenProviderInheritsTelemetry(t *testing.T) {
@@ -38,11 +38,11 @@ func TestE2EValidateRejectsAuditConfigWhenProviderInheritsTelemetry(t *testing.T
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	cfgText := strings.Replace(string(cfgBytes), "plugins:\n", `  audit:
+	cfgText := strings.Replace(string(cfgBytes), "apps:\n", `  audit:
     primary:
       config:
         format: json
-plugins:
+apps:
 `, 1)
 	cfgBytes = []byte(cfgText)
 	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
@@ -101,7 +101,7 @@ func TestE2EValidateRejectsInvalidAuditSettings(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read config: %v", err)
 			}
-			cfgText := strings.Replace(string(cfgBytes), "plugins:\n", tc.auditYAML+"plugins:\n", 1)
+			cfgText := strings.Replace(string(cfgBytes), "apps:\n", tc.auditYAML+"apps:\n", 1)
 			cfgBytes = []byte(cfgText)
 			if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
 				t.Fatalf("write config audit: %v", err)
@@ -173,7 +173,7 @@ providers:
     inmem:
       source:
         path: %s
-plugins:
+apps:
   example:
     source:
       path: %s
@@ -195,13 +195,13 @@ func TestE2EValidateAcceptsCanonicalConfigShapes(t *testing.T) {
 
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
-	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, filepath.Join(dir, "plugin")))
+	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, filepath.Join(dir, "app")))
 	ui := setupMountedUIDir(t, dir)
 	workflowManifest := componentProviderManifestPath(t, setupExecutableProviderDir(t, dir, providermanifestv1.KindWorkflow, "workflow-indexeddb"))
 	agentManifest := componentProviderManifestPath(t, setupExecutableProviderDir(t, dir, providermanifestv1.KindAgent, "agent-simple"))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   encryptionKey: canonical-config-shapes-key
@@ -248,7 +248,7 @@ runtime:
   providers:
     hosted:
       driver: local
-plugins:
+apps:
   roadmap:
     source:
       path: %s
@@ -260,7 +260,7 @@ workflows:
     nightly_sync:
       cron: "0 2 * * *"
       target:
-        plugin:
+        app:
           name: roadmap
           operation: sync
           connection: default
@@ -275,7 +275,7 @@ workflows:
           model: fast
           prompt: Summarize yesterday.
           tools:
-            - plugin: roadmap
+            - app: roadmap
               operation: sync
   eventTriggers:
     roadmap_updated:
@@ -283,7 +283,7 @@ workflows:
         type: roadmap.item.updated
         source: roadmap
       target:
-        plugin:
+        app:
           name: roadmap
           operation: sync
           input:
@@ -332,7 +332,7 @@ server:
 		},
 		{
 			name: "unknown field",
-			cfg: `apiVersion: gestaltd.config/v5
+			cfg: `apiVersion: gestaltd.config/v6
 server:
   encryptionKey: test-key
   bogus: true
@@ -341,11 +341,11 @@ server:
 		},
 		{
 			name: "ui object requires path",
-			cfg: `apiVersion: gestaltd.config/v5
-plugins:
+			cfg: `apiVersion: gestaltd.config/v6
+apps:
   roadmap:
     source:
-      path: ./plugin/manifest.yaml
+      path: ./app/manifest.yaml
     ui:
       bundle: roadmap
 `,
@@ -433,8 +433,8 @@ func TestE2EProviderValidateReusesConfiguredPluginKey(t *testing.T) {
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
 	pluginDir := setupPluginDir(t, dir)
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v5
-plugins:
+	cfg := `apiVersion: gestaltd.config/v6
+apps:
   provider_go:
     source: https://example.test/provider-release.yaml
 `
@@ -451,8 +451,8 @@ plugins:
 	if err != nil {
 		t.Fatalf("gestaltd provider validate failed: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "plugin=provider_go") {
-		t.Fatalf("expected configured plugin key in output, got: %s", out)
+	if !strings.Contains(string(out), "app=provider_go") {
+		t.Fatalf("expected configured app key in output, got: %s", out)
 	}
 }
 
@@ -466,7 +466,7 @@ func TestE2EProviderValidateRejectsNonPluginManifest(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected gestaltd provider validate to fail for non-plugin manifest\n%s", out)
 	}
-	if !strings.Contains(string(out), "only support kind: plugin or ui in v1") {
+	if !strings.Contains(string(out), "only support kind: app or ui in v1") {
 		t.Fatalf("expected plugin-only error, got: %s", out)
 	}
 }
@@ -492,14 +492,14 @@ func TestE2EProviderValidateLayeredConfigSupportsNullDeletion(t *testing.T) {
 	}
 
 	baseCfgPath := filepath.Join(dir, "support.yaml")
-	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 providers:
   ui:
     roadmap:
       source:
         path: %s
       path: /provider
-plugins:
+apps:
   support:
     source:
       path: %s
@@ -512,11 +512,11 @@ plugins:
 	}
 
 	overrideCfgPath := filepath.Join(dir, "support-override.yaml")
-	overrideCfg := `apiVersion: gestaltd.config/v5
+	overrideCfg := `apiVersion: gestaltd.config/v6
 providers:
   ui:
     roadmap: null
-plugins:
+apps:
   support: null
 `
 	if err := os.WriteFile(overrideCfgPath, []byte(overrideCfg), 0o644); err != nil {
@@ -675,7 +675,7 @@ func TestE2EValidateAcceptsLayeredConfigs(t *testing.T) {
 	setupPluginDir(t, overrideDir)
 
 	baseConfigPath := filepath.Join(baseDir, "base.yaml")
-	baseConfig := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	baseConfig := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   encryptionKey: test-key
@@ -688,7 +688,7 @@ providers:
         path: %s
       config:
         path: %q
-plugins:
+apps:
   example:
     source:
       path: ./missing/manifest.yaml
@@ -698,8 +698,8 @@ plugins:
 	}
 
 	overrideConfigPath := filepath.Join(overrideDir, "local.yaml")
-	overrideConfig := `apiVersion: gestaltd.config/v5
-plugins:
+	overrideConfig := `apiVersion: gestaltd.config/v6
+apps:
   example:
     source:
       path: ./plugin-src/manifest.yaml
@@ -734,7 +734,7 @@ func TestE2EValidateUsesScratchPreparedInstallsForLocalSourceConfigs(t *testing.
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   encryptionKey: test-key
@@ -747,7 +747,7 @@ providers:
         path: %s
       config:
         path: %q
-plugins:
+apps:
   example:
     source:
       path: %s
@@ -819,10 +819,10 @@ func TestE2EValidatePlatformUsesLockedStaticMetadataWithoutArchiveDownload(t *te
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
 	pluginDir := setupPrebuiltPluginDir(t, dir)
 	if err := writeLocalProviderReleaseMetadata(pluginDir); err != nil {
-		t.Fatalf("write plugin provider-release metadata: %v", err)
+		t.Fatalf("write app provider-release metadata: %v", err)
 	}
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   encryptionKey: valid-config-e2e-key
@@ -838,7 +838,7 @@ providers:
     inmem:
       source:
         path: %s
-plugins:
+apps:
   example:
     source: %s
 `, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, filepath.Join(pluginDir, "provider-release.yaml"))
@@ -867,7 +867,7 @@ plugins:
 		t.Fatalf("parse lockfile: %v", err)
 	}
 	providers := lock["providers"].(map[string]any)
-	plugins := providers["plugin"].(map[string]any)
+	plugins := providers["app"].(map[string]any)
 	example := plugins["example"].(map[string]any)
 	example["archives"] = map[string]any{
 		"linux/amd64": map[string]any{
@@ -909,7 +909,7 @@ func TestE2EValidateStaticRejectsStaleCatalogExposureMetadata(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config.yaml")
 	writeConfig := func(targetOperation string) {
 		t.Helper()
-		cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+		cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   encryptionKey: valid-config-e2e-key
@@ -925,12 +925,12 @@ providers:
     inmem:
       source:
         path: %s
-plugins:
+apps:
   caller:
     source:
       path: %s
     invokes:
-      - plugin: target
+      - app: target
         operation: echo
   target:
     source: %s
@@ -952,7 +952,7 @@ plugins:
 	if err == nil {
 		t.Fatalf("expected stale static catalog metadata to fail validation:\n%s", out)
 	}
-	if !strings.Contains(string(out), `lock entry for plugin \"target\" is stale`) {
+	if !strings.Contains(string(out), `lock entry for app \"target\" is stale`) {
 		t.Fatalf("expected stale target lock error, got: %s", out)
 	}
 }
@@ -964,7 +964,7 @@ func TestE2EValidateStaticPlatformRejectsExplicitMissingLockfile(t *testing.T) {
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   encryptionKey: valid-config-e2e-key
@@ -980,7 +980,7 @@ providers:
     inmem:
       source:
         path: %s
-plugins:
+apps:
   remote:
     source: https://example.com/provider-release.yaml
 `, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest)
@@ -1014,7 +1014,7 @@ func TestE2EValidateStaticLegacyLockAllowsUnavailablePolicyBoundUIMetadata(t *te
 	uiSource := archiveServer.URL + "/private-ui/provider-release.yaml"
 	uiPackage := "github.com/test/private-ui"
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   encryptionKey: valid-config-e2e-key
@@ -1112,7 +1112,7 @@ func TestE2EValidateStaticLegacyLockAllowsUnavailableInvokesTargetCatalog(t *tes
 	targetSource := archiveServer.URL + "/target/provider-release.yaml"
 	targetPackage := "github.com/test/private-target"
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   encryptionKey: valid-config-e2e-key
@@ -1128,12 +1128,12 @@ providers:
     inmem:
       source:
         path: %s
-plugins:
+apps:
   caller:
     source:
       path: %s
     invokes:
-      - plugin: target
+      - app: target
         operation: privateOperation
   target:
     source: %s
@@ -1153,11 +1153,11 @@ plugins:
 		"schemaVersion": 5,
 		"revision":      0,
 		"providers": map[string]any{
-			"plugin": map[string]any{
+			"app": map[string]any{
 				"target": map[string]any{
 					"inputDigest": fingerprint,
 					"package":     targetPackage,
-					"kind":        providermanifestv1.KindPlugin,
+					"kind":        providermanifestv1.KindApp,
 					"runtime":     "executable",
 					"source":      targetSource,
 					"version":     "0.0.1-alpha.1",
@@ -1198,7 +1198,7 @@ func TestE2EValidateRejectsInvalidPluginInvokesDependency(t *testing.T) {
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   encryptionKey: test-key
@@ -1211,12 +1211,12 @@ providers:
         path: %s
       config:
         path: %q
-plugins:
+apps:
   caller:
     source:
       path: %s
     invokes:
-      - plugin: target
+      - app: target
         operation: missing
   target:
     source:
@@ -1272,7 +1272,7 @@ paths:
 
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   encryptionKey: test-key
@@ -1285,7 +1285,7 @@ providers:
         path: %s
       config:
         path: %q
-plugins:
+apps:
   target:
     source:
       path: %s
@@ -1428,8 +1428,8 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 	artifactRel := ".gestalt/build/provider"
 	writeGoPluginBuildFixture(t, pluginDir, "github.com/valon-technologies/gestalt/testdata/provider-go", "example", artifactRel)
 	manifest := &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
-		Source:      "github.com/test/plugins/provider",
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/test/apps/provider",
 		Version:     version,
 		DisplayName: "Example Provider",
 		Description: "A minimal example provider built with the public SDK",
@@ -1463,7 +1463,7 @@ func setPluginManifestDisplayName(t *testing.T, manifestPath, displayName string
 	if err != nil {
 		t.Fatalf("ReadSourceManifestFile(%s): %v", manifestPath, err)
 	}
-	manifest.Kind = providermanifestv1.KindPlugin
+	manifest.Kind = providermanifestv1.KindApp
 	manifest.DisplayName = displayName
 	writeManifestFile(t, filepath.Dir(manifestPath), manifest)
 }
@@ -1695,7 +1695,7 @@ func goComponentServeCallForTest(t *testing.T, kind string) string {
 	case providermanifestv1.KindAgent:
 		return "gestalt.ServeAgentProvider(ctx, providerpkg.New())"
 	case providermanifestv1.KindRuntime:
-		return "gestalt.ServePluginRuntimeProvider(ctx, providerpkg.New())"
+		return "gestalt.ServeAppRuntimeProvider(ctx, providerpkg.New())"
 	default:
 		t.Fatalf("unsupported Go component fixture kind %q", kind)
 		return ""
@@ -1969,13 +1969,13 @@ func setupPrebuiltPluginDir(t *testing.T, baseDir string) string {
 		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
 	}
 
-	binDest := filepath.Join(providerDir, "gestalt-plugin-example")
+	binDest := filepath.Join(providerDir, "gestalt-app-example")
 	binData, err := os.ReadFile(pluginBin)
 	if err != nil {
-		t.Fatalf("read plugin binary: %v", err)
+		t.Fatalf("read app binary: %v", err)
 	}
 	if err := os.WriteFile(binDest, binData, 0o755); err != nil {
-		t.Fatalf("write plugin binary: %v", err)
+		t.Fatalf("write app binary: %v", err)
 	}
 
 	srcDir := testutil.MustExampleProviderPluginPath()
@@ -1993,7 +1993,7 @@ func setupPrebuiltPluginDir(t *testing.T, baseDir string) string {
 	}
 
 	artifactRel := filepath.Base(binDest)
-	srcManifest.Source = "github.com/test/plugins/provider"
+	srcManifest.Source = "github.com/test/apps/provider"
 	srcManifest.Version = "0.0.1-alpha.1"
 	srcManifest.Build = nil
 	srcManifest.Artifacts = nil
@@ -2183,7 +2183,7 @@ func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITe
 `, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
 	}
 
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   public:
@@ -2196,7 +2196,7 @@ providers:
     inmem:
       source:
         path: %s
-%splugins:
+%sapps:
   example:
     source:
       path: %s
@@ -2229,7 +2229,7 @@ func writeServeConfigWithManagement(t *testing.T, dir string, publicPort, manage
 `, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
 	}
 
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   public:
@@ -2245,7 +2245,7 @@ providers:
     inmem:
       source:
         path: %s
-%splugins:
+%sapps:
   example:
     source:
       path: %s
@@ -2542,14 +2542,14 @@ func TestE2EServeAndHealthCheck(t *testing.T) {
 		})
 	}
 
-	intResp, err := client.Get(baseURL + "/api/v1/integrations")
+	intResp, err := client.Get(baseURL + "/api/v1/apps")
 	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
+		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
 	defer func() { _ = intResp.Body.Close() }()
 	body, _ := io.ReadAll(intResp.Body)
 	if intResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", intResp.StatusCode, body)
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", intResp.StatusCode, body)
 	}
 
 	var integrations []json.RawMessage
@@ -2628,14 +2628,14 @@ func TestE2EServePathAutoMountsOwnedUI(t *testing.T) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	_ = waitForHTTPBody(t, client, baseURL+"/provider/sync", "Roadmap Review UI")
 
-	integrationsResp, err := client.Get(baseURL + "/api/v1/integrations")
+	integrationsResp, err := client.Get(baseURL + "/api/v1/apps")
 	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
+		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
 	defer func() { _ = integrationsResp.Body.Close() }()
 	integrationsBody, _ := io.ReadAll(integrationsResp.Body)
 	if integrationsResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", integrationsResp.StatusCode, integrationsBody)
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", integrationsResp.StatusCode, integrationsBody)
 	}
 	var integrations []struct {
 		Name        string `json:"name"`
@@ -2687,8 +2687,8 @@ func TestE2EServePathAutoMountsSiblingUIForPlugin(t *testing.T) {
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
 	rootDir := filepath.Join(dir, "package")
-	pluginDir := setupPluginDir(t, filepath.Join(rootDir, "plugin"))
-	setPluginManifestSource(t, pluginDir, "github.com/test/plugins/vm-style-guide")
+	pluginDir := setupPluginDir(t, filepath.Join(rootDir, "app"))
+	setPluginManifestSource(t, pluginDir, "github.com/test/apps/vm-style-guide")
 	_ = setupMountedUIDirAt(t, filepath.Join(rootDir, "ui"), nil)
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
@@ -2723,15 +2723,15 @@ func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.
 		t.Fatalf("read config: %v", err)
 	}
 
-	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath, "--plugin", "example", "--watch")
+	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath, "--app", "example", "--watch")
 	cmd.Env = append(os.Environ(), "GOTELEMETRY=off")
 	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
 
 	client := &http.Client{Timeout: 2 * time.Second}
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Example Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Example Provider")
 
 	setPluginManifestDisplayName(t, manifestPath, "Config Watch Provider")
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Config Watch Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Config Watch Provider")
 
 	invalidConfig := strings.Replace(string(originalConfig), manifestPath, filepath.Join(dir, "missing", "manifest.yaml"), 1)
 	if invalidConfig == string(originalConfig) {
@@ -2741,13 +2741,13 @@ func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.
 		t.Fatalf("write invalid config: %v", err)
 	}
 	time.Sleep(750 * time.Millisecond)
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Config Watch Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Config Watch Provider")
 
 	if err := os.WriteFile(cfgPath, originalConfig, 0o644); err != nil {
 		t.Fatalf("restore config: %v", err)
 	}
 	setPluginManifestDisplayName(t, manifestPath, "Recovered Config Watch Provider")
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Recovered Config Watch Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Recovered Config Watch Provider")
 }
 
 func TestE2EServeConfigWatchReloadsLocalReleaseMetadata(t *testing.T) {
@@ -2766,13 +2766,13 @@ func TestE2EServeConfigWatchReloadsLocalReleaseMetadata(t *testing.T) {
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   public:
     port: %d
   encryptionKey: test-watch-release-key
-%splugins:
+%sapps:
   example:
     source: %s
 `, e2eLoopbackBaseURL(port), port, authIndexedDBConfigYAML(t, dir, "", "sqlite", filepath.Join(dir, "gestalt.db")), metadataPath)
@@ -2789,18 +2789,18 @@ server:
 		_ = logFile.Close()
 	})
 
-	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath, "--plugin", "example", "--watch")
+	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath, "--app", "example", "--watch")
 	cmd.Env = append(os.Environ(), "GOTELEMETRY=off")
 	startCommandAfterReleasingPortWithOutput(t, holder, cmd, baseURL, logFile)
 
 	client := &http.Client{Timeout: 2 * time.Second}
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Example Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Example Provider")
 
 	missingArchive := "missing-after-watch.tar.gz"
 	metadata := fmt.Sprintf(`schema: gestaltd-provider-release
 schemaVersion: 1
-package: github.com/test/plugins/provider
-kind: plugin
+package: github.com/test/apps/provider
+kind: app
 version: 0.0.1-alpha.1
 runtime: %s
 artifacts:
@@ -2813,7 +2813,7 @@ artifacts:
 	}
 
 	_ = waitForFileBody(t, logPath, missingArchive)
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Example Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Example Provider")
 }
 
 //nolint:paralleltest // Uses the default 8080 startup path intentionally.
@@ -2865,8 +2865,8 @@ func TestE2EDefaultServeAutoGeneratesLocalConfig(t *testing.T) {
 	if cfg.Providers.UI["root"] == nil {
 		t.Fatal(`Providers.UI["root"] = nil`)
 	}
-	if len(cfg.Plugins) != 0 {
-		t.Fatalf("expected no default local plugins, got %#v", cfg.Plugins)
+	if len(cfg.Apps) != 0 {
+		t.Fatalf("expected no default local plugins, got %#v", cfg.Apps)
 	}
 }
 
@@ -2899,7 +2899,7 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 	}{
 		{
 			name:       "public serves integrations API",
-			url:        publicURL + "/api/v1/integrations",
+			url:        publicURL + "/api/v1/apps",
 			wantStatus: http.StatusOK,
 		},
 		{
@@ -2925,7 +2925,7 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 		},
 		{
 			name:       "management hides public api",
-			url:        managementURL + "/api/v1/integrations",
+			url:        managementURL + "/api/v1/apps",
 			wantStatus: http.StatusNotFound,
 		},
 		{
@@ -2983,7 +2983,7 @@ func TestE2EServePluginOwnedUIWiring(t *testing.T) {
 	publicPort, publicHolder := reservePort(t)
 	publicURL := fmt.Sprintf("http://127.0.0.1:%d", publicPort)
 	cfgPath := filepath.Join(dir, "config-owned-ui.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   public:
@@ -3000,7 +3000,7 @@ providers:
     roadmap:
       source:
         path: %s
-plugins:
+apps:
   example:
     source:
       path: %s
@@ -3016,8 +3016,8 @@ plugins:
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPathsWithStatePaths(%s): %v", cfgPath, err)
 	}
-	if got := loadedCfg.Providers.UI["roadmap"].OwnerPlugin; got != "example" {
-		t.Fatalf(`Providers.UI["roadmap"].OwnerPlugin = %q, want %q`, got, "example")
+	if got := loadedCfg.Providers.UI["roadmap"].OwnerApp; got != "example" {
+		t.Fatalf(`Providers.UI["roadmap"].OwnerApp = %q, want %q`, got, "example")
 	}
 	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
 	startCommandAfterReleasingPort(t, publicHolder, cmd, publicURL)
@@ -3035,14 +3035,14 @@ plugins:
 		t.Fatalf("expected mounted ui body to contain marker, got: %s", body)
 	}
 
-	integrationsResp, err := (&http.Client{Timeout: 2 * time.Second}).Get(publicURL + "/api/v1/integrations")
+	integrationsResp, err := (&http.Client{Timeout: 2 * time.Second}).Get(publicURL + "/api/v1/apps")
 	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
+		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
 	defer func() { _ = integrationsResp.Body.Close() }()
 	integrationsBody, _ := io.ReadAll(integrationsResp.Body)
 	if integrationsResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", integrationsResp.StatusCode, integrationsBody)
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", integrationsResp.StatusCode, integrationsBody)
 	}
 	var integrations []struct {
 		Name        string `json:"name"`
@@ -3072,7 +3072,7 @@ func TestE2EServeStartsWithPluginBoundCacheProvider(t *testing.T) {
 	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
 	cfgPath := filepath.Join(dir, "config-cache.yaml")
 
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   public:
@@ -3089,7 +3089,7 @@ providers:
     session:
       source:
         path: %s
-plugins:
+apps:
   example:
     source:
       path: %s
@@ -3102,14 +3102,14 @@ plugins:
 
 	baseURL := startGestaltdWithConfig(t, cfgPath)
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(baseURL + "/api/v1/integrations")
+	resp, err := client.Get(baseURL + "/api/v1/apps")
 	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
+		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", resp.StatusCode, body)
 	}
 }
 
@@ -3170,7 +3170,7 @@ func TestE2EHostedHTTPSubjectResolutionUsesAuthorizationAndInheritedInvocation(t
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	cfgPath := filepath.Join(dir, "config-subject-resolution.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   public:
@@ -3190,12 +3190,12 @@ providers:
     local:
       source:
         path: %s
-plugins:
+apps:
   example:
     source:
       path: %s
     invokes:
-      - plugin: example
+      - app: example
         operation: request_context
 `, baseURL, port, indexedDBManifest, "sqlite://"+filepath.Join(dir, "gestalt.db"), authorizationManifest, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -3287,7 +3287,7 @@ func TestE2ELockAndSyncSkipRuntimeSecretRefs(t *testing.T) {
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	missingSecretName := "GESTALT_E2E_RUNTIME_SECRET_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   encryptionKey:
     secret:
@@ -3446,7 +3446,7 @@ func TestE2ELockSyncLocalProviders(t *testing.T) {
 		t.Fatalf("gestaltd sync failed: %v\noutput: %s", err, out)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".gestaltd", "providers", "example")); err != nil {
-		t.Fatalf("expected synced plugin artifact: %v", err)
+		t.Fatalf("expected synced app artifact: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "indexeddb", "inmem")); err != nil {
 		t.Fatalf("expected synced indexeddb artifact: %v", err)
@@ -3458,14 +3458,14 @@ func TestE2ELockSyncLocalProviders(t *testing.T) {
 	}
 
 	baseURL := startGestaltdWithConfigs(t, []string{cfgPath}, true)
-	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/integrations")
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/apps")
 	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
+		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", resp.StatusCode, body)
 	}
 }
 
@@ -3490,7 +3490,7 @@ func TestE2ELockSyncPluginOwnedUI(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config-owned-ui-lock-sync.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   public:
@@ -3503,7 +3503,7 @@ providers:
     inmem:
       source:
         path: %s
-plugins:
+apps:
   example:
     source:
       path: %s
@@ -3585,14 +3585,14 @@ func TestE2ELockAndServeLayeredConfigs(t *testing.T) {
 
 	baseURL := startGestaltdWithConfigs(t, []string{basePath, overridePath}, true)
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(baseURL + "/api/v1/integrations")
+	resp, err := client.Get(baseURL + "/api/v1/apps")
 	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
+		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected /api/v1/integrations 401 with layered auth override, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected /api/v1/apps 401 with layered auth override, got %d: %s", resp.StatusCode, body)
 	}
 }
 
@@ -3660,14 +3660,14 @@ func TestE2EServeUsesOverrideLockfile(t *testing.T) {
 				requiredPath = lockPath
 			}
 			baseURL := startGestaltdWithConfigsAndArgs(t, []string{cfgPath}, tc.args(lockPath), requiredPath)
-			resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/integrations")
+			resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/apps")
 			if err != nil {
-				t.Fatalf("GET /api/v1/integrations: %v", err)
+				t.Fatalf("GET /api/v1/apps: %v", err)
 			}
 			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode != http.StatusOK {
 				body, _ := io.ReadAll(resp.Body)
-				t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+				t.Fatalf("expected /api/v1/apps 200, got %d: %s", resp.StatusCode, body)
 			}
 			if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
 				t.Fatalf("default lockfile should not be written, got err=%v", err)
@@ -3691,13 +3691,13 @@ func TestE2ECLIToServer(t *testing.T) {
 
 	cliEnv := append(os.Environ(), "GESTALT_URL="+baseURL, "GESTALT_API_KEY=e2e-test-key")
 
-	t.Run("integrations list", func(t *testing.T) {
+	t.Run("apps list", func(t *testing.T) {
 		t.Parallel()
-		cmd := exec.Command(gestaltCLIBin, "integrations", "list", "--format", "json", "--url", baseURL)
+		cmd := exec.Command(gestaltCLIBin, "app", "list", "--format", "json", "--url", baseURL)
 		cmd.Env = cliEnv
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			t.Fatalf("gestalt integrations list failed: %v\noutput: %s", err, out)
+			t.Fatalf("gestalt app list failed: %v\noutput: %s", err, out)
 		}
 		if !strings.Contains(string(out), "example") {
 			t.Fatalf("expected 'example' integration in output, got: %s", out)
@@ -3753,7 +3753,7 @@ func writeValidValidateConfig(t *testing.T, dir string) string {
 	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   encryptionKey: valid-config-e2e-key
@@ -3769,7 +3769,7 @@ providers:
     inmem:
       source:
         path: %s
-plugins:
+apps:
   example:
     source:
       path: %s
@@ -3786,7 +3786,7 @@ func writeInvalidValidateConfig(t *testing.T, path string) {
 	dir := filepath.Dir(path)
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   encryptionKey: invalid-config-e2e-key
@@ -3802,7 +3802,7 @@ providers:
     inmem:
       source:
         path: %s
-plugins:
+apps:
   example:
     source:
       path: %s
@@ -3841,7 +3841,7 @@ func writeLayeredE2EConfigs(t *testing.T, dir string, port int) (string, string,
 
 	basePath := filepath.Join(deployDir, "base.yaml")
 	overridePath := filepath.Join(overrideDir, "local.yaml")
-	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   public:
@@ -3859,12 +3859,12 @@ providers:
     inmem:
       source:
         path: %s
-plugins:
+apps:
   example:
     source:
       path: %s
 `, e2eLoopbackBaseURL(port), port, filepath.ToSlash(externalCredentialsManifest), filepath.ToSlash(indexedDBRel), filepath.ToSlash(pluginRel))
-	overrideCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	overrideCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   providers:
     authentication: local
@@ -3898,7 +3898,7 @@ func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir 
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	serverBlock := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	serverBlock := fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   baseUrl: %s
   public:
@@ -3908,7 +3908,7 @@ server:
 	if artifactsDir != "" {
 		serverBlock += fmt.Sprintf("  artifactsDir: %s\n", artifactsDir)
 	}
-	cfg := serverBlock + authIndexedDBConfigYAML(t, dir, "", "sqlite", dbPath) + fmt.Sprintf(`plugins:
+	cfg := serverBlock + authIndexedDBConfigYAML(t, dir, "", "sqlite", dbPath) + fmt.Sprintf(`apps:
     example:
       source:
         path: %s

@@ -17,7 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
 func buildGestaltdBinary(t *testing.T) string {
@@ -62,7 +62,7 @@ func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
+		Apps: map[string]*config.ProviderEntry{
 			"sandboxed": {
 				Command:              bin,
 				Args:                 []string{"provider"},
@@ -92,7 +92,7 @@ func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 	}
 
 	if result.Status == http.StatusOK {
-		t.Fatal("sandboxed plugin should not be able to read unauthorized file")
+		t.Fatal("sandboxed app should not be able to read unauthorized file")
 	}
 }
 
@@ -106,7 +106,7 @@ func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
+		Apps: map[string]*config.ProviderEntry{
 			"sandboxed": {
 				Command:              bin,
 				Args:                 []string{"provider"},
@@ -168,8 +168,8 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 	}
 	manifestPath := filepath.Join(sourceRoot, "manifest.yaml")
 	manifestData, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
-		Source:      "github.com/test/plugins/provider",
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/test/apps/provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Example Provider",
 		Spec:        &providermanifestv1.Spec{},
@@ -187,7 +187,7 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
+		Apps: map[string]*config.ProviderEntry{
 			"example": {
 				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"localhost"}},
 				HostBinary:           hostBin,
@@ -239,7 +239,7 @@ func TestSandboxDisabledByDefault(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
+		Apps: map[string]*config.ProviderEntry{
 			"nosandbox": {
 				Command:              bin,
 				Args:                 []string{"provider"},
@@ -286,7 +286,7 @@ func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
+		Apps: map[string]*config.ProviderEntry{
 			"proxied": {
 				Command:              bin,
 				Args:                 []string{"provider"},
@@ -342,7 +342,7 @@ func TestSandboxedPluginHTTPProxyBlocksUnconfiguredHosts(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
+		Apps: map[string]*config.ProviderEntry{
 			"blocked": {
 				Command:              bin,
 				Args:                 []string{"provider"},

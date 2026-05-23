@@ -1,0 +1,1357 @@
+package providerpkg
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+)
+
+func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t *testing.T) {
+	t.Parallel()
+
+	t.Run("json executable provider", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		sourceDir := filepath.Join(root, "provider-json")
+		artifactPath := testArtifactPath("provider")
+		manifest := mustProviderManifest("github.com/acme/apps/provider-json", "1.2.3", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider-json"))
+		manifest.IconFile = "assets/icon.svg"
+		manifest.Spec.ConfigSchemaPath = "schemas/config.schema.json"
+
+		mustWriteManifestData(t, sourceDir, ManifestFile, mustRawManifestJSON(t, manifest))
+		mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte("provider-json"), 0o755)
+		mustWriteFile(t, filepath.Join(sourceDir, "assets", "icon.svg"), []byte("<svg/>"), 0o644)
+		mustWriteFile(t, filepath.Join(sourceDir, "schemas", "config.schema.json"), []byte(`{"type":"object"}`), 0o644)
+
+		dirData, dirManifest, gotPath, err := LoadManifestFromPath(sourceDir)
+		if err != nil {
+			t.Fatalf("LoadManifestFromPath(dir): %v", err)
+		}
+		if filepath.Base(gotPath) != ManifestFile {
+			t.Fatalf("manifest path = %q, want %q", gotPath, ManifestFile)
+		}
+		if len(dirData) == 0 {
+			t.Fatal("expected manifest bytes from directory")
+		}
+		if dirManifest.IconFile != "assets/icon.svg" {
+			t.Fatalf("IconFile = %q", dirManifest.IconFile)
+		}
+		if dirManifest.Spec == nil || dirManifest.Spec.ConfigSchemaPath != "schemas/config.schema.json" {
+			t.Fatalf("unexpected provider config schema: %#v", dirManifest.Spec)
+		}
+		if dirManifest.Entrypoint == nil || dirManifest.Entrypoint.ArtifactPath != artifactPath {
+			t.Fatalf("unexpected provider entrypoint: %#v", dirManifest.Entrypoint)
+		}
+
+		archivePath := filepath.Join(root, "provider-json.tar.gz")
+		if err := CreatePackageFromDir(sourceDir, archivePath); err != nil {
+			t.Fatalf("CreatePackageFromDir: %v", err)
+		}
+
+		archiveData, archiveManifest, archiveSourcePath, err := LoadManifestFromPath(archivePath)
+		if err != nil {
+			t.Fatalf("LoadManifestFromPath(archive): %v", err)
+		}
+		if archiveSourcePath != archivePath {
+			t.Fatalf("archive source path = %q, want %q", archiveSourcePath, archivePath)
+		}
+		if len(archiveData) == 0 {
+			t.Fatal("expected manifest bytes from archive")
+		}
+		if !ManifestEqual(dirManifest, archiveManifest) {
+			t.Fatalf("directory and archive manifests differ:\ndir=%#v\narchive=%#v", dirManifest, archiveManifest)
+		}
+	})
+
+}
+
+func TestManifestKindNormalizationDoesNotMutateCallerManifest(t *testing.T) {
+	t.Parallel()
+
+	artifactPath := testArtifactPath("auth")
+	manifest := &providermanifestv1.Manifest{
+		Kind:    "auth",
+		Source:  "github.com/acme/apps/auth",
+		Version: "1.0.0",
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:     testArtifactOS,
+			Arch:   testArtifactArch,
+			Path:   artifactPath,
+			SHA256: sha256Hex("auth"),
+		}},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+	}
+
+	kind, err := ManifestKind(manifest)
+	if err != nil {
+		t.Fatalf("ManifestKind: %v", err)
+	}
+	if kind != providermanifestv1.KindAuthentication {
+		t.Fatalf("ManifestKind = %q, want %q", kind, providermanifestv1.KindAuthentication)
+	}
+	if manifest.Kind != "auth" {
+		t.Fatalf("ManifestKind mutated manifest kind to %q", manifest.Kind)
+	}
+
+	encoded, err := EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if manifest.Kind != "auth" {
+		t.Fatalf("EncodeManifest mutated manifest kind to %q", manifest.Kind)
+	}
+	if !strings.Contains(string(encoded), `"kind": "authentication"`) {
+		t.Fatalf("encoded manifest did not normalize kind:\n%s", encoded)
+	}
+}
+
+func TestManifestWorkflow_RoundTripsUIPackage(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "ui")
+	mustWriteManifestData(t, sourceDir, "manifest.yml", []byte(`
+kind: ui
+source: github.com/acme/apps/ui
+version: 1.0.0
+spec:
+  assetRoot: ui/dist
+  routes:
+    - path: /admin/*
+      allowedRoles: [admin]
+    - path: /*
+      allowedRoles: [viewer, admin]
+`))
+	mustWriteFile(t, filepath.Join(sourceDir, "ui", "dist", "index.html"), []byte("<!doctype html><title>ui</title>"), 0o644)
+
+	_, manifest, gotPath, err := LoadManifestFromPath(sourceDir)
+	if err != nil {
+		t.Fatalf("LoadManifestFromPath(dir): %v", err)
+	}
+	if filepath.Base(gotPath) != "manifest.yml" {
+		t.Fatalf("manifest path = %q, want manifest.yml", gotPath)
+	}
+	if manifest.Spec == nil || manifest.Spec.AssetRoot != "ui/dist" {
+		t.Fatalf("unexpected ui manifest: %#v", manifest.Spec)
+	}
+	if len(manifest.Spec.Routes) != 2 || manifest.Spec.Routes[0].Path != "/admin/*" || manifest.Spec.Routes[1].Path != "/*" {
+		t.Fatalf("unexpected ui routes: %#v", manifest.Spec.Routes)
+	}
+
+	archivePath := filepath.Join(root, "ui.tar.gz")
+	if err := CreatePackageFromDir(sourceDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+
+	extractDir := filepath.Join(root, "extracted")
+	if err := ExtractPackage(archivePath, extractDir); err != nil {
+		t.Fatalf("ExtractPackage: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, "ui", "dist", "index.html")); err != nil {
+		t.Fatalf("expected extracted UI asset: %v", err)
+	}
+}
+
+func TestManifestWorkflow_SourceExecutableDeclaresEntrypointNotArtifacts(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "source-plugin")
+	artifactPath := testArtifactPath("provider")
+	manifest := &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/acme/apps/source-only",
+		Version:     "0.0.1-alpha.1",
+		Spec:        &providermanifestv1.Spec{},
+		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+		DisplayName: "Source Only",
+	}
+	manifestPath := mustWriteManifestData(t, sourceDir, ManifestFile, mustManifestJSON(t, manifest))
+	mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte("source-only"), 0o755)
+
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile: %v", err)
+	}
+	if len(manifest.Artifacts) != 0 {
+		t.Fatalf("source artifacts = %+v, want none", manifest.Artifacts)
+	}
+
+	rejected := mustProviderManifest("github.com/acme/apps/source-only-artifacts", "0.0.1-alpha.1", testArtifactOS, testArtifactArch, artifactPath, "")
+	rejectedPath := mustWriteManifestData(t, filepath.Join(root, "rejected-source-plugin"), ManifestFile, mustRawManifestJSON(t, rejected))
+	if _, _, err := ReadSourceManifestFile(rejectedPath); err == nil || !strings.Contains(err.Error(), "artifacts are not allowed in source manifests") {
+		t.Fatalf("ReadSourceManifestFile error = %v, want source artifact rejection", err)
+	}
+}
+
+func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		files    []string
+		wantBase string
+		wantSrc  string
+	}{
+		{
+			name:     "json before yaml",
+			files:    []string{"manifest.json", "manifest.yaml"},
+			wantBase: "manifest.json",
+			wantSrc:  "github.com/acme/apps/json-first",
+		},
+		{
+			name:     "yaml before yml",
+			files:    []string{"manifest.yaml", "manifest.yml"},
+			wantBase: "manifest.yaml",
+			wantSrc:  "github.com/acme/apps/yaml-first",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			for _, name := range tc.files {
+				source := "github.com/acme/apps/fallback"
+				switch name {
+				case "manifest.json":
+					source = "github.com/acme/apps/json-first"
+				case "manifest.yaml":
+					source = "github.com/acme/apps/yaml-first"
+				}
+				data := []byte(fmt.Sprintf("kind: ui\nsource: %s\nversion: 1.0.0\nspec:\n  assetRoot: ui\n", source))
+				if filepath.Ext(name) == ".json" {
+					data = []byte(fmt.Sprintf(`{"kind":"ui","source":%q,"version":"1.0.0","spec":{"assetRoot":"ui"}}`, source))
+				}
+				mustWriteManifestData(t, dir, name, data)
+			}
+
+			_, manifest, gotPath, err := LoadManifestFromPath(dir)
+			if err != nil {
+				t.Fatalf("LoadManifestFromPath: %v", err)
+			}
+			if filepath.Base(gotPath) != tc.wantBase {
+				t.Fatalf("manifest path = %q, want %q", gotPath, tc.wantBase)
+			}
+			if manifest.Source != tc.wantSrc {
+				t.Fatalf("manifest source = %q, want %q", manifest.Source, tc.wantSrc)
+			}
+		})
+	}
+}
+
+func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		buildData  func(t *testing.T, dir string) string
+		readSource bool
+		wantError  string
+	}{
+		{
+			name: "missing provider and ui",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, &providermanifestv1.Manifest{
+					Kind:    "",
+					Source:  "github.com/acme/apps/missing-kind",
+					Version: "1.0.0",
+				}))
+			},
+			wantError: "manifest kind is required",
+		},
+		{
+			name: "rejects ui route without allowed roles",
+			buildData: func(t *testing.T, dir string) string {
+				mustWriteFile(t, filepath.Join(dir, "ui", "dist", "index.html"), []byte("<html/>"), 0o644)
+				return mustWriteManifestData(t, dir, "manifest.yml", []byte(`
+kind: ui
+source: github.com/acme/apps/ui-routes
+version: 1.0.0
+spec:
+  assetRoot: ui/dist
+  routes:
+    - path: /admin
+`))
+			},
+			wantError: "allowedRoles must not be empty",
+		},
+		{
+			name: "rejects non-terminal wildcard ui route",
+			buildData: func(t *testing.T, dir string) string {
+				mustWriteFile(t, filepath.Join(dir, "ui", "dist", "index.html"), []byte("<html/>"), 0o644)
+				return mustWriteManifestData(t, dir, "manifest.yml", []byte(`
+kind: ui
+source: github.com/acme/apps/ui-routes
+version: 1.0.0
+spec:
+  assetRoot: ui/dist
+  routes:
+    - path: /admin/*/settings
+      allowedRoles: [admin]
+`))
+			},
+			wantError: "wildcards are only supported as a terminal /*",
+		},
+		{
+			name: "entrypoint references unknown artifact",
+			buildData: func(t *testing.T, dir string) string {
+				artifactPath := testArtifactPath("provider")
+				manifest := mustProviderManifest("github.com/acme/apps/bad-entrypoint", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
+				manifest.Entrypoint.ArtifactPath = unknownSiblingArtifactPath(artifactPath)
+				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
+			},
+			wantError: "references unknown artifact",
+		},
+		{
+			name: "icon file escapes package root",
+			buildData: func(t *testing.T, dir string) string {
+				artifactPath := testArtifactPath("provider")
+				manifest := mustProviderManifest("github.com/acme/apps/bad-icon", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
+				manifest.IconFile = "../icon.svg"
+				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
+			},
+			wantError: "iconFile must stay within the package",
+		},
+		{
+			name: "rejects unsupported auth type",
+			buildData: func(t *testing.T, dir string) string {
+				artifactPath := testArtifactPath("provider")
+				manifest := mustProviderManifest("github.com/acme/apps/bad-auth", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
+				manifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
+					"default": {
+						Auth: &providermanifestv1.ProviderAuth{Type: "bogus"},
+					},
+				}
+				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
+			},
+			wantError: "unsupported provider.connections.default.auth.type",
+		},
+		{
+			name: "rejects oauth2 auth without token url",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/missing-token-url
+version: 1.0.0
+spec:
+  connections:
+    default:
+      auth:
+        type: oauth2
+        authorizationUrl: https://auth.example.com/authorize
+`))
+			},
+			readSource: true,
+			wantError:  "provider.connections.default.auth.tokenUrl is required for oauth2",
+		},
+		{
+			name: "rejects unknown nested connection auth field",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/unknown-auth-field
+version: 1.0.0
+spec:
+  connections:
+    default:
+      auth:
+        type: oauth2
+        authorizationUrl: https://auth.example.com/authorize
+        tokenUrl: https://auth.example.com/token
+        extraField: nope
+`))
+			},
+			readSource: true,
+			wantError:  "field extraField not found",
+		},
+		{
+			name: "rejects empty route auth object",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/empty-route-auth
+version: 1.0.0
+spec:
+  auth: {}
+`))
+			},
+			readSource: true,
+			wantError:  "provider.auth.provider is required",
+		},
+		{
+			name: "rejects unknown nested route auth field",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/unknown-route-auth-field
+version: 1.0.0
+spec:
+  auth:
+    provider: server
+    typo: bad
+`))
+			},
+			readSource: true,
+			wantError:  "field typo not found",
+		},
+		{
+			name: "rejects unknown source build field",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/unknown-source-build-field
+version: 1.0.0
+build:
+  command: [sh, ./build.sh]
+  typo: bad
+entrypoint:
+  artifactPath: provider
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+`))
+			},
+			readSource: true,
+			wantError:  "build.typo is not supported",
+		},
+		{
+			name: "rejects empty source run command",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/empty-source-run-command
+version: 1.0.0
+run: []
+entrypoint:
+  artifactPath: provider
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+`))
+			},
+			readSource: true,
+			wantError:  "run command is required",
+		},
+		{
+			name: "rejects empty source run arg",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/empty-source-run-arg
+version: 1.0.0
+run: [uv, ""]
+entrypoint:
+  artifactPath: provider
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+`))
+			},
+			readSource: true,
+			wantError:  "run[1] is required",
+		},
+		{
+			name: "rejects legacy source run prefix object",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/legacy-source-run-prefix
+version: 1.0.0
+run:
+  commandPrefix: [uv, run, --frozen]
+entrypoint:
+  artifactPath: provider
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+`))
+			},
+			readSource: true,
+			wantError:  "cannot unmarshal",
+		},
+		{
+			name: "rejects source ui run metadata",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: ui
+source: github.com/acme/apps/source-ui-run
+version: 1.0.0
+build:
+  command: [npm, run, build]
+run: [npm, run, dev]
+spec:
+  assetRoot: dist
+`))
+			},
+			readSource: true,
+			wantError:  "run metadata is not supported for ui manifests",
+		},
+		{
+			name: "released package rejects run metadata",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/released-run-metadata
+version: 1.0.0
+run: [uv, run, --frozen, provider.py]
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+`))
+			},
+			wantError: "run metadata is only allowed in source manifests",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			manifestPath := tc.buildData(t, dir)
+
+			var err error
+			if tc.readSource {
+				_, _, err = ReadSourceManifestFile(manifestPath)
+			} else {
+				_, _, err = ReadManifestFile(manifestPath)
+			}
+			if err == nil {
+				t.Fatal("expected invalid manifest")
+			}
+			if !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("error = %v, want %q", err, tc.wantError)
+			}
+		})
+	}
+}
+
+func TestManifestWorkflow_SourceUIBuildValidation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		manifest   string
+		readSource bool
+		wantErr    string
+	}{
+		{
+			name: "source ui requires asset root",
+			manifest: `
+kind: ui
+source: github.com/acme/apps/source-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
+`,
+			readSource: true,
+			wantErr:    "spec.assetRoot is required for source ui manifests",
+		},
+		{
+			name: "source ui uses asset root",
+			manifest: `
+kind: ui
+source: github.com/acme/apps/source-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
+spec:
+  assetRoot: dist
+`,
+			readSource: true,
+		},
+		{
+			name: "source ui rejects build output field",
+			manifest: `
+kind: ui
+source: github.com/acme/apps/source-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
+  output: dist
+spec:
+  routes:
+    - path: /*
+      allowedRoles: [viewer]
+`,
+			readSource: true,
+			wantErr:    "build.output is not supported",
+		},
+		{
+			name: "source ui rejects prepare-only build",
+			manifest: `
+kind: ui
+source: github.com/acme/apps/source-ui
+version: 1.0.0
+build: [npm, install]
+spec:
+  assetRoot: dist
+`,
+			readSource: true,
+			wantErr:    "source ui manifests require object-form build metadata",
+		},
+		{
+			name: "released ui uses asset root",
+			manifest: `
+kind: ui
+source: github.com/acme/apps/released-ui
+version: 1.0.0
+spec:
+  assetRoot: dist
+`,
+		},
+		{
+			name: "released ui rejects build metadata",
+			manifest: `
+kind: ui
+source: github.com/acme/apps/released-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
+spec:
+  assetRoot: dist
+`,
+			wantErr: "build metadata is only allowed in source manifests",
+		},
+		{
+			name: "source ui rejects deleted release metadata",
+			manifest: `
+kind: ui
+source: github.com/acme/apps/source-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
+spec:
+  assetRoot: dist
+release:
+  build:
+    command: [npm, run, build]
+`,
+			readSource: true,
+			wantErr:    "field release not found",
+		},
+		{
+			name: "source ui rejects input globs",
+			manifest: `
+kind: ui
+source: github.com/acme/apps/source-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
+  inputs:
+    - src/**
+spec:
+  assetRoot: dist
+`,
+			readSource: true,
+			wantErr:    "build.inputs[0] does not support glob syntax",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(tc.manifest))
+
+			var err error
+			if tc.readSource {
+				_, _, err = ReadSourceManifestFile(manifestPath)
+			} else {
+				_, _, err = ReadManifestFile(manifestPath)
+			}
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("read manifest: %v", err)
+			}
+		})
+	}
+}
+
+func TestManifestWorkflow_AcceptsPluginRouteAuthReference(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/route-auth
+version: 1.0.0
+entrypoint:
+  artifactPath: provider
+spec:
+  auth:
+    provider: server
+  connections:
+    default:
+      auth:
+        type: none
+`))
+
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile: %v", err)
+	}
+	if manifest.Spec == nil || manifest.Spec.RouteAuth == nil || manifest.Spec.RouteAuth.Provider != "server" {
+		t.Fatalf("unexpected route auth: %#v", manifest.Spec)
+	}
+	if manifest.Spec.Connections["default"] == nil || manifest.Spec.Connections["default"].Auth == nil || manifest.Spec.Connections["default"].Auth.Type != providermanifestv1.AuthTypeNone {
+		t.Fatalf("unexpected default connection: %#v", manifest.Spec.Connections["default"])
+	}
+
+	encoded, err := EncodeSourceManifestFormat(manifest, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	rendered := string(encoded)
+	if !strings.Contains(rendered, "provider: server") {
+		t.Fatalf("expected canonical route auth in output:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "\n  connectionMode:") || strings.Contains(rendered, "\n  connectionParams:") || strings.Contains(rendered, "\n  discovery:") {
+		t.Fatalf("expected encoded manifest to emit only canonical connection fields:\n%s", rendered)
+	}
+}
+
+func TestManifestWorkflow_AcceptsNullPluginRouteAuth(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/null-route-auth
+version: 1.0.0
+entrypoint:
+  artifactPath: provider
+spec:
+  auth:
+  connections:
+    default:
+      auth:
+        type: none
+`))
+
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile: %v", err)
+	}
+	if manifest.Spec == nil {
+		t.Fatal("expected app metadata")
+	}
+	if manifest.Spec.RouteAuth != nil {
+		t.Fatalf("RouteAuth = %#v, want nil", manifest.Spec.RouteAuth)
+	}
+	if manifest.Spec.Connections["default"] == nil || manifest.Spec.Connections["default"].Auth == nil || manifest.Spec.Connections["default"].Auth.Type != providermanifestv1.AuthTypeNone {
+		t.Fatalf("unexpected default connection: %#v", manifest.Spec.Connections["default"])
+	}
+}
+
+func TestManifestWorkflow_RejectsPlatformProviderConnection(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/platform-connection
+version: 1.0.0
+spec:
+  defaultConnection: default
+  connections:
+    default:
+      mode: subject
+      auth:
+        type: oauth2
+        authorizationUrl: https://auth.example.com/authorize
+        tokenUrl: https://auth.example.com/token
+    bot:
+      displayName: Bot
+      mode: platform
+      auth:
+        type: bearer
+`))
+
+	_, _, err := ReadSourceManifestFile(manifestPath)
+	if err == nil || !strings.Contains(err.Error(), `mode "platform"`) {
+		t.Fatalf("ReadSourceManifestFile error = %v, want platform mode rejection", err)
+	}
+}
+
+func TestManifestWorkflow_AcceptsHostedHTTPBindingsAndSecuritySchemes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/signed
+version: 1.0.0
+entrypoint:
+  artifactPath: provider
+spec:
+  securitySchemes:
+    signed:
+      type: hmac
+      secret:
+        env: REQUEST_SIGNING_SECRET
+      signatureHeader: X-Request-Signature
+      signaturePrefix: v0=
+      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+      timestampHeader: X-Request-Timestamp
+      maxAgeSeconds: 300
+  http:
+    command:
+      path: /command
+      method: POST
+      security: signed
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded: {}
+      target: handle_command
+      ack:
+        body:
+          status: accepted
+`))
+
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile: %v", err)
+	}
+	if manifest.Spec == nil {
+		t.Fatal("expected app metadata")
+	}
+	if manifest.Spec.SecuritySchemes["signed"] == nil || manifest.Spec.SecuritySchemes["signed"].Type != providermanifestv1.HTTPSecuritySchemeTypeHMAC {
+		t.Fatalf("unexpected security scheme: %#v", manifest.Spec.SecuritySchemes["signed"])
+	}
+	if manifest.Spec.HTTP["command"] == nil {
+		t.Fatal("expected http binding")
+	}
+	if got, want := manifest.Spec.HTTP["command"].Path, "/command"; got != want {
+		t.Fatalf("http path = %q, want %q", got, want)
+	}
+	if got, want := manifest.Spec.HTTP["command"].Target, "handle_command"; got != want {
+		t.Fatalf("http target = %q, want %q", got, want)
+	}
+
+	encoded, err := EncodeSourceManifestFormat(manifest, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	rendered := string(encoded)
+	if !strings.Contains(rendered, "securitySchemes:") || !strings.Contains(rendered, "http:") {
+		t.Fatalf("expected hosted http metadata in canonical output:\n%s", rendered)
+	}
+}
+
+func TestManifestWorkflow_RejectsNon2xxHTTPAckStatus(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/bad-http-ack
+version: 1.0.0
+spec:
+  securitySchemes:
+    none:
+      type: none
+  http:
+    command:
+      path: /command
+      method: POST
+      security: none
+      target: handle_command
+      ack:
+        status: 500
+`))
+
+	_, _, err := ReadSourceManifestFile(manifestPath)
+	if err == nil {
+		t.Fatal("expected invalid manifest")
+	}
+	if !strings.Contains(err.Error(), `provider.http.command.ack.status must be a 2xx status`) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestManifestWorkflow_RejectsDuplicateNormalizedHTTPContentTypes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/bad-http-content
+version: 1.0.0
+spec:
+  securitySchemes:
+    none:
+      type: none
+  http:
+    command:
+      path: /command
+      method: POST
+      security: none
+      target: handle_command
+      requestBody:
+        content:
+          application/json: {}
+          application/json; charset=utf-8: {}
+`))
+
+	_, _, err := ReadSourceManifestFile(manifestPath)
+	if err == nil {
+		t.Fatal("expected invalid manifest")
+	}
+	if !strings.Contains(err.Error(), `provider.http.command.requestBody.content "application/json" is duplicated after normalization`) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestManifestWorkflow_RejectsInvalidHMACPayloadTemplates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		payloadTemplate string
+		want            string
+	}{
+		{
+			name:            "missing timestamp placeholder",
+			payloadTemplate: "{raw_body}",
+			want:            `provider.securitySchemes.signed.payloadTemplate must include a header placeholder for "X-Request-Timestamp"`,
+		},
+		{
+			name:            "unsupported placeholder",
+			payloadTemplate: "v0:{query:id}:{raw_body}",
+			want:            `provider.securitySchemes.signed.payloadTemplate placeholder "query:id" is not supported`,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/bad-http-template
+version: 1.0.0
+spec:
+  securitySchemes:
+    signed:
+      type: hmac
+      secret:
+        env: REQUEST_SIGNING_SECRET
+      signatureHeader: X-Request-Signature
+      signaturePrefix: v0=
+      payloadTemplate: "`+tt.payloadTemplate+`"
+      timestampHeader: X-Request-Timestamp
+      maxAgeSeconds: 300
+  http:
+    command:
+      path: /command
+      method: POST
+      security: signed
+      target: handle_command
+`))
+
+			_, _, err := ReadSourceManifestFile(manifestPath)
+			if err == nil {
+				t.Fatal("expected invalid manifest")
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want substring %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestManifestWorkflow_RejectsInvalidHTTPSecuritySchemes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		schemeYAML  string
+		wantErrPart string
+	}{
+		{
+			name: "unsupported type",
+			schemeYAML: `
+      type: bogus
+`,
+			wantErrPart: `provider.securitySchemes.bad.type "bogus" is not supported`,
+		},
+		{
+			name: "invalid api key location",
+			schemeYAML: `
+      type: apiKey
+      name: X-Webhook-Key
+      in: cookie
+      secret:
+        secret: shared-key
+`,
+			wantErrPart: `provider.securitySchemes.bad.in "cookie" is not supported`,
+		},
+		{
+			name: "invalid http scheme",
+			schemeYAML: `
+      type: http
+      scheme: digest
+      secret:
+        secret: shared-key
+`,
+			wantErrPart: `provider.securitySchemes.bad.scheme "digest" is not supported`,
+		},
+		{
+			name: "missing secret",
+			schemeYAML: `
+      type: apiKey
+      name: X-Webhook-Key
+      in: header
+`,
+			wantErrPart: `provider.securitySchemes.bad.secret is required`,
+		},
+		{
+			name: "blank secret ref",
+			schemeYAML: `
+      type: apiKey
+      name: X-Webhook-Key
+      in: header
+      secret: {}
+`,
+			wantErrPart: `provider.securitySchemes.bad.secret must set env or secret`,
+		},
+		{
+			name: "missing hmac signature header",
+			schemeYAML: `
+      type: hmac
+      secret:
+        secret: shared-key
+      payloadTemplate: "{raw_body}"
+`,
+			wantErrPart: `provider.securitySchemes.bad.signatureHeader is required`,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(fmt.Sprintf(`
+kind: app
+source: github.com/acme/apps/bad-http-security
+version: 1.0.0
+spec:
+  securitySchemes:
+    bad:%s
+  http:
+    command:
+      path: /command
+      method: POST
+      security: bad
+      target: handle_command
+`, tt.schemeYAML)))
+
+			_, _, err := ReadSourceManifestFile(manifestPath)
+			if err == nil {
+				t.Fatal("expected invalid manifest")
+			}
+			if !strings.Contains(err.Error(), tt.wantErrPart) {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+}
+
+func TestManifestWorkflow_EncodesCanonicalProgrammaticDefaultConnection(t *testing.T) {
+	t.Parallel()
+
+	programmatic := &providermanifestv1.Manifest{
+		Kind:       providermanifestv1.KindApp,
+		Source:     "github.com/acme/apps/programmatic-default-connection",
+		Version:    "1.0.0",
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
+		Spec: &providermanifestv1.Spec{
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Mode: providermanifestv1.ConnectionModeUser,
+					Auth: &providermanifestv1.ProviderAuth{
+						Type:             providermanifestv1.AuthTypeOAuth2,
+						AuthorizationURL: "https://auth.example.com/authorize",
+						TokenURL:         "https://auth.example.com/token",
+					},
+					Params: map[string]providermanifestv1.ProviderConnectionParam{
+						"workspace_id": {
+							Required:    true,
+							Description: "Workspace ID",
+						},
+					},
+					Discovery: &providermanifestv1.ProviderDiscovery{
+						URL:    "https://api.example.com/workspaces",
+						IDPath: "id",
+					},
+				},
+			},
+		},
+	}
+	programmaticEncoded, err := EncodeSourceManifestFormat(programmatic, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat(programmatic): %v", err)
+	}
+	programmaticRendered := string(programmaticEncoded)
+	if !strings.Contains(programmaticRendered, "connections:") || !strings.Contains(programmaticRendered, "default:") {
+		t.Fatalf("expected canonical default connection in programmatic output:\n%s", programmaticRendered)
+	}
+	if strings.Contains(programmaticRendered, "\n  connectionMode:") || strings.Contains(programmaticRendered, "\n  connectionParams:") || strings.Contains(programmaticRendered, "\n  discovery:") {
+		t.Fatalf("expected encoded programmatic manifest to emit only canonical connection fields:\n%s", programmaticRendered)
+	}
+	def := programmatic.Spec.Connections["default"]
+	if def == nil || def.Auth == nil || def.Auth.Type != providermanifestv1.AuthTypeOAuth2 {
+		t.Fatalf("programmatic manifest mutated unexpectedly: %#v", programmatic.Spec.Connections)
+	}
+}
+
+func TestManifestWorkflow_AcceptsProviderWireSurfaceManifest(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/provider-wire
+version: 1.0.0
+displayName: Provider Wire
+spec:
+  configSchemaPath: schemas/config.schema.json
+  connections:
+    default:
+      auth:
+        type: none
+    api:
+      displayName: OAuth
+      auth:
+        type: oauth2
+        authorizationUrl: https://auth.example.com/authorize
+        tokenUrl: https://auth.example.com/token
+  managedParameters:
+    - in: path
+      name: workspaceId
+      value: ws_123
+  pagination:
+    style: cursor
+    cursorParam: cursor
+    cursor:
+      source: header
+      path: X-After-Cursor
+    resultsPath: results
+    maxPages: 10
+  allowedOperations:
+    items.list:
+      paginate: true
+    items.info: {}
+  surfaces:
+    openapi:
+      document: openapi.yaml
+      connection: api
+`))
+	mustWriteFile(t, filepath.Join(dir, "schemas", "config.schema.json"), []byte(`{"type":"object"}`), 0o644)
+	mustWriteFile(t, filepath.Join(dir, "openapi.yaml"), []byte("openapi: 3.1.0\ninfo:\n  title: Example\n  version: 1.0.0\npaths: {}\n"), 0o644)
+
+	_, manifest, err := ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifestFile: %v", err)
+	}
+	if manifest.Spec == nil {
+		t.Fatal("expected provider metadata")
+	}
+	if manifest.Spec.OpenAPIDocument() != "openapi.yaml" {
+		t.Fatalf("provider openapi document = %q", manifest.Spec.OpenAPIDocument())
+	}
+	if manifest.Spec.SurfaceConnectionName("openapi") != "api" {
+		t.Fatalf("provider openapi connection = %q, want api", manifest.Spec.SurfaceConnectionName("openapi"))
+	}
+	if manifest.Spec.Connections["api"] == nil || manifest.Spec.Connections["api"].DisplayName != "OAuth" {
+		t.Fatalf("provider api connection displayName = %#v", manifest.Spec.Connections["api"])
+	}
+	if len(manifest.Spec.ManagedParameters) != 1 {
+		t.Fatalf("managed_parameters = %+v", manifest.Spec.ManagedParameters)
+	}
+	if manifest.Entrypoint != nil {
+		t.Fatalf("expected declarative/spec provider to omit provider entrypoint, got %+v", manifest.Entrypoint)
+	}
+	if pgn := manifest.Spec.Pagination; pgn == nil || pgn.Style != providermanifestv1.PaginationStyleCursor || pgn.Cursor == nil || pgn.Cursor.Source != "header" || pgn.Cursor.Path != "X-After-Cursor" || pgn.MaxPages != 10 {
+		t.Fatalf("unexpected pagination config: %+v", manifest.Spec.Pagination)
+	}
+	if op := manifest.Spec.AllowedOperations["items.list"]; op == nil || !op.Paginate {
+		t.Fatalf("items.list should have paginate=true, got %+v", manifest.Spec.AllowedOperations["items.list"])
+	}
+}
+
+func TestManifestWorkflow_AcceptsProviderWireMCPOAuthManifestAcrossDirectoryAndArchive(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "plugin-mcp-oauth")
+	manifestPath := mustWriteManifestData(t, sourceDir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/notion
+version: 0.0.1-alpha.1
+displayName: Notion
+spec:
+  connections:
+    mcp:
+      displayName: MCP
+      mode: subject
+      auth:
+        type: mcp_oauth
+  surfaces:
+    mcp:
+      url: https://mcp.notion.com/mcp
+      connection: mcp
+`))
+
+	_, dirManifest, err := ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifestFile(dir): %v", err)
+	}
+	if dirManifest.Spec == nil {
+		t.Fatal("expected app metadata")
+	}
+	if dirManifest.Spec.MCPURL() != "https://mcp.notion.com/mcp" {
+		t.Fatalf("plugin mcp_url = %q", dirManifest.Spec.MCPURL())
+	}
+	if dirManifest.Spec.SurfaceConnectionName("mcp") != "mcp" {
+		t.Fatalf("plugin mcp_connection = %q, want mcp", dirManifest.Spec.SurfaceConnectionName("mcp"))
+	}
+	if conn := dirManifest.Spec.Connections["mcp"]; conn == nil || conn.Auth == nil || conn.Auth.Type != providermanifestv1.AuthTypeMCPOAuth {
+		t.Fatalf("plugin connection auth = %#v", dirManifest.Spec.Connections["mcp"])
+	}
+	if conn := dirManifest.Spec.Connections["mcp"]; conn == nil || conn.DisplayName != "MCP" {
+		t.Fatalf("plugin connection displayName = %#v", dirManifest.Spec.Connections["mcp"])
+	}
+
+	archivePath := filepath.Join(root, "plugin-mcp-oauth.tar.gz")
+	if err := CreatePackageFromDir(sourceDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+
+	_, archiveManifest, _, err := LoadManifestFromPath(archivePath)
+	if err != nil {
+		t.Fatalf("LoadManifestFromPath(archive): %v", err)
+	}
+	if !ManifestEqual(dirManifest, archiveManifest) {
+		t.Fatalf("directory and archive manifests differ:\ndir=%#v\narchive=%#v", dirManifest, archiveManifest)
+	}
+}
+
+func TestManifestWorkflow_RejectsMCPOAuthManifestWithoutMCPSurface(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/bad-mcp-oauth
+version: 0.0.1-alpha.1
+spec:
+  connections:
+    mcp:
+      auth:
+        type: mcp_oauth
+`))
+
+	_, _, err := ReadManifestFile(manifestPath)
+	if err == nil {
+		t.Fatal("expected invalid manifest")
+	}
+	if !strings.Contains(err.Error(), `provider.connections.mcp.auth.type "mcp_oauth" requires an MCP surface`) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestManifestWorkflow_NamedConnectionParamsAndDiscovery(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "app.yaml", []byte(`
+kind: app
+source: github.com/acme/apps/multi-conn
+version: 1.0.0
+displayName: Multi Connection
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+    api:
+      mode: subject
+      auth:
+        type: oauth2
+        authorizationUrl: https://auth.example.com/authorize
+        tokenUrl: https://auth.example.com/token
+      params:
+        workspace_id:
+          required: true
+          description: The workspace ID
+        region:
+          from: discovery
+      discovery:
+        url: https://api.example.com/workspaces
+        idPath: id
+        namePath: name
+        metadata:
+          region: region
+  surfaces:
+    openapi:
+      document: openapi.yaml
+      connection: api
+`))
+	mustWriteFile(t, filepath.Join(dir, "openapi.yaml"), []byte("openapi: 3.1.0\ninfo:\n  title: Example\n  version: 1.0.0\npaths: {}\n"), 0o644)
+
+	_, manifest, err := ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifestFile: %v", err)
+	}
+
+	encoded, err := EncodeManifestFormat(manifest, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat: %v", err)
+	}
+	roundTripped, err := DecodeManifestFormat(encoded, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("DecodeManifestFormat: %v", err)
+	}
+	if !ManifestEqual(manifest, roundTripped) {
+		t.Fatalf("round-trip mismatch:\noriginal=%#v\nround-tripped=%#v", manifest, roundTripped)
+	}
+}

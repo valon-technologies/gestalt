@@ -122,11 +122,11 @@ pub fn fetch_catalog(
     }
 
     let path = if params.is_empty() {
-        format!("/api/v1/integrations/{plugin}/operations")
+        format!("/api/v1/apps/{plugin}/operations")
     } else {
         let query =
             serde_urlencoded::to_string(params).context("failed to encode catalog selectors")?;
-        format!("/api/v1/integrations/{plugin}/operations?{query}")
+        format!("/api/v1/apps/{plugin}/operations?{query}")
     };
     let resp = client.get(&path)?;
     let operations: Vec<CatalogOperation> =

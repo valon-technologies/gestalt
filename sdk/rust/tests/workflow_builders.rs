@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde_json::json;
 
 use gestalt::{
-    AgentMessage, AgentToolRef, BoundWorkflowAgentTarget, BoundWorkflowPluginTarget,
+    AgentMessage, AgentToolRef, BoundWorkflowAgentTarget, BoundWorkflowAppTarget,
     BoundWorkflowRun, BoundWorkflowTarget, WorkflowAgentStep, WorkflowAgentStepWhen,
     WorkflowOutputBinding, WorkflowOutputDelivery, WorkflowOutputValueSource, WorkflowRunStatus,
     WorkflowRunTrigger, WorkflowSignal, new_bound_workflow_run, new_bound_workflow_target,
@@ -20,8 +20,8 @@ struct Payload {
 #[test]
 fn workflow_builders_accept_serde_values_and_system_time() -> gestalt::Result<()> {
     let created_at = UNIX_EPOCH + Duration::from_secs(1_778_241_600);
-    let plugin = BoundWorkflowPluginTarget {
-        plugin_name: "plugin".to_string(),
+    let app = BoundWorkflowAppTarget {
+        app_name: "app".to_string(),
         operation: "run".to_string(),
         ..Default::default()
     }
@@ -50,10 +50,10 @@ fn workflow_builders_accept_serde_values_and_system_time() -> gestalt::Result<()
         ..Default::default()
     })?;
 
-    let plugin = plugin_target(&target)?;
-    assert_eq!(plugin.plugin_name, "plugin");
+    let app = plugin_target(&target)?;
+    assert_eq!(app.app_name, "app");
     assert_eq!(
-        plugin.input.as_ref().and_then(|input| input.get("count")),
+        app.input.as_ref().and_then(|input| input.get("count")),
         Some(&json!(0))
     );
     assert_eq!(signal.sequence, 0);
@@ -63,8 +63,8 @@ fn workflow_builders_accept_serde_values_and_system_time() -> gestalt::Result<()
 
 #[test]
 fn workflow_copy_helpers_do_not_alias_nested_payloads() -> gestalt::Result<()> {
-    let plugin = BoundWorkflowPluginTarget {
-        plugin_name: "plugin".to_string(),
+    let app = BoundWorkflowAppTarget {
+        app_name: "app".to_string(),
         operation: "run".to_string(),
         ..Default::default()
     }
@@ -72,8 +72,8 @@ fn workflow_copy_helpers_do_not_alias_nested_payloads() -> gestalt::Result<()> {
     let mut target = new_bound_workflow_target(BoundWorkflowTarget::Plugin(plugin))?;
     let copied = new_bound_workflow_target_from_target(&target)?;
 
-    let plugin = plugin_target_mut(&mut target)?;
-    plugin.input.as_mut().expect("input")["nested"]["value"] = json!("changed");
+    let app = plugin_target_mut(&mut target)?;
+    app.input.as_mut().expect("input")["nested"]["value"] = json!("changed");
 
     let copied_plugin = plugin_target(&copied)?;
     assert_eq!(
@@ -110,8 +110,8 @@ fn agent_workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()>
                 model_options: Some(json!({"temperature": 0})),
                 timeout_seconds: 45,
                 output_delivery: Some(WorkflowOutputDelivery {
-                    target: Some(BoundWorkflowPluginTarget {
-                        plugin_name: "slack".to_string(),
+                    target: Some(BoundWorkflowAppTarget {
+                        app_name: "slack".to_string(),
                         operation: "reply".to_string(),
                         ..Default::default()
                     }),
@@ -161,7 +161,7 @@ fn agent_workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()>
             .output_delivery
             .as_ref()
             .and_then(|delivery| delivery.target.as_ref())
-            .map(|target| target.plugin_name.as_str()),
+            .map(|target| target.app_name.as_str()),
         Some("slack")
     );
     assert_eq!(
@@ -176,10 +176,10 @@ fn agent_workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()>
 
 fn plugin_target(
     target: &gestalt::BoundWorkflowTarget,
-) -> gestalt::Result<&gestalt::BoundWorkflowPluginTarget> {
+) -> gestalt::Result<&gestalt::BoundWorkflowAppTarget> {
     match target {
         gestalt::BoundWorkflowTarget::Plugin(plugin) => Ok(plugin),
-        _ => Err(gestalt::Error::bad_request("expected plugin target")),
+        _ => Err(gestalt::Error::bad_request("expected app target")),
     }
 }
 
@@ -194,9 +194,9 @@ fn agent_target(
 
 fn plugin_target_mut(
     target: &mut gestalt::BoundWorkflowTarget,
-) -> gestalt::Result<&mut gestalt::BoundWorkflowPluginTarget> {
+) -> gestalt::Result<&mut gestalt::BoundWorkflowAppTarget> {
     match target {
         gestalt::BoundWorkflowTarget::Plugin(plugin) => Ok(plugin),
-        _ => Err(gestalt::Error::bad_request("expected plugin target")),
+        _ => Err(gestalt::Error::bad_request("expected app target")),
     }
 }

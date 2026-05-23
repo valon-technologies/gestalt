@@ -42,14 +42,14 @@ type providerMutationResult struct {
 
 var providerLifecycleKinds = []providerLifecycleKind{
 	{
-		kind:         providermanifestv1.KindPlugin,
-		manifestKind: providermanifestv1.KindPlugin,
-		collection:   func(doc *yaml.Node) *yaml.Node { return mappingValueNodeLocal(doc, "plugins") },
+		kind:         providermanifestv1.KindApp,
+		manifestKind: providermanifestv1.KindApp,
+		collection:   func(doc *yaml.Node) *yaml.Node { return mappingValueNodeLocal(doc, "apps") },
 		entryMap: func(cfg *config.Config) map[string]*config.ProviderEntry {
 			if cfg == nil {
 				return nil
 			}
-			return cfg.Plugins
+			return cfg.Apps
 		},
 		lockEntries: func(lock *operator.Lockfile) map[string]operator.LockEntry {
 			if lock == nil {
@@ -62,8 +62,8 @@ var providerLifecycleKinds = []providerLifecycleKind{
 	lifecycleHostProviderKind(providermanifestv1.KindAuthorization, providermanifestv1.KindAuthorization),
 	lifecycleHostProviderKind(providermanifestv1.KindExternalCredentials, providermanifestv1.KindExternalCredentials),
 	lifecycleHostProviderKind(providermanifestv1.KindSecrets, providermanifestv1.KindSecrets),
-	lifecycleHostProviderKind(string(config.HostProviderKindTelemetry), providermanifestv1.KindPlugin),
-	lifecycleHostProviderKind(string(config.HostProviderKindAudit), providermanifestv1.KindPlugin),
+	lifecycleHostProviderKind(string(config.HostProviderKindTelemetry), providermanifestv1.KindApp),
+	lifecycleHostProviderKind(string(config.HostProviderKindAudit), providermanifestv1.KindApp),
 	lifecycleHostProviderKind(providermanifestv1.KindIndexedDB, providermanifestv1.KindIndexedDB),
 	lifecycleHostProviderKind(providermanifestv1.KindCache, providermanifestv1.KindCache),
 	lifecycleHostProviderKind(providermanifestv1.KindS3, providermanifestv1.KindS3),

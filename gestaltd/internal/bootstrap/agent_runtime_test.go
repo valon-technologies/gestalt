@@ -30,7 +30,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
 	"gopkg.in/yaml.v3"
 )
 
@@ -375,13 +375,13 @@ func (p *workspaceAgentProvider) Ping(context.Context) error {
 }
 
 type workspaceRuntimeProvider struct {
-	*pluginruntime.LocalProvider
+	*appruntime.LocalProvider
 	supportPrepareWorkspace bool
-	prepareWorkspace        func(context.Context, pluginruntime.PrepareWorkspaceRequest) (*pluginruntime.PreparedWorkspace, error)
-	removeWorkspaceReqs     []pluginruntime.RemoveWorkspaceRequest
+	prepareWorkspace        func(context.Context, appruntime.PrepareWorkspaceRequest) (*appruntime.PreparedWorkspace, error)
+	removeWorkspaceReqs     []appruntime.RemoveWorkspaceRequest
 }
 
-func (p *workspaceRuntimeProvider) Support(ctx context.Context) (pluginruntime.Support, error) {
+func (p *workspaceRuntimeProvider) Support(ctx context.Context) (appruntime.Support, error) {
 	support, err := p.LocalProvider.Support(ctx)
 	if err != nil {
 		return support, err
@@ -390,14 +390,14 @@ func (p *workspaceRuntimeProvider) Support(ctx context.Context) (pluginruntime.S
 	return support, nil
 }
 
-func (p *workspaceRuntimeProvider) PrepareWorkspace(ctx context.Context, req pluginruntime.PrepareWorkspaceRequest) (*pluginruntime.PreparedWorkspace, error) {
+func (p *workspaceRuntimeProvider) PrepareWorkspace(ctx context.Context, req appruntime.PrepareWorkspaceRequest) (*appruntime.PreparedWorkspace, error) {
 	if p.prepareWorkspace != nil {
 		return p.prepareWorkspace(ctx, req)
 	}
 	return p.LocalProvider.PrepareWorkspace(ctx, req)
 }
 
-func (p *workspaceRuntimeProvider) RemoveWorkspace(ctx context.Context, req pluginruntime.RemoveWorkspaceRequest) error {
+func (p *workspaceRuntimeProvider) RemoveWorkspace(ctx context.Context, req appruntime.RemoveWorkspaceRequest) error {
 	p.removeWorkspaceReqs = append(p.removeWorkspaceReqs, req)
 	return p.LocalProvider.RemoveWorkspace(ctx, req)
 }
@@ -554,7 +554,7 @@ func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepar
 	if prepared == nil {
 		t.Fatal("provider did not receive prepared workspace")
 	}
-	runtimeProvider.prepareWorkspace = func(context.Context, pluginruntime.PrepareWorkspaceRequest) (*pluginruntime.PreparedWorkspace, error) {
+	runtimeProvider.prepareWorkspace = func(context.Context, appruntime.PrepareWorkspaceRequest) (*appruntime.PreparedWorkspace, error) {
 		return nil, errors.New("prepare should not run for idempotent replay")
 	}
 	second, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
@@ -646,8 +646,8 @@ func TestHostedAgentPoolCleansPreparedWorkspaceAfterValidationFailure(t *testing
 	defer cancel()
 	repo := createAgentRuntimeWorkspaceRepo(t)
 	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
-	runtimeProvider.prepareWorkspace = func(context.Context, pluginruntime.PrepareWorkspaceRequest) (*pluginruntime.PreparedWorkspace, error) {
-		return &pluginruntime.PreparedWorkspace{Root: "/tmp/gestalt-workspace-root", CWD: "/tmp/outside-workspace"}, nil
+	runtimeProvider.prepareWorkspace = func(context.Context, appruntime.PrepareWorkspaceRequest) (*appruntime.PreparedWorkspace, error) {
+		return &appruntime.PreparedWorkspace{Root: "/tmp/gestalt-workspace-root", CWD: "/tmp/outside-workspace"}, nil
 	}
 	agentProvider := &workspaceAgentProvider{supportPreparedWorkspace: true}
 	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
@@ -721,7 +721,7 @@ func TestHostedAgentPoolCleansPreparedWorkspaceWhenSessionArchived(t *testing.T)
 	}
 }
 
-func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, runtimeProvider pluginruntime.Provider, runtimeSession *pluginruntime.Session, allowedRepos ...string) *hostedAgentProviderPool {
+func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, runtimeProvider appruntime.Provider, runtimeSession *appruntime.Session, allowedRepos ...string) *hostedAgentProviderPool {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	return &hostedAgentProviderPool{
@@ -747,13 +747,13 @@ func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, 
 	}
 }
 
-func startWorkspaceRuntimeSession(t *testing.T, ctx context.Context, supportsWorkspace bool) (*workspaceRuntimeProvider, *pluginruntime.Session) {
+func startWorkspaceRuntimeSession(t *testing.T, ctx context.Context, supportsWorkspace bool) (*workspaceRuntimeProvider, *appruntime.Session) {
 	t.Helper()
 	runtimeProvider := &workspaceRuntimeProvider{
-		LocalProvider:           pluginruntime.NewLocalProvider(),
+		LocalProvider:           appruntime.NewLocalProvider(),
 		supportPrepareWorkspace: supportsWorkspace,
 	}
-	session, err := runtimeProvider.StartSession(ctx, pluginruntime.StartSessionRequest{PluginName: "agent"})
+	session, err := runtimeProvider.StartSession(ctx, appruntime.StartSessionRequest{AppName: "agent"})
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)
 	}
@@ -856,12 +856,12 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingPluginRuntime()
+	runtimeProvider := newCapturingAppRuntime()
 	ctxSentinel := &struct{}{}
 	var factoryContextValue any
 
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(ctx context.Context, _ string, _ *config.RuntimeProviderEntry, _ Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(ctx context.Context, _ string, _ *config.RuntimeProviderEntry, _ Deps) (appruntime.Provider, error) {
 		factoryContextValue = ctx.Value(agentRuntimeFactoryContextKey{})
 		return runtimeProvider, nil
 	}
@@ -916,7 +916,7 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 		AgentRuntime:  &agentRuntime{providers: map[string]coreagent.Provider{}},
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 	buildCtx := context.WithValue(context.Background(), agentRuntimeFactoryContextKey{}, ctxSentinel)
 	agents, err := buildAgents(buildCtx, cfg, factories, deps)
 	if err != nil {
@@ -933,8 +933,8 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 		t.Fatalf("start session requests = %d, want 1", len(requests))
 	}
 	req := requests[0]
-	if req.PluginName != "simple" {
-		t.Fatalf("StartSession PluginName = %q, want simple", req.PluginName)
+	if req.AppName != "simple" {
+		t.Fatalf("StartSession AppName = %q, want simple", req.AppName)
 	}
 	if req.Template != "python-dev" {
 		t.Fatalf("StartSession Template = %q, want python-dev", req.Template)
@@ -966,9 +966,9 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingPluginRuntime()
+	runtimeProvider := newCapturingAppRuntime()
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1002,7 +1002,7 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 		Services:      services,
 		AgentRuntime:  agentRuntime,
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1108,9 +1108,9 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingPluginRuntime()
+	runtimeProvider := newCapturingAppRuntime()
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1142,7 +1142,7 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 		Services:      services,
 		AgentRuntime:  agentRuntime,
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1215,9 +1215,9 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingPluginRuntime()
+	runtimeProvider := newCapturingAppRuntime()
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1249,7 +1249,7 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1287,13 +1287,13 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingPluginRuntime()
+	runtimeProvider := newCapturingAppRuntime()
 	var drainMu sync.Mutex
 	var firstDrainAt time.Time
-	runtimeProvider.lifecycleForSession = func(index int) *pluginruntime.SessionLifecycle {
+	runtimeProvider.lifecycleForSession = func(index int) *appruntime.SessionLifecycle {
 		startedAt := time.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
-		lifecycle := &pluginruntime.SessionLifecycle{
+		lifecycle := &appruntime.SessionLifecycle{
 			StartedAt: &startedAt,
 			ExpiresAt: &expiresAt,
 		}
@@ -1307,7 +1307,7 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		return lifecycle
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1340,7 +1340,7 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1395,11 +1395,11 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 //nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
 func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartFails(t *testing.T) {
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingPluginRuntime()
-	runtimeProvider.lifecycleForSession = func(index int) *pluginruntime.SessionLifecycle {
+	runtimeProvider := newCapturingAppRuntime()
+	runtimeProvider.lifecycleForSession = func(index int) *appruntime.SessionLifecycle {
 		startedAt := time.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
-		lifecycle := &pluginruntime.SessionLifecycle{
+		lifecycle := &appruntime.SessionLifecycle{
 			StartedAt: &startedAt,
 			ExpiresAt: &expiresAt,
 		}
@@ -1416,7 +1416,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		return nil
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1450,7 +1450,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1497,14 +1497,14 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 //nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
 func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *testing.T) {
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingPluginRuntime()
+	runtimeProvider := newCapturingAppRuntime()
 	releaseReplacement := make(chan struct{})
 	replacementStarted := make(chan struct{})
 	var replacementStartedOnce sync.Once
-	runtimeProvider.lifecycleForSession = func(index int) *pluginruntime.SessionLifecycle {
+	runtimeProvider.lifecycleForSession = func(index int) *appruntime.SessionLifecycle {
 		startedAt := time.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
-		lifecycle := &pluginruntime.SessionLifecycle{
+		lifecycle := &appruntime.SessionLifecycle{
 			StartedAt: &startedAt,
 			ExpiresAt: &expiresAt,
 		}
@@ -1525,7 +1525,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 		return nil
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1559,7 +1559,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1595,15 +1595,15 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 //nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
 func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntimeLifetime(t *testing.T) {
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingPluginRuntime()
-	runtimeProvider.lifecycleForSession = func(index int) *pluginruntime.SessionLifecycle {
+	runtimeProvider := newCapturingAppRuntime()
+	runtimeProvider.lifecycleForSession = func(index int) *appruntime.SessionLifecycle {
 		expiresAt := time.Now().UTC().Add(5 * time.Minute)
-		return &pluginruntime.SessionLifecycle{
+		return &appruntime.SessionLifecycle{
 			ExpiresAt: &expiresAt,
 		}
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1637,7 +1637,7 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1658,10 +1658,10 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingPluginRuntime()
+	runtimeProvider := newCapturingAppRuntime()
 	var expiryMu sync.Mutex
 	var firstExpiresAt time.Time
-	runtimeProvider.lifecycleForSession = func(index int) *pluginruntime.SessionLifecycle {
+	runtimeProvider.lifecycleForSession = func(index int) *appruntime.SessionLifecycle {
 		expiresAt := time.Now().UTC().Add(time.Hour)
 		if index == 1 {
 			expiresAt = time.Now().UTC().Add(2 * time.Second)
@@ -1669,12 +1669,12 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 			firstExpiresAt = expiresAt
 			expiryMu.Unlock()
 		}
-		return &pluginruntime.SessionLifecycle{
+		return &appruntime.SessionLifecycle{
 			ExpiresAt: &expiresAt,
 		}
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1708,7 +1708,7 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -2045,10 +2045,10 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		RunGrants: runGrants,
 		Invoker:   invoker,
 	}))
-	capturingRuntime := newCapturingPluginRuntime()
+	capturingRuntime := newCapturingAppRuntime()
 
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
 		return capturingRuntime, nil
 	}
 
@@ -2079,7 +2079,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		AgentRuntime:        agentRuntime,
 		PublicHostServices:  publicHostServices,
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -2213,15 +2213,15 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	}
 
 	wantRelayTarget := "tls://" + relaySrv.Listener.Addr().String()
-	startRequests := capturingRuntime.startPluginRequestsCopy()
+	startRequests := capturingRuntime.startAppRequestsCopy()
 	if len(startRequests) != 1 {
-		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
 	if got := startRequests[0].Env[runtimehost.DefaultHostServiceSocketEnv]; got != wantRelayTarget {
 		t.Fatalf("agent host relay target = %q, want %q", got, wantRelayTarget)
 	}
 	if got := startRequests[0].Env[runtimehost.DefaultHostServiceTokenEnv]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartPlugin env missing %s", runtimehost.DefaultHostServiceTokenEnv)
+		t.Fatalf("StartApp env missing %s", runtimehost.DefaultHostServiceTokenEnv)
 	}
 
 	pausedTurn, err := agents[0].CreateTurn(context.Background(), coreagent.CreateTurnRequest{
@@ -2354,10 +2354,10 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			Plugin:     "slack",
+			App:        "slack",
 			Operations: []string{"chat.postMessage"},
 		}},
-		ToolRefs:   []coreagent.ToolRef{{Plugin: "slack", Operation: "chat.postMessage"}},
+		ToolRefs:   []coreagent.ToolRef{{App: "slack", Operation: "chat.postMessage"}},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
@@ -2368,7 +2368,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			Plugin:         "slack",
+			App:            "slack",
 			Operation:      "chat.postMessage",
 			CredentialMode: core.ConnectionModeNone,
 		}),
@@ -2386,7 +2386,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		SubjectID: principal.UserSubjectID("user-123"),
 	}, coreagent.ResolveToolsRequest{
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "slack",
+			App:       "slack",
 			Operation: "events.reply",
 		}},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
@@ -2404,11 +2404,11 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			Plugin:     "slack",
+			App:        "slack",
 			Operations: []string{"events.reply"},
 		}},
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "slack",
+			App:       "slack",
 			Operation: "events.reply",
 		}},
 		Tools:      exactTools,
@@ -2439,7 +2439,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 	if calls[0].idempotencyKey != "agent-tool:turn-1:call-1" {
 		t.Fatalf("invoker idempotency key = %q, want agent-tool:turn-1:call-1", calls[0].idempotencyKey)
 	}
-	if !calls[0].toolRefsSet || len(calls[0].toolRefs) != 1 || calls[0].toolRefs[0].Plugin != "slack" || calls[0].toolRefs[0].Operation != "events.reply" {
+	if !calls[0].toolRefsSet || len(calls[0].toolRefs) != 1 || calls[0].toolRefs[0].App != "slack" || calls[0].toolRefs[0].Operation != "events.reply" {
 		t.Fatalf("invoker tool refs = set %t refs %#v, want slack events.reply", calls[0].toolRefsSet, calls[0].toolRefs)
 	}
 
@@ -2512,12 +2512,12 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		DisplayName:  "Hugh",
 		AuthSource:   "slack",
 		Permissions: []core.AccessPermission{
-			{Plugin: "slack", Operations: []string{"events.reply"}},
-			{Plugin: "github", Operations: []string{"bot.createPullRequest"}},
+			{App: "slack", Operations: []string{"events.reply"}},
+			{App: "github", Operations: []string{"bot.createPullRequest"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
-			{Plugin: "slack", Operation: "events.reply"},
-			{Plugin: "github", Operation: "bot.createPullRequest", CredentialMode: core.ConnectionModeNone, RunAs: runAs, RunAsExternalIdentity: externalIdentity},
+			{App: "slack", Operation: "events.reply"},
+			{App: "github", Operation: "bot.createPullRequest", CredentialMode: core.ConnectionModeNone, RunAs: runAs, RunAsExternalIdentity: externalIdentity},
 		},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
@@ -2530,7 +2530,7 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			Plugin:    "slack",
+			App:       "slack",
 			Operation: "events.reply",
 		}),
 		RunGrant:  grant,
@@ -2544,7 +2544,7 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			Plugin:                "github",
+			App:                   "github",
 			Operation:             "bot.createPullRequest",
 			CredentialMode:        core.ConnectionModeNone,
 			RunAs:                 runAs,
@@ -2623,10 +2623,10 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
-		ToolRefs:   []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
+		ToolRefs:   []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
@@ -2637,7 +2637,7 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			Plugin:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		}),
 		RunGrant:  grant,
@@ -2698,10 +2698,10 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
-		ToolRefs:   []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
+		ToolRefs:   []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
@@ -2742,10 +2742,10 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
-		ToolRefs:   []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
+		ToolRefs:   []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
@@ -2872,7 +2872,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 			InputSchema:  json.RawMessage(`{"type":"object"}`),
 			OutputSchema: oversizedOutputSchema,
 		}
-		docsRefs[i] = coreagent.ToolRef{Plugin: "docs", Operation: id}
+		docsRefs[i] = coreagent.ToolRef{App: "docs", Operation: id}
 		docsPermissions[i] = id
 	}
 	docsProvider := &coretesting.StubIntegration{
@@ -2914,13 +2914,13 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync", "sync!", "sync_2"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
-			{Plugin: "roadmap", Operation: "sync"},
-			{Plugin: "roadmap", Operation: "sync!"},
-			{Plugin: "roadmap", Operation: "sync_2"},
+			{App: "roadmap", Operation: "sync"},
+			{App: "roadmap", Operation: "sync!"},
+			{App: "roadmap", Operation: "sync_2"},
 		},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
@@ -2986,7 +2986,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
@@ -3015,7 +3015,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			Plugin:     "docs",
+			App:        "docs",
 			Operations: docsPermissions,
 		}},
 		ToolRefs:   docsRefs,
@@ -3081,10 +3081,10 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
-		ToolRefs:   []coreagent.ToolRef{{Plugin: "roadmap"}},
+		ToolRefs:   []coreagent.ToolRef{{App: "roadmap"}},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
@@ -3193,10 +3193,10 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{
-			{Plugin: "github", Operations: []string{"issues"}},
-			{Plugin: "linear", Operations: []string{"viewer"}},
+			{App: "github", Operations: []string{"issues"}},
+			{App: "linear", Operations: []string{"viewer"}},
 		},
-		ToolRefs:   []coreagent.ToolRef{{Plugin: "*"}},
+		ToolRefs:   []coreagent.ToolRef{{App: "*"}},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
@@ -3221,7 +3221,7 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 			linearSentinel = listed
 		}
 	}
-	if linearSentinel.ToolID == "" || linearSentinel.Ref.Plugin != "linear" || linearSentinel.Ref.Operation != "" || linearSentinel.Target.Unavailable == nil {
+	if linearSentinel.ToolID == "" || linearSentinel.Ref.App != "linear" || linearSentinel.Ref.Operation != "" || linearSentinel.Target.Unavailable == nil {
 		t.Fatalf("Linear sentinel = %#v, want unavailable plugin-level tool", linearSentinel)
 	}
 
@@ -3249,14 +3249,14 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			Plugin:     "linear",
+			App:        "linear",
 			Operations: []string{"viewer"},
 		}},
-		ToolRefs:   []coreagent.ToolRef{{Plugin: "linear"}},
+		ToolRefs:   []coreagent.ToolRef{{App: "linear"}},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint plugin grant: %v", err)
+		t.Fatalf("Mint app grant: %v", err)
 	}
 	pluginListResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "claude",
@@ -3279,10 +3279,10 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			Plugin:     "linear",
+			App:        "linear",
 			Operations: []string{"viewer"},
 		}},
-		ToolRefs:   []coreagent.ToolRef{{Plugin: "linear", Operation: "viewer"}},
+		ToolRefs:   []coreagent.ToolRef{{App: "linear", Operation: "viewer"}},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
@@ -3348,10 +3348,10 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	relaySrv.StartTLS()
 	testutil.CloseOnCleanup(t, relaySrv)
 
-	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider := newCapturingBundleAppRuntime()
 
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 
@@ -3382,7 +3382,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 		AgentRuntime:       runtimeState,
 		PublicHostServices: publicHostServices,
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -3413,22 +3413,22 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 		t.Fatalf("turn = %#v, want provider-only output", turn)
 	}
 
-	startRequests := runtimeProvider.startPluginRequestsCopy()
+	startRequests := runtimeProvider.startAppRequestsCopy()
 	if len(startRequests) != 1 {
-		t.Fatalf("start plugin requests = %d, want 1", len(startRequests))
+		t.Fatalf("start app requests = %d, want 1", len(startRequests))
 	}
 	if got := startRequests[0].Env[runtimehost.DefaultHostServiceSocketEnv]; got != "tls://"+relaySrv.Listener.Addr().String() {
-		t.Fatalf("StartPlugin env %s = %q, want tls relay target", runtimehost.DefaultHostServiceSocketEnv, got)
+		t.Fatalf("StartApp env %s = %q, want tls relay target", runtimehost.DefaultHostServiceSocketEnv, got)
 	}
 	if got := startRequests[0].Env[runtimehost.DefaultHostServiceTokenEnv]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartPlugin env missing %s: %#v", runtimehost.DefaultHostServiceTokenEnv, startRequests[0].Env)
+		t.Fatalf("StartApp env missing %s: %#v", runtimehost.DefaultHostServiceTokenEnv, startRequests[0].Env)
 	}
 }
 
 func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	t.Parallel()
 
-	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider := newCapturingBundleAppRuntime()
 	entry := &config.ProviderEntry{
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Kind: providermanifestv1.KindAgent,
@@ -3450,7 +3450,7 @@ func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	}), Deps{
 		BaseURL:       "https://gestalt.example.test",
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
-		PluginRuntime: runtimeProvider,
+		AppRuntime:    runtimeProvider,
 	})
 	if err != nil {
 		t.Fatalf("prepareHostedAgentProviderLaunch: %v", err)
@@ -3495,9 +3495,9 @@ func TestAgentRuntimeProviderEntryRuntimePlacementConfigIncludesImagePullAuth(t 
 func TestAgentRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 	t.Parallel()
 
-	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider := newCapturingBundleAppRuntime()
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -3527,7 +3527,7 @@ func TestAgentRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 		BaseURL:       "https://gestalt.example.test",
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	launch, err := prepareHostedAgentProviderLaunch(context.Background(), "simple", entry, mustNode(t, map[string]any{
 		"name":    "simple",
@@ -3588,15 +3588,15 @@ func TestAgentRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := &staticCapabilityPluginRuntime{
-		inner: newCapturingPluginRuntime(),
-		support: pluginruntime.Support{
-			CanHostPlugins: true,
+	runtimeProvider := &staticCapabilityAppRuntime{
+		inner: newCapturingAppRuntime(),
+		support: appruntime.Support{
+			CanHostApps: true,
 		},
 	}
 
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 
@@ -3622,7 +3622,7 @@ func TestAgentRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	deps := Deps{
 		AgentRuntime: &agentRuntime{providers: map[string]coreagent.Provider{}},
 	}
-	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	_, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err == nil {

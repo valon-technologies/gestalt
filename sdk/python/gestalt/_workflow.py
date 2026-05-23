@@ -18,7 +18,7 @@ from ._agent import (
     agent_tool_ref_to_proto,
 )
 from ._gen.v1 import agent_pb2 as _agent_pb
-from ._gen.v1 import plugin_pb2 as _plugin_pb
+from ._gen.v1 import app_pb2 as _app_pb
 from ._gen.v1 import workflow_pb2 as _pb
 from ._gen.v1 import workflow_pb2_grpc as _pb_grpc
 from ._grpc_transport import (
@@ -70,10 +70,10 @@ _MISSING = object()
 
 
 @_dataclasses.dataclass(slots=True)
-class BoundWorkflowPluginTarget:
-    """Native data for a bound plugin workflow target."""
+class BoundWorkflowAppTarget:
+    """Native data for a bound app workflow target."""
 
-    plugin_name: str = ""
+    app_name: str = ""
     operation: str = ""
     input: Any | None = None
     connection: str = ""
@@ -331,7 +331,7 @@ class WorkflowExecutionReference:
     subject_kind: str = ""
     display_name: str = ""
     auth_source: str = ""
-    caller_plugin_name: str = ""
+    caller_app_name: str = ""
     run_as: Any | None = None
     source_definition_id: str = ""
 
@@ -594,7 +594,7 @@ def _message_proto_list(
             output.append(_copy(item))
         elif message_type is _agent_pb.AgentMessage:
             output.append(agent_message_to_proto(item))
-        elif message_type is _plugin_pb.AgentToolRef:
+        elif message_type is _app_pb.AgentToolRef:
             converted = agent_tool_ref_to_proto(item)
             if converted is None:
                 raise TypeError("AgentToolRef item cannot be None")
@@ -621,7 +621,7 @@ def _agent_tool_ref_input_list(values: Sequence[Any] | None) -> list[Any]:
         return []
     output = []
     for item in values:
-        if isinstance(item, _plugin_pb.AgentToolRef):
+        if isinstance(item, _app_pb.AgentToolRef):
             output.append(agent_tool_ref_from_proto(item))
         else:
             output.append(agent_tool_ref_from_dict(item))
@@ -691,7 +691,7 @@ def workflow_access_permission(value: Any | None = None, **kwargs: Any) -> Any:
         return _copy(value)
     data = _data(value, kwargs)
     return pb.WorkflowAccessPermission(
-        plugin=data.get("plugin", ""),
+        plugin=data.get("app", ""),
         operations=list(data.get("operations") or []),
     )
 
@@ -841,13 +841,13 @@ def workflow_output_delivery_input_from_delivery(
 
 
 def bound_workflow_plugin_target(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a bound plugin workflow target ."""
+    """Create a bound app workflow target ."""
 
-    if isinstance(value, pb.BoundWorkflowPluginTarget):
+    if isinstance(value, pb.BoundWorkflowAppTarget):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.BoundWorkflowPluginTarget(
-        plugin_name=data.get("plugin_name", ""),
+    return pb.BoundWorkflowAppTarget(
+        app_name=data.get("app_name", ""),
         operation=data.get("operation", ""),
         input=_optional_struct(data.get("input")),
         connection=data.get("connection", ""),
@@ -858,13 +858,13 @@ def bound_workflow_plugin_target(value: Any | None = None, **kwargs: Any) -> Any
 
 def bound_workflow_plugin_target_input_from_target(
     value: Any | None,
-) -> BoundWorkflowPluginTarget | None:
-    """Return input copied from a bound plugin workflow target."""
+) -> BoundWorkflowAppTarget | None:
+    """Return input copied from a bound app workflow target."""
 
     if value is None:
         return None
-    return BoundWorkflowPluginTarget(
-        plugin_name=value.plugin_name,
+    return BoundWorkflowAppTarget(
+        app_name=value.app_name,
         operation=value.operation,
         input=struct_to_dict(value.input) if has_field(value, "input") else None,
         connection=value.connection,
@@ -886,7 +886,7 @@ def bound_workflow_agent_target(value: Any | None = None, **kwargs: Any) -> Any:
         model=data.get("model", ""),
         prompt=data.get("prompt", ""),
         messages=_message_proto_list(data.get("messages"), _agent_pb.AgentMessage),
-        tool_refs=_message_proto_list(data.get("tool_refs"), _plugin_pb.AgentToolRef),
+        tool_refs=_message_proto_list(data.get("tool_refs"), _app_pb.AgentToolRef),
         response_schema=_optional_struct(data.get("response_schema")),
         metadata=_optional_struct(data.get("metadata")),
         timeout_seconds=data.get("timeout_seconds", 0),
@@ -950,7 +950,7 @@ def workflow_agent_step(value: Any | None = None, **kwargs: Any) -> Any:
         id=data.get("id", ""),
         prompt=data.get("prompt", ""),
         messages=_message_proto_list(data.get("messages"), _agent_pb.AgentMessage),
-        tool_refs=_message_proto_list(data.get("tool_refs"), _plugin_pb.AgentToolRef),
+        tool_refs=_message_proto_list(data.get("tool_refs"), _app_pb.AgentToolRef),
         response_schema=_optional_struct(data.get("response_schema")),
         model_options=_optional_struct(data.get("model_options")),
         timeout_seconds=data.get("timeout_seconds", 0),
@@ -1026,11 +1026,11 @@ def bound_workflow_target(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.BoundWorkflowTarget):
         return _copy(value)
     data = _data(value, kwargs)
-    plugin = data.get("plugin")
+    app = data.get("app")
     agent = data.get("agent")
-    if plugin is not None and agent is not None:
-        raise ValueError("bound workflow target must set either plugin or agent")
-    if plugin is not None:
+    if app is not None and agent is not None:
+        raise ValueError("bound workflow target must set either app or agent")
+    if app is not None:
         return pb.BoundWorkflowTarget(plugin=bound_workflow_plugin_target(plugin))
     if agent is not None:
         return pb.BoundWorkflowTarget(agent=bound_workflow_agent_target(agent))
@@ -1045,7 +1045,7 @@ def bound_workflow_target_input_from_target(
     if value is None:
         return None
     kind = which_oneof(value, "kind")
-    if kind == "plugin":
+    if kind == "app":
         return BoundWorkflowTarget(
             plugin=bound_workflow_plugin_target_input_from_target(value.plugin)
         )
@@ -1746,7 +1746,7 @@ def workflow_execution_reference(value: Any | None = None, **kwargs: Any) -> Any
         subject_kind=data.get("subject_kind", ""),
         display_name=data.get("display_name", ""),
         auth_source=data.get("auth_source", ""),
-        caller_plugin_name=data.get("caller_plugin_name", ""),
+        caller_app_name=data.get("caller_app_name", ""),
         run_as=workflow_run_as_subject(run_as) if run_as is not None else None,
         source_definition_id=data.get("source_definition_id", ""),
     )
@@ -1776,7 +1776,7 @@ def workflow_execution_reference_input_from_reference(
         subject_kind=value.subject_kind,
         display_name=value.display_name,
         auth_source=value.auth_source,
-        caller_plugin_name=value.caller_plugin_name,
+        caller_app_name=value.caller_app_name,
         run_as=workflow_run_as_subject_input_from_subject(value.run_as)
         if has_field(value, "run_as")
         else None,
@@ -1817,7 +1817,7 @@ class ListWorkflowProviderRunsRequest:
     page_size: int = 0
     page_token: str = ""
     status: int = WORKFLOW_RUN_STATUS_UNSPECIFIED
-    target_plugin: str = ""
+    target_app: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
@@ -2038,7 +2038,7 @@ class ListWorkflowExecutionReferencesResponse:
 class PublishWorkflowProviderEventRequest:
     """Publish-event request passed to workflow providers."""
 
-    plugin_name: str = ""
+    app_name: str = ""
     event: Any | None = None
     published_by: Any | None = None
 
@@ -2073,7 +2073,7 @@ def list_workflow_provider_runs_request_from_proto(
         page_size=int(value.page_size),
         page_token=value.page_token,
         status=value.status,
-        target_plugin=value.target_plugin,
+        target_app=value.target_app,
     )
 
 
@@ -2347,7 +2347,7 @@ def publish_workflow_provider_event_request_from_proto(
     value: Any,
 ) -> PublishWorkflowProviderEventRequest:
     return PublishWorkflowProviderEventRequest(
-        plugin_name=value.plugin_name,
+        app_name=value.app_name,
         event=workflow_event_input_from_event(value.event)
         if has_field(value, "event")
         else None,

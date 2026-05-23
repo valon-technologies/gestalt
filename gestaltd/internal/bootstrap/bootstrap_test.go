@@ -37,12 +37,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	graphqlschema "github.com/valon-technologies/gestalt/server/services/plugins/graphql"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -57,9 +57,9 @@ import (
 
 func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, providerName string, target coreworkflow.Target) string {
 	t.Helper()
-	pluginTarget := target.Plugin
+	pluginTarget := target.App
 	if pluginTarget == nil {
-		t.Fatalf("workflow target plugin is nil: %#v", target)
+		t.Fatalf("workflow target app is nil: %#v", target)
 		return ""
 	}
 	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
@@ -76,7 +76,7 @@ func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, provi
 		Target:       target,
 		SubjectID:    "system:config",
 		Permissions: []core.AccessPermission{{
-			Plugin:     pluginTarget.PluginName,
+			App:        pluginTarget.AppName,
 			Operations: []string{pluginTarget.Operation},
 		}},
 	})
@@ -1578,10 +1578,10 @@ func cloneBootstrapWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *c
 
 func cloneBootstrapWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
 	clone := coreworkflow.Target{}
-	if target.Plugin != nil {
-		plugin := *target.Plugin
-		plugin.Input = maps.Clone(plugin.Input)
-		clone.Plugin = &plugin
+	if target.App != nil {
+		appTarget := *target.App
+		appTarget.Input = maps.Clone(appTarget.Input)
+		clone.App = &appTarget
 	}
 	if target.Agent != nil {
 		agent := *target.Agent
@@ -1609,7 +1609,7 @@ func (t *trackedIndexedDB) Close() error {
 
 func validConfig() *config.Config {
 	return &config.Config{
-		Plugins: map[string]*config.ProviderEntry{},
+		Apps: map[string]*config.ProviderEntry{},
 		Providers: config.ProvidersConfig{
 			Authentication: map[string]*config.ProviderEntry{
 				"default": {
@@ -1807,7 +1807,7 @@ func withIndexedDBHostClient(t *testing.T, hostService runtimehost.HostService, 
 
 func workflowStartupCallbackConfig(baseURL string) *config.Config {
 	cfg := validConfig()
-	cfg.Plugins = map[string]*config.ProviderEntry{
+	cfg.Apps = map[string]*config.ProviderEntry{
 		"roadmap": {
 			ConnectionMode: providermanifestv1.ConnectionModeNone,
 			ResolvedManifest: &providermanifestv1.Manifest{
@@ -1860,7 +1860,7 @@ type workflowFixtureEventMatch struct {
 	Subject string
 }
 
-func setWorkflowFixture(cfg *config.Config, plugin string, workflow *workflowFixture) {
+func setWorkflowFixture(cfg *config.Config, app string, workflow *workflowFixture) {
 	if cfg == nil {
 		return
 	}
@@ -1871,12 +1871,12 @@ func setWorkflowFixture(cfg *config.Config, plugin string, workflow *workflowFix
 		cfg.Workflows.EventTriggers = map[string]config.WorkflowEventTriggerConfig{}
 	}
 	for key, schedule := range cfg.Workflows.Schedules {
-		if workflowFixtureTargetPlugin(schedule.Target) == plugin {
+		if workflowFixtureTargetPlugin(schedule.Target) == app {
 			delete(cfg.Workflows.Schedules, key)
 		}
 	}
 	for key, trigger := range cfg.Workflows.EventTriggers {
-		if workflowFixtureTargetPlugin(trigger.Target) == plugin {
+		if workflowFixtureTargetPlugin(trigger.Target) == app {
 			delete(cfg.Workflows.EventTriggers, key)
 		}
 	}
@@ -1886,7 +1886,7 @@ func setWorkflowFixture(cfg *config.Config, plugin string, workflow *workflowFix
 	for key, schedule := range workflow.Schedules {
 		cfg.Workflows.Schedules[key] = config.WorkflowScheduleConfig{
 			Provider: workflow.Provider,
-			Target:   workflowFixtureTarget(plugin, schedule.Operation, schedule.Input),
+			Target:   workflowFixtureTarget(app, schedule.Operation, schedule.Input),
 			Cron:     schedule.Cron,
 			Timezone: schedule.Timezone,
 			Paused:   schedule.Paused,
@@ -1895,7 +1895,7 @@ func setWorkflowFixture(cfg *config.Config, plugin string, workflow *workflowFix
 	for key, trigger := range workflow.EventTriggers {
 		cfg.Workflows.EventTriggers[key] = config.WorkflowEventTriggerConfig{
 			Provider: workflow.Provider,
-			Target:   workflowFixtureTarget(plugin, trigger.Operation, trigger.Input),
+			Target:   workflowFixtureTarget(app, trigger.Operation, trigger.Input),
 			Match: config.WorkflowEventMatch{
 				Type:    trigger.Match.Type,
 				Source:  trigger.Match.Source,
@@ -1908,7 +1908,7 @@ func setWorkflowFixture(cfg *config.Config, plugin string, workflow *workflowFix
 
 func workflowFixtureTarget(plugin, operation string, input map[string]any) *config.WorkflowTargetConfig {
 	return &config.WorkflowTargetConfig{
-		Plugin: &config.WorkflowPluginTargetConfig{
+		App: &config.WorkflowAppTargetConfig{
 			Name:      plugin,
 			Operation: operation,
 			Input:     maps.Clone(input),
@@ -1916,39 +1916,39 @@ func workflowFixtureTarget(plugin, operation string, input map[string]any) *conf
 	}
 }
 
-func requireCoreWorkflowPluginTarget(t *testing.T, target coreworkflow.Target) *coreworkflow.PluginTarget {
+func requireCoreWorkflowAppTarget(t *testing.T, target coreworkflow.Target) *coreworkflow.AppTarget {
 	t.Helper()
-	if target.Plugin == nil {
-		t.Fatalf("target plugin is nil: %#v", target)
+	if target.App == nil {
+		t.Fatalf("target app is nil: %#v", target)
 	}
-	return target.Plugin
+	return target.App
 }
 
-func coreWorkflowPluginTarget(pluginName, operation string) coreworkflow.Target {
+func coreWorkflowAppTarget(pluginName, operation string) coreworkflow.Target {
 	return coreworkflow.Target{
-		Plugin: &coreworkflow.PluginTarget{
-			PluginName: pluginName,
-			Operation:  operation,
+		App: &coreworkflow.AppTarget{
+			AppName:   pluginName,
+			Operation: operation,
 		},
 	}
 }
 
-func protoWorkflowPluginTarget(pluginName, operation string) *proto.BoundWorkflowTarget {
+func protoWorkflowAppTarget(pluginName, operation string) *proto.BoundWorkflowTarget {
 	return &proto.BoundWorkflowTarget{
-		Kind: &proto.BoundWorkflowTarget_Plugin{
-			Plugin: &proto.BoundWorkflowPluginTarget{
-				PluginName: pluginName,
-				Operation:  operation,
+		Kind: &proto.BoundWorkflowTarget_App{
+			App: &proto.BoundWorkflowAppTarget{
+				AppName:   pluginName,
+				Operation: operation,
 			},
 		},
 	}
 }
 
 func workflowFixtureTargetPlugin(target *config.WorkflowTargetConfig) string {
-	if target == nil || target.Plugin == nil {
+	if target == nil || target.App == nil {
 		return ""
 	}
-	return target.Plugin.Name
+	return target.App.Name
 }
 
 func transportSecretRef(name string) string {
@@ -2220,7 +2220,7 @@ func TestBootstrap(t *testing.T) {
 				}
 
 				cfg := validConfig()
-				cfg.Plugins = map[string]*config.ProviderEntry{
+				cfg.Apps = map[string]*config.ProviderEntry{
 					"slack": {
 						ResolvedManifest: &providermanifestv1.Manifest{
 							Spec: &providermanifestv1.Spec{
@@ -2575,19 +2575,19 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 
 	perms := principal.CompilePermissions([]core.AccessPermission{
 		{
-			Plugin:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		},
 		{
-			Plugin:     "lever",
+			App:        "lever",
 			Operations: []string{"sync"},
 		},
 		{
-			Plugin:     "ashby",
+			App:        "ashby",
 			Operations: []string{"sync"},
 		},
 		{
-			Plugin: "managed",
+			App: "managed",
 		},
 	})
 	p := &principal.Principal{
@@ -2597,7 +2597,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		Kind:                principal.KindUser,
 		Source:              principal.SourceSession,
 		TokenPermissions:    perms,
-		Scopes:              principal.PermissionPlugins(perms),
+		Scopes:              principal.PermissionApps(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
 
@@ -2615,7 +2615,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 			Title:     "Roadmap sync",
 		}},
@@ -2663,7 +2663,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if createTurnReq.ToolSource != coreagent.ToolSourceModeMCPCatalog {
 		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", createTurnReq.ToolSource)
 	}
-	if len(createTurnReq.ToolRefs) != 1 || createTurnReq.ToolRefs[0].Plugin != "roadmap" || createTurnReq.ToolRefs[0].Operation != "sync" {
+	if len(createTurnReq.ToolRefs) != 1 || createTurnReq.ToolRefs[0].App != "roadmap" || createTurnReq.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("CreateTurn tool refs = %#v", createTurnReq.ToolRefs)
 	}
 	if strings.TrimSpace(createTurnReq.RunGrant) == "" {
@@ -2695,7 +2695,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		IdempotencyKey: "scoped-unavailable-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync ashby"}},
-		ToolRefs:       []coreagent.ToolRef{{Plugin: "ashby", Operation: "sync"}},
+		ToolRefs:       []coreagent.ToolRef{{App: "ashby", Operation: "sync"}},
 	})
 	if err == nil || !strings.Contains(err.Error(), `no external credential stored for integration "ashby"`) {
 		t.Fatalf("AgentManager.CreateTurn(scoped unavailable) error = %v, want ashby credential error", err)
@@ -2741,7 +2741,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactPluginIssueTool(t *testing.T)
 			},
 		})
 		unavailableIssuePermissions = append(unavailableIssuePermissions, core.AccessPermission{
-			Plugin:     name,
+			App:        name,
 			Operations: []string{"list_issues"},
 		})
 	}
@@ -2870,14 +2870,14 @@ func TestBootstrapAgentHostToolCatalogExecutesExactPluginIssueTool(t *testing.T)
 
 	permissions := []core.AccessPermission{
 		{
-			Plugin: "managed",
+			App: "managed",
 		},
 		{
-			Plugin:     "linear",
+			App:        "linear",
 			Operations: []string{"list_issues", "list_comments", "list_customers", "list_documents"},
 		},
 		{
-			Plugin:     "customerRoadmapReview",
+			App:        "customerRoadmapReview",
 			Operations: []string{"publish_customer_view", "get_me", "get_endpoints"},
 		},
 	}
@@ -2889,7 +2889,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactPluginIssueTool(t *testing.T)
 		Kind:             principal.KindUser,
 		Source:           principal.SourceSession,
 		TokenPermissions: perms,
-		Scopes:           principal.PermissionPlugins(perms),
+		Scopes:           principal.PermissionApps(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
 
@@ -2906,7 +2906,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactPluginIssueTool(t *testing.T)
 		IdempotencyKey: "linear-search-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
-		ToolRefs:       []coreagent.ToolRef{{Plugin: "linear", Operation: "list_issues"}},
+		ToolRefs:       []coreagent.ToolRef{{App: "linear", Operation: "list_issues"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn: %v", err)
@@ -2927,7 +2927,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactPluginIssueTool(t *testing.T)
 		IdempotencyKey: "linear-search-after-unavailable-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "get my assigned tickets"}},
-		ToolRefs:       []coreagent.ToolRef{{Plugin: "linear", Operation: "list_issues"}},
+		ToolRefs:       []coreagent.ToolRef{{App: "linear", Operation: "list_issues"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(after unavailable hits): %v", err)
@@ -3010,10 +3010,10 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 	<-result.ProvidersReady
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		Plugin:     "docs",
+		App:        "docs",
 		Operations: []string{"aardvark_admin", "alpha_search", "beta_list", "delta_export", "epsilon_delete", "gamma_get"},
 	}, {
-		Plugin: "managed",
+		App: "managed",
 	}})
 	p := &principal.Principal{
 		SubjectID:        "user:user-123",
@@ -3021,7 +3021,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		Kind:             principal.KindUser,
 		Source:           principal.SourceSession,
 		TokenPermissions: perms,
-		Scopes:           principal.PermissionPlugins(perms),
+		Scopes:           principal.PermissionApps(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
 
@@ -3038,7 +3038,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		IdempotencyKey: "candidate-search-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "search docs"}},
-		ToolRefs:       []coreagent.ToolRef{{Plugin: "docs"}},
+		ToolRefs:       []coreagent.ToolRef{{App: "docs"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(search): %v", err)
@@ -3097,7 +3097,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		IdempotencyKey: "candidate-load-ref-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "load beta docs"}},
-		ToolRefs:       []coreagent.ToolRef{{Plugin: "docs", Operation: betaOperation}},
+		ToolRefs:       []coreagent.ToolRef{{App: "docs", Operation: betaOperation}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(exact ref): %v", err)
@@ -3119,8 +3119,8 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "load hidden docs"}},
 		ToolRefs: []coreagent.ToolRef{
-			{Plugin: "*"},
-			{Plugin: "docs", Operation: "aardvark_admin"},
+			{App: "*"},
+			{App: "docs", Operation: "aardvark_admin"},
 		},
 	})
 	if err != nil {
@@ -3137,7 +3137,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 	}
 	hiddenListed := false
 	for _, tool := range listResponses[2].GetTools() {
-		if tool.GetRef().GetPlugin() == "docs" && tool.GetRef().GetOperation() == "aardvark_admin" {
+		if tool.GetRef().GetApp() == "docs" && tool.GetRef().GetOperation() == "aardvark_admin" {
 			hiddenListed = true
 			break
 		}
@@ -3237,13 +3237,13 @@ func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalog
 	<-result.ProvidersReady
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		Plugin:     "linear",
+		App:        "linear",
 		Operations: []string{"issues"},
 	}, {
-		Plugin:     "github",
+		App:        "github",
 		Operations: []string{"issues"},
 	}, {
-		Plugin: "managed",
+		App: "managed",
 	}})
 	p := &principal.Principal{
 		SubjectID:        "user:user-123",
@@ -3251,7 +3251,7 @@ func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalog
 		Kind:             principal.KindUser,
 		Source:           principal.SourceSession,
 		TokenPermissions: perms,
-		Scopes:           principal.PermissionPlugins(perms),
+		Scopes:           principal.PermissionApps(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
 
@@ -3284,7 +3284,7 @@ func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalog
 		t.Fatalf("list response count = %d, want 1", len(listResponses))
 	}
 	tools := listResponses[0].GetTools()
-	if len(tools) != 1 || tools[0].GetRef().GetPlugin() != "linear" || tools[0].GetRef().GetOperation() != "issues" {
+	if len(tools) != 1 || tools[0].GetRef().GetApp() != "linear" || tools[0].GetRef().GetOperation() != "issues" {
 		t.Fatalf("listed tools = %#v, want only linear issues from configured narrowing", tools)
 	}
 	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"provider":"linear"`) {
@@ -3353,13 +3353,13 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *t
 	<-result.ProvidersReady
 
 	slackOnly := principal.CompilePermissions([]core.AccessPermission{{
-		Plugin: "slack",
+		App: "slack",
 		Operations: []string{
 			"events.reply",
 			"events.setStatus",
 		},
 	}, {
-		Plugin: "managed",
+		App: "managed",
 	}})
 	p := &principal.Principal{
 		SubjectID:        "user:user-123",
@@ -3367,7 +3367,7 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *t
 		Kind:             principal.KindUser,
 		Source:           principal.SourceAPIToken,
 		TokenPermissions: slackOnly,
-		Scopes:           principal.PermissionPlugins(slackOnly),
+		Scopes:           principal.PermissionApps(slackOnly),
 	}
 	ctx := invocation.WithInvocationSurface(principal.WithPrincipal(context.Background(), p), invocation.InvocationSurfaceHTTP)
 
@@ -3380,12 +3380,12 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *t
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
-		CallerPluginName: "slack",
-		SessionID:        session.ID,
-		IdempotencyKey:   "http-slack-linear-search",
-		Model:            "gpt-test",
-		Messages:         []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
-		ToolRefs:         []coreagent.ToolRef{{Plugin: "*"}},
+		CallerAppName:  "slack",
+		SessionID:      session.ID,
+		IdempotencyKey: "http-slack-linear-search",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
+		ToolRefs:       []coreagent.ToolRef{{App: "*"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn wildcard scoped turn: %v", err)
@@ -3485,13 +3485,13 @@ func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T)
 	<-result.ProvidersReady
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		Plugin:     "linear",
+		App:        "linear",
 		Operations: []string{"issues"},
 	}, {
-		Plugin:     "ashby",
+		App:        "ashby",
 		Operations: []string{"candidates"},
 	}, {
-		Plugin: "managed",
+		App: "managed",
 	}})
 	p := &principal.Principal{
 		SubjectID:        "user:user-123",
@@ -3499,7 +3499,7 @@ func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T)
 		Kind:             principal.KindUser,
 		Source:           principal.SourceSession,
 		TokenPermissions: perms,
-		Scopes:           principal.PermissionPlugins(perms),
+		Scopes:           principal.PermissionApps(perms),
 	}
 	ctx := invocation.WithInvocationSurface(principal.WithPrincipal(context.Background(), p), invocation.InvocationSurfaceHTTP)
 
@@ -3512,12 +3512,12 @@ func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T)
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
-		CallerPluginName: "slack",
-		SessionID:        session.ID,
-		IdempotencyKey:   "http-global-linear-search",
-		Model:            "gpt-test",
-		Messages:         []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
-		ToolRefs:         []coreagent.ToolRef{{Plugin: "*"}},
+		CallerAppName:  "slack",
+		SessionID:      session.ID,
+		IdempotencyKey: "http-global-linear-search",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
+		ToolRefs:       []coreagent.ToolRef{{App: "*"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn global scoped turn: %v", err)
@@ -3537,10 +3537,10 @@ func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T)
 	if len(tools) != 2 {
 		t.Fatalf("listed tools = %#v, want connected linear issues plus ashby unavailable sentinel", tools)
 	}
-	if tools[0].GetRef().GetPlugin() != "linear" || tools[0].GetRef().GetOperation() != "issues" {
+	if tools[0].GetRef().GetApp() != "linear" || tools[0].GetRef().GetOperation() != "issues" {
 		t.Fatalf("first listed tool = %#v, want connected linear issues before unavailable sentinels", tools[0])
 	}
-	if tools[1].GetRef().GetPlugin() != "ashby" || tools[1].GetRef().GetOperation() != "" || tools[1].GetMcpName() != "ashby__no_credential" {
+	if tools[1].GetRef().GetApp() != "ashby" || tools[1].GetRef().GetOperation() != "" || tools[1].GetMcpName() != "ashby__no_credential" {
 		t.Fatalf("second listed tool = %#v, want ashby unavailable sentinel", tools[1])
 	}
 	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"provider":"linear"`) || !strings.Contains(toolBodies[0], `"operation":"issues"`) {
@@ -4112,10 +4112,10 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 	<-result.ProvidersReady
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		Plugin:     "roadmap",
+		App:        "roadmap",
 		Operations: []string{"sync"},
 	}, {
-		Plugin: "managed",
+		App: "managed",
 	}})
 	full := &principal.Principal{
 		SubjectID:        "user:user-123",
@@ -4123,7 +4123,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		Kind:             principal.KindUser,
 		Source:           principal.SourceSession,
 		TokenPermissions: perms,
-		Scopes:           principal.PermissionPlugins(perms),
+		Scopes:           principal.PermissionApps(perms),
 	}
 	fullCtx := principal.WithPrincipal(context.Background(), full)
 
@@ -4141,7 +4141,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		}},
 	})
@@ -4157,7 +4157,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		UserID:           "user-123",
 		Kind:             principal.KindUser,
 		Source:           principal.SourceSession,
-		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{Plugin: "managed"}}),
+		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{App: "managed"}}),
 		Scopes:           []string{"managed"},
 	}
 	restrictedCtx := principal.WithPrincipal(context.Background(), restricted)
@@ -4168,7 +4168,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		}},
 	})
@@ -4586,7 +4586,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 	if !ok {
 		t.Fatal("workflow provider with indexeddb cleanup does not preserve execution reference store")
 	}
-	target := coreWorkflowPluginTarget("roadmap", "sync")
+	target := coreWorkflowAppTarget("roadmap", "sync")
 	if _, err := executionRefs.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "workflow_schedule:sched-test:ref-test",
 		ProviderName: "basic",
@@ -4648,7 +4648,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["slack"] = &config.ProviderEntry{
+	cfg.Apps["slack"] = &config.ProviderEntry{
 		ConnectionMode: providermanifestv1.ConnectionModeNone,
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
@@ -4679,7 +4679,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
 	nightly.Permissions = []core.AccessPermission{{
-		Plugin: "slack",
+		App: "slack",
 		Operations: []string{
 			"conversations.list",
 			"conversations.history",
@@ -4720,12 +4720,12 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if got.Cron != "0 2 * * *" || got.Timezone != "America/New_York" {
 		t.Fatalf("schedule timing = %#v", got)
 	}
-	gotPlugin := requireCoreWorkflowPluginTarget(t, got.Target)
-	if gotPlugin.PluginName != "roadmap" || gotPlugin.Operation != "sync" {
+	gotApp := requireCoreWorkflowAppTarget(t, got.Target)
+	if gotApp.AppName != "roadmap" || gotApp.Operation != "sync" {
 		t.Fatalf("target = %#v", got.Target)
 	}
-	if gotPlugin.Input["source"] != "yaml" {
-		t.Fatalf("target input = %#v", gotPlugin.Input)
+	if gotApp.Input["source"] != "yaml" {
+		t.Fatalf("target input = %#v", gotApp.Input)
 	}
 	if got.RequestedBy.SubjectID != "system:config" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", got.RequestedBy)
@@ -4741,8 +4741,8 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
 	}
 	wantPermissions := []core.AccessPermission{
-		{Plugin: "roadmap", Operations: []string{"sync"}},
-		{Plugin: "slack", Operations: []string{"conversations.list", "conversations.history"}},
+		{App: "roadmap", Operations: []string{"sync"}},
+		{App: "slack", Operations: []string{"conversations.list", "conversations.history"}},
 	}
 	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
 		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
@@ -4792,7 +4792,7 @@ func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissions
 	_ = result.Close(context.Background())
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["slack"] = &config.ProviderEntry{
+	cfg.Apps["slack"] = &config.ProviderEntry{
 		ConnectionMode: providermanifestv1.ConnectionModeNone,
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
@@ -4819,7 +4819,7 @@ func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissions
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
 	nightly.Permissions = []core.AccessPermission{{
-		Plugin:     "slack",
+		App:        "slack",
 		Operations: []string{"conversations.history"},
 	}}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
@@ -4850,8 +4850,8 @@ func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissions
 		t.Fatalf("Get new execution ref: %v", err)
 	}
 	wantPermissions := []core.AccessPermission{
-		{Plugin: "roadmap", Operations: []string{"sync"}},
-		{Plugin: "slack", Operations: []string{"conversations.history"}},
+		{App: "roadmap", Operations: []string{"sync"}},
+		{App: "slack", Operations: []string{"conversations.history"}},
 	}
 	if !reflect.DeepEqual(nextRef.Permissions, wantPermissions) {
 		t.Fatalf("permissions = %#v, want %#v", nextRef.Permissions, wantPermissions)
@@ -4904,13 +4904,13 @@ func TestBootstrapKeepsExistingConfiguredWorkflowScheduleWhenExecutionRefRefresh
 	}
 	_ = result.Close(context.Background())
 	existingSchedule := sharedSchedules[workflowConfigScheduleID("nightly_sync")]
-	if existingSchedule == nil || existingSchedule.Target.Plugin == nil {
+	if existingSchedule == nil || existingSchedule.Target.App == nil {
 		t.Fatalf("existing schedule target = %#v", existingSchedule)
 	}
-	existingSchedule.Target.Plugin.Input = map[string]any{}
+	existingSchedule.Target.App.Input = map[string]any{}
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["slack"] = &config.ProviderEntry{
+	cfg.Apps["slack"] = &config.ProviderEntry{
 		ConnectionMode: providermanifestv1.ConnectionModeNone,
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
@@ -4937,7 +4937,7 @@ func TestBootstrapKeepsExistingConfiguredWorkflowScheduleWhenExecutionRefRefresh
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
 	nightly.Permissions = []core.AccessPermission{{
-		Plugin:     "slack",
+		App:        "slack",
 		Operations: []string{"conversations.history"},
 	}}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
@@ -5009,7 +5009,7 @@ func TestBootstrapRejectsConfiguredWorkflowSchedulesForUserCredentialedPlugins(t
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
 		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
@@ -5030,7 +5030,7 @@ func TestBootstrapRejectsConfiguredWorkflowSchedulesForUserCredentialedPlugins(t
 	if err == nil {
 		t.Fatal("expected Bootstrap to reject user-credentialed config-managed schedules")
 	}
-	if !strings.Contains(err.Error(), `config-managed workflows do not support user-credentialed plugin "roadmap"`) {
+	if !strings.Contains(err.Error(), `config-managed workflows do not support user-credentialed app "roadmap"`) {
 		t.Fatalf("Bootstrap error = %v", err)
 	}
 }
@@ -5039,7 +5039,7 @@ func TestBootstrapAllowsConfiguredWorkflowScheduleCredentialModeNoneForUserCrede
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
 		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
@@ -5051,7 +5051,7 @@ func TestBootstrapAllowsConfiguredWorkflowScheduleCredentialModeNoneForUserCrede
 		},
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Target.Plugin.CredentialMode = providermanifestv1.ConnectionModeNone
+	nightly.Target.App.CredentialMode = providermanifestv1.ConnectionModeNone
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
 
 	factories := validFactories()
@@ -5073,9 +5073,9 @@ func TestBootstrapAllowsConfiguredWorkflowScheduleCredentialModeNoneForUserCrede
 	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
 		t.Fatalf("recorded schedules = %#v", recorders)
 	}
-	gotPlugin := requireCoreWorkflowPluginTarget(t, recorder.upsertedSchedules[0].Target)
-	if gotPlugin.CredentialMode != core.ConnectionModeNone {
-		t.Fatalf("target credential mode = %q, want %q", gotPlugin.CredentialMode, core.ConnectionModeNone)
+	gotApp := requireCoreWorkflowAppTarget(t, recorder.upsertedSchedules[0].Target)
+	if gotApp.CredentialMode != core.ConnectionModeNone {
+		t.Fatalf("target credential mode = %q, want %q", gotApp.CredentialMode, core.ConnectionModeNone)
 	}
 }
 
@@ -5083,7 +5083,7 @@ func TestBootstrapConfiguredWorkflowScheduleRunAsAllowsUserCredentialedTarget(t 
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
 		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
@@ -5144,7 +5144,7 @@ func TestBootstrapRejectsConfiguredWorkflowScheduleWhenProviderDropsRunAs(t *tes
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
 		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
@@ -5213,8 +5213,8 @@ func TestBootstrapAppliesConfiguredWorkflowSchedulesForRunAsConnectionOnUserDefa
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
-	cfg.Plugins["roadmap"].Connections = map[string]*config.ConnectionDef{
+	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Apps["roadmap"].Connections = map[string]*config.ConnectionDef{
 		"bot": {
 			Mode: providermanifestv1.ConnectionModeUser,
 		},
@@ -5230,7 +5230,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedulesForRunAsConnectionOnUserDefa
 		},
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Target.Plugin.Connection = "bot"
+	nightly.Target.App.Connection = "bot"
 	nightly.RunAs = &config.WorkflowRunAsConfig{
 		Subject: &config.WorkflowRunAsSubjectConfig{ID: "service_account:roadmap-sync"},
 	}
@@ -5255,9 +5255,9 @@ func TestBootstrapAppliesConfiguredWorkflowSchedulesForRunAsConnectionOnUserDefa
 	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
 		t.Fatalf("recorded schedules = %#v", recorders)
 	}
-	gotPlugin := requireCoreWorkflowPluginTarget(t, recorder.upsertedSchedules[0].Target)
-	if gotPlugin.Connection != "bot" {
-		t.Fatalf("target connection = %q, want bot", gotPlugin.Connection)
+	gotApp := requireCoreWorkflowAppTarget(t, recorder.upsertedSchedules[0].Target)
+	if gotApp.Connection != "bot" {
+		t.Fatalf("target connection = %q, want bot", gotApp.Connection)
 	}
 }
 
@@ -5265,7 +5265,7 @@ func TestBootstrapAllowsConfiguredWorkflowSchedulePermissionScopesForUserCredent
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["slack"] = &config.ProviderEntry{
+	cfg.Apps["slack"] = &config.ProviderEntry{
 		ConnectionMode: providermanifestv1.ConnectionModeUser,
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
@@ -5292,7 +5292,7 @@ func TestBootstrapAllowsConfiguredWorkflowSchedulePermissionScopesForUserCredent
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
 	nightly.Permissions = []core.AccessPermission{{
-		Plugin:     "slack",
+		App:        "slack",
 		Operations: []string{"conversations.list"},
 	}}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
@@ -5321,8 +5321,8 @@ func TestBootstrapAllowsConfiguredWorkflowSchedulePermissionScopesForUserCredent
 		t.Fatalf("Get execution ref: %v", err)
 	}
 	wantPermissions := []core.AccessPermission{
-		{Plugin: "roadmap", Operations: []string{"sync"}},
-		{Plugin: "slack", Operations: []string{"conversations.list"}},
+		{App: "roadmap", Operations: []string{"sync"}},
+		{App: "slack", Operations: []string{"conversations.list"}},
 	}
 	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
 		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
@@ -5333,7 +5333,7 @@ func TestBootstrapConfiguredWorkflowScheduleInvokesScopesExecutionRef(t *testing
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["slack"] = &config.ProviderEntry{
+	cfg.Apps["slack"] = &config.ProviderEntry{
 		ConnectionMode: providermanifestv1.ConnectionModeUser,
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
@@ -5360,7 +5360,7 @@ func TestBootstrapConfiguredWorkflowScheduleInvokesScopesExecutionRef(t *testing
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
 	nightly.Invokes = []config.WorkflowInvokeConfig{{
-		Plugin:    " slack ",
+		App:       " slack ",
 		Operation: " conversations.list ",
 	}}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
@@ -5389,8 +5389,8 @@ func TestBootstrapConfiguredWorkflowScheduleInvokesScopesExecutionRef(t *testing
 		t.Fatalf("Get execution ref: %v", err)
 	}
 	wantPermissions := []core.AccessPermission{
-		{Plugin: "roadmap", Operations: []string{"sync"}},
-		{Plugin: "slack", Operations: []string{"conversations.list"}},
+		{App: "roadmap", Operations: []string{"sync"}},
+		{App: "slack", Operations: []string{"conversations.list"}},
 	}
 	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
 		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
@@ -5412,8 +5412,8 @@ func TestBootstrapRejectsConfiguredWorkflowScheduleInvokesAndPermissions(t *test
 		},
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Invokes = []config.WorkflowInvokeConfig{{Plugin: "roadmap", Operation: "sync"}}
-	nightly.Permissions = []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}}
+	nightly.Invokes = []config.WorkflowInvokeConfig{{App: "roadmap", Operation: "sync"}}
+	nightly.Permissions = []core.AccessPermission{{App: "roadmap", Operations: []string{"sync"}}}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
 
 	factories := validFactories()
@@ -5801,7 +5801,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowScheduleID(t *testing.T) {
 			ID:       workflowConfigScheduleID("nightly_sync"),
 			Cron:     "0 2 * * *",
 			Timezone: "UTC",
-			Target:   coreWorkflowPluginTarget("roadmap", "sync"),
+			Target:   coreWorkflowAppTarget("roadmap", "sync"),
 		},
 	}
 	factories := validFactories()
@@ -5852,7 +5852,7 @@ func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t
 		t.Fatalf("Bootstrap initial: %v", err)
 	}
 	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
-	provider.executionRefs[initialExecutionRef].Target.Plugin.Input["limit"] = float64(1)
+	provider.executionRefs[initialExecutionRef].Target.App.Input["limit"] = float64(1)
 	_ = result.Close(context.Background())
 
 	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -5904,7 +5904,7 @@ func TestBootstrapReplacesUnreadableConfiguredWorkflowExecutionRef(t *testing.T)
 				ID:           workflowConfigScheduleID("nightly_sync"),
 				Cron:         "0 2 * * *",
 				Timezone:     "UTC",
-				Target:       coreWorkflowPluginTarget("roadmap", "sync"),
+				Target:       coreWorkflowAppTarget("roadmap", "sync"),
 				ExecutionRef: staleExecutionRef,
 				CreatedBy: coreworkflow.Actor{
 					SubjectID:   "system:config",
@@ -6230,7 +6230,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["slack"] = &config.ProviderEntry{
+	cfg.Apps["slack"] = &config.ProviderEntry{
 		ConnectionMode: providermanifestv1.ConnectionModeNone,
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
@@ -6262,7 +6262,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	})
 	taskUpdated := cfg.Workflows.EventTriggers["task_updated"]
 	taskUpdated.Permissions = []core.AccessPermission{{
-		Plugin:     "slack",
+		App:        "slack",
 		Operations: []string{"conversations.history"},
 	}}
 	cfg.Workflows.EventTriggers["task_updated"] = taskUpdated
@@ -6300,12 +6300,12 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	if got.Match.Type != "task.updated" || got.Match.Source != "roadmap" || got.Match.Subject != "" {
 		t.Fatalf("match = %#v", got.Match)
 	}
-	gotPlugin := requireCoreWorkflowPluginTarget(t, got.Target)
-	if gotPlugin.PluginName != "roadmap" || gotPlugin.Operation != "sync" {
+	gotApp := requireCoreWorkflowAppTarget(t, got.Target)
+	if gotApp.AppName != "roadmap" || gotApp.Operation != "sync" {
 		t.Fatalf("target = %#v", got.Target)
 	}
-	if gotPlugin.Input["source"] != "yaml" {
-		t.Fatalf("target input = %#v", gotPlugin.Input)
+	if gotApp.Input["source"] != "yaml" {
+		t.Fatalf("target input = %#v", gotApp.Input)
 	}
 	if got.RequestedBy.SubjectID != "system:config" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", got.RequestedBy)
@@ -6321,8 +6321,8 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
 	}
 	wantPermissions := []core.AccessPermission{
-		{Plugin: "roadmap", Operations: []string{"sync"}},
-		{Plugin: "slack", Operations: []string{"conversations.history"}},
+		{App: "roadmap", Operations: []string{"sync"}},
+		{App: "slack", Operations: []string{"conversations.history"}},
 	}
 	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
 		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
@@ -6333,7 +6333,7 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
 		Provider: "temporal",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
@@ -6398,7 +6398,7 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 		Prompt:   "Inspect the workflow and sync the roadmap",
 		Tools: []config.WorkflowAgentToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: "schedules.list"},
-			{Plugin: "roadmap", Operation: "sync"},
+			{App: "roadmap", Operation: "sync"},
 		},
 	}}
 	cfg.Workflows.Schedules = map[string]config.WorkflowScheduleConfig{
@@ -6458,8 +6458,8 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 		if target.Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow || target.Agent.ToolRefs[0].Operation != "schedules.list" {
 			t.Fatalf("%s workflow tool ref = %#v", label, target.Agent.ToolRefs[0])
 		}
-		if target.Agent.ToolRefs[1].Plugin != "roadmap" || target.Agent.ToolRefs[1].Operation != "sync" {
-			t.Fatalf("%s plugin tool ref = %#v", label, target.Agent.ToolRefs[1])
+		if target.Agent.ToolRefs[1].App != "roadmap" || target.Agent.ToolRefs[1].Operation != "sync" {
+			t.Fatalf("%s app tool ref = %#v", label, target.Agent.ToolRefs[1])
 		}
 	}
 	for _, executionRef := range []string{
@@ -6470,7 +6470,7 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 		if err != nil {
 			t.Fatalf("Get execution ref %q: %v", executionRef, err)
 		}
-		if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
+		if len(ref.Permissions) != 1 || ref.Permissions[0].App != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
 			t.Fatalf("permissions = %#v", ref.Permissions)
 		}
 	}
@@ -6773,7 +6773,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowEventTriggerID(t *testing.T) {
 			Match: coreworkflow.EventMatch{
 				Type: "task.updated",
 			},
-			Target: coreWorkflowPluginTarget("roadmap", "sync"),
+			Target: coreWorkflowAppTarget("roadmap", "sync"),
 		},
 	}
 	factories := validFactories()
@@ -6987,15 +6987,15 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
-			Connection:  config.PluginConnectionName,
+			Connection:  config.AppConnectionName,
 			Instance:    "default",
 			AccessToken: "workflow-bootstrap-token",
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowPluginTarget("roadmap", "sync"))
+		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowAppTarget("roadmap", "sync"))
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target:       protoWorkflowPluginTarget("roadmap", "sync"),
+			Target:       protoWorkflowAppTarget("roadmap", "sync"),
 			ExecutionRef: executionRef,
 		})
 		if err != nil {
@@ -7040,15 +7040,15 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
-			Connection:  config.PluginConnectionName,
+			Connection:  config.AppConnectionName,
 			Instance:    "default",
 			AccessToken: "workflow-validate-token",
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowPluginTarget("roadmap", "sync"))
+		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowAppTarget("roadmap", "sync"))
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target:       protoWorkflowPluginTarget("roadmap", "sync"),
+			Target:       protoWorkflowAppTarget("roadmap", "sync"),
 			ExecutionRef: executionRef,
 		})
 		if err != nil {
@@ -7079,9 +7079,9 @@ func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 	defer srv.Close()
 
 	cfg := workflowStartupCallbackConfig(srv.URL)
-	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
-	cfg.Plugins["roadmap"].AuthorizationPolicy = "roadmap-policy"
-	cfg.Plugins["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
+	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Apps["roadmap"].AuthorizationPolicy = "roadmap-policy"
+	cfg.Apps["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
 	cfg.Authorization.Policies = map[string]config.SubjectPolicyDef{
 		"roadmap-policy": {
 			Members: []config.SubjectPolicyMemberDef{{
@@ -7099,14 +7099,14 @@ func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
-			Connection:  config.PluginConnectionName,
+			Connection:  config.AppConnectionName,
 			Instance:    "default",
 			AccessToken: "workflow-startup-token",
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
 		_, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target: protoWorkflowPluginTarget("roadmap", "sync"),
+			Target: protoWorkflowAppTarget("roadmap", "sync"),
 		})
 		if err == nil {
 			return nil, fmt.Errorf("expected startup callback execution_ref failure")
@@ -7140,7 +7140,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	defer srv.Close()
 
 	cfg := validConfig()
-	cfg.Plugins = map[string]*config.ProviderEntry{
+	cfg.Apps = map[string]*config.ProviderEntry{
 		"roadmap": {
 			ConnectionMode: providermanifestv1.ConnectionModeNone,
 			ResolvedManifest: &providermanifestv1.Manifest{
@@ -7195,7 +7195,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		SessionID: session.ID,
 		Model:     "gpt-test",
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		}},
 	})
@@ -7328,7 +7328,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 	defer srv.Close()
 
 	cfg := validConfig()
-	cfg.Plugins = map[string]*config.ProviderEntry{
+	cfg.Apps = map[string]*config.ProviderEntry{
 		"roadmap": {
 			ConnectionMode: providermanifestv1.ConnectionModeNone,
 			ResolvedManifest: &providermanifestv1.Manifest{
@@ -7384,7 +7384,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		SessionID: session.ID,
 		Model:     "gpt-test",
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		}},
 	})
@@ -7450,7 +7450,7 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 	t.Parallel()
 
 	cfg := validConfig()
-	cfg.Plugins = map[string]*config.ProviderEntry{
+	cfg.Apps = map[string]*config.ProviderEntry{
 		"roadmap": {
 			ConnectionMode: providermanifestv1.ConnectionModeNone,
 			ResolvedManifest: &providermanifestv1.Manifest{
@@ -7501,7 +7501,7 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 	tool := coreagent.Tool{
 		ID: "roadmap.sync",
 		Target: coreagent.ToolTarget{
-			Plugin:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		},
 	}
@@ -7596,8 +7596,8 @@ func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedPl
 	defer srv.Close()
 
 	cfg := workflowStartupCallbackConfig(srv.URL)
-	cfg.Plugins["roadmap"].AuthorizationPolicy = "roadmap-policy"
-	cfg.Plugins["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
+	cfg.Apps["roadmap"].AuthorizationPolicy = "roadmap-policy"
+	cfg.Apps["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
 	cfg.Authorization.Policies = map[string]config.SubjectPolicyDef{
 		"roadmap-policy": {
 			Members: []config.SubjectPolicyMemberDef{{
@@ -7642,7 +7642,7 @@ func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedPl
 		t.Fatal("execution ref is empty")
 	}
 	resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-		Target:       protoWorkflowPluginTarget("roadmap", "sync"),
+		Target:       protoWorkflowAppTarget("roadmap", "sync"),
 		ExecutionRef: executionRef,
 	})
 	if err != nil {
@@ -7677,7 +7677,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 			t.Parallel()
 
 			cfg := validConfig()
-			cfg.Plugins = map[string]*config.ProviderEntry{
+			cfg.Apps = map[string]*config.ProviderEntry{
 				"roadmap": {
 					Source:         tc.source,
 					ConnectionMode: providermanifestv1.ConnectionModeUser,
@@ -7713,15 +7713,15 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 					SubjectID:   "system:config",
 					Integration: "roadmap",
-					Connection:  config.PluginConnectionName,
+					Connection:  config.AppConnectionName,
 					Instance:    "default",
 					AccessToken: "workflow-validate-token",
 				}); err != nil {
 					return nil, fmt.Errorf("store startup token: %w", err)
 				}
-				executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowPluginTarget("roadmap", "sync"))
+				executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowAppTarget("roadmap", "sync"))
 				resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-					Target:       protoWorkflowPluginTarget("roadmap", "sync"),
+					Target:       protoWorkflowAppTarget("roadmap", "sync"),
 					ExecutionRef: executionRef,
 				})
 				if err != nil {
@@ -7758,12 +7758,12 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 	if err := os.WriteFile(filepath.Join(root, "catalog.yaml"), catalogData, 0o644); err != nil {
 		t.Fatalf("WriteFile(catalog.yaml): %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "manifest.yaml"), []byte("kind: plugin\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "manifest.yaml"), []byte("kind: app\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(manifest.yaml): %v", err)
 	}
 
 	cfg := validConfig()
-	cfg.Plugins = map[string]*config.ProviderEntry{
+	cfg.Apps = map[string]*config.ProviderEntry{
 		"roadmap": {
 			Source:               config.NewMetadataSource("https://example.invalid/github-com-example-roadmap/v0.0.1/provider-release.yaml"),
 			ConnectionMode:       providermanifestv1.ConnectionModeUser,
@@ -7775,7 +7775,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 				Spec: &providermanifestv1.Spec{
 					Surfaces: &providermanifestv1.ProviderSurfaces{
 						MCP: &providermanifestv1.MCPSurface{
-							Connection: config.PluginConnectionName,
+							Connection: config.AppConnectionName,
 							URL:        "https://example.invalid/mcp",
 						},
 					},
@@ -7801,7 +7801,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 		}
 		connection := connMaps.DefaultConnection["roadmap"]
 		if connection == "" {
-			connection = config.PluginConnectionName
+			connection = config.AppConnectionName
 		}
 		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 			SubjectID:   "system:config",
@@ -7814,13 +7814,13 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 		}
 		req := coreworkflow.InvokeOperationRequest{
 			ProviderName: name,
-			Target:       coreWorkflowPluginTarget("roadmap", "sync"),
+			Target:       coreWorkflowAppTarget("roadmap", "sync"),
 		}
 		configPrincipal := &principal.Principal{
 			SubjectID:           "system:config",
 			CredentialSubjectID: "system:config",
 			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-				Plugin:     "roadmap",
+				App:        "roadmap",
 				Operations: []string{"sync"},
 			}}),
 		}
@@ -7972,40 +7972,40 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects invalid plugin invokes dependency", func(t *testing.T) {
+	t.Run("rejects invalid app invokes dependency", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"caller": {
 				ResolvedManifest: &providermanifestv1.Manifest{
 					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
 					Spec:       &providermanifestv1.Spec{},
 				},
-				Invokes: []config.PluginInvocationDependency{
-					{Plugin: "missing", Operation: "ping"},
+				Invokes: []config.AppInvocationDependency{
+					{App: "missing", Operation: "ping"},
 				},
 			},
 		}
 
 		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
-		if err == nil || !strings.Contains(err.Error(), `plugins.caller.invokes[0] references unknown plugin "missing"`) {
-			t.Fatalf("Validate error = %v, want unknown plugin invokes error", err)
+		if err == nil || !strings.Contains(err.Error(), `apps.caller.invokes[0] references unknown app "missing"`) {
+			t.Fatalf("Validate error = %v, want unknown app invokes error", err)
 		}
 	})
 
-	t.Run("accepts graphql surface plugin invokes dependency", func(t *testing.T) {
+	t.Run("accepts graphql surface app invokes dependency", func(t *testing.T) {
 		t.Parallel()
 
 		srv := startBootstrapGraphQLIntrospectionServer(t)
 		root := t.TempDir()
 		callerManifestPath := filepath.Join(root, "caller-manifest.yaml")
-		if err := os.WriteFile(callerManifestPath, []byte("kind: plugin\n"), 0o644); err != nil {
+		if err := os.WriteFile(callerManifestPath, []byte("kind: app\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile(caller-manifest.yaml): %v", err)
 		}
 
 		cfg := validConfig()
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"caller": {
 				Source:               config.NewMetadataSource("https://example.invalid/github-com-acme-caller/v1.0.0/provider-release.yaml"),
 				ResolvedManifestPath: callerManifestPath,
@@ -8013,8 +8013,8 @@ func TestValidate(t *testing.T) {
 					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
 					Spec:       &providermanifestv1.Spec{},
 				},
-				Invokes: []config.PluginInvocationDependency{
-					{Plugin: "linear", Surface: "graphql"},
+				Invokes: []config.AppInvocationDependency{
+					{App: "linear", Surface: "graphql"},
 				},
 			},
 			"linear": {
@@ -8035,17 +8035,17 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects graphql surface invoke when target plugin has no graphql surface", func(t *testing.T) {
+	t.Run("rejects graphql surface invoke when target app has no graphql surface", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
 		callerManifestPath := filepath.Join(root, "caller-manifest.yaml")
-		if err := os.WriteFile(callerManifestPath, []byte("kind: plugin\n"), 0o644); err != nil {
+		if err := os.WriteFile(callerManifestPath, []byte("kind: app\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile(caller-manifest.yaml): %v", err)
 		}
 
 		cfg := validConfig()
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"caller": {
 				Source:               config.NewMetadataSource("https://example.invalid/github-com-acme-caller/v1.0.0/provider-release.yaml"),
 				ResolvedManifestPath: callerManifestPath,
@@ -8053,8 +8053,8 @@ func TestValidate(t *testing.T) {
 					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
 					Spec:       &providermanifestv1.Spec{},
 				},
-				Invokes: []config.PluginInvocationDependency{
-					{Plugin: "linear", Surface: "graphql"},
+				Invokes: []config.AppInvocationDependency{
+					{App: "linear", Surface: "graphql"},
 				},
 			},
 			"linear": {
@@ -8074,12 +8074,12 @@ func TestValidate(t *testing.T) {
 		}
 
 		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
-		if err == nil || !strings.Contains(err.Error(), `plugins.caller.invokes[0] references plugin "linear" surface "graphql", but that surface is not configured`) {
+		if err == nil || !strings.Contains(err.Error(), `apps.caller.invokes[0] references app "linear" surface "graphql", but that surface is not configured`) {
 			t.Fatalf("Validate error = %v, want missing graphql surface error", err)
 		}
 	})
 
-	t.Run("accepts plugin configured with both openapi and graphql api surfaces", func(t *testing.T) {
+	t.Run("accepts app configured with both openapi and graphql api surfaces", func(t *testing.T) {
 		t.Parallel()
 
 		schema := map[string]any{
@@ -8165,7 +8165,7 @@ func TestValidate(t *testing.T) {
 		t.Cleanup(srv.Close)
 
 		cfg := validConfig()
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"linear": {
 				ResolvedManifest: &providermanifestv1.Manifest{
 					Spec: &providermanifestv1.Spec{
@@ -8195,11 +8195,11 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("accepts plugin configured with graphql surface without eager introspection", func(t *testing.T) {
+	t.Run("accepts app configured with graphql surface without eager introspection", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"linear": {
 				ResolvedManifest: &providermanifestv1.Manifest{
 					Spec: &providermanifestv1.Spec{
@@ -8228,7 +8228,7 @@ func TestValidate(t *testing.T) {
 		defer srv.Close()
 
 		cfg := validConfig()
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"svc": {
 				ConnectionMode: providermanifestv1.ConnectionModeUser,
 				ResolvedManifest: &providermanifestv1.Manifest{
@@ -8259,7 +8259,7 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("workflow managed service account subjects stay unique across similar plugin names", func(t *testing.T) {
+	t.Run("workflow managed service account subjects stay unique across similar app names", func(t *testing.T) {
 		t.Parallel()
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -8282,7 +8282,7 @@ func TestValidate(t *testing.T) {
 		}
 
 		cfg := validConfig()
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"foo-bar": {
 				ResolvedManifest: manifest,
 			},
@@ -8391,7 +8391,7 @@ func TestBootstrapAllowsPluginConfiguredWithBothOpenAPIAndGraphQLAPISurfaces(t *
 	t.Cleanup(srv.Close)
 
 	cfg := validConfig()
-	cfg.Plugins = map[string]*config.ProviderEntry{
+	cfg.Apps = map[string]*config.ProviderEntry{
 		"linear": {
 			ResolvedManifest: &providermanifestv1.Manifest{
 				Spec: &providermanifestv1.Spec{
@@ -8480,7 +8480,7 @@ func TestBootstrapNoIntegrations(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := validConfig()
-	cfg.Plugins = nil
+	cfg.Apps = nil
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 	if err != nil {
@@ -9034,7 +9034,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			},
 		}
 		cfg.Server.Admin.AuthorizationPolicy = "admin-policy"
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"calendar": {
 				AuthorizationPolicy: "calendar-policy",
 				ResolvedManifest: &providermanifestv1.Manifest{
@@ -9080,7 +9080,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		provider.putRelationship(existingModelID, &core.Relationship{
 			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
 			Relation: "editor",
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "calendar"},
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: "calendar"},
 		})
 		provider.putRelationship(existingModelID, &core.Relationship{
 			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
@@ -9108,10 +9108,10 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		access, allowed := result.Authorizer.ResolveAccess(ctx, staticPrincipal, "calendar")
 		if !allowed {
-			t.Fatal("expected static plugin access to be allowed")
+			t.Fatal("expected static app access to be allowed")
 		}
 		if access.Role != "viewer" {
-			t.Fatalf("static plugin role = %q, want %q", access.Role, "viewer")
+			t.Fatalf("static app role = %q, want %q", access.Role, "viewer")
 		}
 
 		dynamicPrincipal := &principal.Principal{
@@ -9122,10 +9122,10 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		access, allowed = result.Authorizer.ResolveAccess(ctx, dynamicPrincipal, "calendar")
 		if !allowed {
-			t.Fatal("expected dynamic plugin access to be allowed")
+			t.Fatal("expected dynamic app access to be allowed")
 		}
 		if access.Role != "editor" {
-			t.Fatalf("dynamic plugin role = %q, want %q", access.Role, "editor")
+			t.Fatalf("dynamic app role = %q, want %q", access.Role, "editor")
 		}
 
 		adminAccess, allowed := result.Authorizer.ResolveAdminAccess(ctx, dynamicPrincipal, "admin-policy")
@@ -9146,7 +9146,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				"roadmap-policy": {Default: "deny"},
 			},
 		}
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"roadmap": {
 				AuthorizationPolicy: "roadmap-policy",
 				ResolvedManifest: &providermanifestv1.Manifest{
@@ -9177,7 +9177,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			SubjectID:           "system:config",
 			CredentialSubjectID: "system:config",
 			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-				Plugin:     "roadmap",
+				App:        "roadmap",
 				Operations: []string{"sync"},
 			}}),
 		}
@@ -9215,7 +9215,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				},
 			},
 		}
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"roadmap": {
 				AuthorizationPolicy: "roadmap-policy",
 				ConnectionMode:      providermanifestv1.ConnectionModeUser,
@@ -9262,7 +9262,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			},
 		}
 		cfg.Server.Admin.AuthorizationPolicy = "admin-policy"
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"calendar": {
 				AuthorizationPolicy: "calendar-policy",
 				ResolvedManifest: &providermanifestv1.Manifest{
@@ -9294,10 +9294,10 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		access, allowed := result.Authorizer.ResolveAccess(ctx, dynamicPrincipal, "calendar")
 		if allowed {
-			t.Fatal("expected dynamic plugin access to be denied without authorization provider")
+			t.Fatal("expected dynamic app access to be denied without authorization provider")
 		}
 		if access.Role != "" {
-			t.Fatalf("dynamic plugin role without authorization provider = %q, want empty", access.Role)
+			t.Fatalf("dynamic app role without authorization provider = %q, want empty", access.Role)
 		}
 
 		adminAccess, allowed := result.Authorizer.ResolveAdminAccess(ctx, dynamicPrincipal, "admin-policy")
@@ -9320,7 +9320,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			},
 		}
 		cfg.Server.Admin.AuthorizationPolicy = "admin-policy"
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"calendar": {
 				AuthorizationPolicy: "calendar-policy",
 				ResolvedManifest: &providermanifestv1.Manifest{
@@ -9361,7 +9361,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		provider.putRelationship(provider.activeModelID, &core.Relationship{
 			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
 			Relation: "editor",
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "calendar"},
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: "calendar"},
 		})
 		provider.putRelationship(provider.activeModelID, &core.Relationship{
 			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
@@ -9394,10 +9394,10 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		access, allowed := result.Authorizer.ResolveAccess(ctx, dynamicPrincipal, "calendar")
 		if !allowed {
-			t.Fatal("expected provider-backed plugin access after restart")
+			t.Fatal("expected provider-backed app access after restart")
 		}
 		if access.Role != "editor" {
-			t.Fatalf("provider-backed plugin role after restart = %q, want %q", access.Role, "editor")
+			t.Fatalf("provider-backed app role after restart = %q, want %q", access.Role, "editor")
 		}
 
 		adminAccess, allowed := result.Authorizer.ResolveAdminAccess(ctx, dynamicPrincipal, "admin-policy")
@@ -9421,7 +9421,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			},
 		}
 		cfg.Server.Admin.AuthorizationPolicy = "admin-policy"
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"calendar": {
 				AuthorizationPolicy: "calendar-policy",
 				ResolvedManifest: &providermanifestv1.Manifest{
@@ -9459,7 +9459,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		provider.putRelationship(existingModelID, &core.Relationship{
 			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
 			Relation: "viewer",
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "calendar"},
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: "calendar"},
 		})
 		provider.putRelationship(existingModelID, &core.Relationship{
 			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
@@ -9479,10 +9479,10 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		access, allowed := result.Authorizer.ResolveAccess(ctx, dynamicPrincipal, "calendar")
 		if !allowed {
-			t.Fatal("expected provider-backed plugin access to be allowed")
+			t.Fatal("expected provider-backed app access to be allowed")
 		}
 		if access.Role != "viewer" {
-			t.Fatalf("provider-backed plugin role = %q, want %q", access.Role, "viewer")
+			t.Fatalf("provider-backed app role = %q, want %q", access.Role, "viewer")
 		}
 
 		adminAccess, allowed := result.Authorizer.ResolveAdminAccess(ctx, dynamicPrincipal, "admin-policy")
@@ -9508,7 +9508,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				},
 			},
 		}
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"calendar": {
 				AuthorizationPolicy: "calendar-policy",
 				ResolvedManifest: &providermanifestv1.Manifest{
@@ -9576,7 +9576,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				},
 			},
 		}
-		cfg.Plugins = map[string]*config.ProviderEntry{
+		cfg.Apps = map[string]*config.ProviderEntry{
 			"calendar": {
 				AuthorizationPolicy: "calendar-policy",
 				ResolvedManifest: &providermanifestv1.Manifest{
@@ -9848,7 +9848,7 @@ func TestBootstrapWorkflowAuthorizationAllowsNormalizedCredentialedProvider(t *t
 	defer srv.Close()
 
 	cfg := validConfig()
-	cfg.Plugins = map[string]*config.ProviderEntry{
+	cfg.Apps = map[string]*config.ProviderEntry{
 		"svc": {
 			ConnectionMode: providermanifestv1.ConnectionModeUser,
 			ResolvedManifest: &providermanifestv1.Manifest{

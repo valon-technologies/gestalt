@@ -19,12 +19,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
+	integration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	integration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -35,7 +35,7 @@ var (
 	ErrAgentProviderRequired            = errors.New("agent provider is required")
 	ErrAgentProviderNotAvailable        = errors.New("agent provider is not available")
 	ErrAgentSubjectRequired             = errors.New("agent subject is required")
-	ErrAgentCallerPluginRequired        = errors.New("agent caller plugin is required for inherited tools")
+	ErrAgentCallerPluginRequired        = errors.New("agent caller app is required for inherited tools")
 	ErrAgentInheritedSurfaceTool        = errors.New("agent inherited surface tools are not supported")
 	ErrAgentInteractionRequired         = errors.New("agent interaction is required")
 	ErrAgentInteractionNotFound         = errors.New("agent interaction is not found")
@@ -51,7 +51,7 @@ var (
 )
 
 const (
-	agentToolSearchAllPlugin     = "*"
+	agentToolSearchAllApp        = "*"
 	agentToolListDefaultPageSize = 100
 	agentToolListMaxPageSize     = 1000
 	agentToolSchemaMaxBytes      = 128 * 1024
@@ -120,7 +120,7 @@ type Config struct {
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
-	PluginInvokes     map[string][]invocation.PluginInvocationDependency
+	AppInvokes        map[string][]invocation.AppInvocationDependency
 	AgentConnections  map[string][]string
 	SessionStart      map[string]*coreagent.SessionStartConfig
 	// DefaultToolNarrowingThreshold controls when implicit default wildcard
@@ -139,7 +139,7 @@ type Manager struct {
 	authorizer                    authorization.RuntimeAuthorizer
 	defaultConnection             map[string]string
 	catalogConnection             map[string]string
-	pluginInvokes                 map[string][]invocation.PluginInvocationDependency
+	appInvokes                    map[string][]invocation.AppInvocationDependency
 	agentConnections              map[string][]string
 	sessionStart                  map[string]*coreagent.SessionStartConfig
 	defaultToolNarrowingThreshold int
@@ -155,7 +155,7 @@ func New(cfg Config) *Manager {
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
-		pluginInvokes:     invocation.ClonePluginInvocationDependencyMap(cfg.PluginInvokes),
+		appInvokes:        invocation.CloneAppInvocationDependencyMap(cfg.AppInvokes),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
 		sessionStart:      cloneSessionStartConfigMap(cfg.SessionStart),
 		defaultToolNarrowingThreshold: effectiveAgentToolNarrowingThreshold(
@@ -258,7 +258,7 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	if err != nil {
 		return nil, err
 	}
-	refs, err = m.applyCallerInvokePolicies(req.CallerPluginName, refs)
+	refs, err = m.applyCallerInvokePolicies(req.CallerAppName, refs)
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +514,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if err != nil {
 		return nil, err
 	}
-	toolRefs, err = m.applyCallerInvokePolicies(req.CallerPluginName, toolRefs)
+	toolRefs, err = m.applyCallerInvokePolicies(req.CallerAppName, toolRefs)
 	if err != nil {
 		return nil, err
 	}
@@ -570,7 +570,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
 	inheritedOutputDelivery := InheritedOutputDeliveryFromContext(ctx)
-	runGrant, err := m.mintRunGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerPluginName, toolRefs, toolRefsSet, tools, toolSource, inheritedOutputDelivery)
+	runGrant, err := m.mintRunGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerAppName, toolRefs, toolRefsSet, tools, toolSource, inheritedOutputDelivery)
 	if err != nil {
 		return nil, err
 	}
@@ -1222,12 +1222,12 @@ func agentProviderReadFallbackAllowed(err error) bool {
 	return false
 }
 
-func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerPluginName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode, inheritedOutputDelivery *coreworkflow.OutputDelivery) (string, error) {
+func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerAppName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode, inheritedOutputDelivery *coreworkflow.OutputDelivery) (string, error) {
 	if m == nil || m.runGrants == nil {
 		return "", fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
 	}
 	subject := agentSubjectFromPrincipal(p)
-	permissions := agentRunPermissions(ctx, p, callerPluginName, toolRefs)
+	permissions := agentRunPermissions(ctx, p, callerAppName, toolRefs)
 	permissions = agentRunPermissionsWithInheritedOutputDelivery(p, permissions, inheritedOutputDelivery)
 	connections := m.agentConnectionBindings(providerName)
 	if toolSource == coreagent.ToolSourceModeNone {
@@ -1237,7 +1237,7 @@ func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, prov
 		ProviderName:            providerName,
 		SessionID:               sessionID,
 		TurnID:                  turnID,
-		CallerPluginName:        strings.TrimSpace(callerPluginName),
+		CallerAppName:           strings.TrimSpace(callerAppName),
 		SubjectID:               subject.SubjectID,
 		SubjectKind:             subject.SubjectKind,
 		CredentialSubjectID:     subject.CredentialSubjectID,
@@ -1482,9 +1482,9 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if m == nil || m.providers == nil {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent providers are not configured", invocation.ErrInternal)
 	}
-	pluginName := strings.TrimSpace(ref.Plugin)
+	pluginName := strings.TrimSpace(ref.App)
 	if pluginName == "" {
-		return coreagent.Tool{}, fmt.Errorf("%w: agent tool plugin is required", invocation.ErrProviderNotFound)
+		return coreagent.Tool{}, fmt.Errorf("%w: agent tool app is required", invocation.ErrProviderNotFound)
 	}
 	prov, err := m.providers.Get(pluginName)
 	if err != nil {
@@ -1571,7 +1571,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		description = strings.TrimSpace(opMeta.Description)
 	}
 	target := coreagent.ToolTarget{
-		Plugin:                pluginName,
+		App:                   pluginName,
 		Operation:             opMeta.ID,
 		Connection:            connection,
 		Instance:              sessionInstance,
@@ -1627,7 +1627,7 @@ type agentToolTargetKey struct {
 func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
 	return agentToolTargetKey{
 		system:                strings.TrimSpace(ref.System),
-		plugin:                strings.TrimSpace(ref.Plugin),
+		plugin:                strings.TrimSpace(ref.App),
 		operation:             strings.TrimSpace(ref.Operation),
 		connection:            core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
 		instance:              strings.TrimSpace(ref.Instance),
@@ -1640,7 +1640,7 @@ func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
 func agentToolTargetKeyFromTarget(target coreagent.ToolTarget) agentToolTargetKey {
 	return agentToolTargetKey{
 		system:                strings.TrimSpace(target.System),
-		plugin:                strings.TrimSpace(target.Plugin),
+		plugin:                strings.TrimSpace(target.App),
 		operation:             strings.TrimSpace(target.Operation),
 		connection:            core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
 		instance:              strings.TrimSpace(target.Instance),
@@ -1780,7 +1780,7 @@ func (m *Manager) visitToolSearchCandidates(
 						ref.Title = ""
 						ref.Description = ""
 					}
-					ref.Plugin = pluginName
+					ref.App = pluginName
 					ref.Operation = operation
 					seenCandidates = true
 					if visitCandidate == nil {
@@ -1817,7 +1817,7 @@ func agentToolSearchUnavailable(err error) bool {
 }
 
 func unavailableAgentToolCandidate(ref coreagent.ToolRef, err error) agentToolUnavailableCandidate {
-	ref.Plugin = strings.TrimSpace(ref.Plugin)
+	ref.App = strings.TrimSpace(ref.App)
 	ref.Operation = ""
 	ref.Title = ""
 	ref.Description = ""
@@ -1826,7 +1826,7 @@ func unavailableAgentToolCandidate(ref coreagent.ToolRef, err error) agentToolUn
 		ref:     ref,
 		err:     err,
 		reason:  reason,
-		message: unavailableAgentToolMessage(ref.Plugin, reason, err),
+		message: unavailableAgentToolMessage(ref.App, reason, err),
 	}
 }
 
@@ -2005,7 +2005,7 @@ func shouldExpandAgentToolSearchCatalogTargets(ref coreagent.ToolRef, credential
 
 type agentToolSearchScope struct {
 	all      bool
-	plugins  map[string][]coreagent.ToolRef
+	apps     map[string][]coreagent.ToolRef
 	exactOps map[string]map[string][]coreagent.ToolRef
 }
 
@@ -2014,7 +2014,7 @@ func newAgentToolSearchScope(refs []coreagent.ToolRef) agentToolSearchScope {
 		return agentToolSearchScope{all: true}
 	}
 	scope := agentToolSearchScope{
-		plugins:  map[string][]coreagent.ToolRef{},
+		apps:     map[string][]coreagent.ToolRef{},
 		exactOps: map[string]map[string][]coreagent.ToolRef{},
 	}
 	for i := range refs {
@@ -2022,18 +2022,18 @@ func newAgentToolSearchScope(refs []coreagent.ToolRef) agentToolSearchScope {
 		if strings.TrimSpace(ref.System) != "" {
 			continue
 		}
-		pluginName := strings.TrimSpace(ref.Plugin)
+		pluginName := strings.TrimSpace(ref.App)
 		if pluginName == "" {
 			continue
 		}
-		ref.Plugin = pluginName
+		ref.App = pluginName
 		ref.Operation = strings.TrimSpace(ref.Operation)
-		if ref.Plugin == agentToolSearchAllPlugin {
+		if ref.App == agentToolSearchAllApp {
 			scope.all = true
 			continue
 		}
 		if ref.Operation == "" {
-			scope.plugins[pluginName] = append(scope.plugins[pluginName], ref)
+			scope.apps[pluginName] = append(scope.apps[pluginName], ref)
 			continue
 		}
 		if scope.exactOps[pluginName] == nil {
@@ -2049,15 +2049,15 @@ func (s agentToolSearchScope) providerNames() []string {
 		return nil
 	}
 	set := map[string]struct{}{}
-	for pluginName := range s.plugins {
-		set[pluginName] = struct{}{}
+	for appName := range s.apps {
+		set[appName] = struct{}{}
 	}
-	for pluginName := range s.exactOps {
-		set[pluginName] = struct{}{}
+	for appName := range s.exactOps {
+		set[appName] = struct{}{}
 	}
 	names := make([]string, 0, len(set))
-	for pluginName := range set {
-		names = append(names, pluginName)
+	for appName := range set {
+		names = append(names, appName)
 	}
 	sort.Strings(names)
 	return names
@@ -2066,7 +2066,7 @@ func (s agentToolSearchScope) providerNames() []string {
 func (s agentToolSearchScope) refsForProvider(pluginName string) []coreagent.ToolRef {
 	refs := []coreagent.ToolRef{}
 	if s.all {
-		refs = append(refs, coreagent.ToolRef{Plugin: pluginName})
+		refs = append(refs, coreagent.ToolRef{App: pluginName})
 	}
 	if ops := s.exactOps[pluginName]; len(ops) > 0 {
 		operations := make([]string, 0, len(ops))
@@ -2078,8 +2078,8 @@ func (s agentToolSearchScope) refsForProvider(pluginName string) []coreagent.Too
 			refs = append(refs, ops[operation]...)
 		}
 	}
-	if pluginRefs := s.plugins[pluginName]; len(pluginRefs) > 0 {
-		refs = append(refs, pluginRefs...)
+	if appRefs := s.apps[pluginName]; len(appRefs) > 0 {
+		refs = append(refs, appRefs...)
 	}
 	return refs
 }
@@ -2101,11 +2101,11 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 			}
 			continue
 		}
-		pluginName := strings.TrimSpace(ref.Plugin)
+		pluginName := strings.TrimSpace(ref.App)
 		if pluginName == "" {
 			continue
 		}
-		if pluginName == agentToolSearchAllPlugin {
+		if pluginName == agentToolSearchAllApp {
 			continue
 		}
 		if strings.TrimSpace(ref.Operation) != "" {
@@ -2764,7 +2764,7 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 	projectedCandidate.operation = projectedOperation
 	ref := candidate.ref
 	target := coreagent.ToolTarget{
-		Plugin:                strings.TrimSpace(ref.Plugin),
+		App:                   strings.TrimSpace(ref.App),
 		Operation:             strings.TrimSpace(ref.Operation),
 		Connection:            core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
 		Instance:              strings.TrimSpace(ref.Instance),
@@ -2781,7 +2781,7 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 		name = strings.TrimSpace(projectedOperation.Title)
 	}
 	if name == "" {
-		name = target.Plugin + "." + projectedOperation.ID
+		name = target.App + "." + projectedOperation.ID
 	}
 	description := strings.TrimSpace(ref.Description)
 	if description == "" {
@@ -2809,14 +2809,14 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 
 func (m *Manager) listedUnavailableAgentPluginTool(candidate agentToolUnavailableCandidate) (coreagent.ListedTool, error) {
 	ref := candidate.ref
-	ref.Plugin = strings.TrimSpace(ref.Plugin)
+	ref.App = strings.TrimSpace(ref.App)
 	ref.Operation = ""
 	ref.Connection = core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection))
 	ref.Instance = strings.TrimSpace(ref.Instance)
 	ref.Title = ""
 	ref.Description = ""
 	target := coreagent.ToolTarget{
-		Plugin:         ref.Plugin,
+		App:            ref.App,
 		Connection:     ref.Connection,
 		Instance:       ref.Instance,
 		CredentialMode: ref.CredentialMode,
@@ -2832,7 +2832,7 @@ func (m *Manager) listedUnavailableAgentPluginTool(candidate agentToolUnavailabl
 	return coreagent.ListedTool{
 		ToolID:          toolID,
 		MCPName:         agentUnavailableToolMCPName(target),
-		Title:           unavailableAgentToolTitle(ref.Plugin, candidate.reason),
+		Title:           unavailableAgentToolTitle(ref.App, candidate.reason),
 		Description:     candidate.message,
 		InputSchemaJSON: `{"type":"object","properties":{},"additionalProperties":false}`,
 		Annotations: core.CapabilityAnnotations{
@@ -2861,7 +2861,7 @@ func capabilityAnnotationsFromCatalog(value catalog.OperationAnnotations) core.C
 func agentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
 	return coreagent.ToolRef{
 		System:                target.System,
-		Plugin:                target.Plugin,
+		App:                   target.App,
 		Operation:             target.Operation,
 		Connection:            target.Connection,
 		Instance:              target.Instance,
@@ -2892,8 +2892,8 @@ func listedAgentToolSortLess(a, b coreagent.ListedTool) bool {
 	if a.Target.System != b.Target.System {
 		return a.Target.System < b.Target.System
 	}
-	if a.Target.Plugin != b.Target.Plugin {
-		return a.Target.Plugin < b.Target.Plugin
+	if a.Target.App != b.Target.App {
+		return a.Target.App < b.Target.App
 	}
 	if a.Target.Operation != b.Target.Operation {
 		return a.Target.Operation < b.Target.Operation
@@ -2951,7 +2951,7 @@ func agentToolMCPName(target coreagent.ToolTarget) string {
 	if strings.TrimSpace(target.System) != "" {
 		parts = []string{"system", target.System, target.Operation}
 	} else {
-		parts = []string{target.Plugin, target.Operation}
+		parts = []string{target.App, target.Operation}
 		if strings.TrimSpace(target.Connection) != "" || strings.TrimSpace(target.Instance) != "" || target.CredentialMode != "" {
 			parts = append(parts, target.Connection, target.Instance, string(target.CredentialMode))
 		}
@@ -2975,7 +2975,7 @@ func agentUnavailableToolMCPName(target coreagent.ToolTarget) string {
 		reason = strings.TrimSpace(target.Unavailable.Reason)
 	}
 	return agentToolMCPName(coreagent.ToolTarget{
-		Plugin:     strings.TrimSpace(target.Plugin),
+		App:        strings.TrimSpace(target.App),
 		Operation:  reason,
 		Connection: core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
 		Instance:   strings.TrimSpace(target.Instance),
@@ -3067,11 +3067,11 @@ func defaultAgentTurnToolSource(ctx context.Context, provider coreagent.Provider
 }
 
 func (m *Manager) defaultAgentTurnToolRefs(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) []coreagent.ToolRef {
-	broadRefs := []coreagent.ToolRef{{Plugin: agentToolSearchAllPlugin}}
+	broadRefs := []coreagent.ToolRef{{App: agentToolSearchAllApp}}
 	if m == nil || m.providers == nil {
 		return broadRefs
 	}
-	if strings.TrimSpace(req.CallerPluginName) != "" {
+	if strings.TrimSpace(req.CallerAppName) != "" {
 		return broadRefs
 	}
 	latestUserText := latestAgentUserMessageText(req.Messages)
@@ -3089,12 +3089,12 @@ func (m *Manager) defaultAgentTurnToolRefs(ctx context.Context, p *principal.Pri
 
 	narrowedRefs := make([]coreagent.ToolRef, 0, len(mentionedProviders))
 	for _, pluginName := range mentionedProviders {
-		hasCandidate, err := m.agentToolVisibleCandidateCountExceeds(ctx, p, []coreagent.ToolRef{{Plugin: pluginName}}, 0)
+		hasCandidate, err := m.agentToolVisibleCandidateCountExceeds(ctx, p, []coreagent.ToolRef{{App: pluginName}}, 0)
 		if err != nil {
 			return broadRefs
 		}
 		if hasCandidate {
-			narrowedRefs = append(narrowedRefs, coreagent.ToolRef{Plugin: pluginName})
+			narrowedRefs = append(narrowedRefs, coreagent.ToolRef{App: pluginName})
 		}
 	}
 	if len(narrowedRefs) == 0 {
@@ -3240,7 +3240,7 @@ func (m *Manager) agentToolVisibleCandidateCountExceeds(ctx context.Context, p *
 	return exceeded, nil
 }
 
-func agentRunPermissions(ctx context.Context, p *principal.Principal, callerPluginName string, refs []coreagent.ToolRef) []core.AccessPermission {
+func agentRunPermissions(ctx context.Context, p *principal.Principal, callerAppName string, refs []coreagent.ToolRef) []core.AccessPermission {
 	p = principal.Canonicalized(p)
 	if p == nil {
 		return nil
@@ -3248,7 +3248,7 @@ func agentRunPermissions(ctx context.Context, p *principal.Principal, callerPlug
 	if permissions, ok := compactAgentRunPermissionsForRefs(p, refs); ok {
 		return permissions
 	}
-	if shouldUseResolvedUserToolScope(ctx, p, callerPluginName, refs) {
+	if shouldUseResolvedUserToolScope(ctx, p, callerAppName, refs) {
 		return nil
 	}
 	return principal.PermissionsToAccessPermissions(p.TokenPermissions)
@@ -3258,7 +3258,7 @@ func agentRunPermissionsWithInheritedOutputDelivery(p *principal.Principal, perm
 	if permissions == nil || delivery == nil {
 		return permissions
 	}
-	pluginName := strings.TrimSpace(delivery.Target.PluginName)
+	pluginName := strings.TrimSpace(delivery.Target.AppName)
 	operation := strings.TrimSpace(delivery.Target.Operation)
 	if pluginName == "" || operation == "" || !principal.AllowsOperationPermission(p, pluginName, operation) {
 		return permissions
@@ -3290,15 +3290,15 @@ func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.
 	if len(refs) == 0 {
 		return nil, false
 	}
-	operationsByPlugin := map[string]map[string]struct{}{}
+	operationsByApp := map[string]map[string]struct{}{}
 	providerWide := map[string]struct{}{}
 	for i := range refs {
 		ref := refs[i]
 		if strings.TrimSpace(ref.System) != "" {
 			continue
 		}
-		plugin := strings.TrimSpace(ref.Plugin)
-		if plugin == "" || plugin == agentToolSearchAllPlugin || strings.Contains(plugin, "*") {
+		appName := strings.TrimSpace(ref.App)
+		if appName == "" || appName == agentToolSearchAllApp || strings.Contains(appName, "*") {
 			return nil, false
 		}
 		operation := strings.TrimSpace(ref.Operation)
@@ -3306,42 +3306,42 @@ func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.
 			return nil, false
 		}
 		if operation == "" {
-			providerWide[plugin] = struct{}{}
-			delete(operationsByPlugin, plugin)
+			providerWide[appName] = struct{}{}
+			delete(operationsByApp, appName)
 			continue
 		}
-		if _, ok := providerWide[plugin]; ok {
+		if _, ok := providerWide[appName]; ok {
 			continue
 		}
-		ops := operationsByPlugin[plugin]
+		ops := operationsByApp[appName]
 		if ops == nil {
 			ops = map[string]struct{}{}
-			operationsByPlugin[plugin] = ops
+			operationsByApp[appName] = ops
 		}
 		ops[operation] = struct{}{}
 	}
-	if len(providerWide) == 0 && len(operationsByPlugin) == 0 {
+	if len(providerWide) == 0 && len(operationsByApp) == 0 {
 		return nil, false
 	}
-	plugins := make([]string, 0, len(providerWide)+len(operationsByPlugin))
-	for plugin := range providerWide {
-		plugins = append(plugins, plugin)
+	appNames := make([]string, 0, len(providerWide)+len(operationsByApp))
+	for appName := range providerWide {
+		appNames = append(appNames, appName)
 	}
-	for plugin := range operationsByPlugin {
-		if _, ok := providerWide[plugin]; !ok {
-			plugins = append(plugins, plugin)
+	for appName := range operationsByApp {
+		if _, ok := providerWide[appName]; !ok {
+			appNames = append(appNames, appName)
 		}
 	}
-	sort.Strings(plugins)
-	out := make([]core.AccessPermission, 0, len(plugins))
-	for _, plugin := range plugins {
-		if _, ok := providerWide[plugin]; ok {
+	sort.Strings(appNames)
+	out := make([]core.AccessPermission, 0, len(appNames))
+	for _, appName := range appNames {
+		if _, ok := providerWide[appName]; ok {
 			if p != nil && p.TokenPermissions != nil {
-				tokenOps, ok := p.TokenPermissions[plugin]
+				tokenOps, ok := p.TokenPermissions[appName]
 				if !ok {
 					return nil, false
 				}
-				perm := core.AccessPermission{Plugin: plugin}
+				perm := core.AccessPermission{App: appName}
 				if len(tokenOps) > 0 {
 					ops := make([]string, 0, len(tokenOps))
 					for operation := range tokenOps {
@@ -3353,24 +3353,24 @@ func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.
 				out = append(out, perm)
 				continue
 			}
-			out = append(out, core.AccessPermission{Plugin: plugin})
+			out = append(out, core.AccessPermission{App: appName})
 			continue
 		}
-		ops := make([]string, 0, len(operationsByPlugin[plugin]))
-		for operation := range operationsByPlugin[plugin] {
+		ops := make([]string, 0, len(operationsByApp[appName]))
+		for operation := range operationsByApp[appName] {
 			ops = append(ops, operation)
 		}
 		sort.Strings(ops)
 		out = append(out, core.AccessPermission{
-			Plugin:     plugin,
+			App:        appName,
 			Operations: ops,
 		})
 	}
 	return out, true
 }
 
-func shouldUseResolvedUserToolScope(ctx context.Context, p *principal.Principal, callerPluginName string, refs []coreagent.ToolRef) bool {
-	if strings.TrimSpace(callerPluginName) == "" {
+func shouldUseResolvedUserToolScope(ctx context.Context, p *principal.Principal, callerAppName string, refs []coreagent.ToolRef) bool {
+	if strings.TrimSpace(callerAppName) == "" {
 		return false
 	}
 	if invocation.InvocationSurfaceFromContext(ctx) != invocation.InvocationSurfaceHTTP {
@@ -3380,7 +3380,7 @@ func shouldUseResolvedUserToolScope(ctx context.Context, p *principal.Principal,
 		return false
 	}
 	for i := range refs {
-		if strings.TrimSpace(refs[i].Plugin) == agentToolSearchAllPlugin && strings.TrimSpace(refs[i].Operation) == "" {
+		if strings.TrimSpace(refs[i].App) == agentToolSearchAllApp && strings.TrimSpace(refs[i].Operation) == "" {
 			return true
 		}
 	}
@@ -3402,7 +3402,7 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 	for idx := range refs {
 		ref := refs[idx]
 		ref.System = strings.TrimSpace(ref.System)
-		ref.Plugin = strings.TrimSpace(ref.Plugin)
+		ref.App = strings.TrimSpace(ref.App)
 		ref.Operation = strings.TrimSpace(ref.Operation)
 		ref.Connection = strings.TrimSpace(ref.Connection)
 		ref.Instance = strings.TrimSpace(ref.Instance)
@@ -3416,8 +3416,8 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 		}
 		ref.CredentialMode = credentialMode
 		if ref.System != "" {
-			if ref.Plugin != "" {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d] must set exactly one of plugin or system", invocation.ErrInvalidInvocation, idx)
+			if ref.App != "" {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d] must set exactly one of app or system", invocation.ErrInvalidInvocation, idx)
 			}
 			if ref.System != coreagent.SystemToolWorkflow {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d].system %q is not supported", invocation.ErrInvalidInvocation, idx, ref.System)
@@ -3431,10 +3431,10 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 			out = append(out, ref)
 			continue
 		}
-		if ref.Plugin == "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].plugin is required", invocation.ErrProviderNotFound, idx)
+		if ref.App == "" {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].app is required", invocation.ErrProviderNotFound, idx)
 		}
-		if ref.Plugin == agentToolSearchAllPlugin {
+		if ref.App == agentToolSearchAllApp {
 			if ref.Operation != "" || ref.Connection != "" || ref.Instance != "" || ref.Title != "" || ref.Description != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d] global search ref cannot include operation, connection, instance, credential mode, runAs, runAs external identity, title, or description", invocation.ErrProviderNotFound, idx)
 			}
@@ -3447,8 +3447,8 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 	return out, nil
 }
 
-func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
-	callerPluginName = strings.TrimSpace(callerPluginName)
+func (m *Manager) applyCallerInvokePolicies(callerAppName string, refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
+	callerAppName = strings.TrimSpace(callerAppName)
 	if len(refs) == 0 || m == nil {
 		return refs, nil
 	}
@@ -3456,12 +3456,12 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 	runAsSubjects := make(map[string]*core.RunAsSubject)
 	runAsExternalIdentities := make(map[string]*core.ExternalIdentityRef)
 	runAsExplicitOnly := make(map[string]bool)
-	if callerPluginName != "" {
-		for _, invoke := range m.pluginInvokes[callerPluginName] {
+	if callerAppName != "" {
+		for _, invoke := range m.appInvokes[callerAppName] {
 			if strings.TrimSpace(invoke.Surface) != "" {
 				continue
 			}
-			pluginName := strings.TrimSpace(invoke.Plugin)
+			pluginName := strings.TrimSpace(invoke.App)
 			operation := strings.TrimSpace(invoke.Operation)
 			if pluginName == "" || operation == "" {
 				continue
@@ -3486,14 +3486,14 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 	out := append([]coreagent.ToolRef(nil), refs...)
 	for i := range out {
 		operation := strings.TrimSpace(out[i].Operation)
-		if out[i].CredentialMode != "" && callerPluginName == "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a caller plugin declaration", invocation.ErrAuthorizationDenied, i)
+		if out[i].CredentialMode != "" && callerAppName == "" {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a caller app declaration", invocation.ErrAuthorizationDenied, i)
 		}
-		if out[i].RunAs != nil && callerPluginName == "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a caller plugin declaration", invocation.ErrAuthorizationDenied, i)
+		if out[i].RunAs != nil && callerAppName == "" {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a caller app declaration", invocation.ErrAuthorizationDenied, i)
 		}
-		if out[i].RunAsExternalIdentity != nil && callerPluginName == "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires a caller plugin declaration", invocation.ErrAuthorizationDenied, i)
+		if out[i].RunAsExternalIdentity != nil && callerAppName == "" {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires a caller app declaration", invocation.ErrAuthorizationDenied, i)
 		}
 		if operation == "" {
 			if out[i].CredentialMode != "" {
@@ -3507,7 +3507,7 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 			}
 			continue
 		}
-		key := agentToolInvokeKey(out[i].Plugin, operation)
+		key := agentToolInvokeKey(out[i].App, operation)
 		mode, hasMode := modes[key]
 		runAs, hasRunAs := runAsSubjects[key]
 		externalIdentity, hasExternalIdentity := runAsExternalIdentities[key]

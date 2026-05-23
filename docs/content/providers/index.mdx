@@ -30,7 +30,7 @@ examples, and custom provider contract for that kind:
   <Cards.Card title="Agent" href="/providers/agent" />
   <Cards.Card title="Cache" href="/providers/cache" />
   <Cards.Card title="IndexedDB" href="/providers/indexeddb" />
-  <Cards.Card title="Plugin" href="/providers/plugins" />
+  <Cards.Card title="App" href="/providers/apps" />
   <Cards.Card title="Runtime" href="/providers/runtime" />
   <Cards.Card title="S3" href="/providers/s3" />
   <Cards.Card title="Secret" href="/providers/secrets" />
@@ -46,7 +46,7 @@ first-party providers is
 first-party packages published from
 [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers).
 
-Provider sources are configured under `plugins.<name>`,
+Provider sources are configured under `apps.<name>`,
 `providers.<kind>.<name>`, or `runtime.providers.<name>`.
 
 ### Provider packages
@@ -89,16 +89,16 @@ providers:
 ### Local source paths
 
 Local sources point at a provider manifest near the config, such as
-`./plugins/my-plugin/manifest.yaml`. Use them for development and testing before
+`./apps/my-plugin/manifest.yaml`. Use them for development and testing before
 packaging. Executable source manifests can declare `run` for local source
 execution and `build.command` plus `entrypoint.artifactPath` for compiled
 release artifacts. UI source manifests declare `build.command` and
 `spec.assetRoot`.
 
 ```yaml
-plugins:
+apps:
   my-plugin:
-    source: ./plugins/my-plugin/manifest.yaml
+    source: ./apps/my-plugin/manifest.yaml
 ```
 
 ```yaml
@@ -117,9 +117,9 @@ GitHub Release assets. They omit repository and version constraints, so package
 upgrade commands cannot move them.
 
 ```yaml
-plugins:
+apps:
   github:
-    source: https://github.com/valon-technologies/gestalt-providers/releases/download/plugins/github/v0.0.1-alpha.1/provider-release.yaml
+    source: https://github.com/valon-technologies/gestalt-providers/releases/download/apps/github/v0.0.1-alpha.1/provider-release.yaml
 ```
 
 ```yaml
@@ -133,12 +133,12 @@ providers:
 ```
 
 ```yaml
-plugins:
+apps:
   support:
     source:
       githubRelease:
         repo: acme/gestalt-provider-releases
-        tag: plugins/support/v1.3.0
+        tag: apps/support/v1.3.0
         asset: provider-release.yaml
 ```
 
@@ -147,17 +147,17 @@ plugins:
 Git sources point at an external repository, full commit SHA, and manifest path.
 Use them for reproducible provider revisions before provider-index publication.
 `materialization` controls whether Gestalt prepares from source or uses a
-prebuilt snapshot. See [Config File](/reference/config-file#pluginssource) for
+prebuilt snapshot. See [Config File](/reference/config-file#appssource) for
 the full `source.git` shape.
 
 ```yaml
-plugins:
+apps:
   support:
     source:
       git:
         repo: https://github.com/acme/gestalt-providers.git
         ref: 60fa7e0521eeedea8b28abdd9b43284e9ea246e2
-        path: plugins/support/manifest.yaml
+        path: apps/support/manifest.yaml
         materialization: source
 ```
 
@@ -194,7 +194,7 @@ Add `--sync` when you want to materialize artifacts immediately after adding the
 provider:
 
 ```sh
-gestaltd provider add github.com/valon-technologies/gestalt-providers/plugins/github \
+gestaltd provider add github.com/valon-technologies/gestalt-providers/apps/github \
   --config ./gestalt.yaml \
   --sync
 ```
@@ -244,7 +244,7 @@ Change one package source to a new constraint:
 ```sh
 gestaltd provider upgrade github \
   --config ./gestalt.yaml \
-  --kind plugin \
+  --kind app \
   --version '^1.5.0'
 ```
 
@@ -268,11 +268,11 @@ credentials. Put fetch credentials under `source.auth` when Gestalt needs to
 authenticate to read repository metadata, release metadata, or release archives:
 
 ```yaml
-plugins:
+apps:
   support:
     source:
       repo: acme
-      package: github.com/acme/gestalt-providers/plugins/support
+      package: github.com/acme/gestalt-providers/apps/support
       version: ^1.3.0
       auth:
         token: ${GESTALT_PROVIDER_TOKEN}
@@ -301,13 +301,13 @@ Search matches the package address, display name, and description. The output
 prints repository name, package address, and display name:
 
 ```text
-valon  github.com/valon-technologies/gestalt-providers/plugins/github  GitHub
+valon  github.com/valon-technologies/gestalt-providers/apps/github  GitHub
 ```
 
 Use `provider info` to see the versions published for one package:
 
 ```sh
-gestaltd provider info github.com/valon-technologies/gestalt-providers/plugins/github
+gestaltd provider info github.com/valon-technologies/gestalt-providers/apps/github
 ```
 
 ### Use provider repositories
@@ -365,14 +365,14 @@ A provider index is ordinary YAML:
 schema: gestaltd-provider-index
 schemaVersion: 1
 packages:
-  github.com/acme/gestalt-providers/plugins/support:
+  github.com/acme/gestalt-providers/apps/support:
     displayName: Support
     description: Internal support tools
     versions:
       1.3.0:
-        kind: plugin
+        kind: app
         runtime: go
-        metadata: ./plugins/support/1.3.0/provider-release.yaml
+        metadata: ./apps/support/1.3.0/provider-release.yaml
         platforms:
           - darwin/arm64
           - linux/amd64
@@ -400,8 +400,8 @@ package is described by a provider manifest file: `manifest.yaml`,
 #### Minimal executable source manifest
 
 ```yaml
-kind: plugin
-source: github.com/acme/plugins/my-plugin
+kind: app
+source: github.com/acme/apps/my-plugin
 version: 0.0.1-alpha.1
 build:
   command:
@@ -429,7 +429,7 @@ compiled package artifact. Gestalt uses `run` for local source execution and
 uses object-form `build.command` plus `entrypoint.artifactPath` for release
 packaging. The build command can call any toolchain available in the preparation
 environment: Go, Cargo, npm, Python, or an internal wrapper script all use the
-same manifest shape. Declarative plugin manifests that only describe
+same manifest shape. Declarative app manifests that only describe
 hosted/spec-loaded surfaces may omit `build`, `run`, and `entrypoint`.
 
 #### Source UI builds
@@ -444,7 +444,7 @@ control. The environment running
 
 ```yaml
 kind: ui
-source: github.com/acme/plugins/gestalt-ui
+source: github.com/acme/apps/gestalt-ui
 version: 1.2.0
 build:
   workdir: ui
@@ -469,12 +469,12 @@ Released UI packages still contain `spec.assetRoot`; Gestalt verifies that
 
 #### Release manifest for an executable provider
 
-Released executable plugin providers add concrete `entrypoint` and
+Released executable app providers add concrete `entrypoint` and
 `artifacts` entries:
 
 ```yaml
-kind: plugin
-source: github.com/acme/plugins/my-plugin
+kind: app
+source: github.com/acme/apps/my-plugin
 version: 0.0.1-alpha.1
 spec: {}
 entrypoint:
@@ -493,7 +493,7 @@ UI packages use the same manifest system:
 
 ```yaml
 kind: ui
-source: github.com/acme/plugins/ui/default
+source: github.com/acme/apps/ui/default
 version: 1.2.0
 spec:
   assetRoot: ui/out
@@ -540,5 +540,5 @@ The exact structure is determined by the manifest. `schemas/` is optional and
 used for provider config validation. `assets/` is optional and used for icons or
 other static files.
 
-Use [Provider Manifests](/reference/plugin-manifests) for the canonical
+Use [Provider Manifests](/reference/app-manifests) for the canonical
 manifest reference.

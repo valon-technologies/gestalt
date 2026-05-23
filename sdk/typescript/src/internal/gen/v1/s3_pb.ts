@@ -760,7 +760,7 @@ export const S3: GenService<{
 
 /**
  * S3ObjectAccess models host-mediated object access for plugin-scoped S3
- * bindings. It is registered by gestaltd for plugins and is not implemented by
+ * bindings. It is registered by gestaltd for apps and is not implemented by
  * S3 providers.
  *
  * @generated from service gestalt.provider.v1.S3ObjectAccess

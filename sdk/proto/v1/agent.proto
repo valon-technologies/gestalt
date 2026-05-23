@@ -4,7 +4,7 @@ package gestalt.provider.v1;
 
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
-import "v1/plugin.proto";
+import "v1/app.proto";
 
 message AgentMessage {
   string role = 1;

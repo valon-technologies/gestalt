@@ -178,7 +178,7 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 			Metadata: map[string]any{"source": "native"},
 		}},
 		ToolRefs: []gestalt.AgentToolRef{{
-			Plugin:     "github",
+			App: "github",
 			Operation:  "issues.get",
 			Connection: "default",
 		}},
@@ -209,7 +209,7 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 	if metadata := got.GetMessages()[0].GetMetadata().AsMap(); metadata["source"] != "native" {
 		t.Fatalf("message metadata = %#v", metadata)
 	}
-	if got.GetToolRefs()[0].GetPlugin() != "github" || got.GetToolRefs()[0].GetConnection() != "default" {
+	if got.GetToolRefs()[0].GetApp() != "github" || got.GetToolRefs()[0].GetConnection() != "default" {
 		t.Fatalf("tool refs = %#v", got.GetToolRefs())
 	}
 	if schema := got.GetResponseSchema().AsMap(); schema["type"] != "object" {

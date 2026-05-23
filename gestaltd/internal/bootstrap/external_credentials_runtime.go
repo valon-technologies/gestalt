@@ -113,7 +113,7 @@ func connectionRuntimeID(provider, connection string, info invocation.Connection
 	}
 	connection = strings.TrimSpace(connection)
 	if connection == "" {
-		connection = core.PluginConnectionName
+		connection = core.AppConnectionName
 	}
 	return strings.TrimSpace(provider) + ":" + connection
 }

@@ -13,7 +13,7 @@ import (
 )
 
 type providerPluginAuthorizationMembership struct {
-	Plugin    string
+	App       string
 	SubjectID string
 	Role      string
 }
@@ -31,7 +31,7 @@ func (s *Server) upsertProviderPluginAuthorization(ctx context.Context, subject 
 		return nil, fmt.Errorf("subject is required")
 	}
 	resource := &core.ResourceRef{
-		Type: authorization.ProviderResourceTypePluginDynamic,
+		Type: authorization.ProviderResourceTypeAppDynamic,
 		Id:   strings.TrimSpace(plugin),
 	}
 	fragmentRel := coredata.AuthorizationDynamicFragmentRelationship{
@@ -43,11 +43,11 @@ func (s *Server) upsertProviderPluginAuthorization(ctx context.Context, subject 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.upsertAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationPluginFragmentOwner(plugin), fragmentRel, "plugin_member_upsert"); err != nil {
+	if _, err := s.upsertAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationAppFragmentOwner(plugin), fragmentRel, "app_member_upsert"); err != nil {
 		return nil, err
 	}
 	return &providerPluginAuthorizationMembership{
-		Plugin:    plugin,
+		App:       plugin,
 		SubjectID: strings.TrimSpace(subject.SubjectID),
 		Role:      role,
 	}, nil
@@ -58,10 +58,10 @@ func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, 
 		return errAdminAuthorizationUnavailable
 	}
 	resource := &core.ResourceRef{
-		Type: authorization.ProviderResourceTypePluginDynamic,
+		Type: authorization.ProviderResourceTypeAppDynamic,
 		Id:   strings.TrimSpace(plugin),
 	}
-	return s.deleteProviderDynamicFragmentMembership(ctx, coredata.AuthorizationPluginFragmentOwner(plugin), resource, subjectID, "plugin_member_delete")
+	return s.deleteProviderDynamicFragmentMembership(ctx, coredata.AuthorizationAppFragmentOwner(plugin), resource, subjectID, "app_member_delete")
 }
 
 func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, subject *adminAuthorizationWriteSubject, role string) (*providerAdminAuthorizationMembership, error) {
@@ -119,7 +119,7 @@ func (s *Server) deleteProviderDynamicFragmentMembership(ctx context.Context, ow
 	if !deleted {
 		slog.WarnContext(ctx, "provider authorization membership deleted without matching dynamic fragment relationship",
 			"owner_kind", owner.Kind,
-			"owner_plugin", owner.Plugin,
+			"owner_app", owner.App,
 			"resource_type", resource.GetType(),
 			"resource_id", resource.GetId(),
 			"subject_id", strings.TrimSpace(subjectID),
@@ -240,7 +240,7 @@ func (s *Server) replaceProviderDynamicMembership(ctx context.Context, resource 
 
 func (s *Server) ensureManagedDynamicRole(ctx context.Context, resource *core.ResourceRef, role string) (string, error) {
 	switch strings.TrimSpace(resource.GetType()) {
-	case authorization.ProviderResourceTypePluginDynamic, authorization.ProviderResourceTypeAdminDynamic:
+	case authorization.ProviderResourceTypeAppDynamic, authorization.ProviderResourceTypeAdminDynamic:
 	default:
 		return s.managedAuthorizationModelID(ctx)
 	}

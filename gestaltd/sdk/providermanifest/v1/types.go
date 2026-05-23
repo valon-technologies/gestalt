@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	KindPlugin              = "plugin"
+	KindApp                 = "app"
 	KindAuthentication      = "authentication"
 	KindAuthorization       = "authorization"
 	KindExternalCredentials = "externalcredentials"
@@ -36,8 +36,8 @@ func NormalizeKind(kind string) string {
 		return KindAuthentication
 	case KindAuthentication:
 		return KindAuthentication
-	case KindPlugin:
-		return KindPlugin
+	case KindApp:
+		return KindApp
 	case KindAuthorization:
 		return KindAuthorization
 	case KindIndexedDB:
@@ -178,7 +178,7 @@ func (b SourceBuild) MarshalYAML() (any, error) {
 }
 
 // Spec is a union type validated per kind. For auth/datastore/secrets only
-// ConfigSchemaPath is valid. For plugins all surface/connection fields are
+// ConfigSchemaPath is valid. For apps all surface/connection fields are
 // valid. For ui AssetRoot + ConfigSchemaPath.
 type Spec struct {
 	ConfigSchemaPath string `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`

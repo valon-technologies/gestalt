@@ -12,7 +12,7 @@
     "kind": {
       "type": "string",
       "enum": [
-        "plugin",
+        "app",
         "auth",
         "authorization",
         "externalcredentials",

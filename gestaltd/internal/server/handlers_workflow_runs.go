@@ -114,10 +114,10 @@ func workflowRunListRequestFromQuery(w http.ResponseWriter, r *http.Request) (co
 		return coreworkflow.ListRunsRequest{}, false
 	}
 	return coreworkflow.ListRunsRequest{
-		PageSize:     pageSize,
-		PageToken:    strings.TrimSpace(queryValue(query, "pageToken", "page_token")),
-		TargetPlugin: strings.TrimSpace(query.Get("plugin")),
-		Status:       status,
+		PageSize:  pageSize,
+		PageToken: strings.TrimSpace(queryValue(query, "pageToken", "page_token")),
+		TargetApp: strings.TrimSpace(query.Get("app")),
+		Status:    status,
 	}, true
 }
 

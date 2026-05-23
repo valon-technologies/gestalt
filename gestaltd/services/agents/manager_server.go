@@ -9,17 +9,17 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-type InvocationTokenManager = plugininvokerservice.InvocationTokenManager
+type InvocationTokenManager = appinvokerservice.InvocationTokenManager
 
 func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
-	return plugininvokerservice.NewInvocationTokenManager(secret)
+	return appinvokerservice.NewInvocationTokenManager(secret)
 }
 
 type ManagerService interface {
@@ -60,7 +60,7 @@ func (s *ProviderServer) CreateSession(ctx context.Context, req *proto.CreateAge
 	if err != nil {
 		return nil, err
 	}
-	session, err := s.manager.CreateSession(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerCreateSessionRequest{
+	session, err := s.manager.CreateSession(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerCreateSessionRequest{
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
 		ProviderName:   strings.TrimSpace(req.GetProviderName()),
 		Model:          strings.TrimSpace(req.GetModel()),
@@ -86,7 +86,7 @@ func (s *ProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProv
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
-	session, err := s.manager.GetSession(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), sessionID)
+	session, err := s.manager.GetSession(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), sessionID)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -108,7 +108,7 @@ func (s *ProviderServer) ListSessions(ctx context.Context, req *proto.ListAgentP
 	if req.GetLimit() < 0 {
 		return nil, status.Error(codes.InvalidArgument, "limit must be non-negative")
 	}
-	sessions, err := s.manager.ListSessions(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerListSessionsRequest{
+	sessions, err := s.manager.ListSessions(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerListSessionsRequest{
 		ProviderName: strings.TrimSpace(req.GetProviderName()),
 		State:        state,
 		Limit:        int(req.GetLimit()),
@@ -144,7 +144,7 @@ func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAge
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	session, err := s.manager.UpdateSession(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerUpdateSessionRequest{
+	session, err := s.manager.UpdateSession(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerUpdateSessionRequest{
 		SessionID: sessionID,
 		ClientRef: strings.TrimSpace(req.GetClientRef()),
 		State:     state,
@@ -168,8 +168,8 @@ func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentP
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
-	turn, err := s.manager.CreateTurn(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerCreateTurnRequest{
-		CallerPluginName:  strings.TrimSpace(s.pluginName),
+	turn, err := s.manager.CreateTurn(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerCreateTurnRequest{
+		CallerAppName:     strings.TrimSpace(s.pluginName),
 		IdempotencyKey:    strings.TrimSpace(req.GetIdempotencyKey()),
 		Model:             strings.TrimSpace(req.GetModel()),
 		SessionID:         sessionID,
@@ -201,7 +201,7 @@ func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProvide
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	turn, err := s.manager.GetTurn(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID)
+	turn, err := s.manager.GetTurn(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -227,7 +227,7 @@ func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProv
 	if req.GetLimit() < 0 {
 		return nil, status.Error(codes.InvalidArgument, "limit must be non-negative")
 	}
-	turns, err := s.manager.ListTurns(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerListTurnsRequest{
+	turns, err := s.manager.ListTurns(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerListTurnsRequest{
 		SessionID:   sessionID,
 		Status:      statusFilter,
 		Limit:       int(req.GetLimit()),
@@ -259,7 +259,7 @@ func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentP
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	turn, err := s.manager.CancelTurn(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID, strings.TrimSpace(req.GetReason()))
+	turn, err := s.manager.CancelTurn(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID, strings.TrimSpace(req.GetReason()))
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -278,7 +278,7 @@ func (s *ProviderServer) ListTurnEvents(ctx context.Context, req *proto.ListAgen
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	events, err := s.manager.ListTurnEvents(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID, req.GetAfterSeq(), int(req.GetLimit()))
+	events, err := s.manager.ListTurnEvents(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID, req.GetAfterSeq(), int(req.GetLimit()))
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -301,7 +301,7 @@ func (s *ProviderServer) ListInteractions(ctx context.Context, req *proto.ListAg
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	interactions, err := s.manager.ListInteractions(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID)
+	interactions, err := s.manager.ListInteractions(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -324,7 +324,7 @@ func (s *ProviderServer) ResolveInteraction(ctx context.Context, req *proto.Reso
 	if interactionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "interaction_id is required")
 	}
-	interaction, err := s.manager.ResolveInteraction(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID, interactionID, mapFromStruct(req.GetResolution()))
+	interaction, err := s.manager.ResolveInteraction(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID, interactionID, mapFromStruct(req.GetResolution()))
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -335,17 +335,17 @@ func (s *ProviderServer) GetCapabilities(context.Context, *proto.GetAgentProvide
 	return nil, status.Error(codes.Unimplemented, "agent get capabilities is not available through the public provider facade")
 }
 
-func (s *ProviderServer) tokenContext(token string) (plugininvokerservice.TokenContext, error) {
+func (s *ProviderServer) tokenContext(token string) (appinvokerservice.TokenContext, error) {
 	if s == nil || s.tokens == nil {
-		return plugininvokerservice.TokenContext{}, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
+		return appinvokerservice.TokenContext{}, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
 	}
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return plugininvokerservice.TokenContext{}, status.Error(codes.FailedPrecondition, "invocation token is required")
+		return appinvokerservice.TokenContext{}, status.Error(codes.FailedPrecondition, "invocation token is required")
 	}
 	tokenCtx, err := s.tokens.ResolveToken(token, s.pluginName)
 	if err != nil {
-		return plugininvokerservice.TokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
+		return appinvokerservice.TokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	return tokenCtx, nil
 }

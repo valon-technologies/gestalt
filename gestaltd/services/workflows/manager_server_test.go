@@ -63,7 +63,7 @@ func TestWorkflowManagerTargetOrDefinitionAllowsDefinitionOnlyRequests(t *testin
 			if err != nil {
 				t.Fatalf("workflowManagerTargetOrDefinition: %v", err)
 			}
-			if got.Plugin != nil || got.Agent != nil {
+			if got.App != nil || got.Agent != nil {
 				t.Fatalf("target = %#v, want empty target for definition-only request", got)
 			}
 		})
@@ -108,8 +108,8 @@ func TestManagerServerPublishEventThreadsCallerPluginToSelectedProvider(t *testi
 	if len(selected.publishReqs) != 1 {
 		t.Fatalf("selected publish requests = %d, want 1", len(selected.publishReqs))
 	}
-	if got := selected.publishReqs[0].PluginName; got != "valonSats" {
-		t.Fatalf("selected publish plugin = %q, want valonSats", got)
+	if got := selected.publishReqs[0].AppName; got != "valonSats" {
+		t.Fatalf("selected publish app = %q, want valonSats", got)
 	}
 	if len(other.publishReqs) != 0 {
 		t.Fatalf("other publish requests = %d, want 0", len(other.publishReqs))
@@ -168,8 +168,8 @@ func TestManagerServerPublishEventThreadsCallerPluginToFanoutProviders(t *testin
 		if len(provider.publishReqs) != 1 {
 			t.Fatalf("%s publish requests = %d, want 1", name, len(provider.publishReqs))
 		}
-		if got := provider.publishReqs[0].PluginName; got != "valonSats" {
-			t.Fatalf("%s publish plugin = %q, want valonSats", name, got)
+		if got := provider.publishReqs[0].AppName; got != "valonSats" {
+			t.Fatalf("%s publish app = %q, want valonSats", name, got)
 		}
 	}
 	for _, providerName := range []string{"first", "second"} {
@@ -206,7 +206,7 @@ func TestWorkflowManagerPublishEventSelectedProviderPreservesBlankPlugin(t *test
 
 	_, err := manager.PublishEvent(context.Background(), publishEventPrincipal(), workflowmanager.EventPublish{
 		ProviderName: "selected",
-		PluginName:   "   ",
+		AppName:      "   ",
 		Event:        coreworkflow.Event{Type: "valon_sats.attempt.submitted"},
 	})
 	if err != nil {
@@ -215,8 +215,8 @@ func TestWorkflowManagerPublishEventSelectedProviderPreservesBlankPlugin(t *test
 	if len(selected.publishReqs) != 1 {
 		t.Fatalf("selected publish requests = %d, want 1", len(selected.publishReqs))
 	}
-	if got := selected.publishReqs[0].PluginName; got != "" {
-		t.Fatalf("selected publish plugin = %q, want empty", got)
+	if got := selected.publishReqs[0].AppName; got != "" {
+		t.Fatalf("selected publish app = %q, want empty", got)
 	}
 }
 
@@ -260,11 +260,11 @@ func managerServerAuditStringPresent(record map[string]any, key string) bool {
 	return ok && value != ""
 }
 
-func mintPublishEventToken(t *testing.T, tokens *InvocationTokenManager, callerPlugin string) string {
+func mintPublishEventToken(t *testing.T, tokens *InvocationTokenManager, callerApp string) string {
 	t.Helper()
 	token, err := tokens.MintRootTokenWithWorkflowGrants(
 		principal.WithPrincipal(context.Background(), publishEventPrincipal()),
-		callerPlugin,
+		callerApp,
 		nil,
 		workflowgrants.Grants{workflowgrants.OperationEventsPublish: {}},
 	)

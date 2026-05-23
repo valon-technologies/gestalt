@@ -14,7 +14,7 @@ import (
 const (
 	localConfigDirName = ".gestaltd"
 
-	defaultHTTPBinProvider = config.DefaultProviderRepo + "/plugins/httpbin"
+	defaultHTTPBinProvider = config.DefaultProviderRepo + "/apps/httpbin"
 	defaultHTTPBinVersion  = "0.0.1-alpha.1"
 )
 
@@ -110,7 +110,7 @@ func GenerateDefaultConfig(configDir string) (string, error) {
 }
 
 func defaultManagedConfig(dbPath, encryptionKey string) string {
-	return fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	return fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   public:
     port: 8080
@@ -130,7 +130,7 @@ providers:
   secrets:
     env:
       source: env
-plugins:
+apps:
   httpbin:
     displayName: HTTPBin
     source: %s
@@ -145,7 +145,7 @@ plugins:
 }
 
 func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string {
-	return fmt.Sprintf(`apiVersion: gestaltd.config/v5
+	return fmt.Sprintf(`apiVersion: gestaltd.config/v6
 server:
   public:
     port: 8080

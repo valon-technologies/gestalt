@@ -39,7 +39,7 @@ type Grant struct {
 	ProviderName            string
 	SessionID               string
 	TurnID                  string
-	CallerPluginName        string
+	CallerAppName           string
 	SubjectID               string
 	SubjectKind             string
 	CredentialSubjectID     string
@@ -59,7 +59,7 @@ type claims struct {
 	ProviderName        string                  `json:"provider_name,omitempty"`
 	SessionID           string                  `json:"session_id,omitempty"`
 	TurnID              string                  `json:"turn_id,omitempty"`
-	CallerPluginName    string                  `json:"caller_plugin_name,omitempty"`
+	CallerAppName       string                  `json:"caller_app_name,omitempty"`
 	SubjectKind         string                  `json:"subject_kind,omitempty"`
 	CredentialSubjectID string                  `json:"credential_subject_id,omitempty"`
 	DisplayName         string                  `json:"display_name,omitempty"`
@@ -113,7 +113,7 @@ func (m *Manager) Mint(grant Grant) (string, error) {
 		ProviderName:        strings.TrimSpace(grant.ProviderName),
 		SessionID:           strings.TrimSpace(grant.SessionID),
 		TurnID:              strings.TrimSpace(grant.TurnID),
-		CallerPluginName:    strings.TrimSpace(grant.CallerPluginName),
+		CallerAppName:       strings.TrimSpace(grant.CallerAppName),
 		SubjectKind:         strings.TrimSpace(grant.SubjectKind),
 		CredentialSubjectID: strings.TrimSpace(grant.CredentialSubjectID),
 		DisplayName:         strings.TrimSpace(grant.DisplayName),
@@ -166,7 +166,7 @@ func (m *Manager) Resolve(token string) (Grant, error) {
 		ProviderName:            strings.TrimSpace(decoded.ProviderName),
 		SessionID:               strings.TrimSpace(decoded.SessionID),
 		TurnID:                  strings.TrimSpace(decoded.TurnID),
-		CallerPluginName:        strings.TrimSpace(decoded.CallerPluginName),
+		CallerAppName:           strings.TrimSpace(decoded.CallerAppName),
 		SubjectID:               strings.TrimSpace(decoded.Subject),
 		SubjectKind:             strings.TrimSpace(decoded.SubjectKind),
 		CredentialSubjectID:     strings.TrimSpace(decoded.CredentialSubjectID),

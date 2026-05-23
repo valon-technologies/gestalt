@@ -306,7 +306,7 @@ func agentToolRefFromProto(value *proto.AgentToolRef) AgentToolRef {
 		return AgentToolRef{}
 	}
 	return AgentToolRef{
-		Plugin:                value.GetPlugin(),
+		App:                   value.GetApp(),
 		Operation:             value.GetOperation(),
 		Connection:            value.GetConnection(),
 		Instance:              value.GetInstance(),
@@ -343,7 +343,7 @@ func agentToolRefPtrsFromProto(values []*proto.AgentToolRef) []*AgentToolRef {
 
 func agentToolRefToProto(value AgentToolRef) *proto.AgentToolRef {
 	return &proto.AgentToolRef{
-		Plugin:                value.Plugin,
+		App:                   value.App,
 		Operation:             value.Operation,
 		Connection:            value.Connection,
 		Instance:              value.Instance,

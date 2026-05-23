@@ -11,9 +11,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	coreintegration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 type stubProviderWithOps struct {
@@ -480,7 +480,7 @@ func TestGuardedInvoker_OptionalDependenciesUnsupported(t *testing.T) {
 
 	_, err := guarded.InvokeGraphQL(context.Background(), &principal.Principal{}, "alpha", "", invocation.GraphQLRequest{})
 	if err == nil || err.Error() != "plugin invoker is not available" {
-		t.Fatalf("expected plugin invoker unavailable error, got %v", err)
+		t.Fatalf("expected app invoker unavailable error, got %v", err)
 	}
 	if invoked {
 		t.Fatal("plain invoker should not be called for unsupported GraphQL")

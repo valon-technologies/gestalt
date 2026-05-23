@@ -38,7 +38,7 @@ Metadata for [service account](/service-accounts) identities managed through
 `/api/v1/authorization/subjects`. The canonical subject ID is always
 `service_account:<id>`. Authorization relationships for who can manage the
 subject live in the configured authorization provider as `managed_subject`
-resource relationships; plugin runtime grants live as provider-backed dynamic
+resource relationships; app runtime grants live as provider-backed dynamic
 plugin relationships.
 
 | Field | Type | Notes |
@@ -143,7 +143,7 @@ The `_connection` and `_instance` selectors in the [HTTP API](/reference/http-ap
 - **`none`**: No credentials stored. Operations run without upstream authentication.
 - **`user`**: Each calling subject connects individually. Tokens are keyed by `subject_id`.
 
-Renaming a `plugins` key in config is a breaking change. Stored credentials reference the old name.
+Renaming an `apps` key in config is a breaking change. Stored credentials reference the old name.
 
 ## Sessions
 

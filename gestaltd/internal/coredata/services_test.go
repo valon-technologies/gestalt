@@ -676,8 +676,8 @@ func TestAPITokenService(t *testing.T) {
 			HashedToken:         "sha256:abc123",
 			Scopes:              "read:tokens",
 			Permissions: []core.AccessPermission{
-				{Plugin: "sample", Operations: []string{"read"}},
-				{Plugin: "other"},
+				{App: "sample", Operations: []string{"read"}},
+				{App: "other"},
 			},
 		}
 		if err := svc.APITokens.StoreAPIToken(ctx, token); err != nil {
@@ -939,7 +939,7 @@ func TestAPITokenService(t *testing.T) {
 			CredentialSubjectID: principal.UserSubjectID(user.ID),
 			Name:                "owned",
 			HashedToken:         "sha256:owned",
-			Permissions:         []core.AccessPermission{{Plugin: "owned"}},
+			Permissions:         []core.AccessPermission{{App: "owned"}},
 		}
 		if err := svc.APITokens.StoreAPIToken(ctx, owned); err != nil {
 			t.Fatalf("StoreAPIToken owned: %v", err)
@@ -953,7 +953,7 @@ func TestAPITokenService(t *testing.T) {
 			CredentialSubjectID: principal.UserSubjectID(otherUser.ID),
 			Name:                "other",
 			HashedToken:         "sha256:other",
-			Permissions:         []core.AccessPermission{{Plugin: "other"}},
+			Permissions:         []core.AccessPermission{{App: "other"}},
 		}
 		if err := svc.APITokens.StoreAPIToken(ctx, otherOwner); err != nil {
 			t.Fatalf("StoreAPIToken other: %v", err)

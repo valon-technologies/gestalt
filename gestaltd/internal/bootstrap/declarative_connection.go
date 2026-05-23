@@ -6,8 +6,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
-	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 )
 
 func declarativeConnectionDef(conn config.ConnectionDef) declarative.ConnectionDef {
@@ -20,7 +20,7 @@ func declarativeConnectionDef(conn config.ConnectionDef) declarative.ConnectionD
 
 func declarativeNamedConnectionDef(name string, conn config.ConnectionDef) declarative.ConnectionDef {
 	out := declarativeConnectionDef(conn)
-	if postConnect := pluginservice.PostConnectConfigFromManifest(conn.PostConnect); postConnect != nil {
+	if postConnect := appservice.PostConnectConfigFromManifest(conn.PostConnect); postConnect != nil {
 		out.PostConnect = map[string]*core.PostConnectConfig{name: postConnect}
 	}
 	return out

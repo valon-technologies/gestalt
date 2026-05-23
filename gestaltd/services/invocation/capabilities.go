@@ -6,7 +6,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	integration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	integration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
 )
 
 func capabilitiesForProvider(name string, prov core.Provider) []core.Capability {

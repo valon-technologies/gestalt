@@ -17,7 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,12 +26,12 @@ func TestE2EProviderAddDefaultsToPackageSource(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v5\nplugins:\n")
+	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v6\napps:\n")
 	indexURL := writeProviderLifecycleIndex(t, dir)
 
 	runGestaltd(t, "provider", "repo", "add", "local", indexURL, "--config", cfgPath)
 	out := runGestaltd(t, "provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--no-lock")
-	assertContains(t, out, "Added plugin alpha")
+	assertContains(t, out, "Added app alpha")
 	assertContains(t, out, "Version: 1.2.3")
 
 	cfg, err := config.Load(cfgPath)
@@ -41,9 +41,9 @@ func TestE2EProviderAddDefaultsToPackageSource(t *testing.T) {
 	if got := cfg.APIVersion; got != config.ConfigAPIVersion {
 		t.Fatalf("APIVersion = %q, want %q", got, config.ConfigAPIVersion)
 	}
-	entry := cfg.Plugins["alpha"]
+	entry := cfg.Apps["alpha"]
 	if entry == nil {
-		t.Fatal(`Plugins["alpha"] = nil`)
+		t.Fatal(`Apps["alpha"] = nil`)
 	}
 	if !entry.Source.IsPackage() {
 		t.Fatal("Source.IsPackage = false, want true")
@@ -75,11 +75,11 @@ packages:
     versions:
       1.2.3:
         metadata: %s
-        kind: plugin
+        kind: app
         runtime: executable
       1.3.0:
         metadata: %s
-        kind: plugin
+        kind: app
         runtime: executable
 `, pkg, metadata123, metadata130))
 
@@ -108,11 +108,11 @@ packages:
 
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
-	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v5\nplugins:\n")
+	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v6\napps:\n")
 	env := []string{"XDG_CONFIG_HOME=" + xdgConfigHome}
 
 	out := runGestaltdWithEnv(t, env, "provider", "add", pkg, "--config", cfgPath, "--repo", "private", "--name", "alpha", "--version", "1.2.3", "--lockfile", lockPath)
-	assertContains(t, out, "Added plugin alpha")
+	assertContains(t, out, "Added app alpha")
 	assertContains(t, out, "Lockfile: "+lockPath)
 
 	cfg, err := config.Load(cfgPath)
@@ -122,19 +122,19 @@ packages:
 	if got := cfg.ProviderRepositories["private"].URL; got != server.URL+"/provider-index.yaml" {
 		t.Fatalf("project repo URL = %q", got)
 	}
-	if got := cfg.Plugins["alpha"].Source.PackageRepo(); got != "private" {
+	if got := cfg.Apps["alpha"].Source.PackageRepo(); got != "private" {
 		t.Fatalf("package repo = %q, want private", got)
 	}
 	assertProviderLifecycleLockEntry(t, lockPath, "1.2.3", server.URL+"/"+metadata123)
 
 	out = runGestaltdWithEnv(t, env, "provider", "upgrade", "alpha", "--version", "1.3.0", "--config", cfgPath, "--lockfile", lockPath)
-	assertContains(t, out, "Updated plugin alpha version constraint to 1.3.0")
+	assertContains(t, out, "Updated app alpha version constraint to 1.3.0")
 	assertContains(t, out, "Lockfile: "+lockPath)
 	cfg, err = config.Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load after upgrade: %v", err)
 	}
-	if got := cfg.Plugins["alpha"].Source.PackageVersionConstraint(); got != "1.3.0" {
+	if got := cfg.Apps["alpha"].Source.PackageVersionConstraint(); got != "1.3.0" {
 		t.Fatalf("version constraint = %q, want 1.3.0", got)
 	}
 	assertProviderLifecycleLockEntry(t, lockPath, "1.3.0", server.URL+"/"+metadata130)
@@ -149,18 +149,18 @@ func TestE2EProviderAddExactSourceAndRejectsRepeatedConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
 	otherCfgPath := filepath.Join(dir, "other.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v5\nplugins:\n")
-	writeProviderLifecycleTestFile(t, otherCfgPath, "apiVersion: gestaltd.config/v5\n")
+	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v6\napps:\n")
+	writeProviderLifecycleTestFile(t, otherCfgPath, "apiVersion: gestaltd.config/v6\n")
 	indexURL := writeProviderLifecycleIndex(t, dir)
 
 	runGestaltd(t, "provider", "repo", "add", "local", indexURL, "--config", cfgPath)
 	out := runGestaltd(t, "provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--exact-source", "--no-lock")
-	assertContains(t, out, "Added plugin alpha")
+	assertContains(t, out, "Added app alpha")
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.Plugins["alpha"].Source.MetadataURL(); got != "https://example.com/provider-release.yaml" {
+	if got := cfg.Apps["alpha"].Source.MetadataURL(); got != "https://example.com/provider-release.yaml" {
 		t.Fatalf("MetadataURL = %q", got)
 	}
 
@@ -176,7 +176,7 @@ func TestE2EProviderAddRejectsExistingName(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v5\nplugins:\n  alpha:\n    source: env\n")
+	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v6\napps:\n  alpha:\n    source: env\n")
 	indexURL := writeProviderLifecycleIndex(t, dir)
 
 	runGestaltd(t, "provider", "repo", "add", "local", indexURL, "--config", cfgPath)
@@ -192,11 +192,11 @@ func TestE2EProviderListOfflineAndLockStatus(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, `apiVersion: gestaltd.config/v5
+	writeProviderLifecycleTestFile(t, cfgPath, `apiVersion: gestaltd.config/v6
 providerRepositories:
   unreachable:
     url: http://127.0.0.1:1/provider-index.yaml
-plugins:
+apps:
   alpha:
     source:
       repo: unreachable
@@ -220,7 +220,7 @@ providers:
 	out := runGestaltd(t, "provider", "list", "--config", cfgPath)
 	assertContains(t, out, "KIND")
 	assertContains(t, out, "alpha")
-	if got := providerLifecycleListStatus(t, out, "plugin", "alpha"); got != "unlocked" {
+	if got := providerLifecycleListStatus(t, out, "app", "alpha"); got != "unlocked" {
 		t.Fatalf("alpha status = %q, want unlocked\n%s", got, out)
 	}
 	assertContains(t, out, "builtin")
@@ -229,11 +229,11 @@ providers:
 	if err != nil {
 		t.Fatalf("LoadPartialAllowMissingEnvPaths: %v", err)
 	}
-	fingerprint, err := operator.ProviderFingerprint("alpha", cfg.Plugins["alpha"], dir)
+	fingerprint, err := operator.ProviderFingerprint("alpha", cfg.Apps["alpha"], dir)
 	if err != nil {
 		t.Fatalf("ProviderFingerprint: %v", err)
 	}
-	bravoFingerprint, err := operator.ProviderFingerprint("bravo", cfg.Plugins["bravo"], dir)
+	bravoFingerprint, err := operator.ProviderFingerprint("bravo", cfg.Apps["bravo"], dir)
 	if err != nil {
 		t.Fatalf("ProviderFingerprint(bravo): %v", err)
 	}
@@ -250,14 +250,14 @@ providers:
 			"alpha": {
 				Fingerprint: fingerprint,
 				Package:     "github.com/acme/providers/alpha",
-				Kind:        "plugin",
+				Kind:        "app",
 				Runtime:     "executable",
 				Version:     "1.2.3",
 			},
 			"bravo": {
 				Fingerprint: bravoFingerprint,
 				Package:     "github.com/acme/providers/bravo",
-				Kind:        "plugin",
+				Kind:        "app",
 				Runtime:     "executable",
 				Source:      "https://example.com/bravo/provider-release.yaml",
 				Version:     "1.0.0",
@@ -288,7 +288,7 @@ providers:
 	}
 	out = runGestaltd(t, "provider", "list", "--config", cfgPath)
 	assertContains(t, out, "1.2.3")
-	if got := providerLifecycleListStatus(t, out, "plugin", "alpha"); got != "drifted" {
+	if got := providerLifecycleListStatus(t, out, "app", "alpha"); got != "drifted" {
 		t.Fatalf("alpha status = %q, want drifted when package lock source is missing\n%s", got, out)
 	}
 
@@ -297,7 +297,7 @@ providers:
 			"alpha": {
 				Fingerprint: fingerprint,
 				Package:     "github.com/acme/providers/alpha",
-				Kind:        "plugin",
+				Kind:        "app",
 				Runtime:     "executable",
 				Source:      "https://example.com/provider-release.yaml",
 				Version:     "1.2.3",
@@ -305,7 +305,7 @@ providers:
 			"bravo": {
 				Fingerprint: bravoFingerprint,
 				Package:     "github.com/acme/providers/bravo",
-				Kind:        "plugin",
+				Kind:        "app",
 				Runtime:     "executable",
 				Source:      "https://example.com/bravo/provider-release.yaml",
 				Version:     "1.0.0",
@@ -335,10 +335,10 @@ providers:
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 	out = runGestaltd(t, "provider", "list", "--config", cfgPath)
-	if got := providerLifecycleListStatus(t, out, "plugin", "alpha"); got != "unverified" {
+	if got := providerLifecycleListStatus(t, out, "app", "alpha"); got != "unverified" {
 		t.Fatalf("alpha status = %q, want unverified for unresolved package-source lock\n%s", got, out)
 	}
-	if got := providerLifecycleListStatus(t, out, "plugin", "bravo"); got != "locked" {
+	if got := providerLifecycleListStatus(t, out, "app", "bravo"); got != "locked" {
 		t.Fatalf("bravo status = %q, want locked\n%s", got, out)
 	}
 	if got := providerLifecycleListStatus(t, out, "telemetry", "traces"); got != "unverified" {
@@ -361,8 +361,8 @@ func TestE2EProviderRemoveUniqueAndAmbiguousKinds(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, `apiVersion: gestaltd.config/v5
-plugins:
+	writeProviderLifecycleTestFile(t, cfgPath, `apiVersion: gestaltd.config/v6
+apps:
   alpha:
     source: env
 providers:
@@ -397,8 +397,8 @@ func TestE2EProviderUpgradeVersionRejectsRepeatedConfigAndAmbiguousKind(t *testi
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
 	otherCfgPath := filepath.Join(dir, "other.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, `apiVersion: gestaltd.config/v5
-plugins:
+	writeProviderLifecycleTestFile(t, cfgPath, `apiVersion: gestaltd.config/v6
+apps:
   alpha:
     source:
       package: github.com/acme/providers/alpha
@@ -409,7 +409,7 @@ providers:
         package: github.com/acme/providers/alpha-ui
       path: /
 `)
-	writeProviderLifecycleTestFile(t, otherCfgPath, "apiVersion: gestaltd.config/v5\n")
+	writeProviderLifecycleTestFile(t, otherCfgPath, "apiVersion: gestaltd.config/v6\n")
 
 	out, err := runGestaltdResult("provider", "upgrade", "alpha", "--version", "1.2.3", "--config", cfgPath, "--config", otherCfgPath)
 	if err == nil {
@@ -435,7 +435,7 @@ packages:
     versions:
       1.2.3:
         metadata: https://example.com/provider-release.yaml
-        kind: plugin
+        kind: app
         runtime: executable
 `)
 	return (&url.URL{Scheme: "file", Path: indexPath}).String()
@@ -456,7 +456,7 @@ func writeProviderLifecycleRelease(t *testing.T, dir, pkg, version string) strin
 		t.Fatalf("Chmod(provider): %v", err)
 	}
 	manifest := &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		Source:      pkg,
 		Version:     version,
 		DisplayName: "Alpha",
@@ -489,7 +489,7 @@ func writeProviderLifecycleRelease(t *testing.T, dir, pkg, version string) strin
 		"schema":        "gestaltd-provider-release",
 		"schemaVersion": 1,
 		"package":       pkg,
-		"kind":          providermanifestv1.KindPlugin,
+		"kind":          providermanifestv1.KindApp,
 		"version":       version,
 		"runtime":       "executable",
 		"artifacts": map[string]any{
