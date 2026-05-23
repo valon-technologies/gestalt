@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from dataclasses import dataclass
 
-from gestalt import Access, App, Credential, Error, OK, Request, Response, Subject
+from gestalt import OK, Access, App, Credential, Error, Request, Response, Subject
 
 
 class AppOperationTests(unittest.TestCase):
