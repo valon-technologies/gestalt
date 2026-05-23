@@ -87,7 +87,7 @@ async fn runtime_log_host_appends_logs_and_forwards_relay_token() {
     assert_eq!(requests[0].logs[0].message, "runtime boot\n");
     assert_eq!(
         requests[0].logs[0].stream,
-        AppRuntimeLogStream::Runtime as i32
+        AppRuntimeLogStream::PluginRuntimeLogStreamRuntime as i32
     );
     assert_eq!(requests[0].logs[0].source_seq, 7);
     assert!(requests[0].logs[0].observed_at.is_some());
@@ -95,7 +95,7 @@ async fn runtime_log_host_appends_logs_and_forwards_relay_token() {
     assert_eq!(requests[1].session_id, "runtime-session-1");
     assert_eq!(
         requests[1].logs[0].stream,
-        AppRuntimeLogStream::Stderr as i32
+        AppRuntimeLogStream::PluginRuntimeLogStreamStderr as i32
     );
     assert_eq!(requests[1].logs[0].source_seq, 8);
 

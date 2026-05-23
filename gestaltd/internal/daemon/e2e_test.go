@@ -2548,14 +2548,14 @@ func TestE2EServeAndHealthCheck(t *testing.T) {
 		})
 	}
 
-	intResp, err := client.Get(baseURL + "/api/v1/integrations")
+	intResp, err := client.Get(baseURL + "/api/v1/apps")
 	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
+		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
 	defer func() { _ = intResp.Body.Close() }()
 	body, _ := io.ReadAll(intResp.Body)
 	if intResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", intResp.StatusCode, body)
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", intResp.StatusCode, body)
 	}
 
 	var integrations []json.RawMessage
@@ -2634,14 +2634,14 @@ func TestE2EServePathAutoMountsOwnedUI(t *testing.T) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	_ = waitForHTTPBody(t, client, baseURL+"/provider/sync", "Roadmap Review UI")
 
-	integrationsResp, err := client.Get(baseURL + "/api/v1/integrations")
+	integrationsResp, err := client.Get(baseURL + "/api/v1/apps")
 	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
+		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
 	defer func() { _ = integrationsResp.Body.Close() }()
 	integrationsBody, _ := io.ReadAll(integrationsResp.Body)
 	if integrationsResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", integrationsResp.StatusCode, integrationsBody)
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", integrationsResp.StatusCode, integrationsBody)
 	}
 	var integrations []struct {
 		Name        string `json:"name"`
@@ -2734,10 +2734,10 @@ func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.
 	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
 
 	client := &http.Client{Timeout: 2 * time.Second}
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Example Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Example Provider")
 
 	setAppManifestDisplayName(t, manifestPath, "Config Watch Provider")
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Config Watch Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Config Watch Provider")
 
 	invalidConfig := strings.Replace(string(originalConfig), manifestPath, filepath.Join(dir, "missing", "manifest.yaml"), 1)
 	if invalidConfig == string(originalConfig) {
@@ -2747,13 +2747,13 @@ func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.
 		t.Fatalf("write invalid config: %v", err)
 	}
 	time.Sleep(750 * time.Millisecond)
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Config Watch Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Config Watch Provider")
 
 	if err := os.WriteFile(cfgPath, originalConfig, 0o644); err != nil {
 		t.Fatalf("restore config: %v", err)
 	}
 	setAppManifestDisplayName(t, manifestPath, "Recovered Config Watch Provider")
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Recovered Config Watch Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Recovered Config Watch Provider")
 }
 
 func TestE2EServeConfigWatchReloadsLocalReleaseMetadata(t *testing.T) {
@@ -2800,7 +2800,7 @@ server:
 	startCommandAfterReleasingPortWithOutput(t, holder, cmd, baseURL, logFile)
 
 	client := &http.Client{Timeout: 2 * time.Second}
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Example Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Example Provider")
 
 	missingArchive := "missing-after-watch.tar.gz"
 	metadata := fmt.Sprintf(`schema: gestaltd-provider-release
@@ -2819,7 +2819,7 @@ artifacts:
 	}
 
 	_ = waitForFileBody(t, logPath, missingArchive)
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Example Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Example Provider")
 }
 
 //nolint:paralleltest // Uses the default 8080 startup path intentionally.
@@ -2905,7 +2905,7 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 	}{
 		{
 			name:       "public serves integrations API",
-			url:        publicURL + "/api/v1/integrations",
+			url:        publicURL + "/api/v1/apps",
 			wantStatus: http.StatusOK,
 		},
 		{
@@ -2931,7 +2931,7 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 		},
 		{
 			name:       "management hides public api",
-			url:        managementURL + "/api/v1/integrations",
+			url:        managementURL + "/api/v1/apps",
 			wantStatus: http.StatusNotFound,
 		},
 		{
@@ -3041,14 +3041,14 @@ apps:
 		t.Fatalf("expected mounted ui body to contain marker, got: %s", body)
 	}
 
-	integrationsResp, err := (&http.Client{Timeout: 2 * time.Second}).Get(publicURL + "/api/v1/integrations")
+	integrationsResp, err := (&http.Client{Timeout: 2 * time.Second}).Get(publicURL + "/api/v1/apps")
 	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
+		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
 	defer func() { _ = integrationsResp.Body.Close() }()
 	integrationsBody, _ := io.ReadAll(integrationsResp.Body)
 	if integrationsResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", integrationsResp.StatusCode, integrationsBody)
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", integrationsResp.StatusCode, integrationsBody)
 	}
 	var integrations []struct {
 		Name        string `json:"name"`
@@ -3108,14 +3108,14 @@ apps:
 
 	baseURL := startGestaltdWithConfig(t, cfgPath)
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(baseURL + "/api/v1/integrations")
+	resp, err := client.Get(baseURL + "/api/v1/apps")
 	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
+		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", resp.StatusCode, body)
 	}
 }
 
@@ -3464,14 +3464,14 @@ func TestE2ELockSyncLocalProviders(t *testing.T) {
 	}
 
 	baseURL := startGestaltdWithConfigs(t, []string{cfgPath}, true)
-	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/integrations")
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/apps")
 	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
+		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", resp.StatusCode, body)
 	}
 }
 
@@ -3591,14 +3591,14 @@ func TestE2ELockAndServeLayeredConfigs(t *testing.T) {
 
 	baseURL := startGestaltdWithConfigs(t, []string{basePath, overridePath}, true)
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(baseURL + "/api/v1/integrations")
+	resp, err := client.Get(baseURL + "/api/v1/apps")
 	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
+		t.Fatalf("GET /api/v1/apps: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected /api/v1/integrations 401 with layered auth override, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected /api/v1/apps 401 with layered auth override, got %d: %s", resp.StatusCode, body)
 	}
 }
 
@@ -3666,14 +3666,14 @@ func TestE2EServeUsesOverrideLockfile(t *testing.T) {
 				requiredPath = lockPath
 			}
 			baseURL := startGestaltdWithConfigsAndArgs(t, []string{cfgPath}, tc.args(lockPath), requiredPath)
-			resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/integrations")
+			resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/apps")
 			if err != nil {
-				t.Fatalf("GET /api/v1/integrations: %v", err)
+				t.Fatalf("GET /api/v1/apps: %v", err)
 			}
 			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode != http.StatusOK {
 				body, _ := io.ReadAll(resp.Body)
-				t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+				t.Fatalf("expected /api/v1/apps 200, got %d: %s", resp.StatusCode, body)
 			}
 			if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
 				t.Fatalf("default lockfile should not be written, got err=%v", err)
@@ -3697,16 +3697,16 @@ func TestE2ECLIToServer(t *testing.T) {
 
 	cliEnv := append(os.Environ(), "GESTALT_URL="+baseURL, "GESTALT_API_KEY=e2e-test-key")
 
-	t.Run("integrations list", func(t *testing.T) {
+	t.Run("apps list", func(t *testing.T) {
 		t.Parallel()
-		cmd := exec.Command(gestaltCLIBin, "integrations", "list", "--format", "json", "--url", baseURL)
+		cmd := exec.Command(gestaltCLIBin, "app", "list", "--format", "json", "--url", baseURL)
 		cmd.Env = cliEnv
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			t.Fatalf("gestalt integrations list failed: %v\noutput: %s", err, out)
+			t.Fatalf("gestalt app list failed: %v\noutput: %s", err, out)
 		}
 		if !strings.Contains(string(out), "example") {
-			t.Fatalf("expected 'example' integration in output, got: %s", out)
+			t.Fatalf("expected 'example' app in output, got: %s", out)
 		}
 	})
 

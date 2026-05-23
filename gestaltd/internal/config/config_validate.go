@@ -17,7 +17,7 @@ import (
 	cronv3 "github.com/robfig/cron/v3"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
-	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
@@ -2322,8 +2322,8 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 		if err := normalizeWorkflowValueMapConfig(stepPath+".inputs", step.Inputs); err != nil {
 			return err
 		}
-		if err := validateWorkflowStepValueMapRefs(stepPath+".inputs", step.Inputs, seen); err != nil {
-			return err
+		if err := coreworkflow.ValidateValueMapRefs(stepPath+".inputs", workflowValueConfigMapToCore(step.Inputs), seen); err != nil {
+			return fmt.Errorf("config validation: %w", err)
 		}
 		if (step.App == nil) == (step.Agent == nil) {
 			return fmt.Errorf("config validation: %s must set exactly one of app or agent", stepPath)
@@ -2332,8 +2332,8 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 			if err := normalizeWorkflowStepAppCallConfig(stepPath+".app", step.App, true); err != nil {
 				return err
 			}
-			if err := validateWorkflowStepValueRefs(stepPath+".app.input", step.App.Input, seen); err != nil {
-				return err
+			if err := coreworkflow.ValidateValueRefs(stepPath+".app.input", workflowValueConfigToCore(step.App.Input), seen); err != nil {
+				return fmt.Errorf("config validation: %w", err)
 			}
 		}
 		if step.Agent != nil {
@@ -2351,17 +2351,13 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 			if err := normalizeWorkflowValueConfig(stepPath+".when.value", &step.When.Value); err != nil {
 				return err
 			}
-			if !workflowValueConfigIsSet(step.When.Value) {
-				return fmt.Errorf("config validation: %s.when.value is required", stepPath)
+			when := &coreworkflow.StepWhen{
+				Value:     workflowValueConfigToCore(step.When.Value),
+				Equals:    step.When.Equals,
+				EqualsSet: step.When.EqualsSet(),
 			}
-			if err := validateWorkflowStepValueRefs(stepPath+".when.value", step.When.Value, seen); err != nil {
-				return err
-			}
-			if !step.When.EqualsSet() {
-				return fmt.Errorf("config validation: %s.when.equals is required", stepPath)
-			}
-			if !jsonvalue.IsScalar(step.When.Equals) {
-				return fmt.Errorf("config validation: %s.when.equals must be a scalar JSON value", stepPath)
+			if err := coreworkflow.ValidateStepWhen(stepPath+".when", when, seen); err != nil {
+				return fmt.Errorf("config validation: %w", err)
 			}
 		}
 		seen[step.ID] = struct{}{}
@@ -2376,40 +2372,6 @@ func normalizeWorkflowValueMapConfig(path string, values map[string]WorkflowValu
 			return err
 		}
 		values[key] = value
-	}
-	return nil
-}
-
-func validateWorkflowStepValueMapRefs(path string, values map[string]WorkflowValueConfig, seen map[string]struct{}) error {
-	for key := range values {
-		if err := validateWorkflowStepValueRefs(path+"."+key, values[key], seen); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateWorkflowStepValueRefs(path string, value WorkflowValueConfig, seen map[string]struct{}) error {
-	if value.StepOutput != nil {
-		if value.StepOutput.StepID == "" {
-			return fmt.Errorf("config validation: %s.stepOutput.stepId is required", path)
-		}
-		if _, ok := seen[value.StepOutput.StepID]; !ok {
-			return fmt.Errorf("config validation: %s.stepOutput.stepId %q must reference an earlier step", path, value.StepOutput.StepID)
-		}
-		if value.StepOutput.Path == "" {
-			return fmt.Errorf("config validation: %s.stepOutput.path is required", path)
-		}
-	}
-	for key := range value.Object {
-		if err := validateWorkflowStepValueRefs(path+"."+key, value.Object[key], seen); err != nil {
-			return err
-		}
-	}
-	for i := range value.Array {
-		if err := validateWorkflowStepValueRefs(fmt.Sprintf("%s[%d]", path, i), value.Array[i], seen); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -2567,27 +2529,6 @@ func normalizeWorkflowValueConfig(path string, value *WorkflowValueConfig) error
 		return fmt.Errorf("config validation: %s must set exactly one value kind", path)
 	}
 	return nil
-}
-
-func workflowValueConfigIsSet(value WorkflowValueConfig) bool {
-	switch {
-	case value.LiteralSet:
-		return true
-	case value.Object != nil:
-		return true
-	case value.Array != nil:
-		return true
-	case value.Template != nil:
-		return true
-	case strings.TrimSpace(value.RunInput) != "":
-		return true
-	case strings.TrimSpace(value.SignalPayload) != "":
-		return true
-	case value.StepOutput != nil:
-		return true
-	default:
-		return false
-	}
 }
 
 func validateAppCacheBindings(cfg *Config, name string, entry *ProviderEntry) error {

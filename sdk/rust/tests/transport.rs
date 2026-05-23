@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use generated::v1::integration_provider_client::AppProviderClient;
+use generated::v1::app_provider_client::AppProviderClient;
 use generated::v1::{
     AccessContext, AgentToolRef, CredentialContext, ExecuteRequest, ExternalIdentityContext,
     GetSessionCatalogRequest, HostContext, HttpSubjectRequest, PostConnectCredential,
@@ -344,7 +344,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     tool_ref_plugin: request
                         .tool_refs
                         .first()
-                        .map(|ref_| ref_.app.as_str())
+                        .map(|ref_| ref_.plugin.as_str())
                         .unwrap_or_default()
                         .to_string(),
                     tool_ref_operation: request
@@ -498,7 +498,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     public_base_url: "https://gestalt.example.test".to_string(),
                 }),
                 tool_refs: vec![AgentToolRef {
-                    plugin: "github".to_string(),
+                    app: "github".to_string(),
                     operation: "bot.getPullRequest".to_string(),
                     run_as: Some(SubjectContext {
                         id: "service_account:github-review".to_string(),

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use generated::v1::integration_provider_client::AppProviderClient;
+use generated::v1::app_provider_client::AppProviderClient;
 use generated::v1::{
     CredentialContext, ExecuteRequest, RequestContext, StartProviderRequest, SubjectContext,
 };

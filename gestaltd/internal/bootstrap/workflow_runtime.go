@@ -8,7 +8,6 @@ import (
 	"maps"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +18,6 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -295,9 +293,9 @@ func (r *workflowRuntime) invokeWorkflowSteps(ctx context.Context, req coreworkf
 			skipped[stepID] = struct{}{}
 			continue
 		}
-		inputs, err := workflowEvaluateStepInputs(step.Inputs, req, result.Outputs)
+		inputs, err := workflowEvalContext(req, result.Outputs, nil, false).EvaluateStepInputs(step.Inputs)
 		if err != nil {
-			return workflowFailedStepResponse(result, stepID, "invalid_input", err.Error())
+			return workflowFailedStepResponse(result, stepID, "invalid_input", workflowEvalError(err).Error())
 		}
 		stepCtx := ctx
 		cancelStep := func() {}
@@ -356,9 +354,10 @@ func (r *workflowRuntime) invokeWorkflowAppStep(ctx context.Context, req corewor
 	if appName == "" || operation == "" {
 		return nil, fmt.Errorf("%w: workflow %s app name and operation are required", invocation.ErrInvalidInvocation, fieldName)
 	}
-	paramsValue, ok, err := workflowEvaluateValue(app.Input, req, outputs, inputs, true)
+	evalCtx := workflowEvalContext(req, outputs, inputs, true)
+	paramsValue, ok, err := evalCtx.EvaluateValue(app.Input)
 	if err != nil {
-		return nil, err
+		return nil, workflowEvalError(err)
 	}
 	if !ok {
 		return nil, fmt.Errorf("%w: workflow %s app input did not resolve", invocation.ErrInvalidInvocation, fieldName)
@@ -530,100 +529,50 @@ func workflowStepWhenMatches(when *coreworkflow.StepWhen, req coreworkflow.Invok
 			return false, "missing_dependency", nil
 		}
 	}
-	value, ok, err := workflowEvaluateValue(when.Value, req, outputs, nil, false)
+	evalCtx := workflowEvalContext(req, outputs, nil, false)
+	value, ok, err := evalCtx.EvaluateValue(when.Value)
 	if err != nil {
-		return false, "", err
+		return false, "", workflowEvalError(err)
 	}
 	if !ok {
 		return false, "", fmt.Errorf("%w: workflow step when value did not resolve", invocation.ErrInvalidInvocation)
 	}
-	if !jsonvalue.IsScalar(value) || !jsonvalue.IsScalar(when.Equals) {
+	if !coreworkflow.IsScalarJSON(value) || !coreworkflow.IsScalarJSON(when.Equals) {
 		return false, "", fmt.Errorf("%w: workflow step when values must be scalar JSON values", invocation.ErrInvalidInvocation)
 	}
-	if workflowAgentScalarEqual(value, when.Equals) {
+	if coreworkflow.ScalarEqual(value, when.Equals) {
 		return true, "", nil
 	}
 	return false, "when_false", nil
 }
 
-func workflowEvaluateStepInputs(values map[string]coreworkflow.Value, req coreworkflow.InvokeOperationRequest, outputs map[string]any) (map[string]any, error) {
-	if len(values) == 0 {
-		return nil, nil
+func workflowEvalContext(req coreworkflow.InvokeOperationRequest, outputs map[string]any, inputs map[string]any, allowInputs bool) coreworkflow.EvalContext {
+	return coreworkflow.EvalContext{
+		Request:     req,
+		Outputs:     outputs,
+		Inputs:      inputs,
+		AllowInputs: allowInputs,
 	}
-	out := make(map[string]any, len(values))
-	for key := range values {
-		resolved, ok, err := workflowEvaluateValue(values[key], req, outputs, nil, false)
-		if err != nil {
-			return nil, fmt.Errorf("inputs.%s: %w", key, err)
-		}
-		if !ok {
-			return nil, fmt.Errorf("%w: inputs.%s did not resolve", invocation.ErrInvalidInvocation, key)
-		}
-		out[key] = resolved
-	}
-	return out, nil
 }
 
-func workflowEvaluateValue(value coreworkflow.Value, req coreworkflow.InvokeOperationRequest, outputs map[string]any, inputs map[string]any, allowInputs bool) (any, bool, error) {
-	switch {
-	case value.LiteralSet:
-		return value.Literal, true, nil
-	case value.Object != nil:
-		out := make(map[string]any, len(value.Object))
-		for key := range value.Object {
-			resolved, ok, err := workflowEvaluateValue(value.Object[key], req, outputs, inputs, allowInputs)
-			if err != nil {
-				return nil, false, fmt.Errorf("%s: %w", key, err)
-			}
-			if !ok {
-				return nil, false, nil
-			}
-			out[key] = resolved
-		}
-		return out, true, nil
-	case value.Array != nil:
-		out := make([]any, 0, len(value.Array))
-		for i := range value.Array {
-			resolved, ok, err := workflowEvaluateValue(value.Array[i], req, outputs, inputs, allowInputs)
-			if err != nil {
-				return nil, false, fmt.Errorf("[%d]: %w", i, err)
-			}
-			if !ok {
-				return nil, false, nil
-			}
-			out = append(out, resolved)
-		}
-		return out, true, nil
-	case value.Template != nil:
-		rendered, err := workflowRenderTemplate(value.Template.Template, req, outputs, inputs, allowInputs)
-		return rendered, err == nil, err
-	case strings.TrimSpace(value.RunInput) != "":
-		return workflowMapPathValue(req.Input, value.RunInput)
-	case strings.TrimSpace(value.SignalPayload) != "":
-		signal := workflowLatestSignal(req.Signals)
-		if signal == nil {
-			return nil, false, nil
-		}
-		return workflowMapPathValue(signal.Payload, value.SignalPayload)
-	case value.StepOutput != nil:
-		stepID := strings.TrimSpace(value.StepOutput.StepID)
-		output, ok := outputs[stepID]
-		if !ok {
-			return nil, false, fmt.Errorf("%w: workflow step output references missing step %q", invocation.ErrInvalidInvocation, stepID)
-		}
-		return workflowPathValue(output, value.StepOutput.Path)
-	default:
-		return nil, true, nil
+func workflowEvalError(err error) error {
+	if err == nil {
+		return nil
 	}
+	if errors.Is(err, coreworkflow.ErrInvalidValue) {
+		return fmt.Errorf("%w: %v", invocation.ErrInvalidInvocation, err)
+	}
+	return err
 }
 
 func workflowAgentTurnMessages(agent *coreworkflow.AgentTurn, inputs map[string]any, req coreworkflow.InvokeOperationRequest, outputs map[string]any) ([]coreagent.Message, error) {
+	evalCtx := workflowEvalContext(req, outputs, inputs, true)
 	messages := make([]coreagent.Message, 0, len(agent.Messages)+1)
 	for i := range agent.Messages {
 		message := agent.Messages[i]
-		text, err := workflowRenderTemplate(message.Text.Template, req, outputs, inputs, true)
+		text, err := evalCtx.RenderTemplate(message.Text.Template)
 		if err != nil {
-			return nil, fmt.Errorf("messages[%d].text: %w", i, err)
+			return nil, fmt.Errorf("messages[%d].text: %w", i, workflowEvalError(err))
 		}
 		messages = append(messages, coreagent.Message{
 			Role:     message.Role,
@@ -632,79 +581,13 @@ func workflowAgentTurnMessages(agent *coreworkflow.AgentTurn, inputs map[string]
 		})
 	}
 	if agent.Prompt.Template != "" {
-		text, err := workflowRenderTemplate(agent.Prompt.Template, req, outputs, inputs, true)
+		text, err := evalCtx.RenderTemplate(agent.Prompt.Template)
 		if err != nil {
-			return nil, fmt.Errorf("prompt: %w", err)
+			return nil, fmt.Errorf("prompt: %w", workflowEvalError(err))
 		}
 		messages = append(messages, coreagent.Message{Role: "user", Text: text})
 	}
 	return messages, nil
-}
-
-func workflowRenderTemplate(template string, req coreworkflow.InvokeOperationRequest, outputs map[string]any, inputs map[string]any, allowInputs bool) (string, error) {
-	var b strings.Builder
-	for i := 0; i < len(template); {
-		if strings.HasPrefix(template[i:], "$${") {
-			b.WriteString("${")
-			i += 3
-			continue
-		}
-		if !strings.HasPrefix(template[i:], "${") {
-			b.WriteByte(template[i])
-			i++
-			continue
-		}
-		end := strings.IndexByte(template[i+2:], '}')
-		if end < 0 {
-			return "", fmt.Errorf("%w: unterminated template expression", invocation.ErrInvalidInvocation)
-		}
-		expr := strings.TrimSpace(template[i+2 : i+2+end])
-		value, ok, err := workflowTemplateExpressionValue(expr, req, outputs, inputs, allowInputs)
-		if err != nil {
-			return "", err
-		}
-		if !ok {
-			return "", fmt.Errorf("%w: template expression %q did not resolve", invocation.ErrInvalidInvocation, expr)
-		}
-		rendered, err := workflowTemplateRenderValue(value)
-		if err != nil {
-			return "", err
-		}
-		b.WriteString(rendered)
-		i += 2 + end + 1
-	}
-	return b.String(), nil
-}
-
-func workflowTemplateExpressionValue(expr string, req coreworkflow.InvokeOperationRequest, outputs map[string]any, inputs map[string]any, allowInputs bool) (any, bool, error) {
-	switch {
-	case strings.HasPrefix(expr, "inputs."):
-		if !allowInputs {
-			return nil, false, fmt.Errorf("%w: inputs references are not allowed here", invocation.ErrInvalidInvocation)
-		}
-		return workflowMapPathValue(inputs, strings.TrimPrefix(expr, "inputs."))
-	case strings.HasPrefix(expr, "runInput."):
-		return workflowMapPathValue(req.Input, strings.TrimPrefix(expr, "runInput."))
-	case strings.HasPrefix(expr, "signalPayload."):
-		signal := workflowLatestSignal(req.Signals)
-		if signal == nil {
-			return nil, false, nil
-		}
-		return workflowMapPathValue(signal.Payload, strings.TrimPrefix(expr, "signalPayload."))
-	default:
-		return nil, false, fmt.Errorf("%w: unsupported template expression %q", invocation.ErrInvalidInvocation, expr)
-	}
-}
-
-func workflowTemplateRenderValue(value any) (string, error) {
-	if text, ok := value.(string); ok {
-		return text, nil
-	}
-	body, err := json.Marshal(value)
-	if err != nil {
-		return "", err
-	}
-	return string(body), nil
 }
 
 func workflowStableJSON(value any) string {
@@ -719,7 +602,7 @@ func workflowStableJSON(value any) string {
 }
 
 func workflowStepInvocationScope(req coreworkflow.InvokeOperationRequest) string {
-	if signal := workflowLatestSignal(req.Signals); signal != nil {
+	if signal := coreworkflow.LatestSignal(req.Signals); signal != nil {
 		if signalID := strings.TrimSpace(signal.ID); signalID != "" {
 			return "signal-id:" + signalID
 		}
@@ -832,149 +715,6 @@ func workflowAgentTurnID(turn *coreagent.Turn) string {
 		return ""
 	}
 	return strings.TrimSpace(turn.ID)
-}
-
-func workflowAgentScalarEqual(left, right any) bool {
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	if leftString, ok := left.(string); ok {
-		rightString, ok := right.(string)
-		return ok && leftString == rightString
-	}
-	if leftBool, ok := left.(bool); ok {
-		rightBool, ok := right.(bool)
-		return ok && leftBool == rightBool
-	}
-	leftNumber, leftOK := workflowAgentNumber(left)
-	rightNumber, rightOK := workflowAgentNumber(right)
-	return leftOK && rightOK && leftNumber == rightNumber
-}
-
-func workflowAgentNumber(value any) (float64, bool) {
-	switch v := value.(type) {
-	case int:
-		return float64(v), true
-	case int8:
-		return float64(v), true
-	case int16:
-		return float64(v), true
-	case int32:
-		return float64(v), true
-	case int64:
-		return float64(v), true
-	case uint:
-		return float64(v), true
-	case uint8:
-		return float64(v), true
-	case uint16:
-		return float64(v), true
-	case uint32:
-		return float64(v), true
-	case uint64:
-		return float64(v), true
-	case float32:
-		return float64(v), true
-	case float64:
-		return v, true
-	case json.Number:
-		parsed, err := v.Float64()
-		return parsed, err == nil
-	default:
-		return 0, false
-	}
-}
-
-func workflowLatestSignal(signals []coreworkflow.Signal) *coreworkflow.Signal {
-	if len(signals) == 0 {
-		return nil
-	}
-	return &signals[len(signals)-1]
-}
-
-func workflowMapPathValue(values map[string]any, path string) (any, bool, error) {
-	if len(values) == 0 {
-		return nil, false, nil
-	}
-	return workflowPathValue(values, path)
-}
-
-func workflowPathValue(root any, path string) (any, bool, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return root, true, nil
-	}
-	segments, err := workflowPathSegments(path)
-	if err != nil {
-		return nil, false, err
-	}
-	current := root
-	for _, segment := range segments {
-		switch typed := current.(type) {
-		case map[string]any:
-			next, ok := typed[segment.key]
-			if !ok {
-				return nil, false, nil
-			}
-			current = next
-		case []any:
-			if !segment.indexSet || segment.index < 0 || segment.index >= len(typed) {
-				return nil, false, nil
-			}
-			current = typed[segment.index]
-		default:
-			return nil, false, nil
-		}
-	}
-	return current, true, nil
-}
-
-type workflowPathSegment struct {
-	key      string
-	index    int
-	indexSet bool
-}
-
-func workflowPathSegments(path string) ([]workflowPathSegment, error) {
-	var out []workflowPathSegment
-	for i := 0; i < len(path); {
-		switch path[i] {
-		case '.':
-			i++
-			continue
-		case '[':
-			end := strings.IndexByte(path[i:], ']')
-			if end < 0 {
-				return nil, fmt.Errorf("%w: invalid workflow path %q", invocation.ErrInvalidInvocation, path)
-			}
-			token := strings.TrimSpace(path[i+1 : i+end])
-			if strings.HasPrefix(token, "'") || strings.HasPrefix(token, "\"") {
-				unquoted, err := strconv.Unquote(token)
-				if err != nil {
-					return nil, fmt.Errorf("%w: invalid workflow path %q", invocation.ErrInvalidInvocation, path)
-				}
-				out = append(out, workflowPathSegment{key: unquoted})
-			} else {
-				index, err := strconv.Atoi(token)
-				if err != nil {
-					return nil, fmt.Errorf("%w: invalid workflow path %q", invocation.ErrInvalidInvocation, path)
-				}
-				out = append(out, workflowPathSegment{index: index, indexSet: true})
-			}
-			i += end + 1
-		default:
-			start := i
-			for i < len(path) && path[i] != '.' && path[i] != '[' {
-				i++
-			}
-			key := strings.TrimSpace(path[start:i])
-			if key == "" {
-				return nil, fmt.Errorf("%w: invalid workflow path %q", invocation.ErrInvalidInvocation, path)
-			}
-			out = append(out, workflowPathSegment{key: key})
-		}
-	}
-	return out, nil
 }
 
 func waitForWorkflowAgentTurn(ctx context.Context, agentManager agentmanager.Service, p *principal.Principal, turn *coreagent.Turn) (*coreagent.Turn, error) {

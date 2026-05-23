@@ -18,7 +18,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
@@ -2225,7 +2224,7 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 		if step.TimeoutSeconds < 0 {
 			return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d].timeout_seconds must not be negative", i)
 		}
-		if err := validateWorkflowStepValueMapRefs(fmt.Sprintf("workflow target.steps[%d].inputs", i), step.Inputs, seen); err != nil {
+		if err := coreworkflow.ValidateValueMapRefs(fmt.Sprintf("workflow target.steps[%d].inputs", i), step.Inputs, seen); err != nil {
 			return coreworkflow.Target{}, err
 		}
 		switch {
@@ -2236,7 +2235,7 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 			if err != nil {
 				return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d].app: %w", i, err)
 			}
-			if err := validateWorkflowStepValueRefs(fmt.Sprintf("workflow target.steps[%d].app.input", i), app.Input, seen); err != nil {
+			if err := coreworkflow.ValidateValueRefs(fmt.Sprintf("workflow target.steps[%d].app.input", i), app.Input, seen); err != nil {
 				return coreworkflow.Target{}, err
 			}
 			step.App = &app
@@ -2250,7 +2249,7 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 			return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d] must set app or agent", i)
 		}
 		if step.When != nil {
-			if err := validateWorkflowStepWhen(i, step.When, seen); err != nil {
+			if err := coreworkflow.ValidateStepWhen(fmt.Sprintf("workflow target.steps[%d].when", i), step.When, seen); err != nil {
 				return coreworkflow.Target{}, err
 			}
 		}
@@ -2258,85 +2257,6 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 		out.Steps = append(out.Steps, step)
 	}
 	return out, nil
-}
-
-func validateWorkflowStepWhen(index int, when *coreworkflow.StepWhen, previousSteps map[string]struct{}) error {
-	if when == nil {
-		return nil
-	}
-	if !workflowValueIsSet(when.Value) {
-		return fmt.Errorf("workflow target.steps[%d].when.value is required", index)
-	}
-	if err := validateWorkflowStepWhenValue(index, when.Value, previousSteps); err != nil {
-		return err
-	}
-	if !when.EqualsSet {
-		return fmt.Errorf("workflow target.steps[%d].when.equals is required", index)
-	}
-	if !jsonvalue.IsScalar(when.Equals) {
-		return fmt.Errorf("workflow target.steps[%d].when.equals must be a scalar JSON value", index)
-	}
-	return nil
-}
-
-func workflowValueIsSet(value coreworkflow.Value) bool {
-	switch {
-	case value.LiteralSet:
-		return true
-	case value.Object != nil:
-		return true
-	case value.Array != nil:
-		return true
-	case value.Template != nil:
-		return true
-	case strings.TrimSpace(value.RunInput) != "":
-		return true
-	case strings.TrimSpace(value.SignalPayload) != "":
-		return true
-	case value.StepOutput != nil:
-		return true
-	default:
-		return false
-	}
-}
-
-func validateWorkflowStepValueMapRefs(path string, values map[string]coreworkflow.Value, previousSteps map[string]struct{}) error {
-	for key := range values {
-		if err := validateWorkflowStepValueRefs(path+"."+key, values[key], previousSteps); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateWorkflowStepValueRefs(path string, value coreworkflow.Value, previousSteps map[string]struct{}) error {
-	if value.StepOutput != nil {
-		stepID := strings.TrimSpace(value.StepOutput.StepID)
-		if stepID == "" {
-			return fmt.Errorf("%s.step_output.step_id is required", path)
-		}
-		if _, ok := previousSteps[stepID]; !ok {
-			return fmt.Errorf("%s.step_output.step_id %q must reference an earlier step", path, stepID)
-		}
-		if strings.TrimSpace(value.StepOutput.Path) == "" {
-			return fmt.Errorf("%s.step_output.path is required", path)
-		}
-	}
-	for key := range value.Object {
-		if err := validateWorkflowStepValueRefs(path+"."+key, value.Object[key], previousSteps); err != nil {
-			return err
-		}
-	}
-	for i := range value.Array {
-		if err := validateWorkflowStepValueRefs(fmt.Sprintf("%s[%d]", path, i), value.Array[i], previousSteps); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateWorkflowStepWhenValue(index int, value coreworkflow.Value, previousSteps map[string]struct{}) error {
-	return validateWorkflowStepValueRefs(fmt.Sprintf("workflow target.steps[%d].when.value", index), value, previousSteps)
 }
 
 func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Principal, target coreworkflow.AppCall, callerAppName string) (coreworkflow.AppCall, error) {

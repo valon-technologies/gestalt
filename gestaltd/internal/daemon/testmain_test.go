@@ -19,7 +19,7 @@ import (
 
 var (
 	gestaltdBin            string
-	pluginBin              string
+	appBin                 string
 	indexedDBBin           string
 	externalCredentialsBin string
 	gestaltCLIBin          string
@@ -33,10 +33,10 @@ func TestMain(m *testing.M) {
 	}
 
 	gestaltdBin = filepath.Join(tmpDir, "gestaltd")
-	pluginBin = filepath.Join(tmpDir, "provider")
+	appBin = filepath.Join(tmpDir, "provider")
 	indexedDBBin = filepath.Join(tmpDir, "indexeddb-provider")
 	externalCredentialsBin = filepath.Join(tmpDir, "external-credentials-provider")
-	indexedDBSrcDir := filepath.Join(filepath.Dir(testutil.MustExampleProviderPluginPath()), "provider-go-indexeddb")
+	indexedDBSrcDir := filepath.Join(filepath.Dir(testutil.MustExampleProviderAppPath()), "provider-go-indexeddb")
 	externalCredentialsSrcDir, err := writeExternalCredentialsProviderFixture(tmpDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "write external credentials fixture: %v\n", err)
@@ -53,7 +53,7 @@ func TestMain(m *testing.M) {
 	}()
 	go func() {
 		defer wg.Done()
-		errs[1] = buildGoFixtureBinary(testutil.MustExampleProviderPluginPath(), pluginBin, "github.com/valon-technologies/gestalt/testdata/provider-go", `gestalt.ServeProvider(ctx, providerpkg.New(), providerpkg.Router.WithName("provider-go"))`)
+		errs[1] = buildGoFixtureBinary(testutil.MustExampleProviderAppPath(), appBin, "github.com/valon-technologies/gestalt/testdata/provider-go", `gestalt.ServeProvider(ctx, providerpkg.New(), providerpkg.Router.WithName("provider-go"))`)
 	}()
 	go func() {
 		defer wg.Done()

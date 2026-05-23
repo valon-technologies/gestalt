@@ -3299,7 +3299,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.steps[0].when.value.stepOutput.stepId "diagnosis" must reference an earlier step`,
+				want: `workflows.schedules.nightly.target.steps[0].when.value.step_output.step_id "diagnosis" must reference an earlier step`,
 			},
 			{
 				name: "step inputs reject future reference",
@@ -3336,7 +3336,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.steps[0].inputs.source.stepOutput.stepId "pr_fix" must reference an earlier step`,
+				want: `workflows.schedules.nightly.target.steps[0].inputs.source.step_output.step_id "pr_fix" must reference an earlier step`,
 			},
 			{
 				name: "agent step when requires equals",

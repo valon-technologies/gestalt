@@ -309,7 +309,7 @@ async fn app_runtime_provider_transport_uses_native_trait_types() {
         .expect("remove workspace");
 
     let hosted = client
-        .start_plugin(ProtoStartHostedAppRequest {
+        .start_app(ProtoStartHostedAppRequest {
             session_id: "session-1".to_string(),
             app_name: "github".to_string(),
             command: "/bin/plugin".to_string(),
@@ -321,7 +321,7 @@ async fn app_runtime_provider_transport_uses_native_trait_types() {
             workdir: "/runtime/providers/github".to_string(),
         })
         .await
-        .expect("start plugin")
+        .expect("start app")
         .into_inner();
     assert_eq!(hosted.id, "hosted-plugin-1");
     assert_eq!(hosted.dial_target, "unix:///tmp/app.sock");
