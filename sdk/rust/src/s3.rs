@@ -374,11 +374,13 @@ pub type ObjectAccessURL = PresignResult;
 #[async_trait]
 /// Fakeable S3-compatible client contract.
 pub trait S3Api: Send {
+    type Object: S3ObjectApi;
+
     /// Returns a convenience handle for one object key.
-    fn object(&self, bucket: &str, key: &str) -> S3Object;
+    fn object(&self, bucket: &str, key: &str) -> Self::Object;
 
     /// Returns a convenience handle for one object version.
-    fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> S3Object;
+    fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> Self::Object;
 
     /// Fetches metadata for one object.
     async fn head_object(
@@ -1080,6 +1082,8 @@ impl S3 {
 
 #[async_trait]
 impl S3Api for S3 {
+    type Object = S3Object;
+
     fn object(&self, bucket: &str, key: &str) -> S3Object {
         S3::object(self, bucket, key)
     }

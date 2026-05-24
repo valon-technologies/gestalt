@@ -98,6 +98,7 @@ export interface OpenCursorOptions {
  * Fakeable client contract for IndexedDB-compatible storage.
  */
 export interface IndexedDB {
+  close(): void;
   createObjectStore(
     name: string,
     schema?: ObjectStoreSchema,
@@ -140,6 +141,7 @@ export interface Index {
   getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]>;
   count(keyRange?: KeyRange, ...values: unknown[]): Promise<number>;
   delete(...values: unknown[]): Promise<number>;
+  deleteRange(keyRange: KeyRange, ...values: unknown[]): Promise<number>;
   openCursor(
     options?: OpenCursorOptions,
     ...values: unknown[]
@@ -186,6 +188,7 @@ export interface TransactionIndex {
   getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]>;
   count(keyRange?: KeyRange, ...values: unknown[]): Promise<number>;
   delete(...values: unknown[]): Promise<number>;
+  deleteRange(keyRange: KeyRange, ...values: unknown[]): Promise<number>;
 }
 
 /**
@@ -910,6 +913,12 @@ class HostIndexedDB implements IndexedDB {
   }
 
   /**
+   * Releases client resources. The current Connect transport has no explicit
+   * shutdown hook, so this is a lifecycle-compatible no-op.
+   */
+  close(): void {}
+
+  /**
    * Creates an object store.
    */
   async createObjectStore(
@@ -1156,7 +1165,7 @@ class HostTransactionObjectStore implements TransactionObjectStore {
    * @internal
    */
   constructor(
-    private tx: Transaction,
+    private tx: HostTransaction,
     private store: string,
   ) {}
 
@@ -1291,7 +1300,7 @@ class HostTransactionIndex implements TransactionIndex {
    * @internal
    */
   constructor(
-    private tx: Transaction,
+    private tx: HostTransaction,
     private store: string,
     private indexName: string,
   ) {}
@@ -1361,6 +1370,17 @@ class HostTransactionIndex implements TransactionIndex {
     const resp = await this.tx.sendOperation({
       case: "indexDelete" as const,
       value: this.indexRequest(values),
+    });
+    return Number(resp.result.value.deleted);
+  }
+
+  /**
+   * Deletes indexed records inside the transaction that match a key range.
+   */
+  async deleteRange(keyRange: KeyRange, ...values: unknown[]): Promise<number> {
+    const resp = await this.tx.sendOperation({
+      case: "indexDelete" as const,
+      value: this.indexRequest(values, keyRange),
     });
     return Number(resp.result.value.deleted);
   }
@@ -1592,6 +1612,19 @@ class HostIndex implements Index {
       store: this.store,
       index: this.indexName,
       values: values.map(toProtoTypedValue),
+    });
+    return Number(resp.deleted);
+  }
+
+  /**
+   * Deletes records matching the supplied index values and optional range.
+   */
+  async deleteRange(keyRange: KeyRange, ...values: unknown[]): Promise<number> {
+    const resp = await this.client.indexDelete({
+      store: this.store,
+      index: this.indexName,
+      values: values.map(toProtoTypedValue),
+      range: toProtoKeyRange(keyRange),
     });
     return Number(resp.deleted);
   }

@@ -158,18 +158,21 @@ pub struct TransactionOptions {
 #[async_trait]
 /// Fakeable client contract for IndexedDB-compatible storage.
 pub trait IndexedDBApi: Send {
+    type ObjectStore: ObjectStoreApi;
+    type Transaction: TransactionApi;
+
     /// Creates a named object store and returns a typed handle for it.
     async fn create_object_store(
         &mut self,
         name: &str,
         schema: ObjectStoreSchema,
-    ) -> Result<ObjectStore, IndexedDBError>;
+    ) -> Result<Self::ObjectStore, IndexedDBError>;
 
     /// Deletes a named object store.
     async fn delete_object_store(&mut self, name: &str) -> Result<(), IndexedDBError>;
 
     /// Returns a typed handle for one object store.
-    fn object_store(&self, name: &str) -> ObjectStore;
+    fn object_store(&self, name: &str) -> Self::ObjectStore;
 
     /// Opens an explicit transaction over a fixed object-store scope.
     async fn transaction(
@@ -177,12 +180,15 @@ pub trait IndexedDBApi: Send {
         stores: &[&str],
         mode: TransactionMode,
         options: TransactionOptions,
-    ) -> Result<Transaction, IndexedDBError>;
+    ) -> Result<Self::Transaction, IndexedDBError>;
 }
 
 #[async_trait]
 /// Fakeable IndexedDB object-store contract.
 pub trait ObjectStoreApi: Send {
+    type Index: IndexApi;
+    type Cursor: CursorApi;
+
     /// Loads one record by primary key.
     async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError>;
 
@@ -217,26 +223,28 @@ pub trait ObjectStoreApi: Send {
     async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError>;
 
     /// Returns a typed handle for one secondary index.
-    fn index(&self, name: &str) -> Index;
+    fn index(&self, name: &str) -> Self::Index;
 
     /// Opens a full-value cursor over the object store.
     async fn open_cursor(
         &mut self,
         range: Option<KeyRange>,
         direction: CursorDirection,
-    ) -> Result<Cursor, IndexedDBError>;
+    ) -> Result<Self::Cursor, IndexedDBError>;
 
     /// Opens a key-only cursor over the object store.
     async fn open_key_cursor(
         &mut self,
         range: Option<KeyRange>,
         direction: CursorDirection,
-    ) -> Result<Cursor, IndexedDBError>;
+    ) -> Result<Self::Cursor, IndexedDBError>;
 }
 
 #[async_trait]
 /// Fakeable IndexedDB secondary-index contract.
 pub trait IndexApi: Send {
+    type Cursor: CursorApi;
+
     /// Loads the first row that matches values.
     async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError>;
 
@@ -267,13 +275,20 @@ pub trait IndexApi: Send {
     /// Deletes rows that match values and returns the delete count.
     async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError>;
 
+    /// Deletes rows that match values and range and returns the delete count.
+    async fn delete_range(
+        &mut self,
+        values: &[serde_json::Value],
+        range: KeyRange,
+    ) -> Result<i64, IndexedDBError>;
+
     /// Opens a full-value cursor over the secondary index.
     async fn open_cursor(
         &mut self,
         values: &[serde_json::Value],
         range: Option<KeyRange>,
         direction: CursorDirection,
-    ) -> Result<Cursor, IndexedDBError>;
+    ) -> Result<Self::Cursor, IndexedDBError>;
 
     /// Opens a key-only cursor over the secondary index.
     async fn open_key_cursor(
@@ -281,14 +296,18 @@ pub trait IndexApi: Send {
         values: &[serde_json::Value],
         range: Option<KeyRange>,
         direction: CursorDirection,
-    ) -> Result<Cursor, IndexedDBError>;
+    ) -> Result<Self::Cursor, IndexedDBError>;
 }
 
 #[async_trait]
 /// Fakeable explicit IndexedDB transaction contract.
 pub trait TransactionApi: Send {
+    type ObjectStore<'a>: TransactionObjectStoreApi + 'a
+    where
+        Self: 'a;
+
     /// Returns a transaction-scoped object store.
-    fn object_store<'a>(&'a mut self, name: &str) -> TransactionObjectStore<'a>;
+    fn object_store<'a>(&'a mut self, name: &str) -> Self::ObjectStore<'a>;
 
     /// Commits the transaction.
     async fn commit(&mut self) -> Result<(), IndexedDBError>;
@@ -300,6 +319,10 @@ pub trait TransactionApi: Send {
 #[async_trait]
 /// Fakeable transaction-scoped object-store contract.
 pub trait TransactionObjectStoreApi: Send {
+    type Index<'a>: TransactionIndexApi + 'a
+    where
+        Self: 'a;
+
     /// Loads one record by primary key inside the transaction.
     async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError>;
 
@@ -334,7 +357,7 @@ pub trait TransactionObjectStoreApi: Send {
     async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError>;
 
     /// Returns a transaction-scoped secondary index.
-    fn index<'a>(&'a mut self, name: &str) -> TransactionIndex<'a>;
+    fn index<'a>(&'a mut self, name: &str) -> Self::Index<'a>;
 }
 
 #[async_trait]
@@ -369,6 +392,13 @@ pub trait TransactionIndexApi: Send {
 
     /// Deletes rows that match values inside the transaction.
     async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError>;
+
+    /// Deletes rows that match values and range inside the transaction.
+    async fn delete_range(
+        &mut self,
+        values: &[serde_json::Value],
+        range: KeyRange,
+    ) -> Result<i64, IndexedDBError>;
 }
 
 #[async_trait]
@@ -1167,7 +1197,7 @@ impl IndexedDB {
         &mut self,
         name: &str,
         schema: ObjectStoreSchema,
-    ) -> Result<(), IndexedDBError> {
+    ) -> Result<ObjectStore, IndexedDBError> {
         let indexes = schema
             .indexes
             .into_iter()
@@ -1187,7 +1217,7 @@ impl IndexedDB {
             })
             .await
             .map_err(map_status)?;
-        Ok(())
+        Ok(self.object_store(name))
     }
 
     /// Deletes a named object store.
@@ -1710,6 +1740,26 @@ impl TransactionIndex<'_> {
         }
     }
 
+    /// Deletes rows that match values and range inside the transaction.
+    pub async fn delete_range(
+        &mut self,
+        values: &[serde_json::Value],
+        range: KeyRange,
+    ) -> Result<i64, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::IndexDelete(
+                self.index_request(values, Some(range)),
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Delete(deleted)) => {
+                Ok(deleted.deleted)
+            }
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
     fn index_request(
         &self,
         values: &[serde_json::Value],
@@ -2088,6 +2138,25 @@ impl Index {
         Ok(resp.into_inner().deleted)
     }
 
+    /// Deletes rows that match values and range and returns the delete count.
+    pub async fn delete_range(
+        &mut self,
+        values: &[serde_json::Value],
+        range: KeyRange,
+    ) -> Result<i64, IndexedDBError> {
+        let resp = self
+            .client
+            .index_delete(pb::IndexQueryRequest {
+                store: self.store.clone(),
+                index: self.index.clone(),
+                values: values.iter().map(json_to_typed_value).collect(),
+                range: Some(key_range_to_pb(range)),
+            })
+            .await
+            .map_err(map_status)?;
+        Ok(resp.into_inner().deleted)
+    }
+
     /// Opens a full-value cursor over the secondary index.
     pub async fn open_cursor(
         &mut self,
@@ -2127,13 +2196,15 @@ impl Index {
 
 #[async_trait]
 impl IndexedDBApi for IndexedDB {
+    type ObjectStore = ObjectStore;
+    type Transaction = Transaction;
+
     async fn create_object_store(
         &mut self,
         name: &str,
         schema: ObjectStoreSchema,
     ) -> Result<ObjectStore, IndexedDBError> {
-        IndexedDB::create_object_store(self, name, schema).await?;
-        Ok(IndexedDB::object_store(self, name))
+        IndexedDB::create_object_store(self, name, schema).await
     }
 
     async fn delete_object_store(&mut self, name: &str) -> Result<(), IndexedDBError> {
@@ -2156,6 +2227,9 @@ impl IndexedDBApi for IndexedDB {
 
 #[async_trait]
 impl ObjectStoreApi for ObjectStore {
+    type Index = Index;
+    type Cursor = Cursor;
+
     async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError> {
         ObjectStore::get(self, id).await
     }
@@ -2222,6 +2296,8 @@ impl ObjectStoreApi for ObjectStore {
 
 #[async_trait]
 impl IndexApi for Index {
+    type Cursor = Cursor;
+
     async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
         Index::get(self, values).await
     }
@@ -2258,6 +2334,14 @@ impl IndexApi for Index {
         Index::delete(self, values).await
     }
 
+    async fn delete_range(
+        &mut self,
+        values: &[serde_json::Value],
+        range: KeyRange,
+    ) -> Result<i64, IndexedDBError> {
+        Index::delete_range(self, values, range).await
+    }
+
     async fn open_cursor(
         &mut self,
         values: &[serde_json::Value],
@@ -2279,6 +2363,8 @@ impl IndexApi for Index {
 
 #[async_trait]
 impl TransactionApi for Transaction {
+    type ObjectStore<'a> = TransactionObjectStore<'a>;
+
     fn object_store<'a>(&'a mut self, name: &str) -> TransactionObjectStore<'a> {
         Transaction::object_store(self, name)
     }
@@ -2293,7 +2379,12 @@ impl TransactionApi for Transaction {
 }
 
 #[async_trait]
-impl TransactionObjectStoreApi for TransactionObjectStore<'_> {
+impl<'tx> TransactionObjectStoreApi for TransactionObjectStore<'tx> {
+    type Index<'a>
+        = TransactionIndex<'a>
+    where
+        Self: 'a;
+
     async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError> {
         TransactionObjectStore::get(self, id).await
     }
@@ -2378,6 +2469,14 @@ impl TransactionIndexApi for TransactionIndex<'_> {
 
     async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError> {
         TransactionIndex::delete(self, values).await
+    }
+
+    async fn delete_range(
+        &mut self,
+        values: &[serde_json::Value],
+        range: KeyRange,
+    ) -> Result<i64, IndexedDBError> {
+        TransactionIndex::delete_range(self, values, range).await
     }
 }
 

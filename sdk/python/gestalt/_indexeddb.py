@@ -185,6 +185,9 @@ class IndexProtocol(Protocol):
     def delete(self, *values: Any) -> int:
         """Delete records matching the indexed values."""
 
+    def delete_range(self, *values: Any, key_range: KeyRange) -> int:
+        """Delete records matching the indexed values and key range."""
+
     def open_cursor(
         self,
         *values: Any,
@@ -276,6 +279,9 @@ class TransactionIndexProtocol(Protocol):
 
     def delete(self, *values: Any) -> int:
         """Delete records matching the indexed values."""
+
+    def delete_range(self, *values: Any, key_range: KeyRange) -> int:
+        """Delete records matching the indexed values and key range."""
 
 
 class CursorProtocol(Protocol):
@@ -820,6 +826,12 @@ class Index:
         resp = _grpc_call(self._stub.IndexDelete, self._req(values))
         return resp.deleted
 
+    def delete_range(self, *values: Any, key_range: KeyRange) -> int:
+        """Delete records matching the indexed values and key range."""
+
+        resp = _grpc_call(self._stub.IndexDelete, self._req(values, key_range))
+        return resp.deleted
+
     def open_cursor(
         self,
         *values: Any,
@@ -1136,6 +1148,12 @@ class TransactionIndex:
     def delete(self, *values: Any) -> int:
         resp = self._tx._send_operation(
             pb.TransactionOperation(index_delete=self._req(values))
+        )
+        return int(resp.delete.deleted)
+
+    def delete_range(self, *values: Any, key_range: KeyRange) -> int:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(index_delete=self._req(values, key_range))
         )
         return int(resp.delete.deleted)
 

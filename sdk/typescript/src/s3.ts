@@ -219,6 +219,7 @@ export interface ReadResult {
  * Fakeable S3-compatible client contract.
  */
 export interface S3 {
+  close(): void;
   object(bucket: string, key: string): S3Object;
   objectVersion(bucket: string, key: string, versionId: string): S3Object;
   headObject(ref: ObjectRef): Promise<ObjectMeta>;
@@ -596,6 +597,9 @@ class HostS3 implements S3 {
     this.transport = transport;
     this.client = createClient(S3Service, transport);
   }
+
+  /** Releases client resources. */
+  close(): void {}
 
   /** Returns a convenience helper for the latest version of an object. */
   object(bucket: string, key: string): S3Object {
