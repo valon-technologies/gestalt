@@ -112,6 +112,7 @@ _AGENT_PROTOCOL_EXPORTS = (
 
 _AGENT_HELPER_EXPORTS = (
     "AgentManagerCancelTurn",
+    "AgentManagerClientProtocol",
     "AgentManagerCreateSession",
     "AgentManagerCreateTurn",
     "AgentManagerGetSession",
@@ -134,6 +135,7 @@ _AGENT_HELPER_EXPORTS = (
     "AgentToolRef",
     "AgentWorkspaceGitCheckout",
     "AgentWorkspace",
+    "AgentHostClientProtocol",
     "agent_actor_from_dict",
     "agent_actor_to_dict",
     "agent_message_from_dict",
@@ -231,6 +233,8 @@ _WORKFLOW_AUTHORED_EXPORTS = (
     "WorkflowEventMatch",
     "WorkflowEventTriggerInvocation",
     "WorkflowExecutionReference",
+    "WorkflowHostClientProtocol",
+    "WorkflowManagerClientProtocol",
     "WorkflowManagerCreateDefinition",
     "WorkflowManagerCreateEventTrigger",
     "WorkflowManagerCreateSchedule",

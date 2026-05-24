@@ -13,6 +13,18 @@ type AgentHostClient struct {
 	client proto.AgentHostClient
 }
 
+// AgentHostClientContract is the fakeable client contract for host tool calls
+// made by agent providers.
+type AgentHostClientContract interface {
+	Close() error
+	ExecuteTool(context.Context, AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error)
+	ExecuteToolForTurn(context.Context, AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error)
+	ListTools(context.Context, AgentHostListToolsInput) (*ListAgentToolsResponse, error)
+	ListToolsForTurn(context.Context, AgentHostListToolsInput) (*ListAgentToolsResponse, error)
+	ResolveConnection(context.Context, AgentHostResolveConnectionInput) (*ResolvedAgentConnection, error)
+	ResolveConnectionForTurn(context.Context, AgentHostResolveConnectionInput) (*ResolvedAgentConnection, error)
+}
+
 // AgentHostListToolsInput contains plain fields for listing tools available to
 // one agent turn.
 type AgentHostListToolsInput struct {

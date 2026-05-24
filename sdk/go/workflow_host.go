@@ -12,6 +12,13 @@ type WorkflowHostClient struct {
 	client proto.WorkflowHostClient
 }
 
+// WorkflowHostClientContract is the fakeable client contract for invoking
+// workflow operations through the host service.
+type WorkflowHostClientContract interface {
+	Close() error
+	InvokeOperation(context.Context, InvokeWorkflowOperationInput) (*InvokeWorkflowOperationResponse, error)
+}
+
 var sharedWorkflowHostTransport sharedManagerTransport[proto.WorkflowHostClient]
 
 // InvokeWorkflowOperationInput requests invoking a workflow operation through

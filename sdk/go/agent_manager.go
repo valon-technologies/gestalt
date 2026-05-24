@@ -15,6 +15,23 @@ type AgentManagerClient struct {
 	invocationToken string
 }
 
+// AgentManagerClientContract is the fakeable client contract for managing
+// agent sessions, turns, events, and interactions.
+type AgentManagerClientContract interface {
+	Close() error
+	CreateSession(context.Context, AgentManagerCreateSession) (*AgentSession, error)
+	GetSession(context.Context, AgentManagerGetSession) (*AgentSession, error)
+	ListSessions(context.Context, AgentManagerListSessions) (*ListAgentManagerSessionsResponse, error)
+	UpdateSession(context.Context, AgentManagerUpdateSession) (*AgentSession, error)
+	CreateTurn(context.Context, AgentManagerCreateTurn) (*AgentTurn, error)
+	GetTurn(context.Context, AgentManagerGetTurn) (*AgentTurn, error)
+	ListTurns(context.Context, AgentManagerListTurns) (*ListAgentManagerTurnsResponse, error)
+	CancelTurn(context.Context, AgentManagerCancelTurn) (*AgentTurn, error)
+	ListTurnEvents(context.Context, AgentManagerListTurnEvents) (*ListAgentManagerTurnEventsResponse, error)
+	ListInteractions(context.Context, AgentManagerListInteractions) (*ListAgentManagerInteractionsResponse, error)
+	ResolveInteraction(context.Context, AgentManagerResolveInteraction) (*AgentInteraction, error)
+}
+
 var sharedAgentManagerTransport sharedManagerTransport[proto.AgentProviderClient]
 
 // AgentManager returns a client that attaches invocationToken to every request.

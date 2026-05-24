@@ -537,6 +537,13 @@ export interface InvokeWorkflowOperationResponse {
   body: string;
 }
 
+/** Fakeable client contract for workflow host calls. */
+export interface WorkflowHostClientLike {
+  invokeOperation(
+    input: InvokeWorkflowOperationInput,
+  ): Promise<InvokeWorkflowOperationResponse>;
+}
+
 export interface WorkflowManagerSchedule {
   providerName?: string | undefined;
   schedule?: BoundWorkflowSchedule | undefined;
@@ -1648,7 +1655,7 @@ export function isWorkflowProvider(value: unknown): value is WorkflowProvider {
 }
 
 /** Client for invoking operations from workflow provider code. */
-export class WorkflowHost {
+export class WorkflowHost implements WorkflowHostClientLike {
   private readonly client: Client<typeof WorkflowHostService>;
 
   constructor() {

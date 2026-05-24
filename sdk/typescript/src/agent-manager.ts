@@ -142,13 +142,32 @@ export interface AgentManagerResolveInteraction {
   resolution?: JsonObjectInput | undefined;
 }
 
+/** Fakeable client contract for managing agent sessions and turns. */
+export interface AgentManagerClientLike {
+  createSession(request: AgentManagerCreateSession): Promise<AgentSession>;
+  getSession(request: AgentManagerGetSession): Promise<AgentSession>;
+  listSessions(request?: AgentManagerListSessions): Promise<AgentSession[]>;
+  updateSession(request: AgentManagerUpdateSession): Promise<AgentSession>;
+  createTurn(request: AgentManagerCreateTurn): Promise<AgentTurn>;
+  getTurn(request: AgentManagerGetTurn): Promise<AgentTurn>;
+  listTurns(request: AgentManagerListTurns): Promise<AgentTurn[]>;
+  cancelTurn(request: AgentManagerCancelTurn): Promise<AgentTurn>;
+  listTurnEvents(request: AgentManagerListTurnEvents): Promise<AgentTurnEvent[]>;
+  listInteractions(
+    request: AgentManagerListInteractions,
+  ): Promise<AgentInteraction[]>;
+  resolveInteraction(
+    request: AgentManagerResolveInteraction,
+  ): Promise<AgentInteraction>;
+}
+
 /**
  * Client for managing agent sessions, turns, events, and interactions.
  *
  * The constructor accepts either a Gestalt request or an invocation token. Each
  * manager call forwards that token to the agent-provider facade.
  */
-export class AgentManager {
+export class AgentManager implements AgentManagerClientLike {
   private readonly client: Client<typeof AgentProviderService>;
   private readonly invocationToken: string;
 

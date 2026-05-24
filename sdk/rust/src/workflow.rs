@@ -2254,6 +2254,15 @@ pub enum WorkflowHostError {
     Env(String),
 }
 
+#[async_trait]
+/// Fakeable client contract for workflow host calls.
+pub trait WorkflowHostClient: Send {
+    async fn invoke_operation(
+        &mut self,
+        input: InvokeWorkflowOperationInput,
+    ) -> std::result::Result<InvokeWorkflowOperationResponse, WorkflowHostError>;
+}
+
 /// Client for invoking operations from workflow provider code.
 pub struct WorkflowHost {
     client: ProtoWorkflowHostClient<WorkflowHostTransport>,
@@ -2295,6 +2304,16 @@ impl WorkflowHost {
         let request = invoke_workflow_operation_request_from_input(input)?;
         let response = self.client.invoke_operation(request).await?.into_inner();
         Ok(invoke_workflow_operation_response_from_proto(response))
+    }
+}
+
+#[async_trait]
+impl WorkflowHostClient for WorkflowHost {
+    async fn invoke_operation(
+        &mut self,
+        input: InvokeWorkflowOperationInput,
+    ) -> std::result::Result<InvokeWorkflowOperationResponse, WorkflowHostError> {
+        WorkflowHost::invoke_operation(self, input).await
     }
 }
 

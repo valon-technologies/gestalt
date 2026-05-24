@@ -16,6 +16,32 @@ type WorkflowManagerClient struct {
 	idempotencyKey  string
 }
 
+// WorkflowManagerClientContract is the fakeable client contract for starting
+// workflow runs and managing definitions, schedules, and event triggers.
+type WorkflowManagerClientContract interface {
+	Close() error
+	StartRun(context.Context, WorkflowManagerStartRun) (*WorkflowManagerRun, error)
+	SignalRun(context.Context, WorkflowManagerSignalRun) (*WorkflowManagerRunSignal, error)
+	SignalOrStartRun(context.Context, WorkflowManagerSignalOrStartRun) (*WorkflowManagerRunSignal, error)
+	CreateDefinition(context.Context, WorkflowManagerCreateDefinition) (*WorkflowManagerDefinition, error)
+	GetDefinition(context.Context, WorkflowManagerGetDefinition) (*WorkflowManagerDefinition, error)
+	UpdateDefinition(context.Context, WorkflowManagerUpdateDefinition) (*WorkflowManagerDefinition, error)
+	DeleteDefinition(context.Context, WorkflowManagerDeleteDefinition) error
+	CreateSchedule(context.Context, WorkflowManagerCreateSchedule) (*WorkflowManagerSchedule, error)
+	GetSchedule(context.Context, WorkflowManagerGetSchedule) (*WorkflowManagerSchedule, error)
+	UpdateSchedule(context.Context, WorkflowManagerUpdateSchedule) (*WorkflowManagerSchedule, error)
+	DeleteSchedule(context.Context, WorkflowManagerDeleteSchedule) error
+	PauseSchedule(context.Context, WorkflowManagerPauseSchedule) (*WorkflowManagerSchedule, error)
+	ResumeSchedule(context.Context, WorkflowManagerResumeSchedule) (*WorkflowManagerSchedule, error)
+	CreateTrigger(context.Context, WorkflowManagerCreateEventTrigger) (*WorkflowManagerEventTrigger, error)
+	GetTrigger(context.Context, WorkflowManagerGetEventTrigger) (*WorkflowManagerEventTrigger, error)
+	UpdateTrigger(context.Context, WorkflowManagerUpdateEventTrigger) (*WorkflowManagerEventTrigger, error)
+	DeleteTrigger(context.Context, WorkflowManagerDeleteEventTrigger) error
+	PauseTrigger(context.Context, WorkflowManagerPauseEventTrigger) (*WorkflowManagerEventTrigger, error)
+	ResumeTrigger(context.Context, WorkflowManagerResumeEventTrigger) (*WorkflowManagerEventTrigger, error)
+	PublishEvent(context.Context, WorkflowManagerPublishEvent) (*WorkflowEvent, error)
+}
+
 var sharedWorkflowManagerTransport sharedManagerTransport[proto.WorkflowProviderClient]
 
 // WorkflowManager returns a client that attaches invocationToken to every request.

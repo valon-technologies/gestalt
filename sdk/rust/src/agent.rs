@@ -918,6 +918,35 @@ fn infer_agent_message_part_type(input: &AgentMessagePart) -> AgentMessagePartTy
     }
 }
 
+#[async_trait]
+/// Fakeable client contract for agent host calls.
+pub trait AgentHostClient: Send {
+    async fn execute_tool(
+        &mut self,
+        input: AgentHostExecuteToolInput,
+    ) -> std::result::Result<ExecuteAgentToolResponse, AgentHostError>;
+    async fn execute_tool_for_turn(
+        &mut self,
+        input: AgentHostExecuteToolInput,
+    ) -> std::result::Result<ExecuteAgentToolResponse, AgentHostError>;
+    async fn list_tools(
+        &mut self,
+        input: AgentHostListToolsInput,
+    ) -> std::result::Result<ListAgentToolsResponse, AgentHostError>;
+    async fn list_tools_for_turn(
+        &mut self,
+        input: AgentHostListToolsInput,
+    ) -> std::result::Result<ListAgentToolsResponse, AgentHostError>;
+    async fn resolve_connection(
+        &mut self,
+        input: AgentHostResolveConnectionInput,
+    ) -> std::result::Result<ResolvedAgentConnection, AgentHostError>;
+    async fn resolve_connection_for_turn(
+        &mut self,
+        input: AgentHostResolveConnectionInput,
+    ) -> std::result::Result<ResolvedAgentConnection, AgentHostError>;
+}
+
 /// Client for the agent host service available inside agent providers.
 pub struct AgentHost {
     client: ProtoAgentHostClient<AgentHostTransport>,
@@ -1029,6 +1058,51 @@ impl AgentHost {
         input: AgentHostResolveConnectionInput,
     ) -> std::result::Result<ResolvedAgentConnection, AgentHostError> {
         self.resolve_connection(input).await
+    }
+}
+
+#[async_trait]
+impl AgentHostClient for AgentHost {
+    async fn execute_tool(
+        &mut self,
+        input: AgentHostExecuteToolInput,
+    ) -> std::result::Result<ExecuteAgentToolResponse, AgentHostError> {
+        AgentHost::execute_tool(self, input).await
+    }
+
+    async fn execute_tool_for_turn(
+        &mut self,
+        input: AgentHostExecuteToolInput,
+    ) -> std::result::Result<ExecuteAgentToolResponse, AgentHostError> {
+        AgentHost::execute_tool_for_turn(self, input).await
+    }
+
+    async fn list_tools(
+        &mut self,
+        input: AgentHostListToolsInput,
+    ) -> std::result::Result<ListAgentToolsResponse, AgentHostError> {
+        AgentHost::list_tools(self, input).await
+    }
+
+    async fn list_tools_for_turn(
+        &mut self,
+        input: AgentHostListToolsInput,
+    ) -> std::result::Result<ListAgentToolsResponse, AgentHostError> {
+        AgentHost::list_tools_for_turn(self, input).await
+    }
+
+    async fn resolve_connection(
+        &mut self,
+        input: AgentHostResolveConnectionInput,
+    ) -> std::result::Result<ResolvedAgentConnection, AgentHostError> {
+        AgentHost::resolve_connection(self, input).await
+    }
+
+    async fn resolve_connection_for_turn(
+        &mut self,
+        input: AgentHostResolveConnectionInput,
+    ) -> std::result::Result<ResolvedAgentConnection, AgentHostError> {
+        AgentHost::resolve_connection_for_turn(self, input).await
     }
 }
 
