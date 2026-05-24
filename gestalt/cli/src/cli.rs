@@ -22,20 +22,8 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Manage authentication (login, logout)
-    Auth {
-        #[command(subcommand)]
-        command: AuthCommands,
-    },
-
-    /// Interactive setup wizard
-    Init,
-
-    /// Manage persistent configuration
-    Config {
-        #[command(subcommand)]
-        command: ConfigCommands,
-    },
+    /// Run an interactive agent session or inspect agent resources
+    Agent(AgentArgs),
 
     /// Manage apps
     #[command(alias = "apps")]
@@ -44,13 +32,11 @@ pub enum Commands {
         command: AppCommands,
     },
 
-    #[command(hide = true)]
-    /// Execute an app operation
-    Invoke(InvokeArgs),
-
-    #[command(hide = true)]
-    /// Describe an app operation
-    Describe(DescribeArgs),
+    /// Manage authentication (login, logout)
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommands,
+    },
 
     /// Manage authorization resources
     #[command(name = "authz", alias = "authorization")]
@@ -59,15 +45,29 @@ pub enum Commands {
         command: AuthorizationCommands,
     },
 
+    /// Manage persistent configuration
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommands,
+    },
+
+    #[command(hide = true)]
+    /// Describe an app operation
+    Describe(DescribeArgs),
+
+    /// Interactive setup wizard
+    Init,
+
+    #[command(hide = true)]
+    /// Execute an app operation
+    Invoke(InvokeArgs),
+
     /// Manage workflow resources
     #[command(alias = "workflows")]
     Workflow {
         #[command(subcommand)]
         command: WorkflowCommands,
     },
-
-    /// Run an interactive agent session or inspect agent resources
-    Agent(AgentArgs),
 }
 
 #[derive(Subcommand)]
@@ -92,6 +92,8 @@ pub enum ConfigCommands {
         /// Config key
         key: String,
     },
+    /// List all config values
+    List,
     /// Set a config value
     Set {
         /// Config key
@@ -104,14 +106,10 @@ pub enum ConfigCommands {
         /// Config key
         key: String,
     },
-    /// List all config values
-    List,
 }
 
 #[derive(Subcommand)]
 pub enum AppCommands {
-    /// List available apps
-    List,
     /// Connect an app via OAuth or interactive manual auth
     Connect {
         /// App name (e.g., github, slack)
@@ -125,6 +123,8 @@ pub enum AppCommands {
         #[arg(long)]
         instance: Option<String>,
     },
+    /// Describe an app operation
+    Describe(DescribeArgs),
     /// Disconnect an app
     Disconnect {
         /// App name (e.g., github, slack)
@@ -140,8 +140,8 @@ pub enum AppCommands {
     },
     /// Execute an app operation
     Invoke(InvokeArgs),
-    /// Describe an app operation
-    Describe(DescribeArgs),
+    /// List available apps
+    List,
 }
 
 #[derive(Args)]
@@ -206,81 +206,81 @@ pub enum TokenCommands {
 
 #[derive(Subcommand)]
 pub enum AuthorizationCommands {
-    /// Manage service-account subjects
-    Subjects {
+    /// Manage built-in admin authorization memberships
+    Admins {
         #[command(subcommand)]
-        command: AuthorizationSubjectCommands,
+        command: AuthorizationAdminCommands,
     },
     /// Manage app authorization memberships
     Apps {
         #[command(subcommand)]
         command: AuthorizationAppCommands,
     },
-    /// Manage built-in admin authorization memberships
-    Admins {
+    /// Inspect authorization models
+    Models {
         #[command(subcommand)]
-        command: AuthorizationAdminCommands,
+        command: AuthorizationModelCommands,
     },
     /// Inspect the configured authorization provider
     Provider {
         #[command(subcommand)]
         command: AuthorizationProviderCommands,
     },
-    /// Inspect authorization models
-    Models {
-        #[command(subcommand)]
-        command: AuthorizationModelCommands,
-    },
     /// Inspect authorization relationships
     Relationships {
         #[command(subcommand)]
         command: AuthorizationRelationshipCommands,
     },
+    /// Manage service-account subjects
+    Subjects {
+        #[command(subcommand)]
+        command: AuthorizationSubjectCommands,
+    },
 }
 
 #[derive(Subcommand)]
 pub enum AuthorizationSubjectCommands {
-    /// List service-account subjects
-    List,
     /// Create a service-account subject
     Create(AuthorizationSubjectCreateArgs),
-    /// Show a service-account subject
-    Get {
-        /// Service-account slug or canonical service_account:<id>
-        subject: String,
-    },
-    /// Update a service-account subject
-    Update(AuthorizationSubjectUpdateArgs),
     /// Delete a service-account subject
     Delete {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
-    },
-    /// Manage subject administrators and editors
-    Members {
-        #[command(subcommand)]
-        command: AuthorizationSubjectMemberCommands,
-    },
-    /// Manage subject app grants
-    Grants {
-        #[command(subcommand)]
-        command: AuthorizationSubjectGrantCommands,
     },
     /// Manage external identity assumptions
     ExternalIdentities {
         #[command(subcommand)]
         command: AuthorizationSubjectExternalIdentityCommands,
     },
+    /// Show a service-account subject
+    Get {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+    },
+    /// Manage subject app grants
+    Grants {
+        #[command(subcommand)]
+        command: AuthorizationSubjectGrantCommands,
+    },
     /// Manage subject-owned app credentials
     Integrations {
         #[command(subcommand)]
         command: AuthorizationSubjectIntegrationCommands,
+    },
+    /// List service-account subjects
+    List,
+    /// Manage subject administrators and editors
+    Members {
+        #[command(subcommand)]
+        command: AuthorizationSubjectMemberCommands,
     },
     /// Manage subject-owned API tokens
     Tokens {
         #[command(subcommand)]
         command: AuthorizationSubjectTokenCommands,
     },
+    /// Update a service-account subject
+    Update(AuthorizationSubjectUpdateArgs),
 }
 
 #[derive(Args)]
@@ -325,8 +325,6 @@ pub enum AuthorizationSubjectMemberCommands {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
     },
-    /// Add or update a subject member
-    Set(AuthorizationSubjectMemberSetArgs),
     /// Remove a subject member
     Remove {
         /// Service-account slug or canonical service_account:<id>
@@ -334,6 +332,8 @@ pub enum AuthorizationSubjectMemberCommands {
         /// Canonical member subject ID
         member_subject_id: String,
     },
+    /// Add or update a subject member
+    Set(AuthorizationSubjectMemberSetArgs),
 }
 
 #[derive(Args)]
@@ -361,6 +361,13 @@ pub enum AuthorizationSubjectGrantCommands {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
     },
+    /// Remove an app grant from a subject
+    Remove {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+        /// App name
+        app: String,
+    },
     /// Grant an app role to a subject
     Set {
         /// Service-account slug or canonical service_account:<id>
@@ -371,24 +378,17 @@ pub enum AuthorizationSubjectGrantCommands {
         #[arg(long)]
         role: String,
     },
-    /// Remove an app grant from a subject
-    Remove {
-        /// Service-account slug or canonical service_account:<id>
-        subject: String,
-        /// App name
-        app: String,
-    },
 }
 
 #[derive(Subcommand)]
 pub enum AuthorizationSubjectExternalIdentityCommands {
+    /// Allow a subject to assume an external identity
+    Add(AuthorizationSubjectExternalIdentityArgs),
     /// List external identities assumed by a subject
     List {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
     },
-    /// Allow a subject to assume an external identity
-    Add(AuthorizationSubjectExternalIdentityArgs),
     /// Remove an external identity assumption
     Remove(AuthorizationSubjectExternalIdentityArgs),
 }
@@ -409,11 +409,6 @@ pub struct AuthorizationSubjectExternalIdentityArgs {
 
 #[derive(Subcommand)]
 pub enum AuthorizationSubjectIntegrationCommands {
-    /// List app credential state for a subject
-    List {
-        /// Service-account slug or canonical service_account:<id>
-        subject: String,
-    },
     /// Connect an app credential for a subject
     Connect {
         /// Service-account slug or canonical service_account:<id>
@@ -440,17 +435,22 @@ pub enum AuthorizationSubjectIntegrationCommands {
         #[arg(long)]
         instance: Option<String>,
     },
+    /// List app credential state for a subject
+    List {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+    },
 }
 
 #[derive(Subcommand)]
 pub enum AuthorizationSubjectTokenCommands {
+    /// Create a subject-owned API token
+    Create(AuthorizationSubjectTokenCreateArgs),
     /// List API tokens owned by a subject
     List {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
     },
-    /// Create a subject-owned API token
-    Create(AuthorizationSubjectTokenCreateArgs),
     /// Revoke one subject-owned API token
     Revoke {
         /// Service-account slug or canonical service_account:<id>
@@ -509,8 +509,6 @@ pub enum AuthorizationAppMemberCommands {
         /// App name
         app: String,
     },
-    /// Add or update an app member
-    Set(AuthorizationAppMemberSetArgs),
     /// Remove an app member
     Remove {
         /// App name
@@ -518,6 +516,8 @@ pub enum AuthorizationAppMemberCommands {
         /// Canonical subject ID
         subject_id: String,
     },
+    /// Add or update an app member
+    Set(AuthorizationAppMemberSetArgs),
 }
 
 #[derive(Args)]
@@ -551,13 +551,13 @@ pub enum AuthorizationAdminCommands {
 pub enum AuthorizationAdminMemberCommands {
     /// List admin members
     List,
-    /// Add or update an admin member
-    Set(AuthorizationAdminMemberSetArgs),
     /// Remove an admin member
     Remove {
         /// Canonical subject ID
         subject_id: String,
     },
+    /// Add or update an admin member
+    Set(AuthorizationAdminMemberSetArgs),
 }
 
 #[derive(Args)]
@@ -641,16 +641,6 @@ pub struct AuthorizationRelationshipListArgs {
 
 #[derive(Subcommand)]
 pub enum WorkflowCommands {
-    /// Manage workflow schedules
-    Schedules {
-        #[command(subcommand)]
-        command: WorkflowScheduleCommands,
-    },
-    /// Manage workflow triggers
-    Triggers {
-        #[command(subcommand)]
-        command: WorkflowTriggerCommands,
-    },
     /// Publish workflow events
     Events {
         #[command(subcommand)]
@@ -660,6 +650,16 @@ pub enum WorkflowCommands {
     Runs {
         #[command(subcommand)]
         command: WorkflowRunCommands,
+    },
+    /// Manage workflow schedules
+    Schedules {
+        #[command(subcommand)]
+        command: WorkflowScheduleCommands,
+    },
+    /// Manage workflow triggers
+    Triggers {
+        #[command(subcommand)]
+        command: WorkflowTriggerCommands,
     },
 }
 
@@ -703,10 +703,10 @@ pub struct AgentArgs {
 
 #[derive(Subcommand)]
 pub enum AgentCommands {
-    /// Resume an interactive agent session
-    Resume(AgentResumeArgs),
     /// Check the configured local agent harness
     Doctor(AgentDoctorArgs),
+    /// Resume an interactive agent session
+    Resume(AgentResumeArgs),
     /// Inspect and control agent sessions
     Sessions {
         #[command(subcommand)]
@@ -758,25 +758,23 @@ pub struct AgentResumeArgs {
 
 #[derive(Subcommand)]
 pub enum WorkflowScheduleCommands {
-    /// List workflow schedules
-    List {
-        /// Filter schedules by target app
-        #[arg(long)]
-        app: Option<String>,
+    /// Create a workflow schedule
+    Create(WorkflowScheduleCreateArgs),
+    /// Delete a workflow schedule
+    Delete {
+        /// Schedule ID
+        id: String,
     },
     /// Show a single workflow schedule
     Get {
         /// Schedule ID
         id: String,
     },
-    /// Create a workflow schedule
-    Create(WorkflowScheduleCreateArgs),
-    /// Update an existing workflow schedule
-    Update(WorkflowScheduleUpdateArgs),
-    /// Delete a workflow schedule
-    Delete {
-        /// Schedule ID
-        id: String,
+    /// List workflow schedules
+    List {
+        /// Filter schedules by target app
+        #[arg(long)]
+        app: Option<String>,
     },
     /// Pause a workflow schedule
     Pause {
@@ -788,10 +786,24 @@ pub enum WorkflowScheduleCommands {
         /// Schedule ID
         id: String,
     },
+    /// Update an existing workflow schedule
+    Update(WorkflowScheduleUpdateArgs),
 }
 
 #[derive(Subcommand)]
 pub enum WorkflowTriggerCommands {
+    /// Create a workflow trigger
+    Create(WorkflowTriggerCreateArgs),
+    /// Delete a workflow trigger
+    Delete {
+        /// Trigger ID
+        id: String,
+    },
+    /// Show a single workflow trigger
+    Get {
+        /// Trigger ID
+        id: String,
+    },
     /// List workflow triggers
     List {
         /// Filter triggers by target app
@@ -800,20 +812,6 @@ pub enum WorkflowTriggerCommands {
         /// Filter triggers by event type
         #[arg(long = "type")]
         event_type: Option<String>,
-    },
-    /// Show a single workflow trigger
-    Get {
-        /// Trigger ID
-        id: String,
-    },
-    /// Create a workflow trigger
-    Create(WorkflowTriggerCreateArgs),
-    /// Update an existing workflow trigger
-    Update(WorkflowTriggerUpdateArgs),
-    /// Delete a workflow trigger
-    Delete {
-        /// Trigger ID
-        id: String,
     },
     /// Pause a workflow trigger
     Pause {
@@ -825,10 +823,25 @@ pub enum WorkflowTriggerCommands {
         /// Trigger ID
         id: String,
     },
+    /// Update an existing workflow trigger
+    Update(WorkflowTriggerUpdateArgs),
 }
 
 #[derive(Subcommand)]
 pub enum WorkflowRunCommands {
+    /// Cancel a workflow run
+    Cancel {
+        /// Run ID
+        id: String,
+        /// Optional cancellation reason
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Show a single workflow run
+    Get {
+        /// Run ID
+        id: String,
+    },
     /// List workflow runs
     List {
         /// Filter runs by target app
@@ -844,25 +857,17 @@ pub enum WorkflowRunCommands {
         #[arg(long)]
         page_token: Option<String>,
     },
-    /// Show a single workflow run
-    Get {
-        /// Run ID
-        id: String,
-    },
-    /// Cancel a workflow run
-    Cancel {
-        /// Run ID
-        id: String,
-        /// Optional cancellation reason
-        #[arg(long)]
-        reason: Option<String>,
-    },
 }
 
 #[derive(Subcommand)]
 pub enum AgentSessionCommands {
     /// Create an agent session
     Create(AgentSessionCreateArgs),
+    /// Show a single agent session
+    Get {
+        /// Session ID
+        id: String,
+    },
     /// List agent sessions
     List {
         /// Filter sessions by provider
@@ -878,37 +883,12 @@ pub enum AgentSessionCommands {
         #[arg(long)]
         full: bool,
     },
-    /// Show a single agent session
-    Get {
-        /// Session ID
-        id: String,
-    },
     /// Update an existing agent session
     Update(AgentSessionUpdateArgs),
 }
 
 #[derive(Subcommand)]
 pub enum AgentTurnCommands {
-    /// Create an agent turn within a session
-    Create(AgentTurnCreateArgs),
-    /// List turns in a session
-    List {
-        /// Session ID
-        session_id: String,
-        /// Filter turns by status
-        #[arg(long)]
-        status: Option<String>,
-    },
-    /// Show a single agent turn
-    Get {
-        /// Turn ID
-        id: String,
-    },
-    /// Render a stored turn as a transcript
-    Transcript {
-        /// Turn ID
-        id: String,
-    },
     /// Cancel an agent turn
     Cancel {
         /// Turn ID
@@ -917,10 +897,30 @@ pub enum AgentTurnCommands {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Create an agent turn within a session
+    Create(AgentTurnCreateArgs),
     /// Inspect or stream agent turn events
     Events {
         #[command(subcommand)]
         command: AgentTurnEventCommands,
+    },
+    /// Show a single agent turn
+    Get {
+        /// Turn ID
+        id: String,
+    },
+    /// List turns in a session
+    List {
+        /// Session ID
+        session_id: String,
+        /// Filter turns by status
+        #[arg(long)]
+        status: Option<String>,
+    },
+    /// Render a stored turn as a transcript
+    Transcript {
+        /// Turn ID
+        id: String,
     },
 }
 
