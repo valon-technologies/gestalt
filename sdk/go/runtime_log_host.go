@@ -16,15 +16,13 @@ import (
 // runtime session id.
 const EnvRuntimeSessionID = "GESTALT_RUNTIME_SESSION_ID"
 
-// RuntimeLogHostClient appends runtime logs to the host.
-type RuntimeLogHostClient struct {
+type runtimeLogHost struct {
 	client    proto.RuntimeLogHostClient
 	sourceSeq atomic.Int64
 }
 
-// RuntimeLogHostClientContract is the fakeable client contract for runtime log
-// host calls.
-type RuntimeLogHostClientContract interface {
+// RuntimeLogHostAPI is the fakeable contract for runtime log host calls.
+type RuntimeLogHostAPI interface {
 	Close() error
 	AppendLogs(context.Context, string, []RuntimeLogEntry) error
 	Append(context.Context, string, ...RuntimeLogAppendOption) error
@@ -49,8 +47,8 @@ type RuntimeLogEntry struct {
 	SourceSeq  int64
 }
 
-// RuntimeLogHost returns a shared client for the runtime-log host service.
-func RuntimeLogHost() (*RuntimeLogHostClient, error) {
+// RuntimeLogHost returns a shared runtime-log host capability.
+func RuntimeLogHost() (RuntimeLogHostAPI, error) {
 	target, token, err := hostServiceTarget("runtime log host")
 	if err != nil {
 		return nil, err
@@ -63,16 +61,16 @@ func RuntimeLogHost() (*RuntimeLogHostClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &RuntimeLogHostClient{client: client}, nil
+	return &runtimeLogHost{client: client}, nil
 }
 
-// Close is a no-op compatibility method because this client uses shared transport.
-func (c *RuntimeLogHostClient) Close() error {
+// Close is a no-op because this capability uses shared transport.
+func (c *runtimeLogHost) Close() error {
 	return nil
 }
 
 // AppendLogs appends runtime logs for one hosted runtime session.
-func (c *RuntimeLogHostClient) AppendLogs(ctx context.Context, sessionID string, logs []RuntimeLogEntry) error {
+func (c *runtimeLogHost) AppendLogs(ctx context.Context, sessionID string, logs []RuntimeLogEntry) error {
 	_, err := c.client.AppendLogs(ctx, &proto.AppendRuntimeLogsRequest{
 		SessionId: strings.TrimSpace(sessionID),
 		Logs:      runtimeLogEntriesToProto(logs),
@@ -129,7 +127,7 @@ func WithRuntimeLogSourceSeq(sourceSeq int64) RuntimeLogAppendOption {
 }
 
 // Append records one runtime log entry for the current hosted runtime session.
-func (c *RuntimeLogHostClient) Append(ctx context.Context, message string, opts ...RuntimeLogAppendOption) error {
+func (c *runtimeLogHost) Append(ctx context.Context, message string, opts ...RuntimeLogAppendOption) error {
 	cfg := runtimeLogAppendOptions{
 		stream: RuntimeLogStreamRuntime,
 	}
@@ -163,7 +161,7 @@ func (c *RuntimeLogHostClient) Append(ctx context.Context, message string, opts 
 	}})
 }
 
-func (c *RuntimeLogHostClient) advanceSourceSeq(sourceSeq int64) {
+func (c *runtimeLogHost) advanceSourceSeq(sourceSeq int64) {
 	for {
 		current := c.sourceSeq.Load()
 		if current >= sourceSeq || c.sourceSeq.CompareAndSwap(current, sourceSeq) {

@@ -29,8 +29,8 @@ _STREAMS = {
 }
 
 
-class RuntimeLogHostClientProtocol(Protocol):
-    """Fakeable client contract for runtime log host calls."""
+class RuntimeLogHostProtocol(Protocol):
+    """Fakeable contract for runtime log host calls."""
 
     def close(self) -> None:
         """Close the client."""
@@ -160,7 +160,7 @@ class RuntimeLogWriter:
 
     def __init__(
         self,
-        host: RuntimeLogHostClientProtocol,
+        host: RuntimeLogHost,
         session_id: str,
         *,
         stream: str | int = "stdout",
@@ -218,7 +218,7 @@ class RuntimeLogHandler(logging.Handler):
         self,
         session_id: str | None = None,
         *,
-        host: RuntimeLogHostClientProtocol | None = None,
+        host: RuntimeLogHost | None = None,
         stream: str | int = "runtime",
         level: int = logging.NOTSET,
     ) -> None:

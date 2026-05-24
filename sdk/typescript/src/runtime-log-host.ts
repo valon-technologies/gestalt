@@ -65,7 +65,7 @@ export interface RuntimeLogWriterOptions {
 }
 
 /** Fakeable client contract for runtime log host calls. */
-export interface RuntimeLogHostClientLike {
+export interface RuntimeLogHost {
   appendLogs(
     request: RuntimeLogAppendLogsInput,
   ): Promise<RuntimeLogAppendResponse>;
@@ -80,7 +80,7 @@ export interface RuntimeLogHostClientLike {
  * Use `append` for a single entry, `appendLogs` for a native batch, or `writer`
  * to bridge Node streams into the runtime log host.
  */
-export class RuntimeLogHost implements RuntimeLogHostClientLike {
+class HostRuntimeLogHost implements RuntimeLogHost {
   private readonly client: Client<typeof RuntimeLogHostService>;
   private sourceSeq = 0n;
 
@@ -180,6 +180,8 @@ export class RuntimeLogHost implements RuntimeLogHostClientLike {
     };
   }
 }
+
+export const RuntimeLogHost = HostRuntimeLogHost;
 
 function runtimeSessionId(sessionId?: string): string {
   const value = (sessionId ?? process.env[ENV_RUNTIME_SESSION_ID] ?? "").trim();

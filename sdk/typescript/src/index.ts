@@ -184,7 +184,6 @@ export {
 export {
   ENV_RUNTIME_SESSION_ID,
   RuntimeLogHost,
-  type RuntimeLogHostClientLike,
   type RuntimeLogAppendInput,
   type RuntimeLogAppendLogsInput,
   type RuntimeLogAppendResponse,

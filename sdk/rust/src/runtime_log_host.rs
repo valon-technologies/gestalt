@@ -107,7 +107,7 @@ pub enum RuntimeLogHostError {
 
 #[async_trait]
 /// Fakeable client contract for runtime log host calls.
-pub trait RuntimeLogHostClient: Send {
+pub trait RuntimeLogHostApi: Send {
     async fn append_logs(
         &mut self,
         request: AppendRuntimeLogsRequest,
@@ -343,7 +343,7 @@ impl RuntimeLogHost {
 }
 
 #[async_trait]
-impl RuntimeLogHostClient for RuntimeLogHost {
+impl RuntimeLogHostApi for RuntimeLogHost {
     async fn append_logs(
         &mut self,
         request: AppendRuntimeLogsRequest,
