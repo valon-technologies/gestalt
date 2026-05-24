@@ -4,9 +4,9 @@ import (
 	"context"
 	"io"
 
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	rpcs3 "github.com/valon-technologies/gestalt/server/rpc/s3"
-	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/protobuf/types/known/emptypb"

@@ -569,4 +569,3 @@ func firstS3Name(name []string) string {
 	}
 	return name[0]
 }
-

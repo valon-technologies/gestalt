@@ -6,9 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"io"
 	"strings"
+
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"

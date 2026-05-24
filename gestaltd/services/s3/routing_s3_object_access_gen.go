@@ -15,4 +15,3 @@ func (s *routingS3ObjectAccessServer) CreateObjectAccessURL(ctx context.Context,
 	}
 	return server.CreateObjectAccessURL(ctx, req)
 }
-

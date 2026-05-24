@@ -3,14 +3,15 @@ package indexeddb
 import (
 	"context"
 	"errors"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"testing"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	rpcidb "github.com/valon-technologies/gestalt/server/rpc/indexeddb"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	rpcidb "github.com/valon-technologies/gestalt/server/rpc/indexeddb"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"google.golang.org/grpc"
 )

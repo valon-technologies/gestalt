@@ -2,9 +2,10 @@ package indexeddb
 
 import (
 	"context"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"testing"
 	"time"
+
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	rpcidb "github.com/valon-technologies/gestalt/server/rpc/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"

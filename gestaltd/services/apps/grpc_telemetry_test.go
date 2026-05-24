@@ -6,8 +6,8 @@ import (
 	"time"
 
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"

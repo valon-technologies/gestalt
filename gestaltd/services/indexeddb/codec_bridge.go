@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 func typedValueFromAny(v any) (*proto.TypedValue, error) {
@@ -14,10 +14,6 @@ func typedValueFromAny(v any) (*proto.TypedValue, error) {
 
 func anyFromTypedValue(v *proto.TypedValue) (any, error) {
 	return indexeddbcodec.AnyFromTypedValue(v)
-}
-
-func typedValuesFromAny(values []any) ([]*proto.TypedValue, error) {
-	return indexeddbcodec.TypedValuesFromAny(values)
 }
 
 func anyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
@@ -36,20 +32,12 @@ func recordFromProto(record *proto.Record) (idb.Record, error) {
 	return indexeddbcodec.RecordFromProto(record)
 }
 
-func recordsFromProto(records []*proto.Record) ([]idb.Record, error) {
-	return indexeddbcodec.RecordsFromProto(records)
-}
-
 func keyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
 	return indexeddbcodec.KeyValuesToAny(kvs)
 }
 
 func anyToKeyValue(v any) (*proto.KeyValue, error) {
 	return indexeddbcodec.AnyToKeyValue(v)
-}
-
-func cursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
-	return indexeddbcodec.CursorKeyToProto(key, indexCursor)
 }
 
 func keyRangeToProto(r *idb.KeyRange) (*proto.KeyRange, error) {
