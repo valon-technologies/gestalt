@@ -92,7 +92,7 @@ pub use authorization::{
     ResourceSearchRequest, ResourceSearchResponse, SubjectSearchRequest, SubjectSearchResponse,
     WriteModelRequest, WriteRelationshipsRequest,
 };
-pub use cache::{Cache, CacheClient, CacheEntry, CacheError, CacheProvider, CacheSetOptions};
+pub use cache::{Cache, CacheApi, CacheEntry, CacheError, CacheProvider, CacheSetOptions};
 pub use catalog::{Catalog, CatalogOperation, CatalogParameter, OperationAnnotations};
 pub use env::{
     CURRENT_PROTOCOL_VERSION, ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, ENV_PROVIDER_SOCKET,

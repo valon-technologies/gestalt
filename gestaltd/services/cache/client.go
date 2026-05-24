@@ -29,7 +29,7 @@ type ExecConfig struct {
 }
 
 type remoteCache struct {
-	client  sdkcache.Client
+	client  sdkcache.Cache
 	runtime proto.ProviderLifecycleClient
 	closer  io.Closer
 }

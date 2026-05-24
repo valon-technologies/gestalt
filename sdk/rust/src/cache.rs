@@ -51,7 +51,7 @@ pub enum CacheError {
 
 #[async_trait]
 /// Fakeable cache client contract shared by host clients and tests.
-pub trait CacheClient: Send {
+pub trait CacheApi: Send {
     /// Loads one cache value.
     async fn get(&mut self, key: &str) -> std::result::Result<Option<Vec<u8>>, CacheError>;
 
@@ -342,7 +342,7 @@ impl Cache {
 }
 
 #[async_trait]
-impl CacheClient for Cache {
+impl CacheApi for Cache {
     async fn get(&mut self, key: &str) -> std::result::Result<Option<Vec<u8>>, CacheError> {
         Cache::get(self, key).await
     }

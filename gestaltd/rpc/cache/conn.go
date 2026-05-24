@@ -15,12 +15,12 @@ type Options struct {
 }
 
 // NewClient wraps a generated cache gRPC client as the SDK cache contract.
-func NewClient(grpcClient proto.CacheClient, opts Options) sdkcache.Client {
+func NewClient(grpcClient proto.CacheClient, opts Options) sdkcache.Runtime {
 	return &rpcClient{grpc: grpcClient, opts: opts}
 }
 
 // NewConn builds a cache client from a gRPC connection.
-func NewConn(conn grpc.ClientConnInterface, opts Options) sdkcache.Client {
+func NewConn(conn grpc.ClientConnInterface, opts Options) sdkcache.Runtime {
 	return NewClient(proto.NewCacheClient(conn), opts)
 }
 

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Entry is one key/value pair written through Client.SetMany.
+// Entry is one key/value pair written through Cache.SetMany.
 type Entry struct {
 	Key   string
 	Value []byte
@@ -16,9 +16,9 @@ type SetOptions struct {
 	TTL time.Duration
 }
 
-// Client is the app-facing cache capability exposed by gestaltd and implemented
+// Cache is the app-facing cache capability exposed by gestaltd and implemented
 // by cache providers.
-type Client interface {
+type Cache interface {
 	Get(ctx context.Context, key string) ([]byte, bool, error)
 	GetMany(ctx context.Context, keys []string) (map[string][]byte, error)
 	Set(ctx context.Context, key string, value []byte, opts SetOptions) error
@@ -26,4 +26,10 @@ type Client interface {
 	Delete(ctx context.Context, key string) (bool, error)
 	DeleteMany(ctx context.Context, keys []string) (int64, error)
 	Touch(ctx context.Context, key string, ttl time.Duration) (bool, error)
+}
+
+// Runtime is a transport-backed cache capability returned by gestalt.Cache.
+type Runtime interface {
+	Cache
+	Close() error
 }

@@ -207,7 +207,6 @@ export {
   CacheProvider,
   defineCacheProvider,
   isCacheProvider,
-  type CacheClient,
   type CacheEntry,
   type CacheProviderOptions,
   type CacheSetOptions,

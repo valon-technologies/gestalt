@@ -31,7 +31,7 @@ class CacheEntry:
     value: bytes
 
 
-class CacheClient(Protocol):
+class CacheProtocol(Protocol):
     """Fakeable cache client contract shared by host clients and tests."""
 
     def get(self, key: str) -> bytes | None:
@@ -162,7 +162,6 @@ class Cache:
         """Close the cache client at the end of a context manager block."""
 
         self.close()
-
 
 def _duration_from_ttl(ttl: _dt.timedelta | None) -> Any:
     if ttl is None:
