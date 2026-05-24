@@ -166,7 +166,7 @@ type Deps struct {
 	IndexedDBFactory      IndexedDBFactory
 	CacheDefs             map[string]*config.ProviderEntry
 	CacheFactory          CacheFactory
-	S3                    map[string]s3sdk.Client
+	S3                    map[string]s3sdk.S3
 	WorkflowRuntime       *workflowRuntime
 	AgentRuntime          *agentRuntime
 	AgentRunGrants        *agentgrant.Manager
@@ -189,7 +189,7 @@ type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type CacheFactory func(node yaml.Node) (corecache.Cache, error)
-type S3Factory func(node yaml.Node) (s3sdk.Client, error)
+type S3Factory func(node yaml.Node) (s3sdk.S3, error)
 type WorkflowFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreworkflow.Provider, error)
 type AgentFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreagent.Provider, error)
 type RuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (runtimeprovider.Provider, error)
@@ -227,8 +227,8 @@ type Result struct {
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
-	S3                    map[string]s3sdk.Client
-	ExtraS3s              []s3sdk.Client
+	S3                    map[string]s3sdk.S3
+	ExtraS3s              []s3sdk.S3
 	ExtraWorkflows        []coreworkflow.Provider
 	ExtraAgents           []coreagent.Provider
 	Providers             *registry.ProviderMap[core.Provider]
@@ -421,7 +421,7 @@ func closeIndexedDBs(stores ...indexeddb.IndexedDB) error {
 	return errors.Join(errs...)
 }
 
-func closeS3s(clients ...s3sdk.Client) error {
+func closeS3s(clients ...s3sdk.S3) error {
 	var errs []error
 	for _, client := range clients {
 		if client == nil {
@@ -737,7 +737,7 @@ type preparedCore struct {
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
-	ExtraS3s              []s3sdk.Client
+	ExtraS3s              []s3sdk.S3
 	SecretManager         core.SecretManager
 	Telemetry             core.TelemetryProvider
 	Deps                  Deps
@@ -985,8 +985,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		}
 	}()
 
-	hostS3s := make(map[string]s3sdk.Client, len(cfg.Providers.S3))
-	var extraS3s []s3sdk.Client
+	hostS3s := make(map[string]s3sdk.S3, len(cfg.Providers.S3))
+	var extraS3s []s3sdk.S3
 	for name, entry := range cfg.Providers.S3 {
 		if entry == nil {
 			continue
@@ -1802,7 +1802,7 @@ func buildCache(entry *config.ProviderEntry, factories *FactoryRegistry) (coreca
 	return value, nil
 }
 
-func buildS3(name string, entry *config.ProviderEntry, factories *FactoryRegistry) (s3sdk.Client, error) {
+func buildS3(name string, entry *config.ProviderEntry, factories *FactoryRegistry) (s3sdk.S3, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("s3 provider is required")
 	}

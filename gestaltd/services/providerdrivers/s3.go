@@ -11,7 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func S3Factory(node yaml.Node) (s3sdk.Client, error) {
+func S3Factory(node yaml.Node) (s3sdk.S3, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("s3 provider: parsing config: %w", err)

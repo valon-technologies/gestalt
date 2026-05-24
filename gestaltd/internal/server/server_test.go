@@ -328,7 +328,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 	store := &coretesting.StubS3{}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.PublicBaseURL = "https://gestalt.example.test"
-		cfg.S3 = map[string]s3sdk.Client{"brainStorage": store}
+		cfg.S3 = map[string]s3sdk.S3{"brainStorage": store}
 	})
 	defer ts.Close()
 

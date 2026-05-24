@@ -2363,7 +2363,7 @@ func TestBootstrapPassesConfiguredS3ResourceNamesToProviders(t *testing.T) {
 
 	factories := validFactories()
 	seen := make(map[string]struct{}, len(cfg.Providers.S3))
-	factories.S3 = func(node yaml.Node) (s3sdk.Client, error) {
+	factories.S3 = func(node yaml.Node) (s3sdk.S3, error) {
 		var runtime struct {
 			Name string `yaml:"name"`
 		}
@@ -7869,7 +7869,7 @@ func TestBootstrapS3BuildFailureClosesIndexedDBsOnce(t *testing.T) {
 			return nil, fmt.Errorf("unexpected indexeddb build #%d", indexeddbBuilds.Load())
 		}
 	}
-	factories.S3 = func(yaml.Node) (s3sdk.Client, error) {
+	factories.S3 = func(yaml.Node) (s3sdk.S3, error) {
 		return nil, fmt.Errorf("boom")
 	}
 
@@ -8893,7 +8893,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		var receivedNode yaml.Node
-		factories.S3 = func(node yaml.Node) (s3sdk.Client, error) {
+		factories.S3 = func(node yaml.Node) (s3sdk.S3, error) {
 			receivedNode = node
 			return &coretesting.StubS3{}, nil
 		}

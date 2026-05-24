@@ -445,7 +445,7 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 		}
 	}
 
-	bindings := make(map[string]s3sdk.Client, len(entry.S3))
+	bindings := make(map[string]s3sdk.S3, len(entry.S3))
 	for _, binding := range entry.S3 {
 		client, ok := deps.S3[binding]
 		if !ok || client == nil {
@@ -490,7 +490,7 @@ func registerCacheServer(bindings map[string]corecache.Cache, defaultBinding, pl
 	return cacheservice.NewRoutingServer(bindings, defaultBinding, pluginName)
 }
 
-func registerS3Servers(bindings map[string]s3sdk.Client, defaultBinding, pluginName string, accessURLs *s3.ObjectAccessURLManager) (proto.S3Server, proto.S3ObjectAccessServer) {
+func registerS3Servers(bindings map[string]s3sdk.S3, defaultBinding, pluginName string, accessURLs *s3.ObjectAccessURLManager) (proto.S3Server, proto.S3ObjectAccessServer) {
 	if len(bindings) == 1 {
 		for bindingName, client := range bindings {
 			return s3.NewServer(client, pluginName), s3.NewObjectAccessServer(accessURLs, pluginName, bindingName)

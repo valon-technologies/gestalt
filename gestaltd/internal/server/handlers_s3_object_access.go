@@ -62,7 +62,7 @@ func (s *Server) handleS3ObjectAccess(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleS3ObjectAccessGet(w http.ResponseWriter, r *http.Request, client s3sdk.Client, ref s3sdk.ObjectRef) {
+func (s *Server) handleS3ObjectAccessGet(w http.ResponseWriter, r *http.Request, client s3sdk.S3, ref s3sdk.ObjectRef) {
 	readReq, partial, err := s3ObjectAccessReadRequest(r, client, ref)
 	if err != nil {
 		writeS3ObjectAccessError(w, err)
@@ -89,7 +89,7 @@ func (s *Server) handleS3ObjectAccessGet(w http.ResponseWriter, r *http.Request,
 	_, _ = io.Copy(w, result.Body)
 }
 
-func (s *Server) handleS3ObjectAccessHead(w http.ResponseWriter, r *http.Request, client s3sdk.Client, ref s3sdk.ObjectRef) {
+func (s *Server) handleS3ObjectAccessHead(w http.ResponseWriter, r *http.Request, client s3sdk.S3, ref s3sdk.ObjectRef) {
 	meta, err := client.HeadObject(r.Context(), ref)
 	if err != nil {
 		writeS3ObjectAccessError(w, err)
@@ -99,7 +99,7 @@ func (s *Server) handleS3ObjectAccessHead(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleS3ObjectAccessPut(w http.ResponseWriter, r *http.Request, client s3sdk.Client, target s3.ObjectAccessTarget, ref s3sdk.ObjectRef) {
+func (s *Server) handleS3ObjectAccessPut(w http.ResponseWriter, r *http.Request, client s3sdk.S3, target s3.ObjectAccessTarget, ref s3sdk.ObjectRef) {
 	contentType := target.ContentType
 	if contentType == "" {
 		contentType = r.Header.Get("Content-Type")
@@ -125,7 +125,7 @@ func (s *Server) handleS3ObjectAccessPut(w http.ResponseWriter, r *http.Request,
 	})
 }
 
-func (s *Server) handleS3ObjectAccessDelete(w http.ResponseWriter, r *http.Request, client s3sdk.Client, ref s3sdk.ObjectRef) {
+func (s *Server) handleS3ObjectAccessDelete(w http.ResponseWriter, r *http.Request, client s3sdk.S3, ref s3sdk.ObjectRef) {
 	if err := client.DeleteObject(r.Context(), ref); err != nil {
 		writeS3ObjectAccessError(w, err)
 		return
@@ -219,7 +219,7 @@ func (r s3HTTPRange) CoversFullRepresentation(size int64) bool {
 
 var errS3ObjectAccessInvalidConditionalHeader = errors.New("s3 object access conditional header is invalid")
 
-func s3ObjectAccessReadRequest(r *http.Request, client s3sdk.Client, ref s3sdk.ObjectRef) (s3sdk.ReadRequest, s3HTTPRange, error) {
+func s3ObjectAccessReadRequest(r *http.Request, client s3sdk.S3, ref s3sdk.ObjectRef) (s3sdk.ReadRequest, s3HTTPRange, error) {
 	out := s3sdk.ReadRequest{
 		Ref:         ref,
 		IfMatch:     r.Header.Get("If-Match"),

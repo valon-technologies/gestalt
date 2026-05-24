@@ -6209,7 +6209,7 @@ func TestRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *tes
 		BaseURL:       "https://gestalt.example.test",
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 		Egress:        newEgressDeps(cfg),
-		S3: map[string]s3sdk.Client{
+		S3: map[string]s3sdk.S3{
 			"main":    &coretesting.StubS3{},
 			"archive": &coretesting.StubS3{},
 		},
@@ -6279,7 +6279,7 @@ func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 		BaseURL:            relaySrv.URL,
 		EncryptionKey:      secret,
 		PublicHostServices: publicHostServices,
-		S3: map[string]s3sdk.Client{
+		S3: map[string]s3sdk.S3{
 			"main": &coretesting.StubS3{},
 		},
 	}
@@ -6375,7 +6375,7 @@ func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t 
 			}
 			return coretesting.NewStubCache(), nil
 		},
-		S3: map[string]s3sdk.Client{
+		S3: map[string]s3sdk.S3{
 			"main": &coretesting.StubS3{},
 		},
 	})
@@ -7077,7 +7077,7 @@ func TestRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 	deps := Deps{
 		BaseURL:       relaySrv.URL,
 		EncryptionKey: secret,
-		S3: map[string]s3sdk.Client{
+		S3: map[string]s3sdk.S3{
 			"main": boundS3,
 		},
 		PublicHostServices: publicHostServices,
@@ -9164,7 +9164,7 @@ func TestPluginIndexedDBBindingsCleanupOnS3BindingFailure(t *testing.T) {
 				onClose:       closeCount.Add,
 			}, nil
 		},
-		S3: map[string]s3sdk.Client{},
+		S3: map[string]s3sdk.S3{},
 	}))
 	if err == nil {
 		t.Fatal("expected buildProvidersStrict to fail for missing S3 binding")
@@ -9207,7 +9207,7 @@ func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
 		},
 	}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		Services: testutil.NewStubServices(t),
-		S3: map[string]s3sdk.Client{
+		S3: map[string]s3sdk.S3{
 			"main": stubS3,
 		},
 	}))
@@ -9308,7 +9308,7 @@ func TestPluginS3BindingsRouteExplicitBinding(t *testing.T) {
 		},
 	}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		Services: testutil.NewStubServices(t),
-		S3: map[string]s3sdk.Client{
+		S3: map[string]s3sdk.S3{
 			"main":    mainS3,
 			"archive": archiveS3,
 		},
@@ -9372,7 +9372,7 @@ func TestPluginS3BindingsExposeHostSocketEnv(t *testing.T) {
 	}
 
 	services := testutil.NewStubServices(t)
-	s3Bindings := map[string]s3sdk.Client{
+	s3Bindings := map[string]s3sdk.S3{
 		"main":    &coretesting.StubS3{},
 		"archive": &coretesting.StubS3{},
 	}
