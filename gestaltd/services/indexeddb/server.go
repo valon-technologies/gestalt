@@ -124,7 +124,7 @@ func (s *indexedDBServer) CreateObjectStore(ctx context.Context, req *proto.Crea
 		return nil, indexeddbToGRPCErr(err)
 	}
 	schema := protoToSchema(req.GetSchema())
-	if err := s.ds.CreateObjectStore(ctx, s.storeName(req.GetName()), schema); err != nil {
+	if _, err := s.ds.CreateObjectStore(ctx, s.storeName(req.GetName()), schema); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
 	return &emptypb.Empty{}, nil

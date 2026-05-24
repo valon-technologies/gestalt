@@ -167,13 +167,13 @@ func newIndexedDBSessionStore(ctx context.Context, db indexeddb.IndexedDB) (*ind
 	if db == nil {
 		return nil, fmt.Errorf("provider dev indexeddb attachment state requires an IndexedDB provider")
 	}
-	if err := db.CreateObjectStore(ctx, indexedDBAttachmentStore, indexedDBAttachmentSchema); err != nil {
+	if _, err := db.CreateObjectStore(ctx, indexedDBAttachmentStore, indexedDBAttachmentSchema); err != nil {
 		return nil, fmt.Errorf("create provider dev attachment store: %w", err)
 	}
-	if err := db.CreateObjectStore(ctx, indexedDBCallStore, indexedDBCallSchema); err != nil {
+	if _, err := db.CreateObjectStore(ctx, indexedDBCallStore, indexedDBCallSchema); err != nil {
 		return nil, fmt.Errorf("create provider dev call store: %w", err)
 	}
-	if err := db.CreateObjectStore(ctx, indexedDBAuthStore, indexedDBAuthSchema); err != nil {
+	if _, err := db.CreateObjectStore(ctx, indexedDBAuthStore, indexedDBAuthSchema); err != nil {
 		return nil, fmt.Errorf("create provider dev attach authorization store: %w", err)
 	}
 	return &indexedDBSessionStore{db: db}, nil

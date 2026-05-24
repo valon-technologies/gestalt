@@ -1574,7 +1574,7 @@ func (db *interceptIndexedDB) Transaction(ctx context.Context, stores []string, 
 	return db.inner.Transaction(ctx, stores, mode, opts)
 }
 
-func (db *interceptIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+func (db *interceptIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) (indexeddb.ObjectStore, error) {
 	return db.inner.CreateObjectStore(ctx, name, schema)
 }
 

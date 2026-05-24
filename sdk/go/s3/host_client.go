@@ -1,4 +1,4 @@
-package gestalt
+package s3
 
 import (
 	"bytes"
@@ -6,231 +6,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-var (
-	// ErrS3NotFound indicates that the requested object does not exist.
-	ErrS3NotFound = fmt.Errorf("s3: not found")
-	// ErrS3PreconditionFailed indicates that the request failed an If-Match or
-	// If-None-Match style precondition.
-	ErrS3PreconditionFailed = fmt.Errorf("s3: precondition failed")
-	// ErrS3InvalidRange indicates that the requested byte range is invalid.
-	ErrS3InvalidRange = fmt.Errorf("s3: invalid range")
-)
+var _ Client = (*HostClient)(nil)
 
-// ObjectRef identifies one object or object version.
-type ObjectRef struct {
-	Bucket    string
-	Key       string
-	VersionID string
-}
-
-// ObjectMeta describes an object returned by the provider.
-type ObjectMeta struct {
-	Ref          ObjectRef
-	ETag         string
-	Size         int64
-	ContentType  string
-	LastModified time.Time
-	Metadata     map[string]string
-	StorageClass string
-}
-
-// ByteRange requests a half-open slice of an object's bytes.
-type ByteRange struct {
-	Start *int64
-	End   *int64
-}
-
-// ReadOptions configures conditional and ranged reads.
-type ReadOptions struct {
-	Range             *ByteRange
-	IfMatch           string
-	IfNoneMatch       string
-	IfModifiedSince   *time.Time
-	IfUnmodifiedSince *time.Time
-}
-
-// WriteOptions configures object writes.
-type WriteOptions struct {
-	ContentType        string
-	CacheControl       string
-	ContentDisposition string
-	ContentEncoding    string
-	ContentLanguage    string
-	Metadata           map[string]string
-	IfMatch            string
-	IfNoneMatch        string
-}
-
-// ListOptions configures list-objects requests.
-type ListOptions struct {
-	Bucket            string
-	Prefix            string
-	Delimiter         string
-	ContinuationToken string
-	StartAfter        string
-	MaxKeys           int32
-}
-
-// ListPage is one page of list-objects results.
-type ListPage struct {
-	Objects               []ObjectMeta
-	CommonPrefixes        []string
-	NextContinuationToken string
-	HasMore               bool
-}
-
-// CopyOptions configures conditional copy requests.
-type CopyOptions struct {
-	IfMatch     string
-	IfNoneMatch string
-}
-
-// PresignMethod identifies the HTTP verb encoded into a presigned URL.
-type PresignMethod string
-
-const (
-	// PresignMethodGet creates a download URL.
-	PresignMethodGet PresignMethod = "GET"
-	// PresignMethodPut creates an upload URL.
-	PresignMethodPut PresignMethod = "PUT"
-	// PresignMethodDelete creates a delete URL.
-	PresignMethodDelete PresignMethod = "DELETE"
-	// PresignMethodHead creates a metadata-only URL.
-	PresignMethodHead PresignMethod = "HEAD"
-)
-
-// PresignOptions configures presigned URL generation.
-type PresignOptions struct {
-	Method             PresignMethod
-	Expires            time.Duration
-	ContentType        string
-	ContentDisposition string
-	Headers            map[string]string
-}
-
-// PresignResult is a presigned URL plus any required headers.
-type PresignResult struct {
-	URL       string
-	Method    PresignMethod
-	ExpiresAt time.Time
-	Headers   map[string]string
-}
-
-// ObjectAccessURLOptions configures host-mediated object-access URL creation.
-type ObjectAccessURLOptions = PresignOptions
-
-// ObjectAccessURL is a hosted URL plus any required headers.
-type ObjectAccessURL = PresignResult
-
-// S3Client speaks to a running S3 provider over the unified host-service socket.
-type S3Client struct {
+// HostClient speaks to a running S3 provider over the unified host-service socket.
+type HostClient struct {
 	client             proto.S3Client
 	objectAccessClient proto.S3ObjectAccessClient
-}
-
-type sharedS3Transport struct {
-	mu                 sync.Mutex
-	target             string
-	token              string
-	binding            string
-	conn               *grpc.ClientConn
-	client             proto.S3Client
-	objectAccessClient proto.S3ObjectAccessClient
-}
-
-var sharedS3Transports sync.Map
-
-// S3 connects to the S3 provider exposed by gestaltd.
-func S3(name ...string) (*S3Client, error) {
-	target, token, err := hostServiceTarget("s3")
-	if err != nil {
-		return nil, err
-	}
-	binding := firstS3Name(name)
-	transport := getSharedS3Transport(binding)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	client, objectAccessClient, err := sharedS3Clients(ctx, target, token, binding, transport)
-	if err != nil {
-		return nil, fmt.Errorf("s3: connect to host: %w", err)
-	}
-	return &S3Client{
-		client:             client,
-		objectAccessClient: objectAccessClient,
-	}, nil
-}
-
-func getSharedS3Transport(binding string) *sharedS3Transport {
-	val, _ := sharedS3Transports.LoadOrStore(binding, &sharedS3Transport{})
-	return val.(*sharedS3Transport)
-}
-
-func sharedS3Clients(ctx context.Context, target, token, binding string, transport *sharedS3Transport) (proto.S3Client, proto.S3ObjectAccessClient, error) {
-	if transport == nil {
-		return nil, nil, fmt.Errorf("s3: shared transport is not initialized")
-	}
-
-	transport.mu.Lock()
-	if transport.conn != nil && transport.target == target && transport.token == token && transport.binding == binding {
-		client := transport.client
-		objectAccessClient := transport.objectAccessClient
-		transport.mu.Unlock()
-		return client, objectAccessClient, nil
-	}
-	transport.mu.Unlock()
-
-	conn, err := dialHostService(ctx, "s3", target, token, binding)
-	if err != nil {
-		return nil, nil, err
-	}
-	client := proto.NewS3Client(conn)
-	objectAccessClient := proto.NewS3ObjectAccessClient(conn)
-
-	transport.mu.Lock()
-	defer transport.mu.Unlock()
-
-	if transport.conn != nil && transport.target == target && transport.token == token && transport.binding == binding {
-		_ = conn.Close()
-		return transport.client, transport.objectAccessClient, nil
-	}
-	if transport.conn != nil {
-		_ = transport.conn.Close()
-	}
-
-	transport.target = target
-	transport.token = token
-	transport.binding = binding
-	transport.conn = conn
-	transport.client = client
-	transport.objectAccessClient = objectAccessClient
-	return client, objectAccessClient, nil
 }
 
 // Close is a no-op because this client uses shared transport.
-func (c *S3Client) Close() error { return nil }
+func (c *HostClient) Close() error { return nil }
 
 // Object returns a convenience handle for one object key.
-func (c *S3Client) Object(bucket, key string) *Object {
+func (c *HostClient) Object(bucket, key string) *Object {
 	return &Object{client: c, ref: ObjectRef{Bucket: bucket, Key: key}}
 }
 
 // ObjectVersion returns a convenience handle for one object version.
-func (c *S3Client) ObjectVersion(bucket, key, versionID string) *Object {
+func (c *HostClient) ObjectVersion(bucket, key, versionID string) *Object {
 	return &Object{client: c, ref: ObjectRef{Bucket: bucket, Key: key, VersionID: versionID}}
 }
 
 // HeadObject fetches metadata for one object.
-func (c *S3Client) HeadObject(ctx context.Context, ref ObjectRef) (ObjectMeta, error) {
+func (c *HostClient) HeadObject(ctx context.Context, ref ObjectRef) (ObjectMeta, error) {
 	resp, err := c.client.HeadObject(ctx, &proto.HeadObjectRequest{Ref: objectRefToProto(ref)})
 	if err != nil {
 		return ObjectMeta{}, grpcS3Err(err)
@@ -238,8 +44,21 @@ func (c *S3Client) HeadObject(ctx context.Context, ref ObjectRef) (ObjectMeta, e
 	return requiredObjectMeta(resp.GetMeta(), "head object")
 }
 
-// ReadObject opens a streaming object reader.
-func (c *S3Client) ReadObject(ctx context.Context, ref ObjectRef, opts *ReadOptions) (ObjectMeta, io.ReadCloser, error) {
+// ReadObject implements Client using request-oriented parameters.
+func (c *HostClient) ReadObject(ctx context.Context, req ReadRequest) (ReadResult, error) {
+	opts := &ReadOptions{
+		Range: req.Range, IfMatch: req.IfMatch, IfNoneMatch: req.IfNoneMatch,
+		IfModifiedSince: req.IfModifiedSince, IfUnmodifiedSince: req.IfUnmodifiedSince,
+	}
+	meta, body, err := c.readObjectStream(ctx, req.Ref, opts)
+	if err != nil {
+		return ReadResult{}, err
+	}
+	return ReadResult{Meta: meta, Body: body}, nil
+}
+
+// readObjectStream opens a streaming object reader (legacy convenience shape).
+func (c *HostClient) readObjectStream(ctx context.Context, ref ObjectRef, opts *ReadOptions) (ObjectMeta, io.ReadCloser, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -276,8 +95,18 @@ func (c *S3Client) ReadObject(ctx context.Context, ref ObjectRef, opts *ReadOpti
 	return objectMetaFromProto(meta), &s3ReadCloser{stream: stream, cancel: cancel}, nil
 }
 
-// WriteObject uploads an object from body.
-func (c *S3Client) WriteObject(ctx context.Context, ref ObjectRef, body io.Reader, opts *WriteOptions) (ObjectMeta, error) {
+// WriteObject implements Client.
+func (c *HostClient) WriteObject(ctx context.Context, req WriteRequest) (ObjectMeta, error) {
+	opts := &WriteOptions{
+		ContentType: req.ContentType, CacheControl: req.CacheControl,
+		ContentDisposition: req.ContentDisposition, ContentEncoding: req.ContentEncoding,
+		ContentLanguage: req.ContentLanguage, Metadata: req.Metadata,
+		IfMatch: req.IfMatch, IfNoneMatch: req.IfNoneMatch,
+	}
+	return c.writeObjectStream(ctx, req.Ref, req.Body, opts)
+}
+
+func (c *HostClient) writeObjectStream(ctx context.Context, ref ObjectRef, body io.Reader, opts *WriteOptions) (ObjectMeta, error) {
 	stream, err := c.client.WriteObject(ctx)
 	if err != nil {
 		return ObjectMeta{}, grpcS3Err(err)
@@ -327,20 +156,20 @@ func (c *S3Client) WriteObject(ctx context.Context, ref ObjectRef, body io.Reade
 }
 
 // DeleteObject removes one object.
-func (c *S3Client) DeleteObject(ctx context.Context, ref ObjectRef) error {
+func (c *HostClient) DeleteObject(ctx context.Context, ref ObjectRef) error {
 	_, err := c.client.DeleteObject(ctx, &proto.DeleteObjectRequest{Ref: objectRefToProto(ref)})
 	return grpcS3Err(err)
 }
 
-// ListObjects lists objects in a bucket.
-func (c *S3Client) ListObjects(ctx context.Context, opts ListOptions) (ListPage, error) {
+// ListObjects implements Client.
+func (c *HostClient) ListObjects(ctx context.Context, req ListRequest) (ListPage, error) {
 	resp, err := c.client.ListObjects(ctx, &proto.ListObjectsRequest{
-		Bucket:            opts.Bucket,
-		Prefix:            opts.Prefix,
-		Delimiter:         opts.Delimiter,
-		ContinuationToken: opts.ContinuationToken,
-		StartAfter:        opts.StartAfter,
-		MaxKeys:           opts.MaxKeys,
+		Bucket:            req.Bucket,
+		Prefix:            req.Prefix,
+		Delimiter:         req.Delimiter,
+		ContinuationToken: req.ContinuationToken,
+		StartAfter:        req.StartAfter,
+		MaxKeys:           req.MaxKeys,
 	})
 	if err != nil {
 		return ListPage{}, grpcS3Err(err)
@@ -348,37 +177,36 @@ func (c *S3Client) ListObjects(ctx context.Context, opts ListOptions) (ListPage,
 	return listPageFromProto(resp), nil
 }
 
-// CopyObject copies source to destination.
-func (c *S3Client) CopyObject(ctx context.Context, source, destination ObjectRef, opts *CopyOptions) (ObjectMeta, error) {
-	req := &proto.CopyObjectRequest{
-		Source:      objectRefToProto(source),
-		Destination: objectRefToProto(destination),
+// CopyObject implements Client.
+func (c *HostClient) CopyObject(ctx context.Context, req CopyRequest) (ObjectMeta, error) {
+	pb := &proto.CopyObjectRequest{
+		Source:      objectRefToProto(req.Source),
+		Destination: objectRefToProto(req.Destination),
+		IfMatch:     req.IfMatch,
+		IfNoneMatch: req.IfNoneMatch,
 	}
-	if opts != nil {
-		req.IfMatch = opts.IfMatch
-		req.IfNoneMatch = opts.IfNoneMatch
-	}
-	resp, err := c.client.CopyObject(ctx, req)
+	resp, err := c.client.CopyObject(ctx, pb)
 	if err != nil {
 		return ObjectMeta{}, grpcS3Err(err)
 	}
 	return requiredObjectMeta(resp.GetMeta(), "copy object")
 }
 
-// PresignObject creates a provider-generated presigned URL.
-func (c *S3Client) PresignObject(ctx context.Context, ref ObjectRef, opts *PresignOptions) (PresignResult, error) {
-	req := &proto.PresignObjectRequest{
-		Ref: objectRefToProto(ref),
+// PresignObject implements Client.
+func (c *HostClient) PresignObject(ctx context.Context, req PresignRequest) (PresignResult, error) {
+	pb := &proto.PresignObjectRequest{
+		Ref: objectRefToProto(req.Ref),
 	}
-	var requestedMethod PresignMethod
-	if opts != nil {
-		requestedMethod = opts.Method
-		req.Method = presignMethodToProto(opts.Method)
-		req.ExpiresSeconds = int64(opts.Expires / time.Second)
-		req.ContentType = opts.ContentType
-		req.ContentDisposition = opts.ContentDisposition
-		req.Headers = cloneStringMap(opts.Headers)
-	}
+	var requestedMethod PresignMethod = req.Method
+	pb.Method = presignMethodToProto(req.Method)
+	pb.ExpiresSeconds = int64(req.Expires / time.Second)
+	pb.ContentType = req.ContentType
+	pb.ContentDisposition = req.ContentDisposition
+	pb.Headers = cloneStringMap(req.Headers)
+	return c.presignObject(ctx, pb, requestedMethod)
+}
+
+func (c *HostClient) presignObject(ctx context.Context, req *proto.PresignObjectRequest, requestedMethod PresignMethod) (PresignResult, error) {
 	resp, err := c.client.PresignObject(ctx, req)
 	if err != nil {
 		return PresignResult{}, grpcS3Err(err)
@@ -387,7 +215,7 @@ func (c *S3Client) PresignObject(ctx context.Context, ref ObjectRef, opts *Presi
 }
 
 // CreateObjectAccessURL creates a host-mediated object-access URL.
-func (c *S3Client) CreateObjectAccessURL(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
+func (c *HostClient) CreateObjectAccessURL(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
 	req := &proto.CreateObjectAccessURLRequest{
 		Ref: objectRefToProto(ref),
 	}
@@ -408,23 +236,23 @@ func (c *S3Client) CreateObjectAccessURL(ctx context.Context, ref ObjectRef, opt
 }
 
 // CreateObjectAccessUrl is an alias for CreateObjectAccessURL.
-func (c *S3Client) CreateObjectAccessUrl(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
+func (c *HostClient) CreateObjectAccessUrl(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
 	return c.CreateObjectAccessURL(ctx, ref, opts)
 }
 
 // CreateAccessURL is a short alias for CreateObjectAccessURL.
-func (c *S3Client) CreateAccessURL(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
+func (c *HostClient) CreateAccessURL(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
 	return c.CreateObjectAccessURL(ctx, ref, opts)
 }
 
 // CreateAccessUrl is an alias for CreateAccessURL.
-func (c *S3Client) CreateAccessUrl(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
+func (c *HostClient) CreateAccessUrl(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
 	return c.CreateObjectAccessURL(ctx, ref, opts)
 }
 
 // Object is a convenience wrapper around repeated operations on one object key.
 type Object struct {
-	client *S3Client
+	client *HostClient
 	ref    ObjectRef
 }
 
@@ -439,7 +267,7 @@ func (o *Object) Exists(ctx context.Context) (bool, error) {
 	if err == nil {
 		return true, nil
 	}
-	if err == ErrS3NotFound {
+	if err == ErrNotFound {
 		return false, nil
 	}
 	return false, err
@@ -447,7 +275,7 @@ func (o *Object) Exists(ctx context.Context) (bool, error) {
 
 // Stream opens a streaming reader for the current object.
 func (o *Object) Stream(ctx context.Context, opts *ReadOptions) (ObjectMeta, io.ReadCloser, error) {
-	return o.client.ReadObject(ctx, o.ref, opts)
+	return o.client.readObjectStream(ctx, o.ref, opts)
 }
 
 // Bytes reads the entire current object into memory.
@@ -484,7 +312,7 @@ func (o *Object) JSON(ctx context.Context, opts *ReadOptions) (any, error) {
 
 // Write uploads a new object body from body.
 func (o *Object) Write(ctx context.Context, body io.Reader, opts *WriteOptions) (ObjectMeta, error) {
-	return o.client.WriteObject(ctx, o.ref, body, opts)
+	return o.client.writeObjectStream(ctx, o.ref, body, opts)
 }
 
 // WriteBytes uploads body as raw bytes.
@@ -518,7 +346,15 @@ func (o *Object) Delete(ctx context.Context) error {
 
 // Presign creates a presigned URL for the current object.
 func (o *Object) Presign(ctx context.Context, opts *PresignOptions) (PresignResult, error) {
-	return o.client.PresignObject(ctx, o.ref, opts)
+	req := PresignRequest{Ref: o.ref}
+	if opts != nil {
+		req.Method = opts.Method
+		req.Expires = opts.Expires
+		req.ContentType = opts.ContentType
+		req.ContentDisposition = opts.ContentDisposition
+		req.Headers = opts.Headers
+	}
+	return o.client.PresignObject(ctx, req)
 }
 
 // CreateAccessURL creates a host-mediated object-access URL for the current object.
@@ -859,11 +695,11 @@ func grpcS3Err(err error) error {
 	}
 	switch st.Code() {
 	case codes.NotFound:
-		return ErrS3NotFound
+		return ErrNotFound
 	case codes.FailedPrecondition:
-		return ErrS3PreconditionFailed
+		return ErrPreconditionFailed
 	case codes.OutOfRange:
-		return ErrS3InvalidRange
+		return ErrInvalidRange
 	default:
 		return err
 	}

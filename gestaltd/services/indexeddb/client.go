@@ -102,7 +102,7 @@ func (r *remoteIndexedDB) Transaction(ctx context.Context, stores []string, mode
 	return &remoteTransaction{stream: stream, cancel: cancel}, nil
 }
 
-func (r *remoteIndexedDB) CreateObjectStore(ctx context.Context, name string, schema coreindexeddb.ObjectStoreSchema) error {
+func (r *remoteIndexedDB) CreateObjectStore(ctx context.Context, name string, schema coreindexeddb.ObjectStoreSchema) (coreindexeddb.ObjectStore, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	indexes := make([]*proto.IndexSchema, len(schema.Indexes))
@@ -119,7 +119,10 @@ func (r *remoteIndexedDB) CreateObjectStore(ctx context.Context, name string, sc
 	_, err := r.client.CreateObjectStore(ctx, &proto.CreateObjectStoreRequest{
 		Name: name, Schema: &proto.ObjectStoreSchema{Indexes: indexes, Columns: columns},
 	})
-	return grpcToDatastoreErr(err)
+	if err != nil {
+		return nil, grpcToDatastoreErr(err)
+	}
+	return r.ObjectStore(name), nil
 }
 
 func (r *remoteIndexedDB) DeleteObjectStore(ctx context.Context, name string) error {

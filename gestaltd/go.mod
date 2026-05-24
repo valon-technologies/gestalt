@@ -91,6 +91,7 @@ require (
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
+	github.com/valon-technologies/gestalt/sdk/go v0.0.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.etcd.io/bbolt v1.4.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect

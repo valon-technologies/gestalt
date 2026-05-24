@@ -29,7 +29,7 @@ func (s *StubIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
 	return st
 }
 
-func (s *StubIndexedDB) CreateObjectStore(_ context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+func (s *StubIndexedDB) CreateObjectStore(_ context.Context, name string, schema indexeddb.ObjectStoreSchema) (indexeddb.ObjectStore, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stores == nil {
@@ -37,10 +37,11 @@ func (s *StubIndexedDB) CreateObjectStore(_ context.Context, name string, schema
 	}
 	if existing, ok := s.stores[name]; ok {
 		existing.schema = schema
-	} else {
-		s.stores[name] = &stubObjectStore{db: s, records: make(map[string]indexeddb.Record), schema: schema}
+		return existing, nil
 	}
-	return nil
+	st := &stubObjectStore{db: s, records: make(map[string]indexeddb.Record), schema: schema}
+	s.stores[name] = st
+	return st, nil
 }
 
 func (s *StubIndexedDB) DeleteObjectStore(_ context.Context, name string) error {
