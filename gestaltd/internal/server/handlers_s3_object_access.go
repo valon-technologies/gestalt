@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 )
 
@@ -41,7 +41,7 @@ func (s *Server) handleS3ObjectAccess(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "s3 binding not found")
 		return
 	}
-	if err := enforceS3ObjectAccessHeaders(r, target, target.Method == s3store.PresignMethodPut); err != nil {
+	if err := enforceS3ObjectAccessHeaders(r, target, target.Method == s3sdk.PresignMethodPut); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -49,20 +49,20 @@ func (s *Server) handleS3ObjectAccess(w http.ResponseWriter, r *http.Request) {
 	ref.Key = s3.AppObjectKey(target.AppName, ref.Key)
 
 	switch target.Method {
-	case s3store.PresignMethodGet:
+	case s3sdk.PresignMethodGet:
 		s.handleS3ObjectAccessGet(w, r, client, ref)
-	case s3store.PresignMethodHead:
+	case s3sdk.PresignMethodHead:
 		s.handleS3ObjectAccessHead(w, r, client, ref)
-	case s3store.PresignMethodPut:
+	case s3sdk.PresignMethodPut:
 		s.handleS3ObjectAccessPut(w, r, client, target, ref)
-	case s3store.PresignMethodDelete:
+	case s3sdk.PresignMethodDelete:
 		s.handleS3ObjectAccessDelete(w, r, client, ref)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "unsupported s3 object access method")
 	}
 }
 
-func (s *Server) handleS3ObjectAccessGet(w http.ResponseWriter, r *http.Request, client s3store.Client, ref s3store.ObjectRef) {
+func (s *Server) handleS3ObjectAccessGet(w http.ResponseWriter, r *http.Request, client s3sdk.Client, ref s3sdk.ObjectRef) {
 	readReq, partial, err := s3ObjectAccessReadRequest(r, client, ref)
 	if err != nil {
 		writeS3ObjectAccessError(w, err)
@@ -89,7 +89,7 @@ func (s *Server) handleS3ObjectAccessGet(w http.ResponseWriter, r *http.Request,
 	_, _ = io.Copy(w, result.Body)
 }
 
-func (s *Server) handleS3ObjectAccessHead(w http.ResponseWriter, r *http.Request, client s3store.Client, ref s3store.ObjectRef) {
+func (s *Server) handleS3ObjectAccessHead(w http.ResponseWriter, r *http.Request, client s3sdk.Client, ref s3sdk.ObjectRef) {
 	meta, err := client.HeadObject(r.Context(), ref)
 	if err != nil {
 		writeS3ObjectAccessError(w, err)
@@ -99,12 +99,12 @@ func (s *Server) handleS3ObjectAccessHead(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleS3ObjectAccessPut(w http.ResponseWriter, r *http.Request, client s3store.Client, target s3.ObjectAccessTarget, ref s3store.ObjectRef) {
+func (s *Server) handleS3ObjectAccessPut(w http.ResponseWriter, r *http.Request, client s3sdk.Client, target s3.ObjectAccessTarget, ref s3sdk.ObjectRef) {
 	contentType := target.ContentType
 	if contentType == "" {
 		contentType = r.Header.Get("Content-Type")
 	}
-	meta, err := client.WriteObject(r.Context(), s3store.WriteRequest{
+	meta, err := client.WriteObject(r.Context(), s3sdk.WriteRequest{
 		Ref:                ref,
 		ContentType:        contentType,
 		ContentDisposition: target.ContentDisposition,
@@ -125,7 +125,7 @@ func (s *Server) handleS3ObjectAccessPut(w http.ResponseWriter, r *http.Request,
 	})
 }
 
-func (s *Server) handleS3ObjectAccessDelete(w http.ResponseWriter, r *http.Request, client s3store.Client, ref s3store.ObjectRef) {
+func (s *Server) handleS3ObjectAccessDelete(w http.ResponseWriter, r *http.Request, client s3sdk.Client, ref s3sdk.ObjectRef) {
 	if err := client.DeleteObject(r.Context(), ref); err != nil {
 		writeS3ObjectAccessError(w, err)
 		return
@@ -219,8 +219,8 @@ func (r s3HTTPRange) CoversFullRepresentation(size int64) bool {
 
 var errS3ObjectAccessInvalidConditionalHeader = errors.New("s3 object access conditional header is invalid")
 
-func s3ObjectAccessReadRequest(r *http.Request, client s3store.Client, ref s3store.ObjectRef) (s3store.ReadRequest, s3HTTPRange, error) {
-	out := s3store.ReadRequest{
+func s3ObjectAccessReadRequest(r *http.Request, client s3sdk.Client, ref s3sdk.ObjectRef) (s3sdk.ReadRequest, s3HTTPRange, error) {
+	out := s3sdk.ReadRequest{
 		Ref:         ref,
 		IfMatch:     r.Header.Get("If-Match"),
 		IfNoneMatch: r.Header.Get("If-None-Match"),
@@ -228,29 +228,29 @@ func s3ObjectAccessReadRequest(r *http.Request, client s3store.Client, ref s3sto
 	if value := r.Header.Get("If-Modified-Since"); value != "" {
 		t, err := http.ParseTime(value)
 		if err != nil {
-			return s3store.ReadRequest{}, s3HTTPRange{}, fmt.Errorf("%w: If-Modified-Since", errS3ObjectAccessInvalidConditionalHeader)
+			return s3sdk.ReadRequest{}, s3HTTPRange{}, fmt.Errorf("%w: If-Modified-Since", errS3ObjectAccessInvalidConditionalHeader)
 		}
 		out.IfModifiedSince = &t
 	}
 	if value := r.Header.Get("If-Unmodified-Since"); value != "" {
 		t, err := http.ParseTime(value)
 		if err != nil {
-			return s3store.ReadRequest{}, s3HTTPRange{}, fmt.Errorf("%w: If-Unmodified-Since", errS3ObjectAccessInvalidConditionalHeader)
+			return s3sdk.ReadRequest{}, s3HTTPRange{}, fmt.Errorf("%w: If-Unmodified-Since", errS3ObjectAccessInvalidConditionalHeader)
 		}
 		out.IfUnmodifiedSince = &t
 	}
 	byteRange, httpRange, err := parseS3ObjectAccessHTTPRange(r.Header.Get("Range"))
 	if err != nil {
-		return s3store.ReadRequest{}, s3HTTPRange{}, err
+		return s3sdk.ReadRequest{}, s3HTTPRange{}, err
 	}
 	if byteRange != nil && byteRange.Start == nil && byteRange.End != nil {
 		meta, err := client.HeadObject(r.Context(), ref)
 		if err != nil {
-			return s3store.ReadRequest{}, s3HTTPRange{}, err
+			return s3sdk.ReadRequest{}, s3HTTPRange{}, err
 		}
 		suffix := *byteRange.End
 		if suffix <= 0 || meta.Size <= 0 {
-			return s3store.ReadRequest{}, s3HTTPRange{}, s3store.ErrInvalidRange
+			return s3sdk.ReadRequest{}, s3HTTPRange{}, s3sdk.ErrInvalidRange
 		}
 		start := meta.Size - suffix
 		if start < 0 {
@@ -266,30 +266,30 @@ func s3ObjectAccessReadRequest(r *http.Request, client s3store.Client, ref s3sto
 	return out, httpRange, nil
 }
 
-func parseS3ObjectAccessHTTPRange(value string) (*s3store.ByteRange, s3HTTPRange, error) {
+func parseS3ObjectAccessHTTPRange(value string) (*s3sdk.ByteRange, s3HTTPRange, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return nil, s3HTTPRange{}, nil
 	}
 	spec, ok := strings.CutPrefix(value, "bytes=")
 	if !ok || strings.Contains(spec, ",") {
-		return nil, s3HTTPRange{}, s3store.ErrInvalidRange
+		return nil, s3HTTPRange{}, s3sdk.ErrInvalidRange
 	}
 	startRaw, endRaw, ok := strings.Cut(spec, "-")
 	if !ok {
-		return nil, s3HTTPRange{}, s3store.ErrInvalidRange
+		return nil, s3HTTPRange{}, s3sdk.ErrInvalidRange
 	}
 	startRaw = strings.TrimSpace(startRaw)
 	endRaw = strings.TrimSpace(endRaw)
 	if startRaw == "" && endRaw == "" {
-		return nil, s3HTTPRange{}, s3store.ErrInvalidRange
+		return nil, s3HTTPRange{}, s3sdk.ErrInvalidRange
 	}
-	out := &s3store.ByteRange{}
+	out := &s3sdk.ByteRange{}
 	httpRange := s3HTTPRange{Requested: true}
 	if startRaw != "" {
 		start, err := strconv.ParseInt(startRaw, 10, 64)
 		if err != nil || start < 0 {
-			return nil, s3HTTPRange{}, s3store.ErrInvalidRange
+			return nil, s3HTTPRange{}, s3sdk.ErrInvalidRange
 		}
 		out.Start = &start
 		httpRange.Start = &start
@@ -297,18 +297,18 @@ func parseS3ObjectAccessHTTPRange(value string) (*s3store.ByteRange, s3HTTPRange
 	if endRaw != "" {
 		end, err := strconv.ParseInt(endRaw, 10, 64)
 		if err != nil || end < 0 {
-			return nil, s3HTTPRange{}, s3store.ErrInvalidRange
+			return nil, s3HTTPRange{}, s3sdk.ErrInvalidRange
 		}
 		out.End = &end
 		httpRange.End = &end
 	}
 	if out.Start != nil && out.End != nil && *out.Start > *out.End {
-		return nil, s3HTTPRange{}, s3store.ErrInvalidRange
+		return nil, s3HTTPRange{}, s3sdk.ErrInvalidRange
 	}
 	return out, httpRange, nil
 }
 
-func writeS3ObjectAccessMetaHeaders(w http.ResponseWriter, meta s3store.ObjectMeta) {
+func writeS3ObjectAccessMetaHeaders(w http.ResponseWriter, meta s3sdk.ObjectMeta) {
 	if meta.ETag != "" {
 		w.Header().Set("ETag", meta.ETag)
 	}
@@ -329,11 +329,11 @@ func writeS3ObjectAccessError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errS3ObjectAccessInvalidConditionalHeader):
 		writeError(w, http.StatusBadRequest, "s3 object conditional header is invalid")
-	case errors.Is(err, s3store.ErrNotFound):
+	case errors.Is(err, s3sdk.ErrNotFound):
 		writeError(w, http.StatusNotFound, "s3 object not found")
-	case errors.Is(err, s3store.ErrPreconditionFailed):
+	case errors.Is(err, s3sdk.ErrPreconditionFailed):
 		writeError(w, http.StatusPreconditionFailed, "s3 object precondition failed")
-	case errors.Is(err, s3store.ErrInvalidRange):
+	case errors.Is(err, s3sdk.ErrInvalidRange):
 		writeError(w, http.StatusRequestedRangeNotSatisfiable, "s3 object range is invalid")
 	default:
 		writeError(w, http.StatusInternalServerError, "s3 object access failed")

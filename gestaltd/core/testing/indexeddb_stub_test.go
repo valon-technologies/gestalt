@@ -3,9 +3,8 @@ package coretesting
 import (
 	"context"
 	"errors"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"testing"
-
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
 func TestStubCursorAdvanceSkipsRequestedRows(t *testing.T) {
@@ -13,12 +12,12 @@ func TestStubCursorAdvanceSkipsRequestedRows(t *testing.T) {
 
 	db := &StubIndexedDB{}
 	ctx := context.Background()
-	if err := db.CreateObjectStore(ctx, "items", indexeddb.ObjectStoreSchema{}); err != nil {
+	if _, err := db.CreateObjectStore(ctx, "items", idb.ObjectStoreSchema{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 
 	store := db.ObjectStore("items")
-	for _, record := range []indexeddb.Record{
+	for _, record := range []idb.Record{
 		{"id": "a"},
 		{"id": "b"},
 		{"id": "c"},
@@ -28,7 +27,7 @@ func TestStubCursorAdvanceSkipsRequestedRows(t *testing.T) {
 		}
 	}
 
-	cursor, err := store.OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := store.OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -47,14 +46,14 @@ func TestStubIndexCursorOrdersBinaryKeysBytewise(t *testing.T) {
 
 	db := &StubIndexedDB{}
 	ctx := context.Background()
-	if err := db.CreateObjectStore(ctx, "items", indexeddb.ObjectStoreSchema{
-		Indexes: []indexeddb.IndexSchema{{Name: "by_blob", KeyPath: []string{"blob"}}},
+	if _, err := db.CreateObjectStore(ctx, "items", idb.ObjectStoreSchema{
+		Indexes: []idb.IndexSchema{{Name: "by_blob", KeyPath: []string{"blob"}}},
 	}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 
 	store := db.ObjectStore("items")
-	for _, record := range []indexeddb.Record{
+	for _, record := range []idb.Record{
 		{"id": "a", "blob": []byte{10}},
 		{"id": "b", "blob": []byte{2}},
 		{"id": "c", "blob": []byte{2, 0}},
@@ -64,7 +63,7 @@ func TestStubIndexCursorOrdersBinaryKeysBytewise(t *testing.T) {
 		}
 	}
 
-	cursor, err := store.Index("by_blob").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := store.Index("by_blob").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -90,31 +89,31 @@ func TestStubTransactionAbortsOnOperationError(t *testing.T) {
 
 	db := &StubIndexedDB{}
 	ctx := context.Background()
-	if err := db.CreateObjectStore(ctx, "users", indexeddb.ObjectStoreSchema{
-		Indexes: []indexeddb.IndexSchema{{Name: "by_email", KeyPath: []string{"email"}, Unique: true}},
+	if _, err := db.CreateObjectStore(ctx, "users", idb.ObjectStoreSchema{
+		Indexes: []idb.IndexSchema{{Name: "by_email", KeyPath: []string{"email"}, Unique: true}},
 	}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	store := db.ObjectStore("users")
-	if err := store.Add(ctx, indexeddb.Record{"id": "user-1", "email": "same@example.com"}); err != nil {
+	if err := store.Add(ctx, idb.Record{"id": "user-1", "email": "same@example.com"}); err != nil {
 		t.Fatalf("seed user-1: %v", err)
 	}
 
-	tx, err := db.Transaction(ctx, []string{"users"}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
+	tx, err := db.Transaction(ctx, []string{"users"}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
 		t.Fatalf("Transaction: %v", err)
 	}
 	txStore := tx.ObjectStore("users")
-	if err := txStore.Add(ctx, indexeddb.Record{"id": "user-2", "email": "same@example.com"}); !errors.Is(err, indexeddb.ErrAlreadyExists) {
-		t.Fatalf("conflicting Add error = %v, want indexeddb.ErrAlreadyExists", err)
+	if err := txStore.Add(ctx, idb.Record{"id": "user-2", "email": "same@example.com"}); !errors.Is(err, idb.ErrAlreadyExists) {
+		t.Fatalf("conflicting Add error = %v, want idb.ErrAlreadyExists", err)
 	}
-	if err := txStore.Put(ctx, indexeddb.Record{"id": "user-3", "email": "unique@example.com"}); !errors.Is(err, indexeddb.ErrAlreadyExists) {
-		t.Fatalf("Put after failed Add error = %v, want original indexeddb.ErrAlreadyExists", err)
+	if err := txStore.Put(ctx, idb.Record{"id": "user-3", "email": "unique@example.com"}); !errors.Is(err, idb.ErrAlreadyExists) {
+		t.Fatalf("Put after failed Add error = %v, want original idb.ErrAlreadyExists", err)
 	}
-	if err := tx.Commit(ctx); !errors.Is(err, indexeddb.ErrAlreadyExists) {
-		t.Fatalf("Commit after failed Add error = %v, want original indexeddb.ErrAlreadyExists", err)
+	if err := tx.Commit(ctx); !errors.Is(err, idb.ErrAlreadyExists) {
+		t.Fatalf("Commit after failed Add error = %v, want original idb.ErrAlreadyExists", err)
 	}
-	if _, err := store.Get(ctx, "user-3"); !errors.Is(err, indexeddb.ErrNotFound) {
-		t.Fatalf("user-3 after aborted transaction error = %v, want indexeddb.ErrNotFound", err)
+	if _, err := store.Get(ctx, "user-3"); !errors.Is(err, idb.ErrNotFound) {
+		t.Fatalf("user-3 after aborted transaction error = %v, want idb.ErrNotFound", err)
 	}
 }

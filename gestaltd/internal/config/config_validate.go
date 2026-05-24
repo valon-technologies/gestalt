@@ -1186,10 +1186,10 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	seenStores := make(map[string]struct{}, len(entry.IndexedDB.ObjectStores))
 	for i, store := range entry.IndexedDB.ObjectStores {
 		if store == "" {
-			return fmt.Errorf("config validation: %s.indexeddb.objectStores[%d] is required", subject, i)
+			return fmt.Errorf("config validation: %s.idb.objectStores[%d] is required", subject, i)
 		}
 		if _, exists := seenStores[store]; exists {
-			return fmt.Errorf("config validation: %s.indexeddb.objectStores[%d] duplicates %q", subject, i, store)
+			return fmt.Errorf("config validation: %s.idb.objectStores[%d] duplicates %q", subject, i, store)
 		}
 		seenStores[store] = struct{}{}
 	}
@@ -1427,10 +1427,10 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	seenStores := make(map[string]struct{}, len(entry.IndexedDB.ObjectStores))
 	for i, store := range entry.IndexedDB.ObjectStores {
 		if store == "" {
-			return fmt.Errorf("config validation: %s.indexeddb.objectStores[%d] is required", subject, i)
+			return fmt.Errorf("config validation: %s.idb.objectStores[%d] is required", subject, i)
 		}
 		if _, exists := seenStores[store]; exists {
-			return fmt.Errorf("config validation: %s.indexeddb.objectStores[%d] duplicates %q", subject, i, store)
+			return fmt.Errorf("config validation: %s.idb.objectStores[%d] duplicates %q", subject, i, store)
 		}
 		seenStores[store] = struct{}{}
 	}
@@ -1978,10 +1978,10 @@ func validateAppIndexedDBConfig(cfg *Config, name string, entry *ProviderEntry) 
 	seenStores := make(map[string]struct{}, len(indexedDB.ObjectStores))
 	for i, store := range indexedDB.ObjectStores {
 		if store == "" {
-			return fmt.Errorf("config validation: apps.%s.indexeddb.objectStores[%d] is required", name, i)
+			return fmt.Errorf("config validation: apps.%s.idb.objectStores[%d] is required", name, i)
 		}
 		if _, exists := seenStores[store]; exists {
-			return fmt.Errorf("config validation: apps.%s.indexeddb.objectStores[%d] duplicates %q", name, i, store)
+			return fmt.Errorf("config validation: apps.%s.idb.objectStores[%d] duplicates %q", name, i, store)
 		}
 		seenStores[store] = struct{}{}
 	}

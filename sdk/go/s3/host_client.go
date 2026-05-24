@@ -118,7 +118,7 @@ func (c *HostClient) writeObjectStream(ctx context.Context, ref ObjectRef, body 
 		open.ContentDisposition = opts.ContentDisposition
 		open.ContentEncoding = opts.ContentEncoding
 		open.ContentLanguage = opts.ContentLanguage
-		open.Metadata = cloneStringMap(opts.Metadata)
+		open.Metadata = CloneStringMap(opts.Metadata)
 		open.IfMatch = opts.IfMatch
 		open.IfNoneMatch = opts.IfNoneMatch
 	}
@@ -202,7 +202,7 @@ func (c *HostClient) PresignObject(ctx context.Context, req PresignRequest) (Pre
 	pb.ExpiresSeconds = int64(req.Expires / time.Second)
 	pb.ContentType = req.ContentType
 	pb.ContentDisposition = req.ContentDisposition
-	pb.Headers = cloneStringMap(req.Headers)
+	pb.Headers = CloneStringMap(req.Headers)
 	return c.presignObject(ctx, pb, requestedMethod)
 }
 
@@ -226,7 +226,7 @@ func (c *HostClient) CreateObjectAccessURL(ctx context.Context, ref ObjectRef, o
 		req.ExpiresSeconds = int64(opts.Expires / time.Second)
 		req.ContentType = opts.ContentType
 		req.ContentDisposition = opts.ContentDisposition
-		req.Headers = cloneStringMap(opts.Headers)
+		req.Headers = CloneStringMap(opts.Headers)
 	}
 	resp, err := c.objectAccessClient.CreateObjectAccessURL(ctx, req)
 	if err != nil {
@@ -444,7 +444,7 @@ func objectMetaToProto(meta ObjectMeta) *proto.S3ObjectMeta {
 		Etag:         meta.ETag,
 		Size:         meta.Size,
 		ContentType:  meta.ContentType,
-		Metadata:     cloneStringMap(meta.Metadata),
+		Metadata:     CloneStringMap(meta.Metadata),
 		StorageClass: meta.StorageClass,
 	}
 	if !meta.LastModified.IsZero() {
@@ -466,7 +466,7 @@ func objectMetaFromProto(meta *proto.S3ObjectMeta) ObjectMeta {
 		ETag:         meta.GetEtag(),
 		Size:         meta.GetSize(),
 		ContentType:  meta.GetContentType(),
-		Metadata:     cloneStringMap(meta.GetMetadata()),
+		Metadata:     CloneStringMap(meta.GetMetadata()),
 		StorageClass: meta.GetStorageClass(),
 	}
 	if ts := meta.GetLastModified(); ts != nil {
@@ -542,7 +542,7 @@ func writeOptionsFromProto(open *proto.WriteObjectOpen) *WriteOptions {
 		ContentDisposition: open.GetContentDisposition(),
 		ContentEncoding:    open.GetContentEncoding(),
 		ContentLanguage:    open.GetContentLanguage(),
-		Metadata:           cloneStringMap(open.GetMetadata()),
+		Metadata:           CloneStringMap(open.GetMetadata()),
 		IfMatch:            open.GetIfMatch(),
 		IfNoneMatch:        open.GetIfNoneMatch(),
 	}
@@ -598,7 +598,7 @@ func presignOptionsFromProto(req *proto.PresignObjectRequest) *PresignOptions {
 		Expires:            time.Duration(req.GetExpiresSeconds()) * time.Second,
 		ContentType:        req.GetContentType(),
 		ContentDisposition: req.GetContentDisposition(),
-		Headers:            cloneStringMap(req.GetHeaders()),
+		Headers:            CloneStringMap(req.GetHeaders()),
 	}
 }
 
@@ -621,7 +621,7 @@ func presignResultToProto(result PresignResult) *proto.PresignObjectResponse {
 	resp := &proto.PresignObjectResponse{
 		Url:     result.URL,
 		Method:  presignMethodToProto(result.Method),
-		Headers: cloneStringMap(result.Headers),
+		Headers: CloneStringMap(result.Headers),
 	}
 	if !result.ExpiresAt.IsZero() {
 		resp.ExpiresAt = timestamppb.New(result.ExpiresAt)
@@ -640,7 +640,7 @@ func presignResultFromProto(resp *proto.PresignObjectResponse, requested Presign
 	out := PresignResult{
 		URL:     resp.GetUrl(),
 		Method:  method,
-		Headers: cloneStringMap(resp.GetHeaders()),
+		Headers: CloneStringMap(resp.GetHeaders()),
 	}
 	if ts := resp.GetExpiresAt(); ts != nil {
 		out.ExpiresAt = ts.AsTime()
@@ -659,21 +659,10 @@ func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, request
 	out := ObjectAccessURL{
 		URL:     resp.GetUrl(),
 		Method:  method,
-		Headers: cloneStringMap(resp.GetHeaders()),
+		Headers: CloneStringMap(resp.GetHeaders()),
 	}
 	if ts := resp.GetExpiresAt(); ts != nil {
 		out.ExpiresAt = ts.AsTime()
-	}
-	return out
-}
-
-func cloneStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(values))
-	for key, value := range values {
-		out[key] = value
 	}
 	return out
 }

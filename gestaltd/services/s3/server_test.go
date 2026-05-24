@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -45,18 +45,18 @@ func TestS3ServerPrefixesKeysPerPlugin(t *testing.T) {
 		t.Fatal("expected WriteObject response")
 	}
 
-	_, err := store.HeadObject(ctx, s3store.ObjectRef{
+	_, err := store.HeadObject(ctx, s3sdk.ObjectRef{
 		Bucket: "docs",
 		Key:    s3NamespacePrefix("roadmap") + "plans/q2.txt",
 	})
 	if err != nil {
 		t.Fatalf("HeadObject(prefixed): %v", err)
 	}
-	_, err = store.HeadObject(ctx, s3store.ObjectRef{
+	_, err = store.HeadObject(ctx, s3sdk.ObjectRef{
 		Bucket: "docs",
 		Key:    "plans/q2.txt",
 	})
-	if !errors.Is(err, s3store.ErrNotFound) {
+	if !errors.Is(err, s3sdk.ErrNotFound) {
 		t.Fatalf("HeadObject(unprefixed) error = %v, want ErrNotFound", err)
 	}
 }
@@ -66,7 +66,7 @@ func TestRoutingS3ServerRoutesByHostBindingMetadata(t *testing.T) {
 
 	main := &coretesting.StubS3{}
 	archive := &coretesting.StubS3{}
-	srv, _ := NewRoutingServers(map[string]s3store.Client{
+	srv, _ := NewRoutingServers(map[string]s3sdk.Client{
 		"main":    main,
 		"archive": archive,
 	}, "", "roadmap", nil)
@@ -87,16 +87,16 @@ func TestRoutingS3ServerRoutesByHostBindingMetadata(t *testing.T) {
 	if err := srv.WriteObject(stream); err != nil {
 		t.Fatalf("WriteObject: %v", err)
 	}
-	if _, err := archive.HeadObject(context.Background(), s3store.ObjectRef{
+	if _, err := archive.HeadObject(context.Background(), s3sdk.ObjectRef{
 		Bucket: "docs",
 		Key:    s3NamespacePrefix("roadmap") + "plans/q2.txt",
 	}); err != nil {
 		t.Fatalf("archive HeadObject: %v", err)
 	}
-	if _, err := main.HeadObject(context.Background(), s3store.ObjectRef{
+	if _, err := main.HeadObject(context.Background(), s3sdk.ObjectRef{
 		Bucket: "docs",
 		Key:    s3NamespacePrefix("roadmap") + "plans/q2.txt",
-	}); !errors.Is(err, s3store.ErrNotFound) {
+	}); !errors.Is(err, s3sdk.ErrNotFound) {
 		t.Fatalf("main HeadObject error = %v, want ErrNotFound", err)
 	}
 }
@@ -134,8 +134,8 @@ func TestS3ServerListWrapsContinuationTokensForNamespacedPlugins(t *testing.T) {
 		s3NamespacePrefix("roadmap") + "plans/nested/b.txt",
 		s3NamespacePrefix("roadmap") + "plans/z.txt",
 	} {
-		if _, err := store.WriteObject(ctx, s3store.WriteRequest{
-			Ref:  s3store.ObjectRef{Bucket: "docs", Key: key},
+		if _, err := store.WriteObject(ctx, s3sdk.WriteRequest{
+			Ref:  s3sdk.ObjectRef{Bucket: "docs", Key: key},
 			Body: strings.NewReader(key),
 		}); err != nil {
 			t.Fatalf("seed %s: %v", key, err)
@@ -191,7 +191,7 @@ func TestS3ServerListRoundTripsOpaqueBackendContinuationTokens(t *testing.T) {
 	t.Parallel()
 
 	client := &recordingListS3Client{
-		pages: []s3store.ListPage{
+		pages: []s3sdk.ListPage{
 			{
 				HasMore:               true,
 				NextContinuationToken: "plugin_roadmap/internal-offset-2",
@@ -271,8 +271,8 @@ func TestS3ServerWriteObjectPropagatesProviderErrorAfterStoppingReadEarly(t *tes
 	t.Parallel()
 
 	srv := NewServer(funcS3Client{
-		writeObject: func(_ context.Context, req s3store.WriteRequest) (s3store.ObjectMeta, error) {
-			return s3store.ObjectMeta{}, s3store.ErrPreconditionFailed
+		writeObject: func(_ context.Context, req s3sdk.WriteRequest) (s3sdk.ObjectMeta, error) {
+			return s3sdk.ObjectMeta{}, s3sdk.ErrPreconditionFailed
 		},
 	}, "roadmap")
 	stream := newStubS3WriteObjectServer(context.Background(), []*proto.WriteObjectRequest{
@@ -350,10 +350,10 @@ func TestS3ServerListDropsKeysOutsideAppNamespace(t *testing.T) {
 	t.Parallel()
 
 	srv := NewServer(listResultS3Client{
-		page: s3store.ListPage{
-			Objects: []s3store.ObjectMeta{
-				{Ref: s3store.ObjectRef{Bucket: "docs", Key: s3NamespacePrefix("roadmap") + "plans/a.txt"}},
-				{Ref: s3store.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}},
+		page: s3sdk.ListPage{
+			Objects: []s3sdk.ObjectMeta{
+				{Ref: s3sdk.ObjectRef{Bucket: "docs", Key: s3NamespacePrefix("roadmap") + "plans/a.txt"}},
+				{Ref: s3sdk.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}},
 			},
 			CommonPrefixes: []string{
 				s3NamespacePrefix("roadmap") + "plans/nested/",
@@ -385,8 +385,8 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 		t.Parallel()
 
 		srv := NewServer(funcS3Client{
-			headObject: func(context.Context, s3store.ObjectRef) (s3store.ObjectMeta, error) {
-				return s3store.ObjectMeta{Ref: s3store.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}}, nil
+			headObject: func(context.Context, s3sdk.ObjectRef) (s3sdk.ObjectMeta, error) {
+				return s3sdk.ObjectMeta{Ref: s3sdk.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}}, nil
 			},
 		}, "roadmap")
 
@@ -402,9 +402,9 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 		t.Parallel()
 
 		srv := NewServer(funcS3Client{
-			readObject: func(context.Context, s3store.ReadRequest) (s3store.ReadResult, error) {
-				return s3store.ReadResult{
-					Meta: s3store.ObjectMeta{Ref: s3store.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}},
+			readObject: func(context.Context, s3sdk.ReadRequest) (s3sdk.ReadResult, error) {
+				return s3sdk.ReadResult{
+					Meta: s3sdk.ObjectMeta{Ref: s3sdk.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}},
 					Body: io.NopCloser(strings.NewReader("leak")),
 				}, nil
 			},
@@ -426,8 +426,8 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 		t.Parallel()
 
 		srv := NewServer(funcS3Client{
-			writeObject: func(_ context.Context, req s3store.WriteRequest) (s3store.ObjectMeta, error) {
-				return s3store.ObjectMeta{Ref: s3store.ObjectRef{Bucket: req.Ref.Bucket, Key: "plans/escape.txt"}}, nil
+			writeObject: func(_ context.Context, req s3sdk.WriteRequest) (s3sdk.ObjectMeta, error) {
+				return s3sdk.ObjectMeta{Ref: s3sdk.ObjectRef{Bucket: req.Ref.Bucket, Key: "plans/escape.txt"}}, nil
 			},
 		}, "roadmap")
 		stream := newStubS3WriteObjectServer(context.Background(), []*proto.WriteObjectRequest{
@@ -451,8 +451,8 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 		t.Parallel()
 
 		srv := NewServer(funcS3Client{
-			copyObject: func(context.Context, s3store.CopyRequest) (s3store.ObjectMeta, error) {
-				return s3store.ObjectMeta{Ref: s3store.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}}, nil
+			copyObject: func(context.Context, s3sdk.CopyRequest) (s3sdk.ObjectMeta, error) {
+				return s3sdk.ObjectMeta{Ref: s3sdk.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}}, nil
 			},
 		}, "roadmap")
 
@@ -471,9 +471,9 @@ func TestS3ServerRejectsAppScopedPresign(t *testing.T) {
 
 	called := false
 	srv := NewServer(funcS3Client{
-		presignObject: func(context.Context, s3store.PresignRequest) (s3store.PresignResult, error) {
+		presignObject: func(context.Context, s3sdk.PresignRequest) (s3sdk.PresignResult, error) {
 			called = true
-			return s3store.PresignResult{}, nil
+			return s3sdk.PresignResult{}, nil
 		},
 	}, "roadmap")
 
@@ -497,9 +497,9 @@ func TestS3ServerAppScopedPresignReturnsHostedObjectAccessURL(t *testing.T) {
 	}
 	called := false
 	srv := NewServerWithOptions(funcS3Client{
-		presignObject: func(context.Context, s3store.PresignRequest) (s3store.PresignResult, error) {
+		presignObject: func(context.Context, s3sdk.PresignRequest) (s3sdk.PresignResult, error) {
 			called = true
-			return s3store.PresignResult{}, nil
+			return s3sdk.PresignResult{}, nil
 		},
 	}, "roadmap", ServerOptions{BindingName: "docs", AccessURLs: manager})
 
@@ -541,183 +541,183 @@ func TestS3ServerAppScopedPresignReturnsHostedObjectAccessURL(t *testing.T) {
 	if target.AppName != "roadmap" || target.BindingName != "docs" {
 		t.Fatalf("target scope = %s/%s, want roadmap/docs", target.AppName, target.BindingName)
 	}
-	if target.Ref != (s3store.ObjectRef{Bucket: "docs", Key: "plans/q2.txt"}) {
+	if target.Ref != (s3sdk.ObjectRef{Bucket: "docs", Key: "plans/q2.txt"}) {
 		t.Fatalf("target ref = %#v, want docs/plans/q2.txt", target.Ref)
 	}
-	if target.Method != s3store.PresignMethodPut {
+	if target.Method != s3sdk.PresignMethodPut {
 		t.Fatalf("target method = %q, want PUT", target.Method)
 	}
 }
 
 type shortReadS3Client struct{}
 
-func (shortReadS3Client) HeadObject(context.Context, s3store.ObjectRef) (s3store.ObjectMeta, error) {
-	return s3store.ObjectMeta{}, errors.New("unexpected HeadObject call")
+func (shortReadS3Client) HeadObject(context.Context, s3sdk.ObjectRef) (s3sdk.ObjectMeta, error) {
+	return s3sdk.ObjectMeta{}, errors.New("unexpected HeadObject call")
 }
 
-func (shortReadS3Client) ReadObject(context.Context, s3store.ReadRequest) (s3store.ReadResult, error) {
-	return s3store.ReadResult{}, errors.New("unexpected ReadObject call")
+func (shortReadS3Client) ReadObject(context.Context, s3sdk.ReadRequest) (s3sdk.ReadResult, error) {
+	return s3sdk.ReadResult{}, errors.New("unexpected ReadObject call")
 }
 
-func (shortReadS3Client) WriteObject(_ context.Context, req s3store.WriteRequest) (s3store.ObjectMeta, error) {
+func (shortReadS3Client) WriteObject(_ context.Context, req s3sdk.WriteRequest) (s3sdk.ObjectMeta, error) {
 	if req.Body != nil {
 		buf := make([]byte, 1)
 		_, _ = req.Body.Read(buf)
 	}
-	return s3store.ObjectMeta{Ref: req.Ref}, nil
+	return s3sdk.ObjectMeta{Ref: req.Ref}, nil
 }
 
-func (shortReadS3Client) DeleteObject(context.Context, s3store.ObjectRef) error {
+func (shortReadS3Client) DeleteObject(context.Context, s3sdk.ObjectRef) error {
 	return errors.New("unexpected DeleteObject call")
 }
 
-func (shortReadS3Client) ListObjects(context.Context, s3store.ListRequest) (s3store.ListPage, error) {
-	return s3store.ListPage{}, errors.New("unexpected ListObjects call")
+func (shortReadS3Client) ListObjects(context.Context, s3sdk.ListRequest) (s3sdk.ListPage, error) {
+	return s3sdk.ListPage{}, errors.New("unexpected ListObjects call")
 }
 
-func (shortReadS3Client) CopyObject(context.Context, s3store.CopyRequest) (s3store.ObjectMeta, error) {
-	return s3store.ObjectMeta{}, errors.New("unexpected CopyObject call")
+func (shortReadS3Client) CopyObject(context.Context, s3sdk.CopyRequest) (s3sdk.ObjectMeta, error) {
+	return s3sdk.ObjectMeta{}, errors.New("unexpected CopyObject call")
 }
 
-func (shortReadS3Client) PresignObject(context.Context, s3store.PresignRequest) (s3store.PresignResult, error) {
-	return s3store.PresignResult{}, errors.New("unexpected PresignObject call")
+func (shortReadS3Client) PresignObject(context.Context, s3sdk.PresignRequest) (s3sdk.PresignResult, error) {
+	return s3sdk.PresignResult{}, errors.New("unexpected PresignObject call")
 }
 
 func (shortReadS3Client) Ping(context.Context) error { return nil }
 func (shortReadS3Client) Close() error               { return nil }
 
 type listResultS3Client struct {
-	page s3store.ListPage
+	page s3sdk.ListPage
 }
 
-func (c listResultS3Client) HeadObject(context.Context, s3store.ObjectRef) (s3store.ObjectMeta, error) {
-	return s3store.ObjectMeta{}, errors.New("unexpected HeadObject call")
+func (c listResultS3Client) HeadObject(context.Context, s3sdk.ObjectRef) (s3sdk.ObjectMeta, error) {
+	return s3sdk.ObjectMeta{}, errors.New("unexpected HeadObject call")
 }
 
-func (c listResultS3Client) ReadObject(context.Context, s3store.ReadRequest) (s3store.ReadResult, error) {
-	return s3store.ReadResult{}, errors.New("unexpected ReadObject call")
+func (c listResultS3Client) ReadObject(context.Context, s3sdk.ReadRequest) (s3sdk.ReadResult, error) {
+	return s3sdk.ReadResult{}, errors.New("unexpected ReadObject call")
 }
 
-func (c listResultS3Client) WriteObject(context.Context, s3store.WriteRequest) (s3store.ObjectMeta, error) {
-	return s3store.ObjectMeta{}, errors.New("unexpected WriteObject call")
+func (c listResultS3Client) WriteObject(context.Context, s3sdk.WriteRequest) (s3sdk.ObjectMeta, error) {
+	return s3sdk.ObjectMeta{}, errors.New("unexpected WriteObject call")
 }
 
-func (c listResultS3Client) DeleteObject(context.Context, s3store.ObjectRef) error {
+func (c listResultS3Client) DeleteObject(context.Context, s3sdk.ObjectRef) error {
 	return errors.New("unexpected DeleteObject call")
 }
 
-func (c listResultS3Client) ListObjects(context.Context, s3store.ListRequest) (s3store.ListPage, error) {
+func (c listResultS3Client) ListObjects(context.Context, s3sdk.ListRequest) (s3sdk.ListPage, error) {
 	return c.page, nil
 }
 
-func (c listResultS3Client) CopyObject(context.Context, s3store.CopyRequest) (s3store.ObjectMeta, error) {
-	return s3store.ObjectMeta{}, errors.New("unexpected CopyObject call")
+func (c listResultS3Client) CopyObject(context.Context, s3sdk.CopyRequest) (s3sdk.ObjectMeta, error) {
+	return s3sdk.ObjectMeta{}, errors.New("unexpected CopyObject call")
 }
 
-func (c listResultS3Client) PresignObject(context.Context, s3store.PresignRequest) (s3store.PresignResult, error) {
-	return s3store.PresignResult{}, errors.New("unexpected PresignObject call")
+func (c listResultS3Client) PresignObject(context.Context, s3sdk.PresignRequest) (s3sdk.PresignResult, error) {
+	return s3sdk.PresignResult{}, errors.New("unexpected PresignObject call")
 }
 
 func (c listResultS3Client) Ping(context.Context) error { return nil }
 func (c listResultS3Client) Close() error               { return nil }
 
 type recordingListS3Client struct {
-	reqs  []s3store.ListRequest
-	pages []s3store.ListPage
+	reqs  []s3sdk.ListRequest
+	pages []s3sdk.ListPage
 }
 
-func (*recordingListS3Client) HeadObject(context.Context, s3store.ObjectRef) (s3store.ObjectMeta, error) {
-	return s3store.ObjectMeta{}, errors.New("unexpected HeadObject call")
+func (*recordingListS3Client) HeadObject(context.Context, s3sdk.ObjectRef) (s3sdk.ObjectMeta, error) {
+	return s3sdk.ObjectMeta{}, errors.New("unexpected HeadObject call")
 }
 
-func (*recordingListS3Client) ReadObject(context.Context, s3store.ReadRequest) (s3store.ReadResult, error) {
-	return s3store.ReadResult{}, errors.New("unexpected ReadObject call")
+func (*recordingListS3Client) ReadObject(context.Context, s3sdk.ReadRequest) (s3sdk.ReadResult, error) {
+	return s3sdk.ReadResult{}, errors.New("unexpected ReadObject call")
 }
 
-func (*recordingListS3Client) WriteObject(context.Context, s3store.WriteRequest) (s3store.ObjectMeta, error) {
-	return s3store.ObjectMeta{}, errors.New("unexpected WriteObject call")
+func (*recordingListS3Client) WriteObject(context.Context, s3sdk.WriteRequest) (s3sdk.ObjectMeta, error) {
+	return s3sdk.ObjectMeta{}, errors.New("unexpected WriteObject call")
 }
 
-func (*recordingListS3Client) DeleteObject(context.Context, s3store.ObjectRef) error {
+func (*recordingListS3Client) DeleteObject(context.Context, s3sdk.ObjectRef) error {
 	return errors.New("unexpected DeleteObject call")
 }
 
-func (c *recordingListS3Client) ListObjects(_ context.Context, req s3store.ListRequest) (s3store.ListPage, error) {
+func (c *recordingListS3Client) ListObjects(_ context.Context, req s3sdk.ListRequest) (s3sdk.ListPage, error) {
 	c.reqs = append(c.reqs, req)
 	if len(c.pages) == 0 {
-		return s3store.ListPage{}, nil
+		return s3sdk.ListPage{}, nil
 	}
 	page := c.pages[0]
 	c.pages = c.pages[1:]
 	return page, nil
 }
 
-func (*recordingListS3Client) CopyObject(context.Context, s3store.CopyRequest) (s3store.ObjectMeta, error) {
-	return s3store.ObjectMeta{}, errors.New("unexpected CopyObject call")
+func (*recordingListS3Client) CopyObject(context.Context, s3sdk.CopyRequest) (s3sdk.ObjectMeta, error) {
+	return s3sdk.ObjectMeta{}, errors.New("unexpected CopyObject call")
 }
 
-func (*recordingListS3Client) PresignObject(context.Context, s3store.PresignRequest) (s3store.PresignResult, error) {
-	return s3store.PresignResult{}, errors.New("unexpected PresignObject call")
+func (*recordingListS3Client) PresignObject(context.Context, s3sdk.PresignRequest) (s3sdk.PresignResult, error) {
+	return s3sdk.PresignResult{}, errors.New("unexpected PresignObject call")
 }
 
 func (*recordingListS3Client) Ping(context.Context) error { return nil }
 func (*recordingListS3Client) Close() error               { return nil }
 
 type funcS3Client struct {
-	headObject    func(context.Context, s3store.ObjectRef) (s3store.ObjectMeta, error)
-	readObject    func(context.Context, s3store.ReadRequest) (s3store.ReadResult, error)
-	writeObject   func(context.Context, s3store.WriteRequest) (s3store.ObjectMeta, error)
-	deleteObject  func(context.Context, s3store.ObjectRef) error
-	listObjects   func(context.Context, s3store.ListRequest) (s3store.ListPage, error)
-	copyObject    func(context.Context, s3store.CopyRequest) (s3store.ObjectMeta, error)
-	presignObject func(context.Context, s3store.PresignRequest) (s3store.PresignResult, error)
+	headObject    func(context.Context, s3sdk.ObjectRef) (s3sdk.ObjectMeta, error)
+	readObject    func(context.Context, s3sdk.ReadRequest) (s3sdk.ReadResult, error)
+	writeObject   func(context.Context, s3sdk.WriteRequest) (s3sdk.ObjectMeta, error)
+	deleteObject  func(context.Context, s3sdk.ObjectRef) error
+	listObjects   func(context.Context, s3sdk.ListRequest) (s3sdk.ListPage, error)
+	copyObject    func(context.Context, s3sdk.CopyRequest) (s3sdk.ObjectMeta, error)
+	presignObject func(context.Context, s3sdk.PresignRequest) (s3sdk.PresignResult, error)
 }
 
-func (c funcS3Client) HeadObject(ctx context.Context, ref s3store.ObjectRef) (s3store.ObjectMeta, error) {
+func (c funcS3Client) HeadObject(ctx context.Context, ref s3sdk.ObjectRef) (s3sdk.ObjectMeta, error) {
 	if c.headObject == nil {
-		return s3store.ObjectMeta{}, errors.New("unexpected HeadObject call")
+		return s3sdk.ObjectMeta{}, errors.New("unexpected HeadObject call")
 	}
 	return c.headObject(ctx, ref)
 }
 
-func (c funcS3Client) ReadObject(ctx context.Context, req s3store.ReadRequest) (s3store.ReadResult, error) {
+func (c funcS3Client) ReadObject(ctx context.Context, req s3sdk.ReadRequest) (s3sdk.ReadResult, error) {
 	if c.readObject == nil {
-		return s3store.ReadResult{}, errors.New("unexpected ReadObject call")
+		return s3sdk.ReadResult{}, errors.New("unexpected ReadObject call")
 	}
 	return c.readObject(ctx, req)
 }
 
-func (c funcS3Client) WriteObject(ctx context.Context, req s3store.WriteRequest) (s3store.ObjectMeta, error) {
+func (c funcS3Client) WriteObject(ctx context.Context, req s3sdk.WriteRequest) (s3sdk.ObjectMeta, error) {
 	if c.writeObject == nil {
-		return s3store.ObjectMeta{}, errors.New("unexpected WriteObject call")
+		return s3sdk.ObjectMeta{}, errors.New("unexpected WriteObject call")
 	}
 	return c.writeObject(ctx, req)
 }
 
-func (c funcS3Client) DeleteObject(ctx context.Context, ref s3store.ObjectRef) error {
+func (c funcS3Client) DeleteObject(ctx context.Context, ref s3sdk.ObjectRef) error {
 	if c.deleteObject == nil {
 		return errors.New("unexpected DeleteObject call")
 	}
 	return c.deleteObject(ctx, ref)
 }
 
-func (c funcS3Client) ListObjects(ctx context.Context, req s3store.ListRequest) (s3store.ListPage, error) {
+func (c funcS3Client) ListObjects(ctx context.Context, req s3sdk.ListRequest) (s3sdk.ListPage, error) {
 	if c.listObjects == nil {
-		return s3store.ListPage{}, errors.New("unexpected ListObjects call")
+		return s3sdk.ListPage{}, errors.New("unexpected ListObjects call")
 	}
 	return c.listObjects(ctx, req)
 }
 
-func (c funcS3Client) CopyObject(ctx context.Context, req s3store.CopyRequest) (s3store.ObjectMeta, error) {
+func (c funcS3Client) CopyObject(ctx context.Context, req s3sdk.CopyRequest) (s3sdk.ObjectMeta, error) {
 	if c.copyObject == nil {
-		return s3store.ObjectMeta{}, errors.New("unexpected CopyObject call")
+		return s3sdk.ObjectMeta{}, errors.New("unexpected CopyObject call")
 	}
 	return c.copyObject(ctx, req)
 }
 
-func (c funcS3Client) PresignObject(ctx context.Context, req s3store.PresignRequest) (s3store.PresignResult, error) {
+func (c funcS3Client) PresignObject(ctx context.Context, req s3sdk.PresignRequest) (s3sdk.PresignResult, error) {
 	if c.presignObject == nil {
-		return s3store.PresignResult{}, errors.New("unexpected PresignObject call")
+		return s3sdk.PresignResult{}, errors.New("unexpected PresignObject call")
 	}
 	return c.presignObject(ctx, req)
 }

@@ -3,10 +3,10 @@ package metricutil
 import (
 	"context"
 	"errors"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -186,11 +186,11 @@ func indexedDBErrorType(err error) string {
 		return "canceled"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "deadline_exceeded"
-	case errors.Is(err, indexeddb.ErrNotFound):
+	case errors.Is(err, idb.ErrNotFound):
 		return "not_found"
-	case errors.Is(err, indexeddb.ErrAlreadyExists):
+	case errors.Is(err, idb.ErrAlreadyExists):
 		return "already_exists"
-	case errors.Is(err, indexeddb.ErrKeysOnly):
+	case errors.Is(err, idb.ErrKeysOnly):
 		return "keys_only"
 	default:
 		return "internal"

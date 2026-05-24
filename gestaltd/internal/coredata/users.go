@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"strings"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 )
 
 type UserService struct {
-	store indexeddb.ObjectStore
+	store idb.ObjectStore
 }
 
 func NewUserService(ds indexeddb.IndexedDB) *UserService {
@@ -23,7 +24,7 @@ func NewUserService(ds indexeddb.IndexedDB) *UserService {
 func (s *UserService) GetUser(ctx context.Context, id string) (*core.User, error) {
 	rec, err := s.store.Get(ctx, id)
 	if err != nil {
-		if err == indexeddb.ErrNotFound {
+		if err == idb.ErrNotFound {
 			return nil, core.ErrNotFound
 		}
 		return nil, fmt.Errorf("get user: %w", err)
@@ -46,7 +47,7 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 	}
 
 	now := time.Now()
-	newRec := indexeddb.Record{
+	newRec := idb.Record{
 		"id":               uuid.New().String(),
 		"email":            email,
 		"normalized_email": email,
@@ -90,7 +91,7 @@ func (s *UserService) findUserByNormalizedEmail(ctx context.Context, normalizedE
 	return recordToUser(recs[0]), nil
 }
 
-func recordToUser(rec indexeddb.Record) *core.User {
+func recordToUser(rec idb.Record) *core.User {
 	return &core.User{
 		ID:          recString(rec, "id"),
 		Email:       recString(rec, "email"),

@@ -2,6 +2,7 @@ package metricutil
 
 import (
 	"context"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"testing"
 
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -41,7 +42,7 @@ func TestInstrumentIndexedDBRecordsDBAndObjectStoreAttributes(t *testing.T) {
 		"error.type":         "not_found",
 	})
 
-	metrictest.RequireNoMetric(t, rm, "gestaltd.indexeddb.count")
-	metrictest.RequireNoMetric(t, rm, "gestaltd.indexeddb.error_count")
-	metrictest.RequireNoMetric(t, rm, "gestaltd.indexeddb.duration")
+	metrictest.RequireNoMetric(t, rm, "gestaltd.idb.count")
+	metrictest.RequireNoMetric(t, rm, "gestaltd.idb.error_count")
+	metrictest.RequireNoMetric(t, rm, "gestaltd.idb.duration")
 }

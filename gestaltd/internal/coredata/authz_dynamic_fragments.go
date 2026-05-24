@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"sort"
 	"strings"
 	"time"
@@ -24,7 +25,7 @@ const (
 )
 
 type AuthorizationDynamicFragmentService struct {
-	store indexeddb.ObjectStore
+	store idb.ObjectStore
 }
 
 type AuthorizationFragmentOwner struct {
@@ -143,7 +144,7 @@ func (s *AuthorizationDynamicFragmentService) ListFragments(ctx context.Context)
 func (s *AuthorizationDynamicFragmentService) GetFragment(ctx context.Context, id string) (*AuthorizationDynamicFragment, error) {
 	rec, err := s.store.Get(ctx, strings.TrimSpace(id))
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
+		if errors.Is(err, idb.ErrNotFound) {
 			return nil, core.ErrNotFound
 		}
 		return nil, fmt.Errorf("get authorization dynamic fragment: %w", err)
@@ -158,7 +159,7 @@ func (s *AuthorizationDynamicFragmentService) GetFragmentByOwner(ctx context.Con
 	}
 	rec, err := s.store.Index("by_owner").Get(ctx, owner.Kind, authorizationFragmentOwnerID(owner))
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
+		if errors.Is(err, idb.ErrNotFound) {
 			return nil, core.ErrNotFound
 		}
 		return nil, fmt.Errorf("get authorization dynamic fragment by owner: %w", err)
@@ -571,12 +572,12 @@ func normalizeAuthorizationFragmentRelationship(relationship AuthorizationDynami
 	return relationship
 }
 
-func authorizationDynamicFragmentToRecord(fragment *AuthorizationDynamicFragment) indexeddb.Record {
+func authorizationDynamicFragmentToRecord(fragment *AuthorizationDynamicFragment) idb.Record {
 	resourceTypesJSON, _ := json.Marshal(fragment.ResourceTypes)
 	relationshipsJSON, _ := json.Marshal(fragment.Relationships)
 	auditJSON, _ := json.Marshal(fragment.Audit)
 	ownerID := authorizationFragmentOwnerID(fragment.Owner)
-	return indexeddb.Record{
+	return idb.Record{
 		"id":                  fragment.ID,
 		"owner_kind":          fragment.Owner.Kind,
 		"owner_id":            ownerID,
@@ -592,7 +593,7 @@ func authorizationDynamicFragmentToRecord(fragment *AuthorizationDynamicFragment
 	}
 }
 
-func recordToAuthorizationDynamicFragment(rec indexeddb.Record) (*AuthorizationDynamicFragment, error) {
+func recordToAuthorizationDynamicFragment(rec idb.Record) (*AuthorizationDynamicFragment, error) {
 	ownerKind := recString(rec, "owner_kind")
 	ownerID := recString(rec, "owner_id")
 	fragment := &AuthorizationDynamicFragment{

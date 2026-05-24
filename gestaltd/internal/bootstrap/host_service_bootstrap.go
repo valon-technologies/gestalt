@@ -10,16 +10,17 @@ import (
 	"strings"
 	"time"
 
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
+	authorizationadminservice "github.com/valon-technologies/gestalt/server/services/authorizationadmin"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
@@ -80,8 +81,9 @@ func buildAppRuntimeHostServices(name string, entry *config.ProviderEntry, deps 
 	}
 	includeWorkflowProvider := deps.WorkflowManager != nil || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders())
 	includeAgentProvider := deps.AgentManager != nil || deps.AgentRuntime != nil
+	includeAuthorizationAdmin := deps.AuthorizationProvider != nil && deps.AuthorizationAdmin != nil
 	needInvocationTokens := len(entry.Invokes) > 0
-	if includeWorkflowProvider || includeAgentProvider {
+	if includeWorkflowProvider || includeAgentProvider || includeAuthorizationAdmin {
 		needInvocationTokens = true
 	}
 	if needInvocationTokens {
@@ -101,6 +103,9 @@ func buildAppRuntimeHostServices(name string, entry *config.ProviderEntry, deps 
 	}
 	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
+	}
+	if includeAuthorizationAdmin {
+		hostServices = append(hostServices, buildPluginAuthorizationAdminHostService(name, deps, invTokens))
 	}
 	if len(entry.Invokes) > 0 {
 		hostServices = append(hostServices, buildAppInvokerHostService(name, entry, deps, invTokens))
@@ -445,7 +450,7 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 		}
 	}
 
-	bindings := make(map[string]s3store.Client, len(entry.S3))
+	bindings := make(map[string]s3sdk.Client, len(entry.S3))
 	for _, binding := range entry.S3 {
 		client, ok := deps.S3[binding]
 		if !ok || client == nil {
@@ -490,7 +495,7 @@ func registerCacheServer(bindings map[string]corecache.Cache, defaultBinding, pl
 	return cacheservice.NewRoutingServer(bindings, defaultBinding, pluginName)
 }
 
-func registerS3Servers(bindings map[string]s3store.Client, defaultBinding, pluginName string, accessURLs *s3.ObjectAccessURLManager) (proto.S3Server, proto.S3ObjectAccessServer) {
+func registerS3Servers(bindings map[string]s3sdk.Client, defaultBinding, pluginName string, accessURLs *s3.ObjectAccessURLManager) (proto.S3Server, proto.S3ObjectAccessServer) {
 	if len(bindings) == 1 {
 		for bindingName, client := range bindings {
 			return s3.NewServer(client, pluginName), s3.NewObjectAccessServer(accessURLs, pluginName, bindingName)
@@ -533,6 +538,16 @@ func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) ru
 		MethodPrefixes: []string{grpcMethodPrefix(proto.AuthorizationProvider_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAuthorizationProviderServer(srv, authorizationservice.NewProviderServer(provider))
+		},
+	}
+}
+
+func buildPluginAuthorizationAdminHostService(pluginName string, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
+	return runtimehost.HostService{
+		Name:           "authorization_admin",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.AuthorizationAdmin_ServiceDesc.ServiceName)},
+		Register: func(srv *grpc.Server) {
+			proto.RegisterAuthorizationAdminServer(srv, authorizationadminservice.NewServer(pluginName, deps.AuthorizationAdmin, tokens))
 		},
 	}
 }

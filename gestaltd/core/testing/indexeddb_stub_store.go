@@ -2,23 +2,22 @@ package coretesting
 
 import (
 	"context"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"sort"
 	"sync"
-
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
 type stubObjectStore struct {
 	db      *StubIndexedDB
 	mu      sync.RWMutex
-	records map[string]indexeddb.Record
-	schema  indexeddb.ObjectStoreSchema
+	records map[string]idb.Record
+	schema  idb.ObjectStoreSchema
 }
 
 func (o *stubObjectStore) clone(db *StubIndexedDB) *stubObjectStore {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
-	records := make(map[string]indexeddb.Record, len(o.records))
+	records := make(map[string]idb.Record, len(o.records))
 	for id, record := range o.records {
 		records[id] = cloneRecord(record)
 	}
@@ -45,7 +44,7 @@ func (o *stubObjectStore) writeSchedule() func() {
 	return o.db.txMu.Unlock
 }
 
-func (o *stubObjectStore) Get(_ context.Context, id string) (indexeddb.Record, error) {
+func (o *stubObjectStore) Get(_ context.Context, id string) (idb.Record, error) {
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
@@ -55,7 +54,7 @@ func (o *stubObjectStore) Get(_ context.Context, id string) (indexeddb.Record, e
 	defer o.mu.RUnlock()
 	r, ok := o.records[id]
 	if !ok {
-		return nil, indexeddb.ErrNotFound
+		return nil, idb.ErrNotFound
 	}
 	return r, nil
 }
@@ -69,12 +68,12 @@ func (o *stubObjectStore) GetKey(_ context.Context, id string) (string, error) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	if _, ok := o.records[id]; !ok {
-		return "", indexeddb.ErrNotFound
+		return "", idb.ErrNotFound
 	}
 	return id, nil
 }
 
-func (o *stubObjectStore) Add(_ context.Context, record indexeddb.Record) error {
+func (o *stubObjectStore) Add(_ context.Context, record idb.Record) error {
 	if o.db.Err != nil {
 		return o.db.Err
 	}
@@ -84,16 +83,16 @@ func (o *stubObjectStore) Add(_ context.Context, record indexeddb.Record) error 
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if _, ok := o.records[id]; ok {
-		return indexeddb.ErrAlreadyExists
+		return idb.ErrAlreadyExists
 	}
 	if o.hasUniqueConflict(record, nil) {
-		return indexeddb.ErrAlreadyExists
+		return idb.ErrAlreadyExists
 	}
 	o.records[id] = record
 	return nil
 }
 
-func (o *stubObjectStore) Put(_ context.Context, record indexeddb.Record) error {
+func (o *stubObjectStore) Put(_ context.Context, record idb.Record) error {
 	if o.db.Err != nil {
 		return o.db.Err
 	}
@@ -103,13 +102,13 @@ func (o *stubObjectStore) Put(_ context.Context, record indexeddb.Record) error 
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.hasUniqueConflict(record, &id) {
-		return indexeddb.ErrAlreadyExists
+		return idb.ErrAlreadyExists
 	}
 	o.records[id] = record
 	return nil
 }
 
-func (o *stubObjectStore) hasUniqueConflict(record indexeddb.Record, ignoreID *string) bool {
+func (o *stubObjectStore) hasUniqueConflict(record idb.Record, ignoreID *string) bool {
 	for _, idx := range o.schema.Indexes {
 		if !idx.Unique {
 			continue
@@ -153,54 +152,54 @@ func (o *stubObjectStore) Clear(_ context.Context) error {
 	defer done()
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.records = make(map[string]indexeddb.Record)
+	o.records = make(map[string]idb.Record)
 	return nil
 }
 
-func (o *stubObjectStore) GetAll(_ context.Context, r *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+func (o *stubObjectStore) GetAll(_ context.Context, r *idb.KeyRange) ([]idb.Record, error) {
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
 	done := o.readSchedule()
 	defer done()
-	c := o.newCursor(indexeddb.CursorNext, false)
+	c := o.newCursor(idb.CursorNext, false)
 	c.applyKeyRange(r)
-	out := make([]indexeddb.Record, 0, len(c.keys))
+	out := make([]idb.Record, 0, len(c.keys))
 	for _, key := range c.keys {
 		out = append(out, c.snapshot[key])
 	}
 	return out, nil
 }
 
-func (o *stubObjectStore) GetAllKeys(_ context.Context, r *indexeddb.KeyRange) ([]string, error) {
+func (o *stubObjectStore) GetAllKeys(_ context.Context, r *idb.KeyRange) ([]string, error) {
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
 	done := o.readSchedule()
 	defer done()
-	c := o.newCursor(indexeddb.CursorNext, true)
+	c := o.newCursor(idb.CursorNext, true)
 	c.applyKeyRange(r)
 	return append([]string(nil), c.keys...), nil
 }
 
-func (o *stubObjectStore) Count(_ context.Context, r *indexeddb.KeyRange) (int64, error) {
+func (o *stubObjectStore) Count(_ context.Context, r *idb.KeyRange) (int64, error) {
 	if o.db.Err != nil {
 		return 0, o.db.Err
 	}
 	done := o.readSchedule()
 	defer done()
-	c := o.newCursor(indexeddb.CursorNext, true)
+	c := o.newCursor(idb.CursorNext, true)
 	c.applyKeyRange(r)
 	return int64(len(c.keys)), nil
 }
 
-func (o *stubObjectStore) DeleteRange(_ context.Context, r indexeddb.KeyRange) (int64, error) {
+func (o *stubObjectStore) DeleteRange(_ context.Context, r idb.KeyRange) (int64, error) {
 	if o.db.Err != nil {
 		return 0, o.db.Err
 	}
 	done := o.writeSchedule()
 	defer done()
-	c := o.newCursor(indexeddb.CursorNext, true)
+	c := o.newCursor(idb.CursorNext, true)
 	c.applyKeyRange(&r)
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -210,11 +209,11 @@ func (o *stubObjectStore) DeleteRange(_ context.Context, r indexeddb.KeyRange) (
 	return int64(len(c.keys)), nil
 }
 
-func (o *stubObjectStore) Index(name string) indexeddb.Index {
+func (o *stubObjectStore) Index(name string) idb.Index {
 	return &stubIndex{store: o, name: name, schema: o.schema}
 }
 
-func (o *stubObjectStore) OpenCursor(_ context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+func (o *stubObjectStore) OpenCursor(_ context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
@@ -225,7 +224,7 @@ func (o *stubObjectStore) OpenCursor(_ context.Context, r *indexeddb.KeyRange, d
 	return c, nil
 }
 
-func (o *stubObjectStore) OpenKeyCursor(_ context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+func (o *stubObjectStore) OpenKeyCursor(_ context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
@@ -236,10 +235,10 @@ func (o *stubObjectStore) OpenKeyCursor(_ context.Context, r *indexeddb.KeyRange
 	return c, nil
 }
 
-func (o *stubObjectStore) newCursor(dir indexeddb.CursorDirection, keysOnly bool) *stubCursor {
+func (o *stubObjectStore) newCursor(dir idb.CursorDirection, keysOnly bool) *stubCursor {
 	o.mu.RLock()
 	keys := make([]string, 0, len(o.records))
-	snapshot := make(map[string]indexeddb.Record, len(o.records))
+	snapshot := make(map[string]idb.Record, len(o.records))
 	for k, r := range o.records {
 		keys = append(keys, k)
 		snapshot[k] = r
@@ -247,12 +246,12 @@ func (o *stubObjectStore) newCursor(dir indexeddb.CursorDirection, keysOnly bool
 	o.mu.RUnlock()
 
 	sort.Strings(keys)
-	if dir == indexeddb.CursorPrev || dir == indexeddb.CursorPrevUnique {
+	if dir == idb.CursorPrev || dir == idb.CursorPrevUnique {
 		sort.Sort(sort.Reverse(sort.StringSlice(keys)))
 	}
 
-	reverse := dir == indexeddb.CursorPrev || dir == indexeddb.CursorPrevUnique
-	unique := dir == indexeddb.CursorNextUnique || dir == indexeddb.CursorPrevUnique
+	reverse := dir == idb.CursorPrev || dir == idb.CursorPrevUnique
+	unique := dir == idb.CursorNextUnique || dir == idb.CursorPrevUnique
 	return &stubCursor{
 		store:    o,
 		keys:     keys,

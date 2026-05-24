@@ -2,21 +2,20 @@ package coretesting
 
 import (
 	"context"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"sync"
-
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
 type stubTransaction struct {
 	db     *StubIndexedDB
-	mode   indexeddb.TransactionMode
+	mode   idb.TransactionMode
 	mu     sync.Mutex
 	done   bool
 	err    error
 	stores map[string]*stubObjectStore
 }
 
-func (tx *stubTransaction) ObjectStore(name string) indexeddb.TransactionObjectStore {
+func (tx *stubTransaction) ObjectStore(name string) idb.TransactionObjectStore {
 	store := tx.stores[name]
 	if store == nil {
 		return transactionMissingObjectStore{tx: tx}
@@ -46,12 +45,12 @@ func (tx *stubTransaction) finish(commit bool) error {
 		if err != nil {
 			return err
 		}
-		return indexeddb.ErrTransactionDone
+		return idb.ErrTransactionDone
 	}
 	tx.done = true
 	tx.mu.Unlock()
 
-	if commit && tx.mode == indexeddb.TransactionReadwrite {
+	if commit && tx.mode == idb.TransactionReadwrite {
 		tx.db.mu.RLock()
 		for name, clone := range tx.stores {
 			original := tx.db.stores[name]
@@ -59,7 +58,7 @@ func (tx *stubTransaction) finish(commit bool) error {
 				continue
 			}
 			clone.mu.RLock()
-			records := make(map[string]indexeddb.Record, len(clone.records))
+			records := make(map[string]idb.Record, len(clone.records))
 			for id, record := range clone.records {
 				records[id] = cloneRecord(record)
 			}
@@ -78,7 +77,7 @@ func (tx *stubTransaction) finish(commit bool) error {
 }
 
 func (tx *stubTransaction) unlockSchedule() {
-	if tx.mode == indexeddb.TransactionReadwrite {
+	if tx.mode == idb.TransactionReadwrite {
 		tx.db.txMu.Unlock()
 	} else {
 		tx.db.txMu.RUnlock()
@@ -93,14 +92,14 @@ func (tx *stubTransaction) ensureActive(write bool) error {
 		if err != nil {
 			return err
 		}
-		return indexeddb.ErrTransactionDone
+		return idb.ErrTransactionDone
 	}
-	if write && tx.mode == indexeddb.TransactionReadonly {
+	if write && tx.mode == idb.TransactionReadonly {
 		tx.done = true
-		tx.err = indexeddb.ErrReadOnly
+		tx.err = idb.ErrReadOnly
 		tx.mu.Unlock()
 		tx.unlockSchedule()
-		return indexeddb.ErrReadOnly
+		return idb.ErrReadOnly
 	}
 	tx.mu.Unlock()
 	return nil
@@ -117,7 +116,7 @@ func (tx *stubTransaction) abortWithError(err error) error {
 		if existing != nil {
 			return existing
 		}
-		return indexeddb.ErrTransactionDone
+		return idb.ErrTransactionDone
 	}
 	tx.done = true
 	tx.err = err
@@ -131,7 +130,7 @@ type stubTransactionObjectStore struct {
 	store *stubObjectStore
 }
 
-func (s *stubTransactionObjectStore) Get(ctx context.Context, id string) (indexeddb.Record, error) {
+func (s *stubTransactionObjectStore) Get(ctx context.Context, id string) (idb.Record, error) {
 	if err := s.tx.ensureActive(false); err != nil {
 		return nil, err
 	}
@@ -153,14 +152,14 @@ func (s *stubTransactionObjectStore) GetKey(ctx context.Context, id string) (str
 	return key, nil
 }
 
-func (s *stubTransactionObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
+func (s *stubTransactionObjectStore) Add(ctx context.Context, record idb.Record) error {
 	if err := s.tx.ensureActive(true); err != nil {
 		return err
 	}
 	return s.tx.abortWithError(s.store.Add(ctx, record))
 }
 
-func (s *stubTransactionObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
+func (s *stubTransactionObjectStore) Put(ctx context.Context, record idb.Record) error {
 	if err := s.tx.ensureActive(true); err != nil {
 		return err
 	}
@@ -181,7 +180,7 @@ func (s *stubTransactionObjectStore) Clear(ctx context.Context) error {
 	return s.tx.abortWithError(s.store.Clear(ctx))
 }
 
-func (s *stubTransactionObjectStore) GetAll(ctx context.Context, r *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+func (s *stubTransactionObjectStore) GetAll(ctx context.Context, r *idb.KeyRange) ([]idb.Record, error) {
 	if err := s.tx.ensureActive(false); err != nil {
 		return nil, err
 	}
@@ -192,7 +191,7 @@ func (s *stubTransactionObjectStore) GetAll(ctx context.Context, r *indexeddb.Ke
 	return records, nil
 }
 
-func (s *stubTransactionObjectStore) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange) ([]string, error) {
+func (s *stubTransactionObjectStore) GetAllKeys(ctx context.Context, r *idb.KeyRange) ([]string, error) {
 	if err := s.tx.ensureActive(false); err != nil {
 		return nil, err
 	}
@@ -203,7 +202,7 @@ func (s *stubTransactionObjectStore) GetAllKeys(ctx context.Context, r *indexedd
 	return keys, nil
 }
 
-func (s *stubTransactionObjectStore) Count(ctx context.Context, r *indexeddb.KeyRange) (int64, error) {
+func (s *stubTransactionObjectStore) Count(ctx context.Context, r *idb.KeyRange) (int64, error) {
 	if err := s.tx.ensureActive(false); err != nil {
 		return 0, err
 	}
@@ -214,7 +213,7 @@ func (s *stubTransactionObjectStore) Count(ctx context.Context, r *indexeddb.Key
 	return count, nil
 }
 
-func (s *stubTransactionObjectStore) DeleteRange(ctx context.Context, r indexeddb.KeyRange) (int64, error) {
+func (s *stubTransactionObjectStore) DeleteRange(ctx context.Context, r idb.KeyRange) (int64, error) {
 	if err := s.tx.ensureActive(true); err != nil {
 		return 0, err
 	}
@@ -225,16 +224,16 @@ func (s *stubTransactionObjectStore) DeleteRange(ctx context.Context, r indexedd
 	return deleted, nil
 }
 
-func (s *stubTransactionObjectStore) Index(name string) indexeddb.TransactionIndex {
+func (s *stubTransactionObjectStore) Index(name string) idb.TransactionIndex {
 	return &stubTransactionIndex{tx: s.tx, index: s.store.Index(name)}
 }
 
 type stubTransactionIndex struct {
 	tx    *stubTransaction
-	index indexeddb.Index
+	index idb.Index
 }
 
-func (i *stubTransactionIndex) Get(ctx context.Context, values ...any) (indexeddb.Record, error) {
+func (i *stubTransactionIndex) Get(ctx context.Context, values ...any) (idb.Record, error) {
 	if err := i.tx.ensureActive(false); err != nil {
 		return nil, err
 	}
@@ -256,7 +255,7 @@ func (i *stubTransactionIndex) GetKey(ctx context.Context, values ...any) (strin
 	return key, nil
 }
 
-func (i *stubTransactionIndex) GetAll(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]indexeddb.Record, error) {
+func (i *stubTransactionIndex) GetAll(ctx context.Context, r *idb.KeyRange, values ...any) ([]idb.Record, error) {
 	if err := i.tx.ensureActive(false); err != nil {
 		return nil, err
 	}
@@ -267,7 +266,7 @@ func (i *stubTransactionIndex) GetAll(ctx context.Context, r *indexeddb.KeyRange
 	return records, nil
 }
 
-func (i *stubTransactionIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]string, error) {
+func (i *stubTransactionIndex) GetAllKeys(ctx context.Context, r *idb.KeyRange, values ...any) ([]string, error) {
 	if err := i.tx.ensureActive(false); err != nil {
 		return nil, err
 	}
@@ -278,7 +277,7 @@ func (i *stubTransactionIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyR
 	return keys, nil
 }
 
-func (i *stubTransactionIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
+func (i *stubTransactionIndex) Count(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
 	if err := i.tx.ensureActive(false); err != nil {
 		return 0, err
 	}
@@ -293,7 +292,7 @@ func (i *stubTransactionIndex) Delete(ctx context.Context, values ...any) (int64
 	return i.DeleteRange(ctx, nil, values...)
 }
 
-func (i *stubTransactionIndex) DeleteRange(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
+func (i *stubTransactionIndex) DeleteRange(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
 	if err := i.tx.ensureActive(true); err != nil {
 		return 0, err
 	}
@@ -308,47 +307,47 @@ type transactionMissingObjectStore struct {
 	tx *stubTransaction
 }
 
-func (s transactionMissingObjectStore) Get(context.Context, string) (indexeddb.Record, error) {
-	return nil, s.tx.abortWithError(indexeddb.ErrNotFound)
+func (s transactionMissingObjectStore) Get(context.Context, string) (idb.Record, error) {
+	return nil, s.tx.abortWithError(idb.ErrNotFound)
 }
 
 func (s transactionMissingObjectStore) GetKey(context.Context, string) (string, error) {
-	return "", s.tx.abortWithError(indexeddb.ErrNotFound)
+	return "", s.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (s transactionMissingObjectStore) Add(context.Context, indexeddb.Record) error {
-	return s.tx.abortWithError(indexeddb.ErrNotFound)
+func (s transactionMissingObjectStore) Add(context.Context, idb.Record) error {
+	return s.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (s transactionMissingObjectStore) Put(context.Context, indexeddb.Record) error {
-	return s.tx.abortWithError(indexeddb.ErrNotFound)
+func (s transactionMissingObjectStore) Put(context.Context, idb.Record) error {
+	return s.tx.abortWithError(idb.ErrNotFound)
 }
 
 func (s transactionMissingObjectStore) Delete(context.Context, string) error {
-	return s.tx.abortWithError(indexeddb.ErrNotFound)
+	return s.tx.abortWithError(idb.ErrNotFound)
 }
 
 func (s transactionMissingObjectStore) Clear(context.Context) error {
-	return s.tx.abortWithError(indexeddb.ErrNotFound)
+	return s.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (s transactionMissingObjectStore) GetAll(context.Context, *indexeddb.KeyRange) ([]indexeddb.Record, error) {
-	return nil, s.tx.abortWithError(indexeddb.ErrNotFound)
+func (s transactionMissingObjectStore) GetAll(context.Context, *idb.KeyRange) ([]idb.Record, error) {
+	return nil, s.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (s transactionMissingObjectStore) GetAllKeys(context.Context, *indexeddb.KeyRange) ([]string, error) {
-	return nil, s.tx.abortWithError(indexeddb.ErrNotFound)
+func (s transactionMissingObjectStore) GetAllKeys(context.Context, *idb.KeyRange) ([]string, error) {
+	return nil, s.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (s transactionMissingObjectStore) Count(context.Context, *indexeddb.KeyRange) (int64, error) {
-	return 0, s.tx.abortWithError(indexeddb.ErrNotFound)
+func (s transactionMissingObjectStore) Count(context.Context, *idb.KeyRange) (int64, error) {
+	return 0, s.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (s transactionMissingObjectStore) DeleteRange(context.Context, indexeddb.KeyRange) (int64, error) {
-	return 0, s.tx.abortWithError(indexeddb.ErrNotFound)
+func (s transactionMissingObjectStore) DeleteRange(context.Context, idb.KeyRange) (int64, error) {
+	return 0, s.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (s transactionMissingObjectStore) Index(string) indexeddb.TransactionIndex {
+func (s transactionMissingObjectStore) Index(string) idb.TransactionIndex {
 	return transactionMissingIndex(s)
 }
 
@@ -356,30 +355,30 @@ type transactionMissingIndex struct {
 	tx *stubTransaction
 }
 
-func (i transactionMissingIndex) Get(context.Context, ...any) (indexeddb.Record, error) {
-	return nil, i.tx.abortWithError(indexeddb.ErrNotFound)
+func (i transactionMissingIndex) Get(context.Context, ...any) (idb.Record, error) {
+	return nil, i.tx.abortWithError(idb.ErrNotFound)
 }
 
 func (i transactionMissingIndex) GetKey(context.Context, ...any) (string, error) {
-	return "", i.tx.abortWithError(indexeddb.ErrNotFound)
+	return "", i.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (i transactionMissingIndex) GetAll(context.Context, *indexeddb.KeyRange, ...any) ([]indexeddb.Record, error) {
-	return nil, i.tx.abortWithError(indexeddb.ErrNotFound)
+func (i transactionMissingIndex) GetAll(context.Context, *idb.KeyRange, ...any) ([]idb.Record, error) {
+	return nil, i.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (i transactionMissingIndex) GetAllKeys(context.Context, *indexeddb.KeyRange, ...any) ([]string, error) {
-	return nil, i.tx.abortWithError(indexeddb.ErrNotFound)
+func (i transactionMissingIndex) GetAllKeys(context.Context, *idb.KeyRange, ...any) ([]string, error) {
+	return nil, i.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (i transactionMissingIndex) Count(context.Context, *indexeddb.KeyRange, ...any) (int64, error) {
-	return 0, i.tx.abortWithError(indexeddb.ErrNotFound)
+func (i transactionMissingIndex) Count(context.Context, *idb.KeyRange, ...any) (int64, error) {
+	return 0, i.tx.abortWithError(idb.ErrNotFound)
 }
 
 func (i transactionMissingIndex) Delete(context.Context, ...any) (int64, error) {
-	return 0, i.tx.abortWithError(indexeddb.ErrNotFound)
+	return 0, i.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (i transactionMissingIndex) DeleteRange(context.Context, *indexeddb.KeyRange, ...any) (int64, error) {
-	return 0, i.tx.abortWithError(indexeddb.ErrNotFound)
+func (i transactionMissingIndex) DeleteRange(context.Context, *idb.KeyRange, ...any) (int64, error) {
+	return 0, i.tx.abortWithError(idb.ErrNotFound)
 }

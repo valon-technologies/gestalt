@@ -3,6 +3,7 @@ package indexeddb
 import (
 	"context"
 	"errors"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -17,19 +18,19 @@ func newCursorTestDB(t *testing.T) (*coretesting.StubIndexedDB, indexeddb.Indexe
 	t.Helper()
 	stub := &coretesting.StubIndexedDB{}
 
-	schema := indexeddb.ObjectStoreSchema{
-		Indexes: []indexeddb.IndexSchema{
+	schema := idb.ObjectStoreSchema{
+		Indexes: []idb.IndexSchema{
 			{Name: "by_status", KeyPath: []string{"status"}, Unique: false},
 			{Name: "by_email", KeyPath: []string{"email"}, Unique: true},
 		},
 	}
 	ctx := context.Background()
-	if err := stub.CreateObjectStore(ctx, "items", schema); err != nil {
+	if _, err := stub.CreateObjectStore(ctx, "items", schema); err != nil {
 		t.Fatal(err)
 	}
 
 	store := stub.ObjectStore("items")
-	records := []indexeddb.Record{
+	records := []idb.Record{
 		{"id": "a", "name": "Alice", "status": "active", "email": "alice@test.com"},
 		{"id": "b", "name": "Bob", "status": "active", "email": "bob@test.com"},
 		{"id": "c", "name": "Carol", "status": "inactive", "email": "carol@test.com"},
@@ -58,7 +59,7 @@ func TestCursor_ForwardIteration(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -88,14 +89,14 @@ func TestCursor_EmptyCursor(t *testing.T) {
 
 	stub := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	_ = stub.CreateObjectStore(ctx, "empty", indexeddb.ObjectStoreSchema{})
+	_, _ = stub.CreateObjectStore(ctx, "empty", idb.ObjectStoreSchema{})
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
 	})
 	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
 
-	cursor, err := remote.ObjectStore("empty").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := remote.ObjectStore("empty").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -112,7 +113,7 @@ func TestCursor_KeysOnly(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenKeyCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenKeyCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenKeyCursor: %v", err)
 	}
@@ -127,7 +128,7 @@ func TestCursor_KeysOnly(t *testing.T) {
 	}
 
 	_, err = cursor.Value()
-	if !errors.Is(err, indexeddb.ErrKeysOnly) {
+	if !errors.Is(err, idb.ErrKeysOnly) {
 		t.Errorf("Value() error = %v, want ErrKeysOnly", err)
 	}
 }
@@ -138,7 +139,7 @@ func TestCursor_ExhaustedState(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -154,7 +155,7 @@ func TestCursor_ExhaustedState(t *testing.T) {
 		t.Errorf("PrimaryKey() after exhaustion = %q, want empty", cursor.PrimaryKey())
 	}
 	_, err = cursor.Value()
-	if !errors.Is(err, indexeddb.ErrNotFound) {
+	if !errors.Is(err, idb.ErrNotFound) {
 		t.Errorf("Value() after exhaustion = %v, want ErrNotFound", err)
 	}
 }
@@ -167,7 +168,7 @@ func TestCursor_DeleteAtPosition(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -201,7 +202,7 @@ func TestCursor_UpdateAtPosition(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -212,7 +213,7 @@ func TestCursor_UpdateAtPosition(t *testing.T) {
 	}
 	pk := cursor.PrimaryKey()
 
-	updated := indexeddb.Record{"id": pk, "name": "Updated", "status": "updated", "email": "updated@test.com"}
+	updated := idb.Record{"id": pk, "name": "Updated", "status": "updated", "email": "updated@test.com"}
 	if err := cursor.Update(updated); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
@@ -240,7 +241,7 @@ func TestCursor_MutationOnExhaustedCursor(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -249,10 +250,10 @@ func TestCursor_MutationOnExhaustedCursor(t *testing.T) {
 	for cursor.Continue() {
 	}
 
-	if err := cursor.Delete(); !errors.Is(err, indexeddb.ErrNotFound) {
+	if err := cursor.Delete(); !errors.Is(err, idb.ErrNotFound) {
 		t.Errorf("Delete after exhaustion = %v, want ErrNotFound", err)
 	}
-	if err := cursor.Update(indexeddb.Record{"id": "x"}); !errors.Is(err, indexeddb.ErrNotFound) {
+	if err := cursor.Update(idb.Record{"id": "x"}); !errors.Is(err, idb.ErrNotFound) {
 		t.Errorf("Update after exhaustion = %v, want ErrNotFound", err)
 	}
 }
@@ -265,7 +266,7 @@ func TestCursor_ReverseIteration(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorPrev)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorPrev)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -293,7 +294,7 @@ func TestCursor_NextUnique(t *testing.T) {
 	ctx := context.Background()
 
 	// "by_status" index: 3 records have "active", 1 has "inactive"
-	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, nil, indexeddb.CursorNextUnique)
+	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, nil, idb.CursorNextUnique)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -314,7 +315,7 @@ func TestCursor_PrevUnique(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, nil, indexeddb.CursorPrevUnique)
+	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, nil, idb.CursorPrevUnique)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -335,8 +336,8 @@ func TestCursor_KeyRange(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	kr := indexeddb.Only("b")
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, kr, indexeddb.CursorNext)
+	kr := idb.Only("b")
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, kr, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -357,7 +358,7 @@ func TestCursor_IndexKeyRangeSingleField(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, indexeddb.Only("active"), indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, idb.Only("active"), idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -389,7 +390,7 @@ func TestCursor_Advance(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -411,7 +412,7 @@ func TestCursor_ContinueToKey(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -431,7 +432,7 @@ func TestCursor_ReverseContinueToKey(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorPrev)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorPrev)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -451,7 +452,7 @@ func TestCursor_AdvanceRejectsNonPositiveCounts(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -482,7 +483,7 @@ func TestCursor_IndexIteration(t *testing.T) {
 	ctx := context.Background()
 
 	// Filter by status=active (3 records)
-	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, nil, indexeddb.CursorNext, "active")
+	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, nil, idb.CursorNext, "active")
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -510,7 +511,7 @@ func TestCursor_IndexKeyReturnsIndexValues(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -545,15 +546,15 @@ func TestCursor_IndexContinueToKeyRoundTrip(t *testing.T) {
 
 	stub := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	schema := indexeddb.ObjectStoreSchema{
-		Indexes: []indexeddb.IndexSchema{{Name: "by_num", KeyPath: []string{"n"}}},
+	schema := idb.ObjectStoreSchema{
+		Indexes: []idb.IndexSchema{{Name: "by_num", KeyPath: []string{"n"}}},
 	}
-	if err := stub.CreateObjectStore(ctx, "items", schema); err != nil {
+	if _, err := stub.CreateObjectStore(ctx, "items", schema); err != nil {
 		t.Fatal(err)
 	}
 
 	store := stub.ObjectStore("items")
-	for _, r := range []indexeddb.Record{
+	for _, r := range []idb.Record{
 		{"id": "a", "n": 1},
 		{"id": "b", "n": 2},
 		{"id": "c", "n": 3},
@@ -568,7 +569,7 @@ func TestCursor_IndexContinueToKeyRoundTrip(t *testing.T) {
 	})
 	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
 
-	cursor, err := remote.ObjectStore("items").Index("by_num").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := remote.ObjectStore("items").Index("by_num").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -591,7 +592,7 @@ func TestCursor_StubSingleFieldIndexKeyMatchesRemoteShape(t *testing.T) {
 	stub, _ := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := stub.ObjectStore("items").Index("by_status").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := stub.ObjectStore("items").Index("by_status").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -616,7 +617,7 @@ func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 	t.Parallel()
 	stub := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	_ = stub.CreateObjectStore(ctx, "empty", indexeddb.ObjectStoreSchema{})
+	_, _ = stub.CreateObjectStore(ctx, "empty", idb.ObjectStoreSchema{})
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
@@ -624,7 +625,7 @@ func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
 
 	// Value cursor on empty store
-	cursor, err := remote.ObjectStore("empty").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := remote.ObjectStore("empty").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -637,7 +638,7 @@ func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 		t.Fatalf("unexpected error: %v", cursor.Err())
 	}
 	// Key-only cursor on empty store
-	kcursor, err := remote.ObjectStore("empty").OpenKeyCursor(ctx, nil, indexeddb.CursorNext)
+	kcursor, err := remote.ObjectStore("empty").OpenKeyCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenKeyCursor: %v", err)
 	}
@@ -656,7 +657,7 @@ func TestCursor_ValueCursorExhaustionNoExtraEntry(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -683,7 +684,7 @@ func TestCursor_KeyOnlyCursorExhaustionNoSpuriousEntry(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenKeyCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenKeyCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenKeyCursor: %v", err)
 	}
@@ -706,7 +707,7 @@ func TestCursor_ContinueToKeyBeyondEnd(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -726,7 +727,7 @@ func TestCursor_AdvancePastEnd(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -746,7 +747,7 @@ func TestCursor_PostExhaustionFollowUp(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -762,7 +763,7 @@ func TestCursor_PostExhaustionFollowUp(t *testing.T) {
 		t.Fatalf("Err after post-exhaustion Continue: %v", cursor.Err())
 	}
 	// Delete on exhausted cursor should return ErrNotFound
-	if err := cursor.Delete(); !errors.Is(err, indexeddb.ErrNotFound) {
+	if err := cursor.Delete(); !errors.Is(err, idb.ErrNotFound) {
 		t.Errorf("Delete after exhaustion = %v, want ErrNotFound", err)
 	}
 }
@@ -772,7 +773,7 @@ func TestCursor_CloseMakesFurtherCallsInert(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -789,10 +790,10 @@ func TestCursor_CloseMakesFurtherCallsInert(t *testing.T) {
 	if cursor.Advance(1) {
 		t.Fatal("Advance after Close returned true")
 	}
-	if err := cursor.Delete(); !errors.Is(err, indexeddb.ErrNotFound) {
+	if err := cursor.Delete(); !errors.Is(err, idb.ErrNotFound) {
 		t.Fatalf("Delete after Close = %v, want ErrNotFound", err)
 	}
-	if err := cursor.Update(indexeddb.Record{"id": "x"}); !errors.Is(err, indexeddb.ErrNotFound) {
+	if err := cursor.Update(idb.Record{"id": "x"}); !errors.Is(err, idb.ErrNotFound) {
 		t.Fatalf("Update after Close = %v, want ErrNotFound", err)
 	}
 }

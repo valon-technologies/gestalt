@@ -28,12 +28,12 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -6209,7 +6209,7 @@ func TestAppRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *
 		BaseURL:       "https://gestalt.example.test",
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 		Egress:        newEgressDeps(cfg),
-		S3: map[string]s3store.Client{
+		S3: map[string]s3sdk.Client{
 			"main":    &coretesting.StubS3{},
 			"archive": &coretesting.StubS3{},
 		},
@@ -6279,7 +6279,7 @@ func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 		BaseURL:            relaySrv.URL,
 		EncryptionKey:      secret,
 		PublicHostServices: publicHostServices,
-		S3: map[string]s3store.Client{
+		S3: map[string]s3sdk.Client{
 			"main": &coretesting.StubS3{},
 		},
 	}
@@ -6375,7 +6375,7 @@ func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t 
 			}
 			return coretesting.NewStubCache(), nil
 		},
-		S3: map[string]s3store.Client{
+		S3: map[string]s3sdk.Client{
 			"main": &coretesting.StubS3{},
 		},
 	})
@@ -7077,7 +7077,7 @@ func TestAppRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 	deps := Deps{
 		BaseURL:       relaySrv.URL,
 		EncryptionKey: secret,
-		S3: map[string]s3store.Client{
+		S3: map[string]s3sdk.Client{
 			"main": boundS3,
 		},
 		PublicHostServices: publicHostServices,
@@ -7134,7 +7134,7 @@ func TestAppRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 		t.Fatal("expected s3 list operation to find the written object")
 	}
 
-	if _, err := boundS3.HeadObject(context.Background(), s3store.ObjectRef{
+	if _, err := boundS3.HeadObject(context.Background(), s3sdk.ObjectRef{
 		Bucket: "assets",
 		Key:    testPluginS3NamespacePrefix("echoext") + "plans/q3.txt",
 	}); err != nil {
@@ -9164,7 +9164,7 @@ func TestPluginIndexedDBBindingsCleanupOnS3BindingFailure(t *testing.T) {
 				onClose:       closeCount.Add,
 			}, nil
 		},
-		S3: map[string]s3store.Client{},
+		S3: map[string]s3sdk.Client{},
 	}))
 	if err == nil {
 		t.Fatal("expected buildProvidersStrict to fail for missing S3 binding")
@@ -9207,7 +9207,7 @@ func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
 		},
 	}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		Services: testutil.NewStubServices(t),
-		S3: map[string]s3store.Client{
+		S3: map[string]s3sdk.Client{
 			"main": stubS3,
 		},
 	}))
@@ -9259,13 +9259,13 @@ func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
 		t.Fatal("expected list operation to find the written object")
 	}
 
-	if _, err := stubS3.HeadObject(context.Background(), s3store.ObjectRef{
+	if _, err := stubS3.HeadObject(context.Background(), s3sdk.ObjectRef{
 		Bucket: "assets",
 		Key:    testPluginS3NamespacePrefix("echoext") + "plans/q1.txt",
 	}); err != nil {
 		t.Fatalf("expected namespaced backing key: %v", err)
 	}
-	if _, err := stubS3.HeadObject(context.Background(), s3store.ObjectRef{
+	if _, err := stubS3.HeadObject(context.Background(), s3sdk.ObjectRef{
 		Bucket: "assets",
 		Key:    "plans/q1.txt",
 	}); err == nil {
@@ -9308,7 +9308,7 @@ func TestPluginS3BindingsRouteExplicitBinding(t *testing.T) {
 		},
 	}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		Services: testutil.NewStubServices(t),
-		S3: map[string]s3store.Client{
+		S3: map[string]s3sdk.Client{
 			"main":    mainS3,
 			"archive": archiveS3,
 		},
@@ -9331,13 +9331,13 @@ func TestPluginS3BindingsRouteExplicitBinding(t *testing.T) {
 		t.Fatalf("Execute s3_roundtrip: %v", err)
 	}
 
-	if _, err := archiveS3.HeadObject(context.Background(), s3store.ObjectRef{
+	if _, err := archiveS3.HeadObject(context.Background(), s3sdk.ObjectRef{
 		Bucket: "assets",
 		Key:    testPluginS3NamespacePrefix("echoext") + "plans/q2.txt",
 	}); err != nil {
 		t.Fatalf("archive binding should receive the write: %v", err)
 	}
-	if _, err := mainS3.HeadObject(context.Background(), s3store.ObjectRef{
+	if _, err := mainS3.HeadObject(context.Background(), s3sdk.ObjectRef{
 		Bucket: "assets",
 		Key:    testPluginS3NamespacePrefix("echoext") + "plans/q2.txt",
 	}); err == nil {
@@ -9372,7 +9372,7 @@ func TestPluginS3BindingsExposeHostSocketEnv(t *testing.T) {
 	}
 
 	services := testutil.NewStubServices(t)
-	s3Bindings := map[string]s3store.Client{
+	s3Bindings := map[string]s3sdk.Client{
 		"main":    &coretesting.StubS3{},
 		"archive": &coretesting.StubS3{},
 	}

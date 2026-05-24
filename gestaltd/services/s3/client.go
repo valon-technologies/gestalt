@@ -6,7 +6,7 @@ import (
 	"io"
 	"time"
 
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -34,7 +34,7 @@ type remoteS3 struct {
 	closer  io.Closer
 }
 
-func NewExecutable(ctx context.Context, cfg ExecConfig) (s3store.Client, error) {
+func NewExecutable(ctx context.Context, cfg ExecConfig) (s3sdk.Client, error) {
 	proc, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
@@ -58,50 +58,50 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (s3store.Client, error) 
 	return &remoteS3{client: s3Client, runtime: runtimeClient, closer: proc}, nil
 }
 
-func (r *remoteS3) HeadObject(ctx context.Context, ref s3store.ObjectRef) (s3store.ObjectMeta, error) {
+func (r *remoteS3) HeadObject(ctx context.Context, ref s3sdk.ObjectRef) (s3sdk.ObjectMeta, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.HeadObject(ctx, &proto.HeadObjectRequest{Ref: objectRefToProto(ref)})
 	if err != nil {
-		return s3store.ObjectMeta{}, grpcToS3Err(err)
+		return s3sdk.ObjectMeta{}, grpcToS3Err(err)
 	}
 	return requiredObjectMeta(resp.GetMeta(), "head object")
 }
 
-func (r *remoteS3) ReadObject(ctx context.Context, req s3store.ReadRequest) (s3store.ReadResult, error) {
+func (r *remoteS3) ReadObject(ctx context.Context, req s3sdk.ReadRequest) (s3sdk.ReadResult, error) {
 	ctx, cancel := providerStreamContext(ctx)
 	stream, err := r.client.ReadObject(ctx, readObjectRequestToProto(req))
 	if err != nil {
 		cancel()
-		return s3store.ReadResult{}, grpcToS3Err(err)
+		return s3sdk.ReadResult{}, grpcToS3Err(err)
 	}
 	first, err := stream.Recv()
 	if err != nil {
 		cancel()
-		return s3store.ReadResult{}, grpcToS3Err(err)
+		return s3sdk.ReadResult{}, grpcToS3Err(err)
 	}
 	meta := first.GetMeta()
 	if meta == nil {
 		cancel()
-		return s3store.ReadResult{}, fmt.Errorf("s3: read stream did not start with metadata")
+		return s3sdk.ReadResult{}, fmt.Errorf("s3: read stream did not start with metadata")
 	}
-	return s3store.ReadResult{
+	return s3sdk.ReadResult{
 		Meta: objectMetaFromProto(meta),
 		Body: &remoteS3Body{stream: stream, cancel: cancel},
 	}, nil
 }
 
-func (r *remoteS3) WriteObject(ctx context.Context, req s3store.WriteRequest) (s3store.ObjectMeta, error) {
+func (r *remoteS3) WriteObject(ctx context.Context, req s3sdk.WriteRequest) (s3sdk.ObjectMeta, error) {
 	ctx, cancel := providerStreamContext(ctx)
 	defer cancel()
 	stream, err := r.client.WriteObject(ctx)
 	if err != nil {
-		return s3store.ObjectMeta{}, grpcToS3Err(err)
+		return s3sdk.ObjectMeta{}, grpcToS3Err(err)
 	}
 	if err := stream.Send(&proto.WriteObjectRequest{
 		Msg: &proto.WriteObjectRequest_Open{Open: writeObjectOpenToProto(req)},
 	}); err != nil {
-		return s3store.ObjectMeta{}, grpcToS3Err(err)
+		return s3sdk.ObjectMeta{}, grpcToS3Err(err)
 	}
 	body := req.Body
 	if body == nil {
@@ -115,56 +115,56 @@ func (r *remoteS3) WriteObject(ctx context.Context, req s3store.WriteRequest) (s
 			if err := stream.Send(&proto.WriteObjectRequest{
 				Msg: &proto.WriteObjectRequest_Data{Data: chunk},
 			}); err != nil {
-				return s3store.ObjectMeta{}, grpcToS3Err(err)
+				return s3sdk.ObjectMeta{}, grpcToS3Err(err)
 			}
 		}
 		if readErr == io.EOF {
 			break
 		}
 		if readErr != nil {
-			return s3store.ObjectMeta{}, readErr
+			return s3sdk.ObjectMeta{}, readErr
 		}
 	}
 	resp, err := stream.CloseAndRecv()
 	if err != nil {
-		return s3store.ObjectMeta{}, grpcToS3Err(err)
+		return s3sdk.ObjectMeta{}, grpcToS3Err(err)
 	}
 	return requiredObjectMeta(resp.GetMeta(), "write object")
 }
 
-func (r *remoteS3) DeleteObject(ctx context.Context, ref s3store.ObjectRef) error {
+func (r *remoteS3) DeleteObject(ctx context.Context, ref s3sdk.ObjectRef) error {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	_, err := r.client.DeleteObject(ctx, &proto.DeleteObjectRequest{Ref: objectRefToProto(ref)})
 	return grpcToS3Err(err)
 }
 
-func (r *remoteS3) ListObjects(ctx context.Context, req s3store.ListRequest) (s3store.ListPage, error) {
+func (r *remoteS3) ListObjects(ctx context.Context, req s3sdk.ListRequest) (s3sdk.ListPage, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListObjects(ctx, listObjectsRequestToProto(req))
 	if err != nil {
-		return s3store.ListPage{}, grpcToS3Err(err)
+		return s3sdk.ListPage{}, grpcToS3Err(err)
 	}
 	return listPageFromProto(resp), nil
 }
 
-func (r *remoteS3) CopyObject(ctx context.Context, req s3store.CopyRequest) (s3store.ObjectMeta, error) {
+func (r *remoteS3) CopyObject(ctx context.Context, req s3sdk.CopyRequest) (s3sdk.ObjectMeta, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.CopyObject(ctx, copyObjectRequestToProto(req))
 	if err != nil {
-		return s3store.ObjectMeta{}, grpcToS3Err(err)
+		return s3sdk.ObjectMeta{}, grpcToS3Err(err)
 	}
 	return requiredObjectMeta(resp.GetMeta(), "copy object")
 }
 
-func (r *remoteS3) PresignObject(ctx context.Context, req s3store.PresignRequest) (s3store.PresignResult, error) {
+func (r *remoteS3) PresignObject(ctx context.Context, req s3sdk.PresignRequest) (s3sdk.PresignResult, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.PresignObject(ctx, presignRequestToProto(req))
 	if err != nil {
-		return s3store.PresignResult{}, grpcToS3Err(err)
+		return s3sdk.PresignResult{}, grpcToS3Err(err)
 	}
 	return presignResultFromProto(resp, req.Method), nil
 }
@@ -249,17 +249,17 @@ func grpcToS3Err(err error) error {
 	}
 	switch st.Code() {
 	case codes.NotFound:
-		return s3store.ErrNotFound
+		return s3sdk.ErrNotFound
 	case codes.FailedPrecondition:
-		return s3store.ErrPreconditionFailed
+		return s3sdk.ErrPreconditionFailed
 	case codes.OutOfRange:
-		return s3store.ErrInvalidRange
+		return s3sdk.ErrInvalidRange
 	default:
 		return err
 	}
 }
 
-func objectRefToProto(ref s3store.ObjectRef) *proto.S3ObjectRef {
+func objectRefToProto(ref s3sdk.ObjectRef) *proto.S3ObjectRef {
 	return &proto.S3ObjectRef{
 		Bucket:    ref.Bucket,
 		Key:       ref.Key,
@@ -267,27 +267,27 @@ func objectRefToProto(ref s3store.ObjectRef) *proto.S3ObjectRef {
 	}
 }
 
-func objectRefFromProto(ref *proto.S3ObjectRef) s3store.ObjectRef {
+func objectRefFromProto(ref *proto.S3ObjectRef) s3sdk.ObjectRef {
 	if ref == nil {
-		return s3store.ObjectRef{}
+		return s3sdk.ObjectRef{}
 	}
-	return s3store.ObjectRef{
+	return s3sdk.ObjectRef{
 		Bucket:    ref.GetBucket(),
 		Key:       ref.GetKey(),
 		VersionID: ref.GetVersionId(),
 	}
 }
 
-func objectMetaFromProto(meta *proto.S3ObjectMeta) s3store.ObjectMeta {
+func objectMetaFromProto(meta *proto.S3ObjectMeta) s3sdk.ObjectMeta {
 	if meta == nil {
-		return s3store.ObjectMeta{}
+		return s3sdk.ObjectMeta{}
 	}
-	out := s3store.ObjectMeta{
+	out := s3sdk.ObjectMeta{
 		Ref:          objectRefFromProto(meta.GetRef()),
 		ETag:         meta.GetEtag(),
 		Size:         meta.GetSize(),
 		ContentType:  meta.GetContentType(),
-		Metadata:     s3store.CloneStringMap(meta.GetMetadata()),
+		Metadata:     s3sdk.CloneStringMap(meta.GetMetadata()),
 		StorageClass: meta.GetStorageClass(),
 	}
 	if ts := meta.GetLastModified(); ts != nil {
@@ -296,20 +296,20 @@ func objectMetaFromProto(meta *proto.S3ObjectMeta) s3store.ObjectMeta {
 	return out
 }
 
-func requiredObjectMeta(meta *proto.S3ObjectMeta, op string) (s3store.ObjectMeta, error) {
+func requiredObjectMeta(meta *proto.S3ObjectMeta, op string) (s3sdk.ObjectMeta, error) {
 	if meta == nil {
-		return s3store.ObjectMeta{}, fmt.Errorf("s3: %s response missing metadata", op)
+		return s3sdk.ObjectMeta{}, fmt.Errorf("s3: %s response missing metadata", op)
 	}
 	return objectMetaFromProto(meta), nil
 }
 
-func objectMetaToProto(meta s3store.ObjectMeta) *proto.S3ObjectMeta {
+func objectMetaToProto(meta s3sdk.ObjectMeta) *proto.S3ObjectMeta {
 	out := &proto.S3ObjectMeta{
 		Ref:          objectRefToProto(meta.Ref),
 		Etag:         meta.ETag,
 		Size:         meta.Size,
 		ContentType:  meta.ContentType,
-		Metadata:     s3store.CloneStringMap(meta.Metadata),
+		Metadata:     s3sdk.CloneStringMap(meta.Metadata),
 		StorageClass: meta.StorageClass,
 	}
 	if !meta.LastModified.IsZero() {
@@ -318,7 +318,7 @@ func objectMetaToProto(meta s3store.ObjectMeta) *proto.S3ObjectMeta {
 	return out
 }
 
-func readObjectRequestToProto(req s3store.ReadRequest) *proto.ReadObjectRequest {
+func readObjectRequestToProto(req s3sdk.ReadRequest) *proto.ReadObjectRequest {
 	out := &proto.ReadObjectRequest{
 		Ref:         objectRefToProto(req.Ref),
 		IfMatch:     req.IfMatch,
@@ -336,7 +336,7 @@ func readObjectRequestToProto(req s3store.ReadRequest) *proto.ReadObjectRequest 
 	return out
 }
 
-func byteRangeToProto(r *s3store.ByteRange) *proto.ByteRange {
+func byteRangeToProto(r *s3sdk.ByteRange) *proto.ByteRange {
 	if r == nil {
 		return nil
 	}
@@ -352,11 +352,11 @@ func byteRangeToProto(r *s3store.ByteRange) *proto.ByteRange {
 	return out
 }
 
-func byteRangeFromProto(r *proto.ByteRange) *s3store.ByteRange {
+func byteRangeFromProto(r *proto.ByteRange) *s3sdk.ByteRange {
 	if r == nil {
 		return nil
 	}
-	out := &s3store.ByteRange{}
+	out := &s3sdk.ByteRange{}
 	if r.Start != nil {
 		start := r.GetStart()
 		out.Start = &start
@@ -368,7 +368,7 @@ func byteRangeFromProto(r *proto.ByteRange) *s3store.ByteRange {
 	return out
 }
 
-func writeObjectOpenToProto(req s3store.WriteRequest) *proto.WriteObjectOpen {
+func writeObjectOpenToProto(req s3sdk.WriteRequest) *proto.WriteObjectOpen {
 	return &proto.WriteObjectOpen{
 		Ref:                objectRefToProto(req.Ref),
 		ContentType:        req.ContentType,
@@ -376,13 +376,13 @@ func writeObjectOpenToProto(req s3store.WriteRequest) *proto.WriteObjectOpen {
 		ContentDisposition: req.ContentDisposition,
 		ContentEncoding:    req.ContentEncoding,
 		ContentLanguage:    req.ContentLanguage,
-		Metadata:           s3store.CloneStringMap(req.Metadata),
+		Metadata:           s3sdk.CloneStringMap(req.Metadata),
 		IfMatch:            req.IfMatch,
 		IfNoneMatch:        req.IfNoneMatch,
 	}
 }
 
-func listObjectsRequestToProto(req s3store.ListRequest) *proto.ListObjectsRequest {
+func listObjectsRequestToProto(req s3sdk.ListRequest) *proto.ListObjectsRequest {
 	return &proto.ListObjectsRequest{
 		Bucket:            req.Bucket,
 		Prefix:            req.Prefix,
@@ -393,23 +393,23 @@ func listObjectsRequestToProto(req s3store.ListRequest) *proto.ListObjectsReques
 	}
 }
 
-func listPageFromProto(resp *proto.ListObjectsResponse) s3store.ListPage {
+func listPageFromProto(resp *proto.ListObjectsResponse) s3sdk.ListPage {
 	if resp == nil {
-		return s3store.ListPage{}
+		return s3sdk.ListPage{}
 	}
-	out := s3store.ListPage{
+	out := s3sdk.ListPage{
 		CommonPrefixes:        append([]string(nil), resp.GetCommonPrefixes()...),
 		NextContinuationToken: resp.GetNextContinuationToken(),
 		HasMore:               resp.GetHasMore(),
 	}
-	out.Objects = make([]s3store.ObjectMeta, 0, len(resp.GetObjects()))
+	out.Objects = make([]s3sdk.ObjectMeta, 0, len(resp.GetObjects()))
 	for _, obj := range resp.GetObjects() {
 		out.Objects = append(out.Objects, objectMetaFromProto(obj))
 	}
 	return out
 }
 
-func copyObjectRequestToProto(req s3store.CopyRequest) *proto.CopyObjectRequest {
+func copyObjectRequestToProto(req s3sdk.CopyRequest) *proto.CopyObjectRequest {
 	return &proto.CopyObjectRequest{
 		Source:      objectRefToProto(req.Source),
 		Destination: objectRefToProto(req.Destination),
@@ -418,60 +418,60 @@ func copyObjectRequestToProto(req s3store.CopyRequest) *proto.CopyObjectRequest 
 	}
 }
 
-func presignMethodToProto(method s3store.PresignMethod) proto.PresignMethod {
+func presignMethodToProto(method s3sdk.PresignMethod) proto.PresignMethod {
 	switch method {
-	case s3store.PresignMethodGet:
+	case s3sdk.PresignMethodGet:
 		return proto.PresignMethod_PRESIGN_METHOD_GET
-	case s3store.PresignMethodPut:
+	case s3sdk.PresignMethodPut:
 		return proto.PresignMethod_PRESIGN_METHOD_PUT
-	case s3store.PresignMethodDelete:
+	case s3sdk.PresignMethodDelete:
 		return proto.PresignMethod_PRESIGN_METHOD_DELETE
-	case s3store.PresignMethodHead:
+	case s3sdk.PresignMethodHead:
 		return proto.PresignMethod_PRESIGN_METHOD_HEAD
 	default:
 		return proto.PresignMethod_PRESIGN_METHOD_UNSPECIFIED
 	}
 }
 
-func presignMethodFromProto(method proto.PresignMethod) s3store.PresignMethod {
+func presignMethodFromProto(method proto.PresignMethod) s3sdk.PresignMethod {
 	switch method {
 	case proto.PresignMethod_PRESIGN_METHOD_GET:
-		return s3store.PresignMethodGet
+		return s3sdk.PresignMethodGet
 	case proto.PresignMethod_PRESIGN_METHOD_PUT:
-		return s3store.PresignMethodPut
+		return s3sdk.PresignMethodPut
 	case proto.PresignMethod_PRESIGN_METHOD_DELETE:
-		return s3store.PresignMethodDelete
+		return s3sdk.PresignMethodDelete
 	case proto.PresignMethod_PRESIGN_METHOD_HEAD:
-		return s3store.PresignMethodHead
+		return s3sdk.PresignMethodHead
 	default:
 		return ""
 	}
 }
 
-func presignRequestToProto(req s3store.PresignRequest) *proto.PresignObjectRequest {
+func presignRequestToProto(req s3sdk.PresignRequest) *proto.PresignObjectRequest {
 	out := &proto.PresignObjectRequest{
 		Ref:                objectRefToProto(req.Ref),
 		Method:             presignMethodToProto(req.Method),
 		ExpiresSeconds:     int64(req.Expires / time.Second),
 		ContentType:        req.ContentType,
 		ContentDisposition: req.ContentDisposition,
-		Headers:            s3store.CloneStringMap(req.Headers),
+		Headers:            s3sdk.CloneStringMap(req.Headers),
 	}
 	return out
 }
 
-func presignResultFromProto(resp *proto.PresignObjectResponse, requested s3store.PresignMethod) s3store.PresignResult {
+func presignResultFromProto(resp *proto.PresignObjectResponse, requested s3sdk.PresignMethod) s3sdk.PresignResult {
 	if resp == nil {
-		return s3store.PresignResult{}
+		return s3sdk.PresignResult{}
 	}
 	method := presignMethodFromProto(resp.GetMethod())
 	if method == "" {
 		method = requested
 	}
-	out := s3store.PresignResult{
+	out := s3sdk.PresignResult{
 		URL:     resp.GetUrl(),
 		Method:  method,
-		Headers: s3store.CloneStringMap(resp.GetHeaders()),
+		Headers: s3sdk.CloneStringMap(resp.GetHeaders()),
 	}
 	if ts := resp.GetExpiresAt(); ts != nil {
 		out.ExpiresAt = ts.AsTime()

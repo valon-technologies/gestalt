@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"strings"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 )
 
 type APITokenService struct {
-	store indexeddb.ObjectStore
+	store idb.ObjectStore
 }
 
 func NewAPITokenService(ds indexeddb.IndexedDB) *APITokenService {
@@ -60,7 +61,7 @@ func (s *APITokenService) StoreAPIToken(ctx context.Context, token *core.APIToke
 		return fmt.Errorf("marshal api token permissions: %w", err)
 	}
 	now := time.Now()
-	rec := indexeddb.Record{
+	rec := idb.Record{
 		"id":                    token.ID,
 		"owner_kind":            ownerKind,
 		"owner_id":              ownerID,
@@ -82,7 +83,7 @@ func (s *APITokenService) StoreAPIToken(ctx context.Context, token *core.APIToke
 func (s *APITokenService) ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error) {
 	rec, err := s.store.Index("by_hash").Get(ctx, hashedToken)
 	if err != nil {
-		if err == indexeddb.ErrNotFound {
+		if err == idb.ErrNotFound {
 			return nil, core.ErrNotFound
 		}
 		return nil, fmt.Errorf("validate api token: %w", err)
@@ -137,7 +138,7 @@ func (s *APITokenService) RevokeAllAPITokensByOwner(ctx context.Context, ownerKi
 	return deleted, nil
 }
 
-func recordToAPIToken(rec indexeddb.Record) *core.APIToken {
+func recordToAPIToken(rec idb.Record) *core.APIToken {
 	token := &core.APIToken{
 		ID:                  recString(rec, "id"),
 		OwnerKind:           recString(rec, "owner_kind"),

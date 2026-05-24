@@ -3,16 +3,15 @@ package coretesting
 import (
 	"bytes"
 	"fmt"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"sort"
-
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
 type stubCursor struct {
 	store        *stubObjectStore
 	keys         []string
 	indexKeys    []any
-	snapshot     map[string]indexeddb.Record
+	snapshot     map[string]idb.Record
 	pos          int
 	keysOnly     bool
 	reverse      bool
@@ -175,7 +174,7 @@ func toFloat64(v any) (float64, bool) {
 	}
 }
 
-func (c *stubCursor) applyKeyRange(r *indexeddb.KeyRange) {
+func (c *stubCursor) applyKeyRange(r *idb.KeyRange) {
 	if r == nil {
 		return
 	}
@@ -320,19 +319,19 @@ func (c *stubCursor) PrimaryKey() string {
 	return c.keys[c.pos]
 }
 
-func (c *stubCursor) Value() (indexeddb.Record, error) {
+func (c *stubCursor) Value() (idb.Record, error) {
 	if c.keysOnly {
-		return nil, indexeddb.ErrKeysOnly
+		return nil, idb.ErrKeysOnly
 	}
 	if c.pos < 0 || c.pos >= len(c.keys) {
-		return nil, indexeddb.ErrNotFound
+		return nil, idb.ErrNotFound
 	}
 	return c.snapshot[c.keys[c.pos]], nil
 }
 
 func (c *stubCursor) Delete() error {
 	if c.pos < 0 || c.pos >= len(c.keys) {
-		return indexeddb.ErrNotFound
+		return idb.ErrNotFound
 	}
 	c.store.mu.Lock()
 	delete(c.store.records, c.keys[c.pos])
@@ -340,15 +339,15 @@ func (c *stubCursor) Delete() error {
 	return nil
 }
 
-func (c *stubCursor) Update(value indexeddb.Record) error {
+func (c *stubCursor) Update(value idb.Record) error {
 	if c.pos < 0 || c.pos >= len(c.keys) {
-		return indexeddb.ErrNotFound
+		return idb.ErrNotFound
 	}
 	curID := c.keys[c.pos]
 	c.store.mu.Lock()
 	defer c.store.mu.Unlock()
 	if c.store.hasUniqueConflict(value, &curID) {
-		return indexeddb.ErrAlreadyExists
+		return idb.ErrAlreadyExists
 	}
 	c.store.records[curID] = value
 	c.snapshot[curID] = value

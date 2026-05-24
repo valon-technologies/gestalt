@@ -202,14 +202,14 @@ func ResolveEffectiveAppIndexedDB(pluginName string, entry *ProviderEntry, selec
 	}
 	if providerName == "" {
 		if entry.IndexedDB != nil && (strings.TrimSpace(entry.IndexedDB.DB) != "" || len(entry.IndexedDB.ObjectStores) > 0) {
-			return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: apps.%s.indexeddb requires indexeddb.provider or an available selected/default host indexeddb", pluginName)
+			return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: apps.%s.indexeddb requires idb.provider or an available selected/default host indexeddb", pluginName)
 		}
 		return EffectiveHostIndexedDBBinding{}, nil
 	}
 
 	provider, ok := entries[providerName]
 	if !ok || provider == nil {
-		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: apps.%s.indexeddb.provider references unknown indexeddb %q", pluginName, providerName)
+		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: apps.%s.idb.provider references unknown indexeddb %q", pluginName, providerName)
 	}
 
 	dbName := pluginName
@@ -238,12 +238,12 @@ func ResolveEffectiveWorkflowIndexedDB(name string, entry *ProviderEntry, entrie
 
 	providerName := strings.TrimSpace(entry.IndexedDB.Provider)
 	if providerName == "" {
-		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: providers.workflow.%s.indexeddb.provider is required", name)
+		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: providers.workflow.%s.idb.provider is required", name)
 	}
 
 	provider, ok := entries[providerName]
 	if !ok || provider == nil {
-		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: providers.workflow.%s.indexeddb.provider references unknown indexeddb %q", name, providerName)
+		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: providers.workflow.%s.idb.provider references unknown indexeddb %q", name, providerName)
 	}
 
 	dbName := strings.TrimSpace(entry.IndexedDB.DB)
@@ -267,12 +267,12 @@ func ResolveEffectiveAgentIndexedDB(name string, entry *ProviderEntry, entries m
 
 	providerName := strings.TrimSpace(entry.IndexedDB.Provider)
 	if providerName == "" {
-		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: providers.agent.%s.indexeddb.provider is required", name)
+		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: providers.agent.%s.idb.provider is required", name)
 	}
 
 	provider, ok := entries[providerName]
 	if !ok || provider == nil {
-		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: providers.agent.%s.indexeddb.provider references unknown indexeddb %q", name, providerName)
+		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: providers.agent.%s.idb.provider references unknown indexeddb %q", name, providerName)
 	}
 
 	dbName := strings.TrimSpace(entry.IndexedDB.DB)

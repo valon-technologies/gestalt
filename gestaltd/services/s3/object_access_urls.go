@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -35,8 +35,8 @@ type ObjectAccessURLManager struct {
 type ObjectAccessURLRequest struct {
 	AppName            string
 	BindingName        string
-	Ref                s3store.ObjectRef
-	Method             s3store.PresignMethod
+	Ref                s3sdk.ObjectRef
+	Method             s3sdk.PresignMethod
 	Expires            time.Duration
 	ContentType        string
 	ContentDisposition string
@@ -46,8 +46,8 @@ type ObjectAccessURLRequest struct {
 type ObjectAccessTarget struct {
 	AppName            string
 	BindingName        string
-	Ref                s3store.ObjectRef
-	Method             s3store.PresignMethod
+	Ref                s3sdk.ObjectRef
+	Method             s3sdk.PresignMethod
 	ExpiresAt          time.Time
 	ContentType        string
 	ContentDisposition string
@@ -86,16 +86,16 @@ func NewObjectAccessURLManager(secret []byte, baseURL string) (*ObjectAccessURLM
 	}, nil
 }
 
-func (m *ObjectAccessURLManager) MintURL(req ObjectAccessURLRequest) (s3store.PresignResult, error) {
+func (m *ObjectAccessURLManager) MintURL(req ObjectAccessURLRequest) (s3sdk.PresignResult, error) {
 	if m == nil {
-		return s3store.PresignResult{}, fmt.Errorf("s3 object access URLs are not available")
+		return s3sdk.PresignResult{}, fmt.Errorf("s3 object access URLs are not available")
 	}
 	if m.baseURL == "" {
-		return s3store.PresignResult{}, fmt.Errorf("server.base_url is required for s3 object access URLs")
+		return s3sdk.PresignResult{}, fmt.Errorf("server.base_url is required for s3 object access URLs")
 	}
 	target, err := normalizeS3ObjectAccessRequest(req, m.now().Add(m.tokenTTL(req.Expires)))
 	if err != nil {
-		return s3store.PresignResult{}, err
+		return s3sdk.PresignResult{}, err
 	}
 	claims := s3ObjectAccessURLClaims{
 		Version:            s3ObjectAccessVersion,
@@ -109,21 +109,21 @@ func (m *ObjectAccessURLManager) MintURL(req ObjectAccessURLRequest) (s3store.Pr
 		ExpiresAt:          target.ExpiresAt.Unix(),
 		ContentType:        target.ContentType,
 		ContentDisposition: target.ContentDisposition,
-		Headers:            s3store.CloneStringMap(target.Headers),
+		Headers:            s3sdk.CloneStringMap(target.Headers),
 	}
 	payload, err := json.Marshal(claims)
 	if err != nil {
-		return s3store.PresignResult{}, err
+		return s3sdk.PresignResult{}, err
 	}
 	token, err := m.encryptor.EncryptURLSafe(string(payload))
 	if err != nil {
-		return s3store.PresignResult{}, err
+		return s3sdk.PresignResult{}, err
 	}
-	return s3store.PresignResult{
+	return s3sdk.PresignResult{
 		URL:       m.baseURL + ObjectAccessPathPrefix + token,
 		Method:    target.Method,
 		ExpiresAt: target.ExpiresAt,
-		Headers:   s3store.CloneStringMap(target.Headers),
+		Headers:   s3sdk.CloneStringMap(target.Headers),
 	}, nil
 }
 
@@ -153,8 +153,8 @@ func (m *ObjectAccessURLManager) ResolveToken(token string) (ObjectAccessTarget,
 	return normalizeS3ObjectAccessRequest(ObjectAccessURLRequest{
 		AppName:            claims.AppName,
 		BindingName:        claims.BindingName,
-		Ref:                s3store.ObjectRef{Bucket: claims.Bucket, Key: claims.Key, VersionID: claims.VersionID},
-		Method:             s3store.PresignMethod(claims.Method),
+		Ref:                s3sdk.ObjectRef{Bucket: claims.Bucket, Key: claims.Key, VersionID: claims.VersionID},
+		Method:             s3sdk.PresignMethod(claims.Method),
 		ContentType:        claims.ContentType,
 		ContentDisposition: claims.ContentDisposition,
 		Headers:            claims.Headers,
@@ -204,20 +204,20 @@ func normalizeS3ObjectAccessRequest(req ObjectAccessURLRequest, expiresAt time.T
 		ExpiresAt:          expiresAt.UTC(),
 		ContentType:        strings.TrimSpace(req.ContentType),
 		ContentDisposition: strings.TrimSpace(req.ContentDisposition),
-		Headers:            s3store.CloneStringMap(req.Headers),
+		Headers:            s3sdk.CloneStringMap(req.Headers),
 	}, nil
 }
 
-func normalizeS3ObjectAccessMethod(method s3store.PresignMethod) s3store.PresignMethod {
+func normalizeS3ObjectAccessMethod(method s3sdk.PresignMethod) s3sdk.PresignMethod {
 	switch method {
-	case "", s3store.PresignMethodGet:
-		return s3store.PresignMethodGet
-	case s3store.PresignMethodPut:
-		return s3store.PresignMethodPut
-	case s3store.PresignMethodDelete:
-		return s3store.PresignMethodDelete
-	case s3store.PresignMethodHead:
-		return s3store.PresignMethodHead
+	case "", s3sdk.PresignMethodGet:
+		return s3sdk.PresignMethodGet
+	case s3sdk.PresignMethodPut:
+		return s3sdk.PresignMethodPut
+	case s3sdk.PresignMethodDelete:
+		return s3sdk.PresignMethodDelete
+	case s3sdk.PresignMethodHead:
+		return s3sdk.PresignMethodHead
 	default:
 		return ""
 	}
@@ -250,7 +250,7 @@ func (s *s3ObjectAccessServer) CreateObjectAccessURL(_ context.Context, req *pro
 		Expires:            timeDurationSeconds(req.GetExpiresSeconds()),
 		ContentType:        req.GetContentType(),
 		ContentDisposition: req.GetContentDisposition(),
-		Headers:            s3store.CloneStringMap(req.GetHeaders()),
+		Headers:            s3sdk.CloneStringMap(req.GetHeaders()),
 	})
 	if err != nil {
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
@@ -258,11 +258,11 @@ func (s *s3ObjectAccessServer) CreateObjectAccessURL(_ context.Context, req *pro
 	return s3ObjectAccessResultToProto(result), nil
 }
 
-func s3ObjectAccessResultToProto(result s3store.PresignResult) *proto.CreateObjectAccessURLResponse {
+func s3ObjectAccessResultToProto(result s3sdk.PresignResult) *proto.CreateObjectAccessURLResponse {
 	resp := &proto.CreateObjectAccessURLResponse{
 		Url:     result.URL,
 		Method:  presignMethodToProto(result.Method),
-		Headers: s3store.CloneStringMap(result.Headers),
+		Headers: s3sdk.CloneStringMap(result.Headers),
 	}
 	if !result.ExpiresAt.IsZero() {
 		resp.ExpiresAt = timestamppb.New(result.ExpiresAt)

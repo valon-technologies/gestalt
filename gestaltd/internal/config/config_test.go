@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -2823,7 +2824,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `apps.roadmap.indexeddb.provider references unknown indexeddb "missing"`) {
+		if !strings.Contains(err.Error(), `apps.roadmap.idb.provider references unknown indexeddb "missing"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2875,7 +2876,7 @@ server:
 				if err == nil {
 					t.Fatal("Load: expected error, got nil")
 				}
-				if !strings.Contains(err.Error(), `apps.roadmap.indexeddb requires indexeddb.provider or an available selected/default host indexeddb`) {
+				if !strings.Contains(err.Error(), `apps.roadmap.indexeddb requires idb.provider or an available selected/default host indexeddb`) {
 					t.Fatalf("unexpected error: %v", err)
 				}
 			})
@@ -2963,7 +2964,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `apps.roadmap.indexeddb.objectStores[1] duplicates "tasks"`) {
+		if !strings.Contains(err.Error(), `apps.roadmap.idb.objectStores[1] duplicates "tasks"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -3908,7 +3909,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `providers.workflow.basic.indexeddb.provider references unknown indexeddb "missing"`) {
+		if !strings.Contains(err.Error(), `providers.workflow.basic.idb.provider references unknown indexeddb "missing"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -3938,7 +3939,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `providers.agent.simple.indexeddb.provider references unknown indexeddb "missing"`) {
+		if !strings.Contains(err.Error(), `providers.agent.simple.idb.provider references unknown indexeddb "missing"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

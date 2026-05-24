@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -478,7 +479,7 @@ func TestIndexedDBAttachmentStatePollTransactionOpenContextDoneReturnsNoContent(
 	db := &interceptIndexedDB{inner: &coretesting.StubIndexedDB{}}
 	manager, session := newSharedProviderDevSession(t, ctx, db)
 
-	db.transactionFn = func(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	db.transactionFn = func(ctx context.Context, stores []string, mode idb.TransactionMode, opts idb.TransactionOptions) (idb.Transaction, error) {
 		if isProviderDevPollTransaction(stores) {
 			<-ctx.Done()
 			return nil, ctx.Err()
@@ -499,7 +500,7 @@ func TestIndexedDBAttachmentStatePollNoClaimCommitContextDoneReturnsNoContent(t 
 	db := &interceptIndexedDB{inner: &coretesting.StubIndexedDB{}}
 	manager, session := newSharedProviderDevSession(t, ctx, db)
 
-	db.transactionFn = func(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	db.transactionFn = func(ctx context.Context, stores []string, mode idb.TransactionMode, opts idb.TransactionOptions) (idb.Transaction, error) {
 		tx, err := db.inner.Transaction(ctx, stores, mode, opts)
 		if err != nil || !isProviderDevPollTransaction(stores) {
 			return tx, err
@@ -526,7 +527,7 @@ func TestIndexedDBAttachmentStatePollLiveTransactionErrorReturnsInternal(t *test
 	db := &interceptIndexedDB{inner: &coretesting.StubIndexedDB{}}
 	manager, session := newSharedProviderDevSession(t, ctx, db)
 
-	db.transactionFn = func(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	db.transactionFn = func(ctx context.Context, stores []string, mode idb.TransactionMode, opts idb.TransactionOptions) (idb.Transaction, error) {
 		if isProviderDevPollTransaction(stores) {
 			return nil, errors.New("indexeddb unavailable")
 		}
@@ -549,7 +550,7 @@ func TestIndexedDBAttachmentStatePollPostClaimCommitContextDoneReturnsInternal(t
 		t.Fatalf("enqueueCall: %v", err)
 	}
 
-	db.transactionFn = func(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	db.transactionFn = func(ctx context.Context, stores []string, mode idb.TransactionMode, opts idb.TransactionOptions) (idb.Transaction, error) {
 		tx, err := db.inner.Transaction(ctx, stores, mode, opts)
 		if err != nil || !isProviderDevPollTransaction(stores) {
 			return tx, err
@@ -1560,21 +1561,21 @@ func providerDevPollOnlyHandler(t *testing.T, manager *Manager, timeout time.Dur
 
 type interceptIndexedDB struct {
 	inner         indexeddb.IndexedDB
-	transactionFn func(context.Context, []string, indexeddb.TransactionMode, indexeddb.TransactionOptions) (indexeddb.Transaction, error)
+	transactionFn func(context.Context, []string, idb.TransactionMode, idb.TransactionOptions) (idb.Transaction, error)
 }
 
-func (db *interceptIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
+func (db *interceptIndexedDB) ObjectStore(name string) idb.ObjectStore {
 	return db.inner.ObjectStore(name)
 }
 
-func (db *interceptIndexedDB) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+func (db *interceptIndexedDB) Transaction(ctx context.Context, stores []string, mode idb.TransactionMode, opts idb.TransactionOptions) (idb.Transaction, error) {
 	if db.transactionFn != nil {
 		return db.transactionFn(ctx, stores, mode, opts)
 	}
 	return db.inner.Transaction(ctx, stores, mode, opts)
 }
 
-func (db *interceptIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) (indexeddb.ObjectStore, error) {
+func (db *interceptIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
 	return db.inner.CreateObjectStore(ctx, name, schema)
 }
 
@@ -1591,7 +1592,7 @@ func (db *interceptIndexedDB) Close() error {
 }
 
 type interceptTransaction struct {
-	indexeddb.Transaction
+	idb.Transaction
 	commitFn func(context.Context) error
 	abortFn  func(context.Context) error
 }

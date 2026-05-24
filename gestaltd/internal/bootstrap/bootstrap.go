@@ -13,12 +13,12 @@ import (
 	"sync"
 	"time"
 
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -32,6 +32,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
+	"github.com/valon-technologies/gestalt/server/services/authorizationadmin"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
@@ -166,7 +167,7 @@ type Deps struct {
 	IndexedDBFactory      IndexedDBFactory
 	CacheDefs             map[string]*config.ProviderEntry
 	CacheFactory          CacheFactory
-	S3                    map[string]s3store.Client
+	S3                    map[string]s3sdk.Client
 	WorkflowRuntime       *workflowRuntime
 	AgentRuntime          *agentRuntime
 	AgentRunGrants        *agentgrant.Manager
@@ -181,6 +182,7 @@ type Deps struct {
 	HostServiceTLSCAFile  string
 	HostServiceTLSCAPEM   string
 	Telemetry             core.TelemetryProvider
+	AuthorizationAdmin    *authorizationadmin.Service
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
@@ -189,7 +191,7 @@ type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type CacheFactory func(node yaml.Node) (corecache.Cache, error)
-type S3Factory func(node yaml.Node) (s3store.Client, error)
+type S3Factory func(node yaml.Node) (s3sdk.Client, error)
 type WorkflowFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreworkflow.Provider, error)
 type AgentFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreagent.Provider, error)
 type RuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (appruntime.Provider, error)
@@ -225,10 +227,11 @@ type Result struct {
 	SelectedAuthProvider  string
 	AuthProviders         map[string]core.AuthenticationProvider
 	AuthorizationProvider core.AuthorizationProvider
+	AuthorizationAdmin    *authorizationadmin.Service
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
-	S3                    map[string]s3store.Client
-	ExtraS3s              []s3store.Client
+	S3                    map[string]s3sdk.Client
+	ExtraS3s              []s3sdk.Client
 	ExtraWorkflows        []coreworkflow.Provider
 	ExtraAgents           []coreagent.Provider
 	Providers             *registry.ProviderMap[core.Provider]
@@ -421,7 +424,7 @@ func closeIndexedDBs(stores ...indexeddb.IndexedDB) error {
 	return errors.Join(errs...)
 }
 
-func closeS3s(clients ...s3store.Client) error {
+func closeS3s(clients ...s3sdk.Client) error {
 	var errs []error
 	for _, client := range clients {
 		if client == nil {
@@ -737,7 +740,7 @@ type preparedCore struct {
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
-	ExtraS3s              []s3store.Client
+	ExtraS3s              []s3sdk.Client
 	SecretManager         core.SecretManager
 	Telemetry             core.TelemetryProvider
 	Deps                  Deps
@@ -985,8 +988,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		}
 	}()
 
-	hostS3s := make(map[string]s3store.Client, len(cfg.Providers.S3))
-	var extraS3s []s3store.Client
+	hostS3s := make(map[string]s3sdk.Client, len(cfg.Providers.S3))
+	var extraS3s []s3sdk.Client
 	for name, entry := range cfg.Providers.S3 {
 		if entry == nil {
 			continue
@@ -1126,6 +1129,15 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	prepared.Deps.AgentManager = agentManager
 	prepared.Deps.PublicHostServices = publicHostServices
 	prepared.Deps.WorkflowRuntime.SetAgentManager(agentManager)
+	authorizationAdmin := authorizationadmin.New(authorizationadmin.Config{
+		AuthorizationProvider:    prepared.AuthorizationProvider,
+		Users:                    prepared.Services.Users,
+		Fragments:                prepared.Services.AuthzFragments,
+		AppDefs:                  cfg.Apps,
+		AdminAuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
+		AdminAllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
+	})
+	prepared.Deps.AuthorizationAdmin = authorizationAdmin
 
 	providers, providersReady, connAuthResolver, manualConnAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
@@ -1174,6 +1186,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			return nil, err
 		}
 	}
+	authorizationAdmin.SetAuthorizer(authz)
 	providerDevSessions, err := buildProviderDevManager(cfg, providers, prepared.Deps)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
@@ -1193,6 +1206,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
+	authorizationAdmin.SetAuditSink(audit)
 	closeAudit := true
 	defer func() {
 		if closeAudit && auditClose != nil {
@@ -1282,6 +1296,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		SelectedAuthProvider:         prepared.SelectedAuthProvider,
 		AuthProviders:                prepared.AuthProviders,
 		AuthorizationProvider:        prepared.AuthorizationProvider,
+		AuthorizationAdmin:           authorizationAdmin,
 		Services:                     prepared.Services,
 		ExtraIndexedDBs:              prepared.ExtraIndexedDBs,
 		S3:                           prepared.Deps.S3,
@@ -1802,7 +1817,7 @@ func buildCache(entry *config.ProviderEntry, factories *FactoryRegistry) (coreca
 	return value, nil
 }
 
-func buildS3(name string, entry *config.ProviderEntry, factories *FactoryRegistry) (s3store.Client, error) {
+func buildS3(name string, entry *config.ProviderEntry, factories *FactoryRegistry) (s3sdk.Client, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("s3 provider is required")
 	}

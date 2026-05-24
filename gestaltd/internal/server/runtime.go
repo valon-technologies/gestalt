@@ -92,6 +92,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		AgentDefs:             cfg.Providers.Agent,
 		Authorizer:            result.Authorizer,
 		AuthorizationProvider: result.AuthorizationProvider,
+		AuthorizationAdmin:    result.AuthorizationAdmin,
 		PublicBaseURL:         cfg.Server.BaseURL,
 		ManagementBaseURL:     cfg.Server.ManagementBaseURL(),
 		SecureCookies:         strings.HasPrefix(cfg.Server.BaseURL, "https://"),

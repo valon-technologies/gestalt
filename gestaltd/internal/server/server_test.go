@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"io"
 	"log/slog"
 	"maps"
@@ -33,10 +34,9 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
@@ -327,7 +327,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 	store := &coretesting.StubS3{}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.PublicBaseURL = "https://gestalt.example.test"
-		cfg.S3 = map[string]s3store.Client{"brainStorage": store}
+		cfg.S3 = map[string]s3sdk.Client{"brainStorage": store}
 	})
 	defer ts.Close()
 
@@ -338,7 +338,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewObjectAccessURLManager: %v", err)
 	}
-	targetRef := s3store.ObjectRef{
+	targetRef := s3sdk.ObjectRef{
 		Bucket: "brain",
 		Key:    " workspaces/acme/tokens/token-1/content.bin ",
 	}
@@ -346,7 +346,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 		AppName:     "brain",
 		BindingName: "brainStorage",
 		Ref:         targetRef,
-		Method:      s3store.PresignMethodPut,
+		Method:      s3sdk.PresignMethodPut,
 		Expires:     time.Minute,
 		ContentType: "text/plain",
 		Headers:     map[string]string{"Content-Length": "11"},
@@ -371,14 +371,14 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 		t.Fatal("PUT response missing ETag")
 	}
 
-	prefixed := s3store.ObjectRef{
+	prefixed := s3sdk.ObjectRef{
 		Bucket: targetRef.Bucket,
 		Key:    s3.AppObjectKey("brain", targetRef.Key),
 	}
 	if _, err := store.HeadObject(context.Background(), prefixed); err != nil {
 		t.Fatalf("HeadObject(prefixed): %v", err)
 	}
-	if _, err := store.HeadObject(context.Background(), targetRef); !errors.Is(err, s3store.ErrNotFound) {
+	if _, err := store.HeadObject(context.Background(), targetRef); !errors.Is(err, s3sdk.ErrNotFound) {
 		t.Fatalf("HeadObject(unprefixed) error = %v, want ErrNotFound", err)
 	}
 
@@ -386,7 +386,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 		AppName:     "brain",
 		BindingName: "brainStorage",
 		Ref:         targetRef,
-		Method:      s3store.PresignMethodGet,
+		Method:      s3sdk.PresignMethodGet,
 		Expires:     time.Minute,
 	})
 	if err != nil {
@@ -415,7 +415,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 		AppName:     "brain",
 		BindingName: "brainStorage",
 		Ref:         targetRef,
-		Method:      s3store.PresignMethodGet,
+		Method:      s3sdk.PresignMethodGet,
 		Expires:     time.Minute,
 		Headers:     map[string]string{"X-Brain-Download": "ok"},
 	})
@@ -2548,7 +2548,7 @@ func staticPolicyUserMember(t *testing.T, svc *coredata.Services, email, role st
 func seedUserRecord(t *testing.T, svc *coredata.Services, id, email string, createdAt time.Time) *core.User {
 	t.Helper()
 	ctx := context.Background()
-	rec := indexeddb.Record{
+	rec := idb.Record{
 		"id":               id,
 		"email":            email,
 		"normalized_email": strings.ToLower(strings.TrimSpace(email)),
@@ -4885,7 +4885,7 @@ func TestAdminAPI_RuntimeProviderSessionLogsRejectsInvalidCursorAndMapsNotFound(
 		t.Parallel()
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.AppRuntimes = &staticRuntimeInspector{err: indexeddb.ErrNotFound}
+			cfg.AppRuntimes = &staticRuntimeInspector{err: idb.ErrNotFound}
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -8790,7 +8790,7 @@ func TestAuthMiddleware_SubjectOwnedAPITokenRejectsBorrowedCredentialSubject(t *
 	}
 	svc := testutil.NewStubServices(t)
 	now := time.Now()
-	if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(context.Background(), indexeddb.Record{
+	if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(context.Background(), idb.Record{
 		"id":                    "api-tok-borrowed-credential",
 		"owner_kind":            core.APITokenOwnerKindSubject,
 		"owner_id":              "service_account:triage-bot",

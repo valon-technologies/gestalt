@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 )
 
 type StubS3 struct {
@@ -24,70 +24,70 @@ type StubS3 struct {
 }
 
 type stubS3Object struct {
-	meta s3store.ObjectMeta
+	meta s3sdk.ObjectMeta
 	body []byte
 }
 
-func (s *StubS3) HeadObject(_ context.Context, ref s3store.ObjectRef) (s3store.ObjectMeta, error) {
+func (s *StubS3) HeadObject(_ context.Context, ref s3sdk.ObjectRef) (s3sdk.ObjectMeta, error) {
 	if s.Err != nil {
-		return s3store.ObjectMeta{}, s.Err
+		return s3sdk.ObjectMeta{}, s.Err
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	obj, ok := s.lookup(ref)
 	if !ok {
-		return s3store.ObjectMeta{}, s3store.ErrNotFound
+		return s3sdk.ObjectMeta{}, s3sdk.ErrNotFound
 	}
 	return cloneObjectMeta(obj.meta), nil
 }
 
-func (s *StubS3) ReadObject(_ context.Context, req s3store.ReadRequest) (s3store.ReadResult, error) {
+func (s *StubS3) ReadObject(_ context.Context, req s3sdk.ReadRequest) (s3sdk.ReadResult, error) {
 	if s.Err != nil {
-		return s3store.ReadResult{}, s.Err
+		return s3sdk.ReadResult{}, s.Err
 	}
 	s.mu.RLock()
 	obj, ok := s.lookup(req.Ref)
 	if !ok {
 		s.mu.RUnlock()
-		return s3store.ReadResult{}, s3store.ErrNotFound
+		return s3sdk.ReadResult{}, s3sdk.ErrNotFound
 	}
 	meta := cloneObjectMeta(obj.meta)
 	body := append([]byte(nil), obj.body...)
 	s.mu.RUnlock()
 	start, end, err := applyStubRange(req.Range, int64(len(body)))
 	if err != nil {
-		return s3store.ReadResult{}, err
+		return s3sdk.ReadResult{}, err
 	}
-	return s3store.ReadResult{
+	return s3sdk.ReadResult{
 		Meta: meta,
 		Body: io.NopCloser(bytes.NewReader(body[start:end])),
 	}, nil
 }
 
-func (s *StubS3) WriteObject(_ context.Context, req s3store.WriteRequest) (s3store.ObjectMeta, error) {
+func (s *StubS3) WriteObject(_ context.Context, req s3sdk.WriteRequest) (s3sdk.ObjectMeta, error) {
 	if s.Err != nil {
-		return s3store.ObjectMeta{}, s.Err
+		return s3sdk.ObjectMeta{}, s.Err
 	}
 	if req.IfMatch != "" || req.IfNoneMatch != "" {
 		if err := s.checkWritePreconditions(req.Ref, req.IfMatch, req.IfNoneMatch); err != nil {
-			return s3store.ObjectMeta{}, err
+			return s3sdk.ObjectMeta{}, err
 		}
 	}
 	body, err := io.ReadAll(req.Body)
 	if err != nil {
-		return s3store.ObjectMeta{}, err
+		return s3sdk.ObjectMeta{}, err
 	}
 	now := time.Now().UTC()
 	if s.Now != nil {
 		now = s.Now().UTC()
 	}
-	meta := s3store.ObjectMeta{
+	meta := s3sdk.ObjectMeta{
 		Ref:          req.Ref,
 		ETag:         stubETag(body),
 		Size:         int64(len(body)),
 		ContentType:  req.ContentType,
 		LastModified: now,
-		Metadata:     s3store.CloneStringMap(req.Metadata),
+		Metadata:     s3sdk.CloneStringMap(req.Metadata),
 	}
 
 	s.mu.Lock()
@@ -100,7 +100,7 @@ func (s *StubS3) WriteObject(_ context.Context, req s3store.WriteRequest) (s3sto
 	return cloneObjectMeta(meta), nil
 }
 
-func (s *StubS3) DeleteObject(_ context.Context, ref s3store.ObjectRef) error {
+func (s *StubS3) DeleteObject(_ context.Context, ref s3sdk.ObjectRef) error {
 	if s.Err != nil {
 		return s.Err
 	}
@@ -114,9 +114,9 @@ func (s *StubS3) DeleteObject(_ context.Context, ref s3store.ObjectRef) error {
 	return nil
 }
 
-func (s *StubS3) ListObjects(_ context.Context, req s3store.ListRequest) (s3store.ListPage, error) {
+func (s *StubS3) ListObjects(_ context.Context, req s3sdk.ListRequest) (s3sdk.ListPage, error) {
 	if s.Err != nil {
-		return s3store.ListPage{}, s.Err
+		return s3sdk.ListPage{}, s.Err
 	}
 	s.mu.RLock()
 	keys := s.sortedKeys(req.Bucket)
@@ -131,7 +131,7 @@ func (s *StubS3) ListObjects(_ context.Context, req s3store.ListRequest) (s3stor
 		limit = 1000
 	}
 
-	page := s3store.ListPage{}
+	page := s3sdk.ListPage{}
 	seenPrefixes := map[string]struct{}{}
 	count := 0
 	lastToken := ""
@@ -171,9 +171,9 @@ func (s *StubS3) ListObjects(_ context.Context, req s3store.ListRequest) (s3stor
 			page.NextContinuationToken = lastToken
 			return page, nil
 		}
-		meta, err := s.HeadObject(context.Background(), s3store.ObjectRef{Bucket: req.Bucket, Key: key})
+		meta, err := s.HeadObject(context.Background(), s3sdk.ObjectRef{Bucket: req.Bucket, Key: key})
 		if err != nil {
-			return s3store.ListPage{}, err
+			return s3sdk.ListPage{}, err
 		}
 		page.Objects = append(page.Objects, meta)
 		count++
@@ -183,20 +183,20 @@ func (s *StubS3) ListObjects(_ context.Context, req s3store.ListRequest) (s3stor
 	return page, nil
 }
 
-func (s *StubS3) CopyObject(_ context.Context, req s3store.CopyRequest) (s3store.ObjectMeta, error) {
+func (s *StubS3) CopyObject(_ context.Context, req s3sdk.CopyRequest) (s3sdk.ObjectMeta, error) {
 	if s.Err != nil {
-		return s3store.ObjectMeta{}, s.Err
+		return s3sdk.ObjectMeta{}, s.Err
 	}
 	if req.IfMatch != "" || req.IfNoneMatch != "" {
 		if err := s.checkWritePreconditions(req.Source, req.IfMatch, req.IfNoneMatch); err != nil {
-			return s3store.ObjectMeta{}, err
+			return s3sdk.ObjectMeta{}, err
 		}
 	}
 	s.mu.RLock()
 	obj, ok := s.lookup(req.Source)
 	if !ok {
 		s.mu.RUnlock()
-		return s3store.ObjectMeta{}, s3store.ErrNotFound
+		return s3sdk.ObjectMeta{}, s3sdk.ErrNotFound
 	}
 	body := append([]byte(nil), obj.body...)
 	meta := cloneObjectMeta(obj.meta)
@@ -217,9 +217,9 @@ func (s *StubS3) CopyObject(_ context.Context, req s3store.CopyRequest) (s3store
 	return cloneObjectMeta(meta), nil
 }
 
-func (s *StubS3) PresignObject(_ context.Context, req s3store.PresignRequest) (s3store.PresignResult, error) {
+func (s *StubS3) PresignObject(_ context.Context, req s3sdk.PresignRequest) (s3sdk.PresignResult, error) {
 	if s.Err != nil {
-		return s3store.PresignResult{}, s.Err
+		return s3sdk.PresignResult{}, s.Err
 	}
 	now := time.Now().UTC()
 	if s.Now != nil {
@@ -240,18 +240,18 @@ func (s *StubS3) PresignObject(_ context.Context, req s3store.PresignRequest) (s
 	for key, value := range req.Headers {
 		values.Set("header."+key, value)
 	}
-	return s3store.PresignResult{
+	return s3sdk.PresignResult{
 		URL:       fmt.Sprintf("https://example.invalid/%s/%s?%s", req.Ref.Bucket, url.PathEscape(req.Ref.Key), values.Encode()),
 		Method:    req.Method,
 		ExpiresAt: expiresAt,
-		Headers:   s3store.CloneStringMap(req.Headers),
+		Headers:   s3sdk.CloneStringMap(req.Headers),
 	}, nil
 }
 
 func (s *StubS3) Ping(context.Context) error { return s.Err }
 func (s *StubS3) Close() error               { return nil }
 
-func (s *StubS3) lookup(ref s3store.ObjectRef) (*stubS3Object, bool) {
+func (s *StubS3) lookup(ref s3sdk.ObjectRef) (*stubS3Object, bool) {
 	if s.buckets == nil {
 		return nil, false
 	}
@@ -288,30 +288,30 @@ func (s *StubS3) sortedKeys(bucket string) []string {
 	return keys
 }
 
-func (s *StubS3) checkWritePreconditions(ref s3store.ObjectRef, ifMatch, ifNoneMatch string) error {
+func (s *StubS3) checkWritePreconditions(ref s3sdk.ObjectRef, ifMatch, ifNoneMatch string) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	obj, ok := s.lookup(ref)
 	if ifMatch != "" {
 		if !ok || obj.meta.ETag != ifMatch {
-			return s3store.ErrPreconditionFailed
+			return s3sdk.ErrPreconditionFailed
 		}
 	}
 	if ifNoneMatch != "" {
 		if ifNoneMatch == "*" {
 			if ok {
-				return s3store.ErrPreconditionFailed
+				return s3sdk.ErrPreconditionFailed
 			}
 			return nil
 		}
 		if ok && obj.meta.ETag == ifNoneMatch {
-			return s3store.ErrPreconditionFailed
+			return s3sdk.ErrPreconditionFailed
 		}
 	}
 	return nil
 }
 
-func applyStubRange(r *s3store.ByteRange, size int64) (int64, int64, error) {
+func applyStubRange(r *s3sdk.ByteRange, size int64) (int64, int64, error) {
 	if r == nil {
 		return 0, size, nil
 	}
@@ -324,7 +324,7 @@ func applyStubRange(r *s3store.ByteRange, size int64) (int64, int64, error) {
 		end = *r.End + 1
 	}
 	if start < 0 || end < 0 || start > end || end > size {
-		return 0, 0, s3store.ErrInvalidRange
+		return 0, 0, s3sdk.ErrInvalidRange
 	}
 	return start, end, nil
 }
@@ -334,7 +334,7 @@ func stubETag(body []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func cloneObjectMeta(meta s3store.ObjectMeta) s3store.ObjectMeta {
-	meta.Metadata = s3store.CloneStringMap(meta.Metadata)
+func cloneObjectMeta(meta s3sdk.ObjectMeta) s3sdk.ObjectMeta {
+	meta.Metadata = s3sdk.CloneStringMap(meta.Metadata)
 	return meta
 }

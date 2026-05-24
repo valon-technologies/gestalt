@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
+	"github.com/valon-technologies/gestalt/server/services/authorizationadmin"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -96,6 +97,7 @@ type Server struct {
 	workflowSchedules       *workflowmanager.Manager
 	agentRuns               agentmanager.Service
 	authorizationProvider   core.AuthorizationProvider
+	authorizationAdmin      *authorizationadmin.Service
 	providers               *registry.ProviderMap[core.Provider]
 	workflow                bootstrap.WorkflowControl
 	pluginRuntimes          bootstrap.RuntimeInspector
@@ -130,7 +132,7 @@ type Server struct {
 	hostServiceMu           sync.Mutex
 	hostServiceHandlers     map[uint64]http.Handler
 	publicHostServices      *runtimehost.PublicHostServiceRegistry
-	s3                      map[string]s3store.Client
+	s3                      map[string]s3sdk.Client
 	s3ObjectAccessURLs      *s3.ObjectAccessURLManager
 	egressProxyTokens       *egressproxy.TokenManager
 	providerDevSessions     *providerdev.Manager
@@ -175,6 +177,7 @@ type Config struct {
 	ProviderUIs           map[string]*config.UIEntry
 	Authorizer            authorization.RuntimeAuthorizer
 	AuthorizationProvider core.AuthorizationProvider
+	AuthorizationAdmin    *authorizationadmin.Service
 	PublicBaseURL         string
 	ManagementBaseURL     string
 	SecureCookies         bool
@@ -187,7 +190,7 @@ type Config struct {
 	PrometheusMetrics     http.Handler
 	MCPHandler            http.Handler
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
-	S3                    map[string]s3store.Client
+	S3                    map[string]s3sdk.Client
 	ProviderDevSessions   *providerdev.Manager
 	ProviderDevAttach     bool
 	MountedUIs            []MountedUI
@@ -295,6 +298,19 @@ func New(cfg Config) (*Server, error) {
 	apiTokens := cfg.Services.APITokens
 	managedSubjects := cfg.Services.ManagedSubjects
 	authzFragments := cfg.Services.AuthzFragments
+	authorizationAdmin := cfg.AuthorizationAdmin
+	if authorizationAdmin == nil {
+		authorizationAdmin = authorizationadmin.New(authorizationadmin.Config{
+			Authorizer:               cfg.Authorizer,
+			AuthorizationProvider:    cfg.AuthorizationProvider,
+			Users:                    users,
+			Fragments:                authzFragments,
+			AppDefs:                  cfg.AppDefs,
+			AdminAuthorizationPolicy: adminRoute.AuthorizationPolicy,
+			AdminAllowedRoles:        adminRoute.AllowedRoles,
+			AuditSink:                cfg.AuditSink,
+		})
+	}
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens)
 	authProviders := make(map[string]core.AuthenticationProvider, len(cfg.AuthProviders)+1)
 	for name, provider := range cfg.AuthProviders {
@@ -353,6 +369,7 @@ func New(cfg Config) (*Server, error) {
 		agent:                  cfg.Agent,
 		agentRuns:              cfg.AgentManager,
 		authorizationProvider:  cfg.AuthorizationProvider,
+		authorizationAdmin:     authorizationAdmin,
 		providers:              cfg.Providers,
 		workflow:               cfg.Workflow,
 		pluginRuntimes:         cfg.AppRuntimes,

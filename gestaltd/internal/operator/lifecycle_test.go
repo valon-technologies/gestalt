@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -2237,7 +2238,7 @@ server:
 			return
 		}
 		if got := indexedDB.Command; strings.Contains(got, "stale/indexeddb/executable") {
-			t.Fatalf("indexeddb.Command = %q, want derived prepared path", got)
+			t.Fatalf("idb.Command = %q, want derived prepared path", got)
 		}
 
 		ui := loaded.Providers.UI["roadmap"]

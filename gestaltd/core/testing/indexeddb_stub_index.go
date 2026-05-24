@@ -2,14 +2,13 @@ package coretesting
 
 import (
 	"context"
-
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 )
 
 type stubIndex struct {
 	store  *stubObjectStore
 	name   string
-	schema indexeddb.ObjectStoreSchema
+	schema idb.ObjectStoreSchema
 }
 
 func (idx *stubIndex) keyPath() []string {
@@ -21,7 +20,7 @@ func (idx *stubIndex) keyPath() []string {
 	return nil
 }
 
-func (idx *stubIndex) matches(record indexeddb.Record, values []any) bool {
+func (idx *stubIndex) matches(record idb.Record, values []any) bool {
 	kp := idx.keyPath()
 	if kp == nil {
 		return false
@@ -38,7 +37,7 @@ func (idx *stubIndex) matches(record indexeddb.Record, values []any) bool {
 	return true
 }
 
-func (idx *stubIndex) Get(ctx context.Context, values ...any) (indexeddb.Record, error) {
+func (idx *stubIndex) Get(ctx context.Context, values ...any) (idb.Record, error) {
 	if idx.store.db.Err != nil {
 		return nil, idx.store.db.Err
 	}
@@ -47,7 +46,7 @@ func (idx *stubIndex) Get(ctx context.Context, values ...any) (indexeddb.Record,
 		return nil, err
 	}
 	if len(records) == 0 {
-		return nil, indexeddb.ErrNotFound
+		return nil, idb.ErrNotFound
 	}
 	return records[0], nil
 }
@@ -64,7 +63,7 @@ func (idx *stubIndex) GetKey(ctx context.Context, values ...any) (string, error)
 	return id, nil
 }
 
-func (idx *stubIndex) newCursor(dir indexeddb.CursorDirection, r *indexeddb.KeyRange, keysOnly bool, values ...any) *stubCursor {
+func (idx *stubIndex) newCursor(dir idb.CursorDirection, r *idb.KeyRange, keysOnly bool, values ...any) *stubCursor {
 	c := idx.store.newCursor(dir, keysOnly)
 	c.filterIndex = idx
 	c.filterValues = values
@@ -74,21 +73,21 @@ func (idx *stubIndex) newCursor(dir indexeddb.CursorDirection, r *indexeddb.KeyR
 	return c
 }
 
-func (idx *stubIndex) GetAll(_ context.Context, r *indexeddb.KeyRange, values ...any) ([]indexeddb.Record, error) {
+func (idx *stubIndex) GetAll(_ context.Context, r *idb.KeyRange, values ...any) ([]idb.Record, error) {
 	if idx.store.db.Err != nil {
 		return nil, idx.store.db.Err
 	}
 	done := idx.store.readSchedule()
 	defer done()
-	c := idx.newCursor(indexeddb.CursorNext, r, false, values...)
-	out := make([]indexeddb.Record, 0, len(c.keys))
+	c := idx.newCursor(idb.CursorNext, r, false, values...)
+	out := make([]idb.Record, 0, len(c.keys))
 	for _, key := range c.keys {
 		out = append(out, c.snapshot[key])
 	}
 	return out, nil
 }
 
-func (idx *stubIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]string, error) {
+func (idx *stubIndex) GetAllKeys(ctx context.Context, r *idb.KeyRange, values ...any) ([]string, error) {
 	if idx.store.db.Err != nil {
 		return nil, idx.store.db.Err
 	}
@@ -103,13 +102,13 @@ func (idx *stubIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, val
 	return keys, nil
 }
 
-func (idx *stubIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
+func (idx *stubIndex) Count(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
 	if idx.store.db.Err != nil {
 		return 0, idx.store.db.Err
 	}
 	done := idx.store.readSchedule()
 	defer done()
-	c := idx.newCursor(indexeddb.CursorNext, r, true, values...)
+	c := idx.newCursor(idb.CursorNext, r, true, values...)
 	return int64(len(c.keys)), nil
 }
 
@@ -117,13 +116,13 @@ func (idx *stubIndex) Delete(ctx context.Context, values ...any) (int64, error) 
 	return idx.DeleteRange(ctx, nil, values...)
 }
 
-func (idx *stubIndex) DeleteRange(_ context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
+func (idx *stubIndex) DeleteRange(_ context.Context, r *idb.KeyRange, values ...any) (int64, error) {
 	if idx.store.db.Err != nil {
 		return 0, idx.store.db.Err
 	}
 	done := idx.store.writeSchedule()
 	defer done()
-	c := idx.newCursor(indexeddb.CursorNext, r, true, values...)
+	c := idx.newCursor(idb.CursorNext, r, true, values...)
 	idx.store.mu.Lock()
 	defer idx.store.mu.Unlock()
 	for _, id := range c.keys {
@@ -132,7 +131,7 @@ func (idx *stubIndex) DeleteRange(_ context.Context, r *indexeddb.KeyRange, valu
 	return int64(len(c.keys)), nil
 }
 
-func (idx *stubIndex) OpenCursor(_ context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
+func (idx *stubIndex) OpenCursor(_ context.Context, r *idb.KeyRange, dir idb.CursorDirection, values ...any) (idb.Cursor, error) {
 	if idx.store.db.Err != nil {
 		return nil, idx.store.db.Err
 	}
@@ -141,7 +140,7 @@ func (idx *stubIndex) OpenCursor(_ context.Context, r *indexeddb.KeyRange, dir i
 	return idx.newCursor(dir, r, false, values...), nil
 }
 
-func (idx *stubIndex) OpenKeyCursor(_ context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
+func (idx *stubIndex) OpenKeyCursor(_ context.Context, r *idb.KeyRange, dir idb.CursorDirection, values ...any) (idb.Cursor, error) {
 	if idx.store.db.Err != nil {
 		return nil, idx.store.db.Err
 	}

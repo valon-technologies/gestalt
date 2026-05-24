@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"slices"
 	"strings"
 	"time"
@@ -32,59 +33,59 @@ const (
 )
 
 var (
-	indexedDBAttachmentSchema = indexeddb.ObjectStoreSchema{
-		Indexes: []indexeddb.IndexSchema{
+	indexedDBAttachmentSchema = idb.ObjectStoreSchema{
+		Indexes: []idb.IndexSchema{
 			{Name: "by_owner", KeyPath: []string{"owner"}},
 			{Name: "by_owner_created_at", KeyPath: []string{"owner", "created_at"}},
 		},
-		Columns: []indexeddb.ColumnDef{
-			{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-			{Name: "owner", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "dispatcher_secret_hash", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "targets_json", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "created_at", Type: indexeddb.TypeInt},
-			{Name: "last_seen_at", Type: indexeddb.TypeInt},
-			{Name: "closed", Type: indexeddb.TypeBool},
-			{Name: "closed_at", Type: indexeddb.TypeInt},
+		Columns: []idb.ColumnDef{
+			{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+			{Name: "owner", Type: idb.TypeString, NotNull: true},
+			{Name: "dispatcher_secret_hash", Type: idb.TypeString, NotNull: true},
+			{Name: "targets_json", Type: idb.TypeString, NotNull: true},
+			{Name: "created_at", Type: idb.TypeInt},
+			{Name: "last_seen_at", Type: idb.TypeInt},
+			{Name: "closed", Type: idb.TypeBool},
+			{Name: "closed_at", Type: idb.TypeInt},
 		},
 	}
-	indexedDBCallSchema = indexeddb.ObjectStoreSchema{
-		Indexes: []indexeddb.IndexSchema{
+	indexedDBCallSchema = idb.ObjectStoreSchema{
+		Indexes: []idb.IndexSchema{
 			{Name: "by_attachment_state_created_at", KeyPath: []string{"attachment_id", "state", "created_at"}},
 			{Name: "by_attachment_state", KeyPath: []string{"attachment_id", "state"}},
 			{Name: "by_attachment", KeyPath: []string{"attachment_id"}},
 		},
-		Columns: []indexeddb.ColumnDef{
-			{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-			{Name: "attachment_id", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "owner", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "provider", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "method", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "request_base64", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "response_base64", Type: indexeddb.TypeString},
-			{Name: "error_code", Type: indexeddb.TypeInt},
-			{Name: "error_message", Type: indexeddb.TypeString},
-			{Name: "state", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "created_at", Type: indexeddb.TypeInt},
-			{Name: "leased_at", Type: indexeddb.TypeInt},
-			{Name: "completed_at", Type: indexeddb.TypeInt},
-			{Name: "expires_at", Type: indexeddb.TypeInt},
+		Columns: []idb.ColumnDef{
+			{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+			{Name: "attachment_id", Type: idb.TypeString, NotNull: true},
+			{Name: "owner", Type: idb.TypeString, NotNull: true},
+			{Name: "provider", Type: idb.TypeString, NotNull: true},
+			{Name: "method", Type: idb.TypeString, NotNull: true},
+			{Name: "request_base64", Type: idb.TypeString, NotNull: true},
+			{Name: "response_base64", Type: idb.TypeString},
+			{Name: "error_code", Type: idb.TypeInt},
+			{Name: "error_message", Type: idb.TypeString},
+			{Name: "state", Type: idb.TypeString, NotNull: true},
+			{Name: "created_at", Type: idb.TypeInt},
+			{Name: "leased_at", Type: idb.TypeInt},
+			{Name: "completed_at", Type: idb.TypeInt},
+			{Name: "expires_at", Type: idb.TypeInt},
 		},
 	}
-	indexedDBAuthSchema = indexeddb.ObjectStoreSchema{
-		Indexes: []indexeddb.IndexSchema{
+	indexedDBAuthSchema = idb.ObjectStoreSchema{
+		Indexes: []idb.IndexSchema{
 			{Name: "by_expires_at", KeyPath: []string{"expires_at"}},
 		},
-		Columns: []indexeddb.ColumnDef{
-			{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-			{Name: "client_secret_hash", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "verification_hash", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "request_hash", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "providers_json", Type: indexeddb.TypeString, NotNull: true},
-			{Name: "approved_by_json", Type: indexeddb.TypeString},
-			{Name: "used", Type: indexeddb.TypeBool},
-			{Name: "created_at", Type: indexeddb.TypeInt},
-			{Name: "expires_at", Type: indexeddb.TypeInt},
+		Columns: []idb.ColumnDef{
+			{Name: "id", Type: idb.TypeString, PrimaryKey: true},
+			{Name: "client_secret_hash", Type: idb.TypeString, NotNull: true},
+			{Name: "verification_hash", Type: idb.TypeString, NotNull: true},
+			{Name: "request_hash", Type: idb.TypeString, NotNull: true},
+			{Name: "providers_json", Type: idb.TypeString, NotNull: true},
+			{Name: "approved_by_json", Type: idb.TypeString},
+			{Name: "used", Type: idb.TypeBool},
+			{Name: "created_at", Type: idb.TypeInt},
+			{Name: "expires_at", Type: idb.TypeInt},
 		},
 	}
 )
@@ -208,7 +209,7 @@ func (s *indexedDBSessionStore) createSession(ctx context.Context, owner, id, di
 	if err != nil {
 		return status.Errorf(codes.Internal, "encode provider dev attachment targets: %v", err)
 	}
-	rec := indexeddb.Record{
+	rec := idb.Record{
 		"id":                     id,
 		"owner":                  owner,
 		"dispatcher_secret_hash": dispatcherSecretHash,
@@ -230,7 +231,7 @@ func (s *indexedDBSessionStore) createAttachAuthorization(ctx context.Context, a
 	if now.IsZero() {
 		now = time.Now()
 	}
-	tx, err := s.db.Transaction(ctx, []string{indexedDBAuthStore}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
+	tx, err := s.db.Transaction(ctx, []string{indexedDBAuthStore}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "open provider dev attach authorization transaction: %v", err)
 	}
@@ -296,7 +297,7 @@ func (s *indexedDBSessionStore) getAttachAuthorization(ctx context.Context, id s
 }
 
 func (s *indexedDBSessionStore) approveAttachAuthorization(ctx context.Context, id string, p *principal.Principal, verificationCode string, now time.Time) error {
-	tx, err := s.db.Transaction(ctx, []string{indexedDBAuthStore}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
+	tx, err := s.db.Transaction(ctx, []string{indexedDBAuthStore}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
 		return status.Errorf(codes.Internal, "open provider dev attach authorization approval transaction: %v", err)
 	}
@@ -343,7 +344,7 @@ func (s *indexedDBSessionStore) pollAttachAuthorization(ctx context.Context, id,
 }
 
 func (s *indexedDBSessionStore) consumeAttachAuthorization(ctx context.Context, id, clientSecret, requestHash string, now time.Time) (*principal.Principal, error) {
-	tx, err := s.db.Transaction(ctx, []string{indexedDBAuthStore}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
+	tx, err := s.db.Transaction(ctx, []string{indexedDBAuthStore}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "open provider dev attach authorization consume transaction: %v", err)
 	}
@@ -407,7 +408,7 @@ func (s *indexedDBSessionStore) poll(ctx context.Context, id, dispatcherSecret s
 }
 
 func (s *indexedDBSessionStore) claimCall(ctx context.Context, id, dispatcherSecret string, now time.Time, heartbeat bool) (*PollResponse, bool, error) {
-	tx, err := s.db.Transaction(ctx, []string{indexedDBAttachmentStore, indexedDBCallStore}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
+	tx, err := s.db.Transaction(ctx, []string{indexedDBAttachmentStore, indexedDBCallStore}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
 		if pollContextOperationDone(ctx, err) {
 			return nil, false, nil
@@ -539,14 +540,14 @@ func pollContextOperationDone(ctx context.Context, err error) bool {
 	return st.Code() == codes.Canceled || st.Code() == codes.DeadlineExceeded
 }
 
-func pollAttachmentFromStore(ctx context.Context, attachments indexeddb.TransactionObjectStore, id string, now time.Time) (*indexedDBSessionRecord, error) {
+func pollAttachmentFromStore(ctx context.Context, attachments idb.TransactionObjectStore, id string, now time.Time) (*indexedDBSessionRecord, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, status.Error(codes.InvalidArgument, "session id is required")
 	}
 	raw, err := attachments.Get(ctx, id)
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
+		if errors.Is(err, idb.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "provider dev session %q not found", id)
 		}
 		return nil, err
@@ -567,7 +568,7 @@ func (s *indexedDBSessionStore) completeCall(ctx context.Context, attachmentID, 
 	if callID == "" {
 		return status.Error(codes.InvalidArgument, "call id is required")
 	}
-	tx, err := s.db.Transaction(ctx, []string{indexedDBAttachmentStore, indexedDBCallStore}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
+	tx, err := s.db.Transaction(ctx, []string{indexedDBAttachmentStore, indexedDBCallStore}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
 		return status.Errorf(codes.Internal, "open provider dev completion transaction: %v", err)
 	}
@@ -585,7 +586,7 @@ func (s *indexedDBSessionStore) completeCall(ctx context.Context, attachmentID, 
 	}
 	raw, err := calls.Get(ctx, callID)
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
+		if errors.Is(err, idb.ErrNotFound) {
 			return status.Errorf(codes.NotFound, "provider dev call %q not found", callID)
 		}
 		return status.Errorf(codes.Internal, "load provider dev call: %v", err)
@@ -665,7 +666,7 @@ func (s *indexedDBSessionStore) closeSession(ctx context.Context, owner, id stri
 }
 
 func (s *indexedDBSessionStore) closeAttachment(ctx context.Context, id, owner string) error {
-	tx, err := s.db.Transaction(ctx, []string{indexedDBAttachmentStore, indexedDBCallStore}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
+	tx, err := s.db.Transaction(ctx, []string{indexedDBAttachmentStore, indexedDBCallStore}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
 		return status.Errorf(codes.Internal, "open provider dev close transaction: %v", err)
 	}
@@ -802,7 +803,7 @@ func (s *indexedDBSessionStore) latestTarget(ctx context.Context, owner, provide
 func (s *indexedDBSessionStore) getActiveAttachment(ctx context.Context, id string, now time.Time) (*indexedDBSessionRecord, error) {
 	raw, err := s.db.ObjectStore(indexedDBAttachmentStore).Get(ctx, strings.TrimSpace(id))
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
+		if errors.Is(err, idb.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "provider dev session %q not found", id)
 		}
 		return nil, status.Errorf(codes.Internal, "load provider dev attachment: %v", err)
@@ -830,7 +831,7 @@ func (s *indexedDBSessionStore) sessionActive(ctx context.Context, id string, no
 	}
 	raw, err := s.db.ObjectStore(indexedDBAttachmentStore).Get(ctx, id)
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
+		if errors.Is(err, idb.ErrNotFound) {
 			return false, nil
 		}
 		return false, status.Errorf(codes.Internal, "load provider dev attachment: %v", err)
@@ -842,14 +843,14 @@ func (s *indexedDBSessionStore) sessionActive(ctx context.Context, id string, no
 	return attachmentActive(session, now), nil
 }
 
-func (s *indexedDBSessionStore) attachmentFromStore(ctx context.Context, attachments indexeddb.TransactionObjectStore, id string, now time.Time) (*indexedDBSessionRecord, error) {
+func (s *indexedDBSessionStore) attachmentFromStore(ctx context.Context, attachments idb.TransactionObjectStore, id string, now time.Time) (*indexedDBSessionRecord, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, status.Error(codes.InvalidArgument, "session id is required")
 	}
 	raw, err := attachments.Get(ctx, id)
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
+		if errors.Is(err, idb.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "provider dev session %q not found", id)
 		}
 		return nil, status.Errorf(codes.Internal, "load provider dev attachment: %v", err)
@@ -877,7 +878,7 @@ func (s *indexedDBSessionStore) enqueueCall(ctx context.Context, attachmentID, o
 		return "", status.Errorf(codes.Internal, "create provider dev call: %v", err)
 	}
 	now := time.Now()
-	tx, err := s.db.Transaction(ctx, []string{indexedDBAttachmentStore, indexedDBCallStore}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
+	tx, err := s.db.Transaction(ctx, []string{indexedDBAttachmentStore, indexedDBCallStore}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
 		return "", status.Errorf(codes.Internal, "open provider dev call transaction: %v", err)
 	}
@@ -918,7 +919,7 @@ func (s *indexedDBSessionStore) waitCall(ctx context.Context, attachmentID, call
 	for {
 		raw, err := s.db.ObjectStore(indexedDBCallStore).Get(ctx, callID)
 		if err != nil {
-			if errors.Is(err, indexeddb.ErrNotFound) {
+			if errors.Is(err, idb.ErrNotFound) {
 				return nil, status.Errorf(codes.NotFound, "provider dev call %q not found", callID)
 			}
 			return nil, status.Errorf(codes.Internal, "load provider dev call: %v", err)
@@ -958,7 +959,7 @@ func (s *indexedDBSessionStore) waitCall(ctx context.Context, attachmentID, call
 }
 
 func (s *indexedDBSessionStore) cancelCall(ctx context.Context, attachmentID, callID string, code codes.Code, message string) error {
-	tx, err := s.db.Transaction(ctx, []string{indexedDBCallStore}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
+	tx, err := s.db.Transaction(ctx, []string{indexedDBCallStore}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
 		return err
 	}
@@ -997,7 +998,7 @@ func (s *indexedDBSessionStore) cleanupExpired(ctx context.Context, now time.Tim
 	if now.IsZero() {
 		now = time.Now()
 	}
-	tx, err := s.db.Transaction(ctx, []string{indexedDBAttachmentStore, indexedDBCallStore, indexedDBAuthStore}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
+	tx, err := s.db.Transaction(ctx, []string{indexedDBAttachmentStore, indexedDBCallStore, indexedDBAuthStore}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
 		return err
 	}
@@ -1212,7 +1213,7 @@ func (s *indexedDBSessionStore) loadActiveAttachAuthorization(ctx context.Contex
 	}
 	raw, err := s.db.ObjectStore(indexedDBAuthStore).Get(ctx, id)
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
+		if errors.Is(err, idb.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "provider dev attach authorization %q not found", id)
 		}
 		return nil, status.Errorf(codes.Internal, "load provider dev attach authorization: %v", err)
@@ -1231,14 +1232,14 @@ func (s *indexedDBSessionStore) loadActiveAttachAuthorization(ctx context.Contex
 	return &auth, nil
 }
 
-func (s *indexedDBSessionStore) attachAuthorizationFromStore(ctx context.Context, store indexeddb.TransactionObjectStore, id string, now time.Time) (*indexedDBAttachAuthorizationRecord, error) {
+func (s *indexedDBSessionStore) attachAuthorizationFromStore(ctx context.Context, store idb.TransactionObjectStore, id string, now time.Time) (*indexedDBAttachAuthorizationRecord, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, status.Error(codes.InvalidArgument, "provider dev attach authorization id is required")
 	}
 	raw, err := store.Get(ctx, id)
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
+		if errors.Is(err, idb.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, "provider dev attach authorization %q not found", id)
 		}
 		return nil, status.Errorf(codes.Internal, "load provider dev attach authorization: %v", err)
@@ -1265,7 +1266,7 @@ func (a indexedDBAttachAuthorizationRecord) info() AttachAuthorizationInfo {
 	}
 }
 
-func sessionFromRecord(rec indexeddb.Record) (indexedDBSessionRecord, error) {
+func sessionFromRecord(rec idb.Record) (indexedDBSessionRecord, error) {
 	targetsJSON := recordString(rec, "targets_json")
 	var targets []storedTarget
 	if targetsJSON != "" {
@@ -1285,12 +1286,12 @@ func sessionFromRecord(rec indexeddb.Record) (indexedDBSessionRecord, error) {
 	}, nil
 }
 
-func attachmentToRecord(session *indexedDBSessionRecord) (indexeddb.Record, error) {
+func attachmentToRecord(session *indexedDBSessionRecord) (idb.Record, error) {
 	targetsJSON, err := json.Marshal(session.targets)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "encode provider dev attachment targets: %v", err)
 	}
-	return indexeddb.Record{
+	return idb.Record{
 		"id":                     session.id,
 		"owner":                  session.owner,
 		"dispatcher_secret_hash": session.dispatcherSecretHash,
@@ -1302,7 +1303,7 @@ func attachmentToRecord(session *indexedDBSessionRecord) (indexeddb.Record, erro
 	}, nil
 }
 
-func attachAuthorizationFromRecord(rec indexeddb.Record) (indexedDBAttachAuthorizationRecord, error) {
+func attachAuthorizationFromRecord(rec idb.Record) (indexedDBAttachAuthorizationRecord, error) {
 	var providers []string
 	if value := recordString(rec, "providers_json"); value != "" {
 		if err := json.Unmarshal([]byte(value), &providers); err != nil {
@@ -1330,7 +1331,7 @@ func attachAuthorizationFromRecord(rec indexeddb.Record) (indexedDBAttachAuthori
 	}, nil
 }
 
-func attachAuthorizationToRecord(auth indexedDBAttachAuthorizationRecord) (indexeddb.Record, error) {
+func attachAuthorizationToRecord(auth indexedDBAttachAuthorizationRecord) (idb.Record, error) {
 	providersJSON, err := json.Marshal(auth.providers)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "encode provider dev attach authorization providers: %v", err)
@@ -1343,7 +1344,7 @@ func attachAuthorizationToRecord(auth indexedDBAttachAuthorizationRecord) (index
 		}
 		approvedByJSON = string(payload)
 	}
-	return indexeddb.Record{
+	return idb.Record{
 		"id":                 auth.id,
 		"client_secret_hash": auth.clientSecretHash,
 		"verification_hash":  auth.verificationHash,
@@ -1356,7 +1357,7 @@ func attachAuthorizationToRecord(auth indexedDBAttachAuthorizationRecord) (index
 	}, nil
 }
 
-func callFromRecord(rec indexeddb.Record) (indexedDBCallRecord, error) {
+func callFromRecord(rec idb.Record) (indexedDBCallRecord, error) {
 	request, err := base64.StdEncoding.DecodeString(recordString(rec, "request_base64"))
 	if err != nil {
 		return indexedDBCallRecord{}, status.Errorf(codes.Internal, "decode provider dev call request: %v", err)
@@ -1386,8 +1387,8 @@ func callFromRecord(rec indexeddb.Record) (indexedDBCallRecord, error) {
 	}, nil
 }
 
-func callToRecord(call indexedDBCallRecord) indexeddb.Record {
-	rec := indexeddb.Record{
+func callToRecord(call indexedDBCallRecord) idb.Record {
+	rec := idb.Record{
 		"id":              call.id,
 		"attachment_id":   call.attachmentID,
 		"owner":           call.owner,
@@ -1410,7 +1411,7 @@ func callOpen(state string) bool {
 	return state == indexedDBCallStatePending || state == indexedDBCallStateLeased
 }
 
-func abortIfUncommitted(ctx context.Context, tx indexeddb.Transaction, committed *bool) {
+func abortIfUncommitted(ctx context.Context, tx idb.Transaction, committed *bool) {
 	if tx == nil || committed == nil || *committed {
 		return
 	}
@@ -1423,7 +1424,7 @@ func abortIfUncommitted(ctx context.Context, tx indexeddb.Transaction, committed
 	_ = tx.Abort(abortCtx)
 }
 
-func recordString(rec indexeddb.Record, key string) string {
+func recordString(rec idb.Record, key string) string {
 	switch v := rec[key].(type) {
 	case nil:
 		return ""
@@ -1436,7 +1437,7 @@ func recordString(rec indexeddb.Record, key string) string {
 	}
 }
 
-func recordBool(rec indexeddb.Record, key string) bool {
+func recordBool(rec idb.Record, key string) bool {
 	switch v := rec[key].(type) {
 	case bool:
 		return v
@@ -1447,7 +1448,7 @@ func recordBool(rec indexeddb.Record, key string) bool {
 	}
 }
 
-func recordInt64(rec indexeddb.Record, key string) int64 {
+func recordInt64(rec idb.Record, key string) int64 {
 	switch v := rec[key].(type) {
 	case int:
 		return int64(v)

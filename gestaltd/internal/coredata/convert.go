@@ -1,12 +1,11 @@
 package coredata
 
 import (
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"time"
-
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
-func recString(rec indexeddb.Record, key string) string {
+func recString(rec idb.Record, key string) string {
 	v, ok := rec[key]
 	if !ok || v == nil {
 		return ""
@@ -21,7 +20,7 @@ func recString(rec indexeddb.Record, key string) string {
 	}
 }
 
-func recInt64(rec indexeddb.Record, key string) int64 {
+func recInt64(rec idb.Record, key string) int64 {
 	v := rec[key]
 	switch n := v.(type) {
 	case int:
@@ -35,7 +34,7 @@ func recInt64(rec indexeddb.Record, key string) int64 {
 	}
 }
 
-func recTime(rec indexeddb.Record, key string) time.Time {
+func recTime(rec idb.Record, key string) time.Time {
 	v, ok := rec[key]
 	if !ok || v == nil {
 		return time.Time{}
@@ -59,7 +58,7 @@ func recTime(rec indexeddb.Record, key string) time.Time {
 	}
 }
 
-func recTimePtr(rec indexeddb.Record, key string) *time.Time {
+func recTimePtr(rec idb.Record, key string) *time.Time {
 	v, ok := rec[key]
 	if !ok || v == nil {
 		return nil
