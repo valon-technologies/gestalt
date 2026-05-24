@@ -5,12 +5,10 @@ use std::sync::{Arc, Mutex};
 use support::*;
 
 #[test]
-fn test_list_plugins() {
+fn test_list_apps() {
     let mut server = Server::new();
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
-        .with_body(
-            r#"[{"name":"acme_crm","displayName":"Acme CRM","description":"Acme CRM plugin"}]"#,
-        )
+        .with_body(r#"[{"name":"acme_crm","displayName":"Acme CRM","description":"Acme CRM app"}]"#)
         .create();
 
     let client = create_client(&server);
@@ -145,7 +143,7 @@ fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_instance() 
 }
 
 #[test]
-fn test_connect_uses_user_facing_plugin_connection_name_on_the_wire() {
+fn test_connect_uses_user_facing_app_connection_name_on_the_wire() {
     let mut server = Server::new();
     let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
         .with_body(
@@ -202,7 +200,7 @@ fn test_disconnect_sends_delete_with_connection_and_instance() {
 }
 
 #[test]
-fn test_disconnect_normalizes_plugin_connection_name() {
+fn test_disconnect_normalizes_app_connection_name() {
     let mut server = Server::new();
     let mock = authed_json_mock!(
         server,
@@ -561,7 +559,7 @@ fn test_manual_connect_fails_when_stdin_closes_during_prompt() {
 }
 
 #[test]
-fn test_cli_plugins_list_table_output() {
+fn test_cli_apps_list_table_output() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
     write_credentials(

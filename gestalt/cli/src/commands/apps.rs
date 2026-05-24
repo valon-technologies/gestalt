@@ -56,9 +56,7 @@ pub fn canonical_connection_name(name: &str) -> &str {
 }
 
 pub fn list(client: &ApiClient, format: Format) -> Result<()> {
-    let resp = client
-        .get("/api/v1/apps")
-        .context("failed to list plugins")?;
+    let resp = client.get("/api/v1/apps").context("failed to list apps")?;
 
     match format {
         Format::Json => output::print_json(&resp),
@@ -112,7 +110,7 @@ fn expand_app_group_divider_line(line: &str) -> String {
     )
 }
 
-fn plugin_status(item: &serde_json::Value) -> String {
+fn app_status(item: &serde_json::Value) -> String {
     item["status"]
         .as_str()
         .map(str::to_string)
@@ -120,9 +118,9 @@ fn plugin_status(item: &serde_json::Value) -> String {
 }
 
 fn app_rows(item: &serde_json::Value) -> Vec<Vec<String>> {
-    let mut connections = plugin_connection_rows(item);
+    let mut connections = app_connection_rows(item);
     if connections.is_empty() {
-        connections.push((plugin_status(item), "-".to_string(), "-".to_string()));
+        connections.push((app_status(item), "-".to_string(), "-".to_string()));
     }
 
     connections
@@ -158,7 +156,7 @@ fn app_group_divider_row() -> Vec<String> {
     ]
 }
 
-fn plugin_connection_rows(item: &serde_json::Value) -> Vec<(String, String, String)> {
+fn app_connection_rows(item: &serde_json::Value) -> Vec<(String, String, String)> {
     item["connections"]
         .as_array()
         .map(|connections| connections.iter().flat_map(connection_rows).collect())
