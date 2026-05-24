@@ -2,11 +2,12 @@ package server
 
 import (
 	"errors"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	"github.com/go-chi/chi/v5"
 

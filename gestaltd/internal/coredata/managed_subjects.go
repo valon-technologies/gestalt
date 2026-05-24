@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"strings"
 	"time"
+
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"

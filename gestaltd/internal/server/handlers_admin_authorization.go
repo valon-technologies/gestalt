@@ -16,7 +16,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
-	"github.com/valon-technologies/gestalt/server/services/authorizationadmin"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
@@ -222,53 +221,128 @@ func (s *Server) listAdminAuthorizationPlugins(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Server) listAdminAuthorizationPluginMembers(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.authorizationAdmin.ListAppMembers(r.Context(), chi.URLParam(r, "app"))
+	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "app"))
 	if err != nil {
-		s.writeAdminAuthorizationServiceError(w, err)
+		s.writeAdminAuthorizationPluginError(w, err)
+		return
+	}
+	if !s.ensureAdminDynamicAuthorizationAvailable(w) {
+		return
+	}
+
+	rows, err := s.adminAuthorizationMemberRows(r.Context(), plugin)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list authorization members")
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
 }
 
 func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *http.Request) {
+	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "app"))
+	if err != nil {
+		s.writeAdminAuthorizationPluginError(w, err)
+		return
+	}
+	if !s.ensureAdminDynamicAuthorizationAvailable(w) {
+		return
+	}
+
 	var req putAdminAuthorizationMemberRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	result, err := s.authorizationAdmin.UpsertAppMember(r.Context(), authorizationadmin.UpsertAppMemberRequest{
-		App:       chi.URLParam(r, "app"),
-		Role:      req.Role,
-		SubjectID: req.SubjectID,
-		Email:     req.Email,
-	})
-	if err != nil {
-		s.writeAdminAuthorizationServiceError(w, err)
+	if strings.TrimSpace(req.Role) == "" {
+		writeError(w, http.StatusBadRequest, "role is required")
 		return
 	}
-	status := http.StatusOK
-	if result != nil && result.Status == authorizationadmin.MutationStatusPersistedPendingReload {
-		status = http.StatusAccepted
+	subject, status, message := s.resolveAdminAuthorizationWriteSubject(r.Context(), req)
+	if status != 0 {
+		writeError(w, status, message)
+		return
 	}
-	writeJSON(w, status, result)
+	if access, ok := s.authorizer.StaticRoleForProviderIdentity(plugin, subject.SubjectID); ok && access.Role != "" {
+		writeError(w, http.StatusConflict, "subject already has static authorization for this plugin")
+		return
+	}
+
+	membership, err := s.upsertProviderPluginAuthorization(r.Context(), subject, plugin, req.Role)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to persist authorization member")
+		return
+	}
+
+	row := adminAuthorizationMemberRow{
+		App:           membership.App,
+		Role:          membership.Role,
+		Source:        "dynamic",
+		Effective:     true,
+		Mutable:       true,
+		SelectorKind:  "subject_id",
+		SelectorValue: strings.TrimSpace(membership.SubjectID),
+		Email:         adminAuthorizationSubjectEmail(subject),
+	}
+	if err := s.reloadAuthorizationState(r.Context()); err != nil {
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"status":     "persisted_pending_reload",
+			"persisted":  true,
+			"reloaded":   false,
+			"membership": row,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":     "ok",
+		"persisted":  true,
+		"reloaded":   true,
+		"membership": row,
+	})
 }
 
 func (s *Server) deleteAdminAuthorizationPluginMember(w http.ResponseWriter, r *http.Request) {
+	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "app"))
+	if err != nil {
+		s.writeAdminAuthorizationPluginError(w, err)
+		return
+	}
+	if !s.ensureAdminDynamicAuthorizationAvailable(w) {
+		return
+	}
 	subjectIDParam, err := decodedURLParam(r, "subjectID")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	result, err := s.authorizationAdmin.DeleteAppMember(r.Context(), chi.URLParam(r, "app"), subjectIDParam)
+	subjectID, err := adminAuthorizationSubjectID(strings.TrimSpace(subjectIDParam))
 	if err != nil {
-		s.writeAdminAuthorizationServiceError(w, err)
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	status := http.StatusOK
-	if result != nil && result.Status == authorizationadmin.MutationStatusPersistedPendingReload {
-		status = http.StatusAccepted
+
+	deleteErr := s.deleteProviderPluginAuthorization(r.Context(), plugin, subjectID)
+	if deleteErr != nil {
+		if errors.Is(deleteErr, core.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "authorization member not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to delete authorization member")
+		return
 	}
-	writeJSON(w, status, result)
+
+	if err := s.reloadAuthorizationState(r.Context()); err != nil {
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"status":    "persisted_pending_reload",
+			"persisted": true,
+			"reloaded":  false,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":    "deleted",
+		"persisted": true,
+		"reloaded":  true,
+	})
 }
 
 func (s *Server) listAdminAuthorizationAdminMembers(w http.ResponseWriter, r *http.Request) {
@@ -413,27 +487,6 @@ func (s *Server) writeAdminAuthorizationPluginError(w http.ResponseWriter, err e
 		writeError(w, http.StatusBadRequest, "plugin does not declare authorizationPolicy")
 	default:
 		writeError(w, http.StatusInternalServerError, "plugin authorization failed")
-	}
-}
-
-func (s *Server) writeAdminAuthorizationServiceError(w http.ResponseWriter, err error) {
-	message := authorizationadmin.MessageOf(err)
-	if message == "" {
-		message = "plugin authorization failed"
-	}
-	switch authorizationadmin.CodeOf(err) {
-	case authorizationadmin.CodeInvalidArgument:
-		writeError(w, http.StatusBadRequest, message)
-	case authorizationadmin.CodeNotFound:
-		writeError(w, http.StatusNotFound, message)
-	case authorizationadmin.CodeFailedPrecondition:
-		writeError(w, http.StatusServiceUnavailable, message)
-	case authorizationadmin.CodeAlreadyExists:
-		writeError(w, http.StatusConflict, message)
-	case authorizationadmin.CodePermissionDenied:
-		writeError(w, http.StatusForbidden, message)
-	default:
-		writeError(w, http.StatusInternalServerError, message)
 	}
 }
 

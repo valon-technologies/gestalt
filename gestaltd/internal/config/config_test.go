@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"os"
 	"path/filepath"
 	"reflect"

@@ -2,9 +2,10 @@ package coretesting
 
 import (
 	"context"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"sort"
 	"sync"
+
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )

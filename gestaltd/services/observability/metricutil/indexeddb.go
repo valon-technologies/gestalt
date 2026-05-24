@@ -2,9 +2,9 @@ package metricutil
 
 import (
 	"context"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"time"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
@@ -54,7 +54,11 @@ func (d *instrumentedIndexedDB) Transaction(ctx context.Context, stores []string
 }
 
 func (d *instrumentedIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
-	return d.inner.CreateObjectStore(ctx, name, schema)
+	store, err := d.inner.CreateObjectStore(ctx, name, schema)
+	if err != nil {
+		return nil, err
+	}
+	return InstrumentObjectStore(store, IndexedDBMetricLabels{DB: d.db, ObjectStore: name}), nil
 }
 
 func (d *instrumentedIndexedDB) DeleteObjectStore(ctx context.Context, name string) error {

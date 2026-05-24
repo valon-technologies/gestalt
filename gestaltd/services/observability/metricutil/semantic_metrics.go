@@ -3,10 +3,10 @@ package metricutil
 import (
 	"context"
 	"errors"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"strings"
 	"time"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )

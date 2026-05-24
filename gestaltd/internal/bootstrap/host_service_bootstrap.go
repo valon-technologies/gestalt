@@ -20,7 +20,6 @@ import (
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
-	authorizationadminservice "github.com/valon-technologies/gestalt/server/services/authorizationadmin"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
@@ -81,9 +80,8 @@ func buildAppRuntimeHostServices(name string, entry *config.ProviderEntry, deps 
 	}
 	includeWorkflowProvider := deps.WorkflowManager != nil || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders())
 	includeAgentProvider := deps.AgentManager != nil || deps.AgentRuntime != nil
-	includeAuthorizationAdmin := deps.AuthorizationProvider != nil && deps.AuthorizationAdmin != nil
 	needInvocationTokens := len(entry.Invokes) > 0
-	if includeWorkflowProvider || includeAgentProvider || includeAuthorizationAdmin {
+	if includeWorkflowProvider || includeAgentProvider {
 		needInvocationTokens = true
 	}
 	if needInvocationTokens {
@@ -103,9 +101,6 @@ func buildAppRuntimeHostServices(name string, entry *config.ProviderEntry, deps 
 	}
 	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
-	}
-	if includeAuthorizationAdmin {
-		hostServices = append(hostServices, buildPluginAuthorizationAdminHostService(name, deps, invTokens))
 	}
 	if len(entry.Invokes) > 0 {
 		hostServices = append(hostServices, buildAppInvokerHostService(name, entry, deps, invTokens))
@@ -538,16 +533,6 @@ func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) ru
 		MethodPrefixes: []string{grpcMethodPrefix(proto.AuthorizationProvider_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAuthorizationProviderServer(srv, authorizationservice.NewProviderServer(provider))
-		},
-	}
-}
-
-func buildPluginAuthorizationAdminHostService(pluginName string, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
-	return runtimehost.HostService{
-		Name:           "authorization_admin",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.AuthorizationAdmin_ServiceDesc.ServiceName)},
-		Register: func(srv *grpc.Server) {
-			proto.RegisterAuthorizationAdminServer(srv, authorizationadminservice.NewServer(pluginName, deps.AuthorizationAdmin, tokens))
 		},
 	}
 }

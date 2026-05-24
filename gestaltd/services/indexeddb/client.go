@@ -3,11 +3,11 @@ package indexeddb
 import (
 	"context"
 	"fmt"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"io"
 	"strings"
 	"sync"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"

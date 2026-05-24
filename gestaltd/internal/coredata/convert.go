@@ -1,8 +1,9 @@
 package coredata
 
 import (
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"time"
+
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 )
 
 func recString(rec idb.Record, key string) string {

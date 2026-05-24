@@ -1,4 +1,4 @@
-package s3
+package hosts3
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
+	"github.com/valon-technologies/gestalt/sdk/go/s3"
 	"google.golang.org/grpc"
 )
 
@@ -30,7 +31,7 @@ type sharedTransport struct {
 }
 
 // Open connects to the S3 provider exposed by gestaltd.
-func Open(ctx context.Context, opts OpenOptions) (Client, error) {
+func Open(ctx context.Context, opts OpenOptions) (s3.Client, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

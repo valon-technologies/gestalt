@@ -2,7 +2,6 @@ package metricutil
 
 import (
 	"context"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"testing"
 
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"

@@ -7,10 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"slices"
 	"strings"
 	"time"
+
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"

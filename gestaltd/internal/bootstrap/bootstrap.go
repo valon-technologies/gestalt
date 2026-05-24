@@ -32,7 +32,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
-	"github.com/valon-technologies/gestalt/server/services/authorizationadmin"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
@@ -182,7 +181,6 @@ type Deps struct {
 	HostServiceTLSCAFile  string
 	HostServiceTLSCAPEM   string
 	Telemetry             core.TelemetryProvider
-	AuthorizationAdmin    *authorizationadmin.Service
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
@@ -227,7 +225,6 @@ type Result struct {
 	SelectedAuthProvider  string
 	AuthProviders         map[string]core.AuthenticationProvider
 	AuthorizationProvider core.AuthorizationProvider
-	AuthorizationAdmin    *authorizationadmin.Service
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
 	S3                    map[string]s3sdk.Client
@@ -1129,15 +1126,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	prepared.Deps.AgentManager = agentManager
 	prepared.Deps.PublicHostServices = publicHostServices
 	prepared.Deps.WorkflowRuntime.SetAgentManager(agentManager)
-	authorizationAdmin := authorizationadmin.New(authorizationadmin.Config{
-		AuthorizationProvider:    prepared.AuthorizationProvider,
-		Users:                    prepared.Services.Users,
-		Fragments:                prepared.Services.AuthzFragments,
-		AppDefs:                  cfg.Apps,
-		AdminAuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
-		AdminAllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
-	})
-	prepared.Deps.AuthorizationAdmin = authorizationAdmin
 
 	providers, providersReady, connAuthResolver, manualConnAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
@@ -1186,7 +1174,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			return nil, err
 		}
 	}
-	authorizationAdmin.SetAuthorizer(authz)
 	providerDevSessions, err := buildProviderDevManager(cfg, providers, prepared.Deps)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
@@ -1206,7 +1193,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
-	authorizationAdmin.SetAuditSink(audit)
 	closeAudit := true
 	defer func() {
 		if closeAudit && auditClose != nil {
@@ -1296,7 +1282,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		SelectedAuthProvider:         prepared.SelectedAuthProvider,
 		AuthProviders:                prepared.AuthProviders,
 		AuthorizationProvider:        prepared.AuthorizationProvider,
-		AuthorizationAdmin:           authorizationAdmin,
 		Services:                     prepared.Services,
 		ExtraIndexedDBs:              prepared.ExtraIndexedDBs,
 		S3:                           prepared.Deps.S3,

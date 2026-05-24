@@ -1,14 +1,14 @@
-package s3
+package hosts3
 
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	. "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -26,13 +26,13 @@ type HostClient struct {
 func (c *HostClient) Close() error { return nil }
 
 // Object returns a convenience handle for one object key.
-func (c *HostClient) Object(bucket, key string) *Object {
-	return &Object{client: c, ref: ObjectRef{Bucket: bucket, Key: key}}
+func (c *HostClient) Object(bucket, key string) *ObjectHandleRef {
+	return NewObject(c, ObjectRef{Bucket: bucket, Key: key})
 }
 
 // ObjectVersion returns a convenience handle for one object version.
-func (c *HostClient) ObjectVersion(bucket, key, versionID string) *Object {
-	return &Object{client: c, ref: ObjectRef{Bucket: bucket, Key: key, VersionID: versionID}}
+func (c *HostClient) ObjectVersion(bucket, key, versionID string) *ObjectHandleRef {
+	return NewObject(c, ObjectRef{Bucket: bucket, Key: key, VersionID: versionID})
 }
 
 // HeadObject fetches metadata for one object.
@@ -251,122 +251,6 @@ func (c *HostClient) CreateAccessUrl(ctx context.Context, ref ObjectRef, opts *O
 }
 
 // Object is a convenience wrapper around repeated operations on one object key.
-type Object struct {
-	client *HostClient
-	ref    ObjectRef
-}
-
-// Stat returns metadata for the current object.
-func (o *Object) Stat(ctx context.Context) (ObjectMeta, error) {
-	return o.client.HeadObject(ctx, o.ref)
-}
-
-// Exists reports whether the current object exists.
-func (o *Object) Exists(ctx context.Context) (bool, error) {
-	_, err := o.Stat(ctx)
-	if err == nil {
-		return true, nil
-	}
-	if err == ErrNotFound {
-		return false, nil
-	}
-	return false, err
-}
-
-// Stream opens a streaming reader for the current object.
-func (o *Object) Stream(ctx context.Context, opts *ReadOptions) (ObjectMeta, io.ReadCloser, error) {
-	return o.client.readObjectStream(ctx, o.ref, opts)
-}
-
-// Bytes reads the entire current object into memory.
-func (o *Object) Bytes(ctx context.Context, opts *ReadOptions) ([]byte, error) {
-	_, body, err := o.Stream(ctx, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = body.Close() }()
-	return io.ReadAll(body)
-}
-
-// Text reads the entire current object as UTF-8 text.
-func (o *Object) Text(ctx context.Context, opts *ReadOptions) (string, error) {
-	data, err := o.Bytes(ctx, opts)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-// JSON reads and decodes the entire current object as JSON.
-func (o *Object) JSON(ctx context.Context, opts *ReadOptions) (any, error) {
-	data, err := o.Bytes(ctx, opts)
-	if err != nil {
-		return nil, err
-	}
-	var value any
-	if err := json.Unmarshal(data, &value); err != nil {
-		return nil, err
-	}
-	return value, nil
-}
-
-// Write uploads a new object body from body.
-func (o *Object) Write(ctx context.Context, body io.Reader, opts *WriteOptions) (ObjectMeta, error) {
-	return o.client.writeObjectStream(ctx, o.ref, body, opts)
-}
-
-// WriteBytes uploads body as raw bytes.
-func (o *Object) WriteBytes(ctx context.Context, body []byte, opts *WriteOptions) (ObjectMeta, error) {
-	return o.Write(ctx, bytes.NewReader(body), opts)
-}
-
-// WriteString uploads body as text.
-func (o *Object) WriteString(ctx context.Context, body string, opts *WriteOptions) (ObjectMeta, error) {
-	return o.WriteBytes(ctx, []byte(body), opts)
-}
-
-// WriteJSON uploads value as JSON, defaulting the content type when omitted.
-func (o *Object) WriteJSON(ctx context.Context, value any, opts *WriteOptions) (ObjectMeta, error) {
-	body, err := json.Marshal(value)
-	if err != nil {
-		return ObjectMeta{}, err
-	}
-	if opts == nil {
-		opts = &WriteOptions{ContentType: "application/json"}
-	} else if opts.ContentType == "" {
-		opts.ContentType = "application/json"
-	}
-	return o.WriteBytes(ctx, body, opts)
-}
-
-// Delete removes the current object.
-func (o *Object) Delete(ctx context.Context) error {
-	return o.client.DeleteObject(ctx, o.ref)
-}
-
-// Presign creates a presigned URL for the current object.
-func (o *Object) Presign(ctx context.Context, opts *PresignOptions) (PresignResult, error) {
-	req := PresignRequest{Ref: o.ref}
-	if opts != nil {
-		req.Method = opts.Method
-		req.Expires = opts.Expires
-		req.ContentType = opts.ContentType
-		req.ContentDisposition = opts.ContentDisposition
-		req.Headers = opts.Headers
-	}
-	return o.client.PresignObject(ctx, req)
-}
-
-// CreateAccessURL creates a host-mediated object-access URL for the current object.
-func (o *Object) CreateAccessURL(ctx context.Context, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
-	return o.client.CreateObjectAccessURL(ctx, o.ref, opts)
-}
-
-// CreateAccessUrl is an alias for CreateAccessURL.
-func (o *Object) CreateAccessUrl(ctx context.Context, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
-	return o.CreateAccessURL(ctx, opts)
-}
-
 type s3ReadCloser struct {
 	stream  proto.S3_ReadObjectClient
 	cancel  context.CancelFunc
@@ -665,13 +549,6 @@ func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, request
 		out.ExpiresAt = ts.AsTime()
 	}
 	return out
-}
-
-func firstS3Name(name []string) string {
-	if len(name) == 0 {
-		return ""
-	}
-	return name[0]
 }
 
 func grpcS3Err(err error) error {

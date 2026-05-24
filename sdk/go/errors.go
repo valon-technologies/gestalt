@@ -52,6 +52,15 @@ type statusError struct {
 
 func (e statusError) Error() string { return e.message }
 
+// StatusCodeOf reports the Gestalt provider status code when err is a StatusError.
+func StatusCodeOf(err error) (StatusCode, bool) {
+	var se statusError
+	if errors.As(err, &se) {
+		return se.code, true
+	}
+	return "", false
+}
+
 // StatusError returns an error with a provider status code.
 func StatusError(code StatusCode, message string) error {
 	return statusError{code: code, message: message}

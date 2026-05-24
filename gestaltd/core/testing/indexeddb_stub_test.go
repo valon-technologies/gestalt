@@ -3,8 +3,9 @@ package coretesting
 import (
 	"context"
 	"errors"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"testing"
+
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 )
 
 func TestStubCursorAdvanceSkipsRequestedRows(t *testing.T) {

@@ -1,6 +1,9 @@
-package s3
+package hosts3
 
-import proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+import (
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	. "github.com/valon-technologies/gestalt/sdk/go/s3"
+)
 
 // ObjectRefFromProto decodes an object reference.
 func ObjectRefFromProto(ref *proto.S3ObjectRef) ObjectRef {

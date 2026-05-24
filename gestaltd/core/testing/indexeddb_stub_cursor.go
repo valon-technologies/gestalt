@@ -3,8 +3,9 @@ package coretesting
 import (
 	"bytes"
 	"fmt"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"sort"
+
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 )
 
 type stubCursor struct {

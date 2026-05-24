@@ -4,21 +4,22 @@ import (
 	"context"
 
 	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+	"github.com/valon-technologies/gestalt/sdk/go/internal/hostindexeddb"
 )
 
 // IndexedDB data types (aliases to sdk/go/indexeddb).
 type (
-	Record                   = indexeddb.Record
-	KeyRange                 = indexeddb.KeyRange
-	CursorDirection          = indexeddb.CursorDirection
-	TransactionMode          = indexeddb.TransactionMode
+	Record                    = indexeddb.Record
+	KeyRange                  = indexeddb.KeyRange
+	CursorDirection           = indexeddb.CursorDirection
+	TransactionMode           = indexeddb.TransactionMode
 	TransactionDurabilityHint = indexeddb.TransactionDurabilityHint
-	TransactionOptions       = indexeddb.TransactionOptions
-	IndexSchema              = indexeddb.IndexSchema
-	ColumnType               = indexeddb.ColumnType
-	ColumnDef                = indexeddb.ColumnDef
-	ObjectStoreSchema        = indexeddb.ObjectStoreSchema
-	ObjectStoreOptions       = indexeddb.ObjectStoreOptions
+	TransactionOptions        = indexeddb.TransactionOptions
+	IndexSchema               = indexeddb.IndexSchema
+	ColumnType                = indexeddb.ColumnType
+	ColumnDef                 = indexeddb.ColumnDef
+	ObjectStoreSchema         = indexeddb.ObjectStoreSchema
+	ObjectStoreOptions        = indexeddb.ObjectStoreOptions
 )
 
 const (
@@ -52,39 +53,22 @@ var (
 	ErrInvalidTransaction = indexeddb.ErrInvalidTransaction
 )
 
-// IndexedDB client capability interfaces (provider-side types keep IndexedDB* names in indexeddb_provider.go).
+// IndexedDB capability interfaces (provider-side types keep IndexedDB* names in indexeddb_provider.go).
 type (
 	IndexedDBDatabase               = indexeddb.Database
-	IndexedDBObjectStore          = indexeddb.ObjectStore
+	IndexedDBObjectStore            = indexeddb.ObjectStore
 	IndexedDBIndex                  = indexeddb.Index
-	IndexedDBClientTransaction      = indexeddb.Transaction
 	IndexedDBTransactionObjectStore = indexeddb.TransactionObjectStore
 	IndexedDBTransactionIndex       = indexeddb.TransactionIndex
-	IndexedDBClientCursor             = indexeddb.Cursor
 	IndexedDBRangeDeleter           = indexeddb.RangeDeleter
 	IndexedDBMutableIndex           = indexeddb.MutableIndex
 )
 
-// IndexedDBClient is the host-service transport implementation of Database.
-type IndexedDBClient = indexeddb.HostClient
-
-// ObjectStoreClient is the host-service object store handle.
-type ObjectStoreClient = indexeddb.ObjectStoreClient
-
-// IndexClient is the host-service index handle.
-type IndexClient = indexeddb.IndexClient
-
-// Transaction is the host-service transaction handle (client Database.Transaction returns indexeddb.Transaction).
-type Transaction = indexeddb.HostTransaction
-
-// Cursor is the host-service cursor handle.
-type Cursor = indexeddb.HostCursor
-
 // IndexedDB connects to the IndexedDB provider exposed by gestaltd.
 func IndexedDB(ctx context.Context, name ...string) (indexeddb.Database, error) {
-	opts := indexeddb.OpenOptions{}
+	opts := hostindexeddb.OpenOptions{}
 	if len(name) > 0 {
 		opts.Binding = name[0]
 	}
-	return indexeddb.Open(ctx, opts)
+	return hostindexeddb.Open(ctx, opts)
 }

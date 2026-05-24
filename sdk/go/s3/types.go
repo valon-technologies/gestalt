@@ -126,14 +126,7 @@ type WriteOptions struct {
 type CopyOptions = CopyRequest
 
 // ListOptions is the legacy convenience list shape.
-type ListOptions struct {
-	Bucket            string
-	Prefix            string
-	Delimiter         string
-	ContinuationToken string
-	StartAfter        string
-	MaxKeys           int32
-}
+type ListOptions = ListRequest
 
 // PresignOptions is the legacy convenience presign shape.
 type PresignOptions struct {

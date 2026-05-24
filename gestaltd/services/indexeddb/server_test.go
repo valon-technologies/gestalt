@@ -3,8 +3,9 @@ package indexeddb
 import (
 	"context"
 	"errors"
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"testing"
+
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"

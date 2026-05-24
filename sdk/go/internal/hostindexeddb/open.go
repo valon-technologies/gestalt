@@ -1,4 +1,4 @@
-package indexeddb
+package hostindexeddb
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
 )
@@ -19,7 +20,7 @@ type OpenOptions struct {
 var sharedTransports sync.Map
 
 // Open connects to the IndexedDB provider exposed by gestaltd.
-func Open(ctx context.Context, opts OpenOptions) (Database, error) {
+func Open(ctx context.Context, opts OpenOptions) (indexeddb.Database, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
