@@ -6,8 +6,6 @@ on:
       - main
     paths:
       - '.dockerignore'
-      - '.github/scripts/check-go-proto-split.sh'
-      - '.github/scripts/check-sdk-package-exists.py'
       - '.github/workflows/build-gestaltd.yml'
       - 'docs/**'
       - 'gestaltd/**'
@@ -16,8 +14,6 @@ on:
   pull_request:
     paths:
       - '.dockerignore'
-      - '.github/scripts/check-go-proto-split.sh'
-      - '.github/scripts/check-sdk-package-exists.py'
       - '.github/workflows/build-gestaltd.yml'
       - 'docs/**'
       - 'gestaltd/**'
@@ -35,110 +31,6 @@ permissions:
   contents: read
 
 jobs:
-  changes:
-    name: Detect Changed Paths
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      docker: ${{ steps.detect.outputs.docker }}
-      docs: ${{ steps.detect.outputs.docs }}
-      go_lint: ${{ steps.detect.outputs.go_lint }}
-      go_source: ${{ steps.detect.outputs.go_source }}
-      helm: ${{ steps.detect.outputs.helm }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          fetch-depth: 0
-
-      - name: Detect changed path groups
-        id: detect
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
-          EVENT_NAME: ${{ github.event_name }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          set -euo pipefail
-
-          docker=false
-          docs=false
-          go_lint=false
-          go_source=false
-          helm=false
-
-          emit() {
-            {
-              echo "docker=${docker}"
-              echo "docs=${docs}"
-              echo "go_lint=${go_lint}"
-              echo "go_source=${go_source}"
-              echo "helm=${helm}"
-            } >> "${GITHUB_OUTPUT}"
-          }
-
-          run_all() {
-            docker=true
-            docs=true
-            go_lint=true
-            go_source=true
-            helm=true
-          }
-
-          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
-            run_all
-            emit
-            exit 0
-          fi
-
-          base="${BASE_SHA}"
-          head="${HEAD_SHA}"
-          if [[ -z "${base}" || "${base}" =~ ^0+$ ]]; then
-            base="$(git rev-list --max-parents=0 "${head}")"
-          fi
-
-          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
-            diff_range="${base}...${head}"
-          else
-            diff_range="${base}..${head}"
-          fi
-
-          while IFS= read -r path; do
-            case "${path}" in
-              .github/workflows/build-gestaltd.yml)
-                run_all
-                ;;
-              .dockerignore)
-                docker=true
-                ;;
-              .github/scripts/check-go-proto-split.sh)
-                go_lint=true
-                ;;
-              .github/scripts/check-sdk-package-exists.py)
-                docs=true
-                ;;
-              docs/*)
-                docs=true
-                ;;
-              gestaltd/deploy/helm/gestaltd/*)
-                docker=true
-                go_lint=true
-                go_source=true
-                helm=true
-                ;;
-              gestaltd/*)
-                docker=true
-                go_lint=true
-                go_source=true
-                ;;
-              sdk/go/* | sdk/proto/*)
-                docker=true
-                go_lint=true
-                go_source=true
-                ;;
-            esac
-          done < <(git diff --name-only "${diff_range}")
-
-          emit
-
   resolve-ref:
     name: Resolve Build Ref
     runs-on: ubuntu-latest
@@ -188,8 +80,7 @@ jobs:
 
   lint:
     name: Go Lint & Vet
-    needs: [changes, resolve-ref]
-    if: ${{ needs.changes.outputs.go_lint == 'true' }}
+    needs: resolve-ref
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -251,8 +142,7 @@ jobs:
 
   test:
     name: Go Tests
-    needs: [changes, resolve-ref]
-    if: ${{ needs.changes.outputs.go_source == 'true' }}
+    needs: resolve-ref
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -278,8 +168,7 @@ jobs:
 
   coverage:
     name: Go Coverage
-    needs: [changes, resolve-ref]
-    if: ${{ needs.changes.outputs.go_source == 'true' }}
+    needs: resolve-ref
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -308,8 +197,8 @@ jobs:
 
   race:
     name: Go Race Tests (${{ matrix.name }})
-    needs: [changes, resolve-ref]
-    if: ${{ github.event_name != 'pull_request' && needs.changes.outputs.go_source == 'true' }}
+    needs: resolve-ref
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -364,8 +253,7 @@ jobs:
 
   docs-build:
     name: Docs Build
-    needs: [changes, resolve-ref]
-    if: ${{ needs.changes.outputs.docs == 'true' }}
+    needs: resolve-ref
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -414,8 +302,7 @@ jobs:
 
   helm-validate:
     name: Helm Chart Validation
-    needs: [changes, resolve-ref]
-    if: ${{ needs.changes.outputs.helm == 'true' }}
+    needs: resolve-ref
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -489,8 +376,7 @@ jobs:
 
   docker-build:
     name: Docker Image Build
-    needs: [changes, resolve-ref]
-    if: ${{ needs.changes.outputs.docker == 'true' }}
+    needs: resolve-ref
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -522,21 +408,8 @@ jobs:
 
   publish-ci-image:
     name: Publish CI Image
-    needs: [changes, resolve-ref, lint, test, coverage, race, docker-build]
-    if: >-
-      ${{
-        always() &&
-        needs.changes.result == 'success' &&
-        needs.resolve-ref.result == 'success' &&
-        needs.changes.outputs.docker == 'true' &&
-        needs.docker-build.result == 'success' &&
-        (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
-        (needs.test.result == 'success' || needs.test.result == 'skipped') &&
-        (needs.coverage.result == 'success' || needs.coverage.result == 'skipped') &&
-        (needs.race.result == 'success' || needs.race.result == 'skipped') &&
-        needs.resolve-ref.outputs.publish == 'true' &&
-        vars.GESTALTD_CI_IMAGE_PUBLISH_ENABLED == 'true'
-      }}
+    needs: [resolve-ref, lint, test, coverage, race, docs-build, helm-validate, docker-build]
+    if: ${{ needs.resolve-ref.outputs.publish == 'true' && vars.GESTALTD_CI_IMAGE_PUBLISH_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
