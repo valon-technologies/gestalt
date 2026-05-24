@@ -224,7 +224,7 @@ fn test_list_operations_infers_only_connected_instance_before_catalog_resolution
         .stdout(predicate::str::contains("Connection: prod"))
         .stdout(predicate::str::contains("Instance:   default"))
         .stdout(predicate::str::contains("healthcheck"))
-        .stderr(predicate::str::contains("plugin \"frontPorch\" is not connected").not());
+        .stderr(predicate::str::contains("app \"frontPorch\" is not connected").not());
 
     integrations_mock.assert();
     catalog_mock.assert();
@@ -680,7 +680,7 @@ fn test_invoke_retries_without_catalog_when_preflight_masks_surface_error() {
         .stderr(predicate::str::contains(
             "operation \"api_get_resource\" on integration \"sample_svc\" uses connection \"api-conn\"",
         ))
-        .stderr(predicate::str::contains("plugin \"sample_svc\" is not connected").not());
+        .stderr(predicate::str::contains("app \"sample_svc\" is not connected").not());
 }
 
 #[test]

@@ -250,7 +250,7 @@ fn test_cli_authorization_subjects_tokens_list_table_shows_permissions() {
 }
 
 #[test]
-fn test_cli_authorization_plugins_members_set_uses_management_api() {
+fn test_cli_authorization_apps_members_set_uses_management_api() {
     let mut server = Server::new();
     let mock = authed_json_mock!(
         server,

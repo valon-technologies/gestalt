@@ -110,7 +110,7 @@ pub enum ConfigCommands {
 
 #[derive(Subcommand)]
 pub enum AppCommands {
-    /// List available plugins
+    /// List available apps
     List,
     /// Connect an app via OAuth or interactive manual auth
     Connect {
@@ -125,7 +125,7 @@ pub enum AppCommands {
         #[arg(long)]
         instance: Option<String>,
     },
-    /// Disconnect a plugin
+    /// Disconnect an app
     Disconnect {
         /// App name (e.g., github, slack)
         name: String,
@@ -478,11 +478,11 @@ pub struct AuthorizationSubjectTokenCreateArgs {
     #[arg(long, conflicts_with_all = ["permission", "action", "permissions_file"])]
     pub scopes: Option<String>,
 
-    /// Operation permission in plugin:operation form
+    /// Operation permission in app:operation form
     #[arg(long = "permission", conflicts_with = "permissions_file")]
     pub permission: Vec<String>,
 
-    /// Action permission in plugin:action form
+    /// Action permission in app:action form
     #[arg(long = "action", conflicts_with = "permissions_file")]
     pub action: Vec<String>,
 
@@ -498,19 +498,19 @@ pub enum AuthorizationAppCommands {
     /// Manage app members
     Members {
         #[command(subcommand)]
-        command: AuthorizationPluginMemberCommands,
+        command: AuthorizationAppMemberCommands,
     },
 }
 
 #[derive(Subcommand)]
-pub enum AuthorizationPluginMemberCommands {
+pub enum AuthorizationAppMemberCommands {
     /// List app members
     List {
         /// App name
         app: String,
     },
     /// Add or update an app member
-    Set(AuthorizationPluginMemberSetArgs),
+    Set(AuthorizationAppMemberSetArgs),
     /// Remove an app member
     Remove {
         /// App name
@@ -521,7 +521,7 @@ pub enum AuthorizationPluginMemberCommands {
 }
 
 #[derive(Args)]
-pub struct AuthorizationPluginMemberSetArgs {
+pub struct AuthorizationAppMemberSetArgs {
     /// App name
     pub app: String,
 
@@ -696,7 +696,7 @@ pub struct AgentArgs {
     #[arg(long = "message")]
     pub messages: Vec<String>,
 
-    /// Add a tool in plugin:operation form to each turn
+    /// Add a tool in app:operation form to each turn
     #[arg(long = "tool", value_parser = AgentToolArg::parse)]
     pub tools: Vec<AgentToolArg>,
 }
@@ -751,7 +751,7 @@ pub struct AgentResumeArgs {
     #[arg(long = "message")]
     pub messages: Vec<String>,
 
-    /// Add a tool in plugin:operation form to each turn
+    /// Add a tool in app:operation form to each turn
     #[arg(long = "tool", value_parser = AgentToolArg::parse)]
     pub tools: Vec<AgentToolArg>,
 }
@@ -1064,7 +1064,7 @@ pub struct AgentTurnCreateArgs {
     #[arg(long = "message")]
     pub messages: Vec<String>,
 
-    /// Add a tool in plugin:operation form
+    /// Add a tool in app:operation form
     #[arg(long = "tool", value_parser = AgentToolArg::parse)]
     pub tools: Vec<AgentToolArg>,
 

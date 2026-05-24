@@ -326,7 +326,7 @@ fn connect_with_scope_and_browser_opener<F>(
 where
     F: FnOnce(&str) -> Result<()>,
 {
-    let integration = fetch_plugin(client, scope, name)?;
+    let integration = fetch_app(client, scope, name)?;
     let flow = ResolvedConnectFlow::resolve(&integration, connection)?;
 
     match flow.mode {
@@ -442,7 +442,7 @@ fn connect_manual(
                 },
             )
             .map_err(rewrite_connect_api_error)
-            .context("failed to connect plugin")?,
+            .context("failed to connect app")?,
     )
     .context("failed to parse manual connect response")?;
 
@@ -521,21 +521,17 @@ fn complete_pending_selection(
     Ok(())
 }
 
-fn fetch_plugin(
-    client: &ApiClient,
-    scope: ConnectScope<'_>,
-    name: &str,
-) -> Result<IntegrationInfo> {
+fn fetch_app(client: &ApiClient, scope: ConnectScope<'_>, name: &str) -> Result<IntegrationInfo> {
     let apps: Vec<IntegrationInfo> = serde_json::from_value(
         client
             .get(&scope.integrations_path())
-            .context("failed to load plugins")?,
+            .context("failed to load apps")?,
     )
-    .context("failed to parse plugins")?;
+    .context("failed to parse apps")?;
 
     apps.into_iter()
         .find(|app| app.name == name)
-        .with_context(|| format!("plugin '{}' not found", name))
+        .with_context(|| format!("app '{}' not found", name))
 }
 
 fn resolve_connection<'a>(
@@ -598,7 +594,7 @@ fn resolve_connect_mode(integration: &str, auth_types: &[String]) -> Result<Conn
     }
 
     bail!(
-        "plugin '{}' does not expose a supported connection flow in the CLI",
+        "app '{}' does not expose a supported connection flow in the CLI",
         integration
     );
 }
@@ -611,7 +607,7 @@ fn validate_user_connectable(
         && let Some("none") = definition.credential_mode.as_deref()
     {
         bail!(
-            "plugin '{}' connection '{}' does not require a user connection",
+            "app '{}' connection '{}' does not require a user connection",
             integration.name,
             definition.display_name()
         );

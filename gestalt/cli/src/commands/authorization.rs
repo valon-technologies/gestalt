@@ -7,8 +7,8 @@ use serde_json::{Map, Value, json};
 use crate::api::{ApiClient, encode_path_segment};
 use crate::cli::{
     AuthorizationAdminCommands, AuthorizationAdminMemberCommands, AuthorizationAppCommands,
-    AuthorizationCommands, AuthorizationManagedSubjectRole, AuthorizationModelCommands,
-    AuthorizationPageArgs, AuthorizationPluginMemberCommands, AuthorizationProviderCommands,
+    AuthorizationAppMemberCommands, AuthorizationCommands, AuthorizationManagedSubjectRole,
+    AuthorizationModelCommands, AuthorizationPageArgs, AuthorizationProviderCommands,
     AuthorizationRelationshipCommands, AuthorizationRelationshipListArgs,
     AuthorizationSubjectCommands, AuthorizationSubjectCreateArgs,
     AuthorizationSubjectExternalIdentityCommands, AuthorizationSubjectGrantCommands,
@@ -129,12 +129,12 @@ pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Form
             },
         },
         AuthorizationCommands::Apps { command } => match command {
-            AuthorizationAppCommands::List => list_plugins(client, format),
+            AuthorizationAppCommands::List => list_apps(client, format),
             AuthorizationAppCommands::Members { command } => match command {
-                AuthorizationPluginMemberCommands::List { app } => {
-                    list_plugin_members(client, &app, format)
+                AuthorizationAppMemberCommands::List { app } => {
+                    list_app_members(client, &app, format)
                 }
-                AuthorizationPluginMemberCommands::Set(args) => set_plugin_member(
+                AuthorizationAppMemberCommands::Set(args) => set_app_member(
                     client,
                     &args.app,
                     args.subject_id.as_deref(),
@@ -142,8 +142,8 @@ pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Form
                     &args.role,
                     format,
                 ),
-                AuthorizationPluginMemberCommands::Remove { app, subject_id } => {
-                    remove_plugin_member(client, &app, &subject_id, format)
+                AuthorizationAppMemberCommands::Remove { app, subject_id } => {
+                    remove_app_member(client, &app, &subject_id, format)
                 }
             },
         },
@@ -305,7 +305,7 @@ pub fn list_subject_grants(client: &ApiClient, subject: &str, format: Format) ->
     print_array_response(
         &resp,
         format,
-        &["Plugin", "Role", "Source", "Mutable"],
+        &["App", "Role", "Source", "Mutable"],
         grant_row,
     )
 }
@@ -313,7 +313,7 @@ pub fn list_subject_grants(client: &ApiClient, subject: &str, format: Format) ->
 pub fn set_subject_grant(
     client: &ApiClient,
     subject: &str,
-    plugin: &str,
+    app: &str,
     role: &str,
     format: Format,
 ) -> Result<()> {
@@ -323,7 +323,7 @@ pub fn set_subject_grant(
             &format!(
                 "{}/grants/{}",
                 subject_path(subject)?,
-                encode_path_segment(plugin)
+                encode_path_segment(app)
             ),
             &json!({ "role": role }),
         )
@@ -334,20 +334,20 @@ pub fn set_subject_grant(
 pub fn remove_subject_grant(
     client: &ApiClient,
     subject: &str,
-    plugin: &str,
+    app: &str,
     format: Format,
 ) -> Result<()> {
     let resp = client
         .delete(&format!(
             "{}/grants/{}",
             subject_path(subject)?,
-            encode_path_segment(plugin)
+            encode_path_segment(app)
         ))
         .context("failed to remove service account grant")?;
     print_status(
         &resp,
         format,
-        &format!("Removed {plugin} grant from {subject}."),
+        &format!("Removed {app} grant from {subject}."),
     )
 }
 
@@ -522,23 +522,23 @@ pub fn revoke_all_subject_tokens(client: &ApiClient, subject: &str, format: Form
     print_status(&resp, format, "Revoked all service account tokens.")
 }
 
-pub fn list_plugins(client: &ApiClient, format: Format) -> Result<()> {
+pub fn list_apps(client: &ApiClient, format: Format) -> Result<()> {
     let resp = client
         .get("/admin/api/v1/authorization/apps")
-        .context("failed to list authorization plugins")?;
+        .context("failed to list authorization apps")?;
     print_array_response(
         &resp,
         format,
         &["Name", "Policy", "Mounted UI"],
-        authorization_plugin_row,
+        authorization_app_row,
     )
 }
 
-pub fn list_plugin_members(client: &ApiClient, plugin: &str, format: Format) -> Result<()> {
+pub fn list_app_members(client: &ApiClient, app: &str, format: Format) -> Result<()> {
     let resp = client
         .get(&format!(
             "/admin/api/v1/authorization/apps/{}/members",
-            encode_path_segment(plugin)
+            encode_path_segment(app)
         ))
         .context("failed to list app members")?;
     print_array_response(
@@ -549,9 +549,9 @@ pub fn list_plugin_members(client: &ApiClient, plugin: &str, format: Format) -> 
     )
 }
 
-pub fn set_plugin_member(
+pub fn set_app_member(
     client: &ApiClient,
-    plugin: &str,
+    app: &str,
     subject_id: Option<&str>,
     email: Option<&str>,
     role: &str,
@@ -563,7 +563,7 @@ pub fn set_plugin_member(
         .put(
             &format!(
                 "/admin/api/v1/authorization/apps/{}/members",
-                encode_path_segment(plugin)
+                encode_path_segment(app)
             ),
             &body,
         )
@@ -571,9 +571,9 @@ pub fn set_plugin_member(
     print_admin_write_response(&resp, format)
 }
 
-pub fn remove_plugin_member(
+pub fn remove_app_member(
     client: &ApiClient,
-    plugin: &str,
+    app: &str,
     subject_id: &str,
     format: Format,
 ) -> Result<()> {
@@ -581,15 +581,11 @@ pub fn remove_plugin_member(
     let resp = client
         .delete(&format!(
             "/admin/api/v1/authorization/apps/{}/members/{}",
-            encode_path_segment(plugin),
+            encode_path_segment(app),
             encode_path_segment(&subject_id)
         ))
         .context("failed to remove app member")?;
-    print_status(
-        &resp,
-        format,
-        &format!("Removed {subject_id} from {plugin}."),
-    )
+    print_status(&resp, format, &format!("Removed {subject_id} from {app}."))
 }
 
 pub fn list_admin_members(client: &ApiClient, format: Format) -> Result<()> {
@@ -847,19 +843,19 @@ fn token_permissions(args: &AuthorizationSubjectTokenCreateArgs) -> Result<Optio
 
     let mut by_app: BTreeMap<String, (Vec<String>, Vec<String>)> = BTreeMap::new();
     for value in &args.permission {
-        let (plugin, operation) = parse_scoped_value(value, "permission")?;
-        by_app.entry(plugin).or_default().0.push(operation);
+        let (app, operation) = parse_scoped_value(value, "permission")?;
+        by_app.entry(app).or_default().0.push(operation);
     }
     for value in &args.action {
-        let (plugin, action) = parse_scoped_value(value, "action")?;
-        by_app.entry(plugin).or_default().1.push(action);
+        let (app, action) = parse_scoped_value(value, "action")?;
+        by_app.entry(app).or_default().1.push(action);
     }
 
     let permissions = by_app
         .into_iter()
-        .map(|(plugin, (operations, actions))| {
+        .map(|(app, (operations, actions))| {
             let mut permission = object();
-            permission.insert("app".to_string(), json!(plugin));
+            permission.insert("app".to_string(), json!(app));
             if !operations.is_empty() {
                 permission.insert("operations".to_string(), json!(operations));
             }
@@ -873,11 +869,11 @@ fn token_permissions(args: &AuthorizationSubjectTokenCreateArgs) -> Result<Optio
 }
 
 fn parse_scoped_value(value: &str, label: &str) -> Result<(String, String)> {
-    let Some((plugin, name)) = value.split_once(':') else {
-        bail!("--{label} must use plugin:name form");
+    let Some((app, name)) = value.split_once(':') else {
+        bail!("--{label} must use app:name form");
     };
     Ok((
-        non_empty("app", plugin)?.to_string(),
+        non_empty("app", app)?.to_string(),
         non_empty(label, name)?.to_string(),
     ))
 }
@@ -984,14 +980,14 @@ fn print_grant_write_response(resp: &Value, format: Format) -> Result<()> {
                 print_single_response(
                     grant,
                     Format::Table,
-                    &["Plugin", "Role", "Source", "Mutable"],
+                    &["App", "Role", "Source", "Mutable"],
                     grant_row,
                 )?;
             } else {
                 print_single_response(
                     resp,
                     Format::Table,
-                    &["Plugin", "Role", "Source", "Mutable"],
+                    &["App", "Role", "Source", "Mutable"],
                     grant_row,
                 )?;
             }
@@ -1114,7 +1110,7 @@ fn permission_cell(item: &Value) -> String {
     }
 }
 
-fn authorization_plugin_row(item: &Value) -> Vec<String> {
+fn authorization_app_row(item: &Value) -> Vec<String> {
     vec![
         string_cell(item, "name"),
         string_cell(item, "authorizationPolicy"),
