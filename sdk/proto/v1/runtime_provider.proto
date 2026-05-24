@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "v1/agent.proto";
+
+enum RuntimeEgressMode {
+  RUNTIME_EGRESS_MODE_UNSPECIFIED = 0;
+  RUNTIME_EGRESS_MODE_NONE = 1;
+  RUNTIME_EGRESS_MODE_CIDR = 2;
+  RUNTIME_EGRESS_MODE_HOSTNAME = 3;
+}
+
+message RuntimeSupport {
+  reserved 2, 4, 5, 6;
+  reserved "host_service_access";
+  bool can_host_apps = 1;
+  RuntimeEgressMode egress_mode = 3;
+  bool supports_prepare_workspace = 7;
+}
+
+message RuntimeSession {
+  string id = 1;
+  string state = 2;
+  map<string, string> metadata = 3;
+  RuntimeSessionLifecycle lifecycle = 4;
+  string state_reason = 5;
+  string state_message = 6;
+}
+
+message RuntimeSessionLifecycle {
+  google.protobuf.Timestamp started_at = 1;
+  google.protobuf.Timestamp recommended_drain_at = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+message RuntimeImagePullAuth {
+  string docker_config_json = 1;
+}
+
+message StartRuntimeSessionRequest {
+  reserved 5;
+  reserved "image_pull_credentials";
+  string app_name = 1;
+  string template = 2;
+  string image = 3;
+  map<string, string> metadata = 4;
+  RuntimeImagePullAuth image_pull_auth = 6;
+}
+
+message GetRuntimeSessionRequest {
+  string session_id = 1;
+}
+
+message ListRuntimeSessionsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListRuntimeSessionsResponse {
+  repeated RuntimeSession sessions = 1;
+  string next_page_token = 2;
+}
+
+message StopRuntimeSessionRequest {
+  string session_id = 1;
+}
+
+message PrepareRuntimeWorkspaceRequest {
+  string session_id = 1;
+  string agent_session_id = 2;
+  AgentWorkspace workspace = 3;
+}
+
+message PrepareRuntimeWorkspaceResponse {
+  PreparedAgentWorkspace workspace = 1;
+}
+
+message RemoveRuntimeWorkspaceRequest {
+  string session_id = 1;
+  string agent_session_id = 2;
+}
+
+// StartHostedAppRequest describes the app process to launch inside a
+// runtime session. The runtime backend owns allocation and injection of the
+// app's listener endpoint and returns a host-reachable dial target in the
+// HostedApp response.
+message StartHostedAppRequest {
+  reserved 6, 10;
+  string session_id = 1;
+  string app_name = 2;
+  string command = 3;
+  repeated string args = 4;
+  map<string, string> env = 5;
+  repeated string allowed_hosts = 7;
+  string default_action = 8;
+  string host_binary = 9;
+  string workdir = 11;
+}
+
+message HostedApp {
+  string id = 1;
+  string session_id = 2;
+  string app_name = 3;
+  string dial_target = 4;
+}
+
+enum RuntimeLogStream {
+  RUNTIME_LOG_STREAM_UNSPECIFIED = 0;
+  RUNTIME_LOG_STREAM_STDOUT = 1;
+  RUNTIME_LOG_STREAM_STDERR = 2;
+  RUNTIME_LOG_STREAM_RUNTIME = 3;
+}
+
+message RuntimeLogEntry {
+  RuntimeLogStream stream = 1;
+  string message = 2;
+  google.protobuf.Timestamp observed_at = 3;
+  int64 source_seq = 4;
+}
+
+message AppendRuntimeLogsRequest {
+  string session_id = 1;
+  repeated RuntimeLogEntry logs = 2;
+}
+
+message AppendRuntimeLogsResponse {
+  int64 last_seq = 1;
+}
+
+service RuntimeLogHost {
+  rpc AppendLogs(AppendRuntimeLogsRequest) returns (AppendRuntimeLogsResponse);
+}
+
+service RuntimeProvider {
+  rpc GetSupport(google.protobuf.Empty) returns (RuntimeSupport);
+  rpc StartSession(StartRuntimeSessionRequest) returns (RuntimeSession);
+  rpc GetSession(GetRuntimeSessionRequest) returns (RuntimeSession);
+  rpc ListSessions(ListRuntimeSessionsRequest) returns (ListRuntimeSessionsResponse);
+  rpc StopSession(StopRuntimeSessionRequest) returns (google.protobuf.Empty);
+  rpc PrepareWorkspace(PrepareRuntimeWorkspaceRequest) returns (PrepareRuntimeWorkspaceResponse);
+  rpc RemoveWorkspace(RemoveRuntimeWorkspaceRequest) returns (google.protobuf.Empty);
+  rpc StartApp(StartHostedAppRequest) returns (HostedApp);
+}

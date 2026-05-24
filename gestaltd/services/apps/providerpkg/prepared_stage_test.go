@@ -19,8 +19,8 @@ func TestStageSourcePreparedInstallDir_BuildsHostBinaryWhenSourcePackageExists(t
 	buildScript := `mkdir -p .gestalt/build
 cat > .gestalt/build/provider <<'SH'
 #!/bin/sh
-if [ -n "$GESTALT_PLUGIN_WRITE_CATALOG" ]; then
-  printf 'name: provider\noperations:\n  - id: echo\n    method: POST\n' > "$GESTALT_PLUGIN_WRITE_CATALOG"
+if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
+  printf 'name: provider\noperations:\n  - id: echo\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
 SH
 chmod +x .gestalt/build/provider
@@ -28,8 +28,8 @@ chmod +x .gestalt/build/provider
 	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
 	mustWriteFile(t, filepath.Join(root, "catalog.sh"), []byte(`#!/bin/sh
 set -eu
-if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
-  printf 'name: provider\noperations:\n  - id: run_catalog\n    method: POST\n' > "$GESTALT_PLUGIN_WRITE_CATALOG"
+if [ -n "${GESTALT_APP_WRITE_CATALOG:-}" ]; then
+  printf 'name: provider\noperations:\n  - id: run_catalog\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
 `), 0o755)
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
@@ -73,7 +73,7 @@ fi
 	if err != nil {
 		t.Fatalf("ReadFile(%s): %v", stagedBinaryPath, err)
 	}
-	if !strings.Contains(string(data), "GESTALT_PLUGIN_WRITE_CATALOG") {
+	if !strings.Contains(string(data), "GESTALT_APP_WRITE_CATALOG") {
 		t.Fatalf("staged binary did not come from declared build command")
 	}
 
@@ -94,8 +94,8 @@ func TestStageSourcePreparedInstallDir_ReplacesRunGeneratedCatalog(t *testing.T)
 	buildScript := `mkdir -p .gestalt/build
 cat > .gestalt/build/provider <<'SH'
 #!/bin/sh
-if [ -n "$GESTALT_PLUGIN_WRITE_CATALOG" ]; then
-  printf 'name: provider\noperations:\n  - id: packaged_catalog\n    method: POST\n' > "$GESTALT_PLUGIN_WRITE_CATALOG"
+if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
+  printf 'name: provider\noperations:\n  - id: packaged_catalog\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
 SH
 chmod +x .gestalt/build/provider
@@ -103,8 +103,8 @@ chmod +x .gestalt/build/provider
 	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
 	mustWriteFile(t, filepath.Join(root, "run.sh"), []byte(`#!/bin/sh
 set -eu
-if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
-  printf 'name: provider\noperations:\n  - id: run_catalog\n    method: POST\n' > "$GESTALT_PLUGIN_WRITE_CATALOG"
+if [ -n "${GESTALT_APP_WRITE_CATALOG:-}" ]; then
+  printf 'name: provider\noperations:\n  - id: run_catalog\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
 `), 0o755)
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
@@ -229,8 +229,8 @@ func TestSourceRunCommand(t *testing.T) {
 			run: func(t *testing.T, root, fakeUVPath, logPath string) {
 				mustWriteFile(t, filepath.Join(root, "provider.sh"), []byte(`#!/bin/sh
 set -eu
-if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
-  printf 'name: provider\noperations:\n  - id: uv_catalog\n    method: POST\n' > "$GESTALT_PLUGIN_WRITE_CATALOG"
+if [ -n "${GESTALT_APP_WRITE_CATALOG:-}" ]; then
+  printf 'name: provider\noperations:\n  - id: uv_catalog\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
 `), 0o755)
 				manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
@@ -381,14 +381,14 @@ mkdir -p .gestalt/build
 if [ "${GOOS:-}/` + "${GOARCH:-}" + `" = "` + hostPlatform + `" ]; then
   cat > .gestalt/build/provider <<'SH'
 #!/bin/sh
-if [ -n "$GESTALT_PLUGIN_WRITE_CATALOG" ]; then
-  printf 'name: provider\noperations:\n  - id: host_catalog\n    method: POST\n' > "$GESTALT_PLUGIN_WRITE_CATALOG"
+if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
+  printf 'name: provider\noperations:\n  - id: host_catalog\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
 SH
 else
   cat > .gestalt/build/provider <<'SH'
 #!/bin/sh
-if [ -n "$GESTALT_PLUGIN_WRITE_CATALOG" ]; then
+if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
   echo "target artifact should not generate catalogs" >&2
   exit 42
 fi
@@ -445,8 +445,8 @@ func TestStageSourcePreparedInstallDir_RunOnlyFailsReleasePackaging(t *testing.T
 	root := t.TempDir()
 	mustWriteFile(t, filepath.Join(root, "provider.sh"), []byte(`#!/bin/sh
 set -eu
-if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
-  printf 'name: provider\noperations:\n  - id: local_only\n    method: POST\n' > "$GESTALT_PLUGIN_WRITE_CATALOG"
+if [ -n "${GESTALT_APP_WRITE_CATALOG:-}" ]; then
+  printf 'name: provider\noperations:\n  - id: local_only\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
 `), 0o755)
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
@@ -519,8 +519,8 @@ func TestStagePreparedInstallDir_WithEntrypointCopiesGeneratedCatalog(t *testing
 
 	root := t.TempDir()
 	mustWriteFile(t, filepath.Join(root, "provider"), []byte(`#!/bin/sh
-if [ -n "$GESTALT_PLUGIN_WRITE_CATALOG" ]; then
-  printf 'name: provider\noperations:\n  - id: echo\n    method: POST\n' > "$GESTALT_PLUGIN_WRITE_CATALOG"
+if [ -n "$GESTALT_APP_WRITE_CATALOG" ]; then
+  printf 'name: provider\noperations:\n  - id: echo\n    method: POST\n' > "$GESTALT_APP_WRITE_CATALOG"
 fi
 `), 0o755)
 

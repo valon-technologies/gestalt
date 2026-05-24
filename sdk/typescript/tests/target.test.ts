@@ -12,9 +12,9 @@ import {
 import { fixturePath } from "./helpers.ts";
 
 test("module target parsing validates relative module paths", () => {
-  expect(parseModuleTarget("./provider.ts#plugin")).toEqual({
+  expect(parseModuleTarget("./provider.ts#app")).toEqual({
     modulePath: "./provider.ts",
-    exportName: "plugin",
+    exportName: "app",
   });
   expect(parseModuleTarget("./provider.ts")).toEqual({
     modulePath: "./provider.ts",
@@ -29,20 +29,20 @@ test("module target parsing validates relative module paths", () => {
 });
 
 test("provider target parsing supports app defaults and kind prefixes", () => {
-  expect(parseProviderTarget("./provider.ts#plugin")).toEqual({
+  expect(parseProviderTarget("./provider.ts#app")).toEqual({
     kind: "integration",
     modulePath: "./provider.ts",
-    exportName: "plugin",
+    exportName: "app",
   });
-  expect(parseProviderTarget("app:./provider.ts#plugin")).toEqual({
+  expect(parseProviderTarget("app:./provider.ts#app")).toEqual({
     kind: "integration",
     modulePath: "./provider.ts",
-    exportName: "plugin",
+    exportName: "app",
   });
-  expect(parseProviderTarget({ target: "./provider.ts#plugin" })).toEqual({
+  expect(parseProviderTarget({ target: "./provider.ts#app" })).toEqual({
     kind: "integration",
     modulePath: "./provider.ts",
-    exportName: "plugin",
+    exportName: "app",
   });
   expect(parseProviderTarget("authentication:./auth.ts#provider")).toEqual({
     kind: "authentication",
@@ -59,7 +59,7 @@ test("provider target parsing supports app defaults and kind prefixes", () => {
     modulePath: "./agent.ts",
     exportName: "provider",
   });
-  expect(() => parseProviderTarget("integration:./provider.ts#plugin")).toThrow(
+  expect(() => parseProviderTarget("integration:./provider.ts#app")).toThrow(
     'unsupported provider kind "integration"',
   );
   expect(() => parseProviderTarget("auth:./auth.ts#provider")).toThrow(

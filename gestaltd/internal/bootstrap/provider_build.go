@@ -43,7 +43,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"gopkg.in/yaml.v3"
 )
@@ -964,7 +964,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 			cleanup()
 		}
 	}()
-	runtimeConfig, runtimeProvider, runtimeOwned, err := effectiveAppRuntime(ctx, name, entry, deps)
+	runtimeConfig, runtimeProvider, runtimeOwned, err := effectiveRuntime(ctx, name, entry, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -975,7 +975,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		}
 		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
-	runtimePlan, err := buildAppRuntimePlan(name, entry, deps, runtimeSupport)
+	runtimePlan, err := buildRuntimePlan(name, entry, deps, runtimeSupport)
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -1028,7 +1028,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
 		}
-		return nil, fmt.Errorf("start app runtime session: %w", err)
+		return nil, fmt.Errorf("start runtime session: %w", err)
 	}
 	sessionID := session.ID
 	stopSession := true
@@ -1036,16 +1036,16 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		if !stopSession {
 			return
 		}
-		_ = stopAppRuntimeSession(runtimeProvider, sessionID)
+		_ = stopRuntimeSession(runtimeProvider, sessionID)
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
 		}
 	}()
-	if _, err := waitForAppRuntimeSessionReady(ctx, runtimeProvider, sessionID); err != nil {
-		return nil, fmt.Errorf("wait for app runtime session %q ready: %w", sessionID, err)
+	if _, err := waitForRuntimeSessionReady(ctx, runtimeProvider, sessionID); err != nil {
+		return nil, fmt.Errorf("wait for runtime session %q ready: %w", sessionID, err)
 	}
 
-	hostServices, invTokens, runtimeCleanup, err := buildAppRuntimeHostServices(name, entry, deps)
+	hostServices, invTokens, runtimeCleanup, err := buildRuntimeHostServices(name, entry, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -1086,28 +1086,28 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		maps.Copy(startEnv, egressPlan.Env)
 	}
 
-	hostedApp, err := runtimeProvider.StartApp(ctx, appruntime.StartAppRequest{
+	hostedApp, err := runtimeProvider.StartApp(ctx, runtimeprovider.StartAppRequest{
 		SessionID: sessionID,
 		AppName:   name,
 		Command:   command,
 		Args:      args,
 		Workdir:   workdir,
 		Env:       startEnv,
-		Egress: appruntime.RuntimeEgressPolicy{
+		Egress: runtimeprovider.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
-			DefaultAction: appruntime.PolicyAction(deps.Egress.DefaultAction),
+			DefaultAction: runtimeprovider.PolicyAction(deps.Egress.DefaultAction),
 		},
 		HostBinary: entry.HostBinary,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("start hosted plugin: %w", err)
+		return nil, fmt.Errorf("start hosted app: %w", err)
 	}
-	conn, err := appruntime.DialHostedApp(ctx, hostedApp.DialTarget,
-		appruntime.WithProviderName(name),
-		appruntime.WithTelemetry(deps.Telemetry),
+	conn, err := runtimeprovider.DialHostedApp(ctx, hostedApp.DialTarget,
+		runtimeprovider.WithProviderName(name),
+		runtimeprovider.WithTelemetry(deps.Telemetry),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("dial hosted plugin: %w", err)
+		return nil, fmt.Errorf("dial hosted app: %w", err)
 	}
 	opts := []appservice.RemoteProviderOption{
 		appservice.WithCloser(&runtimeBackedHostedCloser{
@@ -1171,7 +1171,7 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 type hostedAgentProviderLaunch struct {
 	name            string
 	runtimeConfig   config.EffectiveRuntimePlacement
-	runtimeProvider appruntime.Provider
+	runtimeProvider runtimeprovider.Provider
 	runtimeOwned    bool
 	runtimePlan     RuntimePlacementPlan
 	cfg             componentprovider.YAMLConfig
@@ -1182,9 +1182,9 @@ type hostedAgentProviderLaunch struct {
 
 type hostedAgentProviderInstance struct {
 	provider         coreagent.Provider
-	runtimeProvider  appruntime.Provider
+	runtimeProvider  runtimeprovider.Provider
 	runtimeSessionID string
-	runtimeSession   *appruntime.Session
+	runtimeSession   *runtimeprovider.Session
 }
 
 func (p *hostedAgentProviderLaunch) close() {
@@ -1315,7 +1315,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		if !stopSession {
 			return
 		}
-		_ = stopAppRuntimeSession(runtimeProvider, sessionID)
+		_ = stopRuntimeSession(runtimeProvider, sessionID)
 		if closeOnFailure {
 			_ = runtimeProvider.Close()
 		}
@@ -1324,7 +1324,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		}
 	}()
 	phaseStarted = time.Now()
-	readySession, err := waitForAppRuntimeSessionReady(ctx, runtimeProvider, sessionID)
+	readySession, err := waitForRuntimeSessionReady(ctx, runtimeProvider, sessionID)
 	if err != nil {
 		recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_ready", phaseStarted, err)
 		return nil, fmt.Errorf("wait for hosted agent runtime session %q ready: %w", sessionID, err)
@@ -1371,16 +1371,16 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	}
 
 	phaseStarted = time.Now()
-	hostedApp, err := runtimeProvider.StartApp(ctx, appruntime.StartAppRequest{
+	hostedApp, err := runtimeProvider.StartApp(ctx, runtimeprovider.StartAppRequest{
 		SessionID: sessionID,
 		AppName:   name,
 		Command:   launch.launch.command,
 		Args:      launch.launch.args,
 		Workdir:   cfg.Workdir,
 		Env:       startEnv,
-		Egress: appruntime.RuntimeEgressPolicy{
+		Egress: runtimeprovider.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
-			DefaultAction: appruntime.PolicyAction(deps.Egress.DefaultAction),
+			DefaultAction: runtimeprovider.PolicyAction(deps.Egress.DefaultAction),
 		},
 		HostBinary: cfg.HostBinary,
 	})
@@ -1389,9 +1389,9 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		return nil, fmt.Errorf("start hosted agent provider: %w", err)
 	}
 	phaseStarted = time.Now()
-	conn, err := appruntime.DialHostedAgent(ctx, hostedApp.DialTarget,
-		appruntime.WithProviderName(name),
-		appruntime.WithTelemetry(deps.Telemetry),
+	conn, err := runtimeprovider.DialHostedAgent(ctx, hostedApp.DialTarget,
+		runtimeprovider.WithProviderName(name),
+		runtimeprovider.WithTelemetry(deps.Telemetry),
 	)
 	recordHostedAgentRuntimeStartPhase(ctx, name, "provider_dial", phaseStarted, err)
 	if err != nil {
@@ -1428,16 +1428,16 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	}, nil
 }
 
-func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, entry *config.ProviderEntry, deps Deps) (config.EffectiveRuntimePlacement, appruntime.Provider, bool, error) {
+func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, entry *config.ProviderEntry, deps Deps) (config.EffectiveRuntimePlacement, runtimeprovider.Provider, bool, error) {
 	if entry == nil || !entry.UsesRuntimePlacement() {
 		return config.EffectiveRuntimePlacement{}, nil, false, nil
 	}
 	explicitRuntimeConfig := providerEntryRuntimePlacementConfig(entry)
-	if deps.AppRuntime != nil {
-		return explicitRuntimeConfig, deps.AppRuntime, false, nil
+	if deps.Runtime != nil {
+		return explicitRuntimeConfig, deps.Runtime, false, nil
 	}
-	if deps.AppRuntimeRegistry != nil {
-		runtimeConfig, runtimeProvider, err := deps.AppRuntimeRegistry.Resolve(ctx, configPath, entry)
+	if deps.RuntimeRegistry != nil {
+		runtimeConfig, runtimeProvider, err := deps.RuntimeRegistry.Resolve(ctx, configPath, entry)
 		if err != nil {
 			return config.EffectiveRuntimePlacement{}, nil, false, err
 		}
@@ -1445,18 +1445,18 @@ func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, en
 			return runtimeConfig, runtimeProvider, false, nil
 		}
 		if runtimeConfig.Enabled {
-			return localRuntimePlacementConfig(runtimeConfig), newLocalAppRuntime(runtimeConfig.ProviderName, deps), true, nil
+			return localRuntimePlacementConfig(runtimeConfig), newLocalRuntime(runtimeConfig.ProviderName, deps), true, nil
 		}
 	}
-	return localRuntimePlacementConfig(explicitRuntimeConfig), newLocalAppRuntime(explicitRuntimeConfig.ProviderName, deps), true, nil
+	return localRuntimePlacementConfig(explicitRuntimeConfig), newLocalRuntime(explicitRuntimeConfig.ProviderName, deps), true, nil
 }
 
-func effectiveAppRuntime(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (config.EffectiveRuntimePlacement, appruntime.Provider, bool, error) {
-	if deps.AppRuntime != nil {
-		return providerEntryRuntimePlacementConfig(entry), deps.AppRuntime, false, nil
+func effectiveRuntime(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (config.EffectiveRuntimePlacement, runtimeprovider.Provider, bool, error) {
+	if deps.Runtime != nil {
+		return providerEntryRuntimePlacementConfig(entry), deps.Runtime, false, nil
 	}
-	if deps.AppRuntimeRegistry != nil {
-		runtimeConfig, runtimeProvider, err := deps.AppRuntimeRegistry.Resolve(ctx, "apps."+name, entry)
+	if deps.RuntimeRegistry != nil {
+		runtimeConfig, runtimeProvider, err := deps.RuntimeRegistry.Resolve(ctx, "apps."+name, entry)
 		if err != nil {
 			return config.EffectiveRuntimePlacement{}, nil, false, err
 		}
@@ -1464,10 +1464,10 @@ func effectiveAppRuntime(ctx context.Context, name string, entry *config.Provide
 			return runtimeConfig, runtimeProvider, false, nil
 		}
 		if runtimeConfig.Enabled {
-			return localRuntimePlacementConfig(runtimeConfig), newLocalAppRuntime(runtimeConfig.ProviderName, deps), true, nil
+			return localRuntimePlacementConfig(runtimeConfig), newLocalRuntime(runtimeConfig.ProviderName, deps), true, nil
 		}
 	}
-	return localRuntimePlacementConfig(config.EffectiveRuntimePlacement{}), newLocalAppRuntime("", deps), true, nil
+	return localRuntimePlacementConfig(config.EffectiveRuntimePlacement{}), newLocalRuntime("", deps), true, nil
 }
 
 func providerEntryRuntimePlacementConfig(entry *config.ProviderEntry) config.EffectiveRuntimePlacement {
@@ -1521,20 +1521,20 @@ func localRuntimePlacementConfig(runtimeConfig config.EffectiveRuntimePlacement)
 	return runtimeConfig
 }
 
-func newLocalAppRuntime(runtimeProviderName string, deps Deps) appruntime.Provider {
+func newLocalRuntime(runtimeProviderName string, deps Deps) runtimeprovider.Provider {
 	runtimeProviderName = strings.TrimSpace(runtimeProviderName)
 	if runtimeProviderName == "" {
 		runtimeProviderName = "local"
 	}
-	opts := []appruntime.LocalOption{appruntime.WithLocalTelemetry(deps.Telemetry)}
+	opts := []runtimeprovider.LocalOption{runtimeprovider.WithLocalTelemetry(deps.Telemetry)}
 	if deps.Services != nil && deps.Services.RuntimeSessionLogs != nil {
-		opts = append(opts, appruntime.WithLocalRuntimeSessionLogs(runtimeProviderName, deps.Services.RuntimeSessionLogs))
+		opts = append(opts, runtimeprovider.WithLocalRuntimeSessionLogs(runtimeProviderName, deps.Services.RuntimeSessionLogs))
 	}
-	return appruntime.NewLocalProvider(opts...)
+	return runtimeprovider.NewLocalProvider(opts...)
 }
 
 const (
-	pluginRuntimeEgressProxyTokenTTL = 30 * 24 * time.Hour
+	runtimeEgressProxyTokenTTL = 30 * 24 * time.Hour
 )
 
 type RuntimeEgressLaunchPlan struct {
@@ -1551,7 +1551,7 @@ func hostedRuntimeLabel(runtimeConfig config.EffectiveRuntimePlacement) string {
 	return "hosted runtime"
 }
 
-func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig config.EffectiveRuntimePlacement) appruntime.StartSessionRequest {
+func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig config.EffectiveRuntimePlacement) runtimeprovider.StartSessionRequest {
 	metadata := maps.Clone(runtimeConfig.Metadata)
 	if metadata == nil {
 		metadata = map[string]string{}
@@ -1562,7 +1562,7 @@ func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig conf
 	if name != "" {
 		metadata["provider_name"] = name
 	}
-	return appruntime.StartSessionRequest{
+	return runtimeprovider.StartSessionRequest{
 		AppName:       name,
 		Template:      runtimeConfig.Template,
 		Image:         runtimeConfig.Image,
@@ -1571,11 +1571,11 @@ func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig conf
 	}
 }
 
-func hostedRuntimeImagePullAuth(auth *config.RuntimePlacementImagePullAuth) *appruntime.ImagePullAuth {
+func hostedRuntimeImagePullAuth(auth *config.RuntimePlacementImagePullAuth) *runtimeprovider.ImagePullAuth {
 	if auth == nil {
 		return nil
 	}
-	return &appruntime.ImagePullAuth{
+	return &runtimeprovider.ImagePullAuth{
 		DockerConfigJSON: auth.DockerConfigJSON,
 	}
 }
@@ -1600,11 +1600,11 @@ func buildHostedRuntimeEgressLaunchPlan(providerName, sessionID string, policy e
 	return plan, nil
 }
 
-const pluginRuntimeStopTimeout = 3 * time.Second
+const runtimeStopTimeout = 3 * time.Second
 
 type runtimeBackedHostedCloser struct {
 	conn         io.Closer
-	runtime      appruntime.Provider
+	runtime      runtimeprovider.Provider
 	sessionID    string
 	closeRuntime bool
 	cleanup      func()
@@ -1617,7 +1617,7 @@ func (c *runtimeBackedHostedCloser) Close() error {
 	}
 	var errs []error
 	if c.runtime != nil && c.sessionID != "" {
-		errs = append(errs, stopAppRuntimeSessionWithTimeout(c.runtime, c.sessionID, c.stopTimeout))
+		errs = append(errs, stopRuntimeSessionWithTimeout(c.runtime, c.sessionID, c.stopTimeout))
 	}
 	if c.conn != nil {
 		errs = append(errs, c.conn.Close())
@@ -1631,43 +1631,43 @@ func (c *runtimeBackedHostedCloser) Close() error {
 	return errors.Join(errs...)
 }
 
-func stopAppRuntimeSession(runtimeProvider appruntime.Provider, sessionID string) error {
-	return stopAppRuntimeSessionWithTimeout(runtimeProvider, sessionID, 0)
+func stopRuntimeSession(runtimeProvider runtimeprovider.Provider, sessionID string) error {
+	return stopRuntimeSessionWithTimeout(runtimeProvider, sessionID, 0)
 }
 
-func stopAppRuntimeSessionWithTimeout(runtimeProvider appruntime.Provider, sessionID string, timeout time.Duration) error {
+func stopRuntimeSessionWithTimeout(runtimeProvider runtimeprovider.Provider, sessionID string, timeout time.Duration) error {
 	if runtimeProvider == nil || sessionID == "" {
 		return nil
 	}
 	if timeout <= 0 {
-		timeout = pluginRuntimeStopTimeout
+		timeout = runtimeStopTimeout
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runtimeProvider.StopSession(ctx, appruntime.StopSessionRequest{SessionID: sessionID})
+		done <- runtimeProvider.StopSession(ctx, runtimeprovider.StopSessionRequest{SessionID: sessionID})
 	}()
 
 	select {
 	case err := <-done:
 		return err
 	case <-ctx.Done():
-		return fmt.Errorf("stop app runtime session %q: %w", sessionID, ctx.Err())
+		return fmt.Errorf("stop runtime session %q: %w", sessionID, ctx.Err())
 	}
 }
 
-func waitForAppRuntimeSessionReady(ctx context.Context, runtimeProvider appruntime.Provider, sessionID string) (*appruntime.Session, error) {
+func waitForRuntimeSessionReady(ctx context.Context, runtimeProvider runtimeprovider.Provider, sessionID string) (*runtimeprovider.Session, error) {
 	for {
-		session, err := runtimeProvider.GetSession(ctx, appruntime.GetSessionRequest{SessionID: sessionID})
+		session, err := runtimeProvider.GetSession(ctx, runtimeprovider.GetSessionRequest{SessionID: sessionID})
 		if err != nil {
 			return nil, err
 		}
 		switch session.State {
-		case appruntime.SessionStateReady, appruntime.SessionStateRunning:
+		case runtimeprovider.SessionStateReady, runtimeprovider.SessionStateRunning:
 			return session, nil
-		case appruntime.SessionStateFailed, appruntime.SessionStateStopped:
+		case runtimeprovider.SessionStateFailed, runtimeprovider.SessionStateStopped:
 			return nil, fmt.Errorf("session entered %q state", session.State)
 		}
 
@@ -1684,7 +1684,7 @@ func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowed
 	if baseURL == "" || len(deps.EncryptionKey) == 0 {
 		return nil, fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to enforce hostname-based egress for hosted runtimes", providerName)
 	}
-	proxyBaseURL, _, err := pluginRuntimePublicProxyBaseURL(baseURL, explicitRelayBaseURL)
+	proxyBaseURL, _, err := runtimePublicProxyBaseURL(baseURL, explicitRelayBaseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -1697,7 +1697,7 @@ func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowed
 		SessionID:     sessionID,
 		AllowedHosts:  slices.Clone(allowedHosts),
 		DefaultAction: defaultAction,
-		TTL:           pluginRuntimeEgressProxyTokenTTL,
+		TTL:           runtimeEgressProxyTokenTTL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("mint public egress proxy token: %w", err)

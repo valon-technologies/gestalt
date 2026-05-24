@@ -62,8 +62,8 @@ import {
   type StartProviderRequest,
 } from "./internal/gen/v1/app_pb.ts";
 import {
-  AppRuntimeProvider as AppRuntimeProviderService,
-} from "./internal/gen/v1/appruntime_pb.ts";
+  RuntimeProvider as RuntimeProviderService,
+} from "./internal/gen/v1/runtime_provider_pb.ts";
 import {
   ConfigureProviderResponseSchema,
   HealthCheckResponseSchema,
@@ -110,10 +110,10 @@ import {
   isAppProvider,
 } from "./app.ts";
 import {
-  AppRuntimeProvider,
-  createAppRuntimeProviderService,
-  isAppRuntimeProvider,
-} from "./appruntime.ts";
+  RuntimeProvider,
+  createRuntimeProviderService,
+  isRuntimeProvider,
+} from "./runtime-provider.ts";
 import {
   providerKindLabel,
   resolveDefaultProviderExport,
@@ -137,26 +137,26 @@ import {
 /**
  * Environment variable containing the Unix socket path for a running provider.
  */
-export const ENV_PROVIDER_SOCKET = "GESTALT_PLUGIN_SOCKET";
+export const ENV_PROVIDER_SOCKET = "GESTALT_PROVIDER_SOCKET";
 /**
  * Environment variable containing the parent process ID supplied by the host.
  */
-export const ENV_PROVIDER_PARENT_PID = "GESTALT_PLUGIN_PARENT_PID";
+export const ENV_PROVIDER_PARENT_PID = "GESTALT_APP_PARENT_PID";
 /**
  * Environment variable used to request static catalog generation.
  */
-export const ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG";
+export const ENV_WRITE_CATALOG = "GESTALT_APP_WRITE_CATALOG";
 /**
  * Protocol version currently implemented by the TypeScript runtime.
  */
-export const CURRENT_PROTOCOL_VERSION = 3;
+export const CURRENT_PROTOCOL_VERSION = 4;
 /**
  * Command-line usage for the runtime entrypoint.
  */
 export const USAGE = "usage: bun run runtime.ts ROOT PROVIDER_TARGET";
 export { createAgentProviderService } from "./agent.ts";
 export { createAuthorizationProviderService } from "./authorization.ts";
-export { createAppRuntimeProviderService } from "./appruntime.ts";
+export { createRuntimeProviderService } from "./runtime-provider.ts";
 export { createWorkflowProviderService } from "./workflow.ts";
 
 /**
@@ -177,7 +177,7 @@ export type LoadedProvider =
   | CacheProvider
   | SecretsProvider
   | S3Provider
-  | AppRuntimeProvider
+  | RuntimeProvider
   | AgentProvider
   | WorkflowProvider;
 
@@ -252,12 +252,12 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
   },
   runtime: {
     isProvider:
-      isAppRuntimeProvider as (value: unknown) => value is LoadedProvider,
+      isRuntimeProvider as (value: unknown) => value is LoadedProvider,
     protoKind: ProtoProviderKind.RUNTIME,
     registerService(router, provider) {
       router.service(
-        AppRuntimeProviderService,
-        createAppRuntimeProviderService(provider as AppRuntimeProvider),
+        RuntimeProviderService,
+        createRuntimeProviderService(provider as RuntimeProvider),
       );
     },
   },

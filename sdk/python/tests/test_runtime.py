@@ -20,8 +20,6 @@ from gestalt import (
     AgentProvider,
     App,
     AppProviderAdapter,
-    AppRuntimeProvider,
-    AppRuntimeSupport,
     AuthenticationProvider,
     BeginLoginRequest,
     BoundWorkflowDefinition,
@@ -36,7 +34,7 @@ from gestalt import (
     ConnectedToken,
     CreateWorkflowProviderDefinitionRequest,
     ExternalTokenValidator,
-    GetAppRuntimeSupportRequest,
+    GetRuntimeSupportRequest,
     GetWorkflowProviderDefinitionRequest,
     HealthChecker,
     ListWorkflowProviderRunsRequest,
@@ -49,6 +47,8 @@ from gestalt import (
     Request,
     ResumeWorkflowProviderEventTriggerRequest,
     ResumeWorkflowProviderScheduleRequest,
+    RuntimeProvider,
+    RuntimeSupport,
     S3Provider,
     SessionTTLProvider,
     StartWorkflowProviderRunRequest,
@@ -62,11 +62,11 @@ from gestalt import (
 from gestalt._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
 from gestalt._gen.v1 import app_pb2 as _app_pb2
 from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
-from gestalt._gen.v1 import appruntime_pb2 as _appruntime_pb2
-from gestalt._gen.v1 import appruntime_pb2_grpc as _appruntime_pb2_grpc
 from gestalt._gen.v1 import authentication_pb2 as _authentication_pb2
 from gestalt._gen.v1 import cache_pb2 as _cache_pb2
 from gestalt._gen.v1 import runtime_pb2 as _runtime_pb2
+from gestalt._gen.v1 import runtime_provider_pb2 as _runtime_provider_pb2
+from gestalt._gen.v1 import runtime_provider_pb2_grpc as _runtime_provider_pb2_grpc
 from gestalt._gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from gestalt._gen.v1 import workflow_pb2 as _workflow_pb2
 from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
@@ -77,8 +77,8 @@ cache_pb2: Any = _cache_pb2
 empty_pb2: Any = _empty_pb2
 app_pb2: Any = _app_pb2
 app_pb2_grpc: Any = _app_pb2_grpc
-appruntime_pb2: Any = _appruntime_pb2
-appruntime_pb2_grpc: Any = _appruntime_pb2_grpc
+runtime_provider_pb2: Any = _runtime_provider_pb2
+runtime_provider_pb2_grpc: Any = _runtime_provider_pb2_grpc
 runtime_pb2: Any = _runtime_pb2
 s3_pb2_grpc: Any = _s3_pb2_grpc
 struct_pb2: Any = _struct_pb2
@@ -392,9 +392,7 @@ class MainEntrypointTests(unittest.TestCase):
                 ),
                 "workflow": request.workflow,
                 "tool_refs_set": request.tool_refs_set,
-                "tool_ref_app": request.tool_refs[0].app
-                if request.tool_refs
-                else "",
+                "tool_ref_app": request.tool_refs[0].app if request.tool_refs else "",
                 "tool_ref_operation": request.tool_refs[0].operation
                 if request.tool_refs
                 else "",
@@ -1274,9 +1272,9 @@ class S3RuntimeTests(unittest.TestCase):
         self.assertIs(servable.provider, provider)
 
 
-class AppRuntimeRuntimeTests(unittest.TestCase):
-    class StubAppRuntimeProvider(
-        AppRuntimeProvider,
+class RuntimeRuntimeTests(unittest.TestCase):
+    class StubRuntimeProvider(
+        RuntimeProvider,
         MetadataProvider,
         WarningsProvider,
         HealthChecker,
@@ -1299,8 +1297,8 @@ class AppRuntimeRuntimeTests(unittest.TestCase):
         def health_check(self) -> None:
             return None
 
-    def test_runtime_metadata_and_app_runtime_registration(self) -> None:
-        provider = self.StubAppRuntimeProvider()
+    def test_runtime_metadata_and_runtime_provider_registration(self) -> None:
+        provider = self.StubRuntimeProvider()
 
         runtime_servicer = _runtime._runtime_servicer(
             provider=provider,
@@ -1311,11 +1309,11 @@ class AppRuntimeRuntimeTests(unittest.TestCase):
         self.assertEqual(meta.name, "stub-runtime")
         self.assertEqual(list(meta.warnings), ["set RUNTIME_ENDPOINT"])
 
-        adapter = _runtime._app_runtime_runtime_plugin(provider)
+        adapter = _runtime._runtime_provider_runtime_app(provider)
         server = mock.Mock()
         with mock.patch.object(
-            appruntime_pb2_grpc,
-            "add_AppRuntimeProviderServicer_to_server",
+            runtime_provider_pb2_grpc,
+            "add_RuntimeProviderServicer_to_server",
         ) as add_runtime:
             adapter.register_services(server, provider)
         add_runtime.assert_called_once()
@@ -1324,11 +1322,11 @@ class AppRuntimeRuntimeTests(unittest.TestCase):
         self.assertIs(getattr(wrapped, "_provider"), provider)
         self.assertIs(registered_server, server)
 
-    def test_app_runtime_registration_accepts_snake_case_handlers(self) -> None:
-        class Provider(AppRuntimeProvider):
+    def test_runtime_provider_registration_accepts_snake_case_handlers(self) -> None:
+        class Provider(RuntimeProvider):
             def get_support(self, request: Any) -> Any:
                 self.request = request
-                return AppRuntimeSupport(
+                return RuntimeSupport(
                     can_host_apps=True,
                     supports_prepare_workspace=True,
                 )
@@ -1336,24 +1334,24 @@ class AppRuntimeRuntimeTests(unittest.TestCase):
         provider = Provider()
         server = mock.Mock()
         with mock.patch.object(
-            appruntime_pb2_grpc,
-            "add_AppRuntimeProviderServicer_to_server",
+            runtime_provider_pb2_grpc,
+            "add_RuntimeProviderServicer_to_server",
         ) as add_runtime:
-            _runtime._register_app_runtime_services(server, provider)
+            _runtime._register_runtime_provider_services(server, provider)
 
         wrapped, _registered_server = add_runtime.call_args.args
         response = wrapped.GetSupport(empty_pb2.Empty(), object())
-        self.assertIsInstance(provider.request, GetAppRuntimeSupportRequest)
+        self.assertIsInstance(provider.request, GetRuntimeSupportRequest)
         self.assertEqual(
             response,
-            appruntime_pb2.AppRuntimeSupport(
+            runtime_provider_pb2.RuntimeSupport(
                 can_host_apps=True,
                 supports_prepare_workspace=True,
             ),
         )
 
-    def test_servable_target_wraps_app_runtime_provider(self) -> None:
-        provider = self.StubAppRuntimeProvider()
+    def test_servable_target_wraps_runtime_provider(self) -> None:
+        provider = self.StubRuntimeProvider()
         servable = _runtime._servable_target(
             provider,
             runtime_kind=ProviderKind.RUNTIME,
@@ -1519,7 +1517,9 @@ class WorkflowRuntimeTests(unittest.TestCase):
             provider.create_request,
             CreateWorkflowProviderDefinitionRequest,
         )
-        self.assertIsInstance(provider.get_request, GetWorkflowProviderDefinitionRequest)
+        self.assertIsInstance(
+            provider.get_request, GetWorkflowProviderDefinitionRequest
+        )
         self.assertIsInstance(
             provider.update_request,
             UpdateWorkflowProviderDefinitionRequest,

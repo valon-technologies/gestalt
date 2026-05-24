@@ -48,7 +48,7 @@ const (
 
 	RPCRoleProviderClient    = "provider_client"
 	RPCRoleProviderServer    = "provider_server"
-	RPCRoleHostedAppClient   = "hosted_plugin_client"
+	RPCRoleHostedAppClient   = "hosted_app_client"
 	RPCRoleHostServiceServer = "host_service_server"
 
 	DBSystemNameGestaltdIndexedDB = "gestaltd.indexeddb"

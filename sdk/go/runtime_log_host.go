@@ -13,16 +13,16 @@ import (
 )
 
 // EnvRuntimeSessionID names the environment variable containing the current
-// plugin-runtime session id.
+// runtime session id.
 const EnvRuntimeSessionID = "GESTALT_RUNTIME_SESSION_ID"
 
-// RuntimeLogHostClient appends plugin-runtime logs to the host.
+// RuntimeLogHostClient appends runtime logs to the host.
 type RuntimeLogHostClient struct {
-	client    proto.AppRuntimeLogHostClient
+	client    proto.RuntimeLogHostClient
 	sourceSeq atomic.Int64
 }
 
-var sharedRuntimeLogHostTransport sharedManagerTransport[proto.AppRuntimeLogHostClient]
+var sharedRuntimeLogHostTransport sharedManagerTransport[proto.RuntimeLogHostClient]
 
 // RuntimeLogStream identifies the stream that produced a runtime log entry.
 type RuntimeLogStream string
@@ -51,7 +51,7 @@ func RuntimeLogHost() (*RuntimeLogHostClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "runtime log host", target, token, &sharedRuntimeLogHostTransport, proto.NewAppRuntimeLogHostClient)
+	client, err := managerTransportClient(ctx, "runtime log host", target, token, &sharedRuntimeLogHostTransport, proto.NewRuntimeLogHostClient)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (c *RuntimeLogHostClient) Close() error {
 
 // AppendLogs appends runtime logs for one hosted runtime session.
 func (c *RuntimeLogHostClient) AppendLogs(ctx context.Context, sessionID string, logs []RuntimeLogEntry) error {
-	_, err := c.client.AppendLogs(ctx, &proto.AppendAppRuntimeLogsRequest{
+	_, err := c.client.AppendLogs(ctx, &proto.AppendRuntimeLogsRequest{
 		SessionId: strings.TrimSpace(sessionID),
 		Logs:      runtimeLogEntriesToProto(logs),
 	})
@@ -82,7 +82,7 @@ type runtimeLogAppendOptions struct {
 	sourceSeq *int64
 }
 
-// RuntimeSessionID returns the runtime session id injected into hosted plugin
+// RuntimeSessionID returns the runtime session id injected into hosted app
 // processes by gestaltd.
 func RuntimeSessionID() (string, error) {
 	sessionID := strings.TrimSpace(os.Getenv(EnvRuntimeSessionID))
@@ -164,10 +164,10 @@ func (c *RuntimeLogHostClient) advanceSourceSeq(sourceSeq int64) {
 	}
 }
 
-func runtimeLogEntriesToProto(logs []RuntimeLogEntry) []*proto.AppRuntimeLogEntry {
-	out := make([]*proto.AppRuntimeLogEntry, 0, len(logs))
+func runtimeLogEntriesToProto(logs []RuntimeLogEntry) []*proto.RuntimeLogEntry {
+	out := make([]*proto.RuntimeLogEntry, 0, len(logs))
 	for _, log := range logs {
-		entry := &proto.AppRuntimeLogEntry{
+		entry := &proto.RuntimeLogEntry{
 			Stream:    runtimeLogStreamToProto(log.Stream),
 			Message:   log.Message,
 			SourceSeq: log.SourceSeq,
@@ -180,13 +180,13 @@ func runtimeLogEntriesToProto(logs []RuntimeLogEntry) []*proto.AppRuntimeLogEntr
 	return out
 }
 
-func runtimeLogStreamToProto(stream RuntimeLogStream) proto.AppRuntimeLogStream {
+func runtimeLogStreamToProto(stream RuntimeLogStream) proto.RuntimeLogStream {
 	switch stream {
 	case RuntimeLogStreamStdout:
-		return proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT
+		return proto.RuntimeLogStream_RUNTIME_LOG_STREAM_STDOUT
 	case RuntimeLogStreamStderr:
-		return proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR
+		return proto.RuntimeLogStream_RUNTIME_LOG_STREAM_STDERR
 	default:
-		return proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME
+		return proto.RuntimeLogStream_RUNTIME_LOG_STREAM_RUNTIME
 	}
 }

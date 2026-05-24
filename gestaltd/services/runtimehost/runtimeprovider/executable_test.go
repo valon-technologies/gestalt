@@ -1,4 +1,4 @@
-package appruntime
+package runtimeprovider
 
 import (
 	"context"
@@ -125,7 +125,7 @@ func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing
 	}
 }
 
-func TestExecutableProviderForwardsStartPluginWorkdir(t *testing.T) {
+func TestExecutableProviderForwardsStartAppWorkdir(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -167,7 +167,7 @@ func TestExecutableProviderForwardsStartPluginWorkdir(t *testing.T) {
 func buildRuntimeLogProviderBinary(t *testing.T) string {
 	t.Helper()
 
-	repoRoot := repoRootForAppRuntimeTests(t)
+	repoRoot := repoRootForRuntimeTests(t)
 	moduleDir := t.TempDir()
 	goMod := "module runtimehostlogs\n\ngo 1.26\n\nrequire github.com/valon-technologies/gestalt/sdk/go v0.0.0\n\n" +
 		"replace github.com/valon-technologies/gestalt/sdk/go => " + filepath.ToSlash(filepath.Join(repoRoot, "sdk", "go")) + "\n" +
@@ -194,7 +194,7 @@ func buildRuntimeLogProviderBinary(t *testing.T) string {
 	return bin
 }
 
-func repoRootForAppRuntimeTests(t *testing.T) string {
+func repoRootForRuntimeTests(t *testing.T) string {
 	t.Helper()
 
 	_, file, _, ok := runtime.Caller(0)
@@ -229,29 +229,29 @@ import (
 
 type runtimeProvider struct {
 	mu       sync.Mutex
-	sessions map[string]gestalt.AppRuntimeSession
+	sessions map[string]gestalt.RuntimeSession
 }
 
 func newRuntimeProvider() *runtimeProvider {
-	return &runtimeProvider{sessions: make(map[string]gestalt.AppRuntimeSession)}
+	return &runtimeProvider{sessions: make(map[string]gestalt.RuntimeSession)}
 }
 
 func (p *runtimeProvider) Configure(context.Context, string, map[string]any) error {
 	return nil
 }
 
-func (p *runtimeProvider) GetSupport(context.Context) (gestalt.AppRuntimeSupport, error) {
-	return gestalt.AppRuntimeSupport{
+func (p *runtimeProvider) GetSupport(context.Context) (gestalt.RuntimeSupport, error) {
+	return gestalt.RuntimeSupport{
 		CanHostApps: true,
 	}, nil
 }
 
-func (p *runtimeProvider) StartSession(_ context.Context, req gestalt.StartAppRuntimeSessionRequest) (gestalt.AppRuntimeSession, error) {
+func (p *runtimeProvider) StartSession(_ context.Context, req gestalt.StartRuntimeSessionRequest) (gestalt.RuntimeSession, error) {
 	sessionID := strings.TrimSpace(req.AppName) + "-session"
 	if sessionID == "-session" {
 		sessionID = "runtime-session"
 	}
-	session := gestalt.AppRuntimeSession{
+	session := gestalt.RuntimeSession{
 		ID:       sessionID,
 		State:    "ready",
 		Metadata: req.Metadata,
@@ -262,24 +262,27 @@ func (p *runtimeProvider) StartSession(_ context.Context, req gestalt.StartAppRu
 	return session, nil
 }
 
-func (p *runtimeProvider) GetSession(_ context.Context, sessionID string) (gestalt.AppRuntimeSession, error) {
+func (p *runtimeProvider) GetSession(_ context.Context, sessionID string) (gestalt.RuntimeSession, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	session, ok := p.sessions[strings.TrimSpace(sessionID)]
 	if !ok {
-		return gestalt.AppRuntimeSession{}, status.Error(codes.NotFound, "session not found")
+		return gestalt.RuntimeSession{}, status.Error(codes.NotFound, "session not found")
 	}
 	return session, nil
 }
 
-func (p *runtimeProvider) ListSessions(context.Context) ([]gestalt.AppRuntimeSession, error) {
+func (p *runtimeProvider) ListSessions(_ context.Context, req gestalt.ListRuntimeSessionsRequest) (gestalt.ListRuntimeSessionsResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	sessions := make([]gestalt.AppRuntimeSession, 0, len(p.sessions))
+	sessions := make([]gestalt.RuntimeSession, 0, len(p.sessions))
 	for _, session := range p.sessions {
 		sessions = append(sessions, session)
 	}
-	return sessions, nil
+	return gestalt.ListRuntimeSessionsResponse{
+		Sessions:      sessions,
+		NextPageToken: req.PageToken,
+	}, nil
 }
 
 func (p *runtimeProvider) StopSession(_ context.Context, sessionID string) error {
@@ -329,7 +332,7 @@ func (p *runtimeProvider) StartApp(ctx context.Context, req gestalt.StartHostedA
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if err := gestalt.ServeAppRuntimeProvider(ctx, newRuntimeProvider()); err != nil {
+	if err := gestalt.ServeRuntimeProvider(ctx, newRuntimeProvider()); err != nil {
 		panic(err)
 	}
 }

@@ -6,32 +6,32 @@ import (
 	"sync"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 )
 
-type pluginRuntimeRegistry struct {
+type runtimeRegistry struct {
 	cfg     *config.Config
 	deps    Deps
 	factory RuntimeFactory
 
 	mu        sync.Mutex
-	providers map[string]appruntime.Provider
+	providers map[string]runtimeprovider.Provider
 	closed    bool
 }
 
-func newAppRuntimeRegistry(cfg *config.Config, factory RuntimeFactory, deps Deps) *pluginRuntimeRegistry {
+func newRuntimeRegistry(cfg *config.Config, factory RuntimeFactory, deps Deps) *runtimeRegistry {
 	if cfg == nil {
 		return nil
 	}
-	return &pluginRuntimeRegistry{
+	return &runtimeRegistry{
 		cfg:       cfg,
 		deps:      deps,
 		factory:   factory,
-		providers: make(map[string]appruntime.Provider, len(cfg.Runtime.Providers)),
+		providers: make(map[string]runtimeprovider.Provider, len(cfg.Runtime.Providers)),
 	}
 }
 
-func (r *pluginRuntimeRegistry) Resolve(ctx context.Context, configPath string, entry *config.ProviderEntry) (config.EffectiveRuntimePlacement, appruntime.Provider, error) {
+func (r *runtimeRegistry) Resolve(ctx context.Context, configPath string, entry *config.ProviderEntry) (config.EffectiveRuntimePlacement, runtimeprovider.Provider, error) {
 	if r == nil || r.cfg == nil {
 		return config.EffectiveRuntimePlacement{}, nil, nil
 	}
@@ -48,15 +48,15 @@ func (r *pluginRuntimeRegistry) Resolve(ctx context.Context, configPath string, 
 	return effective, provider, err
 }
 
-func (r *pluginRuntimeRegistry) resolveConfigured(ctx context.Context, effective config.EffectiveRuntimePlacement) (appruntime.Provider, error) {
+func (r *runtimeRegistry) resolveConfigured(ctx context.Context, effective config.EffectiveRuntimePlacement) (runtimeprovider.Provider, error) {
 	if r == nil {
-		return nil, fmt.Errorf("plugin runtime registry is not configured")
+		return nil, fmt.Errorf("runtime registry is not configured")
 	}
 	providerName := effective.ProviderName
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
-		return nil, fmt.Errorf("plugin runtime registry is closed")
+		return nil, fmt.Errorf("runtime registry is closed")
 	}
 	if provider, ok := r.providers[providerName]; ok && provider != nil {
 		r.mu.Unlock()
@@ -64,10 +64,10 @@ func (r *pluginRuntimeRegistry) resolveConfigured(ctx context.Context, effective
 	}
 	factory := r.factory
 	r.mu.Unlock()
-	var provider appruntime.Provider
+	var provider runtimeprovider.Provider
 	switch effective.Provider.Driver {
 	case config.RuntimeProviderDriverLocal:
-		provider = newLocalAppRuntime(providerName, r.deps)
+		provider = newLocalRuntime(providerName, r.deps)
 	default:
 		if factory == nil {
 			return nil, fmt.Errorf("runtime provider %q is not registered", providerName)
@@ -83,7 +83,7 @@ func (r *pluginRuntimeRegistry) resolveConfigured(ctx context.Context, effective
 	defer r.mu.Unlock()
 	if r.closed {
 		_ = provider.Close()
-		return nil, fmt.Errorf("plugin runtime registry is closed")
+		return nil, fmt.Errorf("runtime registry is closed")
 	}
 	if existing, ok := r.providers[providerName]; ok && existing != nil {
 		_ = provider.Close()
@@ -93,7 +93,7 @@ func (r *pluginRuntimeRegistry) resolveConfigured(ctx context.Context, effective
 	return provider, nil
 }
 
-func (r *pluginRuntimeRegistry) Close() error {
+func (r *runtimeRegistry) Close() error {
 	if r == nil {
 		return nil
 	}
@@ -104,7 +104,7 @@ func (r *pluginRuntimeRegistry) Close() error {
 		return nil
 	}
 	r.closed = true
-	providers := make([]appruntime.Provider, 0, len(r.providers))
+	providers := make([]runtimeprovider.Provider, 0, len(r.providers))
 	for _, provider := range r.providers {
 		if provider != nil {
 			providers = append(providers, provider)
@@ -122,7 +122,7 @@ func (r *pluginRuntimeRegistry) Close() error {
 	return firstErr
 }
 
-func closeAppRuntimeRegistry(registry *pluginRuntimeRegistry) error {
+func closeRuntimeRegistry(registry *runtimeRegistry) error {
 	if registry == nil {
 		return nil
 	}

@@ -7,11 +7,11 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { expect, test } from "bun:test";
 
 import {
-  AppendAppRuntimeLogsResponseSchema,
-  type AppendAppRuntimeLogsRequest,
-  AppRuntimeLogHost as AppRuntimeLogHostService,
-  AppRuntimeLogStream,
-} from "../src/internal/gen/v1/appruntime_pb.ts";
+  AppendRuntimeLogsResponseSchema,
+  type AppendRuntimeLogsRequest,
+  RuntimeLogHost as RuntimeLogHostService,
+  RuntimeLogStream,
+} from "../src/internal/gen/v1/runtime_provider_pb.ts";
 import {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
@@ -23,7 +23,7 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
   const previousSession = process.env[ENV_RUNTIME_SESSION_ID];
-  const calls: AppendAppRuntimeLogsRequest[] = [];
+  const calls: AppendRuntimeLogsRequest[] = [];
   const seenTokens: string[] = [];
 
   const handler = connectNodeAdapter({
@@ -31,14 +31,14 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
     grpcWeb: false,
     connect: false,
     routes(router) {
-      router.service(AppRuntimeLogHostService, {
+      router.service(RuntimeLogHostService, {
         async appendLogs(input) {
           calls.push(input);
-          return create(AppendAppRuntimeLogsResponseSchema, {
+          return create(AppendRuntimeLogsResponseSchema, {
             lastSeq: input.logs.at(-1)?.sourceSeq ?? 0n,
           });
         },
-      } satisfies Partial<ServiceImpl<typeof AppRuntimeLogHostService>>);
+      } satisfies Partial<ServiceImpl<typeof RuntimeLogHostService>>);
     },
   });
   const server = createServer((req, res) => {
@@ -117,19 +117,19 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
       "runtime-session-1",
       "runtime-session-1",
     ]);
-    expect(calls[0]?.logs[0]?.stream).toBe(AppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_RUNTIME);
+    expect(calls[0]?.logs[0]?.stream).toBe(RuntimeLogStream.RUNTIME);
     expect(calls[0]?.logs[0]?.message).toBe("runtime boot\n");
     expect(calls[0]?.logs[0]?.sourceSeq).toBe(7n);
     expect(calls[0]?.logs[0]?.observedAt?.seconds).toBe(1777550400n);
-    expect(calls[1]?.logs[0]?.stream).toBe(AppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_STDOUT);
+    expect(calls[1]?.logs[0]?.stream).toBe(RuntimeLogStream.STDOUT);
     expect(calls[1]?.logs[0]?.message).toBe("batch line\n");
     expect(calls[1]?.logs[0]?.sourceSeq).toBe(10n);
-    expect(calls[2]?.logs[0]?.stream).toBe(AppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_RUNTIME);
+    expect(calls[2]?.logs[0]?.stream).toBe(RuntimeLogStream.RUNTIME);
     expect(calls[2]?.logs[0]?.message).toBe("pre-epoch\n");
     expect(calls[2]?.logs[0]?.sourceSeq).toBe(8n);
     expect(calls[2]?.logs[0]?.observedAt?.seconds).toBe(-1n);
     expect(calls[2]?.logs[0]?.observedAt?.nanos).toBe(999_000_000);
-    expect(calls[3]?.logs[0]?.stream).toBe(AppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_STDERR);
+    expect(calls[3]?.logs[0]?.stream).toBe(RuntimeLogStream.STDERR);
     expect(calls[3]?.logs[0]?.message).toBe("stderr line\n");
     expect(calls[3]?.logs[0]?.sourceSeq).toBe(11n);
   } finally {

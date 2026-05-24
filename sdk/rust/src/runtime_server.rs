@@ -5,7 +5,6 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::agent::AgentProvider;
 use crate::api::RuntimeMetadata;
-use crate::app_runtime::AppRuntimeProvider;
 use crate::auth::AuthenticationProvider;
 use crate::authorization::AuthorizationProvider;
 use crate::cache::CacheProvider;
@@ -16,6 +15,7 @@ use crate::generated::v1::{
     ProviderKind, StartRuntimeProviderResponse,
 };
 use crate::rpc_status::{require_protocol_version, rpc_error_message, rpc_status};
+use crate::runtime_provider::RuntimeProvider;
 use crate::secrets::SecretsProvider;
 use crate::{CURRENT_PROTOCOL_VERSION, Provider, S3Provider, WorkflowProvider};
 
@@ -60,7 +60,7 @@ struct S3Runtime<P> {
     provider: Arc<P>,
 }
 
-struct AppRuntime<P> {
+struct Runtime<P> {
     provider: Arc<P>,
 }
 
@@ -112,7 +112,7 @@ impl_runtime_hooks!(AuthorizationRuntime, AuthorizationProvider);
 impl_runtime_hooks!(CacheRuntime, CacheProvider);
 impl_runtime_hooks!(SecretsRuntime, SecretsProvider);
 impl_runtime_hooks!(S3Runtime, S3Provider);
-impl_runtime_hooks!(AppRuntime, AppRuntimeProvider);
+impl_runtime_hooks!(Runtime, RuntimeProvider);
 impl_runtime_hooks!(WorkflowRuntime, WorkflowProvider);
 impl_runtime_hooks!(AgentRuntime, AgentProvider);
 
@@ -191,13 +191,13 @@ impl RuntimeServer {
         }
     }
 
-    pub fn for_app_runtime<P>(provider: Arc<P>) -> Self
+    pub fn for_runtime_provider<P>(provider: Arc<P>) -> Self
     where
-        P: AppRuntimeProvider,
+        P: RuntimeProvider,
     {
         Self {
             kind: ProviderKind::Runtime,
-            provider: Arc::new(AppRuntime { provider }),
+            provider: Arc::new(Runtime { provider }),
         }
     }
 

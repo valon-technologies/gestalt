@@ -383,7 +383,7 @@ Provider interfaces
    CacheProvider
    S3Provider
    AgentProvider
-   AppRuntimeProvider
+   RuntimeProvider
    WorkflowProvider
    AuthenticatedUser
    BeginLoginRequest
@@ -450,7 +450,7 @@ Provider interfaces
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
-.. autoclass:: AppRuntimeProvider
+.. autoclass:: RuntimeProvider
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 

@@ -1,4 +1,4 @@
-package appruntime
+package runtimeprovider
 
 import (
 	"context"
@@ -59,7 +59,7 @@ func TestDialHostedAppRecordsRPCClientDurationWithTelemetryAttrs(t *testing.T) {
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	attrs := map[string]string{
-		"gestaltd.rpc.role":      "hosted_plugin_client",
+		"gestaltd.rpc.role":      "hosted_app_client",
 		"gestaltd.provider.name": providerName,
 	}
 	metrictest.RequireFloat64Histogram(t, rm, "rpc.client.call.duration", attrs)

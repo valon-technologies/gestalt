@@ -66,14 +66,14 @@ property in `package.json`.
   "gestalt": {
     "provider": {
       "kind": "app",
-      "target": "./provider.ts#plugin"
+      "target": "./provider.ts#app"
     }
   }
 }
 ```
 
 The target is a relative file path with an optional export suffix. If the suffix
-is omitted, the runtime looks for `provider`, then `plugin`, then the default
+is omitted, the runtime looks for `provider`, then `app`, then the default
 export.
 
 Use `"app"` as the kind token for executable app providers. Use an object
@@ -90,7 +90,7 @@ The root package exports provider definition helpers:
 - `defineCacheProvider`, `defineIndexedDBProvider`, `defineS3Provider`, and
   `defineSecretsProvider` for host-service backends.
 - `defineWorkflowProvider`, `defineAgentProvider`, and
-  `defineAppRuntimeProvider` for workflow, agent, and hosted-runtime
+  `defineRuntimeProvider` for workflow, agent, and hosted-runtime
   backends.
 - `s` schema builders for operation input, output, and catalog metadata.
 - Host-service clients for cache, IndexedDB, S3, workflows, agents,
@@ -118,13 +118,13 @@ Gestalt catalog.
 Source-mode runtime:
 
 ```sh
-gestalt-ts-runtime ROOT plugin:./provider.ts#plugin
+gestalt-ts-runtime ROOT plugin:./provider.ts#app
 ```
 
 Release build:
 
 ```sh
-gestalt-ts-build ROOT plugin:./provider.ts#plugin OUTPUT PROVIDER_NAME GOOS GOARCH
+gestalt-ts-build ROOT plugin:./provider.ts#app OUTPUT PROVIDER_NAME GOOS GOARCH
 ```
 
 The build entrypoint compiles a standalone executable with Bun and bundles the

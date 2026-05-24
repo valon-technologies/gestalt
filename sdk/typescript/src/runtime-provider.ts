@@ -8,110 +8,118 @@ import {
 
 import {
   HostedAppSchema,
-  ListAppRuntimeSessionsResponseSchema,
-  PrepareAppRuntimeWorkspaceResponseSchema,
-  AppRuntimeEgressMode as ProtoAppRuntimeEgressMode,
-  AppRuntimeProvider as AppRuntimeProviderService,
-  AppRuntimeSessionSchema,
-  AppRuntimeSupportSchema,
-  type GetAppRuntimeSessionRequest as ProtoGetAppRuntimeSessionRequest,
-  type ListAppRuntimeSessionsRequest as ProtoListAppRuntimeSessionsRequest,
-  type PrepareAppRuntimeWorkspaceRequest as ProtoPrepareAppRuntimeWorkspaceRequest,
-  type RemoveAppRuntimeWorkspaceRequest as ProtoRemoveAppRuntimeWorkspaceRequest,
+  ListRuntimeSessionsResponseSchema,
+  PrepareRuntimeWorkspaceResponseSchema,
+  RuntimeEgressMode as ProtoRuntimeEgressMode,
+  RuntimeProvider as RuntimeProviderService,
+  RuntimeSessionSchema,
+  RuntimeSupportSchema,
+  type GetRuntimeSessionRequest as ProtoGetRuntimeSessionRequest,
+  type ListRuntimeSessionsRequest as ProtoListRuntimeSessionsRequest,
+  type PrepareRuntimeWorkspaceRequest as ProtoPrepareRuntimeWorkspaceRequest,
+  type RemoveRuntimeWorkspaceRequest as ProtoRemoveRuntimeWorkspaceRequest,
   type StartHostedAppRequest as ProtoStartHostedAppRequest,
-  type StartAppRuntimeSessionRequest as ProtoStartAppRuntimeSessionRequest,
-  type StopAppRuntimeSessionRequest as ProtoStopAppRuntimeSessionRequest,
-} from "./internal/gen/v1/appruntime_pb.ts";
+  type StartRuntimeSessionRequest as ProtoStartRuntimeSessionRequest,
+  type StopRuntimeSessionRequest as ProtoStopRuntimeSessionRequest,
+} from "./internal/gen/v1/runtime_provider_pb.ts";
 import {
   timestampFromDate,
 } from "./protocol.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 
-type AppRuntimeProviderServiceImpl = Partial<
-  ServiceImpl<typeof AppRuntimeProviderService>
+type RuntimeProviderServiceImpl = Partial<
+  ServiceImpl<typeof RuntimeProviderService>
 >;
 
-/** Native egress-mode constants for authored app runtime providers. */
-export const AppRuntimeEgressMode = {
-  UNSPECIFIED: ProtoAppRuntimeEgressMode.UNSPECIFIED,
-  NONE: ProtoAppRuntimeEgressMode.NONE,
-  CIDR: ProtoAppRuntimeEgressMode.CIDR,
-  HOSTNAME: ProtoAppRuntimeEgressMode.HOSTNAME,
+/** Native egress-mode constants for authored runtime providers. */
+export const RuntimeEgressMode = {
+  UNSPECIFIED: ProtoRuntimeEgressMode.UNSPECIFIED,
+  NONE: ProtoRuntimeEgressMode.NONE,
+  CIDR: ProtoRuntimeEgressMode.CIDR,
+  HOSTNAME: ProtoRuntimeEgressMode.HOSTNAME,
 } as const;
-export type AppRuntimeEgressMode =
-  (typeof AppRuntimeEgressMode)[keyof typeof AppRuntimeEgressMode];
+export type RuntimeEgressMode =
+  (typeof RuntimeEgressMode)[keyof typeof RuntimeEgressMode];
 
-export interface AppRuntimeSupport {
+export interface RuntimeSupport {
   canHostApps?: boolean | undefined;
-  egressMode?: AppRuntimeEgressMode | undefined;
+  egressMode?: RuntimeEgressMode | undefined;
   supportsPrepareWorkspace?: boolean | undefined;
 }
 
-export interface AppRuntimeSessionLifecycle {
+export interface RuntimeSessionLifecycle {
   startedAt?: Date | undefined;
   recommendedDrainAt?: Date | undefined;
   expiresAt?: Date | undefined;
 }
 
-export interface AppRuntimeSession {
+export interface RuntimeSession {
   id?: string | undefined;
   state?: string | undefined;
   metadata?: Record<string, string> | undefined;
-  lifecycle?: AppRuntimeSessionLifecycle | undefined;
+  lifecycle?: RuntimeSessionLifecycle | undefined;
   stateReason?: string | undefined;
   stateMessage?: string | undefined;
 }
 
-export interface AppRuntimeImagePullAuth {
+export interface RuntimeImagePullAuth {
   dockerConfigJson?: string | undefined;
 }
 
-export interface StartAppRuntimeSessionRequest {
+export interface StartRuntimeSessionRequest {
   appName: string;
   template?: string | undefined;
   image?: string | undefined;
   metadata?: Record<string, string> | undefined;
-  imagePullAuth?: AppRuntimeImagePullAuth | undefined;
+  imagePullAuth?: RuntimeImagePullAuth | undefined;
 }
 
-export interface GetAppRuntimeSessionRequest {
+export interface GetRuntimeSessionRequest {
   sessionId: string;
 }
 
-export interface ListAppRuntimeSessionsRequest {}
+export interface ListRuntimeSessionsRequest {
+  pageSize?: number | undefined;
+  pageToken?: string | undefined;
+}
 
-export interface StopAppRuntimeSessionRequest {
+export interface ListRuntimeSessionsResponse {
+  sessions?: readonly RuntimeSession[] | undefined;
+  nextPageToken?: string | undefined;
+}
+
+export interface StopRuntimeSessionRequest {
   sessionId: string;
 }
 
-export interface AppRuntimeAgentWorkspaceGitCheckout {
+export interface RuntimeAgentWorkspaceGitCheckout {
   url?: string | undefined;
   ref?: string | undefined;
   path?: string | undefined;
 }
 
-export interface AppRuntimeAgentWorkspace {
-  checkouts?: readonly AppRuntimeAgentWorkspaceGitCheckout[] | undefined;
+export interface RuntimeAgentWorkspace {
+  checkouts?: readonly RuntimeAgentWorkspaceGitCheckout[] | undefined;
   cwd?: string | undefined;
 }
 
-export interface AppRuntimePreparedAgentWorkspace {
+export interface RuntimePreparedAgentWorkspace {
   root?: string | undefined;
   cwd?: string | undefined;
 }
 
-export interface PrepareAppRuntimeWorkspaceRequest {
+export interface PrepareRuntimeWorkspaceRequest {
   sessionId: string;
   agentSessionId: string;
-  workspace?: AppRuntimeAgentWorkspace | undefined;
+  workspace?: RuntimeAgentWorkspace | undefined;
 }
 
-export interface PrepareAppRuntimeWorkspaceResponse {
-  workspace?: AppRuntimePreparedAgentWorkspace | undefined;
+export interface PrepareRuntimeWorkspaceResponse {
+  workspace?: RuntimePreparedAgentWorkspace | undefined;
 }
 
-export interface RemoveAppRuntimeWorkspaceRequest {
+export interface RemoveRuntimeWorkspaceRequest {
   sessionId: string;
   agentSessionId: string;
 }
@@ -135,42 +143,42 @@ export interface HostedApp {
   dialTarget?: string | undefined;
 }
 
-export interface AppRuntimeProviderOptions extends ProviderBaseOptions {
-  getSupport: () => MaybePromise<AppRuntimeSupport>;
+export interface RuntimeProviderOptions extends ProviderBaseOptions {
+  getSupport: () => MaybePromise<RuntimeSupport>;
   startSession: (
-    request: StartAppRuntimeSessionRequest,
-  ) => MaybePromise<AppRuntimeSession>;
+    request: StartRuntimeSessionRequest,
+  ) => MaybePromise<RuntimeSession>;
   getSession: (
-    request: GetAppRuntimeSessionRequest,
-  ) => MaybePromise<AppRuntimeSession>;
+    request: GetRuntimeSessionRequest,
+  ) => MaybePromise<RuntimeSession>;
   listSessions: (
-    request: ListAppRuntimeSessionsRequest,
-  ) => MaybePromise<readonly AppRuntimeSession[]>;
-  stopSession: (request: StopAppRuntimeSessionRequest) => MaybePromise<void>;
+    request: ListRuntimeSessionsRequest,
+  ) => MaybePromise<ListRuntimeSessionsResponse>;
+  stopSession: (request: StopRuntimeSessionRequest) => MaybePromise<void>;
   prepareWorkspace?: (
-    request: PrepareAppRuntimeWorkspaceRequest,
-  ) => MaybePromise<PrepareAppRuntimeWorkspaceResponse>;
+    request: PrepareRuntimeWorkspaceRequest,
+  ) => MaybePromise<PrepareRuntimeWorkspaceResponse>;
   removeWorkspace?: (
-    request: RemoveAppRuntimeWorkspaceRequest,
+    request: RemoveRuntimeWorkspaceRequest,
   ) => MaybePromise<void>;
   startApp: (
     request: StartHostedAppRequest,
   ) => MaybePromise<HostedApp>;
 }
 
-export class AppRuntimeProvider extends ProviderBase {
+export class RuntimeProvider extends ProviderBase {
   readonly kind = "runtime" as const;
 
-  private readonly getSupportHandler: AppRuntimeProviderOptions["getSupport"];
-  private readonly startSessionHandler: AppRuntimeProviderOptions["startSession"];
-  private readonly getSessionHandler: AppRuntimeProviderOptions["getSession"];
-  private readonly listSessionsHandler: AppRuntimeProviderOptions["listSessions"];
-  private readonly stopSessionHandler: AppRuntimeProviderOptions["stopSession"];
-  private readonly prepareWorkspaceHandler: AppRuntimeProviderOptions["prepareWorkspace"];
-  private readonly removeWorkspaceHandler: AppRuntimeProviderOptions["removeWorkspace"];
-  private readonly startAppHandler: AppRuntimeProviderOptions["startApp"];
+  private readonly getSupportHandler: RuntimeProviderOptions["getSupport"];
+  private readonly startSessionHandler: RuntimeProviderOptions["startSession"];
+  private readonly getSessionHandler: RuntimeProviderOptions["getSession"];
+  private readonly listSessionsHandler: RuntimeProviderOptions["listSessions"];
+  private readonly stopSessionHandler: RuntimeProviderOptions["stopSession"];
+  private readonly prepareWorkspaceHandler: RuntimeProviderOptions["prepareWorkspace"];
+  private readonly removeWorkspaceHandler: RuntimeProviderOptions["removeWorkspace"];
+  private readonly startAppHandler: RuntimeProviderOptions["startApp"];
 
-  constructor(options: AppRuntimeProviderOptions) {
+  constructor(options: RuntimeProviderOptions) {
     super(options);
     this.getSupportHandler = options.getSupport;
     this.startSessionHandler = options.startSession;
@@ -182,38 +190,38 @@ export class AppRuntimeProvider extends ProviderBase {
     this.startAppHandler = options.startApp;
   }
 
-  async getSupport(): Promise<AppRuntimeSupport> {
+  async getSupport(): Promise<RuntimeSupport> {
     return await this.getSupportHandler();
   }
 
   async startSession(
-    request: StartAppRuntimeSessionRequest,
-  ): Promise<AppRuntimeSession> {
+    request: StartRuntimeSessionRequest,
+  ): Promise<RuntimeSession> {
     return await this.startSessionHandler(request);
   }
 
   async getSession(
-    request: GetAppRuntimeSessionRequest,
-  ): Promise<AppRuntimeSession> {
+    request: GetRuntimeSessionRequest,
+  ): Promise<RuntimeSession> {
     return await this.getSessionHandler(request);
   }
 
   async listSessions(
-    request: ListAppRuntimeSessionsRequest,
-  ): Promise<readonly AppRuntimeSession[]> {
+    request: ListRuntimeSessionsRequest,
+  ): Promise<ListRuntimeSessionsResponse> {
     return await this.listSessionsHandler(request);
   }
 
-  async stopSession(request: StopAppRuntimeSessionRequest): Promise<void> {
+  async stopSession(request: StopRuntimeSessionRequest): Promise<void> {
     await this.stopSessionHandler(request);
   }
 
   async prepareWorkspace(
-    request: PrepareAppRuntimeWorkspaceRequest,
-  ): Promise<PrepareAppRuntimeWorkspaceResponse> {
+    request: PrepareRuntimeWorkspaceRequest,
+  ): Promise<PrepareRuntimeWorkspaceResponse> {
     if (!this.prepareWorkspaceHandler) {
       throw new ConnectError(
-        "plugin runtime provider prepare workspace is not implemented",
+        "runtime provider prepare workspace is not implemented",
         Code.Unimplemented,
       );
     }
@@ -221,11 +229,11 @@ export class AppRuntimeProvider extends ProviderBase {
   }
 
   async removeWorkspace(
-    request: RemoveAppRuntimeWorkspaceRequest,
+    request: RemoveRuntimeWorkspaceRequest,
   ): Promise<void> {
     if (!this.removeWorkspaceHandler) {
       throw new ConnectError(
-        "plugin runtime provider remove workspace is not implemented",
+        "runtime provider remove workspace is not implemented",
         Code.Unimplemented,
       );
     }
@@ -239,17 +247,17 @@ export class AppRuntimeProvider extends ProviderBase {
   }
 }
 
-export function defineAppRuntimeProvider(
-  options: AppRuntimeProviderOptions,
-): AppRuntimeProvider {
-  return new AppRuntimeProvider(options);
+export function defineRuntimeProvider(
+  options: RuntimeProviderOptions,
+): RuntimeProvider {
+  return new RuntimeProvider(options);
 }
 
-export function isAppRuntimeProvider(
+export function isRuntimeProvider(
   value: unknown,
-): value is AppRuntimeProvider {
+): value is RuntimeProvider {
   return (
-    value instanceof AppRuntimeProvider ||
+    value instanceof RuntimeProvider ||
     (typeof value === "object" &&
       value !== null &&
       "kind" in value &&
@@ -260,15 +268,15 @@ export function isAppRuntimeProvider(
   );
 }
 
-export function createAppRuntimeProviderService(
-  provider: AppRuntimeProvider,
-): AppRuntimeProviderServiceImpl {
+export function createRuntimeProviderService(
+  provider: RuntimeProvider,
+): RuntimeProviderServiceImpl {
   return {
     async getSupport() {
       return create(
-        AppRuntimeSupportSchema,
-        pluginRuntimeSupportToProto(
-          await invokeAppRuntimeProvider("get support", () =>
+        RuntimeSupportSchema,
+        runtimeSupportToProto(
+          await invokeRuntimeProvider("get support", () =>
             provider.getSupport(),
           ),
         ),
@@ -276,9 +284,9 @@ export function createAppRuntimeProviderService(
     },
     async startSession(request) {
       return create(
-        AppRuntimeSessionSchema,
-        pluginRuntimeSessionToProto(
-          await invokeAppRuntimeProvider("start session", () =>
+        RuntimeSessionSchema,
+        runtimeSessionToProto(
+          await invokeRuntimeProvider("start session", () =>
             provider.startSession(startSessionRequestFromProto(request)),
           ),
         ),
@@ -286,41 +294,41 @@ export function createAppRuntimeProviderService(
     },
     async getSession(request) {
       return create(
-        AppRuntimeSessionSchema,
-        pluginRuntimeSessionToProto(
-          await invokeAppRuntimeProvider("get session", () =>
+        RuntimeSessionSchema,
+        runtimeSessionToProto(
+          await invokeRuntimeProvider("get session", () =>
             provider.getSession(getSessionRequestFromProto(request)),
           ),
         ),
       );
     },
     async listSessions(request) {
-      return create(ListAppRuntimeSessionsResponseSchema, {
-        sessions: (
-          await invokeAppRuntimeProvider("list sessions", () =>
-            provider.listSessions(listSessionsRequestFromProto(request)),
-          )
-        ).map(pluginRuntimeSessionToProto),
+      const response = await invokeRuntimeProvider("list sessions", () =>
+        provider.listSessions(listSessionsRequestFromProto(request)),
+      );
+      return create(ListRuntimeSessionsResponseSchema, {
+        sessions: (response.sessions ?? []).map(runtimeSessionToProto),
+        nextPageToken: response.nextPageToken ?? "",
       });
     },
     async stopSession(request) {
-      await invokeAppRuntimeProvider("stop session", () =>
+      await invokeRuntimeProvider("stop session", () =>
         provider.stopSession(stopSessionRequestFromProto(request)),
       );
       return create(EmptySchema);
     },
     async prepareWorkspace(request) {
       return create(
-        PrepareAppRuntimeWorkspaceResponseSchema,
+        PrepareRuntimeWorkspaceResponseSchema,
         prepareWorkspaceResponseToProto(
-          await invokeAppRuntimeProvider("prepare workspace", () =>
+          await invokeRuntimeProvider("prepare workspace", () =>
             provider.prepareWorkspace(prepareWorkspaceRequestFromProto(request)),
           ),
         ),
       );
     },
     async removeWorkspace(request) {
-      await invokeAppRuntimeProvider("remove workspace", () =>
+      await invokeRuntimeProvider("remove workspace", () =>
         provider.removeWorkspace(removeWorkspaceRequestFromProto(request)),
       );
       return create(EmptySchema);
@@ -329,7 +337,7 @@ export function createAppRuntimeProviderService(
       return create(
         HostedAppSchema,
         hostedAppToProto(
-          await invokeAppRuntimeProvider("start app", () =>
+          await invokeRuntimeProvider("start app", () =>
             provider.startApp(startHostedAppRequestFromProto(request)),
           ),
         ),
@@ -339,8 +347,8 @@ export function createAppRuntimeProviderService(
 }
 
 function startSessionRequestFromProto(
-  request: ProtoStartAppRuntimeSessionRequest,
-): StartAppRuntimeSessionRequest {
+  request: ProtoStartRuntimeSessionRequest,
+): StartRuntimeSessionRequest {
   return {
     appName: request.appName,
     template: request.template,
@@ -353,26 +361,36 @@ function startSessionRequestFromProto(
 }
 
 function getSessionRequestFromProto(
-  request: ProtoGetAppRuntimeSessionRequest,
-): GetAppRuntimeSessionRequest {
+  request: ProtoGetRuntimeSessionRequest,
+): GetRuntimeSessionRequest {
   return { sessionId: request.sessionId };
 }
 
 function listSessionsRequestFromProto(
-  _request: ProtoListAppRuntimeSessionsRequest,
-): ListAppRuntimeSessionsRequest {
-  return {};
+  request: ProtoListRuntimeSessionsRequest,
+): ListRuntimeSessionsRequest {
+  const pageSize = request.pageSize;
+  if (pageSize < 0) {
+    throw new ConnectError(
+      "page_size must be non-negative",
+      Code.InvalidArgument,
+    );
+  }
+  return {
+    pageSize: pageSize === 0 ? 100 : Math.min(pageSize, 200),
+    pageToken: request.pageToken,
+  };
 }
 
 function stopSessionRequestFromProto(
-  request: ProtoStopAppRuntimeSessionRequest,
-): StopAppRuntimeSessionRequest {
+  request: ProtoStopRuntimeSessionRequest,
+): StopRuntimeSessionRequest {
   return { sessionId: request.sessionId };
 }
 
 function prepareWorkspaceRequestFromProto(
-  request: ProtoPrepareAppRuntimeWorkspaceRequest,
-): PrepareAppRuntimeWorkspaceRequest {
+  request: ProtoPrepareRuntimeWorkspaceRequest,
+): PrepareRuntimeWorkspaceRequest {
   return {
     sessionId: request.sessionId,
     agentSessionId: request.agentSessionId,
@@ -390,8 +408,8 @@ function prepareWorkspaceRequestFromProto(
 }
 
 function removeWorkspaceRequestFromProto(
-  request: ProtoRemoveAppRuntimeWorkspaceRequest,
-): RemoveAppRuntimeWorkspaceRequest {
+  request: ProtoRemoveRuntimeWorkspaceRequest,
+): RemoveRuntimeWorkspaceRequest {
   return {
     sessionId: request.sessionId,
     agentSessionId: request.agentSessionId,
@@ -414,15 +432,15 @@ function startHostedAppRequestFromProto(
   };
 }
 
-function pluginRuntimeSupportToProto(support: AppRuntimeSupport) {
+function runtimeSupportToProto(support: RuntimeSupport) {
   return {
     canHostApps: support.canHostApps ?? false,
-    egressMode: support.egressMode ?? AppRuntimeEgressMode.UNSPECIFIED,
+    egressMode: support.egressMode ?? RuntimeEgressMode.UNSPECIFIED,
     supportsPrepareWorkspace: support.supportsPrepareWorkspace ?? false,
   };
 }
 
-function pluginRuntimeSessionToProto(session: AppRuntimeSession) {
+function runtimeSessionToProto(session: RuntimeSession) {
   return {
     id: session.id ?? "",
     state: session.state ?? "",
@@ -446,7 +464,7 @@ function pluginRuntimeSessionToProto(session: AppRuntimeSession) {
 }
 
 function prepareWorkspaceResponseToProto(
-  response: PrepareAppRuntimeWorkspaceResponse,
+  response: PrepareRuntimeWorkspaceResponse,
 ) {
   return {
     workspace: response.workspace === undefined
@@ -467,7 +485,7 @@ function hostedAppToProto(app: HostedApp) {
   };
 }
 
-async function invokeAppRuntimeProvider<T>(
+async function invokeRuntimeProvider<T>(
   label: string,
   fn: () => MaybePromise<T>,
 ): Promise<T> {
@@ -478,7 +496,7 @@ async function invokeAppRuntimeProvider<T>(
       throw error;
     }
     throw new ConnectError(
-      `plugin runtime provider ${label}: ${errorMessage(error)}`,
+      `runtime provider ${label}: ${errorMessage(error)}`,
       Code.Unknown,
     );
   }

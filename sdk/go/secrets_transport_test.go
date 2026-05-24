@@ -35,7 +35,7 @@ func (p *stubSecretsProvider) GetSecret(_ context.Context, name string) (string,
 
 func TestSecretsProviderRoundTrip(t *testing.T) {
 	socket := newSocketPath(t, "secrets.sock")
-	t.Setenv(proto.EnvPluginSocket, socket)
+	t.Setenv(proto.EnvProviderSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	provider := &stubSecretsProvider{

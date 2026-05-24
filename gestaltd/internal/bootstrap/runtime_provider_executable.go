@@ -8,13 +8,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
-func buildExecutableAppRuntime(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (appruntime.Provider, error) {
+func buildExecutableRuntime(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (runtimeprovider.Provider, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("runtime provider entry is required")
 	}
@@ -29,7 +29,7 @@ func buildExecutableAppRuntime(ctx context.Context, name string, entry *config.R
 		sessionLogs = deps.Services.RuntimeSessionLogs
 	}
 
-	return appruntime.NewExecutableProvider(ctx, appruntime.ExecutableConfig{
+	return runtimeprovider.NewExecutableProvider(ctx, runtimeprovider.ExecutableConfig{
 		Name:         name,
 		Command:      entry.Command,
 		Args:         append([]string(nil), entry.Args...),
@@ -49,7 +49,7 @@ func buildRuntimeProviderHostServices(name string, deps Deps) []runtimehost.Host
 	}
 	return []runtimehost.HostService{{
 		Name:           "runtime_log_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.AppRuntimeLogHost_ServiceDesc.ServiceName)},
+		MethodPrefixes: []string{grpcMethodPrefix(proto.RuntimeLogHost_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			runtimehost.RegisterRuntimeLogHostServer(srv, name, deps.Services.RuntimeSessionLogs.AppendSessionLogs)
 		},

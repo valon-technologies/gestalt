@@ -4,7 +4,6 @@
 mod agent;
 mod agent_manager;
 mod api;
-mod app_runtime;
 mod auth;
 mod auth_server;
 mod authorization;
@@ -24,6 +23,7 @@ mod rpc_status;
 /// Runtime entrypoints for serving Gestalt provider surfaces over Unix sockets.
 pub mod runtime;
 mod runtime_log_host;
+mod runtime_provider;
 mod runtime_server;
 /// S3-compatible client and provider helpers.
 pub mod s3;
@@ -72,14 +72,6 @@ pub use api::{
     Access, ConnectedToken, Credential, ExternalIdentity, HTTPSubjectRequest, Host, Provider,
     Request, Response, RuntimeMetadata, Subject, ok,
 };
-pub use app_runtime::{
-    AppRuntimeEgressMode, AppRuntimeImagePullAuth, AppRuntimeProvider, AppRuntimeSession,
-    AppRuntimeSessionLifecycle, AppRuntimeSupport, GetAppRuntimeSessionRequest, HostedApp,
-    ListAppRuntimeSessionsRequest, ListAppRuntimeSessionsResponse,
-    PrepareAppRuntimeWorkspaceRequest, PrepareAppRuntimeWorkspaceResponse,
-    RemoveAppRuntimeWorkspaceRequest, StartAppRuntimeSessionRequest, StartHostedAppRequest,
-    StopAppRuntimeSessionRequest,
-};
 pub use auth::{
     AuthSessionSettings, AuthenticatedUser, AuthenticationProvider, BeginLoginRequest,
     BeginLoginResponse, CompleteLoginRequest,
@@ -117,9 +109,15 @@ pub use invoker::{AppInvoker, AppInvokerError, InvocationGrant, InvokeOptions};
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
 pub use runtime_log_host::{
-    AppRuntimeLogEntry, AppendAppRuntimeLogsRequest, AppendAppRuntimeLogsResponse,
-    ENV_RUNTIME_SESSION_ID, RuntimeLogHost, RuntimeLogHostError, RuntimeLogStream,
-    runtime_session_id,
+    AppendRuntimeLogsRequest, AppendRuntimeLogsResponse, ENV_RUNTIME_SESSION_ID, RuntimeLogEntry,
+    RuntimeLogHost, RuntimeLogHostError, RuntimeLogStream, runtime_session_id,
+};
+pub use runtime_provider::{
+    GetRuntimeSessionRequest, HostedApp, ListRuntimeSessionsRequest, ListRuntimeSessionsResponse,
+    PrepareRuntimeWorkspaceRequest, PrepareRuntimeWorkspaceResponse, RemoveRuntimeWorkspaceRequest,
+    RuntimeEgressMode, RuntimeImagePullAuth, RuntimeProvider, RuntimeSession,
+    RuntimeSessionLifecycle, RuntimeSupport, StartHostedAppRequest, StartRuntimeSessionRequest,
+    StopRuntimeSessionRequest,
 };
 pub use s3::{S3, S3Error, S3Provider};
 pub use s3::{S3ReadObjectFrame, S3ReadObjectStream, S3WriteObjectFrame, S3WriteObjectStream};
@@ -280,13 +278,13 @@ macro_rules! export_s3_provider {
     };
 }
 
-/// Exports the app-runtime-provider entrypoint expected by `gestaltd`.
+/// Exports the runtime-provider entrypoint expected by `gestaltd`.
 #[macro_export]
-macro_rules! export_app_runtime_provider {
+macro_rules! export_runtime_provider {
     (constructor = $constructor:path $(,)?) => {
         pub fn __gestalt_serve_runtime(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_app_runtime_provider(provider)
+            $crate::runtime::run_runtime_provider(provider)
         }
     };
 }

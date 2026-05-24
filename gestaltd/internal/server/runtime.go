@@ -78,7 +78,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		Agent:                result.AgentControl,
 		AgentManager:         result.AgentManager,
 		Workflow:             result.WorkflowControl,
-		AppRuntimes:          result.AppRuntimes,
+		Runtimes:             result.Runtimes,
 		Invoker:              httpInvoker,
 		AppInvoker:           result.AppInvoker,
 		DefaultConnection:    connMaps.DefaultConnection,

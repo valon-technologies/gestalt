@@ -521,7 +521,7 @@ func componentServeCall(kind string) (string, error) {
 	case providermanifestv1.KindSecrets:
 		return "gestalt.ServeSecretsProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindRuntime:
-		return "gestalt.ServeAppRuntimeProvider(ctx, providerpkg.New())", nil
+		return "gestalt.ServeRuntimeProvider(ctx, providerpkg.New())", nil
 	default:
 		return "", fmt.Errorf("unsupported source component kind %q", kind)
 	}

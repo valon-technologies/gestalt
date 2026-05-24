@@ -14,12 +14,12 @@ import (
 	"google.golang.org/grpc"
 )
 
-const envWriteCatalog = "GESTALT_PLUGIN_WRITE_CATALOG"
+const envWriteCatalog = "GESTALT_APP_WRITE_CATALOG"
 
 type providerCloserContextKey struct{}
 
 // ServeProvider starts a gRPC server for the given [Provider] and typed
-// router on the Unix socket specified by the GESTALT_PLUGIN_SOCKET environment
+// router on the Unix socket specified by the GESTALT_PROVIDER_SOCKET environment
 // variable. It blocks until ctx is cancelled, at which point it drains
 // in-flight requests and returns nil. This is the main entry point for
 // integration providers.

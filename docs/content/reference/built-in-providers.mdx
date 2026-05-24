@@ -106,13 +106,13 @@ own `runtime` block.
 ```yaml
 runtime:
   providers:
-    modal:
+    kubernetes:
       source:
-        package: github.com/valon-technologies/gestalt-providers/runtime/modal
+        package: github.com/valon-technologies/gestalt-providers/runtime/kubernetes
         version: 0.0.1-alpha.1
       default: true
       config:
-        app: gestalt-runtime
+        namespace: gestalt-runtime
 
 apps:
   support:
@@ -124,7 +124,7 @@ apps:
 | Name | Purpose |
 | --- | --- |
 | `local` | Built-in same-machine runtime driver. Used by default when a provider does not opt into hosted execution. |
-| `modal` | First-party hosted runtime provider for Modal sandboxes. |
+| `kubernetes` | First-party hosted runtime provider for native Kubernetes Pods. |
 
 ## Workflow Providers
 

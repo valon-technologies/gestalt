@@ -157,30 +157,28 @@ _AUTHENTICATION_AUTHORED_EXPORTS = (
     "CompleteLoginRequest",
 )
 
-_AUTHORIZATION_HELPER_EXPORTS = (
-    "AUTHORIZATION_SUBJECT_TYPE_SUBJECT",
-)
+_AUTHORIZATION_HELPER_EXPORTS = ("AUTHORIZATION_SUBJECT_TYPE_SUBJECT",)
 
-_APP_RUNTIME_AUTHORED_EXPORTS = (
-    "GetAppRuntimeSessionRequest",
-    "GetAppRuntimeSupportRequest",
+_RUNTIME_PROVIDER_AUTHORED_EXPORTS = (
+    "GetRuntimeSessionRequest",
+    "GetRuntimeSupportRequest",
     "HostedApp",
-    "ListAppRuntimeSessionsRequest",
-    "ListAppRuntimeSessionsResponse",
-    "APP_RUNTIME_EGRESS_MODE_CIDR",
-    "APP_RUNTIME_EGRESS_MODE_HOSTNAME",
-    "APP_RUNTIME_EGRESS_MODE_NONE",
-    "APP_RUNTIME_EGRESS_MODE_UNSPECIFIED",
-    "AppRuntimeImagePullAuth",
-    "AppRuntimeSession",
-    "AppRuntimeSessionLifecycle",
-    "AppRuntimeSupport",
-    "PrepareAppRuntimeWorkspaceRequest",
-    "PrepareAppRuntimeWorkspaceResponse",
-    "RemoveAppRuntimeWorkspaceRequest",
+    "ListRuntimeSessionsRequest",
+    "ListRuntimeSessionsResponse",
+    "RUNTIME_EGRESS_MODE_CIDR",
+    "RUNTIME_EGRESS_MODE_HOSTNAME",
+    "RUNTIME_EGRESS_MODE_NONE",
+    "RUNTIME_EGRESS_MODE_UNSPECIFIED",
+    "RuntimeImagePullAuth",
+    "RuntimeSession",
+    "RuntimeSessionLifecycle",
+    "RuntimeSupport",
+    "PrepareRuntimeWorkspaceRequest",
+    "PrepareRuntimeWorkspaceResponse",
+    "RemoveRuntimeWorkspaceRequest",
     "StartHostedAppRequest",
-    "StartAppRuntimeSessionRequest",
-    "StopAppRuntimeSessionRequest",
+    "StartRuntimeSessionRequest",
+    "StopRuntimeSessionRequest",
 )
 
 _WORKFLOW_AUTHORED_EXPORTS = (
@@ -391,7 +389,7 @@ _LAZY_EXPORTS = {
     "AppInvoker": ("._invoker", "AppInvoker"),
     "AppProvider": ("._providers", "AppProvider"),
     "AppProviderAdapter": ("._providers", "AppProviderAdapter"),
-    "AppRuntimeProvider": ("._providers", "AppRuntimeProvider"),
+    "RuntimeProvider": ("._providers", "RuntimeProvider"),
     "PresignMethod": ("._s3", "PresignMethod"),
     "PresignOptions": ("._s3", "PresignOptions"),
     "PresignResult": ("._s3", "PresignResult"),
@@ -444,7 +442,7 @@ _LAZY_EXPORTS.update(
     {name: ("._authorization", name) for name in _AUTHORIZATION_HELPER_EXPORTS}
 )
 _LAZY_EXPORTS.update(
-    {name: ("._appruntime", name) for name in _APP_RUNTIME_AUTHORED_EXPORTS}
+    {name: ("._runtime_provider", name) for name in _RUNTIME_PROVIDER_AUTHORED_EXPORTS}
 )
 _LAZY_EXPORTS.update(
     {name: ("._workflow", name) for name in _WORKFLOW_AUTHORED_EXPORTS}
@@ -476,7 +474,7 @@ __all__ = [
     *_AGENT_HELPER_EXPORTS,
     *_AUTHENTICATION_AUTHORED_EXPORTS,
     *_AUTHORIZATION_HELPER_EXPORTS,
-    *_APP_RUNTIME_AUTHORED_EXPORTS,
+    *_RUNTIME_PROVIDER_AUTHORED_EXPORTS,
     *_WORKFLOW_AUTHORED_EXPORTS,
     "AgentHost",
     "AgentManager",
@@ -534,7 +532,7 @@ __all__ = [
     "AppInvoker",
     "AppProvider",
     "AppProviderAdapter",
-    "AppRuntimeProvider",
+    "RuntimeProvider",
     "PresignMethod",
     "PresignOptions",
     "PresignResult",

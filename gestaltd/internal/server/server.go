@@ -163,7 +163,7 @@ type Config struct {
 	Agent                 bootstrap.AgentControl
 	AgentManager          agentmanager.Service
 	Workflow              bootstrap.WorkflowControl
-	AppRuntimes           bootstrap.RuntimeInspector
+	Runtimes              bootstrap.RuntimeInspector
 	Invoker               invocation.Invoker
 	AppInvoker            invocation.Invoker
 	DefaultConnection     map[string]string
@@ -355,7 +355,7 @@ func New(cfg Config) (*Server, error) {
 		authorizationProvider:  cfg.AuthorizationProvider,
 		providers:              cfg.Providers,
 		workflow:               cfg.Workflow,
-		pluginRuntimes:         cfg.AppRuntimes,
+		pluginRuntimes:         cfg.Runtimes,
 		resolver:               resolver,
 		authResolvers:          authResolvers,
 		invoker:                cfg.Invoker,

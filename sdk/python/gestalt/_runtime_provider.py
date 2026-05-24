@@ -3,10 +3,12 @@ from __future__ import annotations
 import datetime as _dt
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from http import HTTPStatus
 from typing import Any
 
 from . import _agent as _agent_native
-from ._gen.v1 import appruntime_pb2 as _pb
+from ._api import Error
+from ._gen.v1 import runtime_provider_pb2 as _pb
 from ._protocol import (
     coerce_model as _coerce,
 )
@@ -21,29 +23,29 @@ from ._protocol import (
 
 pb: Any = _pb
 
-APP_RUNTIME_EGRESS_MODE_UNSPECIFIED = pb.APP_RUNTIME_EGRESS_MODE_UNSPECIFIED
-APP_RUNTIME_EGRESS_MODE_NONE = pb.APP_RUNTIME_EGRESS_MODE_NONE
-APP_RUNTIME_EGRESS_MODE_CIDR = pb.APP_RUNTIME_EGRESS_MODE_CIDR
-APP_RUNTIME_EGRESS_MODE_HOSTNAME = pb.APP_RUNTIME_EGRESS_MODE_HOSTNAME
+RUNTIME_EGRESS_MODE_UNSPECIFIED = pb.RUNTIME_EGRESS_MODE_UNSPECIFIED
+RUNTIME_EGRESS_MODE_NONE = pb.RUNTIME_EGRESS_MODE_NONE
+RUNTIME_EGRESS_MODE_CIDR = pb.RUNTIME_EGRESS_MODE_CIDR
+RUNTIME_EGRESS_MODE_HOSTNAME = pb.RUNTIME_EGRESS_MODE_HOSTNAME
 
 
 @dataclass(slots=True)
-class GetAppRuntimeSupportRequest:
-    """Request passed to ``AppRuntimeProvider.get_support``."""
+class GetRuntimeSupportRequest:
+    """Request passed to ``RuntimeProvider.get_support``."""
 
 
 @dataclass(slots=True)
-class AppRuntimeSupport:
-    """Capabilities returned by a plugin-runtime provider."""
+class RuntimeSupport:
+    """Capabilities returned by a runtime provider."""
 
     can_host_apps: bool = False
-    egress_mode: int | str = APP_RUNTIME_EGRESS_MODE_UNSPECIFIED
+    egress_mode: int | str = RUNTIME_EGRESS_MODE_UNSPECIFIED
     supports_prepare_workspace: bool = False
 
 
 @dataclass(slots=True)
-class AppRuntimeSessionLifecycle:
-    """Lifecycle timestamps for a plugin-runtime session."""
+class RuntimeSessionLifecycle:
+    """Lifecycle timestamps for a runtime session."""
 
     started_at: _dt.datetime | None = None
     recommended_drain_at: _dt.datetime | None = None
@@ -51,66 +53,68 @@ class AppRuntimeSessionLifecycle:
 
 
 @dataclass(slots=True)
-class AppRuntimeSession:
-    """Plugin-runtime session returned by a runtime provider."""
+class RuntimeSession:
+    """Runtime session returned by a runtime provider."""
 
     id: str = ""
     state: str = ""
     metadata: Mapping[str, str] = field(default_factory=dict)
-    lifecycle: AppRuntimeSessionLifecycle | Mapping[str, Any] | None = None
+    lifecycle: RuntimeSessionLifecycle | Mapping[str, Any] | None = None
     state_reason: str = ""
     state_message: str = ""
 
 
 @dataclass(slots=True)
-class AppRuntimeImagePullAuth:
+class RuntimeImagePullAuth:
     """Container registry auth for a runtime image pull."""
 
     docker_config_json: str = ""
 
 
 @dataclass(slots=True)
-class StartAppRuntimeSessionRequest:
-    """Request passed to ``AppRuntimeProvider.start_session``."""
+class StartRuntimeSessionRequest:
+    """Request passed to ``RuntimeProvider.start_session``."""
 
     app_name: str = ""
     template: str = ""
     image: str = ""
     metadata: Mapping[str, str] = field(default_factory=dict)
-    image_pull_auth: AppRuntimeImagePullAuth | Mapping[str, Any] | None = None
+    image_pull_auth: RuntimeImagePullAuth | Mapping[str, Any] | None = None
 
 
 @dataclass(slots=True)
-class GetAppRuntimeSessionRequest:
-    """Request passed to ``AppRuntimeProvider.get_session``."""
+class GetRuntimeSessionRequest:
+    """Request passed to ``RuntimeProvider.get_session``."""
 
     session_id: str = ""
 
 
 @dataclass(slots=True)
-class ListAppRuntimeSessionsRequest:
-    """Request passed to ``AppRuntimeProvider.list_sessions``."""
+class ListRuntimeSessionsRequest:
+    """Request passed to ``RuntimeProvider.list_sessions``."""
+
+    page_size: int = 0
+    page_token: str = ""
 
 
 @dataclass(slots=True)
-class ListAppRuntimeSessionsResponse:
-    """Sessions returned by ``AppRuntimeProvider.list_sessions``."""
+class ListRuntimeSessionsResponse:
+    """Sessions returned by ``RuntimeProvider.list_sessions``."""
 
-    sessions: Iterable[AppRuntimeSession | Mapping[str, Any]] = field(
-        default_factory=list
-    )
+    sessions: Iterable[RuntimeSession | Mapping[str, Any]] = field(default_factory=list)
+    next_page_token: str = ""
 
 
 @dataclass(slots=True)
-class StopAppRuntimeSessionRequest:
-    """Request passed to ``AppRuntimeProvider.stop_session``."""
+class StopRuntimeSessionRequest:
+    """Request passed to ``RuntimeProvider.stop_session``."""
 
     session_id: str = ""
 
 
 @dataclass(slots=True)
-class PrepareAppRuntimeWorkspaceRequest:
-    """Request passed to ``AppRuntimeProvider.prepare_workspace``."""
+class PrepareRuntimeWorkspaceRequest:
+    """Request passed to ``RuntimeProvider.prepare_workspace``."""
 
     session_id: str = ""
     agent_session_id: str = ""
@@ -118,15 +122,15 @@ class PrepareAppRuntimeWorkspaceRequest:
 
 
 @dataclass(slots=True)
-class PrepareAppRuntimeWorkspaceResponse:
-    """Workspace returned by ``AppRuntimeProvider.prepare_workspace``."""
+class PrepareRuntimeWorkspaceResponse:
+    """Workspace returned by ``RuntimeProvider.prepare_workspace``."""
 
     workspace: _agent_native.AgentPreparedWorkspace | Mapping[str, Any] | None = None
 
 
 @dataclass(slots=True)
-class RemoveAppRuntimeWorkspaceRequest:
-    """Request passed to ``AppRuntimeProvider.remove_workspace``."""
+class RemoveRuntimeWorkspaceRequest:
+    """Request passed to ``RuntimeProvider.remove_workspace``."""
 
     session_id: str = ""
     agent_session_id: str = ""
@@ -134,7 +138,7 @@ class RemoveAppRuntimeWorkspaceRequest:
 
 @dataclass(slots=True)
 class StartHostedAppRequest:
-    """Request passed to ``AppRuntimeProvider.start_plugin``."""
+    """Request passed to ``RuntimeProvider.start_app``."""
 
     session_id: str = ""
     app_name: str = ""
@@ -149,7 +153,7 @@ class StartHostedAppRequest:
 
 @dataclass(slots=True)
 class HostedApp:
-    """Hosted app returned by ``AppRuntimeProvider.start_plugin``."""
+    """Hosted app returned by ``RuntimeProvider.start_app``."""
 
     id: str = ""
     session_id: str = ""
@@ -157,29 +161,29 @@ class HostedApp:
     dial_target: str = ""
 
 
-def get_app_runtime_support_request_from_proto(
+def get_runtime_provider_support_request_from_proto(
     _value: Any,
-) -> GetAppRuntimeSupportRequest:
-    return GetAppRuntimeSupportRequest()
+) -> GetRuntimeSupportRequest:
+    return GetRuntimeSupportRequest()
 
 
-def app_runtime_support_to_proto(value: Any) -> Any:
-    if isinstance(value, pb.AppRuntimeSupport):
+def runtime_provider_support_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.RuntimeSupport):
         return _copy(value)
-    support = _coerce(value, AppRuntimeSupport, "AppRuntimeSupport")
-    return pb.AppRuntimeSupport(
+    support = _coerce(value, RuntimeSupport, "RuntimeSupport")
+    return pb.RuntimeSupport(
         can_host_apps=support.can_host_apps,
         egress_mode=support.egress_mode,
         supports_prepare_workspace=support.supports_prepare_workspace,
     )
 
 
-def app_runtime_session_from_proto(value: Any) -> AppRuntimeSession:
-    return AppRuntimeSession(
+def runtime_provider_session_from_proto(value: Any) -> RuntimeSession:
+    return RuntimeSession(
         id=value.id,
         state=value.state,
         metadata=dict(value.metadata),
-        lifecycle=app_runtime_session_lifecycle_from_proto(value.lifecycle)
+        lifecycle=runtime_provider_session_lifecycle_from_proto(value.lifecycle)
         if has_field(value, "lifecycle")
         else None,
         state_reason=value.state_reason,
@@ -187,27 +191,27 @@ def app_runtime_session_from_proto(value: Any) -> AppRuntimeSession:
     )
 
 
-def app_runtime_session_to_proto(value: Any) -> Any:
-    if isinstance(value, pb.AppRuntimeSession):
+def runtime_provider_session_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.RuntimeSession):
         return _copy(value)
-    session = _coerce(value, AppRuntimeSession, "AppRuntimeSession")
-    out = pb.AppRuntimeSession(
+    session = _coerce(value, RuntimeSession, "RuntimeSession")
+    out = pb.RuntimeSession(
         id=session.id,
         state=session.state,
         metadata=dict(session.metadata),
         state_reason=session.state_reason,
         state_message=session.state_message,
     )
-    lifecycle = app_runtime_session_lifecycle_to_proto(session.lifecycle)
+    lifecycle = runtime_provider_session_lifecycle_to_proto(session.lifecycle)
     if lifecycle is not None:
         out.lifecycle.CopyFrom(lifecycle)
     return out
 
 
-def app_runtime_session_lifecycle_from_proto(
+def runtime_provider_session_lifecycle_from_proto(
     value: Any,
-) -> AppRuntimeSessionLifecycle:
-    return AppRuntimeSessionLifecycle(
+) -> RuntimeSessionLifecycle:
+    return RuntimeSessionLifecycle(
         started_at=datetime_from_timestamp(value.started_at)
         if has_field(value, "started_at")
         else None,
@@ -220,47 +224,47 @@ def app_runtime_session_lifecycle_from_proto(
     )
 
 
-def app_runtime_session_lifecycle_to_proto(value: Any) -> Any | None:
+def runtime_provider_session_lifecycle_to_proto(value: Any) -> Any | None:
     if value is None:
         return None
-    if isinstance(value, pb.AppRuntimeSessionLifecycle):
+    if isinstance(value, pb.RuntimeSessionLifecycle):
         return _copy(value)
     lifecycle = _coerce(
         value,
-        AppRuntimeSessionLifecycle,
-        "AppRuntimeSessionLifecycle",
+        RuntimeSessionLifecycle,
+        "RuntimeSessionLifecycle",
     )
-    out = pb.AppRuntimeSessionLifecycle()
+    out = pb.RuntimeSessionLifecycle()
     _copy_timestamp(out, "started_at", lifecycle.started_at)
     _copy_timestamp(out, "recommended_drain_at", lifecycle.recommended_drain_at)
     _copy_timestamp(out, "expires_at", lifecycle.expires_at)
     return out
 
 
-def app_runtime_image_pull_auth_from_proto(
+def runtime_provider_image_pull_auth_from_proto(
     value: Any,
-) -> AppRuntimeImagePullAuth:
-    return AppRuntimeImagePullAuth(docker_config_json=value.docker_config_json)
+) -> RuntimeImagePullAuth:
+    return RuntimeImagePullAuth(docker_config_json=value.docker_config_json)
 
 
-def app_runtime_image_pull_auth_to_proto(value: Any) -> Any | None:
+def runtime_provider_image_pull_auth_to_proto(value: Any) -> Any | None:
     if value is None:
         return None
-    if isinstance(value, pb.AppRuntimeImagePullAuth):
+    if isinstance(value, pb.RuntimeImagePullAuth):
         return _copy(value)
-    auth = _coerce(value, AppRuntimeImagePullAuth, "AppRuntimeImagePullAuth")
-    return pb.AppRuntimeImagePullAuth(docker_config_json=auth.docker_config_json)
+    auth = _coerce(value, RuntimeImagePullAuth, "RuntimeImagePullAuth")
+    return pb.RuntimeImagePullAuth(docker_config_json=auth.docker_config_json)
 
 
-def start_app_runtime_session_request_from_proto(
+def start_runtime_provider_session_request_from_proto(
     value: Any,
-) -> StartAppRuntimeSessionRequest:
-    return StartAppRuntimeSessionRequest(
+) -> StartRuntimeSessionRequest:
+    return StartRuntimeSessionRequest(
         app_name=value.app_name,
         template=value.template,
         image=value.image,
         metadata=dict(value.metadata),
-        image_pull_auth=app_runtime_image_pull_auth_from_proto(
+        image_pull_auth=runtime_provider_image_pull_auth_from_proto(
             value.image_pull_auth
         )
         if has_field(value, "image_pull_auth")
@@ -268,43 +272,54 @@ def start_app_runtime_session_request_from_proto(
     )
 
 
-def get_app_runtime_session_request_from_proto(
+def get_runtime_provider_session_request_from_proto(
     value: Any,
-) -> GetAppRuntimeSessionRequest:
-    return GetAppRuntimeSessionRequest(session_id=value.session_id)
+) -> GetRuntimeSessionRequest:
+    return GetRuntimeSessionRequest(session_id=value.session_id)
 
 
-def list_app_runtime_sessions_request_from_proto(
-    _value: Any,
-) -> ListAppRuntimeSessionsRequest:
-    return ListAppRuntimeSessionsRequest()
+def list_runtime_provider_sessions_request_from_proto(
+    value: Any,
+) -> ListRuntimeSessionsRequest:
+    page_size = value.page_size
+    if page_size < 0:
+        raise Error(HTTPStatus.BAD_REQUEST, "page_size must be non-negative")
+    if page_size == 0:
+        page_size = 100
+    if page_size > 200:
+        page_size = 200
+    return ListRuntimeSessionsRequest(
+        page_size=page_size,
+        page_token=value.page_token,
+    )
 
 
-def list_app_runtime_sessions_response_to_proto(value: Any) -> Any:
-    if isinstance(value, pb.ListAppRuntimeSessionsResponse):
+def list_runtime_provider_sessions_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.ListRuntimeSessionsResponse):
         return _copy(value)
     response = _coerce(
         value,
-        ListAppRuntimeSessionsResponse,
-        "ListAppRuntimeSessionsResponse",
+        ListRuntimeSessionsResponse,
+        "ListRuntimeSessionsResponse",
     )
-    return pb.ListAppRuntimeSessionsResponse(
+    return pb.ListRuntimeSessionsResponse(
         sessions=[
-            app_runtime_session_to_proto(session) for session in response.sessions
-        ]
+            runtime_provider_session_to_proto(session) for session in response.sessions
+        ],
+        next_page_token=response.next_page_token,
     )
 
 
-def stop_app_runtime_session_request_from_proto(
+def stop_runtime_provider_session_request_from_proto(
     value: Any,
-) -> StopAppRuntimeSessionRequest:
-    return StopAppRuntimeSessionRequest(session_id=value.session_id)
+) -> StopRuntimeSessionRequest:
+    return StopRuntimeSessionRequest(session_id=value.session_id)
 
 
-def prepare_app_runtime_workspace_request_from_proto(
+def prepare_runtime_provider_workspace_request_from_proto(
     value: Any,
-) -> PrepareAppRuntimeWorkspaceRequest:
-    return PrepareAppRuntimeWorkspaceRequest(
+) -> PrepareRuntimeWorkspaceRequest:
+    return PrepareRuntimeWorkspaceRequest(
         session_id=value.session_id,
         agent_session_id=value.agent_session_id,
         workspace=agent_workspace_input_from_proto(value.workspace)
@@ -313,31 +328,31 @@ def prepare_app_runtime_workspace_request_from_proto(
     )
 
 
-def prepare_app_runtime_workspace_response_to_proto(value: Any) -> Any:
-    if isinstance(value, pb.PrepareAppRuntimeWorkspaceResponse):
+def prepare_runtime_provider_workspace_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.PrepareRuntimeWorkspaceResponse):
         return _copy(value)
     response = _coerce(
         value,
-        PrepareAppRuntimeWorkspaceResponse,
-        "PrepareAppRuntimeWorkspaceResponse",
+        PrepareRuntimeWorkspaceResponse,
+        "PrepareRuntimeWorkspaceResponse",
     )
-    out = pb.PrepareAppRuntimeWorkspaceResponse()
+    out = pb.PrepareRuntimeWorkspaceResponse()
     workspace = agent_prepared_workspace_to_proto(response.workspace)
     if workspace is not None:
         out.workspace.CopyFrom(workspace)
     return out
 
 
-def remove_app_runtime_workspace_request_from_proto(
+def remove_runtime_provider_workspace_request_from_proto(
     value: Any,
-) -> RemoveAppRuntimeWorkspaceRequest:
-    return RemoveAppRuntimeWorkspaceRequest(
+) -> RemoveRuntimeWorkspaceRequest:
+    return RemoveRuntimeWorkspaceRequest(
         session_id=value.session_id,
         agent_session_id=value.agent_session_id,
     )
 
 
-def start_hosted_plugin_request_from_proto(value: Any) -> StartHostedAppRequest:
+def start_hosted_app_request_from_proto(value: Any) -> StartHostedAppRequest:
     return StartHostedAppRequest(
         session_id=value.session_id,
         app_name=value.app_name,
@@ -351,7 +366,7 @@ def start_hosted_plugin_request_from_proto(value: Any) -> StartHostedAppRequest:
     )
 
 
-def hosted_plugin_to_proto(value: Any) -> Any:
+def hosted_app_to_proto(value: Any) -> Any:
     if isinstance(value, pb.HostedApp):
         return _copy(value)
     app = _coerce(value, HostedApp, "HostedApp")
@@ -383,7 +398,9 @@ def agent_prepared_workspace_to_proto(value: Any) -> Any | None:
     if isinstance(value, _agent_native.pb.PreparedAgentWorkspace):
         return _copy(value)
     workspace = _coerce(value, _agent_native.AgentPreparedWorkspace, "workspace")
-    return _agent_native.pb.PreparedAgentWorkspace(root=workspace.root, cwd=workspace.cwd)
+    return _agent_native.pb.PreparedAgentWorkspace(
+        root=workspace.root, cwd=workspace.cwd
+    )
 
 
 def _copy_timestamp(target: Any, field_name: str, value: _dt.datetime | None) -> None:

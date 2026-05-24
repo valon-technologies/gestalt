@@ -13,7 +13,7 @@ use crate::rpc_status::rpc_status;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[repr(i32)]
-pub enum AppRuntimeEgressMode {
+pub enum RuntimeEgressMode {
     #[default]
     Unspecified = 0,
     None = 1,
@@ -21,7 +21,7 @@ pub enum AppRuntimeEgressMode {
     Hostname = 3,
 }
 
-impl AppRuntimeEgressMode {
+impl RuntimeEgressMode {
     pub const fn as_i32(self) -> i32 {
         self as i32
     }
@@ -37,75 +37,79 @@ impl AppRuntimeEgressMode {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct AppRuntimeSupport {
+pub struct RuntimeSupport {
     pub can_host_apps: bool,
-    pub egress_mode: AppRuntimeEgressMode,
+    pub egress_mode: RuntimeEgressMode,
     pub supports_prepare_workspace: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct AppRuntimeSession {
+pub struct RuntimeSession {
     pub id: String,
     pub state: String,
     pub metadata: std::collections::BTreeMap<String, String>,
-    pub lifecycle: Option<AppRuntimeSessionLifecycle>,
+    pub lifecycle: Option<RuntimeSessionLifecycle>,
     pub state_reason: String,
     pub state_message: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct AppRuntimeSessionLifecycle {
+pub struct RuntimeSessionLifecycle {
     pub started_at: Option<SystemTime>,
     pub recommended_drain_at: Option<SystemTime>,
     pub expires_at: Option<SystemTime>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AppRuntimeImagePullAuth {
+pub struct RuntimeImagePullAuth {
     pub docker_config_json: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct StartAppRuntimeSessionRequest {
+pub struct StartRuntimeSessionRequest {
     pub app_name: String,
     pub template: String,
     pub image: String,
     pub metadata: std::collections::BTreeMap<String, String>,
-    pub image_pull_auth: Option<AppRuntimeImagePullAuth>,
+    pub image_pull_auth: Option<RuntimeImagePullAuth>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct GetAppRuntimeSessionRequest {
+pub struct GetRuntimeSessionRequest {
     pub session_id: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ListAppRuntimeSessionsRequest {}
+pub struct ListRuntimeSessionsRequest {
+    pub page_size: i32,
+    pub page_token: String,
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ListAppRuntimeSessionsResponse {
-    pub sessions: Vec<AppRuntimeSession>,
+pub struct ListRuntimeSessionsResponse {
+    pub sessions: Vec<RuntimeSession>,
+    pub next_page_token: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct StopAppRuntimeSessionRequest {
+pub struct StopRuntimeSessionRequest {
     pub session_id: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct PrepareAppRuntimeWorkspaceRequest {
+pub struct PrepareRuntimeWorkspaceRequest {
     pub session_id: String,
     pub agent_session_id: String,
     pub workspace: Option<AgentWorkspace>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct PrepareAppRuntimeWorkspaceResponse {
+pub struct PrepareRuntimeWorkspaceResponse {
     pub workspace: Option<AgentPreparedWorkspace>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RemoveAppRuntimeWorkspaceRequest {
+pub struct RemoveRuntimeWorkspaceRequest {
     pub session_id: String,
     pub agent_session_id: String,
 }
@@ -131,22 +135,22 @@ pub struct HostedApp {
     pub dial_target: String,
 }
 
-fn support_to_proto(value: AppRuntimeSupport) -> pb::AppRuntimeSupport {
-    pb::AppRuntimeSupport {
+fn support_to_proto(value: RuntimeSupport) -> pb::RuntimeSupport {
+    pb::RuntimeSupport {
         can_host_apps: value.can_host_apps,
         egress_mode: value.egress_mode.as_i32(),
         supports_prepare_workspace: value.supports_prepare_workspace,
     }
 }
 
-fn session_to_proto(value: AppRuntimeSession) -> pb::AppRuntimeSession {
-    pb::AppRuntimeSession {
+fn session_to_proto(value: RuntimeSession) -> pb::RuntimeSession {
+    pb::RuntimeSession {
         id: value.id,
         state: value.state,
         metadata: value.metadata,
         lifecycle: value
             .lifecycle
-            .map(|lifecycle| pb::AppRuntimeSessionLifecycle {
+            .map(|lifecycle| pb::RuntimeSessionLifecycle {
                 started_at: lifecycle
                     .started_at
                     .map(protocol::timestamp_from_system_time),
@@ -163,31 +167,51 @@ fn session_to_proto(value: AppRuntimeSession) -> pb::AppRuntimeSession {
 }
 
 fn start_session_request_from_proto(
-    value: pb::StartAppRuntimeSessionRequest,
-) -> StartAppRuntimeSessionRequest {
-    StartAppRuntimeSessionRequest {
+    value: pb::StartRuntimeSessionRequest,
+) -> StartRuntimeSessionRequest {
+    StartRuntimeSessionRequest {
         app_name: value.app_name,
         template: value.template,
         image: value.image,
         metadata: value.metadata,
-        image_pull_auth: value.image_pull_auth.map(|auth| AppRuntimeImagePullAuth {
+        image_pull_auth: value.image_pull_auth.map(|auth| RuntimeImagePullAuth {
             docker_config_json: auth.docker_config_json,
         }),
     }
 }
 
 fn list_sessions_response_to_proto(
-    value: ListAppRuntimeSessionsResponse,
-) -> pb::ListAppRuntimeSessionsResponse {
-    pb::ListAppRuntimeSessionsResponse {
+    value: ListRuntimeSessionsResponse,
+) -> pb::ListRuntimeSessionsResponse {
+    pb::ListRuntimeSessionsResponse {
         sessions: value.sessions.into_iter().map(session_to_proto).collect(),
+        next_page_token: value.next_page_token,
     }
 }
 
+fn list_sessions_request_from_proto(
+    value: pb::ListRuntimeSessionsRequest,
+) -> std::result::Result<ListRuntimeSessionsRequest, Status> {
+    let mut page_size = value.page_size;
+    if page_size < 0 {
+        return Err(Status::invalid_argument("page_size must be non-negative"));
+    }
+    if page_size == 0 {
+        page_size = 100;
+    }
+    if page_size > 200 {
+        page_size = 200;
+    }
+    Ok(ListRuntimeSessionsRequest {
+        page_size,
+        page_token: value.page_token,
+    })
+}
+
 fn prepare_workspace_request_from_proto(
-    value: pb::PrepareAppRuntimeWorkspaceRequest,
-) -> PrepareAppRuntimeWorkspaceRequest {
-    PrepareAppRuntimeWorkspaceRequest {
+    value: pb::PrepareRuntimeWorkspaceRequest,
+) -> PrepareRuntimeWorkspaceRequest {
+    PrepareRuntimeWorkspaceRequest {
         session_id: value.session_id,
         agent_session_id: value.agent_session_id,
         workspace: value.workspace.map(|workspace| AgentWorkspace {
@@ -206,9 +230,9 @@ fn prepare_workspace_request_from_proto(
 }
 
 fn prepare_workspace_response_to_proto(
-    value: PrepareAppRuntimeWorkspaceResponse,
-) -> pb::PrepareAppRuntimeWorkspaceResponse {
-    pb::PrepareAppRuntimeWorkspaceResponse {
+    value: PrepareRuntimeWorkspaceResponse,
+) -> pb::PrepareRuntimeWorkspaceResponse {
+    pb::PrepareRuntimeWorkspaceResponse {
         workspace: value.workspace.map(|workspace| pb::PreparedAgentWorkspace {
             root: workspace.root,
             cwd: workspace.cwd,
@@ -216,7 +240,7 @@ fn prepare_workspace_response_to_proto(
     }
 }
 
-fn start_plugin_request_from_proto(value: pb::StartHostedAppRequest) -> StartHostedAppRequest {
+fn start_app_request_from_proto(value: pb::StartHostedAppRequest) -> StartHostedAppRequest {
     StartHostedAppRequest {
         session_id: value.session_id,
         app_name: value.app_name,
@@ -230,7 +254,7 @@ fn start_plugin_request_from_proto(value: pb::StartHostedAppRequest) -> StartHos
     }
 }
 
-fn hosted_plugin_to_proto(value: HostedApp) -> pb::HostedApp {
+fn hosted_app_to_proto(value: HostedApp) -> pb::HostedApp {
     pb::HostedApp {
         id: value.id,
         session_id: value.session_id,
@@ -240,8 +264,8 @@ fn hosted_plugin_to_proto(value: HostedApp) -> pb::HostedApp {
 }
 
 #[async_trait]
-/// Provider trait for serving hosted plugin-runtime sessions.
-pub trait AppRuntimeProvider: Send + Sync + 'static {
+/// Provider trait for serving hosted runtime sessions.
+pub trait RuntimeProvider: Send + Sync + 'static {
     /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
@@ -277,44 +301,44 @@ pub trait AppRuntimeProvider: Send + Sync + 'static {
     }
 
     /// Returns the runtime capabilities supported by this provider.
-    async fn get_support(&self, _request: ()) -> ProviderResult<AppRuntimeSupport> {
+    async fn get_support(&self, _request: ()) -> ProviderResult<RuntimeSupport> {
         Err(crate::Error::unimplemented(
             "runtime get support is not implemented",
         ))
     }
 
-    /// Starts a hosted plugin-runtime session.
+    /// Starts a hosted runtime session.
     async fn start_session(
         &self,
-        _request: StartAppRuntimeSessionRequest,
-    ) -> ProviderResult<AppRuntimeSession> {
+        _request: StartRuntimeSessionRequest,
+    ) -> ProviderResult<RuntimeSession> {
         Err(crate::Error::unimplemented(
             "runtime start session is not implemented",
         ))
     }
 
-    /// Returns one hosted plugin-runtime session by ID.
+    /// Returns one hosted runtime session by ID.
     async fn get_session(
         &self,
-        _request: GetAppRuntimeSessionRequest,
-    ) -> ProviderResult<AppRuntimeSession> {
+        _request: GetRuntimeSessionRequest,
+    ) -> ProviderResult<RuntimeSession> {
         Err(crate::Error::unimplemented(
             "runtime get session is not implemented",
         ))
     }
 
-    /// Lists hosted plugin-runtime sessions.
+    /// Lists hosted runtime sessions.
     async fn list_sessions(
         &self,
-        _request: ListAppRuntimeSessionsRequest,
-    ) -> ProviderResult<ListAppRuntimeSessionsResponse> {
+        _request: ListRuntimeSessionsRequest,
+    ) -> ProviderResult<ListRuntimeSessionsResponse> {
         Err(crate::Error::unimplemented(
             "runtime list sessions is not implemented",
         ))
     }
 
-    /// Stops a hosted plugin-runtime session.
-    async fn stop_session(&self, _request: StopAppRuntimeSessionRequest) -> ProviderResult<()> {
+    /// Stops a hosted runtime session.
+    async fn stop_session(&self, _request: StopRuntimeSessionRequest) -> ProviderResult<()> {
         Err(crate::Error::unimplemented(
             "runtime stop session is not implemented",
         ))
@@ -323,8 +347,8 @@ pub trait AppRuntimeProvider: Send + Sync + 'static {
     /// Prepares an agent workspace for use by a hosted app.
     async fn prepare_workspace(
         &self,
-        _request: PrepareAppRuntimeWorkspaceRequest,
-    ) -> ProviderResult<PrepareAppRuntimeWorkspaceResponse> {
+        _request: PrepareRuntimeWorkspaceRequest,
+    ) -> ProviderResult<PrepareRuntimeWorkspaceResponse> {
         Err(crate::Error::unimplemented(
             "runtime prepare workspace is not implemented",
         ))
@@ -333,7 +357,7 @@ pub trait AppRuntimeProvider: Send + Sync + 'static {
     /// Removes a previously prepared agent workspace.
     async fn remove_workspace(
         &self,
-        _request: RemoveAppRuntimeWorkspaceRequest,
+        _request: RemoveRuntimeWorkspaceRequest,
     ) -> ProviderResult<()> {
         Err(crate::Error::unimplemented(
             "runtime remove workspace is not implemented",
@@ -341,7 +365,7 @@ pub trait AppRuntimeProvider: Send + Sync + 'static {
     }
 
     /// Starts one hosted app process inside a runtime session.
-    async fn start_plugin(&self, _request: StartHostedAppRequest) -> ProviderResult<HostedApp> {
+    async fn start_app(&self, _request: StartHostedAppRequest) -> ProviderResult<HostedApp> {
         Err(crate::Error::unimplemented(
             "runtime start app is not implemented",
         ))
@@ -349,25 +373,25 @@ pub trait AppRuntimeProvider: Send + Sync + 'static {
 }
 
 #[derive(Clone)]
-pub(crate) struct AppRuntimeServer<P> {
+pub(crate) struct RuntimeServer<P> {
     provider: Arc<P>,
 }
 
-impl<P> AppRuntimeServer<P> {
+impl<P> RuntimeServer<P> {
     pub(crate) fn new(provider: Arc<P>) -> Self {
         Self { provider }
     }
 }
 
 #[async_trait]
-impl<P> pb::app_runtime_provider_server::AppRuntimeProvider for AppRuntimeServer<P>
+impl<P> pb::runtime_provider_server::RuntimeProvider for RuntimeServer<P>
 where
-    P: AppRuntimeProvider,
+    P: RuntimeProvider,
 {
     async fn get_support(
         &self,
         request: GrpcRequest<()>,
-    ) -> std::result::Result<GrpcResponse<pb::AppRuntimeSupport>, Status> {
+    ) -> std::result::Result<GrpcResponse<pb::RuntimeSupport>, Status> {
         let support = self
             .provider
             .get_support(request.into_inner())
@@ -378,8 +402,8 @@ where
 
     async fn start_session(
         &self,
-        request: GrpcRequest<pb::StartAppRuntimeSessionRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::AppRuntimeSession>, Status> {
+        request: GrpcRequest<pb::StartRuntimeSessionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::RuntimeSession>, Status> {
         let session = self
             .provider
             .start_session(start_session_request_from_proto(request.into_inner()))
@@ -390,13 +414,13 @@ where
 
     async fn get_session(
         &self,
-        request: GrpcRequest<pb::GetAppRuntimeSessionRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::AppRuntimeSession>, Status> {
+        request: GrpcRequest<pb::GetRuntimeSessionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::RuntimeSession>, Status> {
         let session = self
             .provider
             .get_session({
                 let request = request.into_inner();
-                GetAppRuntimeSessionRequest {
+                GetRuntimeSessionRequest {
                     session_id: request.session_id,
                 }
             })
@@ -407,14 +431,11 @@ where
 
     async fn list_sessions(
         &self,
-        request: GrpcRequest<pb::ListAppRuntimeSessionsRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::ListAppRuntimeSessionsResponse>, Status> {
+        request: GrpcRequest<pb::ListRuntimeSessionsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListRuntimeSessionsResponse>, Status> {
         let response = self
             .provider
-            .list_sessions({
-                let _request = request.into_inner();
-                ListAppRuntimeSessionsRequest {}
-            })
+            .list_sessions(list_sessions_request_from_proto(request.into_inner())?)
             .await
             .map_err(|error| rpc_status("runtime list sessions", error))?;
         Ok(GrpcResponse::new(list_sessions_response_to_proto(response)))
@@ -422,12 +443,12 @@ where
 
     async fn stop_session(
         &self,
-        request: GrpcRequest<pb::StopAppRuntimeSessionRequest>,
+        request: GrpcRequest<pb::StopRuntimeSessionRequest>,
     ) -> std::result::Result<GrpcResponse<()>, Status> {
         self.provider
             .stop_session({
                 let request = request.into_inner();
-                StopAppRuntimeSessionRequest {
+                StopRuntimeSessionRequest {
                     session_id: request.session_id,
                 }
             })
@@ -438,8 +459,8 @@ where
 
     async fn prepare_workspace(
         &self,
-        request: GrpcRequest<pb::PrepareAppRuntimeWorkspaceRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::PrepareAppRuntimeWorkspaceResponse>, Status> {
+        request: GrpcRequest<pb::PrepareRuntimeWorkspaceRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::PrepareRuntimeWorkspaceResponse>, Status> {
         let response = self
             .provider
             .prepare_workspace(prepare_workspace_request_from_proto(request.into_inner()))
@@ -452,12 +473,12 @@ where
 
     async fn remove_workspace(
         &self,
-        request: GrpcRequest<pb::RemoveAppRuntimeWorkspaceRequest>,
+        request: GrpcRequest<pb::RemoveRuntimeWorkspaceRequest>,
     ) -> std::result::Result<GrpcResponse<()>, Status> {
         self.provider
             .remove_workspace({
                 let request = request.into_inner();
-                RemoveAppRuntimeWorkspaceRequest {
+                RemoveRuntimeWorkspaceRequest {
                     session_id: request.session_id,
                     agent_session_id: request.agent_session_id,
                 }
@@ -473,9 +494,9 @@ where
     ) -> std::result::Result<GrpcResponse<pb::HostedApp>, Status> {
         let app = self
             .provider
-            .start_plugin(start_plugin_request_from_proto(request.into_inner()))
+            .start_app(start_app_request_from_proto(request.into_inner()))
             .await
-            .map_err(|error| rpc_status("runtime start plugin", error))?;
-        Ok(GrpcResponse::new(hosted_plugin_to_proto(app)))
+            .map_err(|error| rpc_status("runtime start app", error))?;
+        Ok(GrpcResponse::new(hosted_app_to_proto(app)))
     }
 }

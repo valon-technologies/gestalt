@@ -2,18 +2,26 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 )
 
 type RuntimeInspector interface {
-	SnapshotAppRuntimes(ctx context.Context) ([]RuntimeProviderSnapshot, error)
-	ListAppRuntimeSessionLogs(ctx context.Context, providerName, sessionID string, afterSeq int64, limit int) ([]runtimelogs.Record, error)
+	SnapshotRuntimes(ctx context.Context) ([]RuntimeProviderSnapshot, error)
+	ListRuntimeSessions(ctx context.Context, providerName string, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error)
+	ListRuntimeSessionLogs(ctx context.Context, providerName, sessionID string, afterSeq int64, limit int) ([]runtimelogs.Record, error)
 }
+
+var (
+	ErrRuntimeProviderNotFound    = errors.New("runtime provider not found")
+	ErrRuntimeProviderUnavailable = errors.New("runtime provider unavailable")
+)
 
 type RuntimeProviderSnapshot struct {
 	Name          string
@@ -23,11 +31,10 @@ type RuntimeProviderSnapshot struct {
 	SupportLoaded bool
 	Advertised    RuntimeBehavior
 	Effective     RuntimeBehavior
-	Sessions      []appruntime.Session
 	Error         string
 }
 
-func (r *pluginRuntimeRegistry) SnapshotAppRuntimes(ctx context.Context) ([]RuntimeProviderSnapshot, error) {
+func (r *runtimeRegistry) SnapshotRuntimes(ctx context.Context) ([]RuntimeProviderSnapshot, error) {
 	if r == nil || r.cfg == nil {
 		return nil, nil
 	}
@@ -35,13 +42,13 @@ func (r *pluginRuntimeRegistry) SnapshotAppRuntimes(ctx context.Context) ([]Runt
 	type item struct {
 		name     string
 		entry    *config.RuntimeProviderEntry
-		provider appruntime.Provider
+		provider runtimeprovider.Provider
 	}
 
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
-		return nil, fmt.Errorf("plugin runtime registry is closed")
+		return nil, fmt.Errorf("runtime registry is closed")
 	}
 	items := make([]item, 0, len(r.cfg.Runtime.Providers))
 	for name, entry := range r.cfg.Runtime.Providers {
@@ -84,20 +91,37 @@ func (r *pluginRuntimeRegistry) SnapshotAppRuntimes(ctx context.Context) ([]Runt
 			snapshot.SupportLoaded = true
 			snapshot.Advertised = runtimeAdvertisedBehavior(support)
 			snapshot.Effective = runtimeResolvedBehavior(snapshot.Advertised, r.deps)
-			sessions, err := item.provider.ListSessions(ctx)
-			if err != nil {
-				snapshot.Error = fmt.Sprintf("list sessions: %v", err)
-				out = append(out, snapshot)
-				continue
-			}
-			snapshot.Sessions = sessions
 		}
 		out = append(out, snapshot)
 	}
 	return out, nil
 }
 
-func (r *pluginRuntimeRegistry) ListAppRuntimeSessionLogs(ctx context.Context, providerName, sessionID string, afterSeq int64, limit int) ([]runtimelogs.Record, error) {
+func (r *runtimeRegistry) ListRuntimeSessions(ctx context.Context, providerName string, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+	providerName = strings.TrimSpace(providerName)
+	if r == nil || r.cfg == nil || providerName == "" {
+		return nil, ErrRuntimeProviderNotFound
+	}
+
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("%w: registry is closed", ErrRuntimeProviderUnavailable)
+	}
+	_, configured := r.cfg.Runtime.Providers[providerName]
+	provider := r.providers[providerName]
+	r.mu.Unlock()
+
+	if !configured {
+		return nil, ErrRuntimeProviderNotFound
+	}
+	if provider == nil {
+		return nil, fmt.Errorf("%w: provider is not loaded", ErrRuntimeProviderUnavailable)
+	}
+	return provider.ListSessions(ctx, req)
+}
+
+func (r *runtimeRegistry) ListRuntimeSessionLogs(ctx context.Context, providerName, sessionID string, afterSeq int64, limit int) ([]runtimelogs.Record, error) {
 	if r == nil || r.deps.Services == nil || r.deps.Services.RuntimeSessionLogs == nil {
 		return nil, nil
 	}

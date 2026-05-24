@@ -1309,229 +1309,6 @@ impl AgentInteractionState {
         }
     }
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppRuntimeSupport {
-    #[prost(bool, tag = "1")]
-    pub can_host_apps: bool,
-    #[prost(enumeration = "AppRuntimeEgressMode", tag = "3")]
-    pub egress_mode: i32,
-    #[prost(bool, tag = "7")]
-    pub supports_prepare_workspace: bool,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AppRuntimeSession {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub state: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "3")]
-    pub metadata: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-    #[prost(message, optional, tag = "4")]
-    pub lifecycle: ::core::option::Option<AppRuntimeSessionLifecycle>,
-    #[prost(string, tag = "5")]
-    pub state_reason: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub state_message: ::prost::alloc::string::String,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppRuntimeSessionLifecycle {
-    #[prost(message, optional, tag = "1")]
-    pub started_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "2")]
-    pub recommended_drain_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "3")]
-    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppRuntimeImagePullAuth {
-    #[prost(string, tag = "1")]
-    pub docker_config_json: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StartAppRuntimeSessionRequest {
-    #[prost(string, tag = "1")]
-    pub app_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub template: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub image: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "4")]
-    pub metadata: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-    #[prost(message, optional, tag = "6")]
-    pub image_pull_auth: ::core::option::Option<AppRuntimeImagePullAuth>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetAppRuntimeSessionRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListAppRuntimeSessionsRequest {}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListAppRuntimeSessionsResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub sessions: ::prost::alloc::vec::Vec<AppRuntimeSession>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct StopAppRuntimeSessionRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PrepareAppRuntimeWorkspaceRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub agent_session_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub workspace: ::core::option::Option<AgentWorkspace>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct PrepareAppRuntimeWorkspaceResponse {
-    #[prost(message, optional, tag = "1")]
-    pub workspace: ::core::option::Option<PreparedAgentWorkspace>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct RemoveAppRuntimeWorkspaceRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub agent_session_id: ::prost::alloc::string::String,
-}
-/// StartHostedAppRequest describes the app process to launch inside a
-/// runtime session. The runtime backend owns allocation and injection of the
-/// plugin's listener endpoint and returns a host-reachable dial target in the
-/// HostedApp response.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StartHostedAppRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub app_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub command: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "4")]
-    pub args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(btree_map = "string, string", tag = "5")]
-    pub env: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
-    #[prost(string, repeated, tag = "7")]
-    pub allowed_hosts: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, tag = "8")]
-    pub default_action: ::prost::alloc::string::String,
-    #[prost(string, tag = "9")]
-    pub host_binary: ::prost::alloc::string::String,
-    #[prost(string, tag = "11")]
-    pub workdir: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct HostedApp {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub app_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub dial_target: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppRuntimeLogEntry {
-    #[prost(enumeration = "AppRuntimeLogStream", tag = "1")]
-    pub stream: i32,
-    #[prost(string, tag = "2")]
-    pub message: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub observed_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(int64, tag = "4")]
-    pub source_seq: i64,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AppendAppRuntimeLogsRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "2")]
-    pub logs: ::prost::alloc::vec::Vec<AppRuntimeLogEntry>,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppendAppRuntimeLogsResponse {
-    #[prost(int64, tag = "1")]
-    pub last_seq: i64,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum AppRuntimeEgressMode {
-    Unspecified = 0,
-    None = 1,
-    Cidr = 2,
-    Hostname = 3,
-}
-impl AppRuntimeEgressMode {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "APP_RUNTIME_EGRESS_MODE_UNSPECIFIED",
-            Self::None => "APP_RUNTIME_EGRESS_MODE_NONE",
-            Self::Cidr => "APP_RUNTIME_EGRESS_MODE_CIDR",
-            Self::Hostname => "APP_RUNTIME_EGRESS_MODE_HOSTNAME",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "APP_RUNTIME_EGRESS_MODE_UNSPECIFIED" => Some(Self::Unspecified),
-            "APP_RUNTIME_EGRESS_MODE_NONE" => Some(Self::None),
-            "APP_RUNTIME_EGRESS_MODE_CIDR" => Some(Self::Cidr),
-            "APP_RUNTIME_EGRESS_MODE_HOSTNAME" => Some(Self::Hostname),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum AppRuntimeLogStream {
-    PluginRuntimeLogStreamUnspecified = 0,
-    PluginRuntimeLogStreamStdout = 1,
-    PluginRuntimeLogStreamStderr = 2,
-    PluginRuntimeLogStreamRuntime = 3,
-}
-impl AppRuntimeLogStream {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::PluginRuntimeLogStreamUnspecified => "PLUGIN_RUNTIME_LOG_STREAM_UNSPECIFIED",
-            Self::PluginRuntimeLogStreamStdout => "PLUGIN_RUNTIME_LOG_STREAM_STDOUT",
-            Self::PluginRuntimeLogStreamStderr => "PLUGIN_RUNTIME_LOG_STREAM_STDERR",
-            Self::PluginRuntimeLogStreamRuntime => "PLUGIN_RUNTIME_LOG_STREAM_RUNTIME",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "PLUGIN_RUNTIME_LOG_STREAM_UNSPECIFIED" => {
-                Some(Self::PluginRuntimeLogStreamUnspecified)
-            }
-            "PLUGIN_RUNTIME_LOG_STREAM_STDOUT" => Some(Self::PluginRuntimeLogStreamStdout),
-            "PLUGIN_RUNTIME_LOG_STREAM_STDERR" => Some(Self::PluginRuntimeLogStreamStderr),
-            "PLUGIN_RUNTIME_LOG_STREAM_RUNTIME" => Some(Self::PluginRuntimeLogStreamRuntime),
-            _ => None,
-        }
-    }
-}
 /// AuthenticatedUser is the normalized user identity returned by an authentication
 /// provider after a login or token-validation flow.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2774,6 +2551,234 @@ impl ProviderKind {
             "PROVIDER_KIND_RUNTIME" => Some(Self::Runtime),
             "PROVIDER_KIND_AGENT" => Some(Self::Agent),
             "PROVIDER_KIND_EXTERNAL_CREDENTIAL" => Some(Self::ExternalCredential),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeSupport {
+    #[prost(bool, tag = "1")]
+    pub can_host_apps: bool,
+    #[prost(enumeration = "RuntimeEgressMode", tag = "3")]
+    pub egress_mode: i32,
+    #[prost(bool, tag = "7")]
+    pub supports_prepare_workspace: bool,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RuntimeSession {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub state: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "3")]
+    pub metadata: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(message, optional, tag = "4")]
+    pub lifecycle: ::core::option::Option<RuntimeSessionLifecycle>,
+    #[prost(string, tag = "5")]
+    pub state_reason: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub state_message: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeSessionLifecycle {
+    #[prost(message, optional, tag = "1")]
+    pub started_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "2")]
+    pub recommended_drain_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "3")]
+    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeImagePullAuth {
+    #[prost(string, tag = "1")]
+    pub docker_config_json: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StartRuntimeSessionRequest {
+    #[prost(string, tag = "1")]
+    pub app_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub template: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub image: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "4")]
+    pub metadata: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(message, optional, tag = "6")]
+    pub image_pull_auth: ::core::option::Option<RuntimeImagePullAuth>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetRuntimeSessionRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListRuntimeSessionsRequest {
+    #[prost(int32, tag = "1")]
+    pub page_size: i32,
+    #[prost(string, tag = "2")]
+    pub page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListRuntimeSessionsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub sessions: ::prost::alloc::vec::Vec<RuntimeSession>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StopRuntimeSessionRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PrepareRuntimeWorkspaceRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub agent_session_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub workspace: ::core::option::Option<AgentWorkspace>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PrepareRuntimeWorkspaceResponse {
+    #[prost(message, optional, tag = "1")]
+    pub workspace: ::core::option::Option<PreparedAgentWorkspace>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RemoveRuntimeWorkspaceRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub agent_session_id: ::prost::alloc::string::String,
+}
+/// StartHostedAppRequest describes the app process to launch inside a
+/// runtime session. The runtime backend owns allocation and injection of the
+/// app's listener endpoint and returns a host-reachable dial target in the
+/// HostedApp response.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StartHostedAppRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub app_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub command: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "4")]
+    pub args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(btree_map = "string, string", tag = "5")]
+    pub env: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(string, repeated, tag = "7")]
+    pub allowed_hosts: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag = "8")]
+    pub default_action: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub host_binary: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub workdir: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HostedApp {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub app_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub dial_target: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RuntimeLogEntry {
+    #[prost(enumeration = "RuntimeLogStream", tag = "1")]
+    pub stream: i32,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub observed_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(int64, tag = "4")]
+    pub source_seq: i64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AppendRuntimeLogsRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "2")]
+    pub logs: ::prost::alloc::vec::Vec<RuntimeLogEntry>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AppendRuntimeLogsResponse {
+    #[prost(int64, tag = "1")]
+    pub last_seq: i64,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum RuntimeEgressMode {
+    Unspecified = 0,
+    None = 1,
+    Cidr = 2,
+    Hostname = 3,
+}
+impl RuntimeEgressMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "RUNTIME_EGRESS_MODE_UNSPECIFIED",
+            Self::None => "RUNTIME_EGRESS_MODE_NONE",
+            Self::Cidr => "RUNTIME_EGRESS_MODE_CIDR",
+            Self::Hostname => "RUNTIME_EGRESS_MODE_HOSTNAME",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "RUNTIME_EGRESS_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "RUNTIME_EGRESS_MODE_NONE" => Some(Self::None),
+            "RUNTIME_EGRESS_MODE_CIDR" => Some(Self::Cidr),
+            "RUNTIME_EGRESS_MODE_HOSTNAME" => Some(Self::Hostname),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum RuntimeLogStream {
+    Unspecified = 0,
+    Stdout = 1,
+    Stderr = 2,
+    Runtime = 3,
+}
+impl RuntimeLogStream {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "RUNTIME_LOG_STREAM_UNSPECIFIED",
+            Self::Stdout => "RUNTIME_LOG_STREAM_STDOUT",
+            Self::Stderr => "RUNTIME_LOG_STREAM_STDERR",
+            Self::Runtime => "RUNTIME_LOG_STREAM_RUNTIME",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "RUNTIME_LOG_STREAM_UNSPECIFIED" => Some(Self::Unspecified),
+            "RUNTIME_LOG_STREAM_STDOUT" => Some(Self::Stdout),
+            "RUNTIME_LOG_STREAM_STDERR" => Some(Self::Stderr),
+            "RUNTIME_LOG_STREAM_RUNTIME" => Some(Self::Runtime),
             _ => None,
         }
     }

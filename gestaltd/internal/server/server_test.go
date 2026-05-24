@@ -68,8 +68,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	"github.com/valon-technologies/gestalt/server/services/ui"
 	"github.com/valon-technologies/gestalt/server/services/ui/adminui"
@@ -566,12 +566,15 @@ func (r *recordingExternalCredentialProvider) lookupCalls() int64 {
 }
 
 type staticRuntimeInspector struct {
-	snapshots []bootstrap.RuntimeProviderSnapshot
-	logs      []runtimelogs.Record
-	err       error
+	mu              sync.Mutex
+	snapshots       []bootstrap.RuntimeProviderSnapshot
+	sessions        map[string]*runtimeprovider.ListSessionsResponse
+	sessionRequests map[string]runtimeprovider.ListSessionsRequest
+	logs            []runtimelogs.Record
+	err             error
 }
 
-func (s *staticRuntimeInspector) SnapshotAppRuntimes(context.Context) ([]bootstrap.RuntimeProviderSnapshot, error) {
+func (s *staticRuntimeInspector) SnapshotRuntimes(context.Context) ([]bootstrap.RuntimeProviderSnapshot, error) {
 	if s == nil {
 		return nil, nil
 	}
@@ -581,20 +584,48 @@ func (s *staticRuntimeInspector) SnapshotAppRuntimes(context.Context) ([]bootstr
 	out := make([]bootstrap.RuntimeProviderSnapshot, 0, len(s.snapshots))
 	for _, snapshot := range s.snapshots {
 		cloned := snapshot
-		cloned.Sessions = make([]appruntime.Session, 0, len(snapshot.Sessions))
-		for _, session := range snapshot.Sessions {
-			cloned.Sessions = append(cloned.Sessions, appruntime.Session{
-				ID:       session.ID,
-				State:    session.State,
-				Metadata: maps.Clone(session.Metadata),
-			})
-		}
 		out = append(out, cloned)
 	}
 	return out, nil
 }
 
-func (s *staticRuntimeInspector) ListAppRuntimeSessionLogs(_ context.Context, _ string, _ string, afterSeq int64, limit int) ([]runtimelogs.Record, error) {
+func (s *staticRuntimeInspector) ListRuntimeSessions(_ context.Context, providerName string, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+	if s == nil {
+		return nil, bootstrap.ErrRuntimeProviderNotFound
+	}
+	if s.err != nil {
+		return nil, s.err
+	}
+	s.mu.Lock()
+	if s.sessionRequests == nil {
+		s.sessionRequests = map[string]runtimeprovider.ListSessionsRequest{}
+	}
+	s.sessionRequests[providerName] = req
+	s.mu.Unlock()
+	resp := s.sessions[providerName]
+	if resp == nil {
+		for _, snapshot := range s.snapshots {
+			if snapshot.Name == providerName {
+				return nil, bootstrap.ErrRuntimeProviderUnavailable
+			}
+		}
+		return nil, bootstrap.ErrRuntimeProviderNotFound
+	}
+	out := &runtimeprovider.ListSessionsResponse{
+		Sessions:      make([]runtimeprovider.Session, 0, len(resp.Sessions)),
+		NextPageToken: resp.NextPageToken,
+	}
+	for _, session := range resp.Sessions {
+		out.Sessions = append(out.Sessions, runtimeprovider.Session{
+			ID:       session.ID,
+			State:    session.State,
+			Metadata: maps.Clone(session.Metadata),
+		})
+	}
+	return out, nil
+}
+
+func (s *staticRuntimeInspector) ListRuntimeSessionLogs(_ context.Context, _ string, _ string, afterSeq int64, limit int) ([]runtimelogs.Record, error) {
 	if s == nil {
 		return nil, nil
 	}
@@ -795,15 +826,15 @@ func (s relayTestAgentProviderServer) GetSession(_ context.Context, req *proto.G
 }
 
 type relayTestRuntimeLogHostServer struct {
-	proto.UnimplementedAppRuntimeLogHostServer
+	proto.UnimplementedRuntimeLogHostServer
 	calls *atomic.Int64
 }
 
-func (s relayTestRuntimeLogHostServer) AppendLogs(_ context.Context, req *proto.AppendAppRuntimeLogsRequest) (*proto.AppendAppRuntimeLogsResponse, error) {
+func (s relayTestRuntimeLogHostServer) AppendLogs(_ context.Context, req *proto.AppendRuntimeLogsRequest) (*proto.AppendRuntimeLogsResponse, error) {
 	if s.calls != nil {
 		s.calls.Add(1)
 	}
-	return &proto.AppendAppRuntimeLogsResponse{LastSeq: int64(len(req.GetLogs()))}, nil
+	return &proto.AppendRuntimeLogsResponse{LastSeq: int64(len(req.GetLogs()))}, nil
 }
 
 func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
@@ -1265,25 +1296,25 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 		{
 			name:         "runtime log host",
 			service:      "runtime_log_host",
-			methodPrefix: "/" + proto.AppRuntimeLogHost_ServiceDesc.ServiceName + "/",
+			methodPrefix: "/" + proto.RuntimeLogHost_ServiceDesc.ServiceName + "/",
 			register: func(srv *grpc.Server, calls *atomic.Int64) {
-				proto.RegisterAppRuntimeLogHostServer(srv, relayTestRuntimeLogHostServer{calls: calls})
+				proto.RegisterRuntimeLogHostServer(srv, relayTestRuntimeLogHostServer{calls: calls})
 			},
 			call: func(t *testing.T, ctx context.Context, conn *grpc.ClientConn) {
 				t.Helper()
-				resp, err := proto.NewAppRuntimeLogHostClient(conn).AppendLogs(ctx, &proto.AppendAppRuntimeLogsRequest{
+				resp, err := proto.NewRuntimeLogHostClient(conn).AppendLogs(ctx, &proto.AppendRuntimeLogsRequest{
 					SessionId: "runtime-session-1",
-					Logs: []*proto.AppRuntimeLogEntry{{
-						Stream:    proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT,
+					Logs: []*proto.RuntimeLogEntry{{
+						Stream:    proto.RuntimeLogStream_RUNTIME_LOG_STREAM_STDOUT,
 						Message:   "hello",
 						SourceSeq: 1,
 					}},
 				})
 				if err != nil {
-					t.Fatalf("AppRuntimeLogHost.AppendLogs via relay: %v", err)
+					t.Fatalf("RuntimeLogHost.AppendLogs via relay: %v", err)
 				}
 				if resp.GetLastSeq() != 1 {
-					t.Fatalf("AppRuntimeLogHost.AppendLogs last_seq = %d, want 1", resp.GetLastSeq())
+					t.Fatalf("RuntimeLogHost.AppendLogs last_seq = %d, want 1", resp.GetLastSeq())
 				}
 			},
 		},
@@ -1350,9 +1381,9 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			case "agent_provider":
 				_, err = proto.NewAgentProviderClient(conn).GetSession(staleCtx, &proto.GetAgentProviderSessionRequest{SessionId: "agent-session-1"})
 			case "runtime_log_host":
-				_, err = proto.NewAppRuntimeLogHostClient(conn).AppendLogs(staleCtx, &proto.AppendAppRuntimeLogsRequest{
+				_, err = proto.NewRuntimeLogHostClient(conn).AppendLogs(staleCtx, &proto.AppendRuntimeLogsRequest{
 					SessionId: "runtime-session-1",
-					Logs:      []*proto.AppRuntimeLogEntry{{Message: "stale"}},
+					Logs:      []*proto.RuntimeLogEntry{{Message: "stale"}},
 				})
 			}
 			if grpcstatus.Code(err) != codes.Unauthenticated {
@@ -4515,7 +4546,7 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.AppRuntimes = &staticRuntimeInspector{
+		cfg.Runtimes = &staticRuntimeInspector{
 			snapshots: []bootstrap.RuntimeProviderSnapshot{
 				{
 					Name:    "local",
@@ -4537,14 +4568,6 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 						HostServiceAccess: bootstrap.RuntimeHostServiceAccessRelay,
 						EgressMode:        bootstrap.RuntimeEgressModeCIDR,
 					},
-					Sessions: []appruntime.Session{{
-						ID:    "session-1",
-						State: appruntime.SessionStateRunning,
-						Metadata: map[string]string{
-							"app":   "support",
-							"owner": "support-platform",
-						},
-					}},
 				},
 			},
 		}
@@ -4586,8 +4609,8 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 	if got := providers[1]["loaded"]; got != true {
 		t.Fatalf("runtime providers[1].loaded = %v, want true", got)
 	}
-	if got := providers[1]["sessionCount"]; got != float64(1) {
-		t.Fatalf("runtime providers[1].sessionCount = %v, want 1", got)
+	if _, ok := providers[1]["sessionCount"]; ok {
+		t.Fatalf("runtime providers[1].sessionCount unexpectedly present: %#v", providers[1]["sessionCount"])
 	}
 	profile, ok := providers[1]["profile"].(map[string]any)
 	if !ok {
@@ -4601,10 +4624,10 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 	if !ok {
 		t.Fatalf("runtime providers[1].profile.effective = %#v, want object", profile["effective"])
 	}
-	if advertised["canHostPlugins"] != true || advertised["hostServiceAccess"] != "none" || advertised["egressMode"] != "cidr" {
+	if advertised["canHostApps"] != true || advertised["hostServiceAccess"] != "none" || advertised["egressMode"] != "cidr" {
 		t.Fatalf("runtime providers[1].profile.advertised = %#v", advertised)
 	}
-	if effective["canHostPlugins"] != true || effective["hostServiceAccess"] != "relay" || effective["egressMode"] != "cidr" {
+	if effective["canHostApps"] != true || effective["hostServiceAccess"] != "relay" || effective["egressMode"] != "cidr" {
 		t.Fatalf("runtime providers[1].profile.effective = %#v", effective)
 	}
 }
@@ -4612,26 +4635,32 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 func TestAdminAPI_RuntimeProviderSessions(t *testing.T) {
 	t.Parallel()
 
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.AppRuntimes = &staticRuntimeInspector{
-			snapshots: []bootstrap.RuntimeProviderSnapshot{{
-				Name:   "modal",
-				Driver: config.RuntimeProviderDriver("modal"),
-				Loaded: true,
-				Sessions: []appruntime.Session{{
+	inspector := &staticRuntimeInspector{
+		snapshots: []bootstrap.RuntimeProviderSnapshot{{
+			Name:   "modal",
+			Driver: config.RuntimeProviderDriver("modal"),
+			Loaded: true,
+		}},
+		sessions: map[string]*runtimeprovider.ListSessionsResponse{
+			"modal": {
+				NextPageToken: "next-page",
+				Sessions: []runtimeprovider.Session{{
 					ID:    "session-1",
-					State: appruntime.SessionStateRunning,
+					State: runtimeprovider.SessionStateRunning,
 					Metadata: map[string]string{
-						"app":   "support",
-						"owner": "support-platform",
+						"provider_name": "support",
+						"owner":         "support-platform",
 					},
 				}},
-			}},
-		}
+			},
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Runtimes = inspector
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers/modal/sessions")
+	resp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers/modal/sessions?pageSize=500&pageToken=next-in")
 	if err != nil {
 		t.Fatalf("GET runtime provider sessions: %v", err)
 	}
@@ -4641,24 +4670,126 @@ func TestAdminAPI_RuntimeProviderSessions(t *testing.T) {
 		t.Fatalf("runtime provider sessions status = %d, want 200: %s", resp.StatusCode, body)
 	}
 
-	var sessions []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&sessions); err != nil {
+	var listed map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
 		t.Fatalf("decoding runtime provider sessions: %v", err)
+	}
+	sessions, ok := listed["sessions"].([]any)
+	if !ok {
+		t.Fatalf("runtime provider sessions response = %#v, want sessions array", listed)
 	}
 	if len(sessions) != 1 {
 		t.Fatalf("runtime provider sessions len = %d, want 1", len(sessions))
 	}
-	if got := sessions[0]["id"]; got != "session-1" {
+	session, ok := sessions[0].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime provider sessions[0] = %#v, want object", sessions[0])
+	}
+	if got := session["id"]; got != "session-1" {
 		t.Fatalf("runtime provider sessions[0].id = %v, want session-1", got)
 	}
-	if got := sessions[0]["state"]; got != string(appruntime.SessionStateRunning) {
-		t.Fatalf("runtime provider sessions[0].state = %v, want %q", got, appruntime.SessionStateRunning)
+	if got := session["state"]; got != string(runtimeprovider.SessionStateRunning) {
+		t.Fatalf("runtime provider sessions[0].state = %v, want %q", got, runtimeprovider.SessionStateRunning)
 	}
-	if got := sessions[0]["app"]; got != "support" {
-		t.Fatalf("runtime provider sessions[0].plugin = %v, want support", got)
+	if got := session["app"]; got != "support" {
+		t.Fatalf("runtime provider sessions[0].app = %v, want support", got)
 	}
-	if _, ok := sessions[0]["metadata"]; ok {
-		t.Fatalf("runtime provider sessions[0].metadata unexpectedly present: %#v", sessions[0]["metadata"])
+	if _, ok := session["metadata"]; ok {
+		t.Fatalf("runtime provider sessions[0].metadata unexpectedly present: %#v", session["metadata"])
+	}
+	if got := listed["nextPageToken"]; got != "next-page" {
+		t.Fatalf("runtime provider sessions nextPageToken = %v, want next-page", got)
+	}
+	inspector.mu.Lock()
+	listReq := inspector.sessionRequests["modal"]
+	inspector.mu.Unlock()
+	if got, want := listReq.PageSize, 200; got != want {
+		t.Fatalf("runtime provider sessions pageSize = %d, want %d", got, want)
+	}
+	if got, want := listReq.PageToken, "next-in"; got != want {
+		t.Fatalf("runtime provider sessions pageToken = %q, want %q", got, want)
+	}
+}
+
+func TestAdminAPI_RuntimeProviderSessionsRejectsInvalidPagination(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		inspector *staticRuntimeInspector
+		path      string
+		want      int
+	}{
+		{
+			name:      "negative page size",
+			inspector: &staticRuntimeInspector{},
+			path:      "/admin/api/v1/runtime/providers/modal/sessions?pageSize=-1",
+			want:      http.StatusBadRequest,
+		},
+		{
+			name:      "provider invalid argument",
+			inspector: &staticRuntimeInspector{err: grpcstatus.Error(codes.InvalidArgument, "bad token")},
+			path:      "/admin/api/v1/runtime/providers/modal/sessions?pageToken=bad",
+			want:      http.StatusBadRequest,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Runtimes = tc.inspector
+			})
+			testutil.CloseOnCleanup(t, ts)
+
+			resp, err := http.Get(ts.URL + tc.path)
+			if err != nil {
+				t.Fatalf("GET runtime provider sessions: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != tc.want {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("runtime provider sessions status = %d, want %d: %s", resp.StatusCode, tc.want, body)
+			}
+		})
+	}
+}
+
+func TestAdminAPI_RuntimeProviderSessionsForwardsTokenWithoutDefaultPageSize(t *testing.T) {
+	t.Parallel()
+
+	inspector := &staticRuntimeInspector{
+		snapshots: []bootstrap.RuntimeProviderSnapshot{{
+			Name:   "modal",
+			Driver: config.RuntimeProviderDriver("modal"),
+			Loaded: true,
+		}},
+		sessions: map[string]*runtimeprovider.ListSessionsResponse{
+			"modal": {},
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Runtimes = inspector
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers/modal/sessions?pageToken=next-in")
+	if err != nil {
+		t.Fatalf("GET runtime provider sessions: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("runtime provider sessions status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	inspector.mu.Lock()
+	listReq := inspector.sessionRequests["modal"]
+	inspector.mu.Unlock()
+	if got := listReq.PageSize; got != 0 {
+		t.Fatalf("runtime provider sessions pageSize = %d, want 0 for token-only request", got)
+	}
+	if got, want := listReq.PageToken, "next-in"; got != want {
+		t.Fatalf("runtime provider sessions pageToken = %q, want %q", got, want)
 	}
 }
 
@@ -4666,7 +4797,7 @@ func TestAdminAPI_RuntimeProviderInspectionError(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.AppRuntimes = &staticRuntimeInspector{
+		cfg.Runtimes = &staticRuntimeInspector{
 			snapshots: []bootstrap.RuntimeProviderSnapshot{{
 				Name:   "modal",
 				Driver: config.RuntimeProviderDriver("modal"),
@@ -4722,7 +4853,7 @@ func TestAdminAPI_RuntimeProviderSessionInspectionErrorKeepsProfile(t *testing.T
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.AppRuntimes = &staticRuntimeInspector{
+		cfg.Runtimes = &staticRuntimeInspector{
 			snapshots: []bootstrap.RuntimeProviderSnapshot{{
 				Name:          "modal",
 				Driver:        config.RuntimeProviderDriver("modal"),
@@ -4786,7 +4917,7 @@ func TestAdminAPI_RuntimeProviderSessionLogs(t *testing.T) {
 	observedAt := time.Date(2026, time.April, 23, 12, 0, 0, 0, time.UTC)
 	appendedAt := observedAt.Add(2 * time.Second)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.AppRuntimes = &staticRuntimeInspector{
+		cfg.Runtimes = &staticRuntimeInspector{
 			logs: []runtimelogs.Record{
 				{
 					Seq:        1,
@@ -4867,7 +4998,7 @@ func TestAdminAPI_RuntimeProviderSessionLogsRejectsInvalidCursorAndMapsNotFound(
 		t.Parallel()
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.AppRuntimes = &staticRuntimeInspector{}
+			cfg.Runtimes = &staticRuntimeInspector{}
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -4886,7 +5017,7 @@ func TestAdminAPI_RuntimeProviderSessionLogsRejectsInvalidCursorAndMapsNotFound(
 		t.Parallel()
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.AppRuntimes = &staticRuntimeInspector{err: idb.ErrNotFound}
+			cfg.Runtimes = &staticRuntimeInspector{err: idb.ErrNotFound}
 		})
 		testutil.CloseOnCleanup(t, ts)
 

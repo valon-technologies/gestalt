@@ -69,7 +69,7 @@ The top-level `gestalt` package exposes the supported authoring API:
 - `Model`, `field`, `App`, `operation`, and `Request` for integration
   providers.
 - `AuthenticationProvider`, `CacheProvider`, `S3Provider`, `SecretsProvider`,
-  `WorkflowProvider`, `AgentProvider`, and `AppRuntimeProvider` for
+  `WorkflowProvider`, `AgentProvider`, and `RuntimeProvider` for
   host-service provider runtimes.
 - `Cache`, `IndexedDB`, `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`,
   `AgentManager`, and `AppInvoker` for calling sibling host services.
@@ -77,7 +77,7 @@ The top-level `gestalt` package exposes the supported authoring API:
 - `gestalt.telemetry` for provider-authored GenAI spans and metrics.
 
 The SDK also exposes authored provider models for authentication, workflow,
-agent, and plugin-runtime payloads. Agent provider handlers receive and return
+agent, and runtime payloads. Agent provider handlers receive and return
 native dataclasses such as `CreateAgentProviderTurnRequest`, `AgentSession`,
 and `AgentTurn`; structured fields accept dictionaries or dataclass instances,
 and timestamp fields use timezone-aware `datetime` values. Workflow helpers such as
