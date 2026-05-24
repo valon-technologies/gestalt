@@ -38,6 +38,14 @@ type InvokerClient struct {
 	invocationToken string
 }
 
+// InvokerClientContract is the fakeable client contract for app invoker calls.
+type InvokerClientContract interface {
+	Close() error
+	Invoke(context.Context, string, string, any, *InvokeOptions) (*OperationResult, error)
+	InvokeGraphQL(context.Context, string, string, any, *InvokeOptions) (*OperationResult, error)
+	ExchangeInvocationToken(context.Context, []InvocationGrant, time.Duration) (string, error)
+}
+
 var sharedInvokerTransport sharedManagerTransport[proto.AppInvokerClient]
 
 // Invoker returns a client that attaches invocationToken to every request.

@@ -4,6 +4,7 @@ use hyper_util::rt::TokioIo;
 use serde::Serialize;
 use tokio::net::UnixStream;
 use tonic::Request;
+use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
@@ -69,6 +70,30 @@ pub struct InvokeOptions {
     pub instance: String,
     /// Idempotency key forwarded to the target operation.
     pub idempotency_key: String,
+}
+
+#[async_trait]
+/// Fakeable client contract for app invoker calls.
+pub trait AppInvokerClient: Send {
+    async fn invoke(
+        &mut self,
+        plugin: String,
+        operation: String,
+        params: serde_json::Value,
+        options: Option<InvokeOptions>,
+    ) -> std::result::Result<OperationResult, AppInvokerError>;
+    async fn invoke_graphql(
+        &mut self,
+        plugin: String,
+        document: String,
+        variables: Option<serde_json::Value>,
+        options: Option<InvokeOptions>,
+    ) -> std::result::Result<OperationResult, AppInvokerError>;
+    async fn exchange_invocation_token(
+        &mut self,
+        grants: &[InvocationGrant],
+        ttl: Option<Duration>,
+    ) -> std::result::Result<String, AppInvokerError>;
 }
 
 /// Client for invoking sibling app operations through the host.
@@ -247,6 +272,37 @@ impl AppInvoker {
             .into_inner();
 
         Ok(response.invocation_token)
+    }
+}
+
+#[async_trait]
+impl AppInvokerClient for AppInvoker {
+    async fn invoke(
+        &mut self,
+        plugin: String,
+        operation: String,
+        params: serde_json::Value,
+        options: Option<InvokeOptions>,
+    ) -> std::result::Result<OperationResult, AppInvokerError> {
+        AppInvoker::invoke(self, &plugin, &operation, params, options).await
+    }
+
+    async fn invoke_graphql(
+        &mut self,
+        plugin: String,
+        document: String,
+        variables: Option<serde_json::Value>,
+        options: Option<InvokeOptions>,
+    ) -> std::result::Result<OperationResult, AppInvokerError> {
+        AppInvoker::invoke_graphql(self, &plugin, &document, variables, options).await
+    }
+
+    async fn exchange_invocation_token(
+        &mut self,
+        grants: &[InvocationGrant],
+        ttl: Option<Duration>,
+    ) -> std::result::Result<String, AppInvokerError> {
+        AppInvoker::exchange_invocation_token(self, grants, ttl).await
     }
 }
 

@@ -138,6 +138,7 @@ export {
 } from "./build.ts";
 export {
   AppInvoker,
+  type AppInvokerClientLike,
   type AppGraphQLInvokeOptions,
   type AppInvocationGrant,
   type AppInvokeOptions,

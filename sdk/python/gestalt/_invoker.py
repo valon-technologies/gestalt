@@ -30,6 +30,45 @@ pb_grpc: Any = _pb_grpc
 _PLUGIN_INVOKER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 
 
+class AppInvokerClientProtocol(Protocol):
+    """Fakeable client contract for app invoker calls."""
+
+    def close(self) -> None:
+        """Close the client."""
+
+    def invoke(
+        self,
+        plugin: str,
+        operation: str,
+        params: JsonObjectInput | None = None,
+        *,
+        connection: str = "",
+        instance: str = "",
+        idempotency_key: str = "",
+    ) -> Response[str]:
+        """Invoke one operation on another app."""
+
+    def invoke_graphql(
+        self,
+        plugin: str,
+        document: str,
+        variables: JsonObjectInput | None = None,
+        *,
+        connection: str = "",
+        instance: str = "",
+        idempotency_key: str = "",
+    ) -> Response[str]:
+        """Invoke another app's GraphQL surface."""
+
+    def exchange_invocation_token(
+        self,
+        *,
+        grants: Sequence[Any] | None = None,
+        ttl_seconds: int = 0,
+    ) -> str:
+        """Exchange this invocation token for a narrower child token."""
+
+
 class AppInvoker:
     """Client for invoking sibling app operations from provider code.
 

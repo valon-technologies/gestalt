@@ -104,7 +104,7 @@ pub use indexeddb::{
     TransactionIndexClient, TransactionMode, TransactionObjectStore, TransactionOptions,
     compare_indexeddb_values, indexeddb_range_bounds, new_indexeddb_cursor_snapshot,
 };
-pub use invoker::{AppInvoker, AppInvokerError, InvocationGrant, InvokeOptions};
+pub use invoker::{AppInvoker, AppInvokerClient, AppInvokerError, InvocationGrant, InvokeOptions};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};

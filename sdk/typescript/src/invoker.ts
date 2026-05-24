@@ -36,13 +36,33 @@ export interface AppGraphQLInvokeOptions extends AppInvokeOptions {
   /** GraphQL variables encoded as a JSON object. */
   variables?: JsonObjectInput;
 }
+
+/** Fakeable client contract for app invoker calls. */
+export interface AppInvokerClientLike {
+  invoke(
+    app: string,
+    operation: string,
+    params?: JsonObjectInput,
+    options?: AppInvokeOptions,
+  ): Promise<OperationResult>;
+  invokeGraphQL(
+    app: string,
+    document: string,
+    options?: AppGraphQLInvokeOptions,
+  ): Promise<OperationResult>;
+  exchangeInvocationToken(options?: {
+    grants?: AppInvocationGrant[];
+    ttlSeconds?: number;
+  }): Promise<string>;
+}
+
 /**
  * Client for invoking sibling app operations through the host.
  *
  * The constructor accepts either a Gestalt request or an invocation token. The
  * token is attached to every operation, GraphQL, and token-exchange request.
  */
-export class AppInvoker {
+export class AppInvoker implements AppInvokerClientLike {
   private readonly client: Client<typeof AppInvokerService>;
   private readonly invocationToken: string;
 
