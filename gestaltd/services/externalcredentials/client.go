@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
+	sdkexternalcredentials "github.com/valon-technologies/gestalt/sdk/go/externalcredentials"
 	"github.com/valon-technologies/gestalt/server/core"
+	rpcexternalcredentials "github.com/valon-technologies/gestalt/server/rpc/externalcredentials"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -31,7 +33,7 @@ type ExecConfig struct {
 }
 
 type remoteExternalCredentialProvider struct {
-	client proto.ExternalCredentialProviderClient
+	client sdkexternalcredentials.Client
 	closer io.Closer
 }
 
@@ -52,13 +54,12 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredential
 	}
 
 	runtimeClient := proc.Lifecycle()
-	client := proto.NewExternalCredentialProviderClient(proc.Conn())
 	if _, err := runtimehost.ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL, cfg.Name, cfg.Config); err != nil {
 		_ = proc.Close()
 		return nil, err
 	}
 
-	return &remoteExternalCredentialProvider{client: client, closer: proc}, nil
+	return &remoteExternalCredentialProvider{client: rpcexternalcredentials.NewConn(proc.Conn(), rpcexternalcredentials.Options{}), closer: proc}, nil
 }
 
 func (r *remoteExternalCredentialProvider) PutCredential(ctx context.Context, credential *core.ExternalCredential) error {
@@ -83,10 +84,10 @@ func (r *remoteExternalCredentialProvider) GetCredential(ctx context.Context, su
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
-	resp, err := r.client.GetCredential(ctx, &proto.GetExternalCredentialRequest{
-		Lookup: &proto.ExternalCredentialLookup{
-			SubjectId:    strings.TrimSpace(subjectID),
-			ConnectionId: strings.TrimSpace(connectionID),
+	resp, err := r.client.GetCredential(ctx, &sdkexternalcredentials.GetExternalCredentialRequest{
+		Lookup: &sdkexternalcredentials.ExternalCredentialLookup{
+			SubjectID:    strings.TrimSpace(subjectID),
+			ConnectionID: strings.TrimSpace(connectionID),
 			Instance:     strings.TrimSpace(instance),
 		},
 	})
@@ -96,19 +97,19 @@ func (r *remoteExternalCredentialProvider) GetCredential(ctx context.Context, su
 	if resp == nil {
 		return nil, fmt.Errorf("get external credential: provider returned nil credential")
 	}
-	return externalCredentialFromProto(resp), nil
+	return externalCredentialFromSDK(resp), nil
 }
 
 func (r *remoteExternalCredentialProvider) ListCredentials(ctx context.Context, subjectID string) ([]*core.ExternalCredential, error) {
-	return r.listCredentials(ctx, &proto.ListExternalCredentialsRequest{
-		SubjectId: strings.TrimSpace(subjectID),
+	return r.listCredentials(ctx, &sdkexternalcredentials.ListExternalCredentialsRequest{
+		SubjectID: strings.TrimSpace(subjectID),
 	})
 }
 
 func (r *remoteExternalCredentialProvider) ListCredentialsForConnection(ctx context.Context, subjectID, connectionID string) ([]*core.ExternalCredential, error) {
-	return r.listCredentials(ctx, &proto.ListExternalCredentialsRequest{
-		SubjectId:    strings.TrimSpace(subjectID),
-		ConnectionId: strings.TrimSpace(connectionID),
+	return r.listCredentials(ctx, &sdkexternalcredentials.ListExternalCredentialsRequest{
+		SubjectID:    strings.TrimSpace(subjectID),
+		ConnectionID: strings.TrimSpace(connectionID),
 	})
 }
 
@@ -116,8 +117,8 @@ func (r *remoteExternalCredentialProvider) DeleteCredential(ctx context.Context,
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
-	_, err := r.client.DeleteCredential(ctx, &proto.DeleteExternalCredentialRequest{
-		Id: strings.TrimSpace(id),
+	err := r.client.DeleteCredential(ctx, &sdkexternalcredentials.DeleteExternalCredentialRequest{
+		ID: strings.TrimSpace(id),
 	})
 	if status.Code(err) == codes.NotFound {
 		return nil
@@ -132,7 +133,7 @@ func (r *remoteExternalCredentialProvider) ValidateCredentialConfig(ctx context.
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
-	_, err := r.client.ValidateCredentialConfig(ctx, validateCredentialConfigToProto(req))
+	err := r.client.ValidateCredentialConfig(ctx, validateCredentialConfigToSDK(req))
 	if err != nil {
 		return externalCredentialRPCError("validate external credential config", err)
 	}
@@ -143,28 +144,28 @@ func (r *remoteExternalCredentialProvider) ResolveCredential(ctx context.Context
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
-	resp, err := r.client.ResolveCredential(ctx, resolveCredentialRequestToProto(req))
+	resp, err := r.client.ResolveCredential(ctx, resolveCredentialRequestToSDK(req))
 	if err != nil {
 		return nil, externalCredentialRPCError("resolve external credential", err)
 	}
 	if resp == nil {
 		return nil, fmt.Errorf("resolve external credential: provider returned nil response")
 	}
-	return resolveCredentialResponseFromProto(resp), nil
+	return resolveCredentialResponseFromSDK(resp), nil
 }
 
 func (r *remoteExternalCredentialProvider) ExchangeCredential(ctx context.Context, req *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
-	resp, err := r.client.ExchangeCredential(ctx, exchangeCredentialRequestToProto(req))
+	resp, err := r.client.ExchangeCredential(ctx, exchangeCredentialRequestToSDK(req))
 	if err != nil {
 		return nil, externalCredentialRPCError("exchange external credential", err)
 	}
 	if resp == nil {
 		return nil, fmt.Errorf("exchange external credential: provider returned nil response")
 	}
-	return exchangeCredentialResponseFromProto(resp), nil
+	return exchangeCredentialResponseFromSDK(resp), nil
 }
 
 func (r *remoteExternalCredentialProvider) Close() error {
@@ -181,8 +182,8 @@ func (r *remoteExternalCredentialProvider) upsertCredential(ctx context.Context,
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
-	resp, err := r.client.UpsertCredential(ctx, &proto.UpsertExternalCredentialRequest{
-		Credential:         externalCredentialToProto(credential),
+	resp, err := r.client.UpsertCredential(ctx, &sdkexternalcredentials.UpsertExternalCredentialRequest{
+		Credential:         externalCredentialToSDK(credential),
 		PreserveTimestamps: preserveTimestamps,
 	})
 	if err != nil {
@@ -191,10 +192,10 @@ func (r *remoteExternalCredentialProvider) upsertCredential(ctx context.Context,
 	if resp == nil {
 		return nil, fmt.Errorf("upsert external credential: provider returned nil credential")
 	}
-	return externalCredentialFromProto(resp), nil
+	return externalCredentialFromSDK(resp), nil
 }
 
-func (r *remoteExternalCredentialProvider) listCredentials(ctx context.Context, req *proto.ListExternalCredentialsRequest) ([]*core.ExternalCredential, error) {
+func (r *remoteExternalCredentialProvider) listCredentials(ctx context.Context, req *sdkexternalcredentials.ListExternalCredentialsRequest) ([]*core.ExternalCredential, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
@@ -207,9 +208,155 @@ func (r *remoteExternalCredentialProvider) listCredentials(ctx context.Context, 
 	}
 	out := make([]*core.ExternalCredential, 0, len(resp.GetCredentials()))
 	for _, credential := range resp.GetCredentials() {
-		out = append(out, externalCredentialFromProto(credential))
+		out = append(out, externalCredentialFromSDK(credential))
 	}
 	return out, nil
+}
+
+func externalCredentialToSDK(credential *core.ExternalCredential) *sdkexternalcredentials.ExternalCredential {
+	if credential == nil {
+		return nil
+	}
+	return &sdkexternalcredentials.ExternalCredential{
+		ID:                credential.ID,
+		SubjectID:         strings.TrimSpace(credential.SubjectID),
+		ConnectionID:      strings.TrimSpace(credential.ConnectionID),
+		Instance:          strings.TrimSpace(credential.Instance),
+		AccessToken:       credential.AccessToken,
+		RefreshToken:      credential.RefreshToken,
+		Scopes:            credential.Scopes,
+		ExpiresAt:         credential.ExpiresAt,
+		LastRefreshedAt:   credential.LastRefreshedAt,
+		RefreshErrorCount: int32(credential.RefreshErrorCount),
+		MetadataJSON:      credential.MetadataJSON,
+		CreatedAt:         nonZeroTimePtr(credential.CreatedAt),
+		UpdatedAt:         nonZeroTimePtr(credential.UpdatedAt),
+	}
+}
+
+func validateCredentialConfigToSDK(req *core.ValidateExternalCredentialConfigRequest) *sdkexternalcredentials.ValidateExternalCredentialConfigRequest {
+	if req == nil {
+		return nil
+	}
+	return &sdkexternalcredentials.ValidateExternalCredentialConfigRequest{
+		Provider:         strings.TrimSpace(req.Provider),
+		Connection:       strings.TrimSpace(req.Connection),
+		ConnectionID:     strings.TrimSpace(req.ConnectionID),
+		Mode:             string(core.NormalizeConnectionMode(req.Mode)),
+		Auth:             externalCredentialAuthConfigToSDK(req.Auth),
+		ConnectionParams: cloneStringMap(req.ConnectionParams),
+	}
+}
+
+func resolveCredentialRequestToSDK(req *core.ResolveExternalCredentialRequest) *sdkexternalcredentials.ResolveExternalCredentialRequest {
+	if req == nil {
+		return nil
+	}
+	return &sdkexternalcredentials.ResolveExternalCredentialRequest{
+		Provider:            strings.TrimSpace(req.Provider),
+		Connection:          strings.TrimSpace(req.Connection),
+		ConnectionID:        strings.TrimSpace(req.ConnectionID),
+		Mode:                string(core.NormalizeConnectionMode(req.Mode)),
+		CredentialSubjectID: strings.TrimSpace(req.CredentialSubjectID),
+		ActorSubjectID:      strings.TrimSpace(req.ActorSubjectID),
+		Instance:            strings.TrimSpace(req.Instance),
+		Auth:                externalCredentialAuthConfigToSDK(req.Auth),
+		ConnectionParams:    cloneStringMap(req.ConnectionParams),
+	}
+}
+
+func resolveCredentialResponseFromSDK(resp *sdkexternalcredentials.ResolveExternalCredentialResponse) *core.ResolveExternalCredentialResponse {
+	if resp == nil {
+		return nil
+	}
+	return &core.ResolveExternalCredentialResponse{
+		Token:        resp.GetToken(),
+		ExpiresAt:    resp.GetExpiresAt(),
+		MetadataJSON: resp.GetMetadataJson(),
+		Params:       cloneStringMap(resp.GetParams()),
+		Credential:   externalCredentialFromSDK(resp.GetCredential()),
+	}
+}
+
+func exchangeCredentialRequestToSDK(req *core.ExchangeExternalCredentialRequest) *sdkexternalcredentials.ExchangeExternalCredentialRequest {
+	if req == nil {
+		return nil
+	}
+	return &sdkexternalcredentials.ExchangeExternalCredentialRequest{
+		Provider:            strings.TrimSpace(req.Provider),
+		Connection:          strings.TrimSpace(req.Connection),
+		ConnectionID:        strings.TrimSpace(req.ConnectionID),
+		CredentialSubjectID: strings.TrimSpace(req.CredentialSubjectID),
+		ActorSubjectID:      strings.TrimSpace(req.ActorSubjectID),
+		Instance:            strings.TrimSpace(req.Instance),
+		Auth:                externalCredentialAuthConfigToSDK(req.Auth),
+		CredentialJSON:      req.CredentialJSON,
+		ConnectionParams:    cloneStringMap(req.ConnectionParams),
+	}
+}
+
+func exchangeCredentialResponseFromSDK(resp *sdkexternalcredentials.ExchangeExternalCredentialResponse) *core.ExchangeExternalCredentialResponse {
+	if resp == nil {
+		return nil
+	}
+	return &core.ExchangeExternalCredentialResponse{
+		TokenResponse: externalCredentialTokenResponseFromSDK(resp.GetTokenResponse()),
+	}
+}
+
+func externalCredentialTokenResponseFromSDK(resp *sdkexternalcredentials.ExternalCredentialTokenResponse) *core.ExternalCredentialTokenResponse {
+	if resp == nil {
+		return nil
+	}
+	extra := map[string]any(nil)
+	if resp.GetExtraJson() != "" {
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(resp.GetExtraJson()), &decoded); err == nil {
+			extra = decoded
+		}
+	}
+	return &core.ExternalCredentialTokenResponse{
+		AccessToken:   resp.GetAccessToken(),
+		RefreshToken:  resp.GetRefreshToken(),
+		RefreshSource: resp.GetRefreshSource(),
+		ExpiresIn:     int(resp.GetExpiresIn()),
+		TokenType:     resp.GetTokenType(),
+		Extra:         extra,
+	}
+}
+
+func externalCredentialAuthConfigToSDK(auth core.ExternalCredentialAuthConfig) *sdkexternalcredentials.ExternalCredentialAuthConfig {
+	drivers := make([]*sdkexternalcredentials.ExternalCredentialTokenExchangeDriver, 0, len(auth.TokenExchangeDrivers))
+	for _, driver := range auth.TokenExchangeDrivers {
+		drivers = append(drivers, &sdkexternalcredentials.ExternalCredentialTokenExchangeDriver{
+			Type:            driver.Type,
+			TargetPrincipal: driver.TargetPrincipal,
+			Scopes:          append([]string(nil), driver.Scopes...),
+			LifetimeSeconds: int32(driver.LifetimeSeconds),
+			Endpoint:        driver.Endpoint,
+			Params:          cloneStringMap(driver.Params),
+		})
+	}
+	return &sdkexternalcredentials.ExternalCredentialAuthConfig{
+		Type:                 auth.Type,
+		Token:                auth.Token,
+		TokenPrefix:          auth.TokenPrefix,
+		GrantType:            auth.GrantType,
+		RefreshToken:         auth.RefreshToken,
+		TokenURL:             auth.TokenURL,
+		ClientID:             auth.ClientID,
+		ClientSecret:         auth.ClientSecret,
+		ClientAuth:           auth.ClientAuth,
+		TokenExchange:        auth.TokenExchange,
+		Scopes:               append([]string(nil), auth.Scopes...),
+		ScopeParam:           auth.ScopeParam,
+		ScopeSeparator:       auth.ScopeSeparator,
+		TokenParams:          cloneStringMap(auth.TokenParams),
+		RefreshParams:        cloneStringMap(auth.RefreshParams),
+		AcceptHeader:         auth.AcceptHeader,
+		AccessTokenPath:      auth.AccessTokenPath,
+		TokenExchangeDrivers: drivers,
+	}
 }
 
 func externalCredentialToProto(credential *core.ExternalCredential) *proto.ExternalCredential {
@@ -233,73 +380,24 @@ func externalCredentialToProto(credential *core.ExternalCredential) *proto.Exter
 	}
 }
 
-func validateCredentialConfigToProto(req *core.ValidateExternalCredentialConfigRequest) *proto.ValidateExternalCredentialConfigRequest {
-	if req == nil {
+func externalCredentialFromProto(credential *proto.ExternalCredential) *core.ExternalCredential {
+	if credential == nil {
 		return nil
 	}
-	return &proto.ValidateExternalCredentialConfigRequest{
-		Provider:         strings.TrimSpace(req.Provider),
-		Connection:       strings.TrimSpace(req.Connection),
-		ConnectionId:     strings.TrimSpace(req.ConnectionID),
-		Mode:             string(core.NormalizeConnectionMode(req.Mode)),
-		Auth:             externalCredentialAuthConfigToProto(req.Auth),
-		ConnectionParams: cloneStringMap(req.ConnectionParams),
-	}
-}
-
-func resolveCredentialRequestToProto(req *core.ResolveExternalCredentialRequest) *proto.ResolveExternalCredentialRequest {
-	if req == nil {
-		return nil
-	}
-	return &proto.ResolveExternalCredentialRequest{
-		Provider:            strings.TrimSpace(req.Provider),
-		Connection:          strings.TrimSpace(req.Connection),
-		ConnectionId:        strings.TrimSpace(req.ConnectionID),
-		Mode:                string(core.NormalizeConnectionMode(req.Mode)),
-		CredentialSubjectId: strings.TrimSpace(req.CredentialSubjectID),
-		ActorSubjectId:      strings.TrimSpace(req.ActorSubjectID),
-		Instance:            strings.TrimSpace(req.Instance),
-		Auth:                externalCredentialAuthConfigToProto(req.Auth),
-		ConnectionParams:    cloneStringMap(req.ConnectionParams),
-	}
-}
-
-func resolveCredentialResponseFromProto(resp *proto.ResolveExternalCredentialResponse) *core.ResolveExternalCredentialResponse {
-	if resp == nil {
-		return nil
-	}
-	return &core.ResolveExternalCredentialResponse{
-		Token:        resp.GetToken(),
-		ExpiresAt:    timeFromProto(resp.GetExpiresAt()),
-		MetadataJSON: resp.GetMetadataJson(),
-		Params:       cloneStringMap(resp.GetParams()),
-		Credential:   externalCredentialFromProto(resp.GetCredential()),
-	}
-}
-
-func exchangeCredentialRequestToProto(req *core.ExchangeExternalCredentialRequest) *proto.ExchangeExternalCredentialRequest {
-	if req == nil {
-		return nil
-	}
-	return &proto.ExchangeExternalCredentialRequest{
-		Provider:            strings.TrimSpace(req.Provider),
-		Connection:          strings.TrimSpace(req.Connection),
-		ConnectionId:        strings.TrimSpace(req.ConnectionID),
-		CredentialSubjectId: strings.TrimSpace(req.CredentialSubjectID),
-		ActorSubjectId:      strings.TrimSpace(req.ActorSubjectID),
-		Instance:            strings.TrimSpace(req.Instance),
-		Auth:                externalCredentialAuthConfigToProto(req.Auth),
-		CredentialJson:      req.CredentialJSON,
-		ConnectionParams:    cloneStringMap(req.ConnectionParams),
-	}
-}
-
-func exchangeCredentialResponseFromProto(resp *proto.ExchangeExternalCredentialResponse) *core.ExchangeExternalCredentialResponse {
-	if resp == nil {
-		return nil
-	}
-	return &core.ExchangeExternalCredentialResponse{
-		TokenResponse: externalCredentialTokenResponseFromProto(resp.GetTokenResponse()),
+	return &core.ExternalCredential{
+		ID:                strings.TrimSpace(credential.GetId()),
+		SubjectID:         strings.TrimSpace(credential.GetSubjectId()),
+		ConnectionID:      strings.TrimSpace(credential.GetConnectionId()),
+		Instance:          strings.TrimSpace(credential.GetInstance()),
+		AccessToken:       credential.GetAccessToken(),
+		RefreshToken:      credential.GetRefreshToken(),
+		Scopes:            credential.GetScopes(),
+		ExpiresAt:         timeFromProto(credential.GetExpiresAt()),
+		LastRefreshedAt:   timeFromProto(credential.GetLastRefreshedAt()),
+		RefreshErrorCount: int(credential.GetRefreshErrorCount()),
+		MetadataJSON:      credential.GetMetadataJson(),
+		CreatedAt:         derefTime(timeFromProto(credential.GetCreatedAt())),
+		UpdatedAt:         derefTime(timeFromProto(credential.GetUpdatedAt())),
 	}
 }
 
@@ -320,61 +418,6 @@ func externalCredentialTokenResponseToProto(resp *core.ExternalCredentialTokenRe
 		ExpiresIn:     int32(resp.ExpiresIn),
 		TokenType:     resp.TokenType,
 		ExtraJson:     extraJSON,
-	}
-}
-
-func externalCredentialTokenResponseFromProto(resp *proto.ExternalCredentialTokenResponse) *core.ExternalCredentialTokenResponse {
-	if resp == nil {
-		return nil
-	}
-	extra := map[string]any(nil)
-	if resp.GetExtraJson() != "" {
-		var decoded map[string]any
-		if err := json.Unmarshal([]byte(resp.GetExtraJson()), &decoded); err == nil {
-			extra = decoded
-		}
-	}
-	return &core.ExternalCredentialTokenResponse{
-		AccessToken:   resp.GetAccessToken(),
-		RefreshToken:  resp.GetRefreshToken(),
-		RefreshSource: resp.GetRefreshSource(),
-		ExpiresIn:     int(resp.GetExpiresIn()),
-		TokenType:     resp.GetTokenType(),
-		Extra:         extra,
-	}
-}
-
-func externalCredentialAuthConfigToProto(auth core.ExternalCredentialAuthConfig) *proto.ExternalCredentialAuthConfig {
-	drivers := make([]*proto.ExternalCredentialTokenExchangeDriver, 0, len(auth.TokenExchangeDrivers))
-	for _, driver := range auth.TokenExchangeDrivers {
-		drivers = append(drivers, &proto.ExternalCredentialTokenExchangeDriver{
-			Type:            driver.Type,
-			TargetPrincipal: driver.TargetPrincipal,
-			Scopes:          append([]string(nil), driver.Scopes...),
-			LifetimeSeconds: int32(driver.LifetimeSeconds),
-			Endpoint:        driver.Endpoint,
-			Params:          cloneStringMap(driver.Params),
-		})
-	}
-	return &proto.ExternalCredentialAuthConfig{
-		Type:                 auth.Type,
-		Token:                auth.Token,
-		TokenPrefix:          auth.TokenPrefix,
-		GrantType:            auth.GrantType,
-		RefreshToken:         auth.RefreshToken,
-		TokenUrl:             auth.TokenURL,
-		ClientId:             auth.ClientID,
-		ClientSecret:         auth.ClientSecret,
-		ClientAuth:           auth.ClientAuth,
-		TokenExchange:        auth.TokenExchange,
-		Scopes:               append([]string(nil), auth.Scopes...),
-		ScopeParam:           auth.ScopeParam,
-		ScopeSeparator:       auth.ScopeSeparator,
-		TokenParams:          cloneStringMap(auth.TokenParams),
-		RefreshParams:        cloneStringMap(auth.RefreshParams),
-		AcceptHeader:         auth.AcceptHeader,
-		AccessTokenPath:      auth.AccessTokenPath,
-		TokenExchangeDrivers: drivers,
 	}
 }
 
@@ -429,7 +472,7 @@ func cloneStringMap(in map[string]string) map[string]string {
 	return out
 }
 
-func externalCredentialFromProto(credential *proto.ExternalCredential) *core.ExternalCredential {
+func externalCredentialFromSDK(credential *sdkexternalcredentials.ExternalCredential) *core.ExternalCredential {
 	if credential == nil {
 		return nil
 	}
@@ -441,12 +484,12 @@ func externalCredentialFromProto(credential *proto.ExternalCredential) *core.Ext
 		AccessToken:       credential.GetAccessToken(),
 		RefreshToken:      credential.GetRefreshToken(),
 		Scopes:            credential.GetScopes(),
-		ExpiresAt:         timeFromProto(credential.GetExpiresAt()),
-		LastRefreshedAt:   timeFromProto(credential.GetLastRefreshedAt()),
+		ExpiresAt:         credential.GetExpiresAt(),
+		LastRefreshedAt:   credential.GetLastRefreshedAt(),
 		RefreshErrorCount: int(credential.GetRefreshErrorCount()),
 		MetadataJSON:      credential.GetMetadataJson(),
-		CreatedAt:         derefTime(timeFromProto(credential.GetCreatedAt())),
-		UpdatedAt:         derefTime(timeFromProto(credential.GetUpdatedAt())),
+		CreatedAt:         derefTime(credential.GetCreatedAt()),
+		UpdatedAt:         derefTime(credential.GetUpdatedAt()),
 	}
 }
 

@@ -12,6 +12,7 @@ mod cache_server;
 mod catalog;
 mod env;
 mod error;
+mod external_credentials;
 mod generated;
 /// IndexedDB-style datastore client and provider helpers.
 pub mod indexeddb;
@@ -98,6 +99,15 @@ pub use env::{
     CURRENT_PROTOCOL_VERSION, ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, ENV_PROVIDER_SOCKET,
 };
 pub use error::{Error, Result};
+pub use external_credentials::{
+    DeleteExternalCredentialRequest, ExchangeExternalCredentialRequest,
+    ExchangeExternalCredentialResponse, ExternalCredential, ExternalCredentialAuthConfig,
+    ExternalCredentialClient, ExternalCredentialLookup, ExternalCredentialTokenExchangeDriver,
+    ExternalCredentialTokenResponse, GetExternalCredentialRequest, ListExternalCredentialsRequest,
+    ListExternalCredentialsResponse, ResolveExternalCredentialRequest,
+    ResolveExternalCredentialResponse, UpsertExternalCredentialRequest,
+    ValidateExternalCredentialConfigRequest,
+};
 pub use indexeddb::{
     Cursor, CursorDirection, IndexedDB, IndexedDBCursorSnapshot, IndexedDBCursorSnapshotEntry,
     IndexedDBError, IndexedDBOpenCursorRequest, Transaction, TransactionDurabilityHint,

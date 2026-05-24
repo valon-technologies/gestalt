@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	rpcexternalcredentials "github.com/valon-technologies/gestalt/server/rpc/externalcredentials"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 )
@@ -56,7 +57,7 @@ func TestExternalCredentialProviderTransportHandlesWrappedNotFound(t *testing.T)
 	conn := newBufconnConn(t, func(server *grpc.Server) {
 		proto.RegisterExternalCredentialProviderServer(server, NewProviderServer(&wrappedNotFoundExternalCredentialProvider{}))
 	})
-	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialProviderClient(conn)}
+	remote := &remoteExternalCredentialProvider{client: rpcexternalcredentials.NewConn(conn, rpcexternalcredentials.Options{})}
 
 	_, err := remote.GetCredential(context.Background(), "user:test", "github:default", "")
 	if !errors.Is(err, core.ErrNotFound) {
@@ -119,7 +120,7 @@ func TestExternalCredentialAuthConfigRefreshTokenRoundTripsOverTransport(t *test
 	conn := newBufconnConn(t, func(server *grpc.Server) {
 		proto.RegisterExternalCredentialProviderServer(server, NewProviderServer(provider))
 	})
-	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialProviderClient(conn)}
+	remote := &remoteExternalCredentialProvider{client: rpcexternalcredentials.NewConn(conn, rpcexternalcredentials.Options{})}
 	auth := core.ExternalCredentialAuthConfig{
 		Type:         "oauth2",
 		GrantType:    "refresh_token",
@@ -221,7 +222,7 @@ func TestExternalCredentialProviderRestorePreservesTimestampsOverTransport(t *te
 	conn := newBufconnConn(t, func(server *grpc.Server) {
 		proto.RegisterExternalCredentialProviderServer(server, NewProviderServer(provider))
 	})
-	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialProviderClient(conn)}
+	remote := &remoteExternalCredentialProvider{client: rpcexternalcredentials.NewConn(conn, rpcexternalcredentials.Options{})}
 
 	createdAt := time.Unix(1_700_000_000, 0).UTC()
 	updatedAt := time.Unix(1_700_000_001, 0).UTC()

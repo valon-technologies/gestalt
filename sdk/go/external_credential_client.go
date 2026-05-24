@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	externalcredentials "github.com/valon-technologies/gestalt/sdk/go/externalcredentials"
+	rpcexternalcredentials "github.com/valon-technologies/gestalt/server/rpc/externalcredentials"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -13,7 +15,7 @@ import (
 
 // ExternalCredentialClient calls the host-managed external credential provider.
 type ExternalCredentialClient struct {
-	client proto.ExternalCredentialProviderClient
+	client externalcredentials.Client
 }
 
 var sharedExternalCredentialTransport sharedManagerTransport[proto.ExternalCredentialProviderClient]
@@ -33,7 +35,7 @@ func ExternalCredentials() (*ExternalCredentialClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ExternalCredentialClient{client: client}, nil
+	return &ExternalCredentialClient{client: rpcexternalcredentials.NewClient(client, rpcexternalcredentials.Options{})}, nil
 }
 
 // Close is a no-op compatibility method because this client uses shared transport.
@@ -47,11 +49,7 @@ func (c *ExternalCredentialClient) UpsertCredential(ctx context.Context, req *Up
 	if req == nil {
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
-	resp, err := c.client.UpsertCredential(ctx, upsertExternalCredentialRequestToProto(req))
-	if err != nil {
-		return nil, err
-	}
-	return externalCredentialFromProto(resp)
+	return c.client.UpsertCredential(ctx, req)
 }
 
 // GetCredential fetches one host-managed external credential.
@@ -62,14 +60,11 @@ func (c *ExternalCredentialClient) GetCredential(ctx context.Context, req *GetEx
 	if req == nil {
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
-	resp, err := c.client.GetCredential(ctx, getExternalCredentialRequestToProto(req))
+	resp, err := c.client.GetCredential(ctx, req)
 	if externalCredentialHostServiceMissing(err) {
 		return nil, ErrExternalCredentialNotFound
 	}
-	if err != nil {
-		return nil, err
-	}
-	return externalCredentialFromProto(resp)
+	return resp, err
 }
 
 // ListCredentials lists host-managed external credentials.
@@ -80,14 +75,11 @@ func (c *ExternalCredentialClient) ListCredentials(ctx context.Context, req *Lis
 	if req == nil {
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
-	resp, err := c.client.ListCredentials(ctx, listExternalCredentialsRequestToProto(req))
+	resp, err := c.client.ListCredentials(ctx, req)
 	if externalCredentialHostServiceMissing(err) {
 		return &ListExternalCredentialsResponse{}, nil
 	}
-	if err != nil {
-		return nil, err
-	}
-	return listExternalCredentialsResponseFromProto(resp)
+	return resp, err
 }
 
 // DeleteCredential deletes one host-managed external credential.
@@ -98,8 +90,7 @@ func (c *ExternalCredentialClient) DeleteCredential(ctx context.Context, req *De
 	if req == nil {
 		return fmt.Errorf("external credentials: request is required")
 	}
-	_, err := c.client.DeleteCredential(ctx, deleteExternalCredentialRequestToProto(req))
-	return err
+	return c.client.DeleteCredential(ctx, req)
 }
 
 func (c *ExternalCredentialClient) ValidateCredentialConfig(ctx context.Context, req *ValidateExternalCredentialConfigRequest) error {
@@ -109,8 +100,7 @@ func (c *ExternalCredentialClient) ValidateCredentialConfig(ctx context.Context,
 	if req == nil {
 		return fmt.Errorf("external credentials: request is required")
 	}
-	_, err := c.client.ValidateCredentialConfig(ctx, validateExternalCredentialConfigRequestToProto(req))
-	return err
+	return c.client.ValidateCredentialConfig(ctx, req)
 }
 
 func externalCredentialHostServiceMissing(err error) bool {
@@ -127,14 +117,11 @@ func (c *ExternalCredentialClient) ResolveCredential(ctx context.Context, req *R
 	if req == nil {
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
-	resp, err := c.client.ResolveCredential(ctx, resolveExternalCredentialRequestToProto(req))
+	resp, err := c.client.ResolveCredential(ctx, req)
 	if externalCredentialHostServiceMissing(err) {
 		return nil, ErrExternalCredentialNotFound
 	}
-	if err != nil {
-		return nil, err
-	}
-	return resolveExternalCredentialResponseFromProto(resp)
+	return resp, err
 }
 
 func (c *ExternalCredentialClient) ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error) {
@@ -144,9 +131,5 @@ func (c *ExternalCredentialClient) ExchangeCredential(ctx context.Context, req *
 	if req == nil {
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
-	resp, err := c.client.ExchangeCredential(ctx, exchangeExternalCredentialRequestToProto(req))
-	if err != nil {
-		return nil, err
-	}
-	return exchangeExternalCredentialResponseFromProto(resp), nil
+	return c.client.ExchangeCredential(ctx, req)
 }

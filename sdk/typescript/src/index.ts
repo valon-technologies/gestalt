@@ -218,6 +218,24 @@ export {
   HOST_SERVICE_RELAY_TOKEN_HEADER,
 } from "./host-service.ts";
 export {
+  type DeleteExternalCredentialRequest,
+  type ExchangeExternalCredentialRequest,
+  type ExchangeExternalCredentialResponse,
+  type ExternalCredential,
+  type ExternalCredentialAuthConfig,
+  type ExternalCredentialClient,
+  type ExternalCredentialLookup,
+  type ExternalCredentialTokenExchangeDriver,
+  type ExternalCredentialTokenResponse,
+  type GetExternalCredentialRequest,
+  type ListExternalCredentialsRequest,
+  type ListExternalCredentialsResponse,
+  type ResolveExternalCredentialRequest,
+  type ResolveExternalCredentialResponse,
+  type UpsertExternalCredentialRequest,
+  type ValidateExternalCredentialConfigRequest,
+} from "./external-credentials.ts";
+export {
   defineSecretsProvider,
   isSecretsProvider,
   type SecretsProviderOptions,
