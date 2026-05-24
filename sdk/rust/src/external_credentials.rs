@@ -153,7 +153,7 @@ pub struct ExchangeExternalCredentialResponse {
 
 #[async_trait]
 /// Fakeable external-credential client contract.
-pub trait ExternalCredentialClient: Send + Sync {
+pub trait ExternalCredentials: Send + Sync {
     async fn upsert_credential(
         &self,
         request: UpsertExternalCredentialRequest,

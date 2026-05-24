@@ -24,5 +24,5 @@ type (
 // credentials.
 type ExternalCredentialProvider interface {
 	Provider
-	externalcredentials.Client
+	externalcredentials.ExternalCredentials
 }

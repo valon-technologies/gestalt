@@ -729,8 +729,8 @@ func (r *ExchangeExternalCredentialResponse) GetTokenResponse() *ExternalCredent
 	return r.TokenResponse
 }
 
-// Client serves CRUD operations for host-managed external credentials.
-type Client interface {
+// ExternalCredentials serves CRUD operations for host-managed external credentials.
+type ExternalCredentials interface {
 	UpsertCredential(ctx context.Context, req *UpsertExternalCredentialRequest) (*ExternalCredential, error)
 	GetCredential(ctx context.Context, req *GetExternalCredentialRequest) (*ExternalCredential, error)
 	ListCredentials(ctx context.Context, req *ListExternalCredentialsRequest) (*ListExternalCredentialsResponse, error)
@@ -738,4 +738,11 @@ type Client interface {
 	ValidateCredentialConfig(ctx context.Context, req *ValidateExternalCredentialConfigRequest) error
 	ResolveCredential(ctx context.Context, req *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error)
 	ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error)
+}
+
+// Runtime is a transport-backed external-credentials capability returned by
+// gestalt.ExternalCredentials.
+type Runtime interface {
+	ExternalCredentials
+	Close() error
 }

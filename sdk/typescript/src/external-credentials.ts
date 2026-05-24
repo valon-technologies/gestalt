@@ -138,7 +138,7 @@ export interface ExchangeExternalCredentialResponse {
 /**
  * Fakeable external-credential client contract.
  */
-export interface ExternalCredentialClient {
+export interface ExternalCredentials {
   upsertCredential(
     request: UpsertExternalCredentialRequest,
   ): MaybePromise<ExternalCredential>;

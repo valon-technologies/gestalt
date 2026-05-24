@@ -13,16 +13,16 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// ExternalCredentialClient calls the host-managed external credential provider.
-type ExternalCredentialClient struct {
-	client externalcredentials.Client
+// externalCredentials calls the host-managed external credential provider.
+type externalCredentials struct {
+	client externalcredentials.ExternalCredentials
 }
 
 var sharedExternalCredentialTransport sharedManagerTransport[proto.ExternalCredentialProviderClient]
 
 // ExternalCredentials connects to the ExternalCredentialProvider exposed by
 // gestaltd.
-func ExternalCredentials() (*ExternalCredentialClient, error) {
+func ExternalCredentials() (externalcredentials.Runtime, error) {
 	target, token, err := hostServiceTarget("external credentials")
 	if err != nil {
 		return nil, err
@@ -35,14 +35,14 @@ func ExternalCredentials() (*ExternalCredentialClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ExternalCredentialClient{client: rpcexternalcredentials.NewClient(client, rpcexternalcredentials.Options{})}, nil
+	return &externalCredentials{client: rpcexternalcredentials.NewClient(client, rpcexternalcredentials.Options{})}, nil
 }
 
-// Close is a no-op compatibility method because this client uses shared transport.
-func (c *ExternalCredentialClient) Close() error { return nil }
+// Close is a no-op because this capability uses shared transport.
+func (c *externalCredentials) Close() error { return nil }
 
 // UpsertCredential creates or updates a host-managed external credential.
-func (c *ExternalCredentialClient) UpsertCredential(ctx context.Context, req *UpsertExternalCredentialRequest) (*ExternalCredential, error) {
+func (c *externalCredentials) UpsertCredential(ctx context.Context, req *UpsertExternalCredentialRequest) (*ExternalCredential, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("external credentials: client is not initialized")
 	}
@@ -53,7 +53,7 @@ func (c *ExternalCredentialClient) UpsertCredential(ctx context.Context, req *Up
 }
 
 // GetCredential fetches one host-managed external credential.
-func (c *ExternalCredentialClient) GetCredential(ctx context.Context, req *GetExternalCredentialRequest) (*ExternalCredential, error) {
+func (c *externalCredentials) GetCredential(ctx context.Context, req *GetExternalCredentialRequest) (*ExternalCredential, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("external credentials: client is not initialized")
 	}
@@ -68,7 +68,7 @@ func (c *ExternalCredentialClient) GetCredential(ctx context.Context, req *GetEx
 }
 
 // ListCredentials lists host-managed external credentials.
-func (c *ExternalCredentialClient) ListCredentials(ctx context.Context, req *ListExternalCredentialsRequest) (*ListExternalCredentialsResponse, error) {
+func (c *externalCredentials) ListCredentials(ctx context.Context, req *ListExternalCredentialsRequest) (*ListExternalCredentialsResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("external credentials: client is not initialized")
 	}
@@ -83,7 +83,7 @@ func (c *ExternalCredentialClient) ListCredentials(ctx context.Context, req *Lis
 }
 
 // DeleteCredential deletes one host-managed external credential.
-func (c *ExternalCredentialClient) DeleteCredential(ctx context.Context, req *DeleteExternalCredentialRequest) error {
+func (c *externalCredentials) DeleteCredential(ctx context.Context, req *DeleteExternalCredentialRequest) error {
 	if c == nil || c.client == nil {
 		return fmt.Errorf("external credentials: client is not initialized")
 	}
@@ -93,7 +93,7 @@ func (c *ExternalCredentialClient) DeleteCredential(ctx context.Context, req *De
 	return c.client.DeleteCredential(ctx, req)
 }
 
-func (c *ExternalCredentialClient) ValidateCredentialConfig(ctx context.Context, req *ValidateExternalCredentialConfigRequest) error {
+func (c *externalCredentials) ValidateCredentialConfig(ctx context.Context, req *ValidateExternalCredentialConfigRequest) error {
 	if c == nil || c.client == nil {
 		return fmt.Errorf("external credentials: client is not initialized")
 	}
@@ -110,7 +110,7 @@ func externalCredentialHostServiceMissing(err error) bool {
 	return strings.Contains(status.Convert(err).Message(), "unknown service gestalt.provider.v1.ExternalCredentialProvider")
 }
 
-func (c *ExternalCredentialClient) ResolveCredential(ctx context.Context, req *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error) {
+func (c *externalCredentials) ResolveCredential(ctx context.Context, req *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("external credentials: client is not initialized")
 	}
@@ -124,7 +124,7 @@ func (c *ExternalCredentialClient) ResolveCredential(ctx context.Context, req *R
 	return resp, err
 }
 
-func (c *ExternalCredentialClient) ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error) {
+func (c *externalCredentials) ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("external credentials: client is not initialized")
 	}

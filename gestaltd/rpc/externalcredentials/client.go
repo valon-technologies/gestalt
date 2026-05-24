@@ -8,14 +8,14 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-var _ sdkexternalcredentials.Client = (*rpcClient)(nil)
+var _ sdkexternalcredentials.Runtime = (*rpcClient)(nil)
 
 type rpcClient struct {
 	grpc proto.ExternalCredentialProviderClient
 	opts Options
 }
 
-// Close is a no-op because this client uses shared transport.
+// Close is a no-op because this capability uses shared transport.
 func (c *rpcClient) Close() error { return nil }
 
 func (c *rpcClient) UpsertCredential(ctx context.Context, req *UpsertExternalCredentialRequest) (*ExternalCredential, error) {

@@ -375,10 +375,7 @@ _LAZY_EXPORTS = {
         "._externalcredentials",
         "ExternalCredentialAuthConfig",
     ),
-    "ExternalCredentialClient": (
-        "._externalcredentials",
-        "ExternalCredentialClient",
-    ),
+    "ExternalCredentials": ("._externalcredentials", "ExternalCredentials"),
     "ExternalCredentialLookup": (
         "._externalcredentials",
         "ExternalCredentialLookup",
@@ -571,7 +568,7 @@ __all__ = [
     "Catalog",
     "ExternalCredential",
     "ExternalCredentialAuthConfig",
-    "ExternalCredentialClient",
+    "ExternalCredentials",
     "ExternalCredentialLookup",
     "ExternalCredentialTokenExchangeDriver",
     "ExternalCredentialTokenResponse",

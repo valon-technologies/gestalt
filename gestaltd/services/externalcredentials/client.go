@@ -33,7 +33,7 @@ type ExecConfig struct {
 }
 
 type remoteExternalCredentialProvider struct {
-	client sdkexternalcredentials.Client
+	client sdkexternalcredentials.ExternalCredentials
 	closer io.Closer
 }
 

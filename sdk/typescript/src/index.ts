@@ -223,7 +223,7 @@ export {
   type ExchangeExternalCredentialResponse,
   type ExternalCredential,
   type ExternalCredentialAuthConfig,
-  type ExternalCredentialClient,
+  type ExternalCredentials,
   type ExternalCredentialLookup,
   type ExternalCredentialTokenExchangeDriver,
   type ExternalCredentialTokenResponse,

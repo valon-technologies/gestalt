@@ -152,7 +152,7 @@ class ExchangeExternalCredentialResponse:
     token_response: ExternalCredentialTokenResponse | None = None
 
 
-class ExternalCredentialClient(Protocol):
+class ExternalCredentials(Protocol):
     """Fakeable external-credential client contract."""
 
     def upsert_credential(

@@ -102,11 +102,11 @@ pub use error::{Error, Result};
 pub use external_credentials::{
     DeleteExternalCredentialRequest, ExchangeExternalCredentialRequest,
     ExchangeExternalCredentialResponse, ExternalCredential, ExternalCredentialAuthConfig,
-    ExternalCredentialClient, ExternalCredentialLookup, ExternalCredentialTokenExchangeDriver,
-    ExternalCredentialTokenResponse, GetExternalCredentialRequest, ListExternalCredentialsRequest,
-    ListExternalCredentialsResponse, ResolveExternalCredentialRequest,
-    ResolveExternalCredentialResponse, UpsertExternalCredentialRequest,
-    ValidateExternalCredentialConfigRequest,
+    ExternalCredentialLookup, ExternalCredentialTokenExchangeDriver,
+    ExternalCredentialTokenResponse, ExternalCredentials, GetExternalCredentialRequest,
+    ListExternalCredentialsRequest, ListExternalCredentialsResponse,
+    ResolveExternalCredentialRequest, ResolveExternalCredentialResponse,
+    UpsertExternalCredentialRequest, ValidateExternalCredentialConfigRequest,
 };
 pub use indexeddb::{
     Cursor, CursorDirection, IndexedDB, IndexedDBCursorSnapshot, IndexedDBCursorSnapshotEntry,
