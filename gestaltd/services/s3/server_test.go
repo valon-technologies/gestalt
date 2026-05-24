@@ -66,7 +66,7 @@ func TestRoutingS3ServerRoutesByHostBindingMetadata(t *testing.T) {
 
 	main := &coretesting.StubS3{}
 	archive := &coretesting.StubS3{}
-	srv, _ := NewRoutingServers(map[string]s3sdk.Client{
+	srv, _ := NewRoutingServers(map[string]s3sdk.S3{
 		"main":    main,
 		"archive": archive,
 	}, "", "roadmap", nil)

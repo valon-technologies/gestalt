@@ -82,18 +82,18 @@ class ObjectStoreSchema:
     indexes: list[IndexSchema] = field(default_factory=list)
 
 
-class IndexedDBClient(Protocol):
+class IndexedDBProtocol(Protocol):
     """Fakeable client contract for IndexedDB-compatible storage."""
 
     def create_object_store(
         self, name: str, schema: ObjectStoreSchema | None = None
-    ) -> IndexedDBObjectStoreClient:
+    ) -> ObjectStore:
         """Create an object store and return a store-bound client."""
 
     def delete_object_store(self, name: str) -> None:
         """Delete an object store by name."""
 
-    def object_store(self, name: str) -> IndexedDBObjectStoreClient:
+    def object_store(self, name: str) -> ObjectStore:
         """Return a client bound to an object store."""
 
     def transaction(
@@ -102,14 +102,14 @@ class IndexedDBClient(Protocol):
         mode: str = "readonly",
         *,
         durability_hint: str = "default",
-    ) -> IndexedDBTransactionClient:
+    ) -> Transaction:
         """Start an explicit IndexedDB transaction."""
 
     def close(self) -> None:
         """Close the client."""
 
 
-class IndexedDBObjectStoreClient(Protocol):
+class ObjectStoreProtocol(Protocol):
     """Fakeable IndexedDB object-store contract."""
 
     def get(self, id: str) -> dict[str, Any]:
@@ -146,21 +146,21 @@ class IndexedDBObjectStoreClient(Protocol):
         self,
         key_range: KeyRange | None = None,
         direction: int = CURSOR_NEXT,
-    ) -> IndexedDBCursorClient:
+    ) -> Cursor:
         """Open a record cursor over the store."""
 
     def open_key_cursor(
         self,
         key_range: KeyRange | None = None,
         direction: int = CURSOR_NEXT,
-    ) -> IndexedDBCursorClient:
+    ) -> Cursor:
         """Open a key-only cursor over the store."""
 
-    def index(self, name: str) -> IndexedDBIndexClient:
+    def index(self, name: str) -> Index:
         """Return a client for a named index on this store."""
 
 
-class IndexedDBIndexClient(Protocol):
+class IndexProtocol(Protocol):
     """Fakeable IndexedDB secondary-index contract."""
 
     def get(self, *values: Any) -> dict[str, Any]:
@@ -190,7 +190,7 @@ class IndexedDBIndexClient(Protocol):
         *values: Any,
         key_range: KeyRange | None = None,
         direction: int = CURSOR_NEXT,
-    ) -> IndexedDBCursorClient:
+    ) -> Cursor:
         """Open a record cursor over the indexed results."""
 
     def open_key_cursor(
@@ -198,14 +198,14 @@ class IndexedDBIndexClient(Protocol):
         *values: Any,
         key_range: KeyRange | None = None,
         direction: int = CURSOR_NEXT,
-    ) -> IndexedDBCursorClient:
+    ) -> Cursor:
         """Open a key-only cursor over the indexed results."""
 
 
-class IndexedDBTransactionClient(Protocol):
+class TransactionProtocol(Protocol):
     """Fakeable explicit IndexedDB transaction contract."""
 
-    def object_store(self, name: str) -> IndexedDBTransactionObjectStoreClient:
+    def object_store(self, name: str) -> TransactionObjectStore:
         """Return a transaction-scoped object store."""
 
     def commit(self) -> None:
@@ -215,7 +215,7 @@ class IndexedDBTransactionClient(Protocol):
         """Abort the transaction."""
 
 
-class IndexedDBTransactionObjectStoreClient(Protocol):
+class TransactionObjectStoreProtocol(Protocol):
     """Fakeable transaction-scoped object-store contract."""
 
     def get(self, id: str) -> dict[str, Any]:
@@ -248,11 +248,11 @@ class IndexedDBTransactionObjectStoreClient(Protocol):
     def delete_range(self, key_range: KeyRange) -> int:
         """Delete all records within ``key_range``."""
 
-    def index(self, name: str) -> IndexedDBTransactionIndexClient:
+    def index(self, name: str) -> TransactionIndex:
         """Return a transaction-scoped secondary index."""
 
 
-class IndexedDBTransactionIndexClient(Protocol):
+class TransactionIndexProtocol(Protocol):
     """Fakeable transaction-scoped secondary-index contract."""
 
     def get(self, *values: Any) -> dict[str, Any]:
@@ -278,7 +278,7 @@ class IndexedDBTransactionIndexClient(Protocol):
         """Delete records matching the indexed values."""
 
 
-class IndexedDBCursorClient(Protocol):
+class CursorProtocol(Protocol):
     """Fakeable IndexedDB cursor contract."""
 
     @property

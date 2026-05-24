@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-var _ s3.Client = (*rpcClient)(nil)
+var _ s3.S3 = (*rpcClient)(nil)
 
 // rpcClient speaks to a running S3 provider over gRPC.
 type rpcClient struct {
@@ -45,7 +45,7 @@ func (c *rpcClient) HeadObject(ctx context.Context, ref s3.ObjectRef) (s3.Object
 	return requiredObjectMeta(resp.GetMeta(), "head object")
 }
 
-// ReadObject implements s3.Client using request-oriented parameters.
+// ReadObject implements s3.S3 using request-oriented parameters.
 func (c *rpcClient) ReadObject(ctx context.Context, req s3.ReadRequest) (s3.ReadResult, error) {
 	opts := &s3.ReadOptions{
 		Range: req.Range, IfMatch: req.IfMatch, IfNoneMatch: req.IfNoneMatch,
@@ -96,7 +96,7 @@ func (c *rpcClient) readObjectStream(ctx context.Context, ref s3.ObjectRef, opts
 	return objectMetaFromProto(meta), &s3ReadCloser{stream: stream, cancel: cancel}, nil
 }
 
-// WriteObject implements s3.Client.
+// WriteObject implements s3.S3.
 func (c *rpcClient) WriteObject(ctx context.Context, req s3.WriteRequest) (s3.ObjectMeta, error) {
 	opts := &s3.WriteOptions{
 		ContentType: req.ContentType, CacheControl: req.CacheControl,
@@ -166,7 +166,7 @@ func (c *rpcClient) DeleteObject(ctx context.Context, ref s3.ObjectRef) error {
 	return s3.ClientError(err)
 }
 
-// ListObjects implements s3.Client.
+// ListObjects implements s3.S3.
 func (c *rpcClient) ListObjects(ctx context.Context, req s3.ListRequest) (s3.ListPage, error) {
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
@@ -184,7 +184,7 @@ func (c *rpcClient) ListObjects(ctx context.Context, req s3.ListRequest) (s3.Lis
 	return listPageFromProto(resp), nil
 }
 
-// CopyObject implements s3.Client.
+// CopyObject implements s3.S3.
 func (c *rpcClient) CopyObject(ctx context.Context, req s3.CopyRequest) (s3.ObjectMeta, error) {
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
@@ -201,7 +201,7 @@ func (c *rpcClient) CopyObject(ctx context.Context, req s3.CopyRequest) (s3.Obje
 	return requiredObjectMeta(resp.GetMeta(), "copy object")
 }
 
-// PresignObject implements s3.Client.
+// PresignObject implements s3.S3.
 func (c *rpcClient) PresignObject(ctx context.Context, req s3.PresignRequest) (s3.PresignResult, error) {
 	pb := &proto.PresignObjectRequest{
 		Ref: objectRefToProto(req.Ref),

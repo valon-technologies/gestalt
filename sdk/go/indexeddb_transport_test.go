@@ -14,6 +14,7 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -25,7 +26,7 @@ import (
 var (
 	testClient      gestalt.IndexedDBDatabase
 	testCacheClient *gestalt.CacheClient
-	testS3Client    gestalt.S3Client
+	testS3Client    s3sdk.S3
 	testIDBSocket   string
 	testCacheSocket string
 	testS3Socket    string

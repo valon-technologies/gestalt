@@ -218,9 +218,9 @@ export interface ReadResult {
 /**
  * Fakeable S3-compatible client contract.
  */
-export interface S3Client {
-  object(bucket: string, key: string): S3ObjectHandle;
-  objectVersion(bucket: string, key: string, versionId: string): S3ObjectHandle;
+export interface S3 {
+  object(bucket: string, key: string): S3Object;
+  objectVersion(bucket: string, key: string, versionId: string): S3Object;
   headObject(ref: ObjectRef): Promise<ObjectMeta>;
   readObject(ref: ObjectRef, options?: ReadOptions): Promise<ReadResult>;
   writeObject(
@@ -260,7 +260,7 @@ export interface S3Client {
 /**
  * Fakeable convenience contract for one S3 object reference.
  */
-export interface S3ObjectHandle {
+export interface S3Object {
   readonly ref: ObjectRef;
   stat(): Promise<ObjectMeta>;
   exists(): Promise<boolean>;
@@ -582,7 +582,7 @@ export function createS3Service(
  * await s3.object("example-bucket", "hello.json").writeJSON({ ok: true });
  * ```
  */
-export class S3 implements S3Client {
+class HostS3 implements S3 {
   private readonly transport: Transport;
   private readonly client: Client<typeof S3Service>;
   private objectAccessClient?: Client<typeof S3ObjectAccessService>;
@@ -787,7 +787,7 @@ export class S3 implements S3Client {
 /**
  * Convenience wrapper for working with a single S3 object reference.
  */
-export class S3Object implements S3ObjectHandle {
+class HostS3Object implements S3Object {
   constructor(
     private readonly client: S3,
     readonly ref: ObjectRef,
@@ -1383,3 +1383,6 @@ function messageFromError(error: unknown): string {
   }
   return errorMessage(error);
 }
+
+export const S3 = HostS3;
+export const S3Object = HostS3Object;

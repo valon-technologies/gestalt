@@ -177,15 +177,15 @@ ObjectAccessURLOptions = PresignOptions
 ObjectAccessURL = PresignResult
 
 
-class S3Client(Protocol):
+class S3Protocol(Protocol):
     """Fakeable S3-compatible client contract."""
 
-    def object(self, bucket: str, key: str) -> S3ObjectHandle:
+    def object(self, bucket: str, key: str) -> S3Object:
         """Return an object helper for the latest version."""
 
     def object_version(
         self, bucket: str, key: str, version_id: str
-    ) -> S3ObjectHandle:
+    ) -> S3Object:
         """Return an object helper pinned to a specific version."""
 
     def head_object(self, ref: ObjectRef) -> ObjectMeta:
@@ -238,7 +238,7 @@ class S3Client(Protocol):
         """Close the client."""
 
 
-class S3ObjectHandle(Protocol):
+class S3ObjectProtocol(Protocol):
     """Fakeable convenience contract for one S3 object reference."""
 
     ref: ObjectRef

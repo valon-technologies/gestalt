@@ -373,12 +373,12 @@ pub type ObjectAccessURL = PresignResult;
 
 #[async_trait]
 /// Fakeable S3-compatible client contract.
-pub trait S3Client: Send {
+pub trait S3Api: Send {
     /// Returns a convenience handle for one object key.
-    fn object(&self, bucket: &str, key: &str) -> Object;
+    fn object(&self, bucket: &str, key: &str) -> S3Object;
 
     /// Returns a convenience handle for one object version.
-    fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> Object;
+    fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> S3Object;
 
     /// Fetches metadata for one object.
     async fn head_object(
@@ -442,7 +442,7 @@ pub trait S3Client: Send {
 
 #[async_trait]
 /// Fakeable convenience contract for one S3 object reference.
-pub trait S3ObjectHandle: Send {
+pub trait S3ObjectApi: Send {
     /// Returns the referenced object key and version.
     fn reference(&self) -> &ObjectRef;
 
@@ -790,8 +790,8 @@ impl S3 {
     }
 
     /// Returns a convenience handle for one object key.
-    pub fn object(&self, bucket: &str, key: &str) -> Object {
-        Object {
+    pub fn object(&self, bucket: &str, key: &str) -> S3Object {
+        S3Object {
             client: self.client.clone(),
             object_access_client: self.object_access_client.clone(),
             reference: ObjectRef {
@@ -803,8 +803,8 @@ impl S3 {
     }
 
     /// Returns a convenience handle for one object version.
-    pub fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> Object {
-        Object {
+    pub fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> S3Object {
+        S3Object {
             client: self.client.clone(),
             object_access_client: self.object_access_client.clone(),
             reference: ObjectRef {
@@ -1079,12 +1079,12 @@ impl S3 {
 }
 
 #[async_trait]
-impl S3Client for S3 {
-    fn object(&self, bucket: &str, key: &str) -> Object {
+impl S3Api for S3 {
+    fn object(&self, bucket: &str, key: &str) -> S3Object {
         S3::object(self, bucket, key)
     }
 
-    fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> Object {
+    fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> S3Object {
         S3::object_version(self, bucket, key, version_id)
     }
 
@@ -1158,13 +1158,13 @@ impl S3Client for S3 {
 }
 
 /// Convenience wrapper around repeated operations on one object key.
-pub struct Object {
+pub struct S3Object {
     client: ProtoS3Client<S3Transport>,
     object_access_client: ProtoS3ObjectAccessClient<S3Transport>,
     reference: ObjectRef,
 }
 
-impl Object {
+impl S3Object {
     /// Returns the referenced object key and version.
     pub fn reference(&self) -> &ObjectRef {
         &self.reference
@@ -1333,42 +1333,42 @@ impl Object {
 }
 
 #[async_trait]
-impl S3ObjectHandle for Object {
+impl S3ObjectApi for S3Object {
     fn reference(&self) -> &ObjectRef {
-        Object::reference(self)
+        S3Object::reference(self)
     }
 
     async fn stat(&mut self) -> std::result::Result<ObjectMeta, S3Error> {
-        Object::stat(self).await
+        S3Object::stat(self).await
     }
 
     async fn exists(&mut self) -> std::result::Result<bool, S3Error> {
-        Object::exists(self).await
+        S3Object::exists(self).await
     }
 
     async fn stream(
         &mut self,
         options: Option<ReadOptions>,
     ) -> std::result::Result<ObjectReader, S3Error> {
-        Object::stream(self, options).await
+        S3Object::stream(self, options).await
     }
 
     async fn bytes(
         &mut self,
         options: Option<ReadOptions>,
     ) -> std::result::Result<Vec<u8>, S3Error> {
-        Object::bytes(self, options).await
+        S3Object::bytes(self, options).await
     }
 
     async fn text(&mut self, options: Option<ReadOptions>) -> std::result::Result<String, S3Error> {
-        Object::text(self, options).await
+        S3Object::text(self, options).await
     }
 
     async fn json<T>(&mut self, options: Option<ReadOptions>) -> std::result::Result<T, S3Error>
     where
         T: DeserializeOwned + Send,
     {
-        Object::json(self, options).await
+        S3Object::json(self, options).await
     }
 
     async fn write(
@@ -1376,7 +1376,7 @@ impl S3ObjectHandle for Object {
         body: Vec<u8>,
         options: Option<WriteOptions>,
     ) -> std::result::Result<ObjectMeta, S3Error> {
-        Object::write(self, body, options).await
+        S3Object::write(self, body, options).await
     }
 
     async fn write_bytes(
@@ -1384,7 +1384,7 @@ impl S3ObjectHandle for Object {
         body: Vec<u8>,
         options: Option<WriteOptions>,
     ) -> std::result::Result<ObjectMeta, S3Error> {
-        Object::write_bytes(self, body, options).await
+        S3Object::write_bytes(self, body, options).await
     }
 
     async fn write_string(
@@ -1392,7 +1392,7 @@ impl S3ObjectHandle for Object {
         body: String,
         options: Option<WriteOptions>,
     ) -> std::result::Result<ObjectMeta, S3Error> {
-        Object::write_string(self, body, options).await
+        S3Object::write_string(self, body, options).await
     }
 
     async fn write_json<T>(
@@ -1403,29 +1403,29 @@ impl S3ObjectHandle for Object {
     where
         T: serde::Serialize + Sync + ?Sized,
     {
-        Object::write_json(self, value, options).await
+        S3Object::write_json(self, value, options).await
     }
 
     async fn delete(&mut self) -> std::result::Result<(), S3Error> {
-        Object::delete(self).await
+        S3Object::delete(self).await
     }
 
     async fn presign(
         &mut self,
         options: Option<PresignOptions>,
     ) -> std::result::Result<PresignResult, S3Error> {
-        Object::presign(self, options).await
+        S3Object::presign(self, options).await
     }
 
     async fn create_access_url(
         &mut self,
         options: Option<ObjectAccessURLOptions>,
     ) -> std::result::Result<ObjectAccessURL, S3Error> {
-        Object::create_access_url(self, options).await
+        S3Object::create_access_url(self, options).await
     }
 }
 
-/// Streaming reader returned by [`S3::read_object`] and [`Object::stream`].
+/// Streaming reader returned by [`S3::read_object`] and [`S3Object::stream`].
 pub struct ObjectReader {
     meta: ObjectMeta,
     stream: tonic::Streaming<pb::ReadObjectChunk>,

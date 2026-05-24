@@ -157,7 +157,7 @@ pub struct TransactionOptions {
 
 #[async_trait]
 /// Fakeable client contract for IndexedDB-compatible storage.
-pub trait IndexedDBClient: Send {
+pub trait IndexedDBApi: Send {
     /// Creates a named object store and returns a typed handle for it.
     async fn create_object_store(
         &mut self,
@@ -182,7 +182,7 @@ pub trait IndexedDBClient: Send {
 
 #[async_trait]
 /// Fakeable IndexedDB object-store contract.
-pub trait IndexedDBObjectStoreClient: Send {
+pub trait ObjectStoreApi: Send {
     /// Loads one record by primary key.
     async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError>;
 
@@ -217,7 +217,7 @@ pub trait IndexedDBObjectStoreClient: Send {
     async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError>;
 
     /// Returns a typed handle for one secondary index.
-    fn index(&self, name: &str) -> IndexClient;
+    fn index(&self, name: &str) -> Index;
 
     /// Opens a full-value cursor over the object store.
     async fn open_cursor(
@@ -236,7 +236,7 @@ pub trait IndexedDBObjectStoreClient: Send {
 
 #[async_trait]
 /// Fakeable IndexedDB secondary-index contract.
-pub trait IndexedDBIndexClient: Send {
+pub trait IndexApi: Send {
     /// Loads the first row that matches values.
     async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError>;
 
@@ -286,7 +286,7 @@ pub trait IndexedDBIndexClient: Send {
 
 #[async_trait]
 /// Fakeable explicit IndexedDB transaction contract.
-pub trait IndexedDBTransactionClient: Send {
+pub trait TransactionApi: Send {
     /// Returns a transaction-scoped object store.
     fn object_store<'a>(&'a mut self, name: &str) -> TransactionObjectStore<'a>;
 
@@ -299,7 +299,7 @@ pub trait IndexedDBTransactionClient: Send {
 
 #[async_trait]
 /// Fakeable transaction-scoped object-store contract.
-pub trait IndexedDBTransactionObjectStoreClient: Send {
+pub trait TransactionObjectStoreApi: Send {
     /// Loads one record by primary key inside the transaction.
     async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError>;
 
@@ -334,12 +334,12 @@ pub trait IndexedDBTransactionObjectStoreClient: Send {
     async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError>;
 
     /// Returns a transaction-scoped secondary index.
-    fn index<'a>(&'a mut self, name: &str) -> TransactionIndexClient<'a>;
+    fn index<'a>(&'a mut self, name: &str) -> TransactionIndex<'a>;
 }
 
 #[async_trait]
 /// Fakeable transaction-scoped secondary-index contract.
-pub trait IndexedDBTransactionIndexClient: Send {
+pub trait TransactionIndexApi: Send {
     /// Loads the first row that matches values inside the transaction.
     async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError>;
 
@@ -373,7 +373,7 @@ pub trait IndexedDBTransactionIndexClient: Send {
 
 #[async_trait]
 /// Fakeable IndexedDB cursor contract.
-pub trait IndexedDBCursorClient: Send {
+pub trait CursorApi: Send {
     /// Returns the current cursor key.
     fn key(&self) -> Option<serde_json::Value>;
 
@@ -1586,8 +1586,8 @@ impl TransactionObjectStore<'_> {
     }
 
     /// Returns a transaction-scoped secondary index.
-    pub fn index<'a>(&'a mut self, name: &str) -> TransactionIndexClient<'a> {
-        TransactionIndexClient {
+    pub fn index<'a>(&'a mut self, name: &str) -> TransactionIndex<'a> {
+        TransactionIndex {
             tx: &mut *self.tx,
             store: self.store.clone(),
             index: name.to_string(),
@@ -1596,13 +1596,13 @@ impl TransactionObjectStore<'_> {
 }
 
 /// Secondary-index operations scoped to an explicit transaction.
-pub struct TransactionIndexClient<'a> {
+pub struct TransactionIndex<'a> {
     tx: &'a mut Transaction,
     store: String,
     index: String,
 }
 
-impl TransactionIndexClient<'_> {
+impl TransactionIndex<'_> {
     /// Loads the first row that matches values inside the transaction.
     pub async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
         let resp = self
@@ -1922,8 +1922,8 @@ impl ObjectStore {
     }
 
     /// Returns a typed handle for one secondary index.
-    pub fn index(&self, name: &str) -> IndexClient {
-        IndexClient {
+    pub fn index(&self, name: &str) -> Index {
+        Index {
             client: self.client.clone(),
             store: self.store.clone(),
             index: name.to_string(),
@@ -1966,13 +1966,13 @@ impl ObjectStore {
 }
 
 /// Lookup and cursor access through one secondary index.
-pub struct IndexClient {
+pub struct Index {
     client: IndexedDbClient<IndexedDbTransport>,
     store: String,
     index: String,
 }
 
-impl IndexClient {
+impl Index {
     /// Loads the first row that matches values.
     pub async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
         let resp = self
@@ -2126,7 +2126,7 @@ impl IndexClient {
 }
 
 #[async_trait]
-impl IndexedDBClient for IndexedDB {
+impl IndexedDBApi for IndexedDB {
     async fn create_object_store(
         &mut self,
         name: &str,
@@ -2155,7 +2155,7 @@ impl IndexedDBClient for IndexedDB {
 }
 
 #[async_trait]
-impl IndexedDBObjectStoreClient for ObjectStore {
+impl ObjectStoreApi for ObjectStore {
     async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError> {
         ObjectStore::get(self, id).await
     }
@@ -2199,7 +2199,7 @@ impl IndexedDBObjectStoreClient for ObjectStore {
         ObjectStore::delete_range(self, range).await
     }
 
-    fn index(&self, name: &str) -> IndexClient {
+    fn index(&self, name: &str) -> Index {
         ObjectStore::index(self, name)
     }
 
@@ -2221,13 +2221,13 @@ impl IndexedDBObjectStoreClient for ObjectStore {
 }
 
 #[async_trait]
-impl IndexedDBIndexClient for IndexClient {
+impl IndexApi for Index {
     async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
-        IndexClient::get(self, values).await
+        Index::get(self, values).await
     }
 
     async fn get_key(&mut self, values: &[serde_json::Value]) -> Result<String, IndexedDBError> {
-        IndexClient::get_key(self, values).await
+        Index::get_key(self, values).await
     }
 
     async fn get_all(
@@ -2235,7 +2235,7 @@ impl IndexedDBIndexClient for IndexClient {
         values: &[serde_json::Value],
         range: Option<KeyRange>,
     ) -> Result<Vec<Record>, IndexedDBError> {
-        IndexClient::get_all(self, values, range).await
+        Index::get_all(self, values, range).await
     }
 
     async fn get_all_keys(
@@ -2243,7 +2243,7 @@ impl IndexedDBIndexClient for IndexClient {
         values: &[serde_json::Value],
         range: Option<KeyRange>,
     ) -> Result<Vec<String>, IndexedDBError> {
-        IndexClient::get_all_keys(self, values, range).await
+        Index::get_all_keys(self, values, range).await
     }
 
     async fn count(
@@ -2251,11 +2251,11 @@ impl IndexedDBIndexClient for IndexClient {
         values: &[serde_json::Value],
         range: Option<KeyRange>,
     ) -> Result<i64, IndexedDBError> {
-        IndexClient::count(self, values, range).await
+        Index::count(self, values, range).await
     }
 
     async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError> {
-        IndexClient::delete(self, values).await
+        Index::delete(self, values).await
     }
 
     async fn open_cursor(
@@ -2264,7 +2264,7 @@ impl IndexedDBIndexClient for IndexClient {
         range: Option<KeyRange>,
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
-        IndexClient::open_cursor(self, values, range, direction).await
+        Index::open_cursor(self, values, range, direction).await
     }
 
     async fn open_key_cursor(
@@ -2273,12 +2273,12 @@ impl IndexedDBIndexClient for IndexClient {
         range: Option<KeyRange>,
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
-        IndexClient::open_key_cursor(self, values, range, direction).await
+        Index::open_key_cursor(self, values, range, direction).await
     }
 }
 
 #[async_trait]
-impl IndexedDBTransactionClient for Transaction {
+impl TransactionApi for Transaction {
     fn object_store<'a>(&'a mut self, name: &str) -> TransactionObjectStore<'a> {
         Transaction::object_store(self, name)
     }
@@ -2293,7 +2293,7 @@ impl IndexedDBTransactionClient for Transaction {
 }
 
 #[async_trait]
-impl IndexedDBTransactionObjectStoreClient for TransactionObjectStore<'_> {
+impl TransactionObjectStoreApi for TransactionObjectStore<'_> {
     async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError> {
         TransactionObjectStore::get(self, id).await
     }
@@ -2337,19 +2337,19 @@ impl IndexedDBTransactionObjectStoreClient for TransactionObjectStore<'_> {
         TransactionObjectStore::delete_range(self, range).await
     }
 
-    fn index<'a>(&'a mut self, name: &str) -> TransactionIndexClient<'a> {
+    fn index<'a>(&'a mut self, name: &str) -> TransactionIndex<'a> {
         TransactionObjectStore::index(self, name)
     }
 }
 
 #[async_trait]
-impl IndexedDBTransactionIndexClient for TransactionIndexClient<'_> {
+impl TransactionIndexApi for TransactionIndex<'_> {
     async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
-        TransactionIndexClient::get(self, values).await
+        TransactionIndex::get(self, values).await
     }
 
     async fn get_key(&mut self, values: &[serde_json::Value]) -> Result<String, IndexedDBError> {
-        TransactionIndexClient::get_key(self, values).await
+        TransactionIndex::get_key(self, values).await
     }
 
     async fn get_all(
@@ -2357,7 +2357,7 @@ impl IndexedDBTransactionIndexClient for TransactionIndexClient<'_> {
         values: &[serde_json::Value],
         range: Option<KeyRange>,
     ) -> Result<Vec<Record>, IndexedDBError> {
-        TransactionIndexClient::get_all(self, values, range).await
+        TransactionIndex::get_all(self, values, range).await
     }
 
     async fn get_all_keys(
@@ -2365,7 +2365,7 @@ impl IndexedDBTransactionIndexClient for TransactionIndexClient<'_> {
         values: &[serde_json::Value],
         range: Option<KeyRange>,
     ) -> Result<Vec<String>, IndexedDBError> {
-        TransactionIndexClient::get_all_keys(self, values, range).await
+        TransactionIndex::get_all_keys(self, values, range).await
     }
 
     async fn count(
@@ -2373,16 +2373,16 @@ impl IndexedDBTransactionIndexClient for TransactionIndexClient<'_> {
         values: &[serde_json::Value],
         range: Option<KeyRange>,
     ) -> Result<i64, IndexedDBError> {
-        TransactionIndexClient::count(self, values, range).await
+        TransactionIndex::count(self, values, range).await
     }
 
     async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError> {
-        TransactionIndexClient::delete(self, values).await
+        TransactionIndex::delete(self, values).await
     }
 }
 
 #[async_trait]
-impl IndexedDBCursorClient for Cursor {
+impl CursorApi for Cursor {
     fn key(&self) -> Option<serde_json::Value> {
         Cursor::key(self)
     }
