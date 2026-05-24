@@ -14,7 +14,7 @@ use tower::service_fn;
 use crate::api::RuntimeMetadata;
 use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, HOST_SERVICE_BINDING_HEADER};
 use crate::error::Result;
-use crate::generated::v1::{self as pb, cache_client::CacheClient};
+use crate::generated::v1::{self as pb, cache_client::CacheClient as GrpcCacheClient};
 
 type CacheTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
@@ -47,6 +47,43 @@ pub enum CacheError {
     /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
+}
+
+#[async_trait]
+/// Fakeable cache client contract shared by host clients and tests.
+pub trait CacheClient: Send {
+    /// Loads one cache value.
+    async fn get(&mut self, key: &str) -> std::result::Result<Option<Vec<u8>>, CacheError>;
+
+    /// Loads all present values for keys.
+    async fn get_many(
+        &mut self,
+        keys: &[String],
+    ) -> std::result::Result<BTreeMap<String, Vec<u8>>, CacheError>;
+
+    /// Stores one cache value.
+    async fn set(
+        &mut self,
+        key: &str,
+        value: &[u8],
+        options: CacheSetOptions,
+    ) -> std::result::Result<(), CacheError>;
+
+    /// Stores multiple cache values in one RPC.
+    async fn set_many(
+        &mut self,
+        entries: &[CacheEntry],
+        options: CacheSetOptions,
+    ) -> std::result::Result<(), CacheError>;
+
+    /// Deletes one cache key.
+    async fn delete(&mut self, key: &str) -> std::result::Result<bool, CacheError>;
+
+    /// Deletes many cache keys.
+    async fn delete_many(&mut self, keys: &[String]) -> std::result::Result<i64, CacheError>;
+
+    /// Updates the TTL for one cache key.
+    async fn touch(&mut self, key: &str, ttl: Duration) -> std::result::Result<bool, CacheError>;
 }
 
 #[async_trait]
@@ -138,7 +175,7 @@ pub trait CacheProvider: Send + Sync + 'static {
 
 /// Client for a running cache provider.
 pub struct Cache {
-    client: CacheClient<CacheTransport>,
+    client: GrpcCacheClient<CacheTransport>,
 }
 
 impl Cache {
@@ -176,7 +213,7 @@ impl Cache {
         };
 
         Ok(Self {
-            client: CacheClient::with_interceptor(
+            client: GrpcCacheClient::with_interceptor(
                 channel,
                 relay_token_interceptor(relay_token.trim(), name)?,
             ),
@@ -301,6 +338,49 @@ impl Cache {
             .await?
             .into_inner();
         Ok(response.touched)
+    }
+}
+
+#[async_trait]
+impl CacheClient for Cache {
+    async fn get(&mut self, key: &str) -> std::result::Result<Option<Vec<u8>>, CacheError> {
+        Cache::get(self, key).await
+    }
+
+    async fn get_many(
+        &mut self,
+        keys: &[String],
+    ) -> std::result::Result<BTreeMap<String, Vec<u8>>, CacheError> {
+        Cache::get_many(self, keys).await
+    }
+
+    async fn set(
+        &mut self,
+        key: &str,
+        value: &[u8],
+        options: CacheSetOptions,
+    ) -> std::result::Result<(), CacheError> {
+        Cache::set(self, key, value, options).await
+    }
+
+    async fn set_many(
+        &mut self,
+        entries: &[CacheEntry],
+        options: CacheSetOptions,
+    ) -> std::result::Result<(), CacheError> {
+        Cache::set_many(self, entries, options).await
+    }
+
+    async fn delete(&mut self, key: &str) -> std::result::Result<bool, CacheError> {
+        Cache::delete(self, key).await
+    }
+
+    async fn delete_many(&mut self, keys: &[String]) -> std::result::Result<i64, CacheError> {
+        Cache::delete_many(self, keys).await
+    }
+
+    async fn touch(&mut self, key: &str, ttl: Duration) -> std::result::Result<bool, CacheError> {
+        Cache::touch(self, key, ttl).await
     }
 }
 

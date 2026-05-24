@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as _dt
 import os
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, Protocol
 
 import grpc
 from google.protobuf import duration_pb2 as _duration_pb2
@@ -29,6 +29,40 @@ class CacheEntry:
 
     key: str
     value: bytes
+
+
+class CacheClient(Protocol):
+    """Fakeable cache client contract shared by host clients and tests."""
+
+    def get(self, key: str) -> bytes | None:
+        """Return the cached value for ``key`` if it exists."""
+
+    def get_many(self, keys: list[str]) -> dict[str, bytes]:
+        """Return the subset of ``keys`` that currently exist."""
+
+    def set(
+        self,
+        key: str,
+        value: bytes,
+        ttl: _dt.timedelta | None = None,
+    ) -> None:
+        """Store ``value`` for ``key`` with an optional TTL."""
+
+    def set_many(
+        self,
+        entries: Iterable[CacheEntry],
+        ttl: _dt.timedelta | None = None,
+    ) -> None:
+        """Store multiple cache entries with one RPC."""
+
+    def delete(self, key: str) -> bool:
+        """Delete ``key`` and return whether an entry existed."""
+
+    def delete_many(self, keys: list[str]) -> int:
+        """Delete multiple keys and return the number removed."""
+
+    def touch(self, key: str, ttl: _dt.timedelta) -> bool:
+        """Refresh the TTL for ``key`` if the entry exists."""
 
 
 class Cache:
