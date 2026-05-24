@@ -24,6 +24,7 @@ fn run() -> anyhow::Result<()> {
             AuthCommands::Login => commands::auth::login(url),
             AuthCommands::Logout => commands::auth::logout(),
             AuthCommands::Status => commands::auth::status(url, format),
+            AuthCommands::Token { command } => dispatch_token_command(command, url, format),
         },
         Commands::Init => commands::init::run(url),
         Commands::Config { command } => match command {
@@ -35,16 +36,6 @@ fn run() -> anyhow::Result<()> {
         Commands::App { command } => dispatch_app_command(command, url, format),
         Commands::Invoke(args) => dispatch_app_command(AppCommands::Invoke(args), url, format),
         Commands::Describe(args) => dispatch_app_command(AppCommands::Describe(args), url, format),
-        Commands::Tokens { command } => {
-            let client = ApiClient::from_env(url)?;
-            match command {
-                TokenCommands::Create { name } => {
-                    commands::tokens::create(&client, name.as_deref(), format)
-                }
-                TokenCommands::List => commands::tokens::list(&client, format),
-                TokenCommands::Revoke { id } => commands::tokens::revoke(&client, &id, format),
-            }
-        }
         Commands::Authorization { command } => {
             let client = ApiClient::from_env(url)?;
             commands::authorization::dispatch(&client, command, format)
@@ -54,6 +45,21 @@ fn run() -> anyhow::Result<()> {
             commands::workflows::dispatch(&client, command, format)
         }
         Commands::Agent(args) => dispatch_agent(args, url, url_was_explicit, format),
+    }
+}
+
+fn dispatch_token_command(
+    command: TokenCommands,
+    url: Option<&str>,
+    format: gestalt::output::Format,
+) -> anyhow::Result<()> {
+    let client = ApiClient::from_env(url)?;
+    match command {
+        TokenCommands::Create { name } => {
+            commands::tokens::create(&client, name.as_deref(), format)
+        }
+        TokenCommands::List => commands::tokens::list(&client, format),
+        TokenCommands::Revoke { id } => commands::tokens::revoke(&client, &id, format),
     }
 }
 
