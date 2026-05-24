@@ -43,7 +43,7 @@ func main() {
 	fmt.Fprintf(&buf, "package %s\n\n", *packageName)
 	fmt.Fprintf(&buf, "import (\n")
 	fmt.Fprintf(&buf, "\t\"context\"\n\n")
-	fmt.Fprintf(&buf, "\tproto \"github.com/valon-technologies/gestalt/server/internal/gen/v1\"\n")
+	fmt.Fprintf(&buf, "\tproto \"github.com/valon-technologies/gestalt/server/rpc/protov1/v1\"\n")
 	if needsEmpty(methods) {
 		fmt.Fprintf(&buf, "\t\"google.golang.org/protobuf/types/known/emptypb\"\n")
 	}

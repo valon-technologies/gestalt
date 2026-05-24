@@ -1,6 +1,6 @@
 package cache
 
-//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/cache_grpc.pb.go -service CacheServer -receiver routingCacheServer -binding cache -package cache -server-type proto.CacheServer -output routing_cache_gen.go
+//go:generate go run ../../tools/routinggen -grpc ../../rpc/protov1/v1/cache_grpc.pb.go -service CacheServer -receiver routingCacheServer -binding cache -package cache -server-type proto.CacheServer -output routing_cache_gen.go
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"

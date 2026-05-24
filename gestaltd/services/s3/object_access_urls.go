@@ -9,7 +9,7 @@ import (
 
 	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"

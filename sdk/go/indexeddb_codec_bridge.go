@@ -1,87 +1,70 @@
 package gestalt
 
 import (
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
-	"github.com/valon-technologies/gestalt/sdk/go/internal/indexeddbcodec"
 )
 
 func recordFromProto(record *proto.Record) (Record, error) {
-	return indexeddbcodec.RecordFromProto(record)
+	return indexeddb.RecordFromProto(record)
 }
 
 func recordsFromProto(records []*proto.Record) ([]Record, error) {
-	return indexeddbcodec.RecordsFromProto(records)
+	return indexeddb.RecordsFromProto(records)
 }
 
 func recordToProto(record Record) (*proto.Record, error) {
-	return indexeddbcodec.RecordToProto(record)
+	return indexeddb.RecordToProto(record)
 }
 
 func recordsToProto(records []Record) ([]*proto.Record, error) {
-	return indexeddbcodec.RecordsToProto(records)
+	return indexeddb.RecordsToProto(records)
 }
 
 func anyFromTypedValue(v *proto.TypedValue) (any, error) {
-	return indexeddbcodec.AnyFromTypedValue(v)
-}
-
-func typedValueFromAny(v any) (*proto.TypedValue, error) {
-	return indexeddbcodec.TypedValueFromAny(v)
+	return indexeddb.AnyFromTypedValue(v)
 }
 
 func anyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
-	return indexeddbcodec.AnyFromTypedValues(values)
-}
-
-func typedValuesFromAny(values []any) ([]*proto.TypedValue, error) {
-	return indexeddbcodec.TypedValuesFromAny(values)
+	return indexeddb.AnyFromTypedValues(values)
 }
 
 func keyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
-	return indexeddbcodec.KeyValuesToAny(kvs)
-}
-
-func keyValueToAny(kv *proto.KeyValue) (any, error) {
-	return indexeddbcodec.KeyValueToAny(kv)
-}
-
-func anyToKeyValue(v any) (*proto.KeyValue, error) {
-	return indexeddbcodec.AnyToKeyValue(v)
+	return indexeddb.KeyValuesToAny(kvs)
 }
 
 func cursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
-	return indexeddbcodec.CursorKeyToProto(key, indexCursor)
+	return indexeddb.CursorKeyToProto(key, indexCursor)
 }
 
 // EncodeIndexedDBKey serializes an IndexedDB key (re-export).
 func EncodeIndexedDBKey(value any) ([]byte, error) {
-	return indexeddbcodec.EncodeKey(value)
+	return indexeddb.EncodeIndexedDBKey(value)
 }
 
 // DecodeIndexedDBKey decodes an IndexedDB key (re-export).
 func DecodeIndexedDBKey(data []byte) (any, error) {
-	return indexeddbcodec.DecodeKey(data)
+	return indexeddb.DecodeIndexedDBKey(data)
 }
 
 // EncodeIndexedDBRecord serializes a record (re-export).
 func EncodeIndexedDBRecord(record Record) ([]byte, error) {
-	return indexeddbcodec.EncodeRecord(record)
+	return indexeddb.EncodeIndexedDBRecord(record)
 }
 
 // DecodeIndexedDBRecord decodes a record (re-export).
 func DecodeIndexedDBRecord(data []byte) (Record, error) {
-	return indexeddbcodec.DecodeRecord(data)
+	return indexeddb.DecodeIndexedDBRecord(data)
 }
 
 // EncodeIndexedDBIndexValues serializes index values (re-export).
 func EncodeIndexedDBIndexValues(values []any) ([]byte, error) {
-	return indexeddbcodec.EncodeIndexValues(values)
+	return indexeddb.EncodeIndexedDBIndexValues(values)
 }
 
 // DecodeIndexedDBIndexValues decodes index values (re-export).
 func DecodeIndexedDBIndexValues(data []byte, keyParts int) ([]any, error) {
-	return indexeddbcodec.DecodeIndexValues(data, keyParts)
+	return indexeddb.DecodeIndexedDBIndexValues(data, keyParts)
 }
 
 // CloneIndexedDBRecordWithField clones a record with one field replaced (re-export).

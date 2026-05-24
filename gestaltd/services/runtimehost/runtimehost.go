@@ -5,7 +5,7 @@ package runtimehost
 import (
 	"context"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"google.golang.org/grpc"

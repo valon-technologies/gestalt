@@ -11,8 +11,8 @@ import (
 
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"

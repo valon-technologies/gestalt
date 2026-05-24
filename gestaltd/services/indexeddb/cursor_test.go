@@ -9,7 +9,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	rpcidb "github.com/valon-technologies/gestalt/server/rpc/indexeddb"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -47,7 +48,7 @@ func newCursorTestDB(t *testing.T) (*coretesting.StubIndexedDB, indexeddb.Indexe
 		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
 	})
 	remote := &remoteIndexedDB{
-		client: proto.NewIndexedDBClient(conn),
+		Database: rpcidb.NewClient(proto.NewIndexedDBClient(conn), rpcidb.Options{}),
 	}
 	return stub, remote
 }
@@ -95,7 +96,7 @@ func TestCursor_EmptyCursor(t *testing.T) {
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
 	})
-	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+	remote := &remoteIndexedDB{Database: rpcidb.NewClient(proto.NewIndexedDBClient(conn), rpcidb.Options{})}
 
 	cursor, err := remote.ObjectStore("empty").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
@@ -568,7 +569,7 @@ func TestCursor_IndexContinueToKeyRoundTrip(t *testing.T) {
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
 	})
-	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+	remote := &remoteIndexedDB{Database: rpcidb.NewClient(proto.NewIndexedDBClient(conn), rpcidb.Options{})}
 
 	cursor, err := remote.ObjectStore("items").Index("by_num").OpenCursor(ctx, nil, idb.CursorNext)
 	if err != nil {
@@ -623,7 +624,7 @@ func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
 	})
-	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+	remote := &remoteIndexedDB{Database: rpcidb.NewClient(proto.NewIndexedDBClient(conn), rpcidb.Options{})}
 
 	// Value cursor on empty store
 	cursor, err := remote.ObjectStore("empty").OpenCursor(ctx, nil, idb.CursorNext)

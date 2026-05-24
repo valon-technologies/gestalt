@@ -6,7 +6,9 @@ import (
 	"time"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+
+	rpcidb "github.com/valon-technologies/gestalt/server/rpc/indexeddb"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -51,7 +53,7 @@ func TestRemoteIndexedDBSchemaChangesUseProviderRPCTimeout(t *testing.T) {
 			return &emptypb.Empty{}, nil
 		},
 	}
-	db := &remoteIndexedDB{client: client}
+	db := &remoteIndexedDB{Database: rpcidb.NewClient(client, rpcidb.Options{UnaryTimeout: runtimehost.ProviderRPCTimeout})}
 
 	if _, err := db.CreateObjectStore(context.Background(), "api_tokens", idb.ObjectStoreSchema{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)

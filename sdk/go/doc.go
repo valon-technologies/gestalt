@@ -62,10 +62,11 @@
 // Workflow structs use native Go values at provider boundaries; SDK adapters
 // own transport conversion.
 //
-// Host-service clients include [CacheClient], [S3Client],
-// [WorkflowHostClient], [WorkflowManagerClient], [AgentHostClient],
-// [AgentManagerClient], [AuthorizationClient], and [InvokerClient]. IndexedDB
-// callers use [IndexedDB] to open an indexeddb.Database contract.
+// Host-service clients include [CacheClient], [WorkflowHostClient],
+// [WorkflowManagerClient], [AgentHostClient], [AgentManagerClient],
+// [AuthorizationClient], and [InvokerClient]. Apps reach IndexedDB and S3 through
+// [IndexedDB] and [S3], which return the capability interfaces rather than
+// transport-specific client types.
 //
 // Runtime and telemetry helpers include [ServeProvider], [ProviderMetadata],
 // [TelemetryInstrumentationName], and the provider telemetry helpers.
@@ -86,10 +87,10 @@
 // AgentProvider, and AppRuntimeProvider.
 //
 // Use the host-service clients when provider code needs to call sibling
-// services exposed by gestaltd. These include CacheClient, S3Client,
-// WorkflowHostClient, WorkflowManagerClient, AgentHostClient, AgentManagerClient,
-// AuthorizationClient, and InvokerClient; IndexedDB is exposed as the
-// [IndexedDB] opener returning an indexeddb.Database interface.
+// services exposed by gestaltd. These include CacheClient, WorkflowHostClient,
+// WorkflowManagerClient, AgentHostClient, AgentManagerClient, AuthorizationClient,
+// and InvokerClient. Apps use [IndexedDB] and [S3] for datastore and object
+// storage bindings.
 //
 // AgentHostClient includes plain Go helper methods such as ExecuteToolForTurn,
 // ListToolsForTurn, and ResolveConnectionForTurn. Native SDK structs accept

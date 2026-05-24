@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 // AgentProvider is implemented by providers that serve the agent base
