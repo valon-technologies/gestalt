@@ -506,6 +506,7 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	externalcredentials "github.com/valon-technologies/gestalt/sdk/go/externalcredentials"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -537,7 +538,6 @@ func (p *Provider) UpsertCredential(ctx context.Context, req *gestalt.UpsertExte
 	if client, ok, err := externalCredentialHostClient(); err != nil {
 		return nil, err
 	} else if ok {
-		defer func() { _ = client.Close() }()
 		return client.UpsertCredential(ctx, req)
 	}
 	if req == nil || req.GetCredential() == nil {
@@ -577,7 +577,6 @@ func (p *Provider) GetCredential(ctx context.Context, req *gestalt.GetExternalCr
 	if client, ok, err := externalCredentialHostClient(); err != nil {
 		return nil, err
 	} else if ok {
-		defer func() { _ = client.Close() }()
 		return client.GetCredential(ctx, req)
 	}
 	if req == nil || req.GetLookup() == nil {
@@ -602,7 +601,6 @@ func (p *Provider) ListCredentials(ctx context.Context, req *gestalt.ListExterna
 	if client, ok, err := externalCredentialHostClient(); err != nil {
 		return nil, err
 	} else if ok {
-		defer func() { _ = client.Close() }()
 		return client.ListCredentials(ctx, req)
 	}
 	if req == nil {
@@ -635,7 +633,6 @@ func (p *Provider) DeleteCredential(ctx context.Context, req *gestalt.DeleteExte
 	if client, ok, err := externalCredentialHostClient(); err != nil {
 		return err
 	} else if ok {
-		defer func() { _ = client.Close() }()
 		return client.DeleteCredential(ctx, req)
 	}
 	if req == nil || req.GetId() == "" {
@@ -658,7 +655,6 @@ func (p *Provider) ValidateCredentialConfig(ctx context.Context, req *gestalt.Va
 	if client, ok, err := externalCredentialHostClient(); err != nil {
 		return err
 	} else if ok {
-		defer func() { _ = client.Close() }()
 		if err := client.ValidateCredentialConfig(ctx, req); err != nil {
 			if externalCredentialHostServiceMissing(err) {
 				return nil
@@ -673,7 +669,6 @@ func (p *Provider) ResolveCredential(ctx context.Context, req *gestalt.ResolveEx
 	if client, ok, err := externalCredentialHostClient(); err != nil {
 		return nil, err
 	} else if ok {
-		defer func() { _ = client.Close() }()
 		return client.ResolveCredential(ctx, req)
 	}
 	if req == nil {
@@ -709,7 +704,6 @@ func (p *Provider) ExchangeCredential(ctx context.Context, req *gestalt.Exchange
 	if client, ok, err := externalCredentialHostClient(); err != nil {
 		return nil, err
 	} else if ok {
-		defer func() { _ = client.Close() }()
 		return client.ExchangeCredential(ctx, req)
 	}
 	if req == nil {
@@ -749,7 +743,7 @@ func externalCredentialLookupKey(subjectID, connectionID, instance string) strin
 	return subjectID + "\x00" + connectionID + "\x00" + instance
 }
 
-func externalCredentialHostClient() (*gestalt.ExternalCredentialClient, bool, error) {
+func externalCredentialHostClient() (externalcredentials.ExternalCredentials, bool, error) {
 	if os.Getenv(gestalt.EnvHostServiceSocket) == "" {
 		return nil, false, nil
 	}

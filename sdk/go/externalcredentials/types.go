@@ -739,10 +739,3 @@ type ExternalCredentials interface {
 	ResolveCredential(ctx context.Context, req *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error)
 	ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error)
 }
-
-// Runtime is a transport-backed external-credentials capability returned by
-// gestalt.ExternalCredentials.
-type Runtime interface {
-	ExternalCredentials
-	Close() error
-}

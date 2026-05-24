@@ -8,7 +8,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-var _ sdkexternalcredentials.Runtime = (*rpcClient)(nil)
+var _ sdkexternalcredentials.ExternalCredentials = (*rpcClient)(nil)
 
 type rpcClient struct {
 	grpc proto.ExternalCredentialProviderClient

@@ -22,7 +22,7 @@ var sharedExternalCredentialTransport sharedManagerTransport[proto.ExternalCrede
 
 // ExternalCredentials connects to the ExternalCredentialProvider exposed by
 // gestaltd.
-func ExternalCredentials() (externalcredentials.Runtime, error) {
+func ExternalCredentials() (externalcredentials.ExternalCredentials, error) {
 	target, token, err := hostServiceTarget("external credentials")
 	if err != nil {
 		return nil, err

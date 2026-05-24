@@ -294,7 +294,6 @@ func TestTransport_ExternalCredentialTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExternalCredentials: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
 	credential, err := client.UpsertCredential(context.Background(), &gestalt.UpsertExternalCredentialRequest{
 		Credential: &gestalt.ExternalCredential{

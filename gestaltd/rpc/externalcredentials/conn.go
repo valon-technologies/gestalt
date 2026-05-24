@@ -15,12 +15,12 @@ type Options struct {
 
 // NewClient wraps a generated external-credential gRPC client as the SDK
 // external-credentials contract.
-func NewClient(grpcClient proto.ExternalCredentialProviderClient, opts Options) sdkexternalcredentials.Runtime {
+func NewClient(grpcClient proto.ExternalCredentialProviderClient, opts Options) sdkexternalcredentials.ExternalCredentials {
 	return &rpcClient{grpc: grpcClient, opts: opts}
 }
 
 // NewConn builds an external-credentials capability from a gRPC connection.
-func NewConn(conn grpc.ClientConnInterface, opts Options) sdkexternalcredentials.Runtime {
+func NewConn(conn grpc.ClientConnInterface, opts Options) sdkexternalcredentials.ExternalCredentials {
 	return NewClient(proto.NewExternalCredentialProviderClient(conn), opts)
 }
 
