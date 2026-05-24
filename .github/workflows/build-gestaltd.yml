@@ -4,7 +4,25 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '.dockerignore'
+      - '.github/scripts/check-go-proto-split.sh'
+      - '.github/scripts/check-sdk-package-exists.py'
+      - '.github/workflows/build-gestaltd.yml'
+      - 'docs/**'
+      - 'gestaltd/**'
+      - 'sdk/go/**'
+      - 'sdk/proto/**'
   pull_request:
+    paths:
+      - '.dockerignore'
+      - '.github/scripts/check-go-proto-split.sh'
+      - '.github/scripts/check-sdk-package-exists.py'
+      - '.github/workflows/build-gestaltd.yml'
+      - 'docs/**'
+      - 'gestaltd/**'
+      - 'sdk/go/**'
+      - 'sdk/proto/**'
 
   workflow_dispatch:
     inputs:
