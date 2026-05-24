@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/protov1/v1"
 )
 
 type AuthorizationMetadata = proto.AuthorizationMetadata

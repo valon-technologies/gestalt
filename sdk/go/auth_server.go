@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"

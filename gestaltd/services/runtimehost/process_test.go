@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/protov1/v1"
 	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"

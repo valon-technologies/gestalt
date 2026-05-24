@@ -3,7 +3,7 @@ package gestalt
 import (
 	"context"
 
-	"github.com/valon-technologies/gestalt/sdk/go/internal/hosts3"
+	s3host "github.com/valon-technologies/gestalt/sdk/go/s3/host"
 	"github.com/valon-technologies/gestalt/sdk/go/s3"
 )
 
@@ -68,9 +68,9 @@ func MapProviderClientError(err error) error {
 
 // S3 connects to the S3 provider exposed by gestaltd.
 func S3(ctx context.Context, name ...string) (s3.Client, error) {
-	opts := hosts3.OpenOptions{}
+	opts := s3host.OpenOptions{}
 	if len(name) > 0 {
 		opts.Binding = name[0]
 	}
-	return hosts3.Open(ctx, opts)
+	return s3host.Open(ctx, opts)
 }

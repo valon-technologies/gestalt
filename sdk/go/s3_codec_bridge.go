@@ -1,50 +1,50 @@
 package gestalt
 
 import (
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
-	"github.com/valon-technologies/gestalt/sdk/go/internal/hosts3"
+	proto "github.com/valon-technologies/gestalt/sdk/go/protov1/v1"
+	"github.com/valon-technologies/gestalt/sdk/go/s3/host"
 )
 
 func objectRefFromProto(ref *proto.S3ObjectRef) ObjectRef {
-	return hosts3.ObjectRefFromProto(ref)
+	return host.ObjectRefFromProto(ref)
 }
 
 func objectMetaToProto(meta ObjectMeta) *proto.S3ObjectMeta {
-	return hosts3.ObjectMetaToProto(meta)
+	return host.ObjectMetaToProto(meta)
 }
 
 func objectMetaFromProto(meta *proto.S3ObjectMeta) ObjectMeta {
-	return hosts3.ObjectMetaFromProto(meta)
+	return host.ObjectMetaFromProto(meta)
 }
 
 func readOptionsFromProto(req *proto.ReadObjectRequest) *ReadOptions {
-	return hosts3.ReadOptionsFromProto(req)
+	return host.ReadOptionsFromProto(req)
 }
 
 func writeOptionsFromProto(open *proto.WriteObjectOpen) *WriteOptions {
-	return hosts3.WriteOptionsFromProto(open)
+	return host.WriteOptionsFromProto(open)
 }
 
 func listPageFromProto(resp *proto.ListObjectsResponse) ListPage {
-	return hosts3.ListPageFromProto(resp)
+	return host.ListPageFromProto(resp)
 }
 
 func listPageToProto(page ListPage) *proto.ListObjectsResponse {
-	return hosts3.ListPageToProto(page)
+	return host.ListPageToProto(page)
 }
 
 func presignOptionsFromProto(req *proto.PresignObjectRequest) *PresignOptions {
-	return hosts3.PresignOptionsFromProto(req)
+	return host.PresignOptionsFromProto(req)
 }
 
 func presignResultToProto(result PresignResult) *proto.PresignObjectResponse {
-	return hosts3.PresignResultToProto(result)
+	return host.PresignResultToProto(result)
 }
 
 func presignResultFromProto(resp *proto.PresignObjectResponse, requested PresignMethod) PresignResult {
-	return hosts3.PresignResultFromProto(resp, requested)
+	return host.PresignResultFromProto(resp, requested)
 }
 
 func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, requested PresignMethod) ObjectAccessURL {
-	return hosts3.ObjectAccessURLFromProto(resp, requested)
+	return host.ObjectAccessURLFromProto(resp, requested)
 }

@@ -6,9 +6,10 @@ import (
 	"testing"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+	idbhost "github.com/valon-technologies/gestalt/sdk/go/indexeddb/host"
 
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -174,7 +175,7 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 	conn := newBufconnConn(t, func(server *grpc.Server) {
 		proto.RegisterIndexedDBServer(server, srv)
 	})
-	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+	remote := idbhost.NewConn(conn)
 
 	if _, err := remote.ObjectStore("events").Get(ctx, "evt-1"); !errors.Is(err, idb.ErrNotFound) {
 		t.Fatalf("remote Get error = %v, want idb.ErrNotFound", err)
@@ -244,7 +245,7 @@ func TestIndexedDBServerPutRejectsUniqueIndexConflict(t *testing.T) {
 	conn := newBufconnConn(t, func(server *grpc.Server) {
 		proto.RegisterIndexedDBServer(server, srv)
 	})
-	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+	remote := idbhost.NewConn(conn)
 
 	if err := remote.ObjectStore("users").Put(ctx, idb.Record{"id": "user-2", "email": "same@example.com"}); !errors.Is(err, idb.ErrAlreadyExists) {
 		t.Fatalf("conflicting remote Put error = %v, want idb.ErrAlreadyExists", err)
@@ -270,7 +271,7 @@ func TestIndexedDBTransactionPreservesSentinelErrors(t *testing.T) {
 	conn := newBufconnConn(t, func(server *grpc.Server) {
 		proto.RegisterIndexedDBServer(server, srv)
 	})
-	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+	remote := idbhost.NewConn(conn)
 
 	readonly, err := remote.Transaction(ctx, []string{"events"}, idb.TransactionReadonly, idb.TransactionOptions{})
 	if err != nil {

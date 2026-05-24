@@ -6,7 +6,7 @@ import (
 	"slices"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/protobuf/types/known/emptypb"

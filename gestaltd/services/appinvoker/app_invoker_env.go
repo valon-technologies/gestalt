@@ -1,6 +1,6 @@
 package appinvoker
 
-import proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+import proto "github.com/valon-technologies/gestalt/sdk/go/protov1/v1"
 
 const (
 	DefaultAppInvokerSocketEnv = proto.EnvAppInvokerSocket

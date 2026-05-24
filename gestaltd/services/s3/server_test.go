@@ -11,7 +11,7 @@ import (
 
 	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

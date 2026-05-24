@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

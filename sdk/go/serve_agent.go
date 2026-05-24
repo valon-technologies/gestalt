@@ -3,7 +3,7 @@ package gestalt
 import (
 	"context"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/protov1/v1"
 	"google.golang.org/grpc"
 )
 

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
-	"github.com/valon-technologies/gestalt/sdk/go/internal/hostindexeddb"
+	idbhost "github.com/valon-technologies/gestalt/sdk/go/indexeddb/host"
 )
 
 // IndexedDB data types (aliases to sdk/go/indexeddb).
@@ -64,9 +64,9 @@ type (
 
 // IndexedDB connects to the IndexedDB provider exposed by gestaltd.
 func IndexedDB(ctx context.Context, name ...string) (indexeddb.Database, error) {
-	opts := hostindexeddb.OpenOptions{}
+	opts := idbhost.OpenOptions{}
 	if len(name) > 0 {
 		opts.Binding = name[0]
 	}
-	return hostindexeddb.Open(ctx, opts)
+	return idbhost.Open(ctx, opts)
 }
