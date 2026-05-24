@@ -3,6 +3,7 @@ use std::time::SystemTime;
 use hyper_util::rt::TokioIo;
 use tokio::net::UnixStream;
 use tonic::Request;
+use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
@@ -102,6 +103,68 @@ pub enum RuntimeLogHostError {
     /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
+}
+
+#[async_trait]
+/// Fakeable client contract for runtime log host calls.
+pub trait RuntimeLogHostClient: Send {
+    async fn append_logs(
+        &mut self,
+        request: AppendRuntimeLogsRequest,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError>;
+    async fn append(
+        &mut self,
+        session_id: String,
+        stream: RuntimeLogStream,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError>;
+    async fn append_current(
+        &mut self,
+        stream: RuntimeLogStream,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError>;
+    async fn append_entry(
+        &mut self,
+        session_id: String,
+        stream: RuntimeLogStream,
+        message: String,
+        observed_at: Option<SystemTime>,
+        source_seq: i64,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError>;
+    async fn append_current_entry(
+        &mut self,
+        stream: RuntimeLogStream,
+        message: String,
+        observed_at: Option<SystemTime>,
+        source_seq: i64,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError>;
+    async fn append_stdout(
+        &mut self,
+        session_id: String,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError>;
+    async fn append_current_stdout(
+        &mut self,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError>;
+    async fn append_stderr(
+        &mut self,
+        session_id: String,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError>;
+    async fn append_current_stderr(
+        &mut self,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError>;
+    async fn append_runtime(
+        &mut self,
+        session_id: String,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError>;
+    async fn append_current_runtime(
+        &mut self,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError>;
 }
 
 /// Client for appending runtime logs to the host.
@@ -276,6 +339,100 @@ impl RuntimeLogHost {
     ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError> {
         self.append_current(RuntimeLogStream::Runtime, message)
             .await
+    }
+}
+
+#[async_trait]
+impl RuntimeLogHostClient for RuntimeLogHost {
+    async fn append_logs(
+        &mut self,
+        request: AppendRuntimeLogsRequest,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError> {
+        RuntimeLogHost::append_logs(self, request).await
+    }
+
+    async fn append(
+        &mut self,
+        session_id: String,
+        stream: RuntimeLogStream,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError> {
+        RuntimeLogHost::append(self, session_id, stream, message).await
+    }
+
+    async fn append_current(
+        &mut self,
+        stream: RuntimeLogStream,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError> {
+        RuntimeLogHost::append_current(self, stream, message).await
+    }
+
+    async fn append_entry(
+        &mut self,
+        session_id: String,
+        stream: RuntimeLogStream,
+        message: String,
+        observed_at: Option<SystemTime>,
+        source_seq: i64,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError> {
+        RuntimeLogHost::append_entry(self, session_id, stream, message, observed_at, source_seq)
+            .await
+    }
+
+    async fn append_current_entry(
+        &mut self,
+        stream: RuntimeLogStream,
+        message: String,
+        observed_at: Option<SystemTime>,
+        source_seq: i64,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError> {
+        RuntimeLogHost::append_current_entry(self, stream, message, observed_at, source_seq).await
+    }
+
+    async fn append_stdout(
+        &mut self,
+        session_id: String,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError> {
+        RuntimeLogHost::append_stdout(self, session_id, message).await
+    }
+
+    async fn append_current_stdout(
+        &mut self,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError> {
+        RuntimeLogHost::append_current_stdout(self, message).await
+    }
+
+    async fn append_stderr(
+        &mut self,
+        session_id: String,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError> {
+        RuntimeLogHost::append_stderr(self, session_id, message).await
+    }
+
+    async fn append_current_stderr(
+        &mut self,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError> {
+        RuntimeLogHost::append_current_stderr(self, message).await
+    }
+
+    async fn append_runtime(
+        &mut self,
+        session_id: String,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError> {
+        RuntimeLogHost::append_runtime(self, session_id, message).await
+    }
+
+    async fn append_current_runtime(
+        &mut self,
+        message: String,
+    ) -> std::result::Result<AppendRuntimeLogsResponse, RuntimeLogHostError> {
+        RuntimeLogHost::append_current_runtime(self, message).await
     }
 }
 

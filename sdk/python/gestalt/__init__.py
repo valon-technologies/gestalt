@@ -399,6 +399,10 @@ _LAZY_EXPORTS = {
     "ReadOptions": ("._s3", "ReadOptions"),
     "RuntimeLogHandler": ("._runtime_log_host", "RuntimeLogHandler"),
     "RuntimeLogHost": ("._runtime_log_host", "RuntimeLogHost"),
+    "RuntimeLogHostClientProtocol": (
+        "._runtime_log_host",
+        "RuntimeLogHostClientProtocol",
+    ),
     "RuntimeLogWriter": ("._runtime_log_host", "RuntimeLogWriter"),
     "S3": ("._s3", "S3"),
     "S3InvalidRangeError": ("._s3", "S3InvalidRangeError"),
@@ -544,6 +548,7 @@ __all__ = [
     "ReadOptions",
     "RuntimeLogHandler",
     "RuntimeLogHost",
+    "RuntimeLogHostClientProtocol",
     "RuntimeLogWriter",
     "S3",
     "S3InvalidRangeError",

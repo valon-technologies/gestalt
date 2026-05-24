@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 import grpc
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
@@ -27,6 +27,36 @@ _STREAMS = {
     "stderr": pb.RUNTIME_LOG_STREAM_STDERR,
     "runtime": pb.RUNTIME_LOG_STREAM_RUNTIME,
 }
+
+
+class RuntimeLogHostClientProtocol(Protocol):
+    """Fakeable client contract for runtime log host calls."""
+
+    def close(self) -> None:
+        """Close the client."""
+
+    def append_logs(self, request: Any) -> Any:
+        """Append logs using a raw protocol request message."""
+
+    def append(
+        self,
+        session_id: str,
+        message: str | bytes | None = None,
+        *,
+        stream: str | int = "runtime",
+        observed_at: Any = None,
+        source_seq: int | None = None,
+    ) -> Any:
+        """Append one log entry."""
+
+    def writer(
+        self,
+        session_id: str | None = None,
+        *,
+        stream: str | int = "stdout",
+        source_seq_start: int = 0,
+    ) -> RuntimeLogWriter:
+        """Return a file-like runtime log writer."""
 
 
 class RuntimeLogHost:
@@ -130,7 +160,7 @@ class RuntimeLogWriter:
 
     def __init__(
         self,
-        host: RuntimeLogHost,
+        host: RuntimeLogHostClientProtocol,
         session_id: str,
         *,
         stream: str | int = "stdout",
@@ -188,7 +218,7 @@ class RuntimeLogHandler(logging.Handler):
         self,
         session_id: str | None = None,
         *,
-        host: RuntimeLogHost | None = None,
+        host: RuntimeLogHostClientProtocol | None = None,
         stream: str | int = "runtime",
         level: int = logging.NOTSET,
     ) -> None:

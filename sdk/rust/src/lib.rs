@@ -110,7 +110,8 @@ pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
 pub use runtime_log_host::{
     AppendRuntimeLogsRequest, AppendRuntimeLogsResponse, ENV_RUNTIME_SESSION_ID, RuntimeLogEntry,
-    RuntimeLogHost, RuntimeLogHostError, RuntimeLogStream, runtime_session_id,
+    RuntimeLogHost, RuntimeLogHostClient, RuntimeLogHostError, RuntimeLogStream,
+    runtime_session_id,
 };
 pub use runtime_provider::{
     GetRuntimeSessionRequest, HostedApp, ListRuntimeSessionsRequest, ListRuntimeSessionsResponse,

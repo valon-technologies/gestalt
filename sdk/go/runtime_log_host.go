@@ -22,6 +22,14 @@ type RuntimeLogHostClient struct {
 	sourceSeq atomic.Int64
 }
 
+// RuntimeLogHostClientContract is the fakeable client contract for runtime log
+// host calls.
+type RuntimeLogHostClientContract interface {
+	Close() error
+	AppendLogs(context.Context, string, []RuntimeLogEntry) error
+	Append(context.Context, string, ...RuntimeLogAppendOption) error
+}
+
 var sharedRuntimeLogHostTransport sharedManagerTransport[proto.RuntimeLogHostClient]
 
 // RuntimeLogStream identifies the stream that produced a runtime log entry.
