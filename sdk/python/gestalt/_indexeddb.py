@@ -8,7 +8,7 @@ import queue
 from dataclasses import dataclass, field
 from functools import cmp_to_key
 from numbers import Real
-from typing import Any, Iterator, cast
+from typing import Any, Iterator, Protocol, cast
 
 import grpc as _grpc
 from google.protobuf import struct_pb2 as _struct_pb2
@@ -80,6 +80,236 @@ class ObjectStoreSchema:
     """Schema definition for an object store."""
 
     indexes: list[IndexSchema] = field(default_factory=list)
+
+
+class IndexedDBClient(Protocol):
+    """Fakeable client contract for IndexedDB-compatible storage."""
+
+    def create_object_store(
+        self, name: str, schema: ObjectStoreSchema | None = None
+    ) -> IndexedDBObjectStoreClient:
+        """Create an object store and return a store-bound client."""
+
+    def delete_object_store(self, name: str) -> None:
+        """Delete an object store by name."""
+
+    def object_store(self, name: str) -> IndexedDBObjectStoreClient:
+        """Return a client bound to an object store."""
+
+    def transaction(
+        self,
+        stores: list[str],
+        mode: str = "readonly",
+        *,
+        durability_hint: str = "default",
+    ) -> IndexedDBTransactionClient:
+        """Start an explicit IndexedDB transaction."""
+
+    def close(self) -> None:
+        """Close the client."""
+
+
+class IndexedDBObjectStoreClient(Protocol):
+    """Fakeable IndexedDB object-store contract."""
+
+    def get(self, id: str) -> dict[str, Any]:
+        """Fetch a record by primary key."""
+
+    def get_key(self, id: str) -> str:
+        """Return the canonical key for a primary key lookup."""
+
+    def add(self, record: dict[str, Any]) -> None:
+        """Insert a new record."""
+
+    def put(self, record: dict[str, Any]) -> None:
+        """Insert or replace a record."""
+
+    def delete(self, id: str) -> None:
+        """Delete a record by primary key."""
+
+    def clear(self) -> None:
+        """Delete every record in the store."""
+
+    def get_all(self, key_range: KeyRange | None = None) -> list[dict[str, Any]]:
+        """Return all records that fall within ``key_range``."""
+
+    def get_all_keys(self, key_range: KeyRange | None = None) -> list[str]:
+        """Return all primary keys that fall within ``key_range``."""
+
+    def count(self, key_range: KeyRange | None = None) -> int:
+        """Return the number of matching records."""
+
+    def delete_range(self, key_range: KeyRange) -> int:
+        """Delete all records within ``key_range``."""
+
+    def open_cursor(
+        self,
+        key_range: KeyRange | None = None,
+        direction: int = CURSOR_NEXT,
+    ) -> IndexedDBCursorClient:
+        """Open a record cursor over the store."""
+
+    def open_key_cursor(
+        self,
+        key_range: KeyRange | None = None,
+        direction: int = CURSOR_NEXT,
+    ) -> IndexedDBCursorClient:
+        """Open a key-only cursor over the store."""
+
+    def index(self, name: str) -> IndexedDBIndexClient:
+        """Return a client for a named index on this store."""
+
+
+class IndexedDBIndexClient(Protocol):
+    """Fakeable IndexedDB secondary-index contract."""
+
+    def get(self, *values: Any) -> dict[str, Any]:
+        """Fetch the first matching record for the indexed values."""
+
+    def get_key(self, *values: Any) -> str:
+        """Fetch the first matching primary key for the indexed values."""
+
+    def get_all(
+        self, *values: Any, key_range: KeyRange | None = None
+    ) -> list[dict[str, Any]]:
+        """Return all records matching the indexed values and key range."""
+
+    def get_all_keys(
+        self, *values: Any, key_range: KeyRange | None = None
+    ) -> list[str]:
+        """Return all primary keys matching the indexed values and key range."""
+
+    def count(self, *values: Any, key_range: KeyRange | None = None) -> int:
+        """Return the number of records matching the indexed values."""
+
+    def delete(self, *values: Any) -> int:
+        """Delete records matching the indexed values."""
+
+    def open_cursor(
+        self,
+        *values: Any,
+        key_range: KeyRange | None = None,
+        direction: int = CURSOR_NEXT,
+    ) -> IndexedDBCursorClient:
+        """Open a record cursor over the indexed results."""
+
+    def open_key_cursor(
+        self,
+        *values: Any,
+        key_range: KeyRange | None = None,
+        direction: int = CURSOR_NEXT,
+    ) -> IndexedDBCursorClient:
+        """Open a key-only cursor over the indexed results."""
+
+
+class IndexedDBTransactionClient(Protocol):
+    """Fakeable explicit IndexedDB transaction contract."""
+
+    def object_store(self, name: str) -> IndexedDBTransactionObjectStoreClient:
+        """Return a transaction-scoped object store."""
+
+    def commit(self) -> None:
+        """Commit the transaction."""
+
+    def abort(self) -> None:
+        """Abort the transaction."""
+
+
+class IndexedDBTransactionObjectStoreClient(Protocol):
+    """Fakeable transaction-scoped object-store contract."""
+
+    def get(self, id: str) -> dict[str, Any]:
+        """Fetch a record by primary key."""
+
+    def get_key(self, id: str) -> str:
+        """Return the canonical key for a primary key lookup."""
+
+    def add(self, record: dict[str, Any]) -> None:
+        """Insert a new record."""
+
+    def put(self, record: dict[str, Any]) -> None:
+        """Insert or replace a record."""
+
+    def delete(self, id: str) -> None:
+        """Delete a record by primary key."""
+
+    def clear(self) -> None:
+        """Delete every record in the store."""
+
+    def get_all(self, key_range: KeyRange | None = None) -> list[dict[str, Any]]:
+        """Return all records that fall within ``key_range``."""
+
+    def get_all_keys(self, key_range: KeyRange | None = None) -> list[str]:
+        """Return all primary keys that fall within ``key_range``."""
+
+    def count(self, key_range: KeyRange | None = None) -> int:
+        """Return the number of matching records."""
+
+    def delete_range(self, key_range: KeyRange) -> int:
+        """Delete all records within ``key_range``."""
+
+    def index(self, name: str) -> IndexedDBTransactionIndexClient:
+        """Return a transaction-scoped secondary index."""
+
+
+class IndexedDBTransactionIndexClient(Protocol):
+    """Fakeable transaction-scoped secondary-index contract."""
+
+    def get(self, *values: Any) -> dict[str, Any]:
+        """Fetch the first matching record for the indexed values."""
+
+    def get_key(self, *values: Any) -> str:
+        """Fetch the first matching primary key for the indexed values."""
+
+    def get_all(
+        self, *values: Any, key_range: KeyRange | None = None
+    ) -> list[dict[str, Any]]:
+        """Return all records matching the indexed values and key range."""
+
+    def get_all_keys(
+        self, *values: Any, key_range: KeyRange | None = None
+    ) -> list[str]:
+        """Return all primary keys matching the indexed values and key range."""
+
+    def count(self, *values: Any, key_range: KeyRange | None = None) -> int:
+        """Return the number of records matching the indexed values."""
+
+    def delete(self, *values: Any) -> int:
+        """Delete records matching the indexed values."""
+
+
+class IndexedDBCursorClient(Protocol):
+    """Fakeable IndexedDB cursor contract."""
+
+    @property
+    def key(self) -> Any:
+        """Current key for the cursor entry."""
+
+    @property
+    def primary_key(self) -> str | None:
+        """Current primary key for the cursor entry."""
+
+    @property
+    def value(self) -> dict[str, Any]:
+        """Current record value for the cursor entry."""
+
+    def continue_(self) -> bool:
+        """Advance to the next matching cursor entry."""
+
+    def continue_to_key(self, key: Any) -> bool:
+        """Advance the cursor to ``key`` or the next greater entry."""
+
+    def advance(self, count: int) -> bool:
+        """Skip forward by ``count`` entries."""
+
+    def delete(self) -> None:
+        """Delete the current cursor entry."""
+
+    def update(self, value: dict[str, Any]) -> None:
+        """Replace the current cursor entry."""
+
+    def close(self) -> None:
+        """Close the cursor."""
 
 
 @dataclass
@@ -370,8 +600,8 @@ class IndexedDB:
 
     def create_object_store(
         self, name: str, schema: ObjectStoreSchema | None = None
-    ) -> None:
-        """Create an object store with an optional schema."""
+    ) -> ObjectStore:
+        """Create an object store and return a store-bound client."""
 
         pb_schema = pb.ObjectStoreSchema()
         if schema:
@@ -385,6 +615,7 @@ class IndexedDB:
             self._stub.CreateObjectStore,
             pb.CreateObjectStoreRequest(name=name, schema=pb_schema),
         )
+        return self.object_store(name)
 
     def delete_object_store(self, name: str) -> None:
         """Delete an object store by name."""

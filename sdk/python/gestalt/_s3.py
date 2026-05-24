@@ -8,7 +8,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, BinaryIO, Iterable, Iterator
+from typing import Any, BinaryIO, Iterable, Iterator, Protocol
 
 import grpc
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
@@ -175,6 +175,128 @@ class ProviderReadResult:
 
 ObjectAccessURLOptions = PresignOptions
 ObjectAccessURL = PresignResult
+
+
+class S3Client(Protocol):
+    """Fakeable S3-compatible client contract."""
+
+    def object(self, bucket: str, key: str) -> S3ObjectHandle:
+        """Return an object helper for the latest version."""
+
+    def object_version(
+        self, bucket: str, key: str, version_id: str
+    ) -> S3ObjectHandle:
+        """Return an object helper pinned to a specific version."""
+
+    def head_object(self, ref: ObjectRef) -> ObjectMeta:
+        """Fetch metadata for an object without reading its body."""
+
+    def read_object(
+        self,
+        ref: ObjectRef,
+        opts: ReadOptions | None = None,
+    ) -> tuple[ObjectMeta, S3ReadStream]:
+        """Open a streaming read for an object."""
+
+    def write_object(
+        self,
+        ref: ObjectRef,
+        body: ObjectBody = None,
+        opts: WriteOptions | None = None,
+    ) -> ObjectMeta:
+        """Write an object body and return the resulting metadata."""
+
+    def delete_object(self, ref: ObjectRef) -> None:
+        """Delete an object."""
+
+    def list_objects(self, opts: ListOptions) -> ListPage:
+        """List objects within a bucket."""
+
+    def copy_object(
+        self,
+        source: ObjectRef,
+        destination: ObjectRef,
+        opts: CopyOptions | None = None,
+    ) -> ObjectMeta:
+        """Copy an object and return metadata for the destination."""
+
+    def presign_object(
+        self,
+        ref: ObjectRef,
+        opts: PresignOptions | None = None,
+    ) -> PresignResult:
+        """Generate a presigned URL for an object operation."""
+
+    def create_object_access_url(
+        self,
+        ref: ObjectRef,
+        opts: ObjectAccessURLOptions | None = None,
+    ) -> ObjectAccessURL:
+        """Create a host-mediated object access URL."""
+
+    def close(self) -> None:
+        """Close the client."""
+
+
+class S3ObjectHandle(Protocol):
+    """Fakeable convenience contract for one S3 object reference."""
+
+    ref: ObjectRef
+
+    def stat(self) -> ObjectMeta:
+        """Fetch object metadata."""
+
+    def exists(self) -> bool:
+        """Return whether the object exists."""
+
+    def stream(self, opts: ReadOptions | None = None) -> tuple[ObjectMeta, S3ReadStream]:
+        """Open a streaming read for the object."""
+
+    def bytes(self, opts: ReadOptions | None = None) -> BytesData:
+        """Read the full object body as bytes."""
+
+    def text(self, opts: ReadOptions | None = None, *, encoding: str = "utf-8") -> str:
+        """Read the full object body as text."""
+
+    def json(self, opts: ReadOptions | None = None) -> Any:
+        """Read and decode the full object body as JSON."""
+
+    def write(
+        self,
+        body: ObjectBody = None,
+        opts: WriteOptions | None = None,
+    ) -> ObjectMeta:
+        """Write an object body."""
+
+    def write_bytes(
+        self,
+        body: BytesLike,
+        opts: WriteOptions | None = None,
+    ) -> ObjectMeta:
+        """Write bytes to the object."""
+
+    def write_text(
+        self,
+        body: str,
+        opts: WriteOptions | None = None,
+        *,
+        encoding: str = "utf-8",
+    ) -> ObjectMeta:
+        """Encode and write text to the object."""
+
+    def write_json(self, value: Any, opts: WriteOptions | None = None) -> ObjectMeta:
+        """Encode and write JSON to the object."""
+
+    def delete(self) -> None:
+        """Delete the object."""
+
+    def presign(self, opts: PresignOptions | None = None) -> PresignResult:
+        """Generate a presigned URL for this object."""
+
+    def create_access_url(
+        self, opts: ObjectAccessURLOptions | None = None
+    ) -> ObjectAccessURL:
+        """Create a host-mediated object access URL for this object."""
 
 
 class S3ReadStream:

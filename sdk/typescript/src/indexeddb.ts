@@ -95,9 +95,119 @@ export interface OpenCursorOptions {
 }
 
 /**
+ * Fakeable client contract for IndexedDB-compatible storage.
+ */
+export interface IndexedDBClient {
+  createObjectStore(
+    name: string,
+    schema?: ObjectStoreSchema,
+  ): Promise<IndexedDBObjectStoreClient>;
+  deleteObjectStore(name: string): Promise<void>;
+  objectStore(name: string): IndexedDBObjectStoreClient;
+  transaction(
+    stores: string[],
+    mode?: TransactionMode,
+    options?: TransactionOptions,
+  ): Promise<IndexedDBTransactionClient>;
+}
+
+/**
+ * Fakeable IndexedDB object-store contract.
+ */
+export interface IndexedDBObjectStoreClient {
+  get(id: string): Promise<Record>;
+  getKey(id: string): Promise<string>;
+  add(record: Record): Promise<void>;
+  put(record: Record): Promise<void>;
+  delete(id: string): Promise<void>;
+  clear(): Promise<void>;
+  getAll(keyRange?: KeyRange): Promise<Record[]>;
+  getAllKeys(keyRange?: KeyRange): Promise<string[]>;
+  count(keyRange?: KeyRange): Promise<number>;
+  deleteRange(keyRange: KeyRange): Promise<number>;
+  openCursor(options?: OpenCursorOptions): Promise<IndexedDBCursorClient | null>;
+  openKeyCursor(options?: OpenCursorOptions): Promise<IndexedDBCursorClient | null>;
+  index(name: string): IndexedDBIndexClient;
+}
+
+/**
+ * Fakeable IndexedDB secondary-index contract.
+ */
+export interface IndexedDBIndexClient {
+  get(...values: unknown[]): Promise<Record>;
+  getKey(...values: unknown[]): Promise<string>;
+  getAll(keyRange?: KeyRange, ...values: unknown[]): Promise<Record[]>;
+  getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]>;
+  count(keyRange?: KeyRange, ...values: unknown[]): Promise<number>;
+  delete(...values: unknown[]): Promise<number>;
+  openCursor(
+    options?: OpenCursorOptions,
+    ...values: unknown[]
+  ): Promise<IndexedDBCursorClient | null>;
+  openKeyCursor(
+    options?: OpenCursorOptions,
+    ...values: unknown[]
+  ): Promise<IndexedDBCursorClient | null>;
+}
+
+/**
+ * Fakeable explicit IndexedDB transaction contract.
+ */
+export interface IndexedDBTransactionClient {
+  objectStore(name: string): IndexedDBTransactionObjectStoreClient;
+  commit(): Promise<void>;
+  abort(reason?: string): Promise<void>;
+}
+
+/**
+ * Fakeable transaction-scoped object-store contract.
+ */
+export interface IndexedDBTransactionObjectStoreClient {
+  get(id: string): Promise<Record>;
+  getKey(id: string): Promise<string>;
+  add(record: Record): Promise<void>;
+  put(record: Record): Promise<void>;
+  delete(id: string): Promise<void>;
+  clear(): Promise<void>;
+  getAll(keyRange?: KeyRange): Promise<Record[]>;
+  getAllKeys(keyRange?: KeyRange): Promise<string[]>;
+  count(keyRange?: KeyRange): Promise<number>;
+  deleteRange(keyRange: KeyRange): Promise<number>;
+  index(name: string): IndexedDBTransactionIndexClient;
+}
+
+/**
+ * Fakeable transaction-scoped secondary-index contract.
+ */
+export interface IndexedDBTransactionIndexClient {
+  get(...values: unknown[]): Promise<Record>;
+  getKey(...values: unknown[]): Promise<string>;
+  getAll(keyRange?: KeyRange, ...values: unknown[]): Promise<Record[]>;
+  getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]>;
+  count(keyRange?: KeyRange, ...values: unknown[]): Promise<number>;
+  delete(...values: unknown[]): Promise<number>;
+}
+
+/**
+ * Fakeable IndexedDB cursor contract.
+ */
+export interface IndexedDBCursorClient {
+  readonly key: unknown;
+  readonly primaryKey: string;
+  readonly value: Record | undefined;
+  readonly done: boolean;
+  continue(): Promise<boolean>;
+  continueToKey(key: unknown): Promise<boolean>;
+  advance(count: number): Promise<boolean>;
+  delete(): Promise<void>;
+  update(record: Record): Promise<void>;
+  close(): void;
+}
+
+/**
  * Streaming cursor over an object store or secondary index.
  */
-export class Cursor {
+export class Cursor implements IndexedDBCursorClient {
   private sendQueue: AsyncQueue<any>;
   private responseIterator: AsyncIterator<any>;
   private _key: unknown = undefined;
@@ -787,7 +897,7 @@ function compareBytes(left: Uint8Array, right: Uint8Array): number {
  * const todos = db.objectStore("todos");
  * ```
  */
-export class IndexedDB {
+export class IndexedDB implements IndexedDBClient {
   private client: Client<typeof IndexedDBService>;
 
   constructor(name?: string) {
@@ -805,7 +915,7 @@ export class IndexedDB {
   async createObjectStore(
     name: string,
     schema?: ObjectStoreSchema,
-  ): Promise<void> {
+  ): Promise<ObjectStore> {
     await this.client.createObjectStore({
       name,
       schema: {
@@ -823,6 +933,7 @@ export class IndexedDB {
         })),
       },
     });
+    return this.objectStore(name);
   }
 
   /**
@@ -854,7 +965,7 @@ export class IndexedDB {
 /**
  * Explicit transaction over one or more object stores.
  */
-export class Transaction {
+export class Transaction implements IndexedDBTransactionClient {
   private sendQueue: AsyncQueue<any>;
   private responseIterator: AsyncIterator<any>;
   private closed = false;
@@ -1040,7 +1151,7 @@ export class Transaction {
 /**
  * Transaction-scoped object-store client.
  */
-export class TransactionObjectStore {
+export class TransactionObjectStore implements IndexedDBTransactionObjectStoreClient {
   /**
    * @internal
    */
@@ -1175,7 +1286,7 @@ export class TransactionObjectStore {
 /**
  * Transaction-scoped secondary-index client.
  */
-export class TransactionIndex {
+export class TransactionIndex implements IndexedDBTransactionIndexClient {
   /**
    * @internal
    */
@@ -1267,7 +1378,7 @@ export class TransactionIndex {
 /**
  * Object store client used for primary-key operations.
  */
-export class ObjectStore {
+export class ObjectStore implements IndexedDBObjectStoreClient {
   /**
    * @internal
    */
@@ -1393,7 +1504,7 @@ export class ObjectStore {
 /**
  * Secondary-index client used for lookup and cursor operations.
  */
-export class Index {
+export class Index implements IndexedDBIndexClient {
   /**
    * @internal
    */

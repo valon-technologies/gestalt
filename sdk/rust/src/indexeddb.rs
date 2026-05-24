@@ -5,6 +5,7 @@ use hyper_util::rt::TokioIo;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Request;
+use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
@@ -152,6 +153,255 @@ impl TransactionDurabilityHint {
 pub struct TransactionOptions {
     /// Durability hint for explicit transactions.
     pub durability_hint: TransactionDurabilityHint,
+}
+
+#[async_trait]
+/// Fakeable client contract for IndexedDB-compatible storage.
+pub trait IndexedDBClient: Send {
+    /// Creates a named object store and returns a typed handle for it.
+    async fn create_object_store(
+        &mut self,
+        name: &str,
+        schema: ObjectStoreSchema,
+    ) -> Result<ObjectStore, IndexedDBError>;
+
+    /// Deletes a named object store.
+    async fn delete_object_store(&mut self, name: &str) -> Result<(), IndexedDBError>;
+
+    /// Returns a typed handle for one object store.
+    fn object_store(&self, name: &str) -> ObjectStore;
+
+    /// Opens an explicit transaction over a fixed object-store scope.
+    async fn transaction(
+        &self,
+        stores: &[&str],
+        mode: TransactionMode,
+        options: TransactionOptions,
+    ) -> Result<Transaction, IndexedDBError>;
+}
+
+#[async_trait]
+/// Fakeable IndexedDB object-store contract.
+pub trait IndexedDBObjectStoreClient: Send {
+    /// Loads one record by primary key.
+    async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError>;
+
+    /// Resolves the primary key for id.
+    async fn get_key(&mut self, id: &str) -> Result<String, IndexedDBError>;
+
+    /// Inserts a new row and fails if the key already exists.
+    async fn add(&mut self, record: Record) -> Result<(), IndexedDBError>;
+
+    /// Upserts a row by primary key.
+    async fn put(&mut self, record: Record) -> Result<(), IndexedDBError>;
+
+    /// Deletes one row by primary key.
+    async fn delete(&mut self, id: &str) -> Result<(), IndexedDBError>;
+
+    /// Deletes every row in the object store.
+    async fn clear(&mut self) -> Result<(), IndexedDBError>;
+
+    /// Loads every row that matches range.
+    async fn get_all(&mut self, range: Option<KeyRange>) -> Result<Vec<Record>, IndexedDBError>;
+
+    /// Loads every primary key that matches range.
+    async fn get_all_keys(
+        &mut self,
+        range: Option<KeyRange>,
+    ) -> Result<Vec<String>, IndexedDBError>;
+
+    /// Counts rows that match range.
+    async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError>;
+
+    /// Deletes rows that match range and returns the delete count.
+    async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError>;
+
+    /// Returns a typed handle for one secondary index.
+    fn index(&self, name: &str) -> IndexClient;
+
+    /// Opens a full-value cursor over the object store.
+    async fn open_cursor(
+        &mut self,
+        range: Option<KeyRange>,
+        direction: CursorDirection,
+    ) -> Result<Cursor, IndexedDBError>;
+
+    /// Opens a key-only cursor over the object store.
+    async fn open_key_cursor(
+        &mut self,
+        range: Option<KeyRange>,
+        direction: CursorDirection,
+    ) -> Result<Cursor, IndexedDBError>;
+}
+
+#[async_trait]
+/// Fakeable IndexedDB secondary-index contract.
+pub trait IndexedDBIndexClient: Send {
+    /// Loads the first row that matches values.
+    async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError>;
+
+    /// Resolves the primary key for the first row that matches values.
+    async fn get_key(&mut self, values: &[serde_json::Value]) -> Result<String, IndexedDBError>;
+
+    /// Loads every row that matches values and range.
+    async fn get_all(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<Vec<Record>, IndexedDBError>;
+
+    /// Loads every primary key that matches values and range.
+    async fn get_all_keys(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<Vec<String>, IndexedDBError>;
+
+    /// Counts rows that match values and range.
+    async fn count(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<i64, IndexedDBError>;
+
+    /// Deletes rows that match values and returns the delete count.
+    async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError>;
+
+    /// Opens a full-value cursor over the secondary index.
+    async fn open_cursor(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+        direction: CursorDirection,
+    ) -> Result<Cursor, IndexedDBError>;
+
+    /// Opens a key-only cursor over the secondary index.
+    async fn open_key_cursor(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+        direction: CursorDirection,
+    ) -> Result<Cursor, IndexedDBError>;
+}
+
+#[async_trait]
+/// Fakeable explicit IndexedDB transaction contract.
+pub trait IndexedDBTransactionClient: Send {
+    /// Returns a transaction-scoped object store.
+    fn object_store<'a>(&'a mut self, name: &str) -> TransactionObjectStore<'a>;
+
+    /// Commits the transaction.
+    async fn commit(&mut self) -> Result<(), IndexedDBError>;
+
+    /// Aborts the transaction.
+    async fn abort(&mut self, reason: &str) -> Result<(), IndexedDBError>;
+}
+
+#[async_trait]
+/// Fakeable transaction-scoped object-store contract.
+pub trait IndexedDBTransactionObjectStoreClient: Send {
+    /// Loads one record by primary key inside the transaction.
+    async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError>;
+
+    /// Resolves the primary key for id inside the transaction.
+    async fn get_key(&mut self, id: &str) -> Result<String, IndexedDBError>;
+
+    /// Inserts a new row inside the transaction.
+    async fn add(&mut self, record: Record) -> Result<(), IndexedDBError>;
+
+    /// Upserts a row inside the transaction.
+    async fn put(&mut self, record: Record) -> Result<(), IndexedDBError>;
+
+    /// Deletes one row inside the transaction.
+    async fn delete(&mut self, id: &str) -> Result<(), IndexedDBError>;
+
+    /// Deletes every row in the object store inside the transaction.
+    async fn clear(&mut self) -> Result<(), IndexedDBError>;
+
+    /// Loads every row that matches range inside the transaction.
+    async fn get_all(&mut self, range: Option<KeyRange>) -> Result<Vec<Record>, IndexedDBError>;
+
+    /// Loads every primary key that matches range inside the transaction.
+    async fn get_all_keys(
+        &mut self,
+        range: Option<KeyRange>,
+    ) -> Result<Vec<String>, IndexedDBError>;
+
+    /// Counts rows that match range inside the transaction.
+    async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError>;
+
+    /// Deletes rows that match range inside the transaction.
+    async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError>;
+
+    /// Returns a transaction-scoped secondary index.
+    fn index<'a>(&'a mut self, name: &str) -> TransactionIndexClient<'a>;
+}
+
+#[async_trait]
+/// Fakeable transaction-scoped secondary-index contract.
+pub trait IndexedDBTransactionIndexClient: Send {
+    /// Loads the first row that matches values inside the transaction.
+    async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError>;
+
+    /// Resolves the primary key for the first matching row inside the transaction.
+    async fn get_key(&mut self, values: &[serde_json::Value]) -> Result<String, IndexedDBError>;
+
+    /// Loads every row that matches values and range inside the transaction.
+    async fn get_all(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<Vec<Record>, IndexedDBError>;
+
+    /// Loads every primary key that matches values and range inside the transaction.
+    async fn get_all_keys(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<Vec<String>, IndexedDBError>;
+
+    /// Counts rows that match values and range inside the transaction.
+    async fn count(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<i64, IndexedDBError>;
+
+    /// Deletes rows that match values inside the transaction.
+    async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError>;
+}
+
+#[async_trait]
+/// Fakeable IndexedDB cursor contract.
+pub trait IndexedDBCursorClient: Send {
+    /// Returns the current cursor key.
+    fn key(&self) -> Option<serde_json::Value>;
+
+    /// Returns the current row's primary key.
+    fn primary_key(&self) -> &str;
+
+    /// Returns the current row value.
+    fn value(&self) -> Result<Record, IndexedDBError>;
+
+    /// Advances the cursor by one row.
+    async fn continue_next(&mut self) -> Result<bool, IndexedDBError>;
+
+    /// Advances the cursor to key, or exhausts it if key does not exist.
+    async fn continue_to_key(&mut self, key: serde_json::Value) -> Result<bool, IndexedDBError>;
+
+    /// Skips count rows ahead.
+    async fn advance(&mut self, count: i32) -> Result<bool, IndexedDBError>;
+
+    /// Deletes the current row and keeps the cursor open.
+    async fn delete(&mut self) -> Result<(), IndexedDBError>;
+
+    /// Replaces the current row and keeps the cursor open.
+    async fn update(&mut self, value: Record) -> Result<(), IndexedDBError>;
+
+    /// Closes the cursor stream and releases its transport resources.
+    async fn close(self) -> Result<(), IndexedDBError>
+    where
+        Self: Sized;
 }
 
 /// Native open-cursor request used by provider-side cursor helpers.
@@ -1872,6 +2122,301 @@ impl IndexClient {
             values: values.iter().map(json_to_typed_value).collect(),
         };
         open_cursor_inner(&mut self.client, req).await
+    }
+}
+
+#[async_trait]
+impl IndexedDBClient for IndexedDB {
+    async fn create_object_store(
+        &mut self,
+        name: &str,
+        schema: ObjectStoreSchema,
+    ) -> Result<ObjectStore, IndexedDBError> {
+        IndexedDB::create_object_store(self, name, schema).await?;
+        Ok(IndexedDB::object_store(self, name))
+    }
+
+    async fn delete_object_store(&mut self, name: &str) -> Result<(), IndexedDBError> {
+        IndexedDB::delete_object_store(self, name).await
+    }
+
+    fn object_store(&self, name: &str) -> ObjectStore {
+        IndexedDB::object_store(self, name)
+    }
+
+    async fn transaction(
+        &self,
+        stores: &[&str],
+        mode: TransactionMode,
+        options: TransactionOptions,
+    ) -> Result<Transaction, IndexedDBError> {
+        IndexedDB::transaction(self, stores, mode, options).await
+    }
+}
+
+#[async_trait]
+impl IndexedDBObjectStoreClient for ObjectStore {
+    async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError> {
+        ObjectStore::get(self, id).await
+    }
+
+    async fn get_key(&mut self, id: &str) -> Result<String, IndexedDBError> {
+        ObjectStore::get_key(self, id).await
+    }
+
+    async fn add(&mut self, record: Record) -> Result<(), IndexedDBError> {
+        ObjectStore::add(self, record).await
+    }
+
+    async fn put(&mut self, record: Record) -> Result<(), IndexedDBError> {
+        ObjectStore::put(self, record).await
+    }
+
+    async fn delete(&mut self, id: &str) -> Result<(), IndexedDBError> {
+        ObjectStore::delete(self, id).await
+    }
+
+    async fn clear(&mut self) -> Result<(), IndexedDBError> {
+        ObjectStore::clear(self).await
+    }
+
+    async fn get_all(&mut self, range: Option<KeyRange>) -> Result<Vec<Record>, IndexedDBError> {
+        ObjectStore::get_all(self, range).await
+    }
+
+    async fn get_all_keys(
+        &mut self,
+        range: Option<KeyRange>,
+    ) -> Result<Vec<String>, IndexedDBError> {
+        ObjectStore::get_all_keys(self, range).await
+    }
+
+    async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError> {
+        ObjectStore::count(self, range).await
+    }
+
+    async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError> {
+        ObjectStore::delete_range(self, range).await
+    }
+
+    fn index(&self, name: &str) -> IndexClient {
+        ObjectStore::index(self, name)
+    }
+
+    async fn open_cursor(
+        &mut self,
+        range: Option<KeyRange>,
+        direction: CursorDirection,
+    ) -> Result<Cursor, IndexedDBError> {
+        ObjectStore::open_cursor(self, range, direction).await
+    }
+
+    async fn open_key_cursor(
+        &mut self,
+        range: Option<KeyRange>,
+        direction: CursorDirection,
+    ) -> Result<Cursor, IndexedDBError> {
+        ObjectStore::open_key_cursor(self, range, direction).await
+    }
+}
+
+#[async_trait]
+impl IndexedDBIndexClient for IndexClient {
+    async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
+        IndexClient::get(self, values).await
+    }
+
+    async fn get_key(&mut self, values: &[serde_json::Value]) -> Result<String, IndexedDBError> {
+        IndexClient::get_key(self, values).await
+    }
+
+    async fn get_all(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<Vec<Record>, IndexedDBError> {
+        IndexClient::get_all(self, values, range).await
+    }
+
+    async fn get_all_keys(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<Vec<String>, IndexedDBError> {
+        IndexClient::get_all_keys(self, values, range).await
+    }
+
+    async fn count(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<i64, IndexedDBError> {
+        IndexClient::count(self, values, range).await
+    }
+
+    async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError> {
+        IndexClient::delete(self, values).await
+    }
+
+    async fn open_cursor(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+        direction: CursorDirection,
+    ) -> Result<Cursor, IndexedDBError> {
+        IndexClient::open_cursor(self, values, range, direction).await
+    }
+
+    async fn open_key_cursor(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+        direction: CursorDirection,
+    ) -> Result<Cursor, IndexedDBError> {
+        IndexClient::open_key_cursor(self, values, range, direction).await
+    }
+}
+
+#[async_trait]
+impl IndexedDBTransactionClient for Transaction {
+    fn object_store<'a>(&'a mut self, name: &str) -> TransactionObjectStore<'a> {
+        Transaction::object_store(self, name)
+    }
+
+    async fn commit(&mut self) -> Result<(), IndexedDBError> {
+        Transaction::commit(self).await
+    }
+
+    async fn abort(&mut self, reason: &str) -> Result<(), IndexedDBError> {
+        Transaction::abort(self, reason).await
+    }
+}
+
+#[async_trait]
+impl IndexedDBTransactionObjectStoreClient for TransactionObjectStore<'_> {
+    async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError> {
+        TransactionObjectStore::get(self, id).await
+    }
+
+    async fn get_key(&mut self, id: &str) -> Result<String, IndexedDBError> {
+        TransactionObjectStore::get_key(self, id).await
+    }
+
+    async fn add(&mut self, record: Record) -> Result<(), IndexedDBError> {
+        TransactionObjectStore::add(self, record).await
+    }
+
+    async fn put(&mut self, record: Record) -> Result<(), IndexedDBError> {
+        TransactionObjectStore::put(self, record).await
+    }
+
+    async fn delete(&mut self, id: &str) -> Result<(), IndexedDBError> {
+        TransactionObjectStore::delete(self, id).await
+    }
+
+    async fn clear(&mut self) -> Result<(), IndexedDBError> {
+        TransactionObjectStore::clear(self).await
+    }
+
+    async fn get_all(&mut self, range: Option<KeyRange>) -> Result<Vec<Record>, IndexedDBError> {
+        TransactionObjectStore::get_all(self, range).await
+    }
+
+    async fn get_all_keys(
+        &mut self,
+        range: Option<KeyRange>,
+    ) -> Result<Vec<String>, IndexedDBError> {
+        TransactionObjectStore::get_all_keys(self, range).await
+    }
+
+    async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError> {
+        TransactionObjectStore::count(self, range).await
+    }
+
+    async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError> {
+        TransactionObjectStore::delete_range(self, range).await
+    }
+
+    fn index<'a>(&'a mut self, name: &str) -> TransactionIndexClient<'a> {
+        TransactionObjectStore::index(self, name)
+    }
+}
+
+#[async_trait]
+impl IndexedDBTransactionIndexClient for TransactionIndexClient<'_> {
+    async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
+        TransactionIndexClient::get(self, values).await
+    }
+
+    async fn get_key(&mut self, values: &[serde_json::Value]) -> Result<String, IndexedDBError> {
+        TransactionIndexClient::get_key(self, values).await
+    }
+
+    async fn get_all(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<Vec<Record>, IndexedDBError> {
+        TransactionIndexClient::get_all(self, values, range).await
+    }
+
+    async fn get_all_keys(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<Vec<String>, IndexedDBError> {
+        TransactionIndexClient::get_all_keys(self, values, range).await
+    }
+
+    async fn count(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<i64, IndexedDBError> {
+        TransactionIndexClient::count(self, values, range).await
+    }
+
+    async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError> {
+        TransactionIndexClient::delete(self, values).await
+    }
+}
+
+#[async_trait]
+impl IndexedDBCursorClient for Cursor {
+    fn key(&self) -> Option<serde_json::Value> {
+        Cursor::key(self)
+    }
+
+    fn primary_key(&self) -> &str {
+        Cursor::primary_key(self)
+    }
+
+    fn value(&self) -> Result<Record, IndexedDBError> {
+        Cursor::value(self)
+    }
+
+    async fn continue_next(&mut self) -> Result<bool, IndexedDBError> {
+        Cursor::continue_next(self).await
+    }
+
+    async fn continue_to_key(&mut self, key: serde_json::Value) -> Result<bool, IndexedDBError> {
+        Cursor::continue_to_key(self, key).await
+    }
+
+    async fn advance(&mut self, count: i32) -> Result<bool, IndexedDBError> {
+        Cursor::advance(self, count).await
+    }
+
+    async fn delete(&mut self) -> Result<(), IndexedDBError> {
+        Cursor::delete(self).await
+    }
+
+    async fn update(&mut self, value: Record) -> Result<(), IndexedDBError> {
+        Cursor::update(self, value).await
+    }
+
+    async fn close(self) -> Result<(), IndexedDBError> {
+        Cursor::close(self).await
     }
 }
 
