@@ -40,9 +40,9 @@ type hostApp struct {
 // AppAPI is the fakeable contract for app invocation calls.
 type AppAPI interface {
 	Close() error
-	Invoke(context.Context, string, string, any, *InvokeOptions) (*OperationResult, error)
-	InvokeGraphQL(context.Context, string, string, any, *InvokeOptions) (*OperationResult, error)
-	ExchangeInvocationToken(context.Context, []InvocationGrant, time.Duration) (string, error)
+	Invoke(ctx context.Context, app string, operation string, params any, opts *InvokeOptions) (*OperationResult, error)
+	InvokeGraphQL(ctx context.Context, app string, document string, variables any, opts *InvokeOptions) (*OperationResult, error)
+	ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error)
 }
 
 var sharedAppTransport sharedManagerTransport[proto.AppInvokerClient]

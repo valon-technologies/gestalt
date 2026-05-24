@@ -33,6 +33,12 @@ _HOST_APP_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 class AppProtocol(Protocol):
     """Fakeable contract for app invocation calls."""
 
+    def __enter__(self) -> AppProtocol:
+        """Return the client for ``with`` statements."""
+
+    def __exit__(self, *args: Any) -> None:
+        """Close the client at the end of a context manager block."""
+
     def close(self) -> None:
         """Close the client."""
 
