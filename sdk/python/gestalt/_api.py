@@ -27,7 +27,7 @@ else:
 if TYPE_CHECKING:
     from ._agent import AgentManager, AgentToolRef
     from ._authorization import AuthorizationClient
-    from ._invoker import AppInvoker
+    from ._host_app import AppProtocol
     from ._workflow import WorkflowManager
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
@@ -111,10 +111,10 @@ class Request:
 
         return self.connection_params.get(name)
 
-    def invoker(self) -> "AppInvoker":
-        from ._invoker import AppInvoker
+    def app(self) -> "AppProtocol":
+        from ._host_app import _HostApp
 
-        return AppInvoker(self.invocation_token)
+        return _HostApp(self.invocation_token)
 
     def agent_manager(self) -> "AgentManager":
         from ._agent import AgentManager

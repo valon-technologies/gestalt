@@ -42,7 +42,7 @@ type embeddedIssueParams struct {
 	EmbeddedIssueParams
 }
 
-type pluginInvokerTransportHarness struct {
+type pluginAppTransportHarness struct {
 	proto.UnimplementedAppInvokerServer
 
 	mu       sync.Mutex
@@ -51,7 +51,7 @@ type pluginInvokerTransportHarness struct {
 	tokens   []string
 }
 
-func (h *pluginInvokerTransportHarness) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*proto.OperationResult, error) {
+func (h *pluginAppTransportHarness) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*proto.OperationResult, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
@@ -60,7 +60,7 @@ func (h *pluginInvokerTransportHarness) Invoke(ctx context.Context, req *proto.A
 	}
 	h.requests = append(h.requests, &proto.AppInvokeRequest{
 		InvocationToken: req.GetInvocationToken(),
-		App: req.GetApp(),
+		App:             req.GetApp(),
 		Operation:       req.GetOperation(),
 		Params:          cloneStruct(req.GetParams()),
 		Connection:      req.GetConnection(),
@@ -72,7 +72,7 @@ func (h *pluginInvokerTransportHarness) Invoke(ctx context.Context, req *proto.A
 	return &proto.OperationResult{Status: 207, Body: "relay-ok"}, nil
 }
 
-func (h *pluginInvokerTransportHarness) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraphQLRequest) (*proto.OperationResult, error) {
+func (h *pluginAppTransportHarness) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraphQLRequest) (*proto.OperationResult, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
@@ -81,7 +81,7 @@ func (h *pluginInvokerTransportHarness) InvokeGraphQL(ctx context.Context, req *
 	}
 	h.graphQL = append(h.graphQL, &proto.AppInvokeGraphQLRequest{
 		InvocationToken: req.GetInvocationToken(),
-		App: req.GetApp(),
+		App:             req.GetApp(),
 		Document:        req.GetDocument(),
 		Variables:       cloneStruct(req.GetVariables()),
 		Connection:      req.GetConnection(),
@@ -100,7 +100,7 @@ func cloneStruct(src *structpb.Struct) *structpb.Struct {
 	return gproto.Clone(src).(*structpb.Struct)
 }
 
-func TestTransport_AppInvokerTCPTargetTokenEnv(t *testing.T) {
+func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -108,7 +108,7 @@ func TestTransport_AppInvokerTCPTargetTokenEnv(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = lis.Close() })
 
-	harness := &pluginInvokerTransportHarness{}
+	harness := &pluginAppTransportHarness{}
 	srv := grpc.NewServer()
 	proto.RegisterAppInvokerServer(srv, harness)
 	go func() {
@@ -123,9 +123,9 @@ func TestTransport_AppInvokerTCPTargetTokenEnv(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
 
-	client, err := gestalt.Invoker("parent-token")
+	client, err := gestalt.App("parent-token")
 	if err != nil {
-		t.Fatalf("Invoker: %v", err)
+		t.Fatalf("App: %v", err)
 	}
 	defer func() { _ = client.Close() }()
 

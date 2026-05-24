@@ -12,12 +12,12 @@ import { expect, test } from "bun:test";
 import {
   ExchangeInvocationTokenResponseSchema,
   OperationResultSchema,
-  AppInvoker as AppInvokerService,
+  AppInvoker as AppService,
 } from "../src/internal/gen/v1/app_pb.ts";
 import {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
-  AppInvoker,
+  App,
   request,
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
@@ -26,9 +26,9 @@ interface IssueLookupParams {
   issue_number: number;
 }
 
-test("AppInvoker forwards invocation tokens from strings and Request objects", async () => {
-  const tempDir = mkdtempSync(join(tmpdir(), "gts-plugin-invoker-"));
-  const socketPath = join(tempDir, "plugin-invoker.sock");
+test("App forwards invocation tokens from strings and Request objects", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "gts-plugin-app-"));
+  const socketPath = join(tempDir, "plugin-app.sock");
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const calls: Array<{
     invocationToken: string;
@@ -65,7 +65,7 @@ test("AppInvoker forwards invocation tokens from strings and Request objects", a
     connect: false,
     routes(router) {
       router.service(
-        AppInvokerService,
+        AppService,
         {
           async exchangeInvocationToken(input) {
             exchanges.push({
@@ -130,7 +130,7 @@ test("AppInvoker forwards invocation tokens from strings and Request objects", a
               }),
             });
           },
-        } satisfies Partial<ServiceImpl<typeof AppInvokerService>>,
+        } satisfies Partial<ServiceImpl<typeof AppService>>,
       );
     },
   });
@@ -147,7 +147,7 @@ test("AppInvoker forwards invocation tokens from strings and Request objects", a
 
     process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
 
-    const fromHandle = new AppInvoker("invocation-token-123");
+    const fromHandle = new App("invocation-token-123");
     const childToken = await fromHandle.exchangeInvocationToken({
       grants: [
         {
@@ -194,7 +194,7 @@ test("AppInvoker forwards invocation tokens from strings and Request objects", a
       idempotencyKey: "issue-42-create",
     });
 
-    const fromRequest = new AppInvoker(
+    const fromRequest = new App(
       request("tok", {}, {}, {}, {}, {}, "invocation-token-456"),
     );
     const second = await fromRequest.invoke("slack", "post_message", {
@@ -327,13 +327,13 @@ test("AppInvoker forwards invocation tokens from strings and Request objects", a
   }
 });
 
-test("AppInvoker prioritizes invocation-token validation over socket configuration", () => {
+test("App prioritizes invocation-token validation over socket configuration", () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
 
   try {
     delete process.env[ENV_HOST_SERVICE_SOCKET];
-    expect(() => new AppInvoker("   ")).toThrow(
-      "app invoker: invocation token is not available",
+    expect(() => new App("   ")).toThrow(
+      "app: invocation token is not available",
     );
   } finally {
     if (previousSocket === undefined) {
@@ -367,7 +367,7 @@ async function reserveTCPAddress(): Promise<string> {
   });
 }
 
-test("AppInvoker honors tcp target env and relay token env", async () => {
+test("App honors tcp target env and relay token env", async () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
   const seenTokens: string[] = [];
@@ -378,7 +378,7 @@ test("AppInvoker honors tcp target env and relay token env", async () => {
     grpcWeb: false,
     connect: false,
     routes(router) {
-      router.service(AppInvokerService, {
+      router.service(AppService, {
         async invoke(input) {
           return create(OperationResultSchema, {
             status: 204,
@@ -389,7 +389,7 @@ test("AppInvoker honors tcp target env and relay token env", async () => {
             }),
           });
         },
-      } satisfies Partial<ServiceImpl<typeof AppInvokerService>>);
+      } satisfies Partial<ServiceImpl<typeof AppService>>);
     },
   });
   const server = createServer((req, res) => {
@@ -412,8 +412,8 @@ test("AppInvoker honors tcp target env and relay token env", async () => {
     process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
     process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
-    const invoker = new AppInvoker("invoke-token");
-    const response = await invoker.invoke("github", "get_issue");
+    const app = new App("invoke-token");
+    const response = await app.invoke("github", "get_issue");
 
     expect(response.status).toBe(204);
     expect(JSON.parse(response.body)).toEqual({

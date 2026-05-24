@@ -13,9 +13,9 @@ mod catalog;
 mod env;
 mod error;
 mod generated;
+mod host_app;
 /// IndexedDB-style datastore client and provider helpers.
 pub mod indexeddb;
-mod invoker;
 mod protocol;
 mod provider_server;
 mod router;
@@ -98,13 +98,13 @@ pub use env::{
     CURRENT_PROTOCOL_VERSION, ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, ENV_PROVIDER_SOCKET,
 };
 pub use error::{Error, Result};
+pub use host_app::{App, AppApi, AppError, InvocationGrant, InvokeOptions};
 pub use indexeddb::{
     Cursor, CursorDirection, IndexedDB, IndexedDBCursorSnapshot, IndexedDBCursorSnapshotEntry,
     IndexedDBError, IndexedDBOpenCursorRequest, Transaction, TransactionDurabilityHint,
     TransactionIndexClient, TransactionMode, TransactionObjectStore, TransactionOptions,
     compare_indexeddb_values, indexeddb_range_bounds, new_indexeddb_cursor_snapshot,
 };
-pub use invoker::{AppInvoker, AppInvokerClient, AppInvokerError, InvocationGrant, InvokeOptions};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};

@@ -752,7 +752,7 @@ These clients connect to host services made available to a provider process by
    AgentManager
    Authorization
    AuthorizationClient
-   AppInvoker
+   AppProtocol
    RuntimeLogHost
    RuntimeLogWriter
    RuntimeLogHandler
@@ -778,9 +778,8 @@ These clients connect to host services made available to a provider process by
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
 
-.. autoclass:: AppInvoker
+.. autoclass:: AppProtocol
    :members:
-   :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
 
 .. autoclass:: RuntimeLogHost

@@ -27,11 +27,11 @@ pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 
 # Matches the host-side socket name exposed by gestaltd.
-_PLUGIN_INVOKER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
+_HOST_APP_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 
 
-class AppInvokerClientProtocol(Protocol):
-    """Fakeable client contract for app invoker calls."""
+class AppProtocol(Protocol):
+    """Fakeable contract for app invocation calls."""
 
     def close(self) -> None:
         """Close the client."""
@@ -69,28 +69,25 @@ class AppInvokerClientProtocol(Protocol):
         """Exchange this invocation token for a narrower child token."""
 
 
-class AppInvoker:
-    """Client for invoking sibling app operations from provider code.
+class _HostApp:
+    """Transport-backed implementation for invoking sibling app operations.
 
-    ``AppInvoker`` connects to the host plugin-invoker service exposed in
-    ``GESTALT_HOST_SERVICE_SOCKET``. It attaches the invocation token supplied
-    by the host to each request and returns regular :class:`gestalt.Response`
-    objects for operation and GraphQL calls.
+    Provider code should obtain this through :meth:`gestalt.Request.app`.
     """
 
     def __init__(self, invocation_token: str) -> None:
         trimmed_token = invocation_token.strip()
         if not trimmed_token:
-            raise RuntimeError("app invoker: invocation token is not available")
+            raise RuntimeError("app: invocation token is not available")
 
         socket_path = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not socket_path:
             raise RuntimeError(
-                f"app invoker: {ENV_HOST_SERVICE_SOCKET} is not set"
+                f"app: {ENV_HOST_SERVICE_SOCKET} is not set"
             )
         relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
 
-        self._channel = _app_invoker_channel(socket_path, token=relay_token)
+        self._channel = _host_app_channel(socket_path, token=relay_token)
         self._stub = pb_grpc.AppInvokerStub(self._channel)
         self._invocation_token = trimmed_token
 
@@ -145,7 +142,7 @@ class AppInvoker:
 
         trimmed_document = document.strip()
         if not trimmed_document:
-            raise RuntimeError("app invoker: graphql document is required")
+            raise RuntimeError("app: graphql document is required")
 
         request = pb.AppInvokeGraphQLRequest(
             invocation_token=self._invocation_token,
@@ -156,7 +153,7 @@ class AppInvoker:
             idempotency_key=idempotency_key.strip(),
         )
         message = _struct_from_dict_optional(
-            variables, preserve_empty=False, path="app invoker variables"
+            variables, preserve_empty=False, path="app variables"
         )
         if message is not None:
             request.variables.CopyFrom(message)
@@ -181,7 +178,7 @@ class AppInvoker:
         response = self._stub.ExchangeInvocationToken(request)
         return response.invocation_token
 
-    def __enter__(self) -> AppInvoker:
+    def __enter__(self) -> _HostApp:
         """Return the client for ``with`` statements."""
 
         return self
@@ -191,13 +188,12 @@ class AppInvoker:
 
         self.close()
 
-
 def _struct_from_dict(values: JsonObjectInput | None) -> Any:
     if values is None:
         return None
 
     return _struct_from_dict_optional(
-        values, preserve_empty=True, path="app invoker params"
+        values, preserve_empty=True, path="app params"
     )
 
 
@@ -272,17 +268,17 @@ def _grant_parts(value: Any) -> tuple[str, list[str], list[str], bool]:
     )
 
 
-def _app_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
+def _host_app_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
     target = raw_target.strip()
     if not target:
-        raise RuntimeError("app invoker: transport target is required")
+        raise RuntimeError("app: transport target is required")
     if target.startswith("tcp://"):
         address = target[len("tcp://") :].strip()
         if not address:
             raise RuntimeError(
-                f"app invoker: tcp target {raw_target!r} is missing host:port"
+                f"app: tcp target {raw_target!r} is missing host:port"
             )
-        return _with_app_invoker_relay_token(
+        return _with_host_app_relay_token(
             insecure_internal_channel(internal_channel_target("tcp", address)),
             token,
         )
@@ -290,9 +286,9 @@ def _app_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
         address = target[len("tls://") :].strip()
         if not address:
             raise RuntimeError(
-                f"app invoker: tls target {raw_target!r} is missing host:port"
+                f"app: tls target {raw_target!r} is missing host:port"
             )
-        return _with_app_invoker_relay_token(
+        return _with_host_app_relay_token(
             secure_internal_channel(internal_channel_target("tls", address)),
             token,
         )
@@ -300,24 +296,24 @@ def _app_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
         socket_path = target[len("unix://") :].strip()
         if not socket_path:
             raise RuntimeError(
-                f"app invoker: unix target {raw_target!r} is missing a socket path"
+                f"app: unix target {raw_target!r} is missing a socket path"
             )
-        return _with_app_invoker_relay_token(
+        return _with_host_app_relay_token(
             insecure_internal_channel(internal_channel_target("unix", socket_path)),
             token,
         )
     if "://" in target:
         parsed = _urlparse.urlparse(target)
         raise RuntimeError(
-            f"app invoker: unsupported target scheme {parsed.scheme!r}"
+            f"app: unsupported target scheme {parsed.scheme!r}"
         )
-    return _with_app_invoker_relay_token(
+    return _with_host_app_relay_token(
         insecure_internal_channel(internal_channel_target("unix", target)),
         token,
     )
 
 
-def _with_app_invoker_relay_token(channel: grpc.Channel, token: str) -> grpc.Channel:
+def _with_host_app_relay_token(channel: grpc.Channel, token: str) -> grpc.Channel:
     token = token.strip()
     if not token:
         return channel
@@ -364,7 +360,7 @@ class _RelayTokenInterceptor(grpc.UnaryUnaryClientInterceptor):
     ) -> Any:
         fields = cast(_ClientCallDetailsFields, client_call_details)
         metadata = list(fields.metadata or [])
-        metadata.append((_PLUGIN_INVOKER_RELAY_TOKEN_HEADER, self._token))
+        metadata.append((_HOST_APP_RELAY_TOKEN_HEADER, self._token))
         return continuation(
             _ClientCallDetails(
                 fields.method,

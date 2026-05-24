@@ -144,9 +144,9 @@ impl Request {
         &self.invocation_token
     }
 
-    /// Creates a app invoker using this request's invocation token.
-    pub async fn invoker(&self) -> std::result::Result<crate::AppInvoker, crate::AppInvokerError> {
-        crate::AppInvoker::connect(self.invocation_token()).await
+    /// Creates an app client using this request's invocation token.
+    pub async fn app(&self) -> std::result::Result<crate::App, crate::AppError> {
+        crate::App::connect(self.invocation_token()).await
     }
 
     /// Creates a workflow manager using this request's invocation token.

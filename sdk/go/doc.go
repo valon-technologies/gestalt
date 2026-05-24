@@ -62,11 +62,10 @@
 // Workflow structs use native Go values at provider boundaries; SDK adapters
 // own transport conversion.
 //
-// Host-service clients include [CacheClient], [WorkflowHostClient],
-// [WorkflowManagerClient], [AgentHostClient], [AgentManagerClient],
-// [AuthorizationClient], and [InvokerClient]. Apps reach IndexedDB and S3 through
-// [IndexedDB] and [S3], which return the capability interfaces rather than
-// transport-specific client types.
+// Host-service capabilities include [Cache], [WorkflowHost],
+// [WorkflowManager], [AgentHost], [AgentManager], [Authorization], and [App].
+// Apps reach IndexedDB and S3 through [IndexedDB] and [S3], which return the
+// capability interfaces rather than transport-specific client types.
 //
 // Runtime and telemetry helpers include [ServeProvider], [ProviderMetadata],
 // [TelemetryInstrumentationName], and the provider telemetry helpers.
@@ -86,13 +85,12 @@
 // IndexedDBProvider, S3Provider, SecretsProvider, WorkflowProvider,
 // AgentProvider, and RuntimeProvider.
 //
-// Use the host-service clients when provider code needs to call sibling
-// services exposed by gestaltd. These include CacheClient, WorkflowHostClient,
-// WorkflowManagerClient, AgentHostClient, AgentManagerClient, AuthorizationClient,
-// and InvokerClient. Apps use [IndexedDB] and [S3] for datastore and object
-// storage bindings.
+// Use the host-service capabilities when provider code needs to call sibling
+// services exposed by gestaltd. These include Cache, WorkflowHost,
+// WorkflowManager, AgentHost, AgentManager, Authorization, and App. Apps use
+// [IndexedDB] and [S3] for datastore and object storage bindings.
 //
-// AgentHostClient includes plain Go helper methods such as ExecuteToolForTurn,
+// AgentHost includes plain Go helper methods such as ExecuteToolForTurn,
 // ListToolsForTurn, and ResolveConnectionForTurn. Native SDK structs accept
 // time.Time values and JSON-compatible maps or structs, so provider code can
 // keep transport serialization at the SDK boundary.
