@@ -588,7 +588,7 @@ def _datetime_to_proto_json(value: _dt.datetime) -> str:
     return value.astimezone(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-class AuthorizationClientProtocol(Protocol):
+class AuthorizationProtocol(Protocol):
     """Fakeable client contract for host authorization calls."""
 
     def evaluate(self, request: AccessEvaluationRequest) -> AccessDecision:
@@ -644,7 +644,7 @@ class AuthorizationClientProtocol(Protocol):
         """Write an authorization model."""
 
 
-class AuthorizationClient:
+class Authorization:
     """Transport client for the host authorization provider."""
 
     def __init__(
@@ -808,14 +808,14 @@ class AuthorizationClient:
             )
         ))
 
-    def __enter__(self) -> AuthorizationClient:
+    def __enter__(self) -> Authorization:
         return self
 
     def __exit__(self, *args: Any) -> None:
         self.close()
 
 
-def Authorization() -> AuthorizationClient:
+def _shared_authorization_client() -> Authorization:
     """Return a cached client for the host authorization provider."""
 
     target = _resolve_authorization_socket_target()
@@ -830,7 +830,7 @@ def Authorization() -> AuthorizationClient:
         ):
             return client
 
-        client = AuthorizationClient(target, token, _shared=True)
+        client = Authorization(target, token, _shared=True)
         stale = shared.get("client")
         shared["target"] = target
         shared["token"] = token
@@ -838,7 +838,6 @@ def Authorization() -> AuthorizationClient:
         if stale is not None:
             stale._close_channel()
         return client
-
 
 def _resolve_authorization_socket_target(
     socket_target: str | None = None,

@@ -23,7 +23,6 @@ import {
 } from "../src/internal/gen/v1/authorization_pb.ts";
 import {
   Authorization,
-  AuthorizationClient,
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
   authorizationAction,
@@ -34,13 +33,12 @@ import {
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
 
-test("Authorization() and AuthorizationClient fail fast when the host socket is unset", () => {
+test("Authorization() fails fast when the host socket is unset", () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   delete process.env[ENV_HOST_SERVICE_SOCKET];
 
   try {
     expect(() => Authorization()).toThrow(ENV_HOST_SERVICE_SOCKET);
-    expect(() => new AuthorizationClient()).toThrow(ENV_HOST_SERVICE_SOCKET);
   } finally {
     if (previousSocket === undefined) {
       delete process.env[ENV_HOST_SERVICE_SOCKET];

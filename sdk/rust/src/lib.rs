@@ -79,7 +79,7 @@ pub use auth::{
 pub use authorization::{
     AUTHORIZATION_SUBJECT_TYPE_SUBJECT, AccessDecision, AccessEvaluationRequest,
     AccessEvaluationsRequest, AccessEvaluationsResponse, ActionSearchRequest, ActionSearchResponse,
-    Authorization, AuthorizationAction, AuthorizationClient, AuthorizationError,
+    Authorization, AuthorizationAction, AuthorizationApi, AuthorizationError,
     AuthorizationMetadata, AuthorizationModel, AuthorizationModelAction,
     AuthorizationModelAllowedTarget, AuthorizationModelComputedUserset, AuthorizationModelRef,
     AuthorizationModelRelation, AuthorizationModelResourceType, AuthorizationModelRewrite,

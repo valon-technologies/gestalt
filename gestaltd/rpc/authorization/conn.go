@@ -15,12 +15,12 @@ type Options struct {
 
 // NewClient wraps a generated authorization gRPC client as the SDK
 // authorization contract.
-func NewClient(grpcClient proto.AuthorizationProviderClient, opts Options) sdkauthorization.Client {
+func NewClient(grpcClient proto.AuthorizationProviderClient, opts Options) sdkauthorization.Runtime {
 	return &rpcClient{grpc: grpcClient, opts: opts}
 }
 
 // NewConn builds an authorization client from a gRPC connection.
-func NewConn(conn grpc.ClientConnInterface, opts Options) sdkauthorization.Client {
+func NewConn(conn grpc.ClientConnInterface, opts Options) sdkauthorization.Runtime {
 	return NewClient(proto.NewAuthorizationProviderClient(conn), opts)
 }
 

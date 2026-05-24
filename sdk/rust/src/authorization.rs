@@ -673,7 +673,7 @@ pub struct ExpandResponse {
 
 #[async_trait]
 /// Fakeable client contract for host authorization calls.
-pub trait AuthorizationClient: Send {
+pub trait AuthorizationApi: Send {
     async fn evaluate(
         &mut self,
         request: AccessEvaluationRequest,
@@ -971,7 +971,7 @@ impl Authorization {
 }
 
 #[async_trait]
-impl AuthorizationClient for Authorization {
+impl AuthorizationApi for Authorization {
     async fn evaluate(
         &mut self,
         request: AccessEvaluationRequest,

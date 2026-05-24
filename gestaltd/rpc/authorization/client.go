@@ -10,9 +10,7 @@ import (
 )
 
 var (
-	_ sdkauthorization.Client                = (*rpcClient)(nil)
-	_ sdkauthorization.EffectiveSearchClient = (*rpcClient)(nil)
-	_ sdkauthorization.ExpansionClient       = (*rpcClient)(nil)
+	_ sdkauthorization.Runtime = (*rpcClient)(nil)
 )
 
 type rpcClient struct {

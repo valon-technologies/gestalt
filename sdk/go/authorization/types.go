@@ -1360,8 +1360,8 @@ func NewAuthorizationModelUnionRewrite(children ...*AuthorizationModelRewrite) *
 	}
 }
 
-// Client is the app-facing authorization capability exposed by gestaltd and implemented by authorization providers.
-type Client interface {
+// Authorization is the app-facing authorization capability exposed by gestaltd and implemented by authorization providers.
+type Authorization interface {
 	Evaluate(ctx context.Context, req *AccessEvaluationRequest) (*AccessDecision, error)
 	EvaluateMany(ctx context.Context, req *AccessEvaluationsRequest) (*AccessEvaluationsResponse, error)
 	SearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error)
@@ -1375,13 +1375,23 @@ type Client interface {
 	WriteModel(ctx context.Context, req *WriteModelRequest) (*AuthorizationModelRef, error)
 }
 
-// EffectiveSearchClient is implemented by clients that can search through computed usersets and inherited relationships.
-type EffectiveSearchClient interface {
+// Runtime is a transport-backed authorization capability returned by gestalt.Authorization.
+type Runtime interface {
+	Authorization
+	EffectiveSearch
+	Expansion
+	Close() error
+}
+
+// EffectiveSearch is implemented by authorization capabilities that can search
+// through computed usersets and inherited relationships.
+type EffectiveSearch interface {
 	EffectiveSearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error)
 	EffectiveSearchSubjects(ctx context.Context, req *EffectiveSubjectSearchRequest) (*EffectiveSubjectSearchResponse, error)
 }
 
-// ExpansionClient is implemented by clients that can explain the relationship targets contributing to one resource relation.
-type ExpansionClient interface {
+// Expansion is implemented by authorization capabilities that can explain the
+// relationship targets contributing to one resource relation.
+type Expansion interface {
 	Expand(ctx context.Context, req *ExpandRequest) (*ExpandResponse, error)
 }
