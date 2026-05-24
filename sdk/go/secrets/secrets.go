@@ -2,7 +2,7 @@ package secrets
 
 import "context"
 
-// Client resolves secret values by name.
-type Client interface {
+// Secrets resolves secret values by name.
+type Secrets interface {
 	GetSecret(ctx context.Context, name string) (string, error)
 }

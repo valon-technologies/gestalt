@@ -6,5 +6,5 @@ import secretsapi "github.com/valon-technologies/gestalt/sdk/go/secrets"
 // secret material.
 type SecretsProvider interface {
 	Provider
-	secretsapi.Client
+	secretsapi.Secrets
 }

@@ -5,7 +5,7 @@ use crate::error::Result;
 
 #[async_trait]
 /// Fakeable secret lookup contract shared by providers and tests.
-pub trait SecretsClient: Send + Sync {
+pub trait Secrets: Send + Sync {
     /// Looks up one named secret.
     async fn get_secret(&self, name: &str) -> Result<String>;
 }
@@ -52,7 +52,7 @@ pub trait SecretsProvider: Send + Sync + 'static {
 }
 
 #[async_trait]
-impl<T> SecretsClient for T
+impl<T> Secrets for T
 where
     T: SecretsProvider + ?Sized,
 {

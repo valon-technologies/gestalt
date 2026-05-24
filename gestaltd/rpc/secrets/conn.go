@@ -14,12 +14,12 @@ type Options struct {
 }
 
 // NewClient wraps a generated secrets gRPC client as the SDK secrets contract.
-func NewClient(grpcClient proto.SecretsProviderClient, opts Options) secretsapi.Client {
+func NewClient(grpcClient proto.SecretsProviderClient, opts Options) secretsapi.Secrets {
 	return &rpcClient{grpc: grpcClient, opts: opts}
 }
 
 // NewConn builds a secrets client from a gRPC connection.
-func NewConn(conn grpc.ClientConnInterface, opts Options) secretsapi.Client {
+func NewConn(conn grpc.ClientConnInterface, opts Options) secretsapi.Secrets {
 	return NewClient(proto.NewSecretsProviderClient(conn), opts)
 }
 

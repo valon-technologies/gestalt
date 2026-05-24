@@ -4,19 +4,19 @@ import type { MaybePromise } from "./api.ts";
 /**
  * Fakeable secret lookup contract shared by providers and tests.
  */
-export interface SecretsClient {
+export interface Secrets {
   getSecret(name: string): MaybePromise<string>;
 }
 
 /**
  * Runtime hooks required to implement a Gestalt secrets provider.
  */
-export interface SecretsProviderOptions extends ProviderBaseOptions, SecretsClient {}
+export interface SecretsProviderOptions extends ProviderBaseOptions, Secrets {}
 
 /**
  * Secrets provider implementation consumed by the Gestalt runtime.
  */
-export class SecretsProvider extends ProviderBase implements SecretsClient {
+export class SecretsProvider extends ProviderBase implements Secrets {
   readonly kind = "secrets" as const;
 
   private readonly getSecretHandler: SecretsProviderOptions["getSecret"];

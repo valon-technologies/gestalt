@@ -8,7 +8,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-var _ secretsapi.Client = (*rpcClient)(nil)
+var _ secretsapi.Secrets = (*rpcClient)(nil)
 
 type rpcClient struct {
 	grpc proto.SecretsProviderClient

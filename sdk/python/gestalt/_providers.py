@@ -371,14 +371,14 @@ class SessionTTLProvider:
         raise NotImplementedError
 
 
-class SecretsClient(Protocol):
+class Secrets(Protocol):
     """Fakeable secret lookup contract shared by providers and tests."""
 
     def get_secret(self, name: str) -> str:
         """Return a secret value by name."""
 
 
-class SecretsProvider(AppProvider, SecretsClient):
+class SecretsProvider(AppProvider, Secrets):
     """Base class for secret-provider runtimes."""
 
     def get_secret(self, name: str) -> str:
