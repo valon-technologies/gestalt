@@ -1,6 +1,6 @@
 package gestalt
 
-import proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+import proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 
 type AgentManagerCreateSession struct {
 	ProviderName   string

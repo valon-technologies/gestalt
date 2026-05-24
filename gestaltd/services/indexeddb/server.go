@@ -1,17 +1,17 @@
 package indexeddb
 
-//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/datastore_grpc.pb.go -service IndexedDBServer -receiver routingIndexedDBServer -binding indexeddb -package indexeddb -server-type proto.IndexedDBServer -output routing_indexeddb_gen.go
+//go:generate go run ../../tools/routinggen -grpc ../../rpc/protov1/v1/datastore_grpc.pb.go -service IndexedDBServer -receiver routingIndexedDBServer -binding indexeddb -package indexeddb -server-type proto.IndexedDBServer -output routing_indexeddb_gen.go
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"io"
 	"strings"
 
-	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"

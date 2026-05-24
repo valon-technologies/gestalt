@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 )
 
 func TestTypedValueRoundTrip(t *testing.T) {
@@ -100,7 +102,7 @@ func TestTypedValueRoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pbValue, err := typedValueFromAny(tt.input)
+			pbValue, err := indexeddb.TypedValueFromAny(tt.input)
 			if err != nil {
 				t.Fatalf("typedValueFromAny() error = %v", err)
 			}

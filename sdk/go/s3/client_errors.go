@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// ClientError maps provider, transport, and S3-compatible service errors to S3 client sentinel errors.
+// ClientError maps provider, transport, and AWS errors to S3 client sentinel errors.
 func ClientError(err error) error {
 	if err == nil {
 		return nil
@@ -19,13 +19,13 @@ func ClientError(err error) error {
 	if mapped := rpcClientError(err); mapped != err {
 		return mapped
 	}
-	if isS3NotFound(err) {
+	if isAWSNotFound(err) {
 		return ErrNotFound
 	}
-	if isS3PreconditionFailed(err) {
+	if isAWSPreconditionFailed(err) {
 		return ErrPreconditionFailed
 	}
-	if isS3InvalidRange(err) {
+	if isAWSInvalidRange(err) {
 		return ErrInvalidRange
 	}
 	if strings.Contains(err.Error(), "expires must be") {
@@ -54,7 +54,7 @@ func rpcClientError(err error) error {
 	}
 }
 
-func isS3NotFound(err error) bool {
+func isAWSNotFound(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "NoSuchKey") ||
 		strings.Contains(msg, "NoSuchBucket") ||
@@ -62,7 +62,7 @@ func isS3NotFound(err error) bool {
 		strings.Contains(msg, "StatusCode: 404")
 }
 
-func isS3PreconditionFailed(err error) bool {
+func isAWSPreconditionFailed(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "PreconditionFailed") ||
 		strings.Contains(msg, "NotModified") ||
@@ -70,7 +70,7 @@ func isS3PreconditionFailed(err error) bool {
 		strings.Contains(msg, "StatusCode: 304")
 }
 
-func isS3InvalidRange(err error) bool {
+func isAWSInvalidRange(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "s3: invalid range") ||
 		strings.Contains(msg, "InvalidRange") ||

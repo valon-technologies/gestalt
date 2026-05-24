@@ -15,7 +15,7 @@ import (
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"

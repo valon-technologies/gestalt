@@ -5,16 +5,16 @@ managed:
     - module: buf.build/googleapis/googleapis
   override:
     - file_option: go_package
-      value: github.com/valon-technologies/gestalt/server/internal/gen/v1;proto
+      value: github.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto
 plugins:
   # Go messages
   - remote: buf.build/protocolbuffers/go:v1.36.11
-    out: ../../gestaltd/internal/gen
+    out: ../../gestaltd/rpc/protov1
     opt:
       - paths=source_relative
 
   # Go gRPC stubs
   - remote: buf.build/grpc/go:v1.6.2
-    out: ../../gestaltd/internal/gen
+    out: ../../gestaltd/rpc/protov1
     opt:
       - paths=source_relative

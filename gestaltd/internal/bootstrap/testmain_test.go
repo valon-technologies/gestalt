@@ -127,6 +127,7 @@ func buildBootstrapGoProviderFixture(dir, output string) error {
 		return err
 	}
 	replaced := strings.Replace(string(goMod), "replace github.com/valon-technologies/gestalt/sdk/go => ../../../../../sdk/go", "replace github.com/valon-technologies/gestalt/sdk/go => "+filepath.Join(root, "sdk", "go"), 1)
+	replaced = strings.Replace(replaced, "replace github.com/valon-technologies/gestalt/server/rpc => ../../../../../gestaltd/rpc", "replace github.com/valon-technologies/gestalt/server/rpc => "+filepath.Join(root, "gestaltd", "rpc"), 1)
 	if err := os.WriteFile(goModPath, []byte(replaced), 0o644); err != nil {
 		return err
 	}

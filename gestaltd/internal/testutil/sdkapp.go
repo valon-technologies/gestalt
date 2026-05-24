@@ -73,7 +73,8 @@ func BuildSDKTestMainBinary(srcDir, output string) error {
 	goMod := "module github.com/valon-technologies/gestalt/testdata/" + filepath.Base(srcDir) + "\n\n" +
 		"go 1.26\n\n" +
 		"require github.com/valon-technologies/gestalt/sdk/go v0.0.0\n\n" +
-		"replace github.com/valon-technologies/gestalt/sdk/go => " + filepath.ToSlash(filepath.Join(root, "sdk", "go")) + "\n"
+		"replace github.com/valon-technologies/gestalt/sdk/go => " + filepath.ToSlash(filepath.Join(root, "sdk", "go")) + "\n" +
+		"replace github.com/valon-technologies/gestalt/server/rpc => " + filepath.ToSlash(filepath.Join(root, "gestaltd", "rpc")) + "\n"
 	if err := os.WriteFile(filepath.Join(moduleDir, "go.mod"), []byte(goMod), 0o644); err != nil {
 		return err
 	}
@@ -101,6 +102,12 @@ func CopyExampleProviderPlugin(t *testing.T, dst string) {
 		string(goMod),
 		"replace github.com/valon-technologies/gestalt/sdk/go => ",
 		"replace github.com/valon-technologies/gestalt/sdk/go => "+SDKGoModulePath(t),
+	)
+	updated = rewriteModuleLine(
+		t,
+		updated,
+		"replace github.com/valon-technologies/gestalt/server/rpc => ",
+		"replace github.com/valon-technologies/gestalt/server/rpc => "+filepath.ToSlash(filepath.Join(RepoRootPath(t), "gestaltd", "rpc")),
 	)
 	if err := os.WriteFile(goModPath, []byte(updated), 0o644); err != nil {
 		t.Fatalf("write %s: %v", goModPath, err)
@@ -879,6 +886,12 @@ func GeneratedProviderModuleSource(t *testing.T, module string) string {
 		source,
 		"replace github.com/valon-technologies/gestalt/sdk/go => ",
 		"replace github.com/valon-technologies/gestalt/sdk/go => "+SDKGoModulePath(t),
+	)
+	source = rewriteModuleLine(
+		t,
+		source,
+		"replace github.com/valon-technologies/gestalt/server/rpc => ",
+		"replace github.com/valon-technologies/gestalt/server/rpc => "+filepath.ToSlash(filepath.Join(RepoRootPath(t), "gestaltd", "rpc")),
 	)
 	return source
 }

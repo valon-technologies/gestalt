@@ -5,7 +5,7 @@ package indexeddb
 import (
 	"context"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -152,4 +152,3 @@ func (s *routingIndexedDBServer) IndexDelete(ctx context.Context, req *proto.Ind
 	}
 	return server.IndexDelete(ctx, req)
 }
-

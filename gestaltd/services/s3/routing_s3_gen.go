@@ -5,7 +5,7 @@ package s3
 import (
 	"context"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -48,4 +48,3 @@ func (s *routingS3Server) PresignObject(ctx context.Context, req *proto.PresignO
 	}
 	return server.PresignObject(ctx, req)
 }
-

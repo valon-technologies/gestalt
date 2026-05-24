@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root=$(git rev-parse --show-toplevel)
 module_dir=${1:-"$repo_root/gestaltd"}
 
-server_proto="github.com/valon-technologies/gestalt/server/internal/gen/v1"
+server_proto="github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 sdk_proto="github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 deleted_root_proto="github.com/valon-technologies/gestalt/internal"
 deleted_root_proto="$deleted_root_proto/gen/v1"
