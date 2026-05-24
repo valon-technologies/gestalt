@@ -588,6 +588,62 @@ def _datetime_to_proto_json(value: _dt.datetime) -> str:
     return value.astimezone(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+class AuthorizationClientProtocol(Protocol):
+    """Fakeable client contract for host authorization calls."""
+
+    def evaluate(self, request: AccessEvaluationRequest) -> AccessDecision:
+        """Evaluate one authorization request."""
+
+    def evaluate_many(
+        self, request: AccessEvaluationsRequest
+    ) -> AccessEvaluationsResponse:
+        """Evaluate multiple authorization requests."""
+
+    def search_resources(
+        self, request: ResourceSearchRequest
+    ) -> ResourceSearchResponse:
+        """Search resources visible to a subject for an action."""
+
+    def search_subjects(self, request: SubjectSearchRequest) -> SubjectSearchResponse:
+        """Search subjects related to a resource and action."""
+
+    def effective_search_resources(
+        self, request: ResourceSearchRequest
+    ) -> ResourceSearchResponse:
+        """Search effective resources through inherited relationships."""
+
+    def effective_search_subjects(
+        self, request: EffectiveSubjectSearchRequest
+    ) -> EffectiveSubjectSearchResponse:
+        """Search effective subjects or subject sets."""
+
+    def search_actions(self, request: ActionSearchRequest) -> ActionSearchResponse:
+        """Search actions available between a subject and resource."""
+
+    def expand(self, request: ExpandRequest) -> ExpandResponse:
+        """Expand one resource relation."""
+
+    def read_relationships(
+        self, request: ReadRelationshipsRequest
+    ) -> ReadRelationshipsResponse:
+        """Read authorization relationships."""
+
+    def write_relationships(self, request: WriteRelationshipsRequest) -> None:
+        """Write and delete authorization relationships."""
+
+    def get_metadata(self) -> AuthorizationMetadata:
+        """Return host authorization metadata."""
+
+    def get_active_model(self) -> GetActiveModelResponse:
+        """Return the active authorization model."""
+
+    def list_models(self, request: ListModelsRequest) -> ListModelsResponse:
+        """List authorization model references."""
+
+    def write_model(self, request: WriteModelRequest) -> AuthorizationModelRef:
+        """Write an authorization model."""
+
+
 class AuthorizationClient:
     """Transport client for the host authorization provider."""
 

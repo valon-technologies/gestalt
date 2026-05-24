@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	sdkauthorization "github.com/valon-technologies/gestalt/sdk/go/authorization"
+	rpcauthorization "github.com/valon-technologies/gestalt/server/rpc/authorization"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // AuthorizationClient calls the host authorization provider.
@@ -14,7 +15,7 @@ import (
 // The client accepts SDK authorization request types from this package and
 // hides the generated protobuf transport used on the wire.
 type AuthorizationClient struct {
-	client proto.AuthorizationProviderClient
+	client sdkauthorization.Client
 }
 
 var sharedAuthorizationTransport sharedManagerTransport[proto.AuthorizationProviderClient]
@@ -33,7 +34,7 @@ func Authorization() (*AuthorizationClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &AuthorizationClient{client: client}, nil
+	return &AuthorizationClient{client: rpcauthorization.NewClient(client, rpcauthorization.Options{})}, nil
 }
 
 // Close is a no-op because this client uses shared transport.
@@ -47,15 +48,7 @@ func (c *AuthorizationClient) Evaluate(ctx context.Context, req *AccessEvaluatio
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoAccessEvaluationRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.client.Evaluate(ctx, pbReq)
-	if err != nil {
-		return nil, err
-	}
-	return accessDecisionFromProto(resp), nil
+	return c.client.Evaluate(ctx, req)
 }
 
 // EvaluateMany evaluates multiple authorization requests in one RPC.
@@ -66,15 +59,7 @@ func (c *AuthorizationClient) EvaluateMany(ctx context.Context, req *AccessEvalu
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoAccessEvaluationsRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.client.EvaluateMany(ctx, pbReq)
-	if err != nil {
-		return nil, err
-	}
-	return accessEvaluationsResponseFromProto(resp), nil
+	return c.client.EvaluateMany(ctx, req)
 }
 
 // SearchResources searches resources visible to a subject for an action.
@@ -85,15 +70,7 @@ func (c *AuthorizationClient) SearchResources(ctx context.Context, req *Resource
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoResourceSearchRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.client.SearchResources(ctx, pbReq)
-	if err != nil {
-		return nil, err
-	}
-	return resourceSearchResponseFromProto(resp), nil
+	return c.client.SearchResources(ctx, req)
 }
 
 // SearchSubjects searches subjects related to a resource and action.
@@ -104,15 +81,7 @@ func (c *AuthorizationClient) SearchSubjects(ctx context.Context, req *SubjectSe
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoSubjectSearchRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.client.SearchSubjects(ctx, pbReq)
-	if err != nil {
-		return nil, err
-	}
-	return subjectSearchResponseFromProto(resp), nil
+	return c.client.SearchSubjects(ctx, req)
 }
 
 // EffectiveSearchResources searches resources visible to a subject through
@@ -124,15 +93,11 @@ func (c *AuthorizationClient) EffectiveSearchResources(ctx context.Context, req 
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoResourceSearchRequest(req)
-	if err != nil {
-		return nil, err
+	client, ok := c.client.(sdkauthorization.EffectiveSearchClient)
+	if !ok {
+		return nil, fmt.Errorf("authorization: client does not implement effective search")
 	}
-	resp, err := c.client.EffectiveSearchResources(ctx, pbReq)
-	if err != nil {
-		return nil, err
-	}
-	return resourceSearchResponseFromProto(resp), nil
+	return client.EffectiveSearchResources(ctx, req)
 }
 
 // EffectiveSearchSubjects searches effective subjects or subject sets related
@@ -144,15 +109,11 @@ func (c *AuthorizationClient) EffectiveSearchSubjects(ctx context.Context, req *
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoEffectiveSubjectSearchRequest(req)
-	if err != nil {
-		return nil, err
+	client, ok := c.client.(sdkauthorization.EffectiveSearchClient)
+	if !ok {
+		return nil, fmt.Errorf("authorization: client does not implement effective search")
 	}
-	resp, err := c.client.EffectiveSearchSubjects(ctx, pbReq)
-	if err != nil {
-		return nil, err
-	}
-	return effectiveSubjectSearchResponseFromProto(resp), nil
+	return client.EffectiveSearchSubjects(ctx, req)
 }
 
 // SearchActions searches actions available between a subject and resource.
@@ -163,15 +124,7 @@ func (c *AuthorizationClient) SearchActions(ctx context.Context, req *ActionSear
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoActionSearchRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.client.SearchActions(ctx, pbReq)
-	if err != nil {
-		return nil, err
-	}
-	return actionSearchResponseFromProto(resp), nil
+	return c.client.SearchActions(ctx, req)
 }
 
 // Expand explains the relationship targets contributing to one resource relation.
@@ -182,15 +135,11 @@ func (c *AuthorizationClient) Expand(ctx context.Context, req *ExpandRequest) (*
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoExpandRequest(req)
-	if err != nil {
-		return nil, err
+	client, ok := c.client.(sdkauthorization.ExpansionClient)
+	if !ok {
+		return nil, fmt.Errorf("authorization: client does not implement expansion")
 	}
-	resp, err := c.client.Expand(ctx, pbReq)
-	if err != nil {
-		return nil, err
-	}
-	return expandResponseFromProto(resp), nil
+	return client.Expand(ctx, req)
 }
 
 // ReadRelationships reads authorization relationships matching a request.
@@ -201,15 +150,7 @@ func (c *AuthorizationClient) ReadRelationships(ctx context.Context, req *ReadRe
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoReadRelationshipsRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.client.ReadRelationships(ctx, pbReq)
-	if err != nil {
-		return nil, err
-	}
-	return readRelationshipsResponseFromProto(resp), nil
+	return c.client.ReadRelationships(ctx, req)
 }
 
 // WriteRelationships writes and deletes authorization relationships.
@@ -220,12 +161,7 @@ func (c *AuthorizationClient) WriteRelationships(ctx context.Context, req *Write
 	if req == nil {
 		return fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoWriteRelationshipsRequest(req)
-	if err != nil {
-		return err
-	}
-	_, err = c.client.WriteRelationships(ctx, pbReq)
-	return err
+	return c.client.WriteRelationships(ctx, req)
 }
 
 // GetMetadata returns host authorization provider metadata.
@@ -233,9 +169,35 @@ func (c *AuthorizationClient) GetMetadata(ctx context.Context) (*AuthorizationMe
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("authorization: client is not initialized")
 	}
-	resp, err := c.client.GetMetadata(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, err
+	return c.client.GetMetadata(ctx)
+}
+
+// GetActiveModel returns the active authorization model.
+func (c *AuthorizationClient) GetActiveModel(ctx context.Context) (*GetActiveModelResponse, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("authorization: client is not initialized")
 	}
-	return authorizationMetadataFromProto(resp), nil
+	return c.client.GetActiveModel(ctx)
+}
+
+// ListModels lists stored authorization model refs.
+func (c *AuthorizationClient) ListModels(ctx context.Context, req *ListModelsRequest) (*ListModelsResponse, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("authorization: client is not initialized")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("authorization: request is required")
+	}
+	return c.client.ListModels(ctx, req)
+}
+
+// WriteModel stores an authorization model and returns its ref.
+func (c *AuthorizationClient) WriteModel(ctx context.Context, req *WriteModelRequest) (*AuthorizationModelRef, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("authorization: client is not initialized")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("authorization: request is required")
+	}
+	return c.client.WriteModel(ctx, req)
 }

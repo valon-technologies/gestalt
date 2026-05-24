@@ -385,12 +385,52 @@ const sharedAuthorizationTransport: {
 };
 
 /**
+ * Fakeable client contract for host authorization calls.
+ */
+export interface AuthorizationClientLike {
+  evaluate(request: AuthorizationEvaluateInput): Promise<AuthorizationDecision>;
+  evaluateMany(
+    request: AuthorizationEvaluateManyInput,
+  ): Promise<AuthorizationEvaluationsResponse>;
+  searchResources(
+    request: AuthorizationSearchResourcesInput,
+  ): Promise<AuthorizationResourceSearch>;
+  searchSubjects(
+    request: AuthorizationSearchSubjectsInput,
+  ): Promise<AuthorizationSubjectSearch>;
+  effectiveSearchResources(
+    request: AuthorizationSearchResourcesInput,
+  ): Promise<AuthorizationResourceSearch>;
+  effectiveSearchSubjects(
+    request: AuthorizationEffectiveSearchSubjectsInput,
+  ): Promise<AuthorizationEffectiveSubjectSearch>;
+  searchActions(
+    request: AuthorizationSearchActionsInput,
+  ): Promise<AuthorizationActionSearch>;
+  expand(request: AuthorizationExpandInput): Promise<AuthorizationExpand>;
+  readRelationships(
+    request: AuthorizationReadRelationshipsInput,
+  ): Promise<AuthorizationReadRelationships>;
+  writeRelationships(
+    request: AuthorizationWriteRelationshipsInput,
+  ): Promise<void>;
+  getMetadata(): Promise<AuthorizationMetadata>;
+  getActiveModel(): Promise<AuthorizationGetActiveModel>;
+  listModels(
+    request?: AuthorizationListModelsInput,
+  ): Promise<AuthorizationListModels>;
+  writeModel(
+    request: AuthorizationWriteModelInput,
+  ): Promise<AuthorizationModelRef>;
+}
+
+/**
  * Client for the host-configured authorization provider.
  *
  * The client accepts plain SDK request objects and keeps transport message
  * construction inside the SDK.
  */
-export class AuthorizationClient {
+export class AuthorizationClient implements AuthorizationClientLike {
   private readonly client: Client<typeof AuthorizationProviderService>;
 
   constructor(
