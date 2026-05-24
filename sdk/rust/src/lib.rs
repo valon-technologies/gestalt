@@ -121,7 +121,7 @@ pub use runtime_provider::{
 };
 pub use s3::{S3, S3Error, S3Provider};
 pub use s3::{S3ReadObjectFrame, S3ReadObjectStream, S3WriteObjectFrame, S3WriteObjectStream};
-pub use secrets::SecretsProvider;
+pub use secrets::{SecretsClient, SecretsProvider};
 pub use tonic::codegen::async_trait;
 pub use workflow::{
     BoundWorkflowDefinition, BoundWorkflowEventTrigger, BoundWorkflowRun, BoundWorkflowSchedule,

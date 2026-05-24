@@ -220,6 +220,7 @@ export {
 export {
   defineSecretsProvider,
   isSecretsProvider,
+  type SecretsClient,
   type SecretsProviderOptions,
 } from "./secrets.ts";
 export {

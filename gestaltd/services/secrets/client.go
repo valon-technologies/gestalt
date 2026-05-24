@@ -2,11 +2,11 @@ package secrets
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	rpcsecrets "github.com/valon-technologies/gestalt/server/rpc/secrets"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
@@ -24,7 +24,7 @@ type ExecConfig struct {
 }
 
 type remoteSecretManager struct {
-	client proto.SecretsProviderClient
+	client core.SecretManager
 	closer io.Closer
 }
 
@@ -44,7 +44,6 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.SecretManager, err
 	}
 
 	runtimeClient := proc.Lifecycle()
-	secretsClient := proto.NewSecretsProviderClient(proc.Conn())
 
 	_, err = runtimehost.ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_SECRETS, cfg.Name, cfg.Config)
 	if err != nil {
@@ -53,7 +52,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.SecretManager, err
 	}
 
 	return &remoteSecretManager{
-		client: secretsClient,
+		client: rpcsecrets.NewConn(proc.Conn(), rpcsecrets.Options{}),
 		closer: proc,
 	}, nil
 }
@@ -62,11 +61,7 @@ func (r *remoteSecretManager) GetSecret(ctx context.Context, name string) (strin
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
-	resp, err := r.client.GetSecret(ctx, &proto.GetSecretRequest{Name: name})
-	if err != nil {
-		return "", fmt.Errorf("get secret: %w", err)
-	}
-	return resp.GetValue(), nil
+	return r.client.GetSecret(ctx, name)
 }
 
 func (r *remoteSecretManager) Close() error {

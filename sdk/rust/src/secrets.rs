@@ -4,6 +4,13 @@ use crate::api::RuntimeMetadata;
 use crate::error::Result;
 
 #[async_trait]
+/// Fakeable secret lookup contract shared by providers and tests.
+pub trait SecretsClient: Send + Sync {
+    /// Looks up one named secret.
+    async fn get_secret(&self, name: &str) -> Result<String>;
+}
+
+#[async_trait]
 /// Lifecycle and lookup contract for secrets providers.
 pub trait SecretsProvider: Send + Sync + 'static {
     /// Configures the provider before it starts serving requests.
@@ -42,4 +49,14 @@ pub trait SecretsProvider: Send + Sync + 'static {
 
     /// Looks up one named secret.
     async fn get_secret(&self, name: &str) -> Result<String>;
+}
+
+#[async_trait]
+impl<T> SecretsClient for T
+where
+    T: SecretsProvider + ?Sized,
+{
+    async fn get_secret(&self, name: &str) -> Result<String> {
+        SecretsProvider::get_secret(self, name).await
+    }
 }
