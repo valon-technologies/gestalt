@@ -19,7 +19,6 @@ func TestTransportCacheNamedSocketEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect named cache: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
 	if err := client.Set(ctx, "named", []byte("ok"), gestalt.CacheSetOptions{}); err != nil {
@@ -50,7 +49,6 @@ func TestTransportCacheNamedBindingMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect cache: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
 	if err := client.Set(context.Background(), "key", []byte("value"), gestalt.CacheSetOptions{}); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -83,7 +81,6 @@ func TestTransportCacheTCPTargetEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect tcp cache: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
 	if err := client.Set(ctx, "tcp", []byte("ok"), gestalt.CacheSetOptions{}); err != nil {
@@ -113,7 +110,6 @@ func TestTransportCacheTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect tcp cache with token: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
 	if err := client.Set(ctx, "tcp-token", []byte("relay"), gestalt.CacheSetOptions{}); err != nil {

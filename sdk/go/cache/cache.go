@@ -27,9 +27,3 @@ type Cache interface {
 	DeleteMany(ctx context.Context, keys []string) (int64, error)
 	Touch(ctx context.Context, key string, ttl time.Duration) (bool, error)
 }
-
-// Runtime is a transport-backed cache capability returned by gestalt.Cache.
-type Runtime interface {
-	Cache
-	Close() error
-}

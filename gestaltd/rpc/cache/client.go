@@ -8,7 +8,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-var _ sdkcache.Runtime = (*rpcClient)(nil)
+var _ sdkcache.Cache = (*rpcClient)(nil)
 
 type rpcClient struct {
 	grpc proto.CacheClient

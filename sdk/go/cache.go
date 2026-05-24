@@ -17,7 +17,7 @@ type CacheSetOptions = sdkcache.SetOptions
 var sharedCacheTransports sync.Map
 
 // Cache connects to the cache provider exposed by gestaltd.
-func Cache(name ...string) (sdkcache.Runtime, error) {
+func Cache(name ...string) (sdkcache.Cache, error) {
 	target, token, err := hostServiceTarget("cache")
 	if err != nil {
 		return nil, err
