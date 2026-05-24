@@ -36,6 +36,8 @@ func (c *rpcClient) ObjectVersion(bucket, key, versionID string) *s3.ObjectHandl
 
 // HeadObject fetches metadata for one object.
 func (c *rpcClient) HeadObject(ctx context.Context, ref s3.ObjectRef) (s3.ObjectMeta, error) {
+	ctx, cancel := c.callCtx(ctx)
+	defer cancel()
 	resp, err := c.grpc.HeadObject(ctx, &proto.HeadObjectRequest{Ref: objectRefToProto(ref)})
 	if err != nil {
 		return s3.ObjectMeta{}, s3.ClientError(err)
@@ -106,6 +108,8 @@ func (c *rpcClient) WriteObject(ctx context.Context, req s3.WriteRequest) (s3.Ob
 }
 
 func (c *rpcClient) writeObjectStream(ctx context.Context, ref s3.ObjectRef, body io.Reader, opts *s3.WriteOptions) (s3.ObjectMeta, error) {
+	ctx, cancel := c.callCtx(ctx)
+	defer cancel()
 	stream, err := c.grpc.WriteObject(ctx)
 	if err != nil {
 		return s3.ObjectMeta{}, s3.ClientError(err)
@@ -156,12 +160,16 @@ func (c *rpcClient) writeObjectStream(ctx context.Context, ref s3.ObjectRef, bod
 
 // DeleteObject removes one object.
 func (c *rpcClient) DeleteObject(ctx context.Context, ref s3.ObjectRef) error {
+	ctx, cancel := c.callCtx(ctx)
+	defer cancel()
 	_, err := c.grpc.DeleteObject(ctx, &proto.DeleteObjectRequest{Ref: objectRefToProto(ref)})
 	return s3.ClientError(err)
 }
 
 // ListObjects implements s3.Client.
 func (c *rpcClient) ListObjects(ctx context.Context, req s3.ListRequest) (s3.ListPage, error) {
+	ctx, cancel := c.callCtx(ctx)
+	defer cancel()
 	resp, err := c.grpc.ListObjects(ctx, &proto.ListObjectsRequest{
 		Bucket:            req.Bucket,
 		Prefix:            req.Prefix,
@@ -178,6 +186,8 @@ func (c *rpcClient) ListObjects(ctx context.Context, req s3.ListRequest) (s3.Lis
 
 // CopyObject implements s3.Client.
 func (c *rpcClient) CopyObject(ctx context.Context, req s3.CopyRequest) (s3.ObjectMeta, error) {
+	ctx, cancel := c.callCtx(ctx)
+	defer cancel()
 	pb := &proto.CopyObjectRequest{
 		Source:      objectRefToProto(req.Source),
 		Destination: objectRefToProto(req.Destination),
@@ -206,6 +216,8 @@ func (c *rpcClient) PresignObject(ctx context.Context, req s3.PresignRequest) (s
 }
 
 func (c *rpcClient) presignObject(ctx context.Context, req *proto.PresignObjectRequest, requestedMethod s3.PresignMethod) (s3.PresignResult, error) {
+	ctx, cancel := c.callCtx(ctx)
+	defer cancel()
 	resp, err := c.grpc.PresignObject(ctx, req)
 	if err != nil {
 		return s3.PresignResult{}, s3.ClientError(err)
@@ -215,6 +227,8 @@ func (c *rpcClient) presignObject(ctx context.Context, req *proto.PresignObjectR
 
 // CreateObjectAccessURL creates a host-mediated object-access URL.
 func (c *rpcClient) CreateObjectAccessURL(ctx context.Context, ref s3.ObjectRef, opts *s3.ObjectAccessURLOptions) (s3.ObjectAccessURL, error) {
+	ctx, cancel := c.callCtx(ctx)
+	defer cancel()
 	req := &proto.CreateObjectAccessURLRequest{
 		Ref: objectRefToProto(ref),
 	}

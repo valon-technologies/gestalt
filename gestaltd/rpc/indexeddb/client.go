@@ -74,8 +74,6 @@ func (db *clientDB) ObjectStore(name string) idb.ObjectStore {
 // idb.Transaction starts an explicit IndexedDB transaction over the supplied object
 // store scope.
 func (db *clientDB) Transaction(ctx context.Context, stores []string, mode idb.TransactionMode, opts idb.TransactionOptions) (idb.Transaction, error) {
-	ctx, cancel := db.callCtx(ctx)
-	defer cancel()
 	if mode == idb.TransactionVersionChange {
 		return nil, fmt.Errorf("%w: versionchange transactions", idb.ErrUnsupported)
 	}
