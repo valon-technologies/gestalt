@@ -7,14 +7,12 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-// WorkflowHostClient invokes operations from workflow provider code.
-type WorkflowHostClient struct {
+type workflowHost struct {
 	client proto.WorkflowHostClient
 }
 
-// WorkflowHostClientContract is the fakeable client contract for invoking
-// workflow operations through the host service.
-type WorkflowHostClientContract interface {
+// WorkflowHost is the fakeable contract for invoking workflow operations through the host service.
+type WorkflowHostAPI interface {
 	Close() error
 	InvokeOperation(context.Context, InvokeWorkflowOperationInput) (*InvokeWorkflowOperationResponse, error)
 }
@@ -34,7 +32,7 @@ type InvokeWorkflowOperationInput struct {
 	Signals      []WorkflowSignal
 }
 
-// InvokeWorkflowOperationResponse is returned by WorkflowHostClient.InvokeOperation.
+// InvokeWorkflowOperationResponse is returned by WorkflowHost.InvokeOperation.
 type InvokeWorkflowOperationResponse struct {
 	Status int32
 	Body   string
@@ -56,8 +54,8 @@ func (r *InvokeWorkflowOperationResponse) GetBody() string {
 	return r.Body
 }
 
-// WorkflowHost returns a shared client for the workflow host service.
-func WorkflowHost() (*WorkflowHostClient, error) {
+// WorkflowHost returns a shared workflow host capability.
+func WorkflowHost() (WorkflowHostAPI, error) {
 	target, token, err := hostServiceTarget("workflow host")
 	if err != nil {
 		return nil, err
@@ -70,18 +68,18 @@ func WorkflowHost() (*WorkflowHostClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &WorkflowHostClient{
+	return &workflowHost{
 		client: client,
 	}, nil
 }
 
-// Close is a no-op compatibility method because this client uses shared transport.
-func (c *WorkflowHostClient) Close() error {
+// Close is a no-op because this capability uses shared transport.
+func (c *workflowHost) Close() error {
 	return nil
 }
 
 // InvokeOperation invokes an operation through the workflow host service.
-func (c *WorkflowHostClient) InvokeOperation(ctx context.Context, input InvokeWorkflowOperationInput) (*InvokeWorkflowOperationResponse, error) {
+func (c *workflowHost) InvokeOperation(ctx context.Context, input InvokeWorkflowOperationInput) (*InvokeWorkflowOperationResponse, error) {
 	req, err := invokeWorkflowOperationInputToProto(input)
 	if err != nil {
 		return nil, err

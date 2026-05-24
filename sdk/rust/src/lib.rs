@@ -40,7 +40,7 @@ pub mod proto {
 }
 
 pub use agent::{
-    AgentActor, AgentExecutionStatus, AgentHost, AgentHostClient, AgentHostError,
+    AgentActor, AgentExecutionStatus, AgentHost, AgentHostApi, AgentHostError,
     AgentHostExecuteToolInput, AgentHostListToolsInput, AgentHostResolveConnectionInput,
     AgentInteraction, AgentInteractionState, AgentInteractionType, AgentJson, AgentMessage,
     AgentMessagePart, AgentMessagePartImageRef, AgentMessagePartToolCall,
@@ -61,7 +61,7 @@ pub use agent::{
     new_agent_message_part, new_agent_tool_call, new_agent_tool_ref, new_agent_tool_result,
 };
 pub use agent_manager::{
-    AgentManager, AgentManagerCancelTurn, AgentManagerClient, AgentManagerCreateSession,
+    AgentManager, AgentManagerApi, AgentManagerCancelTurn, AgentManagerCreateSession,
     AgentManagerCreateTurn, AgentManagerError, AgentManagerGetSession, AgentManagerGetTurn,
     AgentManagerListInteractions, AgentManagerListInteractionsResponse, AgentManagerListSessions,
     AgentManagerListSessionsResponse, AgentManagerListTurnEvents,
@@ -142,7 +142,7 @@ pub use workflow::{
     UpsertWorkflowProviderEventTriggerRequest, UpsertWorkflowProviderScheduleRequest,
     WorkflowAccessPermission, WorkflowActor, WorkflowAgentMessage, WorkflowEvent,
     WorkflowEventMatch, WorkflowEventTriggerInvocation, WorkflowExecutionReference, WorkflowHost,
-    WorkflowHostClient, WorkflowHostError, WorkflowJson, WorkflowManagerDefinition,
+    WorkflowHostApi, WorkflowHostError, WorkflowJson, WorkflowManagerDefinition,
     WorkflowManagerEventTrigger, WorkflowManagerRun, WorkflowManagerRunSignal,
     WorkflowManagerSchedule, WorkflowProvider, WorkflowRunAsSubject, WorkflowRunStatus,
     WorkflowRunTrigger, WorkflowScheduleTrigger, WorkflowSignal, WorkflowStep, WorkflowStepAction,
@@ -169,7 +169,7 @@ pub use workflow::{
     workflow_step_input_from_step, workflow_value_input_from_value,
 };
 pub use workflow_manager::{
-    WorkflowManager, WorkflowManagerClient, WorkflowManagerCreateDefinition,
+    WorkflowManager, WorkflowManagerApi, WorkflowManagerCreateDefinition,
     WorkflowManagerCreateEventTrigger, WorkflowManagerCreateSchedule,
     WorkflowManagerDeleteDefinition, WorkflowManagerDeleteEventTrigger,
     WorkflowManagerDeleteSchedule, WorkflowManagerError, WorkflowManagerGetDefinition,

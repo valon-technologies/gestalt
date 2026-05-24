@@ -538,7 +538,7 @@ export interface InvokeWorkflowOperationResponse {
 }
 
 /** Fakeable client contract for workflow host calls. */
-export interface WorkflowHostClientLike {
+export interface WorkflowHost {
   invokeOperation(
     input: InvokeWorkflowOperationInput,
   ): Promise<InvokeWorkflowOperationResponse>;
@@ -1655,7 +1655,7 @@ export function isWorkflowProvider(value: unknown): value is WorkflowProvider {
 }
 
 /** Client for invoking operations from workflow provider code. */
-export class WorkflowHost implements WorkflowHostClientLike {
+class HostWorkflowHost implements WorkflowHost {
   private readonly client: Client<typeof WorkflowHostService>;
 
   constructor() {
@@ -3022,6 +3022,8 @@ function listRunsResult(
 ): ListWorkflowProviderRunsResponse {
   return "runs" in value ? value : { runs: value };
 }
+
+export const WorkflowHost = HostWorkflowHost;
 
 async function invokeWorkflowProvider<T>(
   action: string,

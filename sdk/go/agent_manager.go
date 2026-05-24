@@ -9,15 +9,13 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-// AgentManagerClient manages agent sessions, turns, events, and interactions.
-type AgentManagerClient struct {
+type agentManager struct {
 	client          proto.AgentProviderClient
 	invocationToken string
 }
 
-// AgentManagerClientContract is the fakeable client contract for managing
-// agent sessions, turns, events, and interactions.
-type AgentManagerClientContract interface {
+// AgentManager is the fakeable contract for managing agent sessions, turns, events, and interactions.
+type AgentManagerAPI interface {
 	Close() error
 	CreateSession(context.Context, AgentManagerCreateSession) (*AgentSession, error)
 	GetSession(context.Context, AgentManagerGetSession) (*AgentSession, error)
@@ -34,8 +32,8 @@ type AgentManagerClientContract interface {
 
 var sharedAgentManagerTransport sharedManagerTransport[proto.AgentProviderClient]
 
-// AgentManager returns a client that attaches invocationToken to every request.
-func AgentManager(invocationToken string) (*AgentManagerClient, error) {
+// AgentManager returns a capability that attaches invocationToken to every request.
+func AgentManager(invocationToken string) (AgentManagerAPI, error) {
 	if strings.TrimSpace(invocationToken) == "" {
 		return nil, fmt.Errorf("agent manager: invocation token is not available")
 	}
@@ -52,21 +50,21 @@ func AgentManager(invocationToken string) (*AgentManagerClient, error) {
 		return nil, err
 	}
 
-	return &AgentManagerClient{client: client, invocationToken: strings.TrimSpace(invocationToken)}, nil
+	return &agentManager{client: client, invocationToken: strings.TrimSpace(invocationToken)}, nil
 }
 
 // AgentManagerFromContext returns an AgentManager using the context invocation token.
-func AgentManagerFromContext(ctx context.Context) (*AgentManagerClient, error) {
+func AgentManagerFromContext(ctx context.Context) (AgentManagerAPI, error) {
 	return AgentManager(InvocationTokenFromContext(ctx))
 }
 
-// Close is a no-op compatibility method because this client uses shared transport.
-func (c *AgentManagerClient) Close() error {
+// Close is a no-op because this capability uses shared transport.
+func (c *agentManager) Close() error {
 	return nil
 }
 
 // CreateSession creates an agent session.
-func (c *AgentManagerClient) CreateSession(ctx context.Context, input AgentManagerCreateSession) (*AgentSession, error) {
+func (c *agentManager) CreateSession(ctx context.Context, input AgentManagerCreateSession) (*AgentSession, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -83,7 +81,7 @@ func (c *AgentManagerClient) CreateSession(ctx context.Context, input AgentManag
 }
 
 // GetSession fetches one agent session.
-func (c *AgentManagerClient) GetSession(ctx context.Context, input AgentManagerGetSession) (*AgentSession, error) {
+func (c *agentManager) GetSession(ctx context.Context, input AgentManagerGetSession) (*AgentSession, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -97,7 +95,7 @@ func (c *AgentManagerClient) GetSession(ctx context.Context, input AgentManagerG
 }
 
 // ListSessions lists agent sessions visible to the invocation token.
-func (c *AgentManagerClient) ListSessions(ctx context.Context, input AgentManagerListSessions) (*ListAgentManagerSessionsResponse, error) {
+func (c *agentManager) ListSessions(ctx context.Context, input AgentManagerListSessions) (*ListAgentManagerSessionsResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -111,7 +109,7 @@ func (c *AgentManagerClient) ListSessions(ctx context.Context, input AgentManage
 }
 
 // UpdateSession updates mutable fields on an agent session.
-func (c *AgentManagerClient) UpdateSession(ctx context.Context, input AgentManagerUpdateSession) (*AgentSession, error) {
+func (c *agentManager) UpdateSession(ctx context.Context, input AgentManagerUpdateSession) (*AgentSession, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -128,7 +126,7 @@ func (c *AgentManagerClient) UpdateSession(ctx context.Context, input AgentManag
 }
 
 // CreateTurn creates an agent turn.
-func (c *AgentManagerClient) CreateTurn(ctx context.Context, input AgentManagerCreateTurn) (*AgentTurn, error) {
+func (c *agentManager) CreateTurn(ctx context.Context, input AgentManagerCreateTurn) (*AgentTurn, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -145,7 +143,7 @@ func (c *AgentManagerClient) CreateTurn(ctx context.Context, input AgentManagerC
 }
 
 // GetTurn fetches one agent turn.
-func (c *AgentManagerClient) GetTurn(ctx context.Context, input AgentManagerGetTurn) (*AgentTurn, error) {
+func (c *agentManager) GetTurn(ctx context.Context, input AgentManagerGetTurn) (*AgentTurn, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -159,7 +157,7 @@ func (c *AgentManagerClient) GetTurn(ctx context.Context, input AgentManagerGetT
 }
 
 // ListTurns lists turns for an agent session.
-func (c *AgentManagerClient) ListTurns(ctx context.Context, input AgentManagerListTurns) (*ListAgentManagerTurnsResponse, error) {
+func (c *agentManager) ListTurns(ctx context.Context, input AgentManagerListTurns) (*ListAgentManagerTurnsResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -173,7 +171,7 @@ func (c *AgentManagerClient) ListTurns(ctx context.Context, input AgentManagerLi
 }
 
 // CancelTurn cancels an in-progress agent turn.
-func (c *AgentManagerClient) CancelTurn(ctx context.Context, input AgentManagerCancelTurn) (*AgentTurn, error) {
+func (c *agentManager) CancelTurn(ctx context.Context, input AgentManagerCancelTurn) (*AgentTurn, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -187,7 +185,7 @@ func (c *AgentManagerClient) CancelTurn(ctx context.Context, input AgentManagerC
 }
 
 // ListTurnEvents lists events emitted for an agent turn.
-func (c *AgentManagerClient) ListTurnEvents(ctx context.Context, input AgentManagerListTurnEvents) (*ListAgentManagerTurnEventsResponse, error) {
+func (c *agentManager) ListTurnEvents(ctx context.Context, input AgentManagerListTurnEvents) (*ListAgentManagerTurnEventsResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -201,7 +199,7 @@ func (c *AgentManagerClient) ListTurnEvents(ctx context.Context, input AgentMana
 }
 
 // ListInteractions lists pending or completed agent interactions.
-func (c *AgentManagerClient) ListInteractions(ctx context.Context, input AgentManagerListInteractions) (*ListAgentManagerInteractionsResponse, error) {
+func (c *agentManager) ListInteractions(ctx context.Context, input AgentManagerListInteractions) (*ListAgentManagerInteractionsResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -215,7 +213,7 @@ func (c *AgentManagerClient) ListInteractions(ctx context.Context, input AgentMa
 }
 
 // ResolveInteraction resolves an agent interaction with a host response.
-func (c *AgentManagerClient) ResolveInteraction(ctx context.Context, input AgentManagerResolveInteraction) (*AgentInteraction, error) {
+func (c *agentManager) ResolveInteraction(ctx context.Context, input AgentManagerResolveInteraction) (*AgentInteraction, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}

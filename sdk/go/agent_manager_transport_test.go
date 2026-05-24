@@ -178,7 +178,7 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 			Metadata: map[string]any{"source": "native"},
 		}},
 		ToolRefs: []gestalt.AgentToolRef{{
-			App: "github",
+			App:        "github",
 			Operation:  "issues.get",
 			Connection: "default",
 		}},

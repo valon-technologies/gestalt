@@ -186,7 +186,7 @@ pub struct WorkflowManagerPublishEvent {
 
 #[async_trait]
 /// Fakeable client contract for workflow manager calls.
-pub trait WorkflowManagerClient: Send {
+pub trait WorkflowManagerApi: Send {
     async fn start_run(
         &mut self,
         input: WorkflowManagerStartRun,
@@ -879,7 +879,7 @@ impl WorkflowManager {
 }
 
 #[async_trait]
-impl WorkflowManagerClient for WorkflowManager {
+impl WorkflowManagerApi for WorkflowManager {
     async fn start_run(
         &mut self,
         input: WorkflowManagerStartRun,

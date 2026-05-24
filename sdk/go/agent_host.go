@@ -8,14 +8,12 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// AgentHostClient calls host tool APIs from an agent provider.
-type AgentHostClient struct {
+type agentHost struct {
 	client proto.AgentHostClient
 }
 
-// AgentHostClientContract is the fakeable client contract for host tool calls
-// made by agent providers.
-type AgentHostClientContract interface {
+// AgentHost is the fakeable contract for host tool calls made by agent providers.
+type AgentHostAPI interface {
 	Close() error
 	ExecuteTool(context.Context, AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error)
 	ExecuteToolForTurn(context.Context, AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error)
@@ -60,8 +58,8 @@ type AgentHostResolveConnectionInput struct {
 
 var sharedAgentHostTransport sharedManagerTransport[proto.AgentHostClient]
 
-// AgentHost returns a shared client for the host agent service.
-func AgentHost() (*AgentHostClient, error) {
+// AgentHost returns a shared host tool capability for agent providers.
+func AgentHost() (AgentHostAPI, error) {
 	target, token, err := hostServiceTarget("agent host")
 	if err != nil {
 		return nil, err
@@ -74,18 +72,18 @@ func AgentHost() (*AgentHostClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &AgentHostClient{
+	return &agentHost{
 		client: client,
 	}, nil
 }
 
-// Close is a no-op compatibility method because this client uses shared transport.
-func (c *AgentHostClient) Close() error {
+// Close is a no-op because this capability uses shared transport.
+func (c *agentHost) Close() error {
 	return nil
 }
 
 // ExecuteTool executes a host tool using plain Go request fields.
-func (c *AgentHostClient) ExecuteTool(ctx context.Context, input AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error) {
+func (c *agentHost) ExecuteTool(ctx context.Context, input AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error) {
 	var arguments *structpb.Struct
 	if input.Arguments != nil {
 		var err error
@@ -110,13 +108,13 @@ func (c *AgentHostClient) ExecuteTool(ctx context.Context, input AgentHostExecut
 }
 
 // ExecuteToolForTurn executes a host tool using plain Go request fields.
-func (c *AgentHostClient) ExecuteToolForTurn(ctx context.Context, input AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error) {
+func (c *agentHost) ExecuteToolForTurn(ctx context.Context, input AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error) {
 	return c.ExecuteTool(ctx, input)
 }
 
 // ListTools lists host tools visible to the current agent request using plain
 // Go request fields.
-func (c *AgentHostClient) ListTools(ctx context.Context, input AgentHostListToolsInput) (*ListAgentToolsResponse, error) {
+func (c *agentHost) ListTools(ctx context.Context, input AgentHostListToolsInput) (*ListAgentToolsResponse, error) {
 	resp, err := c.client.ListTools(ctx, &proto.ListAgentToolsRequest{
 		SessionId: input.SessionID,
 		TurnId:    input.TurnID,
@@ -132,13 +130,13 @@ func (c *AgentHostClient) ListTools(ctx context.Context, input AgentHostListTool
 }
 
 // ListToolsForTurn lists host tools using plain Go request fields.
-func (c *AgentHostClient) ListToolsForTurn(ctx context.Context, input AgentHostListToolsInput) (*ListAgentToolsResponse, error) {
+func (c *agentHost) ListToolsForTurn(ctx context.Context, input AgentHostListToolsInput) (*ListAgentToolsResponse, error) {
 	return c.ListTools(ctx, input)
 }
 
 // ResolveConnection resolves a configured agent connection for the current turn
 // using plain Go request fields.
-func (c *AgentHostClient) ResolveConnection(ctx context.Context, input AgentHostResolveConnectionInput) (*ResolvedAgentConnection, error) {
+func (c *agentHost) ResolveConnection(ctx context.Context, input AgentHostResolveConnectionInput) (*ResolvedAgentConnection, error) {
 	resp, err := c.client.ResolveConnection(ctx, &proto.ResolveAgentConnectionRequest{
 		SessionId:  input.SessionID,
 		TurnId:     input.TurnID,
@@ -154,6 +152,6 @@ func (c *AgentHostClient) ResolveConnection(ctx context.Context, input AgentHost
 
 // ResolveConnectionForTurn resolves an agent connection using plain Go request
 // fields.
-func (c *AgentHostClient) ResolveConnectionForTurn(ctx context.Context, input AgentHostResolveConnectionInput) (*ResolvedAgentConnection, error) {
+func (c *agentHost) ResolveConnectionForTurn(ctx context.Context, input AgentHostResolveConnectionInput) (*ResolvedAgentConnection, error) {
 	return c.ResolveConnection(ctx, input)
 }

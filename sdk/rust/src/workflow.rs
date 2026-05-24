@@ -2256,7 +2256,7 @@ pub enum WorkflowHostError {
 
 #[async_trait]
 /// Fakeable client contract for workflow host calls.
-pub trait WorkflowHostClient: Send {
+pub trait WorkflowHostApi: Send {
     async fn invoke_operation(
         &mut self,
         input: InvokeWorkflowOperationInput,
@@ -2308,7 +2308,7 @@ impl WorkflowHost {
 }
 
 #[async_trait]
-impl WorkflowHostClient for WorkflowHost {
+impl WorkflowHostApi for WorkflowHost {
     async fn invoke_operation(
         &mut self,
         input: InvokeWorkflowOperationInput,

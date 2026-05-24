@@ -144,7 +144,6 @@ export {
 } from "./invoker.ts";
 export {
   AgentManager,
-  type AgentManagerClientLike,
   type AgentManagerCancelTurn,
   type AgentManagerCreateSession,
   type AgentManagerCreateTurn,
@@ -161,7 +160,6 @@ export {
 } from "./agent-manager.ts";
 export {
   WorkflowManager,
-  type WorkflowManagerClientLike,
   type WorkflowManagerCreateDefinition,
   type WorkflowManagerCreateTrigger,
   type WorkflowManagerCreateSchedule,
@@ -390,7 +388,6 @@ export {
   defineAgentProvider,
   isAgentProvider,
   type AgentActor,
-  type AgentHostClientLike,
   type AgentHostExecuteToolInput,
   type AgentHostListToolsInput,
   type AgentHostResolveConnectionInput,
@@ -505,7 +502,6 @@ export {
   type GetWorkflowProviderScheduleRequest,
   type InvokeWorkflowOperationInput,
   type InvokeWorkflowOperationResponse,
-  type WorkflowHostClientLike,
   type ListWorkflowExecutionReferencesRequest,
   type ListWorkflowProviderEventTriggersRequest,
   type ListWorkflowProviderRunsRequest,

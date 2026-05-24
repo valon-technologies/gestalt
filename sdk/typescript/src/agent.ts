@@ -542,7 +542,7 @@ export interface AgentHostResolveConnectionInput {
 }
 
 /** Fakeable client contract for agent host calls. */
-export interface AgentHostClientLike {
+export interface AgentHost {
   executeTool(
     request: ExecuteAgentToolRequest,
   ): Promise<ExecuteAgentToolResponse>;
@@ -1156,7 +1156,7 @@ export function isAgentProvider(value: unknown): value is AgentProvider {
 }
 
 /** Client for the agent host service available inside agent providers. */
-export class AgentHost implements AgentHostClientLike {
+class HostAgentHost implements AgentHost {
   private readonly client: Client<typeof AgentHostService>;
 
   constructor() {
@@ -1405,6 +1405,8 @@ function listInteractionsResult(
 ): readonly AgentInteraction[] {
   return "interactions" in value ? value.interactions : value;
 }
+
+export const AgentHost = HostAgentHost;
 
 async function requireAgentProviderHandler<Request, Response>(
   action: string,

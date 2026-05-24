@@ -45,8 +45,8 @@ func (r Request) Invoker() (*InvokerClient, error) {
 	return Invoker(r.invocationToken)
 }
 
-func (r Request) WorkflowManager() (*WorkflowManagerClient, error) {
-	client, err := WorkflowManager(r.invocationToken)
+func (r Request) WorkflowManager() (WorkflowManagerAPI, error) {
+	client, err := newWorkflowManager(r.invocationToken)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (r Request) WorkflowManager() (*WorkflowManagerClient, error) {
 	return client, nil
 }
 
-func (r Request) AgentManager() (*AgentManagerClient, error) {
+func (r Request) AgentManager() (AgentManagerAPI, error) {
 	return AgentManager(r.invocationToken)
 }
 

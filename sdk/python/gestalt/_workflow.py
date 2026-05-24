@@ -2407,8 +2407,8 @@ def workflow_run_status_name(status: int) -> str:
         return str(status)
 
 
-class WorkflowHostClientProtocol(Protocol):
-    """Fakeable client contract for workflow host calls."""
+class WorkflowHostProtocol(Protocol):
+    """Fakeable contract for workflow host calls."""
 
     def close(self) -> None:
         """Close the client."""
@@ -2465,8 +2465,8 @@ class WorkflowHost:
         self.close()
 
 
-class WorkflowManagerClientProtocol(Protocol):
-    """Fakeable client contract for workflow manager calls."""
+class WorkflowManagerProtocol(Protocol):
+    """Fakeable contract for workflow manager calls."""
 
     def close(self) -> None:
         """Close the client."""

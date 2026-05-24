@@ -1751,8 +1751,8 @@ def agent_messages_from_dicts(messages: Iterable[Mapping[str, Any]]) -> list[Any
     return [agent_message_from_dict(message) for message in messages]
 
 
-class AgentHostClientProtocol(Protocol):
-    """Fakeable client contract for agent host tool calls."""
+class AgentHostProtocol(Protocol):
+    """Fakeable contract for agent host tool calls."""
 
     def close(self) -> None:
         """Close the client."""
@@ -2153,8 +2153,8 @@ def _agent_manager_resolve_interaction_request(
     return request
 
 
-class AgentManagerClientProtocol(Protocol):
-    """Fakeable client contract for agent management calls."""
+class AgentManagerProtocol(Protocol):
+    """Fakeable contract for agent management calls."""
 
     def close(self) -> None:
         """Close the client."""

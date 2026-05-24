@@ -217,7 +217,7 @@ pub struct AgentManagerListInteractionsResponse {
 
 #[async_trait]
 /// Fakeable client contract for managing agent sessions and turns.
-pub trait AgentManagerClient: Send {
+pub trait AgentManagerApi: Send {
     async fn create_session(
         &mut self,
         input: AgentManagerCreateSession,
@@ -618,7 +618,7 @@ impl AgentManager {
 }
 
 #[async_trait]
-impl AgentManagerClient for AgentManager {
+impl AgentManagerApi for AgentManager {
     async fn create_session(
         &mut self,
         input: AgentManagerCreateSession,

@@ -180,7 +180,7 @@ export interface WorkflowManagerPublishEvent {
 }
 
 /** Fakeable client contract for workflow manager calls. */
-export interface WorkflowManagerClientLike {
+export interface WorkflowManager {
   startRun(request: WorkflowManagerStartRun): Promise<WorkflowManagerRun>;
   signalRun(
     request: WorkflowManagerSignalRun,
@@ -241,7 +241,7 @@ export interface WorkflowManagerClientLike {
  * constructed from a request, create operations reuse the request idempotency
  * key unless the call provides one explicitly.
  */
-export class WorkflowManager implements WorkflowManagerClientLike {
+class HostWorkflowManager implements WorkflowManager {
   private readonly client: Client<typeof WorkflowProviderService>;
   private readonly invocationToken: string;
   private readonly idempotencyKey: string;
@@ -543,6 +543,8 @@ export class WorkflowManager implements WorkflowManagerClientLike {
     return event;
   }
 }
+
+export const WorkflowManager = HostWorkflowManager;
 
 function normalizeInvocationToken(requestOrToken: Request | string): string {
   const invocationToken =

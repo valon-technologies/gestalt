@@ -920,7 +920,7 @@ fn infer_agent_message_part_type(input: &AgentMessagePart) -> AgentMessagePartTy
 
 #[async_trait]
 /// Fakeable client contract for agent host calls.
-pub trait AgentHostClient: Send {
+pub trait AgentHostApi: Send {
     async fn execute_tool(
         &mut self,
         input: AgentHostExecuteToolInput,
@@ -1062,7 +1062,7 @@ impl AgentHost {
 }
 
 #[async_trait]
-impl AgentHostClient for AgentHost {
+impl AgentHostApi for AgentHost {
     async fn execute_tool(
         &mut self,
         input: AgentHostExecuteToolInput,

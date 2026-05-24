@@ -143,7 +143,7 @@ export interface AgentManagerResolveInteraction {
 }
 
 /** Fakeable client contract for managing agent sessions and turns. */
-export interface AgentManagerClientLike {
+export interface AgentManager {
   createSession(request: AgentManagerCreateSession): Promise<AgentSession>;
   getSession(request: AgentManagerGetSession): Promise<AgentSession>;
   listSessions(request?: AgentManagerListSessions): Promise<AgentSession[]>;
@@ -167,7 +167,7 @@ export interface AgentManagerClientLike {
  * The constructor accepts either a Gestalt request or an invocation token. Each
  * manager call forwards that token to the agent-provider facade.
  */
-export class AgentManager implements AgentManagerClientLike {
+class HostAgentManager implements AgentManager {
   private readonly client: Client<typeof AgentProviderService>;
   private readonly invocationToken: string;
 
@@ -363,6 +363,8 @@ function workspaceToProto(workspace?: AgentManagerWorkspace | undefined) {
     cwd: workspace.cwd ?? "",
   };
 }
+
+export const AgentManager = HostAgentManager;
 
 function agentSessionFromProto(session: ProtoAgentSession): AgentSession {
   return {
