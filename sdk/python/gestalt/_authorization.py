@@ -647,6 +647,17 @@ class AuthorizationProtocol(Protocol):
 class Authorization:
     """Transport client for the host authorization provider."""
 
+    def __new__(
+        cls,
+        socket_target: str | None = None,
+        relay_token: str | None = None,
+        *,
+        _shared: bool = False,
+    ) -> Authorization:
+        if not _shared and socket_target is None and relay_token is None:
+            return _shared_authorization_client()
+        return super().__new__(cls)
+
     def __init__(
         self,
         socket_target: str | None = None,
@@ -654,6 +665,8 @@ class Authorization:
         *,
         _shared: bool = False,
     ) -> None:
+        if getattr(self, "_authorization_initialized", False):
+            return
         target = _resolve_authorization_socket_target(socket_target)
         token = (
             relay_token
@@ -664,6 +677,7 @@ class Authorization:
         self._stub = authorization_pb2_grpc.AuthorizationProviderStub(self._channel)
         self._closed = False
         self._shared = _shared
+        self._authorization_initialized = True
 
     def close(self) -> None:
         """Close the underlying gRPC channel."""
