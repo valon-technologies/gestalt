@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	_ sdkauthorization.Runtime = (*rpcClient)(nil)
+	_ sdkauthorization.Authorization = (*rpcClient)(nil)
 )
 
 type rpcClient struct {

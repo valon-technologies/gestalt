@@ -580,7 +580,7 @@ async fn authorization_runtime_and_server_round_trip_over_unix_socket() {
     );
     assert_eq!(identity.name, "authz-example");
 
-    let mut authz = ProtoAuthorization::new(channel);
+    let mut authz = ProtoAuthorizationClient::new(channel);
     let decision = authz
         .evaluate(ProtoAccessEvaluationRequest {
             subject: Some(ProtoSubject {

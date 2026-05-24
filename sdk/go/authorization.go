@@ -166,7 +166,7 @@ func NewAuthorizationModelUnionRewrite(children ...*AuthorizationModelRewrite) *
 // AuthorizationProvider serves authorization APIs to the host.
 type AuthorizationProvider interface {
 	Provider
-	sdkauthorization.Authorization
+	sdkauthorization.Provider
 }
 
 // AuthorizationProviderEffectiveSearch is implemented by providers that can

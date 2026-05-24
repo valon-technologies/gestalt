@@ -60,7 +60,7 @@ func (r Request) AgentManager() (*AgentManagerClient, error) {
 	return AgentManager(r.invocationToken)
 }
 
-func (r Request) Authorization() (sdkauthorization.Runtime, error) {
+func (r Request) Authorization() (sdkauthorization.Authorization, error) {
 	return Authorization()
 }
 

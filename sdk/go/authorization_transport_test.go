@@ -158,7 +158,6 @@ func TestTransport_AuthorizationTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Authorization: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
 	resp, err := client.SearchSubjects(context.Background(), &gestalt.SubjectSearchRequest{
 		SubjectType: "user",

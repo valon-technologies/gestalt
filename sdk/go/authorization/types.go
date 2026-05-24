@@ -1360,8 +1360,16 @@ func NewAuthorizationModelUnionRewrite(children ...*AuthorizationModelRewrite) *
 	}
 }
 
-// Authorization is the app-facing authorization capability exposed by gestaltd and implemented by authorization providers.
+// Authorization is the app-facing authorization capability exposed by gestaltd.
 type Authorization interface {
+	Provider
+	EffectiveSearch
+	Expansion
+}
+
+// Provider is the base authorization contract implemented by authorization
+// providers. Effective search and expansion are optional provider capabilities.
+type Provider interface {
 	Evaluate(ctx context.Context, req *AccessEvaluationRequest) (*AccessDecision, error)
 	EvaluateMany(ctx context.Context, req *AccessEvaluationsRequest) (*AccessEvaluationsResponse, error)
 	SearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error)
@@ -1373,14 +1381,6 @@ type Authorization interface {
 	GetActiveModel(ctx context.Context) (*GetActiveModelResponse, error)
 	ListModels(ctx context.Context, req *ListModelsRequest) (*ListModelsResponse, error)
 	WriteModel(ctx context.Context, req *WriteModelRequest) (*AuthorizationModelRef, error)
-}
-
-// Runtime is a transport-backed authorization capability returned by gestalt.Authorization.
-type Runtime interface {
-	Authorization
-	EffectiveSearch
-	Expansion
-	Close() error
 }
 
 // EffectiveSearch is implemented by authorization capabilities that can search

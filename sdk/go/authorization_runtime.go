@@ -12,7 +12,7 @@ import (
 var sharedAuthorizationTransport sharedManagerTransport[proto.AuthorizationProviderClient]
 
 // Authorization returns a shared authorization capability.
-func Authorization() (sdkauthorization.Runtime, error) {
+func Authorization() (sdkauthorization.Authorization, error) {
 	target, token, err := hostServiceTarget("authorization")
 	if err != nil {
 		return nil, err
