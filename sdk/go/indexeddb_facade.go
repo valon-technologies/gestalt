@@ -60,8 +60,6 @@ type (
 	IndexedDBIndex                  = indexeddb.Index
 	IndexedDBTransactionObjectStore = indexeddb.TransactionObjectStore
 	IndexedDBTransactionIndex       = indexeddb.TransactionIndex
-	IndexedDBRangeDeleter           = indexeddb.RangeDeleter
-	IndexedDBMutableIndex           = indexeddb.MutableIndex
 )
 
 // IndexedDB connects to the IndexedDB provider exposed by gestaltd.

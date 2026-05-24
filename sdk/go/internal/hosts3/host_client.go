@@ -9,8 +9,6 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	. "github.com/valon-technologies/gestalt/sdk/go/s3"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -552,21 +550,5 @@ func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, request
 }
 
 func grpcS3Err(err error) error {
-	if err == nil {
-		return nil
-	}
-	st, ok := status.FromError(err)
-	if !ok {
-		return err
-	}
-	switch st.Code() {
-	case codes.NotFound:
-		return ErrNotFound
-	case codes.FailedPrecondition:
-		return ErrPreconditionFailed
-	case codes.OutOfRange:
-		return ErrInvalidRange
-	default:
-		return err
-	}
+	return ClientError(err)
 }

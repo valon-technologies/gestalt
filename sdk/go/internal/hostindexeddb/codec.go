@@ -1,7 +1,7 @@
 package hostindexeddb
 
 import (
-	. "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/sdk/go/internal/indexeddbcodec"
 )
@@ -32,39 +32,39 @@ func AnyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
 	return indexeddbcodec.AnyFromTypedValues(values)
 }
 
-func recordToProto(record Record) (*proto.Record, error) {
+func recordToProto(record idb.Record) (*proto.Record, error) {
 	return RecordToProto(record)
 }
 
 // RecordToProto encodes a record.
-func RecordToProto(record Record) (*proto.Record, error) {
+func RecordToProto(record idb.Record) (*proto.Record, error) {
 	return indexeddbcodec.RecordToProto(record)
 }
 
-func recordFromProto(record *proto.Record) (Record, error) {
+func recordFromProto(record *proto.Record) (idb.Record, error) {
 	return RecordFromProto(record)
 }
 
 // RecordFromProto decodes a protobuf record.
-func RecordFromProto(record *proto.Record) (Record, error) {
+func RecordFromProto(record *proto.Record) (idb.Record, error) {
 	return indexeddbcodec.RecordFromProto(record)
 }
 
-func recordsFromProto(records []*proto.Record) ([]Record, error) {
+func recordsFromProto(records []*proto.Record) ([]idb.Record, error) {
 	return RecordsFromProto(records)
 }
 
 // RecordsFromProto decodes protobuf records.
-func RecordsFromProto(records []*proto.Record) ([]Record, error) {
+func RecordsFromProto(records []*proto.Record) ([]idb.Record, error) {
 	return indexeddbcodec.RecordsFromProto(records)
 }
 
-func recordsToProto(records []Record) ([]*proto.Record, error) {
+func recordsToProto(records []idb.Record) ([]*proto.Record, error) {
 	return RecordsToProto(records)
 }
 
 // RecordsToProto encodes records.
-func RecordsToProto(records []Record) ([]*proto.Record, error) {
+func RecordsToProto(records []idb.Record) ([]*proto.Record, error) {
 	return indexeddbcodec.RecordsToProto(records)
 }
 
@@ -109,13 +109,13 @@ func DecodeIndexedDBKey(data []byte) (any, error) {
 
 // EncodeIndexedDBRecord serializes a record using the SDK's stable provider
 // storage format.
-func EncodeIndexedDBRecord(record Record) ([]byte, error) {
+func EncodeIndexedDBRecord(record idb.Record) ([]byte, error) {
 	return indexeddbcodec.EncodeRecord(record)
 }
 
 // DecodeIndexedDBRecord decodes a record previously written by
 // EncodeIndexedDBRecord or by the older protobuf-based helper.
-func DecodeIndexedDBRecord(data []byte) (Record, error) {
+func DecodeIndexedDBRecord(data []byte) (idb.Record, error) {
 	return indexeddbcodec.DecodeRecord(data)
 }
 
