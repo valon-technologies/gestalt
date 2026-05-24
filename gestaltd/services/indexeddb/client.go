@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
@@ -63,11 +64,11 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (coreindexeddb.IndexedDB
 	return &remoteIndexedDB{client: dsClient, runtime: runtimeClient, closer: proc}, nil
 }
 
-func (r *remoteIndexedDB) ObjectStore(name string) coreindexeddb.ObjectStore {
+func (r *remoteIndexedDB) ObjectStore(name string) idb.ObjectStore {
 	return &remoteObjectStore{client: r.client, store: name}
 }
 
-func (r *remoteIndexedDB) Transaction(ctx context.Context, stores []string, mode coreindexeddb.TransactionMode, opts coreindexeddb.TransactionOptions) (coreindexeddb.Transaction, error) {
+func (r *remoteIndexedDB) Transaction(ctx context.Context, stores []string, mode idb.TransactionMode, opts idb.TransactionOptions) (idb.Transaction, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -102,7 +103,7 @@ func (r *remoteIndexedDB) Transaction(ctx context.Context, stores []string, mode
 	return &remoteTransaction{stream: stream, cancel: cancel}, nil
 }
 
-func (r *remoteIndexedDB) CreateObjectStore(ctx context.Context, name string, schema coreindexeddb.ObjectStoreSchema) error {
+func (r *remoteIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	indexes := make([]*proto.IndexSchema, len(schema.Indexes))
@@ -119,7 +120,10 @@ func (r *remoteIndexedDB) CreateObjectStore(ctx context.Context, name string, sc
 	_, err := r.client.CreateObjectStore(ctx, &proto.CreateObjectStoreRequest{
 		Name: name, Schema: &proto.ObjectStoreSchema{Indexes: indexes, Columns: columns},
 	})
-	return grpcToDatastoreErr(err)
+	if err != nil {
+		return nil, grpcToDatastoreErr(err)
+	}
+	return r.ObjectStore(name), nil
 }
 
 func (r *remoteIndexedDB) DeleteObjectStore(ctx context.Context, name string) error {
@@ -150,7 +154,7 @@ type remoteObjectStore struct {
 	store  string
 }
 
-func (o *remoteObjectStore) Get(ctx context.Context, id string) (coreindexeddb.Record, error) {
+func (o *remoteObjectStore) Get(ctx context.Context, id string) (idb.Record, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := o.client.Get(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
@@ -174,7 +178,7 @@ func (o *remoteObjectStore) GetKey(ctx context.Context, id string) (string, erro
 	return resp.GetKey(), nil
 }
 
-func (o *remoteObjectStore) Add(ctx context.Context, record coreindexeddb.Record) error {
+func (o *remoteObjectStore) Add(ctx context.Context, record idb.Record) error {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	pbRecord, err := recordToProto(record)
@@ -185,7 +189,7 @@ func (o *remoteObjectStore) Add(ctx context.Context, record coreindexeddb.Record
 	return grpcToDatastoreErr(err)
 }
 
-func (o *remoteObjectStore) Put(ctx context.Context, record coreindexeddb.Record) error {
+func (o *remoteObjectStore) Put(ctx context.Context, record idb.Record) error {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	pbRecord, err := recordToProto(record)
@@ -210,7 +214,7 @@ func (o *remoteObjectStore) Clear(ctx context.Context) error {
 	return grpcToDatastoreErr(err)
 }
 
-func (o *remoteObjectStore) GetAll(ctx context.Context, r *coreindexeddb.KeyRange) ([]coreindexeddb.Record, error) {
+func (o *remoteObjectStore) GetAll(ctx context.Context, r *idb.KeyRange) ([]idb.Record, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	kr, err := keyRangeToProto(r)
@@ -228,7 +232,7 @@ func (o *remoteObjectStore) GetAll(ctx context.Context, r *coreindexeddb.KeyRang
 	return records, nil
 }
 
-func (o *remoteObjectStore) GetAllKeys(ctx context.Context, r *coreindexeddb.KeyRange) ([]string, error) {
+func (o *remoteObjectStore) GetAllKeys(ctx context.Context, r *idb.KeyRange) ([]string, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	kr, err := keyRangeToProto(r)
@@ -242,7 +246,7 @@ func (o *remoteObjectStore) GetAllKeys(ctx context.Context, r *coreindexeddb.Key
 	return resp.GetKeys(), nil
 }
 
-func (o *remoteObjectStore) Count(ctx context.Context, r *coreindexeddb.KeyRange) (int64, error) {
+func (o *remoteObjectStore) Count(ctx context.Context, r *idb.KeyRange) (int64, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	kr, err := keyRangeToProto(r)
@@ -256,7 +260,7 @@ func (o *remoteObjectStore) Count(ctx context.Context, r *coreindexeddb.KeyRange
 	return resp.GetCount(), nil
 }
 
-func (o *remoteObjectStore) DeleteRange(ctx context.Context, r coreindexeddb.KeyRange) (int64, error) {
+func (o *remoteObjectStore) DeleteRange(ctx context.Context, r idb.KeyRange) (int64, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	kr, err := keyRangeToProto(&r)
@@ -270,15 +274,15 @@ func (o *remoteObjectStore) DeleteRange(ctx context.Context, r coreindexeddb.Key
 	return resp.GetDeleted(), nil
 }
 
-func (o *remoteObjectStore) Index(name string) coreindexeddb.Index {
+func (o *remoteObjectStore) Index(name string) idb.Index {
 	return &remoteIndex{client: o.client, store: o.store, index: name}
 }
 
-func (o *remoteObjectStore) OpenCursor(ctx context.Context, r *coreindexeddb.KeyRange, dir coreindexeddb.CursorDirection) (coreindexeddb.Cursor, error) {
+func (o *remoteObjectStore) OpenCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
 	return openRemoteCursor(ctx, o.client, o.store, "", r, dir, false, nil)
 }
 
-func (o *remoteObjectStore) OpenKeyCursor(ctx context.Context, r *coreindexeddb.KeyRange, dir coreindexeddb.CursorDirection) (coreindexeddb.Cursor, error) {
+func (o *remoteObjectStore) OpenKeyCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
 	return openRemoteCursor(ctx, o.client, o.store, "", r, dir, true, nil)
 }
 
@@ -290,7 +294,7 @@ type remoteIndex struct {
 	index  string
 }
 
-func (idx *remoteIndex) Get(ctx context.Context, values ...any) (coreindexeddb.Record, error) {
+func (idx *remoteIndex) Get(ctx context.Context, values ...any) (idb.Record, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	pbValues, err := toProtoValues(values)
@@ -326,7 +330,7 @@ func (idx *remoteIndex) GetKey(ctx context.Context, values ...any) (string, erro
 	return resp.GetKey(), nil
 }
 
-func (idx *remoteIndex) GetAll(ctx context.Context, r *coreindexeddb.KeyRange, values ...any) ([]coreindexeddb.Record, error) {
+func (idx *remoteIndex) GetAll(ctx context.Context, r *idb.KeyRange, values ...any) ([]idb.Record, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	pbValues, err := toProtoValues(values)
@@ -350,7 +354,7 @@ func (idx *remoteIndex) GetAll(ctx context.Context, r *coreindexeddb.KeyRange, v
 	return records, nil
 }
 
-func (idx *remoteIndex) GetAllKeys(ctx context.Context, r *coreindexeddb.KeyRange, values ...any) ([]string, error) {
+func (idx *remoteIndex) GetAllKeys(ctx context.Context, r *idb.KeyRange, values ...any) ([]string, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	pbValues, err := toProtoValues(values)
@@ -370,7 +374,7 @@ func (idx *remoteIndex) GetAllKeys(ctx context.Context, r *coreindexeddb.KeyRang
 	return resp.GetKeys(), nil
 }
 
-func (idx *remoteIndex) Count(ctx context.Context, r *coreindexeddb.KeyRange, values ...any) (int64, error) {
+func (idx *remoteIndex) Count(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	pbValues, err := toProtoValues(values)
@@ -390,11 +394,11 @@ func (idx *remoteIndex) Count(ctx context.Context, r *coreindexeddb.KeyRange, va
 	return resp.GetCount(), nil
 }
 
-func (idx *remoteIndex) OpenCursor(ctx context.Context, r *coreindexeddb.KeyRange, dir coreindexeddb.CursorDirection, values ...any) (coreindexeddb.Cursor, error) {
+func (idx *remoteIndex) OpenCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection, values ...any) (idb.Cursor, error) {
 	return openRemoteCursor(ctx, idx.client, idx.store, idx.index, r, dir, false, values)
 }
 
-func (idx *remoteIndex) OpenKeyCursor(ctx context.Context, r *coreindexeddb.KeyRange, dir coreindexeddb.CursorDirection, values ...any) (coreindexeddb.Cursor, error) {
+func (idx *remoteIndex) OpenKeyCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection, values ...any) (idb.Cursor, error) {
 	return openRemoteCursor(ctx, idx.client, idx.store, idx.index, r, dir, true, values)
 }
 
@@ -402,7 +406,7 @@ func (idx *remoteIndex) Delete(ctx context.Context, values ...any) (int64, error
 	return idx.DeleteRange(ctx, nil, values...)
 }
 
-func (idx *remoteIndex) DeleteRange(ctx context.Context, r *coreindexeddb.KeyRange, values ...any) (int64, error) {
+func (idx *remoteIndex) DeleteRange(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	pbValues, err := toProtoValues(values)
@@ -433,7 +437,7 @@ type remoteTransaction struct {
 	err    error
 }
 
-func (tx *remoteTransaction) ObjectStore(name string) coreindexeddb.TransactionObjectStore {
+func (tx *remoteTransaction) ObjectStore(name string) idb.TransactionObjectStore {
 	return &remoteTransactionObjectStore{tx: tx, store: name}
 }
 
@@ -445,7 +449,7 @@ func (tx *remoteTransaction) Commit(context.Context) error {
 		if err != nil {
 			return err
 		}
-		return coreindexeddb.ErrTransactionDone
+		return idb.ErrTransactionDone
 	}
 	if tx.err != nil {
 		err := tx.err
@@ -481,7 +485,7 @@ func (tx *remoteTransaction) Abort(context.Context) error {
 		if err != nil {
 			return err
 		}
-		return coreindexeddb.ErrTransactionDone
+		return idb.ErrTransactionDone
 	}
 	tx.done = true
 
@@ -512,7 +516,7 @@ func (tx *remoteTransaction) sendOperation(op *proto.TransactionOperation) (*pro
 		if err != nil {
 			return nil, err
 		}
-		return nil, coreindexeddb.ErrTransactionDone
+		return nil, idb.ErrTransactionDone
 	}
 	if tx.err != nil {
 		err := tx.err
@@ -571,7 +575,7 @@ type remoteTransactionObjectStore struct {
 	store string
 }
 
-func (s *remoteTransactionObjectStore) Get(_ context.Context, id string) (coreindexeddb.Record, error) {
+func (s *remoteTransactionObjectStore) Get(_ context.Context, id string) (idb.Record, error) {
 	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Get{Get: &proto.ObjectStoreRequest{Store: s.store, Id: id}}})
 	if err != nil {
 		return nil, err
@@ -591,7 +595,7 @@ func (s *remoteTransactionObjectStore) GetKey(_ context.Context, id string) (str
 	return resp.GetKey().GetKey(), nil
 }
 
-func (s *remoteTransactionObjectStore) Add(_ context.Context, record coreindexeddb.Record) error {
+func (s *remoteTransactionObjectStore) Add(_ context.Context, record idb.Record) error {
 	pbRecord, err := recordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
@@ -600,7 +604,7 @@ func (s *remoteTransactionObjectStore) Add(_ context.Context, record coreindexed
 	return err
 }
 
-func (s *remoteTransactionObjectStore) Put(_ context.Context, record coreindexeddb.Record) error {
+func (s *remoteTransactionObjectStore) Put(_ context.Context, record idb.Record) error {
 	pbRecord, err := recordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
@@ -619,7 +623,7 @@ func (s *remoteTransactionObjectStore) Clear(context.Context) error {
 	return err
 }
 
-func (s *remoteTransactionObjectStore) GetAll(_ context.Context, r *coreindexeddb.KeyRange) ([]coreindexeddb.Record, error) {
+func (s *remoteTransactionObjectStore) GetAll(_ context.Context, r *idb.KeyRange) ([]idb.Record, error) {
 	kr, err := keyRangeToProto(r)
 	if err != nil {
 		return nil, err
@@ -635,7 +639,7 @@ func (s *remoteTransactionObjectStore) GetAll(_ context.Context, r *coreindexedd
 	return records, nil
 }
 
-func (s *remoteTransactionObjectStore) GetAllKeys(_ context.Context, r *coreindexeddb.KeyRange) ([]string, error) {
+func (s *remoteTransactionObjectStore) GetAllKeys(_ context.Context, r *idb.KeyRange) ([]string, error) {
 	kr, err := keyRangeToProto(r)
 	if err != nil {
 		return nil, err
@@ -647,7 +651,7 @@ func (s *remoteTransactionObjectStore) GetAllKeys(_ context.Context, r *coreinde
 	return resp.GetKeys().GetKeys(), nil
 }
 
-func (s *remoteTransactionObjectStore) Count(_ context.Context, r *coreindexeddb.KeyRange) (int64, error) {
+func (s *remoteTransactionObjectStore) Count(_ context.Context, r *idb.KeyRange) (int64, error) {
 	kr, err := keyRangeToProto(r)
 	if err != nil {
 		return 0, err
@@ -659,7 +663,7 @@ func (s *remoteTransactionObjectStore) Count(_ context.Context, r *coreindexeddb
 	return resp.GetCount().GetCount(), nil
 }
 
-func (s *remoteTransactionObjectStore) DeleteRange(_ context.Context, r coreindexeddb.KeyRange) (int64, error) {
+func (s *remoteTransactionObjectStore) DeleteRange(_ context.Context, r idb.KeyRange) (int64, error) {
 	kr, err := keyRangeToProto(&r)
 	if err != nil {
 		return 0, err
@@ -671,7 +675,7 @@ func (s *remoteTransactionObjectStore) DeleteRange(_ context.Context, r coreinde
 	return resp.GetDelete().GetDeleted(), nil
 }
 
-func (s *remoteTransactionObjectStore) Index(name string) coreindexeddb.TransactionIndex {
+func (s *remoteTransactionObjectStore) Index(name string) idb.TransactionIndex {
 	return &remoteTransactionIndex{tx: s.tx, store: s.store, index: name}
 }
 
@@ -681,7 +685,7 @@ type remoteTransactionIndex struct {
 	index string
 }
 
-func (idx *remoteTransactionIndex) Get(_ context.Context, values ...any) (coreindexeddb.Record, error) {
+func (idx *remoteTransactionIndex) Get(_ context.Context, values ...any) (idb.Record, error) {
 	req, err := idx.query(nil, values)
 	if err != nil {
 		return nil, err
@@ -709,7 +713,7 @@ func (idx *remoteTransactionIndex) GetKey(_ context.Context, values ...any) (str
 	return resp.GetKey().GetKey(), nil
 }
 
-func (idx *remoteTransactionIndex) GetAll(_ context.Context, r *coreindexeddb.KeyRange, values ...any) ([]coreindexeddb.Record, error) {
+func (idx *remoteTransactionIndex) GetAll(_ context.Context, r *idb.KeyRange, values ...any) ([]idb.Record, error) {
 	req, err := idx.query(r, values)
 	if err != nil {
 		return nil, err
@@ -725,7 +729,7 @@ func (idx *remoteTransactionIndex) GetAll(_ context.Context, r *coreindexeddb.Ke
 	return records, nil
 }
 
-func (idx *remoteTransactionIndex) GetAllKeys(_ context.Context, r *coreindexeddb.KeyRange, values ...any) ([]string, error) {
+func (idx *remoteTransactionIndex) GetAllKeys(_ context.Context, r *idb.KeyRange, values ...any) ([]string, error) {
 	req, err := idx.query(r, values)
 	if err != nil {
 		return nil, err
@@ -737,7 +741,7 @@ func (idx *remoteTransactionIndex) GetAllKeys(_ context.Context, r *coreindexedd
 	return resp.GetKeys().GetKeys(), nil
 }
 
-func (idx *remoteTransactionIndex) Count(_ context.Context, r *coreindexeddb.KeyRange, values ...any) (int64, error) {
+func (idx *remoteTransactionIndex) Count(_ context.Context, r *idb.KeyRange, values ...any) (int64, error) {
 	req, err := idx.query(r, values)
 	if err != nil {
 		return 0, err
@@ -753,7 +757,7 @@ func (idx *remoteTransactionIndex) Delete(ctx context.Context, values ...any) (i
 	return idx.DeleteRange(ctx, nil, values...)
 }
 
-func (idx *remoteTransactionIndex) DeleteRange(_ context.Context, r *coreindexeddb.KeyRange, values ...any) (int64, error) {
+func (idx *remoteTransactionIndex) DeleteRange(_ context.Context, r *idb.KeyRange, values ...any) (int64, error) {
 	req, err := idx.query(r, values)
 	if err != nil {
 		return 0, err
@@ -765,7 +769,7 @@ func (idx *remoteTransactionIndex) DeleteRange(_ context.Context, r *coreindexed
 	return resp.GetDelete().GetDeleted(), nil
 }
 
-func (idx *remoteTransactionIndex) query(r *coreindexeddb.KeyRange, values []any) (*proto.IndexQueryRequest, error) {
+func (idx *remoteTransactionIndex) query(r *idb.KeyRange, values []any) (*proto.IndexQueryRequest, error) {
 	pbValues, err := toProtoValues(values)
 	if err != nil {
 		return nil, err
@@ -783,18 +787,18 @@ func toProtoValues(values []any) ([]*proto.TypedValue, error) {
 	return typedValuesFromAny(values)
 }
 
-func transactionModeToProto(mode coreindexeddb.TransactionMode) proto.TransactionMode {
-	if mode == coreindexeddb.TransactionReadwrite {
+func transactionModeToProto(mode idb.TransactionMode) proto.TransactionMode {
+	if mode == idb.TransactionReadwrite {
 		return proto.TransactionMode_TRANSACTION_READWRITE
 	}
 	return proto.TransactionMode_TRANSACTION_READONLY
 }
 
-func durabilityHintToProto(hint coreindexeddb.TransactionDurabilityHint) proto.TransactionDurabilityHint {
+func durabilityHintToProto(hint idb.TransactionDurabilityHint) proto.TransactionDurabilityHint {
 	switch hint {
-	case coreindexeddb.TransactionDurabilityStrict:
+	case idb.TransactionDurabilityStrict:
 		return proto.TransactionDurabilityHint_TRANSACTION_DURABILITY_STRICT
-	case coreindexeddb.TransactionDurabilityRelaxed:
+	case idb.TransactionDurabilityRelaxed:
 		return proto.TransactionDurabilityHint_TRANSACTION_DURABILITY_RELAXED
 	default:
 		return proto.TransactionDurabilityHint_TRANSACTION_DURABILITY_DEFAULT
@@ -808,7 +812,7 @@ func rpcStatusToDatastoreErr(st *rpcstatus.Status) error {
 	return grpcToDatastoreErr(status.Error(codes.Code(st.GetCode()), st.GetMessage()))
 }
 
-func keyRangeToProto(r *coreindexeddb.KeyRange) (*proto.KeyRange, error) {
+func keyRangeToProto(r *idb.KeyRange) (*proto.KeyRange, error) {
 	if r == nil {
 		return nil, nil
 	}
@@ -843,20 +847,20 @@ func grpcToDatastoreErr(err error) error {
 	}
 	switch st.Code() {
 	case codes.NotFound:
-		return coreindexeddb.ErrNotFound
+		return idb.ErrNotFound
 	case codes.AlreadyExists:
-		return coreindexeddb.ErrAlreadyExists
+		return idb.ErrAlreadyExists
 	case codes.InvalidArgument:
 		if strings.Contains(st.Message(), "invalid transaction") {
-			return coreindexeddb.ErrInvalidTransaction
+			return idb.ErrInvalidTransaction
 		}
 		return err
 	case codes.FailedPrecondition:
 		if strings.Contains(st.Message(), "readonly") {
-			return coreindexeddb.ErrReadOnly
+			return idb.ErrReadOnly
 		}
 		if strings.Contains(st.Message(), "already finished") {
-			return coreindexeddb.ErrTransactionDone
+			return idb.ErrTransactionDone
 		}
 		return err
 	default:
@@ -866,20 +870,20 @@ func grpcToDatastoreErr(err error) error {
 
 // --- Remote Cursor ---
 
-func cursorDirectionToProto(dir coreindexeddb.CursorDirection) proto.CursorDirection {
+func cursorDirectionToProto(dir idb.CursorDirection) proto.CursorDirection {
 	switch dir {
-	case coreindexeddb.CursorNextUnique:
+	case idb.CursorNextUnique:
 		return proto.CursorDirection_CURSOR_NEXT_UNIQUE
-	case coreindexeddb.CursorPrev:
+	case idb.CursorPrev:
 		return proto.CursorDirection_CURSOR_PREV
-	case coreindexeddb.CursorPrevUnique:
+	case idb.CursorPrevUnique:
 		return proto.CursorDirection_CURSOR_PREV_UNIQUE
 	default:
 		return proto.CursorDirection_CURSOR_NEXT
 	}
 }
 
-func openRemoteCursor(ctx context.Context, client proto.IndexedDBClient, store, index string, r *coreindexeddb.KeyRange, dir coreindexeddb.CursorDirection, keysOnly bool, values []any) (*remoteCursor, error) {
+func openRemoteCursor(ctx context.Context, client proto.IndexedDBClient, store, index string, r *idb.KeyRange, dir idb.CursorDirection, keysOnly bool, values []any) (*remoteCursor, error) {
 	kr, err := keyRangeToProto(r)
 	if err != nil {
 		return nil, err
@@ -1051,12 +1055,12 @@ func (c *remoteCursor) PrimaryKey() string {
 	return c.entry.PrimaryKey
 }
 
-func (c *remoteCursor) Value() (coreindexeddb.Record, error) {
+func (c *remoteCursor) Value() (idb.Record, error) {
 	if c.keysOnly {
-		return nil, coreindexeddb.ErrKeysOnly
+		return nil, idb.ErrKeysOnly
 	}
 	if c.entry == nil || c.entry.Record == nil {
-		return nil, coreindexeddb.ErrNotFound
+		return nil, idb.ErrNotFound
 	}
 	return recordFromProto(c.entry.Record)
 }
@@ -1066,7 +1070,7 @@ func (c *remoteCursor) Delete() error {
 		return c.err
 	}
 	if c.done {
-		return coreindexeddb.ErrNotFound
+		return idb.ErrNotFound
 	}
 	if err := c.stream.Send(&proto.CursorClientMessage{
 		Msg: &proto.CursorClientMessage_Command{Command: &proto.CursorCommand{
@@ -1096,12 +1100,12 @@ func (c *remoteCursor) Delete() error {
 	return nil
 }
 
-func (c *remoteCursor) Update(value coreindexeddb.Record) error {
+func (c *remoteCursor) Update(value idb.Record) error {
 	if c.err != nil {
 		return c.err
 	}
 	if c.done {
-		return coreindexeddb.ErrNotFound
+		return idb.ErrNotFound
 	}
 	pbRec, err := recordToProto(value)
 	if err != nil {
@@ -1170,19 +1174,19 @@ func anyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
 	return indexeddbcodec.AnyFromTypedValues(values)
 }
 
-func recordToProto(record coreindexeddb.Record) (*proto.Record, error) {
+func recordToProto(record idb.Record) (*proto.Record, error) {
 	return indexeddbcodec.RecordToProto(record)
 }
 
-func recordsToProto(records []coreindexeddb.Record) ([]*proto.Record, error) {
+func recordsToProto(records []idb.Record) ([]*proto.Record, error) {
 	return indexeddbcodec.RecordsToProto(records)
 }
 
-func recordFromProto(record *proto.Record) (coreindexeddb.Record, error) {
+func recordFromProto(record *proto.Record) (idb.Record, error) {
 	return indexeddbcodec.RecordFromProto(record)
 }
 
-func recordsFromProto(records []*proto.Record) ([]coreindexeddb.Record, error) {
+func recordsFromProto(records []*proto.Record) ([]idb.Record, error) {
 	return indexeddbcodec.RecordsFromProto(records)
 }
 

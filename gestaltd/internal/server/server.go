@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -130,7 +130,7 @@ type Server struct {
 	hostServiceMu           sync.Mutex
 	hostServiceHandlers     map[uint64]http.Handler
 	publicHostServices      *runtimehost.PublicHostServiceRegistry
-	s3                      map[string]s3store.Client
+	s3                      map[string]s3sdk.Client
 	s3ObjectAccessURLs      *s3.ObjectAccessURLManager
 	egressProxyTokens       *egressproxy.TokenManager
 	providerDevSessions     *providerdev.Manager
@@ -187,7 +187,7 @@ type Config struct {
 	PrometheusMetrics     http.Handler
 	MCPHandler            http.Handler
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
-	S3                    map[string]s3store.Client
+	S3                    map[string]s3sdk.Client
 	ProviderDevSessions   *providerdev.Manager
 	ProviderDevAttach     bool
 	MountedUIs            []MountedUI

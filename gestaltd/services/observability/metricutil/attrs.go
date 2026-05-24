@@ -32,7 +32,7 @@ const (
 	attrGestaltdUIName             = attribute.Key("gestaltd.ui.name")
 	attrGestaltdRPCRole            = attribute.Key("gestaltd.rpc.role")
 	attrGestaltdHostServiceName    = attribute.Key("gestaltd.host_service.name")
-	attrGestaltdIndexedDBIndexName = attribute.Key("gestaltd.indexeddb.index.name")
+	attrGestaltdIndexedDBIndexName = attribute.Key("gestaltd.idb.index.name")
 
 	attrDBSystemName     = attribute.Key("db.system.name")
 	attrDBNamespace      = attribute.Key("db.namespace")

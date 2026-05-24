@@ -33,14 +33,14 @@ func TestServeIndexedDBProvider_NativeCursorAndErrors(t *testing.T) {
 	}()
 	waitForSocket(t, socket, serveErr)
 
-	client, err := gestalt.IndexedDB(nativeIndexedDBProviderBinding)
+	client, err := gestalt.IndexedDB(context.Background(), nativeIndexedDBProviderBinding)
 	if err != nil {
 		t.Fatalf("IndexedDB: %v", err)
 	}
 	t.Cleanup(func() { _ = client.Close() })
 
 	store := "native_cursor"
-	err = client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{
+	_, err = client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{
 		Indexes: []gestalt.IndexSchema{
 			{Name: "by_pair", KeyPath: []string{"status", "priority"}},
 		},
@@ -626,14 +626,14 @@ func TestServeIndexedDBProvider_NativeReadonlySentinel(t *testing.T) {
 	}()
 	waitForSocket(t, socket, serveErr)
 
-	client, err := gestalt.IndexedDB(nativeIndexedDBProviderBinding)
+	client, err := gestalt.IndexedDB(context.Background(), nativeIndexedDBProviderBinding)
 	if err != nil {
 		t.Fatalf("IndexedDB: %v", err)
 	}
 	t.Cleanup(func() { _ = client.Close() })
 
 	store := "readonly_native"
-	if err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+	if _, err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	tx, err := client.Transaction(ctx, []string{store}, gestalt.TransactionReadonly, gestalt.TransactionOptions{})

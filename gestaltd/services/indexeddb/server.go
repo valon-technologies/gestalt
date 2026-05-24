@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -102,10 +103,10 @@ func (s *indexedDBServer) ensureAllowedStore(name string) error {
 	if _, ok := s.allowed[name]; ok {
 		return nil
 	}
-	return coreindexeddb.ErrNotFound
+	return idb.ErrNotFound
 }
 
-func (s *indexedDBServer) objectStore(name string) (coreindexeddb.ObjectStore, error) {
+func (s *indexedDBServer) objectStore(name string) (idb.ObjectStore, error) {
 	if err := s.ensureAllowedStore(name); err != nil {
 		return nil, err
 	}
@@ -124,7 +125,7 @@ func (s *indexedDBServer) CreateObjectStore(ctx context.Context, req *proto.Crea
 		return nil, indexeddbToGRPCErr(err)
 	}
 	schema := protoToSchema(req.GetSchema())
-	if err := s.ds.CreateObjectStore(ctx, s.storeName(req.GetName()), schema); err != nil {
+	if _, err := s.ds.CreateObjectStore(ctx, s.storeName(req.GetName()), schema); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -412,7 +413,7 @@ func (s *indexedDBServer) Transaction(stream proto.IndexedDB_TransactionServer) 
 		stream.Context(),
 		stores,
 		protoTransactionMode(begin.GetMode()),
-		coreindexeddb.TransactionOptions{DurabilityHint: protoDurabilityHint(begin.GetDurabilityHint())},
+		idb.TransactionOptions{DurabilityHint: protoDurabilityHint(begin.GetDurabilityHint())},
 	)
 	if err != nil {
 		return indexeddbToGRPCErr(err)
@@ -498,7 +499,7 @@ func drainTransactionStream(stream proto.IndexedDB_TransactionServer) error {
 
 func (s *indexedDBServer) transactionStores(stores []string) ([]string, error) {
 	if len(stores) == 0 {
-		return nil, coreindexeddb.ErrInvalidTransaction
+		return nil, idb.ErrInvalidTransaction
 	}
 	out := make([]string, len(stores))
 	for i, store := range stores {
@@ -510,14 +511,14 @@ func (s *indexedDBServer) transactionStores(stores []string) ([]string, error) {
 	return out, nil
 }
 
-func (s *indexedDBServer) transactionObjectStore(tx coreindexeddb.Transaction, name string) (coreindexeddb.TransactionObjectStore, error) {
+func (s *indexedDBServer) transactionObjectStore(tx idb.Transaction, name string) (idb.TransactionObjectStore, error) {
 	if err := s.ensureAllowedStore(name); err != nil {
 		return nil, err
 	}
 	return tx.ObjectStore(s.storeName(name)), nil
 }
 
-func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx coreindexeddb.Transaction, op *proto.TransactionOperation) (*proto.TransactionOperationResponse, error) {
+func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx idb.Transaction, op *proto.TransactionOperation) (*proto.TransactionOperationResponse, error) {
 	if op == nil {
 		return nil, status.Error(codes.InvalidArgument, "transaction operation is required")
 	}
@@ -696,7 +697,7 @@ func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx co
 	return resp, nil
 }
 
-func (s *indexedDBServer) transactionIndex(ctx context.Context, tx coreindexeddb.Transaction, req *proto.IndexQueryRequest) (coreindexeddb.TransactionIndex, []any, *coreindexeddb.KeyRange, error) {
+func (s *indexedDBServer) transactionIndex(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (idb.TransactionIndex, []any, *idb.KeyRange, error) {
 	values, err := protoValuesToAny(req.GetValues())
 	if err != nil {
 		return nil, nil, nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
@@ -712,7 +713,7 @@ func (s *indexedDBServer) transactionIndex(ctx context.Context, tx coreindexeddb
 	return store.Index(req.GetIndex()), values, keyRange, nil
 }
 
-func (s *indexedDBServer) executeTransactionIndexGet(ctx context.Context, tx coreindexeddb.Transaction, req *proto.IndexQueryRequest) (*proto.RecordResponse, error) {
+func (s *indexedDBServer) executeTransactionIndexGet(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (*proto.RecordResponse, error) {
 	idx, values, _, err := s.transactionIndex(ctx, tx, req)
 	if err != nil {
 		return nil, err
@@ -724,7 +725,7 @@ func (s *indexedDBServer) executeTransactionIndexGet(ctx context.Context, tx cor
 	return recordResponseFromRecord(rec)
 }
 
-func (s *indexedDBServer) executeTransactionIndexGetKey(ctx context.Context, tx coreindexeddb.Transaction, req *proto.IndexQueryRequest) (string, error) {
+func (s *indexedDBServer) executeTransactionIndexGetKey(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (string, error) {
 	idx, values, _, err := s.transactionIndex(ctx, tx, req)
 	if err != nil {
 		return "", err
@@ -732,7 +733,7 @@ func (s *indexedDBServer) executeTransactionIndexGetKey(ctx context.Context, tx 
 	return idx.GetKey(ctx, values...)
 }
 
-func (s *indexedDBServer) executeTransactionIndexGetAll(ctx context.Context, tx coreindexeddb.Transaction, req *proto.IndexQueryRequest) (*proto.RecordsResponse, error) {
+func (s *indexedDBServer) executeTransactionIndexGetAll(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (*proto.RecordsResponse, error) {
 	idx, values, keyRange, err := s.transactionIndex(ctx, tx, req)
 	if err != nil {
 		return nil, err
@@ -744,7 +745,7 @@ func (s *indexedDBServer) executeTransactionIndexGetAll(ctx context.Context, tx 
 	return recordsResponseFromRecords(recs)
 }
 
-func (s *indexedDBServer) executeTransactionIndexGetAllKeys(ctx context.Context, tx coreindexeddb.Transaction, req *proto.IndexQueryRequest) ([]string, error) {
+func (s *indexedDBServer) executeTransactionIndexGetAllKeys(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) ([]string, error) {
 	idx, values, keyRange, err := s.transactionIndex(ctx, tx, req)
 	if err != nil {
 		return nil, err
@@ -752,7 +753,7 @@ func (s *indexedDBServer) executeTransactionIndexGetAllKeys(ctx context.Context,
 	return idx.GetAllKeys(ctx, keyRange, values...)
 }
 
-func (s *indexedDBServer) executeTransactionIndexCount(ctx context.Context, tx coreindexeddb.Transaction, req *proto.IndexQueryRequest) (int64, error) {
+func (s *indexedDBServer) executeTransactionIndexCount(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (int64, error) {
 	idx, values, keyRange, err := s.transactionIndex(ctx, tx, req)
 	if err != nil {
 		return 0, err
@@ -760,7 +761,7 @@ func (s *indexedDBServer) executeTransactionIndexCount(ctx context.Context, tx c
 	return idx.Count(ctx, keyRange, values...)
 }
 
-func (s *indexedDBServer) executeTransactionIndexDelete(ctx context.Context, tx coreindexeddb.Transaction, req *proto.IndexQueryRequest) (int64, error) {
+func (s *indexedDBServer) executeTransactionIndexDelete(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (int64, error) {
 	idx, values, keyRange, err := s.transactionIndex(ctx, tx, req)
 	if err != nil {
 		return 0, err
@@ -768,21 +769,21 @@ func (s *indexedDBServer) executeTransactionIndexDelete(ctx context.Context, tx 
 	return idx.DeleteRange(ctx, keyRange, values...)
 }
 
-func protoTransactionMode(mode proto.TransactionMode) coreindexeddb.TransactionMode {
+func protoTransactionMode(mode proto.TransactionMode) idb.TransactionMode {
 	if mode == proto.TransactionMode_TRANSACTION_READWRITE {
-		return coreindexeddb.TransactionReadwrite
+		return idb.TransactionReadwrite
 	}
-	return coreindexeddb.TransactionReadonly
+	return idb.TransactionReadonly
 }
 
-func protoDurabilityHint(hint proto.TransactionDurabilityHint) coreindexeddb.TransactionDurabilityHint {
+func protoDurabilityHint(hint proto.TransactionDurabilityHint) idb.TransactionDurabilityHint {
 	switch hint {
 	case proto.TransactionDurabilityHint_TRANSACTION_DURABILITY_STRICT:
-		return coreindexeddb.TransactionDurabilityStrict
+		return idb.TransactionDurabilityStrict
 	case proto.TransactionDurabilityHint_TRANSACTION_DURABILITY_RELAXED:
-		return coreindexeddb.TransactionDurabilityRelaxed
+		return idb.TransactionDurabilityRelaxed
 	default:
-		return coreindexeddb.TransactionDurabilityDefault
+		return idb.TransactionDurabilityDefault
 	}
 }
 
@@ -808,16 +809,16 @@ func rpcStatusFromError(err error) *rpcstatus.Status {
 	return &rpcstatus.Status{Code: int32(st.Code()), Message: st.Message()}
 }
 
-func protoCursorDirection(d proto.CursorDirection) coreindexeddb.CursorDirection {
+func protoCursorDirection(d proto.CursorDirection) idb.CursorDirection {
 	switch d {
 	case proto.CursorDirection_CURSOR_NEXT_UNIQUE:
-		return coreindexeddb.CursorNextUnique
+		return idb.CursorNextUnique
 	case proto.CursorDirection_CURSOR_PREV:
-		return coreindexeddb.CursorPrev
+		return idb.CursorPrev
 	case proto.CursorDirection_CURSOR_PREV_UNIQUE:
-		return coreindexeddb.CursorPrevUnique
+		return idb.CursorPrevUnique
 	default:
-		return coreindexeddb.CursorNext
+		return idb.CursorNext
 	}
 }
 
@@ -838,7 +839,7 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 	dir := protoCursorDirection(openReq.GetDirection())
 	ctx := stream.Context()
 
-	var cursor coreindexeddb.Cursor
+	var cursor idb.Cursor
 	store, err := s.objectStore(openReq.GetStore())
 	if err != nil {
 		return indexeddbToGRPCErr(err)
@@ -990,7 +991,7 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 	}
 }
 
-func cursorEntryToProto(c coreindexeddb.Cursor, keysOnly bool) (*proto.CursorEntry, error) {
+func cursorEntryToProto(c idb.Cursor, keysOnly bool) (*proto.CursorEntry, error) {
 	entry := &proto.CursorEntry{PrimaryKey: c.PrimaryKey()}
 	key := c.Key()
 	if key != nil {
@@ -1026,7 +1027,7 @@ func cursorEntryToProto(c coreindexeddb.Cursor, keysOnly bool) (*proto.CursorEnt
 	return entry, nil
 }
 
-func recordResponseFromRecord(rec coreindexeddb.Record) (*proto.RecordResponse, error) {
+func recordResponseFromRecord(rec idb.Record) (*proto.RecordResponse, error) {
 	pbRecord, err := recordToProto(rec)
 	if err != nil {
 		return nil, fmt.Errorf("marshal record: %w", err)
@@ -1034,7 +1035,7 @@ func recordResponseFromRecord(rec coreindexeddb.Record) (*proto.RecordResponse, 
 	return &proto.RecordResponse{Record: pbRecord}, nil
 }
 
-func recordsResponseFromRecords(recs []coreindexeddb.Record) (*proto.RecordsResponse, error) {
+func recordsResponseFromRecords(recs []idb.Record) (*proto.RecordsResponse, error) {
 	pbRecords, err := recordsToProto(recs)
 	if err != nil {
 		return nil, err
@@ -1042,33 +1043,33 @@ func recordsResponseFromRecords(recs []coreindexeddb.Record) (*proto.RecordsResp
 	return &proto.RecordsResponse{Records: pbRecords}, nil
 }
 
-func protoToSchema(ps *proto.ObjectStoreSchema) coreindexeddb.ObjectStoreSchema {
+func protoToSchema(ps *proto.ObjectStoreSchema) idb.ObjectStoreSchema {
 	if ps == nil {
-		return coreindexeddb.ObjectStoreSchema{}
+		return idb.ObjectStoreSchema{}
 	}
-	schema := coreindexeddb.ObjectStoreSchema{
-		Indexes: make([]coreindexeddb.IndexSchema, len(ps.GetIndexes())),
-		Columns: make([]coreindexeddb.ColumnDef, len(ps.GetColumns())),
+	schema := idb.ObjectStoreSchema{
+		Indexes: make([]idb.IndexSchema, len(ps.GetIndexes())),
+		Columns: make([]idb.ColumnDef, len(ps.GetColumns())),
 	}
 	for i, idx := range ps.GetIndexes() {
-		schema.Indexes[i] = coreindexeddb.IndexSchema{
+		schema.Indexes[i] = idb.IndexSchema{
 			Name: idx.GetName(), KeyPath: idx.GetKeyPath(), Unique: idx.GetUnique(),
 		}
 	}
 	for i, col := range ps.GetColumns() {
-		schema.Columns[i] = coreindexeddb.ColumnDef{
-			Name: col.GetName(), Type: coreindexeddb.ColumnType(col.GetType()),
+		schema.Columns[i] = idb.ColumnDef{
+			Name: col.GetName(), Type: idb.ColumnType(col.GetType()),
 			PrimaryKey: col.GetPrimaryKey(), NotNull: col.GetNotNull(), Unique: col.GetUnique(),
 		}
 	}
 	return schema
 }
 
-func protoToKeyRange(kr *proto.KeyRange) (*coreindexeddb.KeyRange, error) {
+func protoToKeyRange(kr *proto.KeyRange) (*idb.KeyRange, error) {
 	if kr == nil {
 		return nil, nil
 	}
-	r := &coreindexeddb.KeyRange{
+	r := &idb.KeyRange{
 		LowerOpen: kr.GetLowerOpen(),
 		UpperOpen: kr.GetUpperOpen(),
 	}
@@ -1097,16 +1098,16 @@ func indexeddbToGRPCErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, coreindexeddb.ErrNotFound) {
+	if errors.Is(err, idb.ErrNotFound) {
 		return status.Error(codes.NotFound, err.Error())
 	}
-	if errors.Is(err, coreindexeddb.ErrAlreadyExists) {
+	if errors.Is(err, idb.ErrAlreadyExists) {
 		return status.Error(codes.AlreadyExists, err.Error())
 	}
-	if errors.Is(err, coreindexeddb.ErrInvalidTransaction) {
+	if errors.Is(err, idb.ErrInvalidTransaction) {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
-	if errors.Is(err, coreindexeddb.ErrReadOnly) || errors.Is(err, coreindexeddb.ErrTransactionDone) {
+	if errors.Is(err, idb.ErrReadOnly) || errors.Is(err, idb.ErrTransactionDone) {
 		return status.Error(codes.FailedPrecondition, err.Error())
 	}
 	return status.Error(codes.Internal, err.Error())

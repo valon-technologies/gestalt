@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -45,7 +46,7 @@ func mustCreateUser(t *testing.T, svc *coredata.Services, email string) *core.Us
 func seedUserRecord(t *testing.T, svc *coredata.Services, id, email string, createdAt time.Time) *core.User {
 	t.Helper()
 	ctx := context.Background()
-	rec := indexeddb.Record{
+	rec := idb.Record{
 		"id":               id,
 		"email":            email,
 		"normalized_email": strings.ToLower(strings.TrimSpace(email)),
@@ -78,15 +79,15 @@ func newCountingIndexedDB(inner indexeddb.IndexedDB) *countingIndexedDB {
 	}
 }
 
-func (d *countingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
+func (d *countingIndexedDB) ObjectStore(name string) idb.ObjectStore {
 	return &countingObjectStore{name: name, db: d, inner: d.inner.ObjectStore(name)}
 }
 
-func (d *countingIndexedDB) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+func (d *countingIndexedDB) Transaction(ctx context.Context, stores []string, mode idb.TransactionMode, opts idb.TransactionOptions) (idb.Transaction, error) {
 	return d.inner.Transaction(ctx, stores, mode, opts)
 }
 
-func (d *countingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+func (d *countingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
 	return d.inner.CreateObjectStore(ctx, name, schema)
 }
 
@@ -122,15 +123,15 @@ func newCreateContextRecordingIndexedDB(inner indexeddb.IndexedDB) *createContex
 	}
 }
 
-func (d *createContextRecordingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
+func (d *createContextRecordingIndexedDB) ObjectStore(name string) idb.ObjectStore {
 	return d.inner.ObjectStore(name)
 }
 
-func (d *createContextRecordingIndexedDB) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+func (d *createContextRecordingIndexedDB) Transaction(ctx context.Context, stores []string, mode idb.TransactionMode, opts idb.TransactionOptions) (idb.Transaction, error) {
 	return d.inner.Transaction(ctx, stores, mode, opts)
 }
 
-func (d *createContextRecordingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+func (d *createContextRecordingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
 	d.mu.Lock()
 	d.createContexts[name] = ctx
 	d.mu.Unlock()
@@ -157,10 +158,10 @@ func (d *createContextRecordingIndexedDB) createdStoreContexts() map[string]cont
 type countingObjectStore struct {
 	name  string
 	db    *countingIndexedDB
-	inner indexeddb.ObjectStore
+	inner idb.ObjectStore
 }
 
-func (o *countingObjectStore) Get(ctx context.Context, id string) (indexeddb.Record, error) {
+func (o *countingObjectStore) Get(ctx context.Context, id string) (idb.Record, error) {
 	return o.inner.Get(ctx, id)
 }
 
@@ -168,11 +169,11 @@ func (o *countingObjectStore) GetKey(ctx context.Context, id string) (string, er
 	return o.inner.GetKey(ctx, id)
 }
 
-func (o *countingObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
+func (o *countingObjectStore) Add(ctx context.Context, record idb.Record) error {
 	return o.inner.Add(ctx, record)
 }
 
-func (o *countingObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
+func (o *countingObjectStore) Put(ctx context.Context, record idb.Record) error {
 	return o.inner.Put(ctx, record)
 }
 
@@ -184,32 +185,32 @@ func (o *countingObjectStore) Clear(ctx context.Context) error {
 	return o.inner.Clear(ctx)
 }
 
-func (o *countingObjectStore) GetAll(ctx context.Context, r *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+func (o *countingObjectStore) GetAll(ctx context.Context, r *idb.KeyRange) ([]idb.Record, error) {
 	o.db.recordGetAll(o.name)
 	return o.inner.GetAll(ctx, r)
 }
 
-func (o *countingObjectStore) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange) ([]string, error) {
+func (o *countingObjectStore) GetAllKeys(ctx context.Context, r *idb.KeyRange) ([]string, error) {
 	return o.inner.GetAllKeys(ctx, r)
 }
 
-func (o *countingObjectStore) Count(ctx context.Context, r *indexeddb.KeyRange) (int64, error) {
+func (o *countingObjectStore) Count(ctx context.Context, r *idb.KeyRange) (int64, error) {
 	return o.inner.Count(ctx, r)
 }
 
-func (o *countingObjectStore) DeleteRange(ctx context.Context, r indexeddb.KeyRange) (int64, error) {
+func (o *countingObjectStore) DeleteRange(ctx context.Context, r idb.KeyRange) (int64, error) {
 	return o.inner.DeleteRange(ctx, r)
 }
 
-func (o *countingObjectStore) Index(name string) indexeddb.Index {
+func (o *countingObjectStore) Index(name string) idb.Index {
 	return o.inner.Index(name)
 }
 
-func (o *countingObjectStore) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+func (o *countingObjectStore) OpenCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
 	return o.inner.OpenCursor(ctx, r, dir)
 }
 
-func (o *countingObjectStore) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+func (o *countingObjectStore) OpenKeyCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
 	return o.inner.OpenKeyCursor(ctx, r, dir)
 }
 

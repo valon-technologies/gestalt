@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	s3service "github.com/valon-technologies/gestalt/server/services/s3"
 	"gopkg.in/yaml.v3"
 )
 
-func S3Factory(node yaml.Node) (s3store.Client, error) {
+func S3Factory(node yaml.Node) (s3sdk.Client, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("s3 provider: parsing config: %w", err)

@@ -1,8 +1,7 @@
-package gestalt
+package hostindexeddb
 
 import (
-	"fmt"
-
+	. "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/sdk/go/internal/indexeddbcodec"
 )
@@ -12,6 +11,11 @@ func typedValueFromAny(v any) (*proto.TypedValue, error) {
 }
 
 func anyFromTypedValue(v *proto.TypedValue) (any, error) {
+	return AnyFromTypedValue(v)
+}
+
+// AnyFromTypedValue decodes one typed protobuf value.
+func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
 	return indexeddbcodec.AnyFromTypedValue(v)
 }
 
@@ -20,26 +24,56 @@ func typedValuesFromAny(values []any) ([]*proto.TypedValue, error) {
 }
 
 func anyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
+	return AnyFromTypedValues(values)
+}
+
+// AnyFromTypedValues decodes typed protobuf values.
+func AnyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
 	return indexeddbcodec.AnyFromTypedValues(values)
 }
 
 func recordToProto(record Record) (*proto.Record, error) {
+	return RecordToProto(record)
+}
+
+// RecordToProto encodes a record.
+func RecordToProto(record Record) (*proto.Record, error) {
 	return indexeddbcodec.RecordToProto(record)
 }
 
 func recordFromProto(record *proto.Record) (Record, error) {
+	return RecordFromProto(record)
+}
+
+// RecordFromProto decodes a protobuf record.
+func RecordFromProto(record *proto.Record) (Record, error) {
 	return indexeddbcodec.RecordFromProto(record)
 }
 
 func recordsFromProto(records []*proto.Record) ([]Record, error) {
+	return RecordsFromProto(records)
+}
+
+// RecordsFromProto decodes protobuf records.
+func RecordsFromProto(records []*proto.Record) ([]Record, error) {
 	return indexeddbcodec.RecordsFromProto(records)
 }
 
 func recordsToProto(records []Record) ([]*proto.Record, error) {
+	return RecordsToProto(records)
+}
+
+// RecordsToProto encodes records.
+func RecordsToProto(records []Record) ([]*proto.Record, error) {
 	return indexeddbcodec.RecordsToProto(records)
 }
 
 func keyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
+	return KeyValuesToAny(kvs)
+}
+
+// KeyValuesToAny decodes key values.
+func KeyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
 	return indexeddbcodec.KeyValuesToAny(kvs)
 }
 
@@ -52,6 +86,11 @@ func anyToKeyValue(v any) (*proto.KeyValue, error) {
 }
 
 func cursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
+	return CursorKeyToProto(key, indexCursor)
+}
+
+// CursorKeyToProto encodes a cursor key.
+func CursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
 	return indexeddbcodec.CursorKeyToProto(key, indexCursor)
 }
 
@@ -90,31 +129,4 @@ func EncodeIndexedDBIndexValues(values []any) ([]byte, error) {
 // by EncodeIndexedDBIndexValues.
 func DecodeIndexedDBIndexValues(data []byte, keyParts int) ([]any, error) {
 	return indexeddbcodec.DecodeIndexValues(data, keyParts)
-}
-
-// CloneIndexedDBRecordWithField returns a shallow clone of record with one
-// field replaced. It is useful for cursor updates that must preserve the native
-// primary key value.
-func CloneIndexedDBRecordWithField(record Record, field string, value any) (Record, error) {
-	if record == nil {
-		return nil, fmt.Errorf("record is required")
-	}
-	cloned := make(Record, len(record)+1)
-	for key, item := range record {
-		cloned[key] = item
-	}
-	cloned[field] = value
-	return cloned, nil
-}
-
-// IndexedDBRecordField returns one field from a record.
-func IndexedDBRecordField(record Record, field string) (any, error) {
-	if record == nil {
-		return nil, fmt.Errorf("record is required")
-	}
-	value, ok := record[field]
-	if !ok {
-		return nil, fmt.Errorf("field %q not found", field)
-	}
-	return value, nil
 }

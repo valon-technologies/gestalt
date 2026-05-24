@@ -1,16 +1,8 @@
 package s3
 
 import (
-	"context"
-	"errors"
 	"io"
 	"time"
-)
-
-var (
-	ErrNotFound           = errors.New("s3: not found")
-	ErrPreconditionFailed = errors.New("s3: precondition failed")
-	ErrInvalidRange       = errors.New("s3: invalid range")
 )
 
 type ObjectRef struct {
@@ -109,14 +101,41 @@ type PresignResult struct {
 	Headers   map[string]string
 }
 
-type Client interface {
-	HeadObject(ctx context.Context, ref ObjectRef) (ObjectMeta, error)
-	ReadObject(ctx context.Context, req ReadRequest) (ReadResult, error)
-	WriteObject(ctx context.Context, req WriteRequest) (ObjectMeta, error)
-	DeleteObject(ctx context.Context, ref ObjectRef) error
-	ListObjects(ctx context.Context, req ListRequest) (ListPage, error)
-	CopyObject(ctx context.Context, req CopyRequest) (ObjectMeta, error)
-	PresignObject(ctx context.Context, req PresignRequest) (PresignResult, error)
-	Ping(ctx context.Context) error
-	Close() error
+// ReadOptions is the legacy convenience read shape used by Object helpers.
+type ReadOptions struct {
+	Range             *ByteRange
+	IfMatch           string
+	IfNoneMatch       string
+	IfModifiedSince   *time.Time
+	IfUnmodifiedSince *time.Time
 }
+
+// WriteOptions is the legacy convenience write shape used by Object helpers.
+type WriteOptions struct {
+	ContentType        string
+	CacheControl       string
+	ContentDisposition string
+	ContentEncoding    string
+	ContentLanguage    string
+	Metadata           map[string]string
+	IfMatch            string
+	IfNoneMatch        string
+}
+
+// CopyOptions is the legacy convenience copy shape.
+type CopyOptions = CopyRequest
+
+// ListOptions is the legacy convenience list shape.
+type ListOptions = ListRequest
+
+// PresignOptions is the legacy convenience presign shape.
+type PresignOptions struct {
+	Method             PresignMethod
+	Expires            time.Duration
+	ContentType        string
+	ContentDisposition string
+	Headers            map[string]string
+}
+
+type ObjectAccessURLOptions = PresignOptions
+type ObjectAccessURL = PresignResult

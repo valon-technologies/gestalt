@@ -5,6 +5,8 @@ import (
 	"sort"
 	"sync"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
@@ -15,7 +17,7 @@ type StubIndexedDB struct {
 	Err    error
 }
 
-func (s *StubIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
+func (s *StubIndexedDB) ObjectStore(name string) idb.ObjectStore {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stores == nil {
@@ -24,12 +26,12 @@ func (s *StubIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
 	if st, ok := s.stores[name]; ok {
 		return st
 	}
-	st := &stubObjectStore{db: s, records: make(map[string]indexeddb.Record)}
+	st := &stubObjectStore{db: s, records: make(map[string]idb.Record)}
 	s.stores[name] = st
 	return st
 }
 
-func (s *StubIndexedDB) CreateObjectStore(_ context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+func (s *StubIndexedDB) CreateObjectStore(_ context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stores == nil {
@@ -37,10 +39,11 @@ func (s *StubIndexedDB) CreateObjectStore(_ context.Context, name string, schema
 	}
 	if existing, ok := s.stores[name]; ok {
 		existing.schema = schema
-	} else {
-		s.stores[name] = &stubObjectStore{db: s, records: make(map[string]indexeddb.Record), schema: schema}
+		return existing, nil
 	}
-	return nil
+	st := &stubObjectStore{db: s, records: make(map[string]idb.Record), schema: schema}
+	s.stores[name] = st
+	return st, nil
 }
 
 func (s *StubIndexedDB) DeleteObjectStore(_ context.Context, name string) error {
@@ -50,16 +53,16 @@ func (s *StubIndexedDB) DeleteObjectStore(_ context.Context, name string) error 
 	return nil
 }
 
-func (s *StubIndexedDB) Transaction(_ context.Context, stores []string, mode indexeddb.TransactionMode, _ indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+func (s *StubIndexedDB) Transaction(_ context.Context, stores []string, mode idb.TransactionMode, _ idb.TransactionOptions) (idb.Transaction, error) {
 	if len(stores) == 0 {
-		return nil, indexeddb.ErrInvalidTransaction
+		return nil, idb.ErrInvalidTransaction
 	}
-	if mode != indexeddb.TransactionReadonly && mode != indexeddb.TransactionReadwrite {
-		return nil, indexeddb.ErrInvalidTransaction
+	if mode != idb.TransactionReadonly && mode != idb.TransactionReadwrite {
+		return nil, idb.ErrInvalidTransaction
 	}
 
 	scope := uniqueSortedStores(stores)
-	if mode == indexeddb.TransactionReadwrite {
+	if mode == idb.TransactionReadwrite {
 		s.txMu.Lock()
 	} else {
 		s.txMu.RLock()
@@ -79,7 +82,7 @@ func (s *StubIndexedDB) Transaction(_ context.Context, stores []string, mode ind
 	for _, name := range scope {
 		store, ok := s.stores[name]
 		if !ok {
-			store = &stubObjectStore{db: s, records: make(map[string]indexeddb.Record)}
+			store = &stubObjectStore{db: s, records: make(map[string]idb.Record)}
 			s.stores[name] = store
 		}
 		tx.stores[name] = store.clone(cloneDB)
@@ -116,11 +119,11 @@ func uniqueSortedStores(stores []string) []string {
 	return out
 }
 
-func cloneRecord(record indexeddb.Record) indexeddb.Record {
+func cloneRecord(record idb.Record) idb.Record {
 	if record == nil {
 		return nil
 	}
-	out := make(indexeddb.Record, len(record))
+	out := make(idb.Record, len(record))
 	for k, v := range record {
 		out[k] = v
 	}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 )
 
 type executableProvider interface {
@@ -665,20 +666,20 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		value, _ := params["value"].(string)
 
 		var (
-			db  *gestalt.IndexedDBClient
+			db  gestalt.IndexedDBDatabase
 			err error
 		)
 		if binding != "" {
-			db, err = gestalt.IndexedDB(binding)
+			db, err = gestalt.IndexedDB(ctx, binding)
 		} else {
-			db, err = gestalt.IndexedDB()
+			db, err = gestalt.IndexedDB(ctx)
 		}
 		if err != nil {
 			return nil, err
 		}
 		defer func() { _ = db.Close() }()
 
-		if err := db.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil && !errors.Is(err, gestalt.ErrAlreadyExists) {
+		if _, err := db.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil && !errors.Is(err, gestalt.ErrAlreadyExists) {
 			return nil, err
 		}
 		if err := db.ObjectStore(store).Put(ctx, map[string]any{"id": id, "value": value}); err != nil {
@@ -698,20 +699,20 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		value, _ := params["value"].(string)
 
 		var (
-			client *gestalt.S3Client
+			client gestalt.S3Client
 			err    error
 		)
 		if binding != "" {
-			client, err = gestalt.S3(binding)
+			client, err = gestalt.S3(ctx, binding)
 		} else {
-			client, err = gestalt.S3()
+			client, err = gestalt.S3(ctx)
 		}
 		if err != nil {
 			return nil, err
 		}
 		defer func() { _ = client.Close() }()
 
-		obj := client.Object(bucket, key)
+		obj := s3sdk.Object(client, bucket, key)
 		if _, err := obj.WriteString(ctx, value, &gestalt.WriteOptions{ContentType: "text/plain"}); err != nil {
 			return nil, err
 		}

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	s3store "github.com/valon-technologies/gestalt/server/core/s3"
+	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
@@ -23,7 +23,7 @@ import (
 
 type s3Server struct {
 	proto.UnimplementedS3Server
-	client      s3store.Client
+	client      s3sdk.Client
 	keyPrefix   string
 	pluginName  string
 	bindingName string
@@ -37,11 +37,11 @@ type ServerOptions struct {
 	AccessURLs  *ObjectAccessURLManager
 }
 
-func NewServer(client s3store.Client, pluginName string) proto.S3Server {
+func NewServer(client s3sdk.Client, pluginName string) proto.S3Server {
 	return NewServerWithOptions(client, pluginName, ServerOptions{})
 }
 
-func NewServerWithOptions(client s3store.Client, pluginName string, opts ServerOptions) proto.S3Server {
+func NewServerWithOptions(client s3sdk.Client, pluginName string, opts ServerOptions) proto.S3Server {
 	return &s3Server{
 		client:      client,
 		keyPrefix:   s3NamespacePrefix(pluginName),
@@ -63,7 +63,7 @@ type routingS3ObjectAccessServer struct {
 	defaultBinding string
 }
 
-func NewRoutingServers(clients map[string]s3store.Client, defaultBinding string, pluginName string, accessURLs *ObjectAccessURLManager) (proto.S3Server, proto.S3ObjectAccessServer) {
+func NewRoutingServers(clients map[string]s3sdk.Client, defaultBinding string, pluginName string, accessURLs *ObjectAccessURLManager) (proto.S3Server, proto.S3ObjectAccessServer) {
 	s3Servers := make(map[string]proto.S3Server, len(clients))
 	accessServers := make(map[string]proto.S3ObjectAccessServer, len(clients))
 	for binding, client := range clients {
@@ -261,7 +261,7 @@ func (s *s3Server) ListObjects(ctx context.Context, req *proto.ListObjectsReques
 }
 
 func (s *s3Server) CopyObject(ctx context.Context, req *proto.CopyObjectRequest) (*proto.CopyObjectResponse, error) {
-	meta, err := s.client.CopyObject(ctx, s3store.CopyRequest{
+	meta, err := s.client.CopyObject(ctx, s3sdk.CopyRequest{
 		Source:      s.namespacedRef(objectRefFromProto(req.GetSource())),
 		Destination: s.namespacedRef(objectRefFromProto(req.GetDestination())),
 		IfMatch:     req.GetIfMatch(),
@@ -290,7 +290,7 @@ func (s *s3Server) PresignObject(ctx context.Context, req *proto.PresignObjectRe
 			Expires:            timeDurationSeconds(req.GetExpiresSeconds()),
 			ContentType:        req.GetContentType(),
 			ContentDisposition: req.GetContentDisposition(),
-			Headers:            s3store.CloneStringMap(req.GetHeaders()),
+			Headers:            s3sdk.CloneStringMap(req.GetHeaders()),
 		})
 		if err != nil {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
@@ -298,20 +298,20 @@ func (s *s3Server) PresignObject(ctx context.Context, req *proto.PresignObjectRe
 		resp := &proto.PresignObjectResponse{
 			Url:     result.URL,
 			Method:  presignMethodToProto(result.Method),
-			Headers: s3store.CloneStringMap(result.Headers),
+			Headers: s3sdk.CloneStringMap(result.Headers),
 		}
 		if !result.ExpiresAt.IsZero() {
 			resp.ExpiresAt = timestamppb.New(result.ExpiresAt)
 		}
 		return resp, nil
 	}
-	result, err := s.client.PresignObject(ctx, s3store.PresignRequest{
+	result, err := s.client.PresignObject(ctx, s3sdk.PresignRequest{
 		Ref:                s.namespacedRef(objectRefFromProto(req.GetRef())),
 		Method:             presignMethodFromProto(req.GetMethod()),
 		Expires:            timeDurationSeconds(req.GetExpiresSeconds()),
 		ContentType:        req.GetContentType(),
 		ContentDisposition: req.GetContentDisposition(),
-		Headers:            s3store.CloneStringMap(req.GetHeaders()),
+		Headers:            s3sdk.CloneStringMap(req.GetHeaders()),
 	})
 	if err != nil {
 		return nil, s3ToGRPCErr(err)
@@ -319,7 +319,7 @@ func (s *s3Server) PresignObject(ctx context.Context, req *proto.PresignObjectRe
 	resp := &proto.PresignObjectResponse{
 		Url:     result.URL,
 		Method:  presignMethodToProto(result.Method),
-		Headers: s3store.CloneStringMap(result.Headers),
+		Headers: s3sdk.CloneStringMap(result.Headers),
 	}
 	if !result.ExpiresAt.IsZero() {
 		resp.ExpiresAt = timestamppb.New(result.ExpiresAt)
@@ -327,24 +327,24 @@ func (s *s3Server) PresignObject(ctx context.Context, req *proto.PresignObjectRe
 	return resp, nil
 }
 
-func (s *s3Server) namespacedRef(ref s3store.ObjectRef) s3store.ObjectRef {
+func (s *s3Server) namespacedRef(ref s3sdk.ObjectRef) s3sdk.ObjectRef {
 	ref.Key = s.applyKeyNamespace(ref.Key)
 	return ref
 }
 
-func (s *s3Server) stripOwnedMetaNamespace(meta s3store.ObjectMeta) (s3store.ObjectMeta, bool) {
+func (s *s3Server) stripOwnedMetaNamespace(meta s3sdk.ObjectMeta) (s3sdk.ObjectMeta, bool) {
 	key, ok := s.stripOwnedKeyNamespace(meta.Ref.Key)
 	if !ok {
-		return s3store.ObjectMeta{}, false
+		return s3sdk.ObjectMeta{}, false
 	}
 	meta.Ref.Key = key
 	return meta, true
 }
 
-func (s *s3Server) requireOwnedMetaNamespace(meta s3store.ObjectMeta) (s3store.ObjectMeta, error) {
+func (s *s3Server) requireOwnedMetaNamespace(meta s3sdk.ObjectMeta) (s3sdk.ObjectMeta, error) {
 	meta, ok := s.stripOwnedMetaNamespace(meta)
 	if !ok {
-		return s3store.ObjectMeta{}, status.Error(codes.Internal, "s3 provider returned object outside app namespace")
+		return s3sdk.ObjectMeta{}, status.Error(codes.Internal, "s3 provider returned object outside app namespace")
 	}
 	return meta, nil
 }
@@ -363,8 +363,8 @@ func (s *s3Server) stripOwnedKeyNamespace(key string) (string, bool) {
 	return strings.TrimPrefix(key, s.keyPrefix), true
 }
 
-func (s *s3Server) namespacedReadRequest(req *proto.ReadObjectRequest) s3store.ReadRequest {
-	out := s3store.ReadRequest{
+func (s *s3Server) namespacedReadRequest(req *proto.ReadObjectRequest) s3sdk.ReadRequest {
+	out := s3sdk.ReadRequest{
 		Ref:         s.namespacedRef(objectRefFromProto(req.GetRef())),
 		Range:       byteRangeFromProto(req.GetRange()),
 		IfMatch:     req.GetIfMatch(),
@@ -381,31 +381,31 @@ func (s *s3Server) namespacedReadRequest(req *proto.ReadObjectRequest) s3store.R
 	return out
 }
 
-func (s *s3Server) namespacedWriteRequest(open *proto.WriteObjectOpen, body io.Reader) s3store.WriteRequest {
-	return s3store.WriteRequest{
+func (s *s3Server) namespacedWriteRequest(open *proto.WriteObjectOpen, body io.Reader) s3sdk.WriteRequest {
+	return s3sdk.WriteRequest{
 		Ref:                s.namespacedRef(objectRefFromProto(open.GetRef())),
 		ContentType:        open.GetContentType(),
 		CacheControl:       open.GetCacheControl(),
 		ContentDisposition: open.GetContentDisposition(),
 		ContentEncoding:    open.GetContentEncoding(),
 		ContentLanguage:    open.GetContentLanguage(),
-		Metadata:           s3store.CloneStringMap(open.GetMetadata()),
+		Metadata:           s3sdk.CloneStringMap(open.GetMetadata()),
 		IfMatch:            open.GetIfMatch(),
 		IfNoneMatch:        open.GetIfNoneMatch(),
 		Body:               body,
 	}
 }
 
-func (s *s3Server) namespacedListRequest(req *proto.ListObjectsRequest) (s3store.ListRequest, error) {
+func (s *s3Server) namespacedListRequest(req *proto.ListObjectsRequest) (s3sdk.ListRequest, error) {
 	continuationToken, err := s.unwrapContinuationToken(req.GetContinuationToken())
 	if err != nil {
-		return s3store.ListRequest{}, err
+		return s3sdk.ListRequest{}, err
 	}
 	startAfter := req.GetStartAfter()
 	if startAfter != "" {
 		startAfter = s.applyKeyNamespace(startAfter)
 	}
-	return s3store.ListRequest{
+	return s3sdk.ListRequest{
 		Bucket:            req.GetBucket(),
 		Prefix:            s.applyKeyNamespace(req.GetPrefix()),
 		Delimiter:         req.GetDelimiter(),
@@ -455,11 +455,11 @@ func s3ToGRPCErr(err error) error {
 		return nil
 	}
 	switch {
-	case errors.Is(err, s3store.ErrNotFound):
+	case errors.Is(err, s3sdk.ErrNotFound):
 		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, s3store.ErrPreconditionFailed):
+	case errors.Is(err, s3sdk.ErrPreconditionFailed):
 		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, s3store.ErrInvalidRange):
+	case errors.Is(err, s3sdk.ErrInvalidRange):
 		return status.Error(codes.OutOfRange, err.Error())
 	default:
 		return status.Error(codes.Internal, err.Error())

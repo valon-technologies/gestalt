@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+
 	"github.com/go-chi/chi/v5"
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 )
@@ -141,7 +143,7 @@ func (s *Server) listAdminRuntimeProviderSessionLogs(w http.ResponseWriter, r *h
 	}
 	logs, err := s.pluginRuntimes.ListAppRuntimeSessionLogs(r.Context(), providerName, sessionID, afterSeq, limit)
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) || errors.Is(err, runtimelogs.ErrSessionNotFound) {
+		if errors.Is(err, idb.ErrNotFound) || errors.Is(err, runtimelogs.ErrSessionNotFound) {
 			writeError(w, http.StatusNotFound, "runtime session not found")
 			return
 		}

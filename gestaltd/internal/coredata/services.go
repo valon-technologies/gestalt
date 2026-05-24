@@ -27,16 +27,16 @@ func NewWithContext(ctx context.Context, ds indexeddb.IndexedDB) (*Services, err
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := ds.CreateObjectStore(ctx, StoreUsers, UsersSchema); err != nil {
+	if _, err := ds.CreateObjectStore(ctx, StoreUsers, UsersSchema); err != nil {
 		return nil, fmt.Errorf("create users store: %w", err)
 	}
-	if err := ds.CreateObjectStore(ctx, StoreAPITokens, APITokensSchema); err != nil {
+	if _, err := ds.CreateObjectStore(ctx, StoreAPITokens, APITokensSchema); err != nil {
 		return nil, fmt.Errorf("create api_tokens store: %w", err)
 	}
-	if err := ds.CreateObjectStore(ctx, StoreManagedSubjects, ManagedSubjectsSchema); err != nil {
+	if _, err := ds.CreateObjectStore(ctx, StoreManagedSubjects, ManagedSubjectsSchema); err != nil {
 		return nil, fmt.Errorf("create managed_subjects store: %w", err)
 	}
-	if err := ds.CreateObjectStore(ctx, StoreAuthorizationDynamicFragments, AuthorizationDynamicFragmentsSchema); err != nil {
+	if _, err := ds.CreateObjectStore(ctx, StoreAuthorizationDynamicFragments, AuthorizationDynamicFragmentsSchema); err != nil {
 		return nil, fmt.Errorf("create authz_dynamic_fragments store: %w", err)
 	}
 

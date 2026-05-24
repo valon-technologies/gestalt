@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
@@ -53,7 +53,7 @@ func TestRemoteIndexedDBSchemaChangesUseProviderRPCTimeout(t *testing.T) {
 	}
 	db := &remoteIndexedDB{client: client}
 
-	if err := db.CreateObjectStore(context.Background(), "api_tokens", indexeddb.ObjectStoreSchema{}); err != nil {
+	if _, err := db.CreateObjectStore(context.Background(), "api_tokens", idb.ObjectStoreSchema{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	if err := db.DeleteObjectStore(context.Background(), "api_tokens"); err != nil {

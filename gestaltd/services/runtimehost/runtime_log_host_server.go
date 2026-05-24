@@ -6,7 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"google.golang.org/grpc/codes"
@@ -55,7 +56,7 @@ func (s *RuntimeLogHostServer) AppendLogs(ctx context.Context, req *proto.Append
 	lastSeq, err := s.appendLogs(ctx, s.runtimeProviderName, sessionID, entries)
 	if err != nil {
 		switch {
-		case errors.Is(err, indexeddb.ErrNotFound), errors.Is(err, runtimelogs.ErrSessionNotFound):
+		case errors.Is(err, idb.ErrNotFound), errors.Is(err, runtimelogs.ErrSessionNotFound):
 			return nil, status.Error(codes.NotFound, err.Error())
 		default:
 			return nil, status.Errorf(codes.Internal, "append runtime session logs: %v", err)

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
@@ -14,7 +16,7 @@ import (
 const ManagedSubjectKindServiceAccount = "service_account"
 
 type ManagedSubjectService struct {
-	store indexeddb.ObjectStore
+	store idb.ObjectStore
 }
 
 func NewManagedSubjectService(ds indexeddb.IndexedDB) *ManagedSubjectService {
@@ -41,7 +43,7 @@ func (s *ManagedSubjectService) CreateManagedSubject(ctx context.Context, subjec
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
-	rec := indexeddb.Record{
+	rec := idb.Record{
 		"id":                    subjectID,
 		"subject_id":            subjectID,
 		"kind":                  kind,
@@ -53,7 +55,7 @@ func (s *ManagedSubjectService) CreateManagedSubject(ctx context.Context, subjec
 		"updated_at":            now,
 	}
 	if err := s.store.Add(ctx, rec); err != nil {
-		if errors.Is(err, indexeddb.ErrAlreadyExists) {
+		if errors.Is(err, idb.ErrAlreadyExists) {
 			return nil, core.ErrAlreadyRegistered
 		}
 		return nil, fmt.Errorf("create managed subject: %w", err)
@@ -64,7 +66,7 @@ func (s *ManagedSubjectService) CreateManagedSubject(ctx context.Context, subjec
 func (s *ManagedSubjectService) GetManagedSubject(ctx context.Context, subjectID string) (*core.ManagedSubject, error) {
 	rec, err := s.store.Get(ctx, strings.TrimSpace(subjectID))
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
+		if errors.Is(err, idb.ErrNotFound) {
 			return nil, core.ErrNotFound
 		}
 		return nil, fmt.Errorf("get managed subject: %w", err)
@@ -124,7 +126,7 @@ func (s *ManagedSubjectService) DeleteManagedSubject(ctx context.Context, subjec
 	subjectID = strings.TrimSpace(subjectID)
 	rec, err := s.store.Get(ctx, subjectID)
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
+		if errors.Is(err, idb.ErrNotFound) {
 			return nil, core.ErrNotFound
 		}
 		return nil, fmt.Errorf("delete managed subject: %w", err)
@@ -150,7 +152,7 @@ func (s *ManagedSubjectService) RemoveManagedSubjectForRollback(ctx context.Cont
 	return nil
 }
 
-func recordToManagedSubject(rec indexeddb.Record) *core.ManagedSubject {
+func recordToManagedSubject(rec idb.Record) *core.ManagedSubject {
 	return &core.ManagedSubject{
 		SubjectID:          recString(rec, "subject_id"),
 		Kind:               recString(rec, "kind"),
@@ -163,8 +165,8 @@ func recordToManagedSubject(rec indexeddb.Record) *core.ManagedSubject {
 	}
 }
 
-func managedSubjectToRecord(subject *core.ManagedSubject) indexeddb.Record {
-	return indexeddb.Record{
+func managedSubjectToRecord(subject *core.ManagedSubject) idb.Record {
+	return idb.Record{
 		"id":                    strings.TrimSpace(subject.SubjectID),
 		"subject_id":            strings.TrimSpace(subject.SubjectID),
 		"kind":                  strings.TrimSpace(subject.Kind),
