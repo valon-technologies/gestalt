@@ -25,7 +25,7 @@ fn test_cli_authorization_subjects_create_uses_public_subject_api() {
         .args([
             "--format",
             "json",
-            "authorization",
+            "authz",
             "subjects",
             "create",
             "release-bot",
@@ -60,7 +60,7 @@ fn test_cli_authorization_subjects_members_set_encodes_subject_path() {
         .args([
             "--format",
             "json",
-            "authorization",
+            "authz",
             "subjects",
             "members",
             "set",
@@ -94,7 +94,7 @@ fn test_cli_authorization_subject_member_remove_path_encodes_space_as_percent_20
         .args([
             "--format",
             "json",
-            "authorization",
+            "authz",
             "subjects",
             "members",
             "remove",
@@ -129,7 +129,7 @@ fn test_cli_authorization_subjects_external_identities_remove_sends_delete_body(
         .args([
             "--format",
             "json",
-            "authorization",
+            "authz",
             "subjects",
             "external-identities",
             "remove",
@@ -165,7 +165,7 @@ fn test_cli_authorization_subjects_tokens_create_groups_native_permissions() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "authorization",
+            "authz",
             "subjects",
             "tokens",
             "create",
@@ -205,7 +205,7 @@ fn test_cli_authorization_subjects_grants_set_surfaces_pending_reload() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "authorization",
+            "authz",
             "subjects",
             "grants",
             "set",
@@ -239,7 +239,7 @@ fn test_cli_authorization_subjects_tokens_list_table_shows_permissions() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["authorization", "subjects", "tokens", "list", "release-bot"])
+        .args(["authz", "subjects", "tokens", "list", "release-bot"])
         .assert()
         .success()
         .stdout(predicate::str::contains("github"))
@@ -272,7 +272,7 @@ fn test_cli_authorization_apps_members_set_uses_management_api() {
         .args([
             "--format",
             "json",
-            "authorization",
+            "authz",
             "apps",
             "members",
             "set",
@@ -308,7 +308,7 @@ fn test_cli_authorization_relationships_list_maps_debug_filters() {
         .args([
             "--format",
             "json",
-            "authorization",
+            "authz",
             "relationships",
             "list",
             "--page-size",
@@ -396,7 +396,7 @@ fn test_cli_authorization_subjects_integrations_manual_pending_selection_uses_re
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "authorization",
+            "authz",
             "subjects",
             "integrations",
             "connect",

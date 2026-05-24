@@ -59,6 +59,7 @@ pub enum Commands {
     },
 
     /// Manage authorization resources
+    #[command(name = "authz", alias = "authorization")]
     Authorization {
         #[command(subcommand)]
         command: AuthorizationCommands,
