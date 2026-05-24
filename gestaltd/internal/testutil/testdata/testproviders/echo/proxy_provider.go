@@ -261,12 +261,11 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, envelope), nil
 		}
 
-		invoker, err := gestalt.Invoker(invocationToken)
+		invoker, err := gestalt.App(invocationToken)
 		if err != nil {
 			envelope["error"] = err.Error()
 			return jsonResult(http.StatusOK, envelope), nil
 		}
-		defer func() { _ = invoker.Close() }()
 
 		connection := strings.TrimSpace(input.Connection)
 		instance := strings.TrimSpace(input.Instance)
@@ -315,12 +314,11 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, envelope), nil
 		}
 
-		invoker, err := gestalt.Invoker(invocationToken)
+		invoker, err := gestalt.App(invocationToken)
 		if err != nil {
 			envelope["error"] = err.Error()
 			return jsonResult(http.StatusOK, envelope), nil
 		}
-		defer func() { _ = invoker.Close() }()
 
 		connection := strings.TrimSpace(input.Connection)
 		instance := strings.TrimSpace(input.Instance)

@@ -127,7 +127,6 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("App: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
 	result, err := client.Invoke(context.Background(), "github", "get_issue", invokeIssueParams{
 		IssueNumber: 42,
