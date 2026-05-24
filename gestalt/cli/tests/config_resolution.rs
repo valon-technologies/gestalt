@@ -20,7 +20,7 @@ fn test_cli_reuses_stored_credentials_api_url() {
     );
 
     cli_command(home.path())
-        .args(["tokens", "list"])
+        .args(["auth", "token", "list"])
         .assert()
         .success();
 }
@@ -37,7 +37,7 @@ fn test_cli_ignores_blank_stored_credentials_api_url() {
     );
 
     cli_command(home.path())
-        .args(["tokens", "list"])
+        .args(["auth", "token", "list"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("no URL configured"));

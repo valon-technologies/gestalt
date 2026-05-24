@@ -52,12 +52,6 @@ pub enum Commands {
     /// Describe an app operation
     Describe(DescribeArgs),
 
-    /// Manage API tokens
-    Tokens {
-        #[command(subcommand)]
-        command: TokenCommands,
-    },
-
     /// Manage authorization resources
     #[command(name = "authz", alias = "authorization")]
     Authorization {
@@ -84,6 +78,11 @@ pub enum AuthCommands {
     Logout,
     /// Show authentication status
     Status,
+    /// Manage API tokens
+    Token {
+        #[command(subcommand)]
+        command: TokenCommands,
+    },
 }
 
 #[derive(Subcommand)]
