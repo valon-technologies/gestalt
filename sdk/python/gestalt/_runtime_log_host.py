@@ -8,8 +8,8 @@ from typing import Any, cast
 import grpc
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
-from ._gen.v1 import appruntime_pb2 as _pb
-from ._gen.v1 import appruntime_pb2_grpc as _pb_grpc
+from ._gen.v1 import runtime_provider_pb2 as _pb
+from ._gen.v1 import runtime_provider_pb2_grpc as _pb_grpc
 from ._grpc_transport import (
     ENV_HOST_SERVICE_SOCKET,
     ENV_HOST_SERVICE_TOKEN,
@@ -23,9 +23,9 @@ timestamp_pb2: Any = cast(Any, _timestamp_pb2)
 ENV_RUNTIME_SESSION_ID = "GESTALT_RUNTIME_SESSION_ID"
 
 _STREAMS = {
-    "stdout": pb.PLUGIN_RUNTIME_LOG_STREAM_STDOUT,
-    "stderr": pb.PLUGIN_RUNTIME_LOG_STREAM_STDERR,
-    "runtime": pb.PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
+    "stdout": pb.RUNTIME_LOG_STREAM_STDOUT,
+    "stderr": pb.RUNTIME_LOG_STREAM_STDERR,
+    "runtime": pb.RUNTIME_LOG_STREAM_RUNTIME,
 }
 
 
@@ -50,7 +50,7 @@ class RuntimeLogHost:
             target,
             token=relay_token,
         )
-        self._stub = pb_grpc.AppRuntimeLogHostStub(self._channel)
+        self._stub = pb_grpc.RuntimeLogHostStub(self._channel)
         self._source_seq = 0
 
     def close(self) -> None:
@@ -88,14 +88,14 @@ class RuntimeLogHost:
             source_seq = self._source_seq
         else:
             self._source_seq = max(self._source_seq, source_seq)
-        entry = pb.AppRuntimeLogEntry(
+        entry = pb.RuntimeLogEntry(
             stream=_stream_value(stream),
             message=_message_value(message),
             observed_at=_timestamp_value(observed_at),
             source_seq=source_seq,
         )
         return self.append_logs(
-            pb.AppendAppRuntimeLogsRequest(session_id=session_id, logs=[entry])
+            pb.AppendRuntimeLogsRequest(session_id=session_id, logs=[entry])
         )
 
     def writer(

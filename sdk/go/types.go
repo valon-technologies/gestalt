@@ -37,7 +37,7 @@ const (
 	//
 	// Deprecated: use ProviderKindExternalCredential.
 	ProviderKindExternalCredentialLegacy ProviderKind = "external_credential"
-	// ProviderKindRuntime serves hosted executable-plugin runtime management.
+	// ProviderKindRuntime serves hosted executable-runtime management.
 	ProviderKindRuntime ProviderKind = "runtime"
 )
 

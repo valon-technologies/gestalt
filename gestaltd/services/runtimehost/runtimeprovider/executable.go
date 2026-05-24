@@ -1,10 +1,9 @@
-package appruntime
+package runtimeprovider
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -14,8 +13,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -35,7 +32,7 @@ type ExecutableConfig struct {
 
 type executableProvider struct {
 	proc      *runtimehost.AppProcess
-	runtime   proto.AppRuntimeProviderClient
+	runtime   proto.RuntimeProviderClient
 	lifecycle proto.ProviderLifecycleClient
 
 	name        string
@@ -68,7 +65,7 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 
 	return &executableProvider{
 		proc:        proc,
-		runtime:     proto.NewAppRuntimeProviderClient(proc.Conn()),
+		runtime:     proto.NewRuntimeProviderClient(proc.Conn()),
 		lifecycle:   lifecycle,
 		name:        cfg.Name,
 		telemetry:   cfg.Telemetry,
@@ -93,7 +90,7 @@ func (p *executableProvider) Support(ctx context.Context) (Support, error) {
 }
 
 func (p *executableProvider) StartSession(ctx context.Context, req StartSessionRequest) (*Session, error) {
-	resp, err := p.runtime.StartSession(ctx, &proto.StartAppRuntimeSessionRequest{
+	resp, err := p.runtime.StartSession(ctx, &proto.StartRuntimeSessionRequest{
 		AppName:       req.AppName,
 		Template:      req.Template,
 		Image:         req.Image,
@@ -121,85 +118,47 @@ func (p *executableProvider) StartSession(ctx context.Context, req StartSessionR
 	return session, nil
 }
 
-func imagePullAuthToProto(auth *ImagePullAuth) *proto.AppRuntimeImagePullAuth {
+func imagePullAuthToProto(auth *ImagePullAuth) *proto.RuntimeImagePullAuth {
 	if auth == nil {
 		return nil
 	}
-	return &proto.AppRuntimeImagePullAuth{
+	return &proto.RuntimeImagePullAuth{
 		DockerConfigJson: auth.DockerConfigJSON,
 	}
 }
 
-func (p *executableProvider) ListSessions(ctx context.Context) ([]Session, error) {
+func (p *executableProvider) ListSessions(ctx context.Context, req ListSessionsRequest) (*ListSessionsResponse, error) {
 	if p == nil {
-		return nil, fmt.Errorf("plugin runtime is not configured")
+		return nil, fmt.Errorf("runtime provider is not configured")
 	}
-
-	resp, err := p.runtime.ListSessions(ctx, &proto.ListAppRuntimeSessionsRequest{})
-	if err == nil {
-		out := make([]Session, 0, len(resp.GetSessions()))
-		refreshed := make(map[string]*Session, len(resp.GetSessions()))
-		for _, protoSession := range resp.GetSessions() {
-			session := sessionFromProto(protoSession)
-			if session == nil || session.ID == "" {
-				continue
-			}
-			refreshed[session.ID] = cloneHostedSession(session)
-			out = append(out, *session)
-		}
-		p.mu.Lock()
-		p.sessions = refreshed
-		p.mu.Unlock()
-		return out, nil
+	req, err := NormalizeListSessionsRequestForForwarding(req)
+	if err != nil {
+		return nil, err
 	}
-	if status.Code(err) != codes.Unimplemented {
+	resp, err := p.runtime.ListSessions(ctx, &proto.ListRuntimeSessionsRequest{
+		PageSize:  int32(req.PageSize),
+		PageToken: req.PageToken,
+	})
+	if err != nil {
 		return nil, fmt.Errorf("list runtime sessions: %w", err)
 	}
-
-	p.mu.Lock()
-	sessionIDs := make([]string, 0, len(p.sessions))
-	for sessionID := range p.sessions {
-		sessionIDs = append(sessionIDs, sessionID)
-	}
-	p.mu.Unlock()
-	slices.Sort(sessionIDs)
-
-	out := make([]Session, 0, len(sessionIDs))
-	refreshed := make(map[string]*Session, len(sessionIDs))
-	stale := make([]string, 0)
-	for _, sessionID := range sessionIDs {
-		resp, err := p.runtime.GetSession(ctx, &proto.GetAppRuntimeSessionRequest{
-			SessionId: sessionID,
-		})
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				stale = append(stale, sessionID)
-				continue
-			}
-			return nil, fmt.Errorf("list runtime sessions: get session %q: %w", sessionID, err)
-		}
-		session := sessionFromProto(resp)
-		if session == nil {
-			stale = append(stale, sessionID)
+	out := make([]Session, 0, len(resp.GetSessions()))
+	for _, protoSession := range resp.GetSessions() {
+		session := sessionFromProto(protoSession)
+		if session == nil || session.ID == "" {
 			continue
 		}
-		refreshed[sessionID] = cloneHostedSession(session)
+		p.trackSession(session)
 		out = append(out, *session)
 	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for _, sessionID := range stale {
-		delete(p.sessions, sessionID)
-	}
-	for sessionID, session := range refreshed {
-		p.sessions[sessionID] = session
-	}
-	return out, nil
+	return &ListSessionsResponse{
+		Sessions:      out,
+		NextPageToken: resp.GetNextPageToken(),
+	}, nil
 }
 
 func (p *executableProvider) GetSession(ctx context.Context, req GetSessionRequest) (*Session, error) {
-	resp, err := p.runtime.GetSession(ctx, &proto.GetAppRuntimeSessionRequest{
+	resp, err := p.runtime.GetSession(ctx, &proto.GetRuntimeSessionRequest{
 		SessionId: req.SessionID,
 	})
 	if err != nil {
@@ -211,7 +170,7 @@ func (p *executableProvider) GetSession(ctx context.Context, req GetSessionReque
 }
 
 func (p *executableProvider) StopSession(ctx context.Context, req StopSessionRequest) error {
-	_, err := p.runtime.StopSession(ctx, &proto.StopAppRuntimeSessionRequest{
+	_, err := p.runtime.StopSession(ctx, &proto.StopRuntimeSessionRequest{
 		SessionId: req.SessionID,
 	})
 	if err != nil {
@@ -227,7 +186,7 @@ func (p *executableProvider) StopSession(ctx context.Context, req StopSessionReq
 }
 
 func (p *executableProvider) PrepareWorkspace(ctx context.Context, req PrepareWorkspaceRequest) (*PreparedWorkspace, error) {
-	resp, err := p.runtime.PrepareWorkspace(ctx, &proto.PrepareAppRuntimeWorkspaceRequest{
+	resp, err := p.runtime.PrepareWorkspace(ctx, &proto.PrepareRuntimeWorkspaceRequest{
 		SessionId:      req.SessionID,
 		AgentSessionId: req.AgentSessionID,
 		Workspace:      workspaceToProto(req.Workspace),
@@ -239,7 +198,7 @@ func (p *executableProvider) PrepareWorkspace(ctx context.Context, req PrepareWo
 }
 
 func (p *executableProvider) RemoveWorkspace(ctx context.Context, req RemoveWorkspaceRequest) error {
-	_, err := p.runtime.RemoveWorkspace(ctx, &proto.RemoveAppRuntimeWorkspaceRequest{
+	_, err := p.runtime.RemoveWorkspace(ctx, &proto.RemoveRuntimeWorkspaceRequest{
 		SessionId:      req.SessionID,
 		AgentSessionId: req.AgentSessionID,
 	})
@@ -262,7 +221,7 @@ func (p *executableProvider) StartApp(ctx context.Context, req StartAppRequest) 
 		Workdir:       req.Workdir,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("start hosted plugin: %w", p.enrichStartPluginError(req.SessionID, err))
+		return nil, fmt.Errorf("start hosted app: %w", p.enrichStartAppError(req.SessionID, err))
 	}
 	p.mu.Lock()
 	if session, ok := p.sessions[req.SessionID]; ok && session != nil {
@@ -277,7 +236,7 @@ func (p *executableProvider) StartApp(ctx context.Context, req StartAppRequest) 
 	}, nil
 }
 
-func (p *executableProvider) enrichStartPluginError(sessionID string, err error) error {
+func (p *executableProvider) enrichStartAppError(sessionID string, err error) error {
 	if p == nil || p.sessionLogs == nil || sessionID == "" {
 		return err
 	}
@@ -316,7 +275,7 @@ func (p *executableProvider) Close() error {
 	return p.proc.Close()
 }
 
-func supportFromProto(src *proto.AppRuntimeSupport) Support {
+func supportFromProto(src *proto.RuntimeSupport) Support {
 	if src == nil {
 		return Support{}
 	}
@@ -356,18 +315,18 @@ func preparedWorkspaceFromProto(workspace *proto.PreparedAgentWorkspace) *Prepar
 	}
 }
 
-func egressModeFromProto(src proto.AppRuntimeEgressMode) EgressMode {
+func egressModeFromProto(src proto.RuntimeEgressMode) EgressMode {
 	switch src {
-	case proto.AppRuntimeEgressMode_APP_RUNTIME_EGRESS_MODE_HOSTNAME:
+	case proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME:
 		return EgressModeHostname
-	case proto.AppRuntimeEgressMode_APP_RUNTIME_EGRESS_MODE_CIDR:
+	case proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_CIDR:
 		return EgressModeCIDR
 	default:
 		return EgressModeNone
 	}
 }
 
-func sessionFromProto(src *proto.AppRuntimeSession) *Session {
+func sessionFromProto(src *proto.RuntimeSession) *Session {
 	if src == nil {
 		return nil
 	}
@@ -381,7 +340,7 @@ func sessionFromProto(src *proto.AppRuntimeSession) *Session {
 	}
 }
 
-func sessionLifecycleFromProto(src *proto.AppRuntimeSessionLifecycle) *SessionLifecycle {
+func sessionLifecycleFromProto(src *proto.RuntimeSessionLifecycle) *SessionLifecycle {
 	if src == nil {
 		return nil
 	}

@@ -11,7 +11,7 @@ PROTO_MODULES = (
     "cache",
     "datastore",
     "app",
-    "appruntime",
+    "runtime_provider",
     "runtime",
     "s3",
     "secrets",
@@ -29,7 +29,9 @@ def rewrite_vendored_imports(source: str) -> str:
     )
 
 
-def assert_no_top_level_v1_imports(*, module_name: str, path: Path, source: str) -> None:
+def assert_no_top_level_v1_imports(
+    *, module_name: str, path: Path, source: str
+) -> None:
     if any(marker in source for marker in TOP_LEVEL_V1_IMPORT_MARKERS):
         raise RuntimeError(
             f"generated {module_name} stub {path.name} still imports top-level v1"
@@ -40,8 +42,13 @@ def grpc_pb2_import_module(module_name: str) -> str:
     return module_name
 
 
+def grpc_pb2_import_alias(module_name: str) -> str:
+    return module_name.replace("_", "__")
+
+
 def grpc_runtime_header(module_name: str, *, include_empty_import: bool) -> str:
     pb2_module = grpc_pb2_import_module(module_name)
+    pb2_alias = grpc_pb2_import_alias(module_name)
     empty_import = (
         "from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2\n"
         if include_empty_import
@@ -51,7 +58,7 @@ def grpc_runtime_header(module_name: str, *, include_empty_import: bool) -> str:
 import warnings
 
 {empty_import}\
-from . import {pb2_module}_pb2 as v1_dot_{pb2_module}__pb2
+from . import {pb2_module}_pb2 as v1_dot_{pb2_alias}__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -120,7 +127,8 @@ def main() -> int:
 
             pb2_grpc_source = pb2_grpc_path.read_text(encoding="utf-8")
             pb2_import_module = grpc_pb2_import_module(module_name)
-            expected_import = f"{GRPC_RUNTIME_IMPORT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_module}__pb2\n"
+            pb2_import_alias = grpc_pb2_import_alias(module_name)
+            expected_import = f"{GRPC_RUNTIME_IMPORT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_alias}__pb2\n"
             if expected_import not in pb2_grpc_source:
                 raise RuntimeError(
                     f"unexpected grpc Python import layout in generated {module_name} stub"
@@ -130,19 +138,19 @@ def main() -> int:
             # are vendored under gestalt._gen.v1 and need package-relative imports.
             pb2_grpc_source = pb2_grpc_source.replace(
                 expected_import,
-                f"{GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_module}__pb2\n",
+                f"{GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_alias}__pb2\n",
                 1,
             )
             pb2_grpc_source = pb2_grpc_source.replace(
                 "import grpc\n\n"
                 "from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2\n"
-                f"from . import {pb2_import_module}_pb2 as v1_dot_{pb2_import_module}__pb2\n",
+                f"from . import {pb2_import_module}_pb2 as v1_dot_{pb2_import_alias}__pb2\n",
                 grpc_runtime_header(module_name, include_empty_import=True),
                 1,
             )
             pb2_grpc_source = pb2_grpc_source.replace(
                 "import grpc\n\n"
-                f"from . import {pb2_import_module}_pb2 as v1_dot_{pb2_import_module}__pb2\n",
+                f"from . import {pb2_import_module}_pb2 as v1_dot_{pb2_import_alias}__pb2\n",
                 grpc_runtime_header(module_name, include_empty_import=False),
                 1,
             )
@@ -152,9 +160,7 @@ def main() -> int:
             )
             if not pyi_path.exists():
                 raise RuntimeError(f"buf did not generate {module_name}_pb2.pyi")
-            pyi_source = rewrite_vendored_imports(
-                pyi_path.read_text(encoding="utf-8")
-            )
+            pyi_source = rewrite_vendored_imports(pyi_path.read_text(encoding="utf-8"))
             assert_no_top_level_v1_imports(
                 module_name=module_name,
                 path=pyi_path,

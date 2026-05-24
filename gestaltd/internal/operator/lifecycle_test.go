@@ -180,7 +180,7 @@ func operatorGoComponentServeCallForTest(t *testing.T, kind string) string {
 	case providermanifestv1.KindAgent:
 		return "gestalt.ServeAgentProvider(ctx, providerpkg.New())"
 	case providermanifestv1.KindRuntime:
-		return "gestalt.ServeAppRuntimeProvider(ctx, providerpkg.New())"
+		return "gestalt.ServeRuntimeProvider(ctx, providerpkg.New())"
 	default:
 		t.Fatalf("unsupported Go component fixture kind %q", kind)
 		return ""

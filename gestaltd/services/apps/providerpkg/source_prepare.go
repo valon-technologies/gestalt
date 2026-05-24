@@ -12,7 +12,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
-const envWriteCatalog = "GESTALT_PLUGIN_WRITE_CATALOG"
+const envWriteCatalog = "GESTALT_APP_WRITE_CATALOG"
 
 type sourceCatalogOptions struct {
 	SkipExplicitRun bool

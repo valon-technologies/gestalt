@@ -94,7 +94,7 @@ func TestServeProviderWritesStaticArtifacts(t *testing.T) {
 	t.Run("catalog", func(t *testing.T) {
 		outputDir := filepath.Join(t.TempDir(), "generated")
 		catalogPath := filepath.Join(outputDir, "catalog.yaml")
-		t.Setenv("GESTALT_PLUGIN_WRITE_CATALOG", catalogPath)
+		t.Setenv("GESTALT_APP_WRITE_CATALOG", catalogPath)
 
 		if err := gestalt.ServeProvider(context.Background(), &stubProvider{}, stubRouter); err != nil {
 			t.Fatalf("ServeProvider: %v", err)

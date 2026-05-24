@@ -25,19 +25,19 @@ import (
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
 )
 
 const (
-	appRuntimeHostServiceRelayTokenTTL = 30 * 24 * time.Hour
-	hostServiceTLSCAFileEnv            = "GESTALT_HOST_SERVICE_TLS_CA_FILE"
-	hostServiceTLSCAPEMEnv             = "GESTALT_HOST_SERVICE_TLS_CA_PEM"
+	runtimeHostServiceRelayTokenTTL = 30 * 24 * time.Hour
+	hostServiceTLSCAFileEnv         = "GESTALT_HOST_SERVICE_TLS_CA_FILE"
+	hostServiceTLSCAPEMEnv          = "GESTALT_HOST_SERVICE_TLS_CA_PEM"
 )
 
-func buildAppRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, *appinvokerservice.InvocationTokenManager, func(), error) {
+func buildRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, *appinvokerservice.InvocationTokenManager, func(), error) {
 	var (
 		hostServices []runtimehost.HostService
 		cleanup      func()
@@ -115,7 +115,7 @@ func appendRuntimeLogHostService(hostServices []runtimehost.HostService, runtime
 	runtimeProviderName := runtimeSessionLogProviderName(runtimeConfig)
 	return append(hostServices, runtimehost.HostService{
 		Name:           "runtime_log_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.AppRuntimeLogHost_ServiceDesc.ServiceName)},
+		MethodPrefixes: []string{grpcMethodPrefix(proto.RuntimeLogHost_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			runtimehost.RegisterRuntimeLogHostServer(srv, runtimeProviderName, deps.Services.RuntimeSessionLogs.AppendSessionLogs)
 		},
@@ -213,7 +213,7 @@ func mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostS
 
 type runtimeHostServiceSessionVerifier struct {
 	providerName string
-	provider     appruntime.Provider
+	provider     runtimeprovider.Provider
 }
 
 func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.Context, sessionID string) error {
@@ -222,35 +222,35 @@ func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.
 		return fmt.Errorf("runtime session id is required")
 	}
 	if v.provider == nil {
-		return fmt.Errorf("plugin runtime provider is not configured")
+		return fmt.Errorf("runtime provider is not configured")
 	}
-	session, err := v.provider.GetSession(ctx, appruntime.GetSessionRequest{SessionID: sessionID})
+	session, err := v.provider.GetSession(ctx, runtimeprovider.GetSessionRequest{SessionID: sessionID})
 	if err != nil {
 		return err
 	}
 	if session == nil {
-		return fmt.Errorf("plugin runtime session %q was not found", sessionID)
+		return fmt.Errorf("runtime session %q was not found", sessionID)
 	}
 	if expected := strings.TrimSpace(v.providerName); expected != "" {
 		if got := strings.TrimSpace(session.Metadata["provider_name"]); got != "" && got != expected {
-			return fmt.Errorf("plugin runtime session %q belongs to provider %q", sessionID, got)
+			return fmt.Errorf("runtime session %q belongs to provider %q", sessionID, got)
 		}
 	}
 	if session.Lifecycle != nil && session.Lifecycle.ExpiresAt != nil {
 		expiresAt := session.Lifecycle.ExpiresAt.UTC()
 		if !time.Now().UTC().Before(expiresAt) {
-			return fmt.Errorf("plugin runtime session %q expired at %s", sessionID, expiresAt.Format(time.RFC3339Nano))
+			return fmt.Errorf("runtime session %q expired at %s", sessionID, expiresAt.Format(time.RFC3339Nano))
 		}
 	}
 	switch session.State {
-	case appruntime.SessionStatePending, appruntime.SessionStateReady, appruntime.SessionStateRunning:
+	case runtimeprovider.SessionStatePending, runtimeprovider.SessionStateReady, runtimeprovider.SessionStateRunning:
 		return nil
 	default:
-		return fmt.Errorf("plugin runtime session %q is %s", sessionID, session.State)
+		return fmt.Errorf("runtime session %q is %s", sessionID, session.State)
 	}
 }
 
-func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimePlan RuntimePlacementPlan, runtimeProvider appruntime.Provider) (func(), error) {
+func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimePlan RuntimePlacementPlan, runtimeProvider runtimeprovider.Provider) (func(), error) {
 	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay {
 		return nil, nil
 	}
@@ -269,7 +269,7 @@ func (workflowHostServiceSessionVerifier) VerifyHostServiceSession(context.Conte
 }
 
 func registerPublicWorkflowHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps) (func(), error) {
-	if !hostCanRelayAppRuntimeHostServices(deps) {
+	if !hostCanRelayRuntimeHostServices(deps) {
 		return nil, nil
 	}
 	return registerVerifiedPublicHostServices(providerName, hostServices, deps, workflowHostServiceSessionVerifier{}, true)
@@ -303,7 +303,7 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, de
 	if baseURL == "" || len(deps.EncryptionKey) == 0 {
 		return "", nil, "", false, nil
 	}
-	dialTarget, relayHost, err := pluginRuntimePublicRelayTarget(baseURL, explicitRelayBaseURL)
+	dialTarget, relayHost, err := runtimePublicRelayTarget(baseURL, explicitRelayBaseURL)
 	if err != nil {
 		return "", nil, "", false, err
 	}
@@ -319,7 +319,7 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, de
 		// Per-RPC access is enforced by AllowsMethod and session verification, not
 		// by narrowing the token to individual gRPC service prefixes.
 		MethodPrefix: "/",
-		TTL:          appRuntimeHostServiceRelayTokenTTL,
+		TTL:          runtimeHostServiceRelayTokenTTL,
 	})
 	if err != nil {
 		return "", nil, "", false, fmt.Errorf("mint %s host service relay token: %w", serviceLabel, err)

@@ -67,14 +67,14 @@ import {
   SubjectContextSchema,
 } from "../src/internal/gen/v1/app_pb.ts";
 import {
-  GetAppRuntimeSessionRequestSchema,
-  ListAppRuntimeSessionsRequestSchema,
-  PrepareAppRuntimeWorkspaceRequestSchema,
-  RemoveAppRuntimeWorkspaceRequestSchema,
+  GetRuntimeSessionRequestSchema,
+  ListRuntimeSessionsRequestSchema,
+  PrepareRuntimeWorkspaceRequestSchema,
+  RemoveRuntimeWorkspaceRequestSchema,
   StartHostedAppRequestSchema,
-  StartAppRuntimeSessionRequestSchema,
-  StopAppRuntimeSessionRequestSchema,
-} from "../src/internal/gen/v1/appruntime_pb.ts";
+  StartRuntimeSessionRequestSchema,
+  StopRuntimeSessionRequestSchema,
+} from "../src/internal/gen/v1/runtime_provider_pb.ts";
 import {
   GetSecretRequestSchema,
   SecretsProvider as SecretsProviderService,
@@ -98,7 +98,7 @@ import {
   ENV_PROVIDER_SOCKET,
   createAuthenticationService,
   createProviderService,
-  createAppRuntimeProviderService,
+  createRuntimeProviderService,
   createRuntimeService,
   createWorkflowProviderService,
   loadProviderFromTarget,
@@ -108,14 +108,14 @@ import {
 import {
   httpSubjectError,
   PresignMethod,
-  AppRuntimeEgressMode,
+  RuntimeEgressMode,
   S3,
   WorkflowRunStatus,
   boundWorkflowTargetToProto,
   defineAuthorizationProvider,
   defineCacheProvider,
   defineApp,
-  defineAppRuntimeProvider,
+  defineRuntimeProvider,
   defineS3Provider,
 } from "../src/index.ts";
 import { createS3Service } from "../src/s3.ts";
@@ -1672,16 +1672,16 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
   expect(presigned.headers).toEqual({ "x-test": "1" });
 });
 
-test("app runtime provider serves runtime metadata plus sessions", async () => {
+test("runtime provider serves runtime metadata plus sessions", async () => {
   let startAppWorkdir: string | undefined;
-  const provider = defineAppRuntimeProvider({
+  const provider = defineRuntimeProvider({
     name: "runtime-provider",
     displayName: "Fixture Runtime",
     warnings: ["set RUNTIME_ENDPOINT"],
     getSupport() {
       return {
         canHostApps: true,
-        egressMode: AppRuntimeEgressMode.HOSTNAME,
+        egressMode: RuntimeEgressMode.HOSTNAME,
         supportsPrepareWorkspace: true,
       };
     },
@@ -1697,8 +1697,13 @@ test("app runtime provider serves runtime metadata plus sessions", async () => {
         state: "ready",
       };
     },
-    listSessions() {
-      return [{ id: "app-session", state: "ready" }];
+    listSessions(request) {
+      expect(request.pageSize).toBe(100);
+      expect(request.pageToken).toBe("");
+      return {
+        sessions: [{ id: "app-session", state: "ready" }],
+        nextPageToken: "next-page",
+      };
     },
     stopSession() {},
     prepareWorkspace(request) {
@@ -1722,7 +1727,7 @@ test("app runtime provider serves runtime metadata plus sessions", async () => {
   });
 
   const runtime = createRuntimeService(provider as any);
-  const service = createAppRuntimeProviderService(provider);
+  const service = createRuntimeProviderService(provider);
   const identity = await (runtime.getProviderIdentity as any)(
     create(EmptySchema),
   );
@@ -1733,11 +1738,11 @@ test("app runtime provider serves runtime metadata plus sessions", async () => {
 
   const support = await (service.getSupport as any)(create(EmptySchema));
   expect(support.canHostApps).toBe(true);
-  expect(support.egressMode).toBe(AppRuntimeEgressMode.HOSTNAME);
+  expect(support.egressMode).toBe(RuntimeEgressMode.HOSTNAME);
   expect(support.supportsPrepareWorkspace).toBe(true);
 
   const session = await (service.startSession as any)(
-    create(StartAppRuntimeSessionRequestSchema, {
+    create(StartRuntimeSessionRequestSchema, {
       appName: "app",
       image: "example/app:latest",
     }),
@@ -1746,20 +1751,21 @@ test("app runtime provider serves runtime metadata plus sessions", async () => {
   expect(session.state).toBe("ready");
 
   const fetched = await (service.getSession as any)(
-    create(GetAppRuntimeSessionRequestSchema, {
+    create(GetRuntimeSessionRequestSchema, {
       sessionId: "app-session",
     }),
   );
   expect(fetched.id).toBe("app-session");
 
   const sessions = await (service.listSessions as any)(
-    create(ListAppRuntimeSessionsRequestSchema),
+    create(ListRuntimeSessionsRequestSchema),
   );
   expect(sessions.sessions).toHaveLength(1);
   expect(sessions.sessions[0].id).toBe("app-session");
+  expect(sessions.nextPageToken).toBe("next-page");
 
   const prepared = await (service.prepareWorkspace as any)(
-    create(PrepareAppRuntimeWorkspaceRequestSchema, {
+    create(PrepareRuntimeWorkspaceRequestSchema, {
       sessionId: "app-session",
       agentSessionId: "agent-session-1",
       workspace: {
@@ -1775,7 +1781,7 @@ test("app runtime provider serves runtime metadata plus sessions", async () => {
   expect(prepared.workspace?.cwd).toBe("/runtime/agent-session-1/app");
 
   const removed = await (service.removeWorkspace as any)(
-    create(RemoveAppRuntimeWorkspaceRequestSchema, {
+    create(RemoveRuntimeWorkspaceRequestSchema, {
       sessionId: "app-session",
       agentSessionId: "agent-session-1",
     }),
@@ -1798,7 +1804,7 @@ test("app runtime provider serves runtime metadata plus sessions", async () => {
   expect(startAppWorkdir).toBe("/runtime/providers/app");
 
   const stopped = await (service.stopSession as any)(
-    create(StopAppRuntimeSessionRequestSchema, {
+    create(StopRuntimeSessionRequestSchema, {
       sessionId: "app-session",
     }),
   );

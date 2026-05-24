@@ -15,9 +15,10 @@ import (
 )
 
 type pluginRuntimeTransportProvider struct {
-	prepareReq gestalt.PrepareAppRuntimeWorkspaceRequest
-	removeReq  gestalt.RemoveAppRuntimeWorkspaceRequest
+	prepareReq gestalt.PrepareRuntimeWorkspaceRequest
+	removeReq  gestalt.RemoveRuntimeWorkspaceRequest
 	pluginReq  gestalt.StartHostedAppRequest
+	listReq    gestalt.ListRuntimeSessionsRequest
 }
 
 func (*pluginRuntimeTransportProvider) GetMetadata() gestalt.ProviderMetadata {
@@ -32,23 +33,26 @@ func (*pluginRuntimeTransportProvider) Close() error {
 	return nil
 }
 
-func (*pluginRuntimeTransportProvider) GetSupport(context.Context) (gestalt.AppRuntimeSupport, error) {
-	return gestalt.AppRuntimeSupport{
-		CanHostApps:           true,
+func (*pluginRuntimeTransportProvider) GetSupport(context.Context) (gestalt.RuntimeSupport, error) {
+	return gestalt.RuntimeSupport{
+		CanHostApps:              true,
 		SupportsPrepareWorkspace: true,
 	}, nil
 }
 
-func (*pluginRuntimeTransportProvider) StartSession(context.Context, gestalt.StartAppRuntimeSessionRequest) (gestalt.AppRuntimeSession, error) {
-	return gestalt.AppRuntimeSession{ID: "runtime-session-1", State: "ready"}, nil
+func (*pluginRuntimeTransportProvider) StartSession(context.Context, gestalt.StartRuntimeSessionRequest) (gestalt.RuntimeSession, error) {
+	return gestalt.RuntimeSession{ID: "runtime-session-1", State: "ready"}, nil
 }
 
-func (*pluginRuntimeTransportProvider) GetSession(context.Context, string) (gestalt.AppRuntimeSession, error) {
-	return gestalt.AppRuntimeSession{ID: "runtime-session-1", State: "ready"}, nil
+func (*pluginRuntimeTransportProvider) GetSession(context.Context, string) (gestalt.RuntimeSession, error) {
+	return gestalt.RuntimeSession{ID: "runtime-session-1", State: "ready"}, nil
 }
 
-func (*pluginRuntimeTransportProvider) ListSessions(context.Context) ([]gestalt.AppRuntimeSession, error) {
-	return []gestalt.AppRuntimeSession{{ID: "runtime-session-1", State: "ready"}}, nil
+func (p *pluginRuntimeTransportProvider) ListSessions(_ context.Context, req gestalt.ListRuntimeSessionsRequest) (gestalt.ListRuntimeSessionsResponse, error) {
+	p.listReq = req
+	return gestalt.ListRuntimeSessionsResponse{
+		Sessions: []gestalt.RuntimeSession{{ID: "runtime-session-1", State: "ready"}},
+	}, nil
 }
 
 func (*pluginRuntimeTransportProvider) StopSession(context.Context, string) error {
@@ -60,9 +64,9 @@ func (p *pluginRuntimeTransportProvider) StartApp(_ context.Context, req gestalt
 	return gestalt.HostedApp{ID: "plugin-1", SessionID: req.SessionID, AppName: req.AppName}, nil
 }
 
-func (p *pluginRuntimeTransportProvider) PrepareWorkspace(_ context.Context, req gestalt.PrepareAppRuntimeWorkspaceRequest) (gestalt.PrepareAppRuntimeWorkspaceResponse, error) {
+func (p *pluginRuntimeTransportProvider) PrepareWorkspace(_ context.Context, req gestalt.PrepareRuntimeWorkspaceRequest) (gestalt.PrepareRuntimeWorkspaceResponse, error) {
 	p.prepareReq = req
-	return gestalt.PrepareAppRuntimeWorkspaceResponse{
+	return gestalt.PrepareRuntimeWorkspaceResponse{
 		Workspace: &gestalt.PreparedAgentWorkspace{
 			Root: "/tmp/runtime-session-1/workspaces/agent-session-1",
 			CWD:  "/tmp/runtime-session-1/workspaces/agent-session-1/app",
@@ -70,7 +74,7 @@ func (p *pluginRuntimeTransportProvider) PrepareWorkspace(_ context.Context, req
 	}, nil
 }
 
-func (p *pluginRuntimeTransportProvider) RemoveWorkspace(_ context.Context, req gestalt.RemoveAppRuntimeWorkspaceRequest) error {
+func (p *pluginRuntimeTransportProvider) RemoveWorkspace(_ context.Context, req gestalt.RemoveRuntimeWorkspaceRequest) error {
 	p.removeReq = req
 	return nil
 }
@@ -89,20 +93,22 @@ func (*pluginRuntimeTransportBasicProvider) Close() error {
 	return nil
 }
 
-func (*pluginRuntimeTransportBasicProvider) GetSupport(context.Context) (gestalt.AppRuntimeSupport, error) {
-	return gestalt.AppRuntimeSupport{CanHostApps: true}, nil
+func (*pluginRuntimeTransportBasicProvider) GetSupport(context.Context) (gestalt.RuntimeSupport, error) {
+	return gestalt.RuntimeSupport{CanHostApps: true}, nil
 }
 
-func (*pluginRuntimeTransportBasicProvider) StartSession(context.Context, gestalt.StartAppRuntimeSessionRequest) (gestalt.AppRuntimeSession, error) {
-	return gestalt.AppRuntimeSession{ID: "runtime-session-1", State: "ready"}, nil
+func (*pluginRuntimeTransportBasicProvider) StartSession(context.Context, gestalt.StartRuntimeSessionRequest) (gestalt.RuntimeSession, error) {
+	return gestalt.RuntimeSession{ID: "runtime-session-1", State: "ready"}, nil
 }
 
-func (*pluginRuntimeTransportBasicProvider) GetSession(context.Context, string) (gestalt.AppRuntimeSession, error) {
-	return gestalt.AppRuntimeSession{ID: "runtime-session-1", State: "ready"}, nil
+func (*pluginRuntimeTransportBasicProvider) GetSession(context.Context, string) (gestalt.RuntimeSession, error) {
+	return gestalt.RuntimeSession{ID: "runtime-session-1", State: "ready"}, nil
 }
 
-func (*pluginRuntimeTransportBasicProvider) ListSessions(context.Context) ([]gestalt.AppRuntimeSession, error) {
-	return []gestalt.AppRuntimeSession{{ID: "runtime-session-1", State: "ready"}}, nil
+func (*pluginRuntimeTransportBasicProvider) ListSessions(context.Context, gestalt.ListRuntimeSessionsRequest) (gestalt.ListRuntimeSessionsResponse, error) {
+	return gestalt.ListRuntimeSessionsResponse{
+		Sessions: []gestalt.RuntimeSession{{ID: "runtime-session-1", State: "ready"}},
+	}, nil
 }
 
 func (*pluginRuntimeTransportBasicProvider) StopSession(context.Context, string) error {
@@ -113,17 +119,17 @@ func (*pluginRuntimeTransportBasicProvider) StartApp(context.Context, gestalt.St
 	return gestalt.HostedApp{ID: "plugin-1", SessionID: "runtime-session-1"}, nil
 }
 
-func TestAppRuntimeProviderWorkspaceTransport(t *testing.T) {
+func TestRuntimeProviderWorkspaceTransport(t *testing.T) {
 	socket := pluginRuntimeTransportSocket(t)
 	t.Setenv(proto.EnvProviderSocket, socket)
 	provider := &pluginRuntimeTransportProvider{}
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- gestalt.ServeAppRuntimeProvider(ctx, provider)
+		errCh <- gestalt.ServeRuntimeProvider(ctx, provider)
 	}()
 	conn := newUnixConn(t, socket)
-	client := proto.NewAppRuntimeProviderClient(conn)
+	client := proto.NewRuntimeProviderClient(conn)
 
 	support, err := client.GetSupport(context.Background(), &emptypb.Empty{})
 	if err != nil {
@@ -133,7 +139,7 @@ func TestAppRuntimeProviderWorkspaceTransport(t *testing.T) {
 		t.Fatalf("supports_prepare_workspace = false, want true")
 	}
 
-	prepared, err := client.PrepareWorkspace(context.Background(), &proto.PrepareAppRuntimeWorkspaceRequest{
+	prepared, err := client.PrepareWorkspace(context.Background(), &proto.PrepareRuntimeWorkspaceRequest{
 		SessionId:      "runtime-session-1",
 		AgentSessionId: "agent-session-1",
 		Workspace: &proto.AgentWorkspace{
@@ -158,7 +164,7 @@ func TestAppRuntimeProviderWorkspaceTransport(t *testing.T) {
 		t.Fatalf("prepare workspace = %#v", provider.prepareReq.Workspace)
 	}
 
-	if _, err := client.RemoveWorkspace(context.Background(), &proto.RemoveAppRuntimeWorkspaceRequest{
+	if _, err := client.RemoveWorkspace(context.Background(), &proto.RemoveRuntimeWorkspaceRequest{
 		SessionId:      "runtime-session-1",
 		AgentSessionId: "agent-session-1",
 	}); err != nil {
@@ -169,10 +175,10 @@ func TestAppRuntimeProviderWorkspaceTransport(t *testing.T) {
 	}
 
 	hosted, err := client.StartApp(context.Background(), &proto.StartHostedAppRequest{
-		SessionId:  "runtime-session-1",
-		AppName: "github",
-		Command:    "/bin/plugin",
-		Workdir:    "/tmp/runtime-session-1/providers/github",
+		SessionId: "runtime-session-1",
+		AppName:   "github",
+		Command:   "/bin/plugin",
+		Workdir:   "/tmp/runtime-session-1/providers/github",
 	})
 	if err != nil {
 		t.Fatalf("StartApp: %v", err)
@@ -184,23 +190,32 @@ func TestAppRuntimeProviderWorkspaceTransport(t *testing.T) {
 		t.Fatalf("start app workdir = %q", provider.pluginReq.Workdir)
 	}
 
+	if _, err := client.ListSessions(context.Background(), &proto.ListRuntimeSessionsRequest{
+		PageToken: "next-page",
+	}); err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if provider.listReq.PageSize != 0 || provider.listReq.PageToken != "next-page" {
+		t.Fatalf("list sessions request = %#v, want token-only request forwarded without default page size", provider.listReq)
+	}
+
 	cancel()
 	waitServeResult(t, errCh)
 }
 
-func TestAppRuntimeProviderWorkspaceTransportUnimplemented(t *testing.T) {
+func TestRuntimeProviderWorkspaceTransportUnimplemented(t *testing.T) {
 	socket := pluginRuntimeTransportSocket(t)
 	t.Setenv(proto.EnvProviderSocket, socket)
 	provider := &pluginRuntimeTransportBasicProvider{}
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- gestalt.ServeAppRuntimeProvider(ctx, provider)
+		errCh <- gestalt.ServeRuntimeProvider(ctx, provider)
 	}()
 	conn := newUnixConn(t, socket)
-	client := proto.NewAppRuntimeProviderClient(conn)
+	client := proto.NewRuntimeProviderClient(conn)
 
-	_, err := client.PrepareWorkspace(context.Background(), &proto.PrepareAppRuntimeWorkspaceRequest{
+	_, err := client.PrepareWorkspace(context.Background(), &proto.PrepareRuntimeWorkspaceRequest{
 		SessionId:      "runtime-session-1",
 		AgentSessionId: "agent-session-1",
 		Workspace:      &proto.AgentWorkspace{Cwd: "app"},

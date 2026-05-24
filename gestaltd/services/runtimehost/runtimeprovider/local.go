@@ -1,4 +1,4 @@
-package appruntime
+package runtimeprovider
 
 import (
 	"bytes"
@@ -87,7 +87,7 @@ func (p *LocalProvider) Support(context.Context) (Support, error) {
 
 func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest) (*Session, error) {
 	if p == nil {
-		return nil, fmt.Errorf("plugin runtime is not configured")
+		return nil, fmt.Errorf("runtime provider is not configured")
 	}
 
 	rootDir, err := runtimehost.NewPluginTempDir("gestalt-app-runtime-*")
@@ -100,7 +100,7 @@ func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest)
 	defer p.mu.Unlock()
 	if p.closed {
 		_ = os.RemoveAll(rootDir)
-		return nil, fmt.Errorf("plugin runtime is closed")
+		return nil, fmt.Errorf("runtime provider is closed")
 	}
 	session := &localSession{
 		id:       sessionID,
@@ -124,15 +124,15 @@ func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest)
 	return cloneSession(session), nil
 }
 
-func (p *LocalProvider) ListSessions(_ context.Context) ([]Session, error) {
+func (p *LocalProvider) ListSessions(_ context.Context, req ListSessionsRequest) (*ListSessionsResponse, error) {
 	if p == nil {
-		return nil, fmt.Errorf("plugin runtime is not configured")
+		return nil, fmt.Errorf("runtime provider is not configured")
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
-		return nil, fmt.Errorf("plugin runtime is closed")
+		return nil, fmt.Errorf("runtime provider is closed")
 	}
 
 	sessionIDs := make([]string, 0, len(p.sessions))
@@ -140,21 +140,28 @@ func (p *LocalProvider) ListSessions(_ context.Context) ([]Session, error) {
 		sessionIDs = append(sessionIDs, sessionID)
 	}
 	slices.Sort(sessionIDs)
+	pageIDs, nextPageToken, err := PaginateSortedSessionIDs(sessionIDs, req)
+	if err != nil {
+		return nil, err
+	}
 
-	out := make([]Session, 0, len(sessionIDs))
-	for _, sessionID := range sessionIDs {
+	out := make([]Session, 0, len(pageIDs))
+	for _, sessionID := range pageIDs {
 		session := cloneSession(p.sessions[sessionID])
 		if session == nil {
 			continue
 		}
 		out = append(out, *session)
 	}
-	return out, nil
+	return &ListSessionsResponse{
+		Sessions:      out,
+		NextPageToken: nextPageToken,
+	}, nil
 }
 
 func (p *LocalProvider) GetSession(_ context.Context, req GetSessionRequest) (*Session, error) {
 	if p == nil {
-		return nil, fmt.Errorf("plugin runtime is not configured")
+		return nil, fmt.Errorf("runtime provider is not configured")
 	}
 
 	p.mu.Lock()
@@ -204,7 +211,7 @@ func (p *LocalProvider) StopSession(_ context.Context, req StopSessionRequest) e
 
 func (p *LocalProvider) PrepareWorkspace(ctx context.Context, req PrepareWorkspaceRequest) (*PreparedWorkspace, error) {
 	if p == nil {
-		return nil, fmt.Errorf("plugin runtime is not configured")
+		return nil, fmt.Errorf("runtime provider is not configured")
 	}
 	if err := validateWorkspaceID(req.AgentSessionID); err != nil {
 		return nil, fmt.Errorf("agent session id: %w", err)
@@ -276,10 +283,10 @@ func (p *LocalProvider) RemoveWorkspace(_ context.Context, req RemoveWorkspaceRe
 
 func (p *LocalProvider) StartApp(ctx context.Context, req StartAppRequest) (*HostedApp, error) {
 	if p == nil {
-		return nil, fmt.Errorf("plugin runtime is not configured")
+		return nil, fmt.Errorf("runtime provider is not configured")
 	}
 	if req.Command == "" {
-		return nil, fmt.Errorf("plugin command is required")
+		return nil, fmt.Errorf("app command is required")
 	}
 
 	p.mu.Lock()
@@ -290,7 +297,7 @@ func (p *LocalProvider) StartApp(ctx context.Context, req StartAppRequest) (*Hos
 	}
 	if session.app != nil {
 		p.mu.Unlock()
-		return nil, fmt.Errorf("plugin runtime session %q already has a running plugin", req.SessionID)
+		return nil, fmt.Errorf("runtime session %q already has a running app", req.SessionID)
 	}
 	session.state = SessionStateRunning
 	rootDir := session.rootDir
@@ -403,11 +410,11 @@ func (p *LocalProvider) newID(prefix string) string {
 
 func (p *LocalProvider) sessionLocked(sessionID string) (*localSession, error) {
 	if p.closed {
-		return nil, fmt.Errorf("plugin runtime is closed")
+		return nil, fmt.Errorf("runtime provider is closed")
 	}
 	session, ok := p.sessions[sessionID]
 	if !ok || session == nil {
-		return nil, fmt.Errorf("plugin runtime session %q is not available", sessionID)
+		return nil, fmt.Errorf("runtime session %q is not available", sessionID)
 	}
 	return session, nil
 }

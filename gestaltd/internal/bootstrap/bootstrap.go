@@ -38,7 +38,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
@@ -175,8 +175,8 @@ type Deps struct {
 	Egress                EgressDeps
 	AuthorizationProvider core.AuthorizationProvider
 	AppInvoker            invocation.Invoker
-	AppRuntime            appruntime.Provider
-	AppRuntimeRegistry    *pluginRuntimeRegistry
+	Runtime               runtimeprovider.Provider
+	RuntimeRegistry       *runtimeRegistry
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 	HostServiceTLSCAFile  string
 	HostServiceTLSCAPEM   string
@@ -192,7 +192,7 @@ type CacheFactory func(node yaml.Node) (corecache.Cache, error)
 type S3Factory func(node yaml.Node) (s3sdk.Client, error)
 type WorkflowFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreworkflow.Provider, error)
 type AgentFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreagent.Provider, error)
-type RuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (appruntime.Provider, error)
+type RuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (runtimeprovider.Provider, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
@@ -215,7 +215,7 @@ type FactoryRegistry struct {
 func NewFactoryRegistry() *FactoryRegistry {
 	return &FactoryRegistry{
 		Secrets:   make(map[string]SecretManagerFactory),
-		Runtime:   buildExecutableAppRuntime,
+		Runtime:   buildExecutableRuntime,
 		Telemetry: make(map[string]TelemetryFactory),
 	}
 }
@@ -245,11 +245,11 @@ type Result struct {
 	AuditSink             core.AuditSink
 	SecretManager         core.SecretManager
 	Telemetry             core.TelemetryProvider
-	AppRuntimes           RuntimeInspector
+	Runtimes              RuntimeInspector
 	ProviderDevSessions   *providerdev.Manager
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 
-	pluginRuntimeRegistry               *pluginRuntimeRegistry
+	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
 	workflowConfigReconcileTasksStarted bool
 	auditClose                          func(context.Context) error
@@ -388,7 +388,7 @@ func (r *Result) Close(ctx context.Context) error {
 		closeWorkflows(r.ExtraWorkflows...),
 		closeAgents(r.ExtraAgents...),
 		closeSecretManager(r.SecretManager),
-		closeAppRuntimeRegistry(r.pluginRuntimeRegistry),
+		closeRuntimeRegistry(r.runtimeRegistry),
 	)
 	if r.auditClose != nil {
 		errs = append(errs, r.auditClose(ctx))
@@ -742,7 +742,7 @@ type preparedCore struct {
 	Telemetry             core.TelemetryProvider
 	Deps                  Deps
 
-	pluginRuntimeRegistry *pluginRuntimeRegistry
+	runtimeRegistry *runtimeRegistry
 }
 
 type configSecretManagers struct {
@@ -1034,8 +1034,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 	deps.AuthorizationProvider = authzProvider
-	runtimeRegistry := newAppRuntimeRegistry(cfg, factories.Runtime, deps)
-	deps.AppRuntimeRegistry = runtimeRegistry
+	runtimeRegistry := newRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = runtimeRegistry
 
 	closeSM = false
 	shutdownTelemetry = false
@@ -1055,7 +1055,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		SecretManager:         sm,
 		Telemetry:             tp,
 		Deps:                  deps,
-		pluginRuntimeRegistry: runtimeRegistry,
+		runtimeRegistry:       runtimeRegistry,
 	}, nil
 }
 
@@ -1096,7 +1096,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeS3s(p.ExtraS3s...),
 		closeSecretManager(p.SecretManager),
-		closeAppRuntimeRegistry(p.pluginRuntimeRegistry),
+		closeRuntimeRegistry(p.runtimeRegistry),
 	)
 	if p.Telemetry != nil {
 		errs = append(errs, p.Telemetry.Shutdown(ctx))
@@ -1302,10 +1302,10 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AuditSink:                    audit,
 		SecretManager:                prepared.SecretManager,
 		Telemetry:                    prepared.Telemetry,
-		AppRuntimes:                  prepared.pluginRuntimeRegistry,
+		Runtimes:                     prepared.runtimeRegistry,
 		ProviderDevSessions:          providerDevSessions,
 		PublicHostServices:           publicHostServices,
-		pluginRuntimeRegistry:        prepared.pluginRuntimeRegistry,
+		runtimeRegistry:              prepared.runtimeRegistry,
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
 		auditClose:                   auditClose,
 	}, nil

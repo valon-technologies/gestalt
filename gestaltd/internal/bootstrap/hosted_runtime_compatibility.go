@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 )
 
 const (
@@ -16,7 +16,7 @@ const (
 	hostedRuntimeMetadataTemplate      = "runtime.template"
 )
 
-func hostedRuntimeSessionCompatibilityReason(session *appruntime.Session) string {
+func hostedRuntimeSessionCompatibilityReason(session *runtimeprovider.Session) string {
 	if session == nil || len(session.Metadata) == 0 {
 		return ""
 	}

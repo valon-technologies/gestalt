@@ -1,18 +1,13 @@
 package proto
 
 const (
-	EnvProviderSocket      = "GESTALT_PLUGIN_SOCKET"
-	EnvAppInvokerSocket    = "GESTALT_PLUGIN_INVOKER_SOCKET"
+	EnvProviderSocket      = "GESTALT_PROVIDER_SOCKET"
+	EnvAppInvokerSocket    = "GESTALT_APP_INVOKER_SOCKET"
 	EnvAgentHostSocket     = "GESTALT_AGENT_HOST_SOCKET"
 	EnvAgentProviderSocket = "GESTALT_AGENT_PROVIDER_SOCKET"
-	EnvProviderParentPID   = "GESTALT_PLUGIN_PARENT_PID"
-	EnvProviderName        = "GESTALT_PLUGIN_NAME"
+	EnvProviderParentPID   = "GESTALT_APP_PARENT_PID"
+	EnvProviderName        = "GESTALT_APP_NAME"
 	EnvProviderTelemetry   = "GESTALT_PROVIDER_TELEMETRY"
 
-	CurrentProtocolVersion int32 = 3
-
-	// Deprecated: use EnvProviderSocket.
-	EnvPluginSocket = EnvProviderSocket
-	// Deprecated: use EnvProviderParentPID.
-	EnvPluginParentPID = EnvProviderParentPID
+	CurrentProtocolVersion int32 = 4
 )

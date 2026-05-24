@@ -201,7 +201,7 @@ API tokens cannot manage managed subjects.
 | `DELETE` | `/api/v1/authorization/subjects/{subjectID}/tokens/{id}` | Revoke one subject-owned API token. Requires managed subject `admin`. |
 | `DELETE` | `/api/v1/authorization/subjects/{subjectID}/tokens` | Revoke all API tokens owned by the managed subject. Requires managed subject `admin`. |
 
-The authorization provider stores managed-subject management as relationships on the `managed_subject` resource type. App runtime access is separate: a managed subject can only invoke a app after it has an explicit app grant, which is stored as the same provider-backed dynamic app relationship used by the admin authorization API. Policy `default: allow` applies to user callers, not to managed subjects. Credential connection management is also subject-scoped: OAuth, manual credentials, pending connection selection, and disconnects store or remove credentials under the managed subject's canonical subject ID.
+The authorization provider stores managed-subject management as relationships on the `managed_subject` resource type. App runtime access is separate: a managed subject can only invoke an app after it has an explicit app grant, which is stored as the same provider-backed dynamic app relationship used by the admin authorization API. Policy `default: allow` applies to user callers, not to managed subjects. Credential connection management is also subject-scoped: OAuth, manual credentials, pending connection selection, and disconnects store or remove credentials under the managed subject's canonical subject ID.
 
 For the conceptual model and setup flow, see
 [Service Accounts](/service-accounts).
@@ -211,8 +211,8 @@ For the conceptual model and setup flow, see
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/metrics` | Prometheus scrape endpoint for emitted metrics. Requires Gestalt authentication only when served on the public listener. The recommended production pattern is to move it to `server.management` and protect that listener at the network or proxy layer. |
-| `GET` | `/admin/api/v1/runtime/providers` | List configured runtime providers. When support inspection succeeds, loaded providers include a derived `profile` with `advertised` behavior reported by the runtime and `effective` behavior resolved for this host deployment. `sessionCount` is present when session inspection also succeeds, and `error` explains any current inspection failure. |
-| `GET` | `/admin/api/v1/runtime/providers/{provider}/sessions` | List active sessions for one runtime provider, including session `id`, lifecycle `state`, and the hosted `app` when known. |
+| `GET` | `/admin/api/v1/runtime/providers` | List configured runtime providers. When support inspection succeeds, loaded providers include a derived `profile` with `advertised` behavior reported by the runtime and `effective` behavior resolved for this host deployment. `error` explains any current inspection failure. |
+| `GET` | `/admin/api/v1/runtime/providers/{provider}/sessions` | List active sessions for one runtime provider, including session `id`, lifecycle `state`, and the hosted `app` when known. Supports `pageSize` and `pageToken`, and returns `sessions` plus `nextPageToken` when more sessions are available. |
 | `GET` | `/admin/api/v1/authorization/provider` | Inspect the configured authorization provider, capabilities, and active model. |
 | `GET` | `/admin/api/v1/authorization/models` | List authorization provider models. Supports `pageSize` and `pageToken`. |
 | `GET` | `/admin/api/v1/authorization/relationships` | List authorization provider relationships for debugging. Supports `modelId`, subject, relation, resource, `pageSize`, and `pageToken` filters. |

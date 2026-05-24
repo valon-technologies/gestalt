@@ -4,7 +4,7 @@ import grpc
 import warnings
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
-from . import appruntime_pb2 as v1_dot_appruntime__pb2
+from . import runtime_provider_pb2 as v1_dot_runtime__provider__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -19,14 +19,14 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in v1/appruntime_pb2_grpc.py depends on'
+        + ' but the generated code in v1/runtime_provider_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
     )
 
 
-class AppRuntimeLogHostStub(object):
+class RuntimeLogHostStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -36,13 +36,13 @@ class AppRuntimeLogHostStub(object):
             channel: A grpc.Channel.
         """
         self.AppendLogs = channel.unary_unary(
-                '/gestalt.provider.v1.AppRuntimeLogHost/AppendLogs',
-                request_serializer=v1_dot_appruntime__pb2.AppendAppRuntimeLogsRequest.SerializeToString,
-                response_deserializer=v1_dot_appruntime__pb2.AppendAppRuntimeLogsResponse.FromString,
+                '/gestalt.provider.v1.RuntimeLogHost/AppendLogs',
+                request_serializer=v1_dot_runtime__provider__pb2.AppendRuntimeLogsRequest.SerializeToString,
+                response_deserializer=v1_dot_runtime__provider__pb2.AppendRuntimeLogsResponse.FromString,
                 _registered_method=True)
 
 
-class AppRuntimeLogHostServicer(object):
+class RuntimeLogHostServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def AppendLogs(self, request, context):
@@ -52,22 +52,22 @@ class AppRuntimeLogHostServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_AppRuntimeLogHostServicer_to_server(servicer, server):
+def add_RuntimeLogHostServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'AppendLogs': grpc.unary_unary_rpc_method_handler(
                     servicer.AppendLogs,
-                    request_deserializer=v1_dot_appruntime__pb2.AppendAppRuntimeLogsRequest.FromString,
-                    response_serializer=v1_dot_appruntime__pb2.AppendAppRuntimeLogsResponse.SerializeToString,
+                    request_deserializer=v1_dot_runtime__provider__pb2.AppendRuntimeLogsRequest.FromString,
+                    response_serializer=v1_dot_runtime__provider__pb2.AppendRuntimeLogsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.provider.v1.AppRuntimeLogHost', rpc_method_handlers)
+            'gestalt.provider.v1.RuntimeLogHost', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.provider.v1.AppRuntimeLogHost', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.RuntimeLogHost', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class AppRuntimeLogHost(object):
+class RuntimeLogHost(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -84,9 +84,9 @@ class AppRuntimeLogHost(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AppRuntimeLogHost/AppendLogs',
-            v1_dot_appruntime__pb2.AppendAppRuntimeLogsRequest.SerializeToString,
-            v1_dot_appruntime__pb2.AppendAppRuntimeLogsResponse.FromString,
+            '/gestalt.provider.v1.RuntimeLogHost/AppendLogs',
+            v1_dot_runtime__provider__pb2.AppendRuntimeLogsRequest.SerializeToString,
+            v1_dot_runtime__provider__pb2.AppendRuntimeLogsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -98,7 +98,7 @@ class AppRuntimeLogHost(object):
             _registered_method=True)
 
 
-class AppRuntimeProviderStub(object):
+class RuntimeProviderStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -108,48 +108,48 @@ class AppRuntimeProviderStub(object):
             channel: A grpc.Channel.
         """
         self.GetSupport = channel.unary_unary(
-                '/gestalt.provider.v1.AppRuntimeProvider/GetSupport',
+                '/gestalt.provider.v1.RuntimeProvider/GetSupport',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-                response_deserializer=v1_dot_appruntime__pb2.AppRuntimeSupport.FromString,
+                response_deserializer=v1_dot_runtime__provider__pb2.RuntimeSupport.FromString,
                 _registered_method=True)
         self.StartSession = channel.unary_unary(
-                '/gestalt.provider.v1.AppRuntimeProvider/StartSession',
-                request_serializer=v1_dot_appruntime__pb2.StartAppRuntimeSessionRequest.SerializeToString,
-                response_deserializer=v1_dot_appruntime__pb2.AppRuntimeSession.FromString,
+                '/gestalt.provider.v1.RuntimeProvider/StartSession',
+                request_serializer=v1_dot_runtime__provider__pb2.StartRuntimeSessionRequest.SerializeToString,
+                response_deserializer=v1_dot_runtime__provider__pb2.RuntimeSession.FromString,
                 _registered_method=True)
         self.GetSession = channel.unary_unary(
-                '/gestalt.provider.v1.AppRuntimeProvider/GetSession',
-                request_serializer=v1_dot_appruntime__pb2.GetAppRuntimeSessionRequest.SerializeToString,
-                response_deserializer=v1_dot_appruntime__pb2.AppRuntimeSession.FromString,
+                '/gestalt.provider.v1.RuntimeProvider/GetSession',
+                request_serializer=v1_dot_runtime__provider__pb2.GetRuntimeSessionRequest.SerializeToString,
+                response_deserializer=v1_dot_runtime__provider__pb2.RuntimeSession.FromString,
                 _registered_method=True)
         self.ListSessions = channel.unary_unary(
-                '/gestalt.provider.v1.AppRuntimeProvider/ListSessions',
-                request_serializer=v1_dot_appruntime__pb2.ListAppRuntimeSessionsRequest.SerializeToString,
-                response_deserializer=v1_dot_appruntime__pb2.ListAppRuntimeSessionsResponse.FromString,
+                '/gestalt.provider.v1.RuntimeProvider/ListSessions',
+                request_serializer=v1_dot_runtime__provider__pb2.ListRuntimeSessionsRequest.SerializeToString,
+                response_deserializer=v1_dot_runtime__provider__pb2.ListRuntimeSessionsResponse.FromString,
                 _registered_method=True)
         self.StopSession = channel.unary_unary(
-                '/gestalt.provider.v1.AppRuntimeProvider/StopSession',
-                request_serializer=v1_dot_appruntime__pb2.StopAppRuntimeSessionRequest.SerializeToString,
+                '/gestalt.provider.v1.RuntimeProvider/StopSession',
+                request_serializer=v1_dot_runtime__provider__pb2.StopRuntimeSessionRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.PrepareWorkspace = channel.unary_unary(
-                '/gestalt.provider.v1.AppRuntimeProvider/PrepareWorkspace',
-                request_serializer=v1_dot_appruntime__pb2.PrepareAppRuntimeWorkspaceRequest.SerializeToString,
-                response_deserializer=v1_dot_appruntime__pb2.PrepareAppRuntimeWorkspaceResponse.FromString,
+                '/gestalt.provider.v1.RuntimeProvider/PrepareWorkspace',
+                request_serializer=v1_dot_runtime__provider__pb2.PrepareRuntimeWorkspaceRequest.SerializeToString,
+                response_deserializer=v1_dot_runtime__provider__pb2.PrepareRuntimeWorkspaceResponse.FromString,
                 _registered_method=True)
         self.RemoveWorkspace = channel.unary_unary(
-                '/gestalt.provider.v1.AppRuntimeProvider/RemoveWorkspace',
-                request_serializer=v1_dot_appruntime__pb2.RemoveAppRuntimeWorkspaceRequest.SerializeToString,
+                '/gestalt.provider.v1.RuntimeProvider/RemoveWorkspace',
+                request_serializer=v1_dot_runtime__provider__pb2.RemoveRuntimeWorkspaceRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.StartApp = channel.unary_unary(
-                '/gestalt.provider.v1.AppRuntimeProvider/StartApp',
-                request_serializer=v1_dot_appruntime__pb2.StartHostedAppRequest.SerializeToString,
-                response_deserializer=v1_dot_appruntime__pb2.HostedApp.FromString,
+                '/gestalt.provider.v1.RuntimeProvider/StartApp',
+                request_serializer=v1_dot_runtime__provider__pb2.StartHostedAppRequest.SerializeToString,
+                response_deserializer=v1_dot_runtime__provider__pb2.HostedApp.FromString,
                 _registered_method=True)
 
 
-class AppRuntimeProviderServicer(object):
+class RuntimeProviderServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def GetSupport(self, request, context):
@@ -201,57 +201,57 @@ class AppRuntimeProviderServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_AppRuntimeProviderServicer_to_server(servicer, server):
+def add_RuntimeProviderServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetSupport': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSupport,
                     request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                    response_serializer=v1_dot_appruntime__pb2.AppRuntimeSupport.SerializeToString,
+                    response_serializer=v1_dot_runtime__provider__pb2.RuntimeSupport.SerializeToString,
             ),
             'StartSession': grpc.unary_unary_rpc_method_handler(
                     servicer.StartSession,
-                    request_deserializer=v1_dot_appruntime__pb2.StartAppRuntimeSessionRequest.FromString,
-                    response_serializer=v1_dot_appruntime__pb2.AppRuntimeSession.SerializeToString,
+                    request_deserializer=v1_dot_runtime__provider__pb2.StartRuntimeSessionRequest.FromString,
+                    response_serializer=v1_dot_runtime__provider__pb2.RuntimeSession.SerializeToString,
             ),
             'GetSession': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSession,
-                    request_deserializer=v1_dot_appruntime__pb2.GetAppRuntimeSessionRequest.FromString,
-                    response_serializer=v1_dot_appruntime__pb2.AppRuntimeSession.SerializeToString,
+                    request_deserializer=v1_dot_runtime__provider__pb2.GetRuntimeSessionRequest.FromString,
+                    response_serializer=v1_dot_runtime__provider__pb2.RuntimeSession.SerializeToString,
             ),
             'ListSessions': grpc.unary_unary_rpc_method_handler(
                     servicer.ListSessions,
-                    request_deserializer=v1_dot_appruntime__pb2.ListAppRuntimeSessionsRequest.FromString,
-                    response_serializer=v1_dot_appruntime__pb2.ListAppRuntimeSessionsResponse.SerializeToString,
+                    request_deserializer=v1_dot_runtime__provider__pb2.ListRuntimeSessionsRequest.FromString,
+                    response_serializer=v1_dot_runtime__provider__pb2.ListRuntimeSessionsResponse.SerializeToString,
             ),
             'StopSession': grpc.unary_unary_rpc_method_handler(
                     servicer.StopSession,
-                    request_deserializer=v1_dot_appruntime__pb2.StopAppRuntimeSessionRequest.FromString,
+                    request_deserializer=v1_dot_runtime__provider__pb2.StopRuntimeSessionRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'PrepareWorkspace': grpc.unary_unary_rpc_method_handler(
                     servicer.PrepareWorkspace,
-                    request_deserializer=v1_dot_appruntime__pb2.PrepareAppRuntimeWorkspaceRequest.FromString,
-                    response_serializer=v1_dot_appruntime__pb2.PrepareAppRuntimeWorkspaceResponse.SerializeToString,
+                    request_deserializer=v1_dot_runtime__provider__pb2.PrepareRuntimeWorkspaceRequest.FromString,
+                    response_serializer=v1_dot_runtime__provider__pb2.PrepareRuntimeWorkspaceResponse.SerializeToString,
             ),
             'RemoveWorkspace': grpc.unary_unary_rpc_method_handler(
                     servicer.RemoveWorkspace,
-                    request_deserializer=v1_dot_appruntime__pb2.RemoveAppRuntimeWorkspaceRequest.FromString,
+                    request_deserializer=v1_dot_runtime__provider__pb2.RemoveRuntimeWorkspaceRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'StartApp': grpc.unary_unary_rpc_method_handler(
                     servicer.StartApp,
-                    request_deserializer=v1_dot_appruntime__pb2.StartHostedAppRequest.FromString,
-                    response_serializer=v1_dot_appruntime__pb2.HostedApp.SerializeToString,
+                    request_deserializer=v1_dot_runtime__provider__pb2.StartHostedAppRequest.FromString,
+                    response_serializer=v1_dot_runtime__provider__pb2.HostedApp.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.provider.v1.AppRuntimeProvider', rpc_method_handlers)
+            'gestalt.provider.v1.RuntimeProvider', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.provider.v1.AppRuntimeProvider', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.RuntimeProvider', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class AppRuntimeProvider(object):
+class RuntimeProvider(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -268,9 +268,9 @@ class AppRuntimeProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AppRuntimeProvider/GetSupport',
+            '/gestalt.provider.v1.RuntimeProvider/GetSupport',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            v1_dot_appruntime__pb2.AppRuntimeSupport.FromString,
+            v1_dot_runtime__provider__pb2.RuntimeSupport.FromString,
             options,
             channel_credentials,
             insecure,
@@ -295,9 +295,9 @@ class AppRuntimeProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AppRuntimeProvider/StartSession',
-            v1_dot_appruntime__pb2.StartAppRuntimeSessionRequest.SerializeToString,
-            v1_dot_appruntime__pb2.AppRuntimeSession.FromString,
+            '/gestalt.provider.v1.RuntimeProvider/StartSession',
+            v1_dot_runtime__provider__pb2.StartRuntimeSessionRequest.SerializeToString,
+            v1_dot_runtime__provider__pb2.RuntimeSession.FromString,
             options,
             channel_credentials,
             insecure,
@@ -322,9 +322,9 @@ class AppRuntimeProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AppRuntimeProvider/GetSession',
-            v1_dot_appruntime__pb2.GetAppRuntimeSessionRequest.SerializeToString,
-            v1_dot_appruntime__pb2.AppRuntimeSession.FromString,
+            '/gestalt.provider.v1.RuntimeProvider/GetSession',
+            v1_dot_runtime__provider__pb2.GetRuntimeSessionRequest.SerializeToString,
+            v1_dot_runtime__provider__pb2.RuntimeSession.FromString,
             options,
             channel_credentials,
             insecure,
@@ -349,9 +349,9 @@ class AppRuntimeProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AppRuntimeProvider/ListSessions',
-            v1_dot_appruntime__pb2.ListAppRuntimeSessionsRequest.SerializeToString,
-            v1_dot_appruntime__pb2.ListAppRuntimeSessionsResponse.FromString,
+            '/gestalt.provider.v1.RuntimeProvider/ListSessions',
+            v1_dot_runtime__provider__pb2.ListRuntimeSessionsRequest.SerializeToString,
+            v1_dot_runtime__provider__pb2.ListRuntimeSessionsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -376,8 +376,8 @@ class AppRuntimeProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AppRuntimeProvider/StopSession',
-            v1_dot_appruntime__pb2.StopAppRuntimeSessionRequest.SerializeToString,
+            '/gestalt.provider.v1.RuntimeProvider/StopSession',
+            v1_dot_runtime__provider__pb2.StopRuntimeSessionRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
@@ -403,9 +403,9 @@ class AppRuntimeProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AppRuntimeProvider/PrepareWorkspace',
-            v1_dot_appruntime__pb2.PrepareAppRuntimeWorkspaceRequest.SerializeToString,
-            v1_dot_appruntime__pb2.PrepareAppRuntimeWorkspaceResponse.FromString,
+            '/gestalt.provider.v1.RuntimeProvider/PrepareWorkspace',
+            v1_dot_runtime__provider__pb2.PrepareRuntimeWorkspaceRequest.SerializeToString,
+            v1_dot_runtime__provider__pb2.PrepareRuntimeWorkspaceResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -430,8 +430,8 @@ class AppRuntimeProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AppRuntimeProvider/RemoveWorkspace',
-            v1_dot_appruntime__pb2.RemoveAppRuntimeWorkspaceRequest.SerializeToString,
+            '/gestalt.provider.v1.RuntimeProvider/RemoveWorkspace',
+            v1_dot_runtime__provider__pb2.RemoveRuntimeWorkspaceRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
@@ -457,9 +457,9 @@ class AppRuntimeProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AppRuntimeProvider/StartApp',
-            v1_dot_appruntime__pb2.StartHostedAppRequest.SerializeToString,
-            v1_dot_appruntime__pb2.HostedApp.FromString,
+            '/gestalt.provider.v1.RuntimeProvider/StartApp',
+            v1_dot_runtime__provider__pb2.StartHostedAppRequest.SerializeToString,
+            v1_dot_runtime__provider__pb2.HostedApp.FromString,
             options,
             channel_credentials,
             insecure,

@@ -17,8 +17,8 @@ from http import HTTPStatus
 from typing import Any, Final, cast
 
 from . import _agent as _agent_native
-from . import _appruntime as _appruntime_native
 from . import _authentication as _auth_native
+from . import _runtime_provider as _runtime_provider_native
 from . import _s3 as _s3_native
 from . import _telemetry
 from . import _workflow as _workflow_native
@@ -33,7 +33,6 @@ from ._providers import (
     AgentProvider,
     AppProvider,
     AppProviderAdapter,
-    AppRuntimeProvider,
     AuthenticationProvider,
     AuthorizationProvider,
     CacheProvider,
@@ -43,6 +42,7 @@ from ._providers import (
     MetadataProvider,
     ProviderKind,
     ProviderMetadata,
+    RuntimeProvider,
     S3Provider,
     SecretsProvider,
     SessionTTLProvider,
@@ -59,8 +59,8 @@ empty_pb2: Any = cast(Any, None)
 duration_pb2: Any = cast(Any, None)
 app_pb2: Any = cast(Any, None)
 app_pb2_grpc: Any = cast(Any, None)
-appruntime_pb2: Any = cast(Any, None)
-appruntime_pb2_grpc: Any = cast(Any, None)
+runtime_provider_pb2: Any = cast(Any, None)
+runtime_provider_pb2_grpc: Any = cast(Any, None)
 runtime_pb2: Any = cast(Any, None)
 runtime_pb2_grpc: Any = cast(Any, None)
 authentication_pb2: Any = cast(Any, None)
@@ -76,10 +76,10 @@ agent_pb2_grpc: Any = cast(Any, None)
 workflow_pb2: Any = cast(Any, None)
 workflow_pb2_grpc: Any = cast(Any, None)
 
-ENV_PROVIDER_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
-ENV_PROVIDER_NAME: Final[str] = "GESTALT_PLUGIN_NAME"
-ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
-CURRENT_PROTOCOL_VERSION: Final[int] = 3
+ENV_PROVIDER_SOCKET: Final[str] = "GESTALT_PROVIDER_SOCKET"
+ENV_PROVIDER_NAME: Final[str] = "GESTALT_APP_NAME"
+ENV_WRITE_CATALOG: Final[str] = "GESTALT_APP_WRITE_CATALOG"
+CURRENT_PROTOCOL_VERSION: Final[int] = 4
 GRPC_SERVER_MAX_WORKERS: Final[int] = 4
 GRPC_SHUTDOWN_GRACE_SECONDS: Final[int] = 2
 USAGE: Final[str] = (
@@ -100,8 +100,8 @@ def _ensure_grpc_runtime() -> None:
     global grpc
     global app_pb2
     global app_pb2_grpc
-    global appruntime_pb2
-    global appruntime_pb2_grpc
+    global runtime_provider_pb2
+    global runtime_provider_pb2_grpc
     global runtime_pb2
     global runtime_pb2_grpc
     global s3_pb2_grpc
@@ -122,8 +122,6 @@ def _ensure_grpc_runtime() -> None:
     from ._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
     from ._gen.v1 import app_pb2 as _app_pb2
     from ._gen.v1 import app_pb2_grpc as _app_pb2_grpc
-    from ._gen.v1 import appruntime_pb2 as _appruntime_pb2
-    from ._gen.v1 import appruntime_pb2_grpc as _appruntime_pb2_grpc
     from ._gen.v1 import authentication_pb2 as _authentication_pb2
     from ._gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
     from ._gen.v1 import authorization_pb2 as _authorization_pb2
@@ -132,6 +130,8 @@ def _ensure_grpc_runtime() -> None:
     from ._gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
     from ._gen.v1 import runtime_pb2 as _runtime_pb2
     from ._gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
+    from ._gen.v1 import runtime_provider_pb2 as _runtime_provider_pb2
+    from ._gen.v1 import runtime_provider_pb2_grpc as _runtime_provider_pb2_grpc
     from ._gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
     from ._gen.v1 import secrets_pb2 as _secrets_pb2
     from ._gen.v1 import secrets_pb2_grpc as _secrets_pb2_grpc
@@ -144,8 +144,8 @@ def _ensure_grpc_runtime() -> None:
     empty_pb2 = _empty_pb2
     app_pb2 = _app_pb2
     app_pb2_grpc = _app_pb2_grpc
-    appruntime_pb2 = _appruntime_pb2
-    appruntime_pb2_grpc = _appruntime_pb2_grpc
+    runtime_provider_pb2 = _runtime_provider_pb2
+    runtime_provider_pb2_grpc = _runtime_provider_pb2_grpc
     runtime_pb2 = _runtime_pb2
     runtime_pb2_grpc = _runtime_pb2_grpc
     authentication_pb2 = _authentication_pb2
@@ -278,9 +278,7 @@ def main(argv: list[str] | None = None) -> int:
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
     if catalog_path:
         if not isinstance(target, App):
-            raise RuntimeError(
-                "catalog export is only supported for integration apps"
-            )
+            raise RuntimeError("catalog export is only supported for integration apps")
         target.write_catalog(catalog_path)
         return 0
 
@@ -350,11 +348,9 @@ def _load_target(args: RuntimeArgs) -> App | AppProviderAdapter | AppProvider:
     if resolved_kind == ProviderKind.S3 and isinstance(target, S3Provider):
         return _s3_runtime_plugin(target)
     if resolved_kind == ProviderKind.AGENT and isinstance(target, AgentProvider):
-        return _agent_runtime_plugin(target)
-    if resolved_kind == ProviderKind.RUNTIME and isinstance(
-        target, AppRuntimeProvider
-    ):
-        return _app_runtime_runtime_plugin(target)
+        return _agent_runtime_app(target)
+    if resolved_kind == ProviderKind.RUNTIME and isinstance(target, RuntimeProvider):
+        return _runtime_provider_runtime_app(target)
     if resolved_kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
         return _workflow_runtime_adapter(target)
     if resolved_kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
@@ -423,9 +419,7 @@ def _register_shutdown_handlers(server: Any, close_provider: Any) -> None:
     signal.signal(signal.SIGINT, _shutdown)
 
 
-def _register_services(
-    *, server: Any, servable: App | AppProviderAdapter
-) -> None:
+def _register_services(*, server: Any, servable: App | AppProviderAdapter) -> None:
     _ensure_grpc_runtime()
     if isinstance(servable, App):
         app_pb2_grpc.add_AppProviderServicer_to_server(
@@ -472,9 +466,9 @@ def _servable_target(
     if kind == ProviderKind.S3 and isinstance(target, S3Provider):
         return _s3_runtime_plugin(target)
     if kind == ProviderKind.AGENT and isinstance(target, AgentProvider):
-        return _agent_runtime_plugin(target)
-    if kind == ProviderKind.RUNTIME and isinstance(target, AppRuntimeProvider):
-        return _app_runtime_runtime_plugin(target)
+        return _agent_runtime_app(target)
+    if kind == ProviderKind.RUNTIME and isinstance(target, RuntimeProvider):
+        return _runtime_provider_runtime_app(target)
     if kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
         return _workflow_runtime_adapter(target)
     if kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
@@ -769,7 +763,7 @@ def _close_s3_body(body: Any) -> None:
             pass
 
 
-def _agent_runtime_plugin(provider: AgentProvider) -> AppProviderAdapter:
+def _agent_runtime_app(provider: AgentProvider) -> AppProviderAdapter:
     return AppProviderAdapter(
         kind=ProviderKind.AGENT,
         provider=provider,
@@ -789,24 +783,24 @@ def _register_agent_services(server: Any, provider: AppProvider) -> None:
     )
 
 
-def _app_runtime_runtime_plugin(
-    provider: AppRuntimeProvider,
+def _runtime_provider_runtime_app(
+    provider: RuntimeProvider,
 ) -> AppProviderAdapter:
     return AppProviderAdapter(
         kind=ProviderKind.RUNTIME,
         provider=provider,
-        register_services=_register_app_runtime_services,
+        register_services=_register_runtime_provider_services,
     )
 
 
-def _register_app_runtime_services(server: Any, provider: AppProvider) -> None:
+def _register_runtime_provider_services(server: Any, provider: AppProvider) -> None:
     _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
         _runtime_servicer(provider=provider, kind=ProviderKind.RUNTIME),
         server,
     )
-    appruntime_pb2_grpc.add_AppRuntimeProviderServicer_to_server(
-        _app_runtime_provider_servicer(provider),
+    runtime_provider_pb2_grpc.add_RuntimeProviderServicer_to_server(
+        _runtime_provider_servicer(provider),
         server,
     )
 
@@ -942,85 +936,83 @@ def _agent_provider_servicer(provider: AppProvider) -> Any:
     return AgentProviderServicer(provider)
 
 
-def _app_runtime_provider_servicer(provider: AppProvider) -> Any:
+def _runtime_provider_servicer(provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
 
-    class AppRuntimeProviderServicer(
-        appruntime_pb2_grpc.AppRuntimeProviderServicer
-    ):
+    class RuntimeProviderServicer(runtime_provider_pb2_grpc.RuntimeProviderServicer):
         def __init__(self, inner: AppProvider) -> None:
             self._provider = inner
 
-        @_grpc_handler("plugin runtime get support")
+        @_grpc_handler("runtime get support")
         def GetSupport(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
-                AppRuntimeProvider,
+                RuntimeProvider,
                 "get_support",
                 "GetSupport",
-                _appruntime_native.get_app_runtime_support_request_from_proto(
+                _runtime_provider_native.get_runtime_provider_support_request_from_proto(
                     request
                 ),
                 request,
                 context,
             )
-            return _appruntime_native.app_runtime_support_to_proto(result)
+            return _runtime_provider_native.runtime_provider_support_to_proto(result)
 
-        @_grpc_handler("plugin runtime start session")
+        @_grpc_handler("runtime start session")
         def StartSession(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
-                AppRuntimeProvider,
+                RuntimeProvider,
                 "start_session",
                 "StartSession",
-                _appruntime_native.start_app_runtime_session_request_from_proto(
+                _runtime_provider_native.start_runtime_provider_session_request_from_proto(
                     request
                 ),
                 request,
                 context,
             )
-            return _appruntime_native.app_runtime_session_to_proto(result)
+            return _runtime_provider_native.runtime_provider_session_to_proto(result)
 
-        @_grpc_handler("plugin runtime get session")
+        @_grpc_handler("runtime get session")
         def GetSession(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
-                AppRuntimeProvider,
+                RuntimeProvider,
                 "get_session",
                 "GetSession",
-                _appruntime_native.get_app_runtime_session_request_from_proto(
+                _runtime_provider_native.get_runtime_provider_session_request_from_proto(
                     request
                 ),
                 request,
                 context,
             )
-            return _appruntime_native.app_runtime_session_to_proto(result)
+            return _runtime_provider_native.runtime_provider_session_to_proto(result)
 
-        @_grpc_handler("plugin runtime list sessions")
+        @_grpc_handler("runtime list sessions")
         def ListSessions(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
-                AppRuntimeProvider,
+                RuntimeProvider,
                 "list_sessions",
                 "ListSessions",
-                _appruntime_native.list_app_runtime_sessions_request_from_proto(
+                _runtime_provider_native.list_runtime_provider_sessions_request_from_proto(
                     request
                 ),
                 request,
                 context,
             )
-            return _appruntime_native.list_app_runtime_sessions_response_to_proto(
+            return _runtime_provider_native.list_runtime_provider_sessions_response_to_proto(
                 result
             )
 
-        @_grpc_handler("plugin runtime stop session")
+        @_grpc_handler("runtime stop session")
         def StopSession(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
-                AppRuntimeProvider,
+                RuntimeProvider,
                 "stop_session",
                 "StopSession",
-                _appruntime_native.stop_app_runtime_session_request_from_proto(
+                _runtime_provider_native.stop_runtime_provider_session_request_from_proto(
                     request
                 ),
                 request,
@@ -1028,31 +1020,31 @@ def _app_runtime_provider_servicer(provider: AppProvider) -> Any:
             )
             return _empty_response(result)
 
-        @_grpc_handler("plugin runtime prepare workspace")
+        @_grpc_handler("runtime prepare workspace")
         def PrepareWorkspace(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
-                AppRuntimeProvider,
+                RuntimeProvider,
                 "prepare_workspace",
                 "PrepareWorkspace",
-                _appruntime_native.prepare_app_runtime_workspace_request_from_proto(
+                _runtime_provider_native.prepare_runtime_provider_workspace_request_from_proto(
                     request
                 ),
                 request,
                 context,
             )
-            return _appruntime_native.prepare_app_runtime_workspace_response_to_proto(
+            return _runtime_provider_native.prepare_runtime_provider_workspace_response_to_proto(
                 result
             )
 
-        @_grpc_handler("plugin runtime remove workspace")
+        @_grpc_handler("runtime remove workspace")
         def RemoveWorkspace(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
-                AppRuntimeProvider,
+                RuntimeProvider,
                 "remove_workspace",
                 "RemoveWorkspace",
-                _appruntime_native.remove_app_runtime_workspace_request_from_proto(
+                _runtime_provider_native.remove_runtime_provider_workspace_request_from_proto(
                     request
                 ),
                 request,
@@ -1060,20 +1052,20 @@ def _app_runtime_provider_servicer(provider: AppProvider) -> Any:
             )
             return _empty_response(result)
 
-        @_grpc_handler("plugin runtime start plugin")
-        def StartPlugin(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("runtime start app")
+        def StartApp(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
-                AppRuntimeProvider,
-                "start_plugin",
-                "StartPlugin",
-                _appruntime_native.start_hosted_plugin_request_from_proto(request),
+                RuntimeProvider,
+                "start_app",
+                "StartApp",
+                _runtime_provider_native.start_hosted_app_request_from_proto(request),
                 request,
                 context,
             )
-            return _appruntime_native.hosted_plugin_to_proto(result)
+            return _runtime_provider_native.hosted_app_to_proto(result)
 
-    return AppRuntimeProviderServicer(provider)
+    return RuntimeProviderServicer(provider)
 
 
 def _workflow_provider_servicer(provider: AppProvider) -> Any:

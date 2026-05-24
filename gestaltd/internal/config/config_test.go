@@ -4443,7 +4443,7 @@ server:
 			want: `providers.agent.simple.runtime.pool.restartPolicy "always" requires providers.agent.simple.indexeddb as the provider persistence hook`,
 		},
 		{
-			name: "rejects lifecycle fields on app runtime",
+			name: "rejects lifecycle fields on runtime",
 			yaml: `
 apps:
   service:

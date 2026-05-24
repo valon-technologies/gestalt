@@ -4,7 +4,7 @@ import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
 
 <ActiveDevelopmentCallout verb="are">Runtimes</ActiveDevelopmentCallout>
 
-Runtime providers manage **where executable plugins, hosted agent providers, and
+Runtime providers manage **where executable apps, hosted agent providers, and
 hosted workflow providers run**.
 
 By default, executable providers run on the same machine as `gestaltd`. A
@@ -27,17 +27,18 @@ Runtime providers are configured under top-level `runtime.providers`:
 ```yaml
 runtime:
   providers:
-    modal:
+    kubernetes:
       source:
-        path: ./vendor/gestalt-providers/runtime/modal/manifest.yaml
+        path: ./vendor/gestalt-providers/runtime/kubernetes/manifest.yaml
       default: true
       config:
-        app: gestalt-runtime
-        environment: main
+        namespace: gestalt-runtime
+        container: runtime
+        connectionMode: portForward
 
 server:
   runtime:
-    defaultProvider: modal
+    defaultProvider: kubernetes
 
 apps:
   support:
@@ -68,8 +69,8 @@ apps:
       package: github.com/valon-technologies/gestalt-providers/app/httpbin
       version: 0.0.1-alpha.1
     runtime:
-      provider: modal
-      image: ghcr.io/example/support-plugin@sha256:...
+      provider: kubernetes
+      image: ghcr.io/example/support-app@sha256:...
 ```
 
 Keep the manifest release and image digest in sync. Gestalt does not inspect

@@ -40,7 +40,7 @@ import {
  * Environment variable containing the gestaltd workflow-provider facade target.
  *
  * Manager clients call the facade. Provider runtimes still listen on
- * GESTALT_PLUGIN_SOCKET.
+ * GESTALT_PROVIDER_SOCKET.
  */
 /** Shape accepted when starting a workflow run. */
 export interface WorkflowManagerStartRun {

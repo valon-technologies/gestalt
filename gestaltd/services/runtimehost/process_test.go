@@ -212,8 +212,8 @@ func TestProviderProcessEnvAddsTelemetryDefaultsWithoutOverridingProviderEnv(t *
 			"CUSTOM":            "provider",
 		},
 	}, map[string]string{
-		"GESTALT_PLUGIN_SOCKET": "/tmp/provider.sock",
-		"CUSTOM":                "host",
+		"GESTALT_PROVIDER_SOCKET": "/tmp/provider.sock",
+		"CUSTOM":                  "host",
 	})
 
 	if got := env["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != "otel-collector:4317" {

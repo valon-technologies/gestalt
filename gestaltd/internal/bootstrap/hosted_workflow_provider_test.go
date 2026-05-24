@@ -18,7 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -36,7 +36,7 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 	deps := Deps{
 		BaseURL:            "http://127.0.0.1:8080",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		AppRuntime:         runtimeProvider,
+		Runtime:            runtimeProvider,
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
@@ -162,7 +162,7 @@ func TestHostedWorkflowProviderPoolStartupDoesNotBlockWorkflowReadiness(t *testi
 	deps := Deps{
 		BaseURL:            "http://127.0.0.1:8080",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		AppRuntime:         runtimeProvider,
+		Runtime:            runtimeProvider,
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
@@ -221,7 +221,7 @@ func TestWorkflowConfigReconciliationWaitsForRuntimeWorkers(t *testing.T) {
 	deps := Deps{
 		BaseURL:            "http://127.0.0.1:8080",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		AppRuntime:         runtimeProvider,
+		Runtime:            runtimeProvider,
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
@@ -384,7 +384,7 @@ func TestHostedWorkflowProviderPoolRejectsIncompatibleStartupSession(t *testing.
 	deps := Deps{
 		BaseURL:            "http://127.0.0.1:8080",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		AppRuntime:         runtimeProvider,
+		Runtime:            runtimeProvider,
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
@@ -646,7 +646,7 @@ func TestHostedWorkflowProviderKeepsSharedRuntimeOpen(t *testing.T) {
 	deps := Deps{
 		BaseURL:            "http://127.0.0.1:8080",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		AppRuntime:         runtimeProvider,
+		Runtime:            runtimeProvider,
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
@@ -689,7 +689,7 @@ func TestHostedWorkflowProviderPoolDrainWaitsBeforeClosingWorker(t *testing.T) {
 	deps := Deps{
 		BaseURL:            "http://127.0.0.1:8080",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		AppRuntime:         runtimeProvider,
+		Runtime:            runtimeProvider,
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
@@ -755,12 +755,12 @@ func TestHostedWorkflowProviderPoolDrainWaitsBeforeClosingWorker(t *testing.T) {
 const providermanifestKindWorkflow = "workflow"
 
 type recordingHostedWorkflowRuntime struct {
-	provider *appruntime.LocalProvider
+	provider *runtimeprovider.LocalProvider
 	t        *testing.T
 
 	mu               sync.Mutex
-	startRequests    []appruntime.StartSessionRequest
-	startAppRequests []appruntime.StartAppRequest
+	startRequests    []runtimeprovider.StartSessionRequest
+	startAppRequests []runtimeprovider.StartAppRequest
 	servers          map[string]*recordingHostedWorkflowServer
 	closeCalls       atomic.Int32
 }
@@ -771,7 +771,7 @@ type blockingStartSessionWorkflowRuntime struct {
 	once    sync.Once
 }
 
-func (r *blockingStartSessionWorkflowRuntime) StartSession(ctx context.Context, req appruntime.StartSessionRequest) (*appruntime.Session, error) {
+func (r *blockingStartSessionWorkflowRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
 	r.once.Do(func() {
 		close(r.started)
 	})
@@ -783,7 +783,7 @@ type staleSessionWorkflowRuntime struct {
 	*recordingHostedWorkflowRuntime
 }
 
-func (r *staleSessionWorkflowRuntime) GetSession(ctx context.Context, req appruntime.GetSessionRequest) (*appruntime.Session, error) {
+func (r *staleSessionWorkflowRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
 	session, err := r.recordingHostedWorkflowRuntime.GetSession(ctx, req)
 	if err != nil {
 		return nil, err
@@ -963,22 +963,22 @@ func cloneWorkflowEventTrigger(trigger *workflow.EventTrigger) *workflow.EventTr
 func newRecordingHostedWorkflowRuntime(t *testing.T) *recordingHostedWorkflowRuntime {
 	t.Helper()
 	return &recordingHostedWorkflowRuntime{
-		provider: appruntime.NewLocalProvider(),
+		provider: runtimeprovider.NewLocalProvider(),
 		t:        t,
 		servers:  map[string]*recordingHostedWorkflowServer{},
 	}
 }
 
-func (r *recordingHostedWorkflowRuntime) Support(context.Context) (appruntime.Support, error) {
-	return appruntime.Support{
+func (r *recordingHostedWorkflowRuntime) Support(context.Context) (runtimeprovider.Support, error) {
+	return runtimeprovider.Support{
 		CanHostApps: true,
-		EgressMode:  appruntime.EgressModeHostname,
+		EgressMode:  runtimeprovider.EgressModeHostname,
 	}, nil
 }
 
-func (r *recordingHostedWorkflowRuntime) StartSession(ctx context.Context, req appruntime.StartSessionRequest) (*appruntime.Session, error) {
+func (r *recordingHostedWorkflowRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
 	r.mu.Lock()
-	r.startRequests = append(r.startRequests, appruntime.StartSessionRequest{
+	r.startRequests = append(r.startRequests, runtimeprovider.StartSessionRequest{
 		AppName:       req.AppName,
 		Template:      req.Template,
 		Image:         req.Image,
@@ -989,22 +989,22 @@ func (r *recordingHostedWorkflowRuntime) StartSession(ctx context.Context, req a
 	return r.provider.StartSession(ctx, req)
 }
 
-func (r *recordingHostedWorkflowRuntime) ListSessions(ctx context.Context) ([]appruntime.Session, error) {
-	return r.provider.ListSessions(ctx)
+func (r *recordingHostedWorkflowRuntime) ListSessions(ctx context.Context, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+	return r.provider.ListSessions(ctx, req)
 }
 
-func (r *recordingHostedWorkflowRuntime) GetSession(ctx context.Context, req appruntime.GetSessionRequest) (*appruntime.Session, error) {
+func (r *recordingHostedWorkflowRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
 	return r.provider.GetSession(ctx, req)
 }
 
-func (r *recordingHostedWorkflowRuntime) StopSession(ctx context.Context, req appruntime.StopSessionRequest) error {
+func (r *recordingHostedWorkflowRuntime) StopSession(ctx context.Context, req runtimeprovider.StopSessionRequest) error {
 	r.cleanupServer(req.SessionID)
 	return r.provider.StopSession(ctx, req)
 }
 
-func (r *recordingHostedWorkflowRuntime) StartApp(_ context.Context, req appruntime.StartAppRequest) (*appruntime.HostedApp, error) {
+func (r *recordingHostedWorkflowRuntime) StartApp(_ context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
 	r.mu.Lock()
-	r.startAppRequests = append(r.startAppRequests, appruntime.StartAppRequest{
+	r.startAppRequests = append(r.startAppRequests, runtimeprovider.StartAppRequest{
 		SessionID:  req.SessionID,
 		AppName:    req.AppName,
 		Command:    req.Command,
@@ -1041,7 +1041,7 @@ func (r *recordingHostedWorkflowRuntime) StartApp(_ context.Context, req apprunt
 		_ = lis.Close()
 		_ = os.RemoveAll(dir)
 	})
-	return &appruntime.HostedApp{
+	return &runtimeprovider.HostedApp{
 		ID:         "fake-" + req.SessionID,
 		SessionID:  req.SessionID,
 		AppName:    req.AppName,
@@ -1063,12 +1063,12 @@ func (r *recordingHostedWorkflowRuntime) Close() error {
 	return r.provider.Close()
 }
 
-func (r *recordingHostedWorkflowRuntime) startSessionRequestsCopy() []appruntime.StartSessionRequest {
+func (r *recordingHostedWorkflowRuntime) startSessionRequestsCopy() []runtimeprovider.StartSessionRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]appruntime.StartSessionRequest, len(r.startRequests))
+	out := make([]runtimeprovider.StartSessionRequest, len(r.startRequests))
 	for i, req := range r.startRequests {
-		out[i] = appruntime.StartSessionRequest{
+		out[i] = runtimeprovider.StartSessionRequest{
 			AppName:       req.AppName,
 			Template:      req.Template,
 			Image:         req.Image,
@@ -1079,12 +1079,12 @@ func (r *recordingHostedWorkflowRuntime) startSessionRequestsCopy() []appruntime
 	return out
 }
 
-func (r *recordingHostedWorkflowRuntime) startAppRequestsCopy() []appruntime.StartAppRequest {
+func (r *recordingHostedWorkflowRuntime) startAppRequestsCopy() []runtimeprovider.StartAppRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]appruntime.StartAppRequest, len(r.startAppRequests))
+	out := make([]runtimeprovider.StartAppRequest, len(r.startAppRequests))
 	for i, req := range r.startAppRequests {
-		out[i] = appruntime.StartAppRequest{
+		out[i] = runtimeprovider.StartAppRequest{
 			SessionID:  req.SessionID,
 			AppName:    req.AppName,
 			Command:    req.Command,

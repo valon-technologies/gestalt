@@ -14,13 +14,13 @@ import (
 )
 
 type runtimeLogHostTestServer struct {
-	proto.UnimplementedAppRuntimeLogHostServer
+	proto.UnimplementedRuntimeLogHostServer
 
 	mu       sync.Mutex
-	requests []*proto.AppendAppRuntimeLogsRequest
+	requests []*proto.AppendRuntimeLogsRequest
 }
 
-func (s *runtimeLogHostTestServer) AppendLogs(_ context.Context, req *proto.AppendAppRuntimeLogsRequest) (*proto.AppendAppRuntimeLogsResponse, error) {
+func (s *runtimeLogHostTestServer) AppendLogs(_ context.Context, req *proto.AppendRuntimeLogsRequest) (*proto.AppendRuntimeLogsResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.requests = append(s.requests, req)
@@ -28,13 +28,13 @@ func (s *runtimeLogHostTestServer) AppendLogs(_ context.Context, req *proto.Appe
 	if logs := req.GetLogs(); len(logs) > 0 {
 		lastSeq = logs[len(logs)-1].GetSourceSeq()
 	}
-	return &proto.AppendAppRuntimeLogsResponse{LastSeq: lastSeq}, nil
+	return &proto.AppendRuntimeLogsResponse{LastSeq: lastSeq}, nil
 }
 
-func (s *runtimeLogHostTestServer) requestsCopy() []*proto.AppendAppRuntimeLogsRequest {
+func (s *runtimeLogHostTestServer) requestsCopy() []*proto.AppendRuntimeLogsRequest {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]*proto.AppendAppRuntimeLogsRequest, len(s.requests))
+	out := make([]*proto.AppendRuntimeLogsRequest, len(s.requests))
 	copy(out, s.requests)
 	return out
 }
@@ -54,7 +54,7 @@ func TestRuntimeLogHostAppendUsesRuntimeSessionEnv(t *testing.T) {
 	}
 	srv := grpc.NewServer()
 	logs := &runtimeLogHostTestServer{}
-	proto.RegisterAppRuntimeLogHostServer(srv, logs)
+	proto.RegisterRuntimeLogHostServer(srv, logs)
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 
@@ -89,7 +89,7 @@ func TestRuntimeLogHostAppendUsesRuntimeSessionEnv(t *testing.T) {
 	if entry.GetMessage() != "runtime boot\n" {
 		t.Fatalf("AppendLogs message = %q, want runtime boot", entry.GetMessage())
 	}
-	if entry.GetStream() != proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR {
+	if entry.GetStream() != proto.RuntimeLogStream_RUNTIME_LOG_STREAM_STDERR {
 		t.Fatalf("AppendLogs stream = %v, want stderr", entry.GetStream())
 	}
 	if !entry.GetObservedAt().AsTime().Equal(observedAt) {

@@ -1,4 +1,4 @@
-package appruntime
+package runtimeprovider
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 type dialedHostedAppConn struct {
 	conn      *grpc.ClientConn
 	lifecycle proto.ProviderLifecycleClient
-	plugin    proto.AppProviderClient
+	app       proto.AppProviderClient
 }
 
 type dialedHostedAgentConn struct {
@@ -95,7 +95,7 @@ func DialHostedApp(ctx context.Context, target string, opts ...DialOption) (Host
 	return &dialedHostedAppConn{
 		conn:      conn,
 		lifecycle: proto.NewProviderLifecycleClient(conn),
-		plugin:    proto.NewAppProviderClient(conn),
+		app:       proto.NewAppProviderClient(conn),
 	}, nil
 }
 
@@ -191,7 +191,7 @@ func (c *dialedHostedAppConn) Integration() proto.AppProviderClient {
 	if c == nil {
 		return nil
 	}
-	return c.plugin
+	return c.app
 }
 
 func (c *dialedHostedAppConn) Close() error {
@@ -288,7 +288,7 @@ func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.C
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", socket)
 		}),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedPluginGRPCOptions(cfg)...)),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
 	if err != nil {
 		return nil, err
@@ -301,7 +301,7 @@ func dialTCPTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedPluginGRPCOptions(cfg)...)),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
 	if err != nil {
 		return nil, err
@@ -322,7 +322,7 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 			ServerName: host,
 			NextProtos: []string{"h2"},
 		})),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedPluginGRPCOptions(cfg)...)),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
 	if err != nil {
 		return nil, err
@@ -331,7 +331,7 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
-func hostedPluginGRPCOptions(cfg dialConfig) []otelgrpc.Option {
+func hostedAppGRPCOptions(cfg dialConfig) []otelgrpc.Option {
 	return metricutil.GRPCMetricOptions(cfg.telemetryProviders(), metricutil.RPCMetricDims{
 		Role:         metricutil.RPCRoleHostedAppClient,
 		ProviderName: cfg.providerName,

@@ -22,7 +22,7 @@ provider code imports from the crate root after renaming `gestalt-sdk` to
 | --- | --- | --- |
 | Provider authoring | [`Provider`], [`Operation`], [`Router`], [`Request`], [`HTTPSubjectRequest`], [`ConnectedToken`], [`Response`], [`ok`] | Executable app providers, typed request handlers, hosted HTTP subject hooks, post-connect metadata hooks, and operation results. |
 | Catalog metadata | [`Catalog`], [`CatalogOperation`], [`Router::register`] | Schema-derived operation catalogs from `serde` and `schemars` types. |
-| Provider runtimes | [`AuthenticationProvider`], [`CacheProvider`], [`S3Provider`], [`SecretsProvider`], [`WorkflowProvider`], [`AgentProvider`], [`AppRuntimeProvider`] | Host-service backends implemented as Rust providers. |
+| Provider runtimes | [`AuthenticationProvider`], [`CacheProvider`], [`S3Provider`], [`SecretsProvider`], [`WorkflowProvider`], [`AgentProvider`], [`RuntimeProvider`] | Host-service backends implemented as Rust providers. |
 | Workflow and agent models | [`new_bound_workflow_target`], [`new_workflow_signal`], [`new_bound_workflow_run`], [`new_workflow_execution_reference`], [`new_agent_message`], [`new_agent_tool_ref`] | Native workflow values, agent messages, tool refs, and copy helpers. |
 | Host-service clients | [`Cache`], [`S3`], [`WorkflowHost`], [`WorkflowManager`], [`AgentHost`], [`AgentManager`], [`AppInvoker`] | Calling sibling services exposed to a provider process by `gestaltd`. |
 | Runtime and telemetry | [`runtime`], [`telemetry`], [`RuntimeMetadata`] | Provider process entrypoints and provider-authored GenAI spans and metrics. |
@@ -87,7 +87,7 @@ a host-service backend.
 | `SecretsProvider` | `export_secrets_provider!` | Secret resolution. |
 | `WorkflowProvider` | `export_workflow_provider!` | Workflow runs, schedules, and event triggers. |
 | `AgentProvider` | `export_agent_provider!` | Agent sessions, turns, events, interactions, and capabilities. |
-| `AppRuntimeProvider` | `export_app_runtime_provider!` | Hosted app execution backends. |
+| `RuntimeProvider` | `export_runtime_provider!` | Hosted app execution backends. |
 
 The crate also exposes clients for sibling host services, including `Cache`,
 `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`, `AgentManager`, and
@@ -117,7 +117,7 @@ The crate exposes higher-level authoring APIs:
 - `Router` and `Operation` register typed operations and derive catalog
   metadata from `serde` and `schemars`.
 - `AuthenticationProvider`, `CacheProvider`, `S3Provider`, `SecretsProvider`,
-  `WorkflowProvider`, `AgentProvider`, and `AppRuntimeProvider` model
+  `WorkflowProvider`, `AgentProvider`, and `RuntimeProvider` model
   executable provider runtimes.
 - `Cache`, `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`,
   `AgentManager`, and `AppInvoker` call sibling host services.

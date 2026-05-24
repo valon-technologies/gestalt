@@ -17,7 +17,7 @@ import (
 type RuntimeLogAppendFunc func(ctx context.Context, runtimeProviderName, sessionID string, entries []AppendRuntimeLogEntry) (int64, error)
 
 type RuntimeLogHostServer struct {
-	proto.UnimplementedAppRuntimeLogHostServer
+	proto.UnimplementedRuntimeLogHostServer
 	runtimeProviderName string
 	appendLogs          RuntimeLogAppendFunc
 }
@@ -29,7 +29,7 @@ func NewRuntimeLogHostServer(runtimeProviderName string, appendLogs RuntimeLogAp
 	}
 }
 
-func (s *RuntimeLogHostServer) AppendLogs(ctx context.Context, req *proto.AppendAppRuntimeLogsRequest) (*proto.AppendAppRuntimeLogsResponse, error) {
+func (s *RuntimeLogHostServer) AppendLogs(ctx context.Context, req *proto.AppendRuntimeLogsRequest) (*proto.AppendRuntimeLogsResponse, error) {
 	if s == nil || s.appendLogs == nil {
 		return nil, status.Error(codes.FailedPrecondition, "runtime log host is not available")
 	}
@@ -62,20 +62,20 @@ func (s *RuntimeLogHostServer) AppendLogs(ctx context.Context, req *proto.Append
 			return nil, status.Errorf(codes.Internal, "append runtime session logs: %v", err)
 		}
 	}
-	return &proto.AppendAppRuntimeLogsResponse{LastSeq: lastSeq}, nil
+	return &proto.AppendRuntimeLogsResponse{LastSeq: lastSeq}, nil
 }
 
-func logStreamFromProto(stream proto.AppRuntimeLogStream) runtimelogs.Stream {
+func logStreamFromProto(stream proto.RuntimeLogStream) runtimelogs.Stream {
 	switch stream {
-	case proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT:
+	case proto.RuntimeLogStream_RUNTIME_LOG_STREAM_STDOUT:
 		return runtimelogs.StreamStdout
-	case proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR:
+	case proto.RuntimeLogStream_RUNTIME_LOG_STREAM_STDERR:
 		return runtimelogs.StreamStderr
-	case proto.AppRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME:
+	case proto.RuntimeLogStream_RUNTIME_LOG_STREAM_RUNTIME:
 		return runtimelogs.StreamRuntime
 	default:
 		return runtimelogs.StreamRuntime
 	}
 }
 
-var _ proto.AppRuntimeLogHostServer = (*RuntimeLogHostServer)(nil)
+var _ proto.RuntimeLogHostServer = (*RuntimeLogHostServer)(nil)

@@ -165,7 +165,7 @@ server:
   apiTokenTtl: 30d
   artifactsDir: ./state
   runtime:
-    defaultProvider: modal
+    defaultProvider: kubernetes
     relayBaseUrl: https://gestalt.example.com
   agent:
     defaultToolNarrowingThreshold: 200
@@ -315,13 +315,14 @@ runtime:
   providers:
     local:
       driver: local
-    modal:
+    kubernetes:
       source:
-        path: ./vendor/gestalt-providers/runtime/modal/manifest.yaml
+        path: ./vendor/gestalt-providers/runtime/kubernetes/manifest.yaml
       default: true
       config:
-        app: gestalt-runtime
-        environment: main
+        namespace: gestalt-runtime
+        container: runtime
+        connectionMode: portForward
 ```
 
 `server.runtime.defaultProvider` supplies the default runtime name for
@@ -331,55 +332,51 @@ apps, agent providers, or workflow providers that set `runtime` without an expli
 | Field | Description |
 | --- | --- |
 | `providers.<name>.driver` | Optional built-in runtime selector. The only built-in runtime is `local`. |
-| `providers.<name>.source` | Package source, local manifest path, metadata URL, `source.url`, or `source.githubRelease` for an installable `kind: runtime` provider such as Modal. |
+| `providers.<name>.source` | Package source, local manifest path, metadata URL, `source.url`, or `source.githubRelease` for an installable `kind: runtime` provider such as Kubernetes. |
 | `providers.<name>.default` | Marks the runtime as the default selection when `server.runtime.defaultProvider` is omitted. Only one runtime may be default. |
 | `providers.<name>.config` | Runtime-provider-specific config blob. Built-ins such as `local` reject custom config entirely. |
 
-### `runtime.providers.*.config` for the Modal runtime provider
+### `runtime.providers.*.config` for the Kubernetes runtime provider
 
-The Modal runtime provider creates hosted Linux sandboxes in a Modal app and
-connects to the app over a gRPC tunnel.
+The Kubernetes runtime provider maps one Gestalt runtime session to one native
+Kubernetes Pod and connects to the app over port-forwarding, Pod IP networking,
+or Service DNS.
 
 ```yaml
 runtime:
   providers:
-    modal:
+    kubernetes:
       source:
-        path: ./vendor/gestalt-providers/runtime/modal/manifest.yaml
+        path: ./vendor/gestalt-providers/runtime/kubernetes/manifest.yaml
       config:
-        app: gestalt-runtime
-        environment: main
-        cpu: 2
-        memoryMiB: 4096
-        memoryLimitMiB: 6144
-        timeout: 30m
-        idleTimeout: 10m
-        cloud: aws
-        regions:
-          - us-east-1
+        namespace: gestalt-runtime
+        container: runtime
+        appPort: 50051
+        connectionMode: portForward
+        sessionReadyTimeout: 3m
+        execTimeout: 2m
+        cleanupTimeout: 30s
 ```
 
 | Field | Description |
 | --- | --- |
-| `app` | **Required.** Modal app name used to create or reuse sandboxes. |
-| `environment` | Optional Modal environment name. |
-| `cpu` | Optional CPU allocation for each sandbox. Must be non-negative. |
-| `memoryMiB` | Optional memory request in MiB. Must be non-negative. |
-| `memoryLimitMiB` | Optional memory limit in MiB. Must be non-negative. |
-| `timeout` | Optional absolute sandbox timeout. |
-| `idleTimeout` | Optional idle timeout before Modal reclaims the sandbox. |
-| `cloud` | Optional cloud selector passed through to Modal. |
-| `regions` | Optional region allowlist passed through to Modal. |
+| `namespace` | Kubernetes namespace where runtime session Pods are created. |
+| `container` | Container name that contains the app executable and socket bridge tooling. |
+| `appPort` | TCP port exposed by the hosted app gRPC server inside the Pod. |
+| `connectionMode` | How `gestaltd` connects to the hosted app: `portForward`, `podIP`, or `serviceDNS`. |
+| `sessionReadyTimeout` | How long to wait for the runtime Pod to become ready. |
+| `execTimeout` | Timeout for Kubernetes exec calls used to launch or stop the app process. |
+| `cleanupTimeout` | Timeout for runtime session cleanup. |
 
-When a app uses the Modal runtime provider,
-`apps.<name>.runtime.image` is required. Modal can still run
-hosted apps that need Gestalt-owned services or hostname-based egress when
-the host is configured for the public relay and proxy path. In practice that
-means `server.baseUrl` (or `server.runtime.relayBaseUrl`) and
+When an app uses a hosted runtime provider such as Kubernetes,
+`apps.<name>.runtime.image` or `apps.<name>.runtime.template` is required.
+Hosted runtimes can run apps that need Gestalt-owned services or hostname-based
+egress when the host is configured for the public relay and proxy path. In
+practice that means `server.baseUrl` (or `server.runtime.relayBaseUrl`) and
 `server.encryptionKey` must be set, and the runtime must report a compatible
-support profile. Without those prerequisites, Gestalt will reject Modal for
-apps that need relay-backed host services,
-`egress.allowedHosts`, or a server-wide default-deny egress policy.
+support profile. Without those prerequisites, Gestalt will reject apps that need
+relay-backed host services, `egress.allowedHosts`, or a server-wide default-deny
+egress policy.
 When hosted runtimes cannot reach `server.baseUrl` directly, set
 `server.runtime.relayBaseUrl` to the private HTTP(S) origin they should use for
 host-service relay and egress proxy callbacks. The origin can point at the
@@ -396,7 +393,7 @@ apps:
       package: github.com/valon-technologies/gestalt-providers/app/httpbin
       version: 0.0.1-alpha.1
     runtime:
-      provider: modal
+      provider: kubernetes
       image: ghcr.io/example/support-app@sha256:...
 ```
 
@@ -687,7 +684,7 @@ providers:
         provider: default
         db: simple_agent
       runtime:
-        provider: modal
+        provider: kubernetes
         image: ghcr.io/valon/gestalt-python-runtime:latest
         workspace:
           prepareTimeout: 10m
@@ -1436,8 +1433,8 @@ servers.
 
 Interactive attach creation uses a short-lived browser approval page plus a
 verification code shown in the initiating terminal. The approving browser
-session must satisfy the app runtime grant. For non-interactive/API-token
-attach, the caller must satisfy both the app runtime grant and a token action
+session must satisfy the runtime grant. For non-interactive/API-token
+attach, the caller must satisfy both the runtime grant and a token action
 grant. The runtime grant comes from
 `apps.<name>.dev.attach.allowedRoles` on a app with an
 `authorizationPolicy`, or from a runtime authorizer that explicitly grants the

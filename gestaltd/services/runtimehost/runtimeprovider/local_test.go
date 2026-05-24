@@ -1,4 +1,4 @@
-package appruntime
+package runtimeprovider
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,26 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 )
+
+func TestPaginateSortedSessionIDsContinuesWithTokenPageSizeWhenPageSizeOmitted(t *testing.T) {
+	t.Parallel()
+
+	first, token, err := PaginateSortedSessionIDs([]string{"a", "b", "c", "d", "e"}, ListSessionsRequest{PageSize: 2})
+	if err != nil {
+		t.Fatalf("PaginateSortedSessionIDs(first): %v", err)
+	}
+	if !reflect.DeepEqual(first, []string{"a", "b"}) || token == "" {
+		t.Fatalf("first page = %v token=%q, want first two ids and token", first, token)
+	}
+
+	second, nextToken, err := PaginateSortedSessionIDs([]string{"a", "b", "c", "d", "e"}, ListSessionsRequest{PageToken: token})
+	if err != nil {
+		t.Fatalf("PaginateSortedSessionIDs(second): %v", err)
+	}
+	if !reflect.DeepEqual(second, []string{"c", "d"}) || nextToken == "" {
+		t.Fatalf("second page = %v token=%q, want next two ids and token", second, nextToken)
+	}
+}
 
 func TestLocalProviderCapturesRuntimeSessionLogsOnPluginStartupFailure(t *testing.T) {
 	t.Parallel()

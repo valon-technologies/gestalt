@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 )
 
 type RuntimeHostServiceAccess string
@@ -45,7 +45,7 @@ type RuntimePlacementPlan struct {
 	HostnameEgressDelivery    RuntimeHostnameEgressDelivery
 }
 
-func buildRuntimePlacementPlan(support appruntime.Support, deps Deps, requiresHostServiceAccess, requiresHostnameEgress bool) RuntimePlacementPlan {
+func buildRuntimePlacementPlan(support runtimeprovider.Support, deps Deps, requiresHostServiceAccess, requiresHostnameEgress bool) RuntimePlacementPlan {
 	resolved := runtimeResolvedBehavior(runtimeAdvertisedBehavior(support), deps)
 	return RuntimePlacementPlan{
 		Resolved:                  resolved,
@@ -55,15 +55,15 @@ func buildRuntimePlacementPlan(support appruntime.Support, deps Deps, requiresHo
 	}
 }
 
-func buildAppRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, support appruntime.Support) (RuntimePlacementPlan, error) {
-	requiresHostServiceAccess, requiresHostnameEgress, err := pluginRuntimeRequirementsForPlugin(pluginName, entry, deps)
+func buildRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, support runtimeprovider.Support) (RuntimePlacementPlan, error) {
+	requiresHostServiceAccess, requiresHostnameEgress, err := runtimeRequirementsForApp(pluginName, entry, deps)
 	if err != nil {
 		return RuntimePlacementPlan{}, err
 	}
 	return buildRuntimePlacementPlan(support, deps, requiresHostServiceAccess, requiresHostnameEgress), nil
 }
 
-func runtimeAdvertisedBehavior(support appruntime.Support) RuntimeBehavior {
+func runtimeAdvertisedBehavior(support runtimeprovider.Support) RuntimeBehavior {
 	return RuntimeBehavior{
 		CanHostApps:       support.CanHostApps,
 		HostServiceAccess: RuntimeHostServiceAccessNone,
@@ -73,7 +73,7 @@ func runtimeAdvertisedBehavior(support appruntime.Support) RuntimeBehavior {
 
 func runtimeResolvedBehavior(advertised RuntimeBehavior, deps Deps) RuntimeBehavior {
 	resolved := advertised
-	if hostCanRelayAppRuntimeHostServices(deps) {
+	if hostCanRelayRuntimeHostServices(deps) {
 		resolved.HostServiceAccess = RuntimeHostServiceAccessRelay
 	} else {
 		resolved.HostServiceAccess = RuntimeHostServiceAccessNone
@@ -94,17 +94,17 @@ func runtimeHostnameEgressDelivery(required bool, resolved RuntimeBehavior) Runt
 	return RuntimeHostnameEgressDeliveryNone
 }
 
-func hostCanRelayAppRuntimeHostServices(deps Deps) bool {
+func hostCanRelayRuntimeHostServices(deps Deps) bool {
 	if len(deps.EncryptionKey) == 0 {
 		return false
 	}
 	baseURL, explicit := hostedRuntimeRelayBaseURL(deps)
-	_, _, err := pluginRuntimePublicProxyBaseURL(baseURL, explicit)
+	_, _, err := runtimePublicProxyBaseURL(baseURL, explicit)
 	return err == nil
 }
 
 func hostCanProvideHostedHostnameEgress(deps Deps) bool {
-	return hostCanRelayAppRuntimeHostServices(deps)
+	return hostCanRelayRuntimeHostServices(deps)
 }
 
 func hostedRuntimeRelayBaseURL(deps Deps) (string, bool) {
@@ -114,7 +114,7 @@ func hostedRuntimeRelayBaseURL(deps Deps) (string, bool) {
 	return strings.TrimSpace(deps.BaseURL), false
 }
 
-func pluginRuntimeRequirementsForPlugin(name string, entry *config.ProviderEntry, deps Deps) (bool, bool, error) {
+func runtimeRequirementsForApp(name string, entry *config.ProviderEntry, deps Deps) (bool, bool, error) {
 	if entry == nil {
 		return false, false, nil
 	}
@@ -170,19 +170,19 @@ func (p RuntimePlacementPlan) Validate(label string) error {
 	return nil
 }
 
-func runtimeEgressModeFromSupport(src appruntime.EgressMode) RuntimeEgressMode {
+func runtimeEgressModeFromSupport(src runtimeprovider.EgressMode) RuntimeEgressMode {
 	switch src {
-	case appruntime.EgressModeHostname:
+	case runtimeprovider.EgressModeHostname:
 		return RuntimeEgressModeHostname
-	case appruntime.EgressModeCIDR:
+	case runtimeprovider.EgressModeCIDR:
 		return RuntimeEgressModeCIDR
 	default:
 		return RuntimeEgressModeNone
 	}
 }
 
-func pluginRuntimePublicRelayTarget(baseURL string, allowInsecureHTTP bool) (string, string, error) {
-	parsed, host, err := pluginRuntimePublicProxyBaseURL(baseURL, allowInsecureHTTP)
+func runtimePublicRelayTarget(baseURL string, allowInsecureHTTP bool) (string, string, error) {
+	parsed, host, err := runtimePublicProxyBaseURL(baseURL, allowInsecureHTTP)
 	if err != nil {
 		return "", "", err
 	}
@@ -205,7 +205,7 @@ func pluginRuntimePublicRelayTarget(baseURL string, allowInsecureHTTP bool) (str
 	}
 }
 
-func pluginRuntimePublicProxyBaseURL(baseURL string, allowInsecureHTTP bool) (*url.URL, string, error) {
+func runtimePublicProxyBaseURL(baseURL string, allowInsecureHTTP bool) (*url.URL, string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil {
 		return nil, "", fmt.Errorf("parse server.baseURL for public runtime relay: %w", err)

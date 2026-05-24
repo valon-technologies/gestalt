@@ -8,11 +8,11 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use generated::v1::app_runtime_log_host_server::{
-    AppRuntimeLogHost as ProtoAppRuntimeLogHost, AppRuntimeLogHostServer,
+use generated::v1::runtime_log_host_server::{
+    RuntimeLogHost as ProtoRuntimeLogHost, RuntimeLogHostServer,
 };
 use generated::v1::{
-    AppRuntimeLogStream, AppendAppRuntimeLogsRequest, AppendAppRuntimeLogsResponse,
+    AppendRuntimeLogsRequest, AppendRuntimeLogsResponse, RuntimeLogStream as ProtoRuntimeLogStream,
 };
 use gestalt::{ENV_RUNTIME_SESSION_ID, RuntimeLogHost, RuntimeLogStream};
 use tokio::net::UnixListener;
@@ -23,16 +23,16 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 #[derive(Clone, Default)]
 struct TestRuntimeLogHostServer {
-    requests: Arc<Mutex<Vec<AppendAppRuntimeLogsRequest>>>,
+    requests: Arc<Mutex<Vec<AppendRuntimeLogsRequest>>>,
     relay_tokens: Arc<Mutex<Vec<String>>>,
 }
 
 #[async_trait]
-impl ProtoAppRuntimeLogHost for TestRuntimeLogHostServer {
+impl ProtoRuntimeLogHost for TestRuntimeLogHostServer {
     async fn append_logs(
         &self,
-        request: GrpcRequest<AppendAppRuntimeLogsRequest>,
-    ) -> std::result::Result<GrpcResponse<AppendAppRuntimeLogsResponse>, Status> {
+        request: GrpcRequest<AppendRuntimeLogsRequest>,
+    ) -> std::result::Result<GrpcResponse<AppendRuntimeLogsResponse>, Status> {
         if let Some(token) = request.metadata().get("x-gestalt-host-service-relay-token") {
             self.relay_tokens
                 .lock()
@@ -46,7 +46,7 @@ impl ProtoAppRuntimeLogHost for TestRuntimeLogHostServer {
             .map(|entry| entry.source_seq)
             .unwrap_or_default();
         self.requests.lock().expect("lock requests").push(request);
-        Ok(GrpcResponse::new(AppendAppRuntimeLogsResponse { last_seq }))
+        Ok(GrpcResponse::new(AppendRuntimeLogsResponse { last_seq }))
     }
 }
 
@@ -87,7 +87,7 @@ async fn runtime_log_host_appends_logs_and_forwards_relay_token() {
     assert_eq!(requests[0].logs[0].message, "runtime boot\n");
     assert_eq!(
         requests[0].logs[0].stream,
-        AppRuntimeLogStream::PluginRuntimeLogStreamRuntime as i32
+        ProtoRuntimeLogStream::Runtime as i32
     );
     assert_eq!(requests[0].logs[0].source_seq, 7);
     assert!(requests[0].logs[0].observed_at.is_some());
@@ -95,7 +95,7 @@ async fn runtime_log_host_appends_logs_and_forwards_relay_token() {
     assert_eq!(requests[1].session_id, "runtime-session-1");
     assert_eq!(
         requests[1].logs[0].stream,
-        AppRuntimeLogStream::PluginRuntimeLogStreamStderr as i32
+        ProtoRuntimeLogStream::Stderr as i32
     );
     assert_eq!(requests[1].logs[0].source_seq, 8);
 
@@ -124,7 +124,7 @@ async fn serve_runtime_log_host(
     let listener = UnixListener::bind(socket).expect("bind unix listener");
 
     Server::builder()
-        .add_service(AppRuntimeLogHostServer::new(server))
+        .add_service(RuntimeLogHostServer::new(server))
         .serve_with_incoming(UnixListenerStream::new(listener))
         .await
 }

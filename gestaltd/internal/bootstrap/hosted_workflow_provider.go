@@ -14,7 +14,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"gopkg.in/yaml.v3"
 )
@@ -26,7 +26,7 @@ var errHostedWorkflowWorkerPoolClosed = errors.New("hosted workflow worker pool 
 type hostedWorkflowProviderLaunch struct {
 	name            string
 	runtimeConfig   config.EffectiveRuntimePlacement
-	runtimeProvider appruntime.Provider
+	runtimeProvider runtimeprovider.Provider
 	runtimeOwned    bool
 	runtimePlan     RuntimePlacementPlan
 	cfg             componentprovider.YAMLConfig
@@ -37,9 +37,9 @@ type hostedWorkflowProviderLaunch struct {
 
 type hostedWorkflowProviderInstance struct {
 	provider         coreworkflow.Provider
-	runtimeProvider  appruntime.Provider
+	runtimeProvider  runtimeprovider.Provider
 	runtimeSessionID string
-	runtimeSession   *appruntime.Session
+	runtimeSession   *runtimeprovider.Session
 }
 
 func buildHostedWorkflowWorkerPool(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (*hostedWorkflowWorkerPool, error) {
@@ -185,7 +185,7 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 		if !stopSession {
 			return
 		}
-		_ = stopAppRuntimeSessionWithTimeout(runtimeProvider, sessionID, stopTimeout)
+		_ = stopRuntimeSessionWithTimeout(runtimeProvider, sessionID, stopTimeout)
 		if closeOnFailure {
 			_ = runtimeProvider.Close()
 		}
@@ -193,7 +193,7 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 			cleanup()
 		}
 	}()
-	readySession, err := waitForAppRuntimeSessionReady(ctx, runtimeProvider, sessionID)
+	readySession, err := waitForRuntimeSessionReady(ctx, runtimeProvider, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("wait for hosted workflow runtime session %q ready: %w", sessionID, err)
 	}
@@ -232,25 +232,25 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 		maps.Copy(startEnv, egressPlan.Env)
 	}
 
-	hostedApp, err := runtimeProvider.StartApp(ctx, appruntime.StartAppRequest{
+	hostedApp, err := runtimeProvider.StartApp(ctx, runtimeprovider.StartAppRequest{
 		SessionID: sessionID,
 		AppName:   name,
 		Command:   launch.launch.command,
 		Args:      launch.launch.args,
 		Workdir:   launch.cfg.Workdir,
 		Env:       startEnv,
-		Egress: appruntime.RuntimeEgressPolicy{
+		Egress: runtimeprovider.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
-			DefaultAction: appruntime.PolicyAction(deps.Egress.DefaultAction),
+			DefaultAction: runtimeprovider.PolicyAction(deps.Egress.DefaultAction),
 		},
 		HostBinary: launch.cfg.HostBinary,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start hosted workflow provider: %w", err)
 	}
-	conn, err := appruntime.DialHostedWorkflow(ctx, hostedApp.DialTarget,
-		appruntime.WithProviderName(name),
-		appruntime.WithTelemetry(deps.Telemetry),
+	conn, err := runtimeprovider.DialHostedWorkflow(ctx, hostedApp.DialTarget,
+		runtimeprovider.WithProviderName(name),
+		runtimeprovider.WithTelemetry(deps.Telemetry),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("dial hosted workflow provider: %w", err)
@@ -361,9 +361,9 @@ type hostedWorkflowWorkerPool struct {
 type hostedWorkflowWorker struct {
 	id               int
 	provider         coreworkflow.Provider
-	runtimeProvider  appruntime.Provider
+	runtimeProvider  runtimeprovider.Provider
 	runtimeSessionID string
-	runtimeSession   *appruntime.Session
+	runtimeSession   *runtimeprovider.Session
 	startedAt        time.Time
 	runtimeDrainAt   *time.Time
 	forceCloseAt     *time.Time
@@ -729,7 +729,7 @@ func (p *hostedWorkflowWorkerPool) releaseWorker(worker *hostedWorkflowWorker) {
 	}
 }
 
-func (p *hostedWorkflowWorkerPool) refreshWorkerRuntimeSession(worker *hostedWorkflowWorker) (*appruntime.Session, *time.Time, error) {
+func (p *hostedWorkflowWorkerPool) refreshWorkerRuntimeSession(worker *hostedWorkflowWorker) (*runtimeprovider.Session, *time.Time, error) {
 	if worker == nil {
 		return nil, nil, fmt.Errorf("runtime worker is unavailable")
 	}
@@ -746,7 +746,7 @@ func (p *hostedWorkflowWorkerPool) refreshWorkerRuntimeSession(worker *hostedWor
 	}
 	ctx, cancel := context.WithTimeout(p.ctx, timeout)
 	defer cancel()
-	session, err := runtimeProvider.GetSession(ctx, appruntime.GetSessionRequest{SessionID: sessionID})
+	session, err := runtimeProvider.GetSession(ctx, runtimeprovider.GetSessionRequest{SessionID: sessionID})
 	if err != nil {
 		return nil, nil, fmt.Errorf("get runtime session %q: %w", sessionID, err)
 	}
@@ -846,7 +846,7 @@ func (p *hostedWorkflowWorkerPool) removeWorkerLocked(worker *hostedWorkflowWork
 	}
 }
 
-func (p *hostedWorkflowWorkerPool) runtimeSessionDrainAt(session *appruntime.Session, now time.Time) *time.Time {
+func (p *hostedWorkflowWorkerPool) runtimeSessionDrainAt(session *runtimeprovider.Session, now time.Time) *time.Time {
 	if session == nil || session.Lifecycle == nil {
 		return nil
 	}
@@ -864,7 +864,7 @@ func (p *hostedWorkflowWorkerPool) runtimeSessionDrainAt(session *appruntime.Ses
 	return drainAt
 }
 
-func (p *hostedWorkflowWorkerPool) runtimeSessionExpiryDrainAt(lifecycle *appruntime.SessionLifecycle, now time.Time) time.Time {
+func (p *hostedWorkflowWorkerPool) runtimeSessionExpiryDrainAt(lifecycle *runtimeprovider.SessionLifecycle, now time.Time) time.Time {
 	expiresAt := lifecycle.ExpiresAt.UTC()
 	reserve := p.policy.StartupTimeout + p.policy.DrainTimeout + p.policy.HealthCheckInterval + hostedWorkflowRuntimeLifecycleSafetyMargin
 	drainAt := expiresAt.Add(-reserve).UTC()
@@ -884,12 +884,12 @@ func (p *hostedWorkflowWorkerPool) runtimeSessionExpiryDrainAt(lifecycle *apprun
 	return drainAt
 }
 
-func (p *hostedWorkflowWorkerPool) runtimeSessionRetirementReason(session *appruntime.Session, drainAt *time.Time, now time.Time) string {
+func (p *hostedWorkflowWorkerPool) runtimeSessionRetirementReason(session *runtimeprovider.Session, drainAt *time.Time, now time.Time) string {
 	if session == nil {
 		return ""
 	}
 	switch session.State {
-	case appruntime.SessionStateFailed, appruntime.SessionStateStopped:
+	case runtimeprovider.SessionStateFailed, runtimeprovider.SessionStateStopped:
 		return fmt.Sprintf("runtime session entered %q state", session.State)
 	}
 	if reason := hostedRuntimeSessionCompatibilityReason(session); reason != "" {

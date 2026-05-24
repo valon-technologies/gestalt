@@ -44,21 +44,6 @@ if TYPE_CHECKING:
         UpdateAgentProviderSessionRequest,
     )
     from ._api import Error
-    from ._appruntime import (
-        AppRuntimeSession,
-        AppRuntimeSupport,
-        GetAppRuntimeSessionRequest,
-        GetAppRuntimeSupportRequest,
-        HostedApp,
-        ListAppRuntimeSessionsRequest,
-        ListAppRuntimeSessionsResponse,
-        PrepareAppRuntimeWorkspaceRequest,
-        PrepareAppRuntimeWorkspaceResponse,
-        RemoveAppRuntimeWorkspaceRequest,
-        StartAppRuntimeSessionRequest,
-        StartHostedAppRequest,
-        StopAppRuntimeSessionRequest,
-    )
     from ._authentication import (
         AuthenticatedUser,
         BeginLoginRequest,
@@ -90,6 +75,21 @@ if TYPE_CHECKING:
         SubjectSearchResponse,
         WriteModelRequest,
         WriteRelationshipsRequest,
+    )
+    from ._runtime_provider import (
+        GetRuntimeSessionRequest,
+        GetRuntimeSupportRequest,
+        HostedApp,
+        ListRuntimeSessionsRequest,
+        ListRuntimeSessionsResponse,
+        PrepareRuntimeWorkspaceRequest,
+        PrepareRuntimeWorkspaceResponse,
+        RemoveRuntimeWorkspaceRequest,
+        RuntimeSession,
+        RuntimeSupport,
+        StartHostedAppRequest,
+        StartRuntimeSessionRequest,
+        StopRuntimeSessionRequest,
     )
     from ._s3 import (
         CopyOptions,
@@ -587,58 +587,58 @@ class AgentProvider(AppProvider):
         _runtime.serve(self, runtime_kind=ProviderKind.AGENT)
 
 
-class AppRuntimeProvider(AppProvider):
-    """Base class for hosted plugin-runtime providers.
+class RuntimeProvider(AppProvider):
+    """Base class for hosted runtime providers.
 
     Subclasses implement snake_case handler methods such as
     ``get_support(request)``, ``start_session(request)``, and
-    ``start_plugin(request)``.
+    ``start_app(request)``.
     """
 
     def get_support(
         self,
-        request: GetAppRuntimeSupportRequest,
-    ) -> AppRuntimeSupport:
+        request: GetRuntimeSupportRequest,
+    ) -> RuntimeSupport:
         self._unimplemented("get_support")
 
     def start_session(
         self,
-        request: StartAppRuntimeSessionRequest,
-    ) -> AppRuntimeSession:
+        request: StartRuntimeSessionRequest,
+    ) -> RuntimeSession:
         self._unimplemented("start_session")
 
     def get_session(
         self,
-        request: GetAppRuntimeSessionRequest,
-    ) -> AppRuntimeSession:
+        request: GetRuntimeSessionRequest,
+    ) -> RuntimeSession:
         self._unimplemented("get_session")
 
     def list_sessions(
         self,
-        request: ListAppRuntimeSessionsRequest,
-    ) -> ListAppRuntimeSessionsResponse:
+        request: ListRuntimeSessionsRequest,
+    ) -> ListRuntimeSessionsResponse:
         self._unimplemented("list_sessions")
 
-    def stop_session(self, request: StopAppRuntimeSessionRequest) -> None:
+    def stop_session(self, request: StopRuntimeSessionRequest) -> None:
         self._unimplemented("stop_session")
 
     def prepare_workspace(
         self,
-        request: PrepareAppRuntimeWorkspaceRequest,
-    ) -> PrepareAppRuntimeWorkspaceResponse:
+        request: PrepareRuntimeWorkspaceRequest,
+    ) -> PrepareRuntimeWorkspaceResponse:
         self._unimplemented("prepare_workspace")
 
     def remove_workspace(
         self,
-        request: RemoveAppRuntimeWorkspaceRequest,
+        request: RemoveRuntimeWorkspaceRequest,
     ) -> None:
         self._unimplemented("remove_workspace")
 
-    def start_plugin(self, request: StartHostedAppRequest) -> HostedApp:
-        self._unimplemented("start_plugin")
+    def start_app(self, request: StartHostedAppRequest) -> HostedApp:
+        self._unimplemented("start_app")
 
     def serve(self) -> None:
-        """Start the plugin-runtime provider."""
+        """Start the runtime provider."""
 
         from . import _runtime
 

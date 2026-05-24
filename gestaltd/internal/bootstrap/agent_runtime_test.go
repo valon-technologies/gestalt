@@ -30,7 +30,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"gopkg.in/yaml.v3"
 )
 
@@ -375,13 +375,13 @@ func (p *workspaceAgentProvider) Ping(context.Context) error {
 }
 
 type workspaceRuntimeProvider struct {
-	*appruntime.LocalProvider
+	*runtimeprovider.LocalProvider
 	supportPrepareWorkspace bool
-	prepareWorkspace        func(context.Context, appruntime.PrepareWorkspaceRequest) (*appruntime.PreparedWorkspace, error)
-	removeWorkspaceReqs     []appruntime.RemoveWorkspaceRequest
+	prepareWorkspace        func(context.Context, runtimeprovider.PrepareWorkspaceRequest) (*runtimeprovider.PreparedWorkspace, error)
+	removeWorkspaceReqs     []runtimeprovider.RemoveWorkspaceRequest
 }
 
-func (p *workspaceRuntimeProvider) Support(ctx context.Context) (appruntime.Support, error) {
+func (p *workspaceRuntimeProvider) Support(ctx context.Context) (runtimeprovider.Support, error) {
 	support, err := p.LocalProvider.Support(ctx)
 	if err != nil {
 		return support, err
@@ -390,14 +390,14 @@ func (p *workspaceRuntimeProvider) Support(ctx context.Context) (appruntime.Supp
 	return support, nil
 }
 
-func (p *workspaceRuntimeProvider) PrepareWorkspace(ctx context.Context, req appruntime.PrepareWorkspaceRequest) (*appruntime.PreparedWorkspace, error) {
+func (p *workspaceRuntimeProvider) PrepareWorkspace(ctx context.Context, req runtimeprovider.PrepareWorkspaceRequest) (*runtimeprovider.PreparedWorkspace, error) {
 	if p.prepareWorkspace != nil {
 		return p.prepareWorkspace(ctx, req)
 	}
 	return p.LocalProvider.PrepareWorkspace(ctx, req)
 }
 
-func (p *workspaceRuntimeProvider) RemoveWorkspace(ctx context.Context, req appruntime.RemoveWorkspaceRequest) error {
+func (p *workspaceRuntimeProvider) RemoveWorkspace(ctx context.Context, req runtimeprovider.RemoveWorkspaceRequest) error {
 	p.removeWorkspaceReqs = append(p.removeWorkspaceReqs, req)
 	return p.LocalProvider.RemoveWorkspace(ctx, req)
 }
@@ -554,7 +554,7 @@ func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepar
 	if prepared == nil {
 		t.Fatal("provider did not receive prepared workspace")
 	}
-	runtimeProvider.prepareWorkspace = func(context.Context, appruntime.PrepareWorkspaceRequest) (*appruntime.PreparedWorkspace, error) {
+	runtimeProvider.prepareWorkspace = func(context.Context, runtimeprovider.PrepareWorkspaceRequest) (*runtimeprovider.PreparedWorkspace, error) {
 		return nil, errors.New("prepare should not run for idempotent replay")
 	}
 	second, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
@@ -646,8 +646,8 @@ func TestHostedAgentPoolCleansPreparedWorkspaceAfterValidationFailure(t *testing
 	defer cancel()
 	repo := createAgentRuntimeWorkspaceRepo(t)
 	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
-	runtimeProvider.prepareWorkspace = func(context.Context, appruntime.PrepareWorkspaceRequest) (*appruntime.PreparedWorkspace, error) {
-		return &appruntime.PreparedWorkspace{Root: "/tmp/gestalt-workspace-root", CWD: "/tmp/outside-workspace"}, nil
+	runtimeProvider.prepareWorkspace = func(context.Context, runtimeprovider.PrepareWorkspaceRequest) (*runtimeprovider.PreparedWorkspace, error) {
+		return &runtimeprovider.PreparedWorkspace{Root: "/tmp/gestalt-workspace-root", CWD: "/tmp/outside-workspace"}, nil
 	}
 	agentProvider := &workspaceAgentProvider{supportPreparedWorkspace: true}
 	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
@@ -721,7 +721,7 @@ func TestHostedAgentPoolCleansPreparedWorkspaceWhenSessionArchived(t *testing.T)
 	}
 }
 
-func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, runtimeProvider appruntime.Provider, runtimeSession *appruntime.Session, allowedRepos ...string) *hostedAgentProviderPool {
+func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, runtimeProvider runtimeprovider.Provider, runtimeSession *runtimeprovider.Session, allowedRepos ...string) *hostedAgentProviderPool {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	return &hostedAgentProviderPool{
@@ -747,13 +747,13 @@ func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, 
 	}
 }
 
-func startWorkspaceRuntimeSession(t *testing.T, ctx context.Context, supportsWorkspace bool) (*workspaceRuntimeProvider, *appruntime.Session) {
+func startWorkspaceRuntimeSession(t *testing.T, ctx context.Context, supportsWorkspace bool) (*workspaceRuntimeProvider, *runtimeprovider.Session) {
 	t.Helper()
 	runtimeProvider := &workspaceRuntimeProvider{
-		LocalProvider:           appruntime.NewLocalProvider(),
+		LocalProvider:           runtimeprovider.NewLocalProvider(),
 		supportPrepareWorkspace: supportsWorkspace,
 	}
-	session, err := runtimeProvider.StartSession(ctx, appruntime.StartSessionRequest{AppName: "agent"})
+	session, err := runtimeProvider.StartSession(ctx, runtimeprovider.StartSessionRequest{AppName: "agent"})
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)
 	}
@@ -856,12 +856,12 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingAppRuntime()
+	runtimeProvider := newCapturingRuntime()
 	ctxSentinel := &struct{}{}
 	var factoryContextValue any
 
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(ctx context.Context, _ string, _ *config.RuntimeProviderEntry, _ Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(ctx context.Context, _ string, _ *config.RuntimeProviderEntry, _ Deps) (runtimeprovider.Provider, error) {
 		factoryContextValue = ctx.Value(agentRuntimeFactoryContextKey{})
 		return runtimeProvider, nil
 	}
@@ -916,7 +916,7 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 		AgentRuntime:  &agentRuntime{providers: map[string]coreagent.Provider{}},
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	buildCtx := context.WithValue(context.Background(), agentRuntimeFactoryContextKey{}, ctxSentinel)
 	agents, err := buildAgents(buildCtx, cfg, factories, deps)
 	if err != nil {
@@ -966,9 +966,9 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingAppRuntime()
+	runtimeProvider := newCapturingRuntime()
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1002,7 +1002,7 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 		Services:      services,
 		AgentRuntime:  agentRuntime,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1108,9 +1108,9 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingAppRuntime()
+	runtimeProvider := newCapturingRuntime()
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1142,7 +1142,7 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 		Services:      services,
 		AgentRuntime:  agentRuntime,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1215,9 +1215,9 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingAppRuntime()
+	runtimeProvider := newCapturingRuntime()
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1249,7 +1249,7 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1287,13 +1287,13 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingAppRuntime()
+	runtimeProvider := newCapturingRuntime()
 	var drainMu sync.Mutex
 	var firstDrainAt time.Time
-	runtimeProvider.lifecycleForSession = func(index int) *appruntime.SessionLifecycle {
+	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
 		startedAt := time.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
-		lifecycle := &appruntime.SessionLifecycle{
+		lifecycle := &runtimeprovider.SessionLifecycle{
 			StartedAt: &startedAt,
 			ExpiresAt: &expiresAt,
 		}
@@ -1307,7 +1307,7 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		return lifecycle
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1340,7 +1340,7 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1395,11 +1395,11 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 //nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
 func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartFails(t *testing.T) {
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingAppRuntime()
-	runtimeProvider.lifecycleForSession = func(index int) *appruntime.SessionLifecycle {
+	runtimeProvider := newCapturingRuntime()
+	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
 		startedAt := time.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
-		lifecycle := &appruntime.SessionLifecycle{
+		lifecycle := &runtimeprovider.SessionLifecycle{
 			StartedAt: &startedAt,
 			ExpiresAt: &expiresAt,
 		}
@@ -1416,7 +1416,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		return nil
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1450,7 +1450,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1497,14 +1497,14 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 //nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
 func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *testing.T) {
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingAppRuntime()
+	runtimeProvider := newCapturingRuntime()
 	releaseReplacement := make(chan struct{})
 	replacementStarted := make(chan struct{})
 	var replacementStartedOnce sync.Once
-	runtimeProvider.lifecycleForSession = func(index int) *appruntime.SessionLifecycle {
+	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
 		startedAt := time.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
-		lifecycle := &appruntime.SessionLifecycle{
+		lifecycle := &runtimeprovider.SessionLifecycle{
 			StartedAt: &startedAt,
 			ExpiresAt: &expiresAt,
 		}
@@ -1525,7 +1525,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 		return nil
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1559,7 +1559,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1595,15 +1595,15 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 //nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
 func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntimeLifetime(t *testing.T) {
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingAppRuntime()
-	runtimeProvider.lifecycleForSession = func(index int) *appruntime.SessionLifecycle {
+	runtimeProvider := newCapturingRuntime()
+	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
 		expiresAt := time.Now().UTC().Add(5 * time.Minute)
-		return &appruntime.SessionLifecycle{
+		return &runtimeprovider.SessionLifecycle{
 			ExpiresAt: &expiresAt,
 		}
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1637,7 +1637,7 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1658,10 +1658,10 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := newCapturingAppRuntime()
+	runtimeProvider := newCapturingRuntime()
 	var expiryMu sync.Mutex
 	var firstExpiresAt time.Time
-	runtimeProvider.lifecycleForSession = func(index int) *appruntime.SessionLifecycle {
+	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
 		expiresAt := time.Now().UTC().Add(time.Hour)
 		if index == 1 {
 			expiresAt = time.Now().UTC().Add(2 * time.Second)
@@ -1669,12 +1669,12 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 			firstExpiresAt = expiresAt
 			expiryMu.Unlock()
 		}
-		return &appruntime.SessionLifecycle{
+		return &runtimeprovider.SessionLifecycle{
 			ExpiresAt: &expiresAt,
 		}
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
@@ -1708,7 +1708,7 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -2045,10 +2045,10 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		RunGrants: runGrants,
 		Invoker:   invoker,
 	}))
-	capturingRuntime := newCapturingAppRuntime()
+	capturingRuntime := newCapturingRuntime()
 
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return capturingRuntime, nil
 	}
 
@@ -2079,7 +2079,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		AgentRuntime:        agentRuntime,
 		PublicHostServices:  publicHostServices,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -3348,10 +3348,10 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	relaySrv.StartTLS()
 	testutil.CloseOnCleanup(t, relaySrv)
 
-	runtimeProvider := newCapturingBundleAppRuntime()
+	runtimeProvider := newCapturingBundleRuntime()
 
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 
@@ -3382,7 +3382,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 		AgentRuntime:       runtimeState,
 		PublicHostServices: publicHostServices,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -3428,7 +3428,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	t.Parallel()
 
-	runtimeProvider := newCapturingBundleAppRuntime()
+	runtimeProvider := newCapturingBundleRuntime()
 	entry := &config.ProviderEntry{
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Kind: providermanifestv1.KindAgent,
@@ -3450,7 +3450,7 @@ func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	}), Deps{
 		BaseURL:       "https://gestalt.example.test",
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
-		AppRuntime:    runtimeProvider,
+		Runtime:       runtimeProvider,
 	})
 	if err != nil {
 		t.Fatalf("prepareHostedAgentProviderLaunch: %v", err)
@@ -3495,9 +3495,9 @@ func TestAgentRuntimeProviderEntryRuntimePlacementConfigIncludesImagePullAuth(t 
 func TestAgentRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 	t.Parallel()
 
-	runtimeProvider := newCapturingBundleAppRuntime()
+	runtimeProvider := newCapturingBundleRuntime()
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -3527,7 +3527,7 @@ func TestAgentRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 		BaseURL:       "https://gestalt.example.test",
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	launch, err := prepareHostedAgentProviderLaunch(context.Background(), "simple", entry, mustNode(t, map[string]any{
 		"name":    "simple",
@@ -3588,15 +3588,15 @@ func TestAgentRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	runtimeProvider := &staticCapabilityAppRuntime{
-		inner: newCapturingAppRuntime(),
-		support: appruntime.Support{
+	runtimeProvider := &staticCapabilityRuntime{
+		inner: newCapturingRuntime(),
+		support: runtimeprovider.Support{
 			CanHostApps: true,
 		},
 	}
 
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 
@@ -3622,7 +3622,7 @@ func TestAgentRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	deps := Deps{
 		AgentRuntime: &agentRuntime{providers: map[string]coreagent.Provider{}},
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	_, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err == nil {

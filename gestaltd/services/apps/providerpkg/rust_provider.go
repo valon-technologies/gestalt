@@ -54,7 +54,7 @@ const PLUGIN_NAME: &str = {{.AppNameLiteral}};
 
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 {{- if .SupportsCatalog }}
-    if let Ok(path) = std::env::var("GESTALT_PLUGIN_WRITE_CATALOG") {
+    if let Ok(path) = std::env::var("GESTALT_APP_WRITE_CATALOG") {
         provider_app::__gestalt_write_catalog(PLUGIN_NAME, &path)?;
     } else {
         provider_app::{{.ServeFunction}}(PLUGIN_NAME)?;

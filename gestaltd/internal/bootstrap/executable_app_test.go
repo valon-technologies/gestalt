@@ -55,7 +55,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
@@ -198,30 +198,30 @@ func (p *recordingHostedAuthorizationProvider) Calls() []authorizationSearchCall
 	return slices.Clone(p.searchCalls)
 }
 
-type capturingAppRuntime struct {
-	provider *appruntime.LocalProvider
+type capturingRuntime struct {
+	provider *runtimeprovider.LocalProvider
 
 	mu                  sync.Mutex
-	startRequests       []appruntime.StartSessionRequest
-	startAppRequests    []appruntime.StartAppRequest
+	startRequests       []runtimeprovider.StartSessionRequest
+	startAppRequests    []runtimeprovider.StartAppRequest
 	startTimes          []time.Time
-	sessionLifecycles   map[string]*appruntime.SessionLifecycle
-	lifecycleForSession func(index int) *appruntime.SessionLifecycle
+	sessionLifecycles   map[string]*runtimeprovider.SessionLifecycle
+	lifecycleForSession func(index int) *runtimeprovider.SessionLifecycle
 	startErrForSession  func(index int) error
 	stopCount           atomic.Int32
 }
 
-func newCapturingAppRuntime() *capturingAppRuntime {
-	return &capturingAppRuntime{provider: appruntime.NewLocalProvider()}
+func newCapturingRuntime() *capturingRuntime {
+	return &capturingRuntime{provider: runtimeprovider.NewLocalProvider()}
 }
 
-func (r *capturingAppRuntime) Support(ctx context.Context) (appruntime.Support, error) {
+func (r *capturingRuntime) Support(ctx context.Context) (runtimeprovider.Support, error) {
 	return r.provider.Support(ctx)
 }
 
-func (r *capturingAppRuntime) StartSession(ctx context.Context, req appruntime.StartSessionRequest) (*appruntime.Session, error) {
+func (r *capturingRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
 	r.mu.Lock()
-	r.startRequests = append(r.startRequests, appruntime.StartSessionRequest{
+	r.startRequests = append(r.startRequests, runtimeprovider.StartSessionRequest{
 		AppName:       req.AppName,
 		Template:      req.Template,
 		Image:         req.Image,
@@ -243,29 +243,29 @@ func (r *capturingAppRuntime) StartSession(ctx context.Context, req appruntime.S
 		return nil, err
 	}
 	if lifecycleForSession != nil {
-		session.Lifecycle = cloneAppRuntimeSessionLifecycle(lifecycleForSession(index))
+		session.Lifecycle = cloneRuntimeSessionLifecycle(lifecycleForSession(index))
 		r.mu.Lock()
 		if r.sessionLifecycles == nil {
-			r.sessionLifecycles = map[string]*appruntime.SessionLifecycle{}
+			r.sessionLifecycles = map[string]*runtimeprovider.SessionLifecycle{}
 		}
-		r.sessionLifecycles[session.ID] = cloneAppRuntimeSessionLifecycle(session.Lifecycle)
+		r.sessionLifecycles[session.ID] = cloneRuntimeSessionLifecycle(session.Lifecycle)
 		r.mu.Unlock()
 	}
 	return session, nil
 }
 
-func (r *capturingAppRuntime) ListSessions(ctx context.Context) ([]appruntime.Session, error) {
-	sessions, err := r.provider.ListSessions(ctx)
+func (r *capturingRuntime) ListSessions(ctx context.Context, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+	sessions, err := r.provider.ListSessions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	for i := range sessions {
-		r.attachSessionLifecycle(&sessions[i])
+	for i := range sessions.Sessions {
+		r.attachSessionLifecycle(&sessions.Sessions[i])
 	}
 	return sessions, nil
 }
 
-func (r *capturingAppRuntime) GetSession(ctx context.Context, req appruntime.GetSessionRequest) (*appruntime.Session, error) {
+func (r *capturingRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
 	session, err := r.provider.GetSession(ctx, req)
 	if err != nil {
 		return nil, err
@@ -274,14 +274,14 @@ func (r *capturingAppRuntime) GetSession(ctx context.Context, req appruntime.Get
 	return session, nil
 }
 
-func (r *capturingAppRuntime) StopSession(ctx context.Context, req appruntime.StopSessionRequest) error {
+func (r *capturingRuntime) StopSession(ctx context.Context, req runtimeprovider.StopSessionRequest) error {
 	r.stopCount.Add(1)
 	return r.provider.StopSession(ctx, req)
 }
 
-func (r *capturingAppRuntime) StartApp(ctx context.Context, req appruntime.StartAppRequest) (*appruntime.HostedApp, error) {
+func (r *capturingRuntime) StartApp(ctx context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
 	r.mu.Lock()
-	r.startAppRequests = append(r.startAppRequests, appruntime.StartAppRequest{
+	r.startAppRequests = append(r.startAppRequests, runtimeprovider.StartAppRequest{
 		SessionID:  req.SessionID,
 		AppName:    req.AppName,
 		Command:    req.Command,
@@ -294,16 +294,16 @@ func (r *capturingAppRuntime) StartApp(ctx context.Context, req appruntime.Start
 	return r.provider.StartApp(ctx, req)
 }
 
-func (r *capturingAppRuntime) Close() error {
+func (r *capturingRuntime) Close() error {
 	return r.provider.Close()
 }
 
-func (r *capturingAppRuntime) startSessionRequests() []appruntime.StartSessionRequest {
+func (r *capturingRuntime) startSessionRequests() []runtimeprovider.StartSessionRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]appruntime.StartSessionRequest, len(r.startRequests))
+	out := make([]runtimeprovider.StartSessionRequest, len(r.startRequests))
 	for i, req := range r.startRequests {
-		out[i] = appruntime.StartSessionRequest{
+		out[i] = runtimeprovider.StartSessionRequest{
 			AppName:       req.AppName,
 			Template:      req.Template,
 			Image:         req.Image,
@@ -314,27 +314,27 @@ func (r *capturingAppRuntime) startSessionRequests() []appruntime.StartSessionRe
 	return out
 }
 
-func cloneImagePullAuth(src *appruntime.ImagePullAuth) *appruntime.ImagePullAuth {
+func cloneImagePullAuth(src *runtimeprovider.ImagePullAuth) *runtimeprovider.ImagePullAuth {
 	if src == nil {
 		return nil
 	}
-	return &appruntime.ImagePullAuth{
+	return &runtimeprovider.ImagePullAuth{
 		DockerConfigJSON: src.DockerConfigJSON,
 	}
 }
 
-func (r *capturingAppRuntime) startSessionTimes() []time.Time {
+func (r *capturingRuntime) startSessionTimes() []time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]time.Time(nil), r.startTimes...)
 }
 
-func (r *capturingAppRuntime) startAppRequestsCopy() []appruntime.StartAppRequest {
+func (r *capturingRuntime) startAppRequestsCopy() []runtimeprovider.StartAppRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]appruntime.StartAppRequest, len(r.startAppRequests))
+	out := make([]runtimeprovider.StartAppRequest, len(r.startAppRequests))
 	for i, req := range r.startAppRequests {
-		out[i] = appruntime.StartAppRequest{
+		out[i] = runtimeprovider.StartAppRequest{
 			SessionID:  req.SessionID,
 			AppName:    req.AppName,
 			Command:    req.Command,
@@ -347,21 +347,21 @@ func (r *capturingAppRuntime) startAppRequestsCopy() []appruntime.StartAppReques
 	return out
 }
 
-func (r *capturingAppRuntime) attachSessionLifecycle(session *appruntime.Session) {
+func (r *capturingRuntime) attachSessionLifecycle(session *runtimeprovider.Session) {
 	if session == nil || session.ID == "" {
 		return
 	}
 	r.mu.Lock()
-	lifecycle := cloneAppRuntimeSessionLifecycle(r.sessionLifecycles[session.ID])
+	lifecycle := cloneRuntimeSessionLifecycle(r.sessionLifecycles[session.ID])
 	r.mu.Unlock()
 	session.Lifecycle = lifecycle
 }
 
-func cloneAppRuntimeSessionLifecycle(lifecycle *appruntime.SessionLifecycle) *appruntime.SessionLifecycle {
+func cloneRuntimeSessionLifecycle(lifecycle *runtimeprovider.SessionLifecycle) *runtimeprovider.SessionLifecycle {
 	if lifecycle == nil {
 		return nil
 	}
-	return &appruntime.SessionLifecycle{
+	return &runtimeprovider.SessionLifecycle{
 		StartedAt:          cloneTestTime(lifecycle.StartedAt),
 		RecommendedDrainAt: cloneTestTime(lifecycle.RecommendedDrainAt),
 		ExpiresAt:          cloneTestTime(lifecycle.ExpiresAt),
@@ -376,14 +376,14 @@ func cloneTestTime(src *time.Time) *time.Time {
 	return &out
 }
 
-type capturingBundleAppRuntime struct {
-	provider   *appruntime.LocalProvider
-	support    appruntime.Support
+type capturingBundleRuntime struct {
+	provider   *runtimeprovider.LocalProvider
+	support    runtimeprovider.Support
 	fakeHosted bool
 
 	mu                sync.Mutex
-	startAppRequests  []appruntime.StartAppRequest
-	sessionLifecycles map[string]*appruntime.SessionLifecycle
+	startAppRequests  []runtimeprovider.StartAppRequest
+	sessionLifecycles map[string]*runtimeprovider.SessionLifecycle
 	fakeApps          map[string]*fakeHostedAppServer
 }
 
@@ -393,21 +393,21 @@ type fakeHostedAppServer struct {
 	server   *grpc.Server
 }
 
-func newCapturingBundleAppRuntime() *capturingBundleAppRuntime {
-	return &capturingBundleAppRuntime{
-		provider: appruntime.NewLocalProvider(),
-		support: appruntime.Support{
+func newCapturingBundleRuntime() *capturingBundleRuntime {
+	return &capturingBundleRuntime{
+		provider: runtimeprovider.NewLocalProvider(),
+		support: runtimeprovider.Support{
 			CanHostApps: true,
 		},
 		fakeApps: make(map[string]*fakeHostedAppServer),
 	}
 }
 
-func (r *capturingBundleAppRuntime) Support(context.Context) (appruntime.Support, error) {
+func (r *capturingBundleRuntime) Support(context.Context) (runtimeprovider.Support, error) {
 	return r.support, nil
 }
 
-func (r *capturingBundleAppRuntime) StartSession(ctx context.Context, req appruntime.StartSessionRequest) (*appruntime.Session, error) {
+func (r *capturingBundleRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
 	session, err := r.provider.StartSession(ctx, req)
 	if err != nil {
 		return nil, err
@@ -416,18 +416,18 @@ func (r *capturingBundleAppRuntime) StartSession(ctx context.Context, req apprun
 	return session, nil
 }
 
-func (r *capturingBundleAppRuntime) ListSessions(ctx context.Context) ([]appruntime.Session, error) {
-	sessions, err := r.provider.ListSessions(ctx)
+func (r *capturingBundleRuntime) ListSessions(ctx context.Context, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+	sessions, err := r.provider.ListSessions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	for i := range sessions {
-		r.attachSessionLifecycle(&sessions[i])
+	for i := range sessions.Sessions {
+		r.attachSessionLifecycle(&sessions.Sessions[i])
 	}
 	return sessions, nil
 }
 
-func (r *capturingBundleAppRuntime) GetSession(ctx context.Context, req appruntime.GetSessionRequest) (*appruntime.Session, error) {
+func (r *capturingBundleRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
 	session, err := r.provider.GetSession(ctx, req)
 	if err != nil {
 		return nil, err
@@ -436,14 +436,14 @@ func (r *capturingBundleAppRuntime) GetSession(ctx context.Context, req apprunti
 	return session, nil
 }
 
-func (r *capturingBundleAppRuntime) StopSession(ctx context.Context, req appruntime.StopSessionRequest) error {
+func (r *capturingBundleRuntime) StopSession(ctx context.Context, req runtimeprovider.StopSessionRequest) error {
 	r.cleanupFakeHostedApp(req.SessionID)
 	return r.provider.StopSession(ctx, req)
 }
 
-func (r *capturingBundleAppRuntime) StartApp(ctx context.Context, req appruntime.StartAppRequest) (*appruntime.HostedApp, error) {
+func (r *capturingBundleRuntime) StartApp(ctx context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
 	r.mu.Lock()
-	r.startAppRequests = append(r.startAppRequests, appruntime.StartAppRequest{
+	r.startAppRequests = append(r.startAppRequests, runtimeprovider.StartAppRequest{
 		SessionID:  req.SessionID,
 		AppName:    req.AppName,
 		Command:    req.Command,
@@ -460,7 +460,7 @@ func (r *capturingBundleAppRuntime) StartApp(ctx context.Context, req appruntime
 	return r.provider.StartApp(ctx, req)
 }
 
-func (r *capturingBundleAppRuntime) Close() error {
+func (r *capturingBundleRuntime) Close() error {
 	r.mu.Lock()
 	sessionIDs := make([]string, 0, len(r.fakeApps))
 	for sessionID := range r.fakeApps {
@@ -473,7 +473,7 @@ func (r *capturingBundleAppRuntime) Close() error {
 	return r.provider.Close()
 }
 
-func (r *capturingBundleAppRuntime) startFakeHostedApp(req appruntime.StartAppRequest) (*appruntime.HostedApp, error) {
+func (r *capturingBundleRuntime) startFakeHostedApp(req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
 	env := cloneRuntimeMetadata(req.Env)
 	dir, err := appservice.NewPluginTempDir("gstp-fake-")
 	if err != nil {
@@ -483,14 +483,14 @@ func (r *capturingBundleAppRuntime) startFakeHostedApp(req appruntime.StartAppRe
 	lis, err := net.Listen("unix", socketPath)
 	if err != nil {
 		_ = os.RemoveAll(dir)
-		return nil, fmt.Errorf("listen for fake hosted plugin: %w", err)
+		return nil, fmt.Errorf("listen for fake hosted app: %w", err)
 	}
 
 	srv := grpc.NewServer()
 	proto.RegisterAppProviderServer(srv, appservice.NewServer(&coretesting.StubIntegration{
 		N:        req.AppName,
 		DN:       "Fake Hosted Plugin",
-		Desc:     "test-only fake hosted plugin",
+		Desc:     "test-only fake hosted app",
 		ConnMode: core.ConnectionModeNone,
 		CatalogVal: &catalog.Catalog{
 			Name: req.AppName,
@@ -682,7 +682,7 @@ func (r *capturingBundleAppRuntime) startFakeHostedApp(req appruntime.StartAppRe
 		server:   srv,
 	}
 	r.mu.Unlock()
-	return &appruntime.HostedApp{
+	return &runtimeprovider.HostedApp{
 		ID:         "fake-" + req.SessionID,
 		SessionID:  req.SessionID,
 		AppName:    req.AppName,
@@ -690,7 +690,7 @@ func (r *capturingBundleAppRuntime) startFakeHostedApp(req appruntime.StartAppRe
 	}, nil
 }
 
-func (r *capturingBundleAppRuntime) cleanupFakeHostedApp(sessionID string) {
+func (r *capturingBundleRuntime) cleanupFakeHostedApp(sessionID string) {
 	r.mu.Lock()
 	fake := r.fakeApps[sessionID]
 	delete(r.fakeApps, sessionID)
@@ -1230,12 +1230,12 @@ func fakeHostedInvokePlugin(targetApp, targetOperation, invocationToken string, 
 	return envelope, nil
 }
 
-func (r *capturingBundleAppRuntime) startAppRequestsCopy() []appruntime.StartAppRequest {
+func (r *capturingBundleRuntime) startAppRequestsCopy() []runtimeprovider.StartAppRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]appruntime.StartAppRequest, len(r.startAppRequests))
+	out := make([]runtimeprovider.StartAppRequest, len(r.startAppRequests))
 	for i, req := range r.startAppRequests {
-		out[i] = appruntime.StartAppRequest{
+		out[i] = runtimeprovider.StartAppRequest{
 			SessionID:  req.SessionID,
 			AppName:    req.AppName,
 			Command:    req.Command,
@@ -1248,21 +1248,21 @@ func (r *capturingBundleAppRuntime) startAppRequestsCopy() []appruntime.StartApp
 	return out
 }
 
-func (r *capturingBundleAppRuntime) setSessionLifecycle(sessionID string, lifecycle *appruntime.SessionLifecycle) {
+func (r *capturingBundleRuntime) setSessionLifecycle(sessionID string, lifecycle *runtimeprovider.SessionLifecycle) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.sessionLifecycles == nil {
-		r.sessionLifecycles = make(map[string]*appruntime.SessionLifecycle)
+		r.sessionLifecycles = make(map[string]*runtimeprovider.SessionLifecycle)
 	}
-	r.sessionLifecycles[sessionID] = cloneAppRuntimeSessionLifecycle(lifecycle)
+	r.sessionLifecycles[sessionID] = cloneRuntimeSessionLifecycle(lifecycle)
 }
 
-func (r *capturingBundleAppRuntime) attachSessionLifecycle(session *appruntime.Session) {
+func (r *capturingBundleRuntime) attachSessionLifecycle(session *runtimeprovider.Session) {
 	if session == nil || session.ID == "" {
 		return
 	}
 	r.mu.Lock()
-	lifecycle := cloneAppRuntimeSessionLifecycle(r.sessionLifecycles[session.ID])
+	lifecycle := cloneRuntimeSessionLifecycle(r.sessionLifecycles[session.ID])
 	r.mu.Unlock()
 	session.Lifecycle = lifecycle
 }
@@ -1278,14 +1278,14 @@ func cloneRuntimeMetadata(values map[string]string) map[string]string {
 	return out
 }
 
-func cloneRuntimeEgressPolicy(policy appruntime.RuntimeEgressPolicy) appruntime.RuntimeEgressPolicy {
-	return appruntime.RuntimeEgressPolicy{
+func cloneRuntimeEgressPolicy(policy runtimeprovider.RuntimeEgressPolicy) runtimeprovider.RuntimeEgressPolicy {
+	return runtimeprovider.RuntimeEgressPolicy{
 		AllowedHosts:  slices.Clone(policy.AllowedHosts),
 		DefaultAction: policy.DefaultAction,
 	}
 }
 
-func assertStartPluginEgressPolicy(t *testing.T, req appruntime.StartAppRequest, allowedHosts []string, action appruntime.PolicyAction) {
+func assertStartAppEgressPolicy(t *testing.T, req runtimeprovider.StartAppRequest, allowedHosts []string, action runtimeprovider.PolicyAction) {
 	t.Helper()
 	if got := req.Egress.AllowedHosts; !slices.Equal(got, allowedHosts) {
 		t.Fatalf("StartApp egress allowed hosts = %#v, want %#v", got, allowedHosts)
@@ -1295,7 +1295,7 @@ func assertStartPluginEgressPolicy(t *testing.T, req appruntime.StartAppRequest,
 	}
 }
 
-func assertStartAppRelayEnv(t *testing.T, req appruntime.StartAppRequest, relayContext string) {
+func assertStartAppRelayEnv(t *testing.T, req runtimeprovider.StartAppRequest, relayContext string) {
 	t.Helper()
 	if got := req.Env[runtimehost.DefaultHostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
 		t.Fatalf("StartApp env %s = %q, want tls:// public relay target for %s", runtimehost.DefaultHostServiceSocketEnv, got, relayContext)
@@ -1305,80 +1305,80 @@ func assertStartAppRelayEnv(t *testing.T, req appruntime.StartAppRequest, relayC
 	}
 }
 
-type slowStopAppRuntime struct {
-	inner     appruntime.Provider
+type slowStopRuntime struct {
+	inner     runtimeprovider.Provider
 	stopCount atomic.Int32
 }
 
-func (r *slowStopAppRuntime) Support(ctx context.Context) (appruntime.Support, error) {
+func (r *slowStopRuntime) Support(ctx context.Context) (runtimeprovider.Support, error) {
 	return r.inner.Support(ctx)
 }
 
-func (r *slowStopAppRuntime) StartSession(ctx context.Context, req appruntime.StartSessionRequest) (*appruntime.Session, error) {
+func (r *slowStopRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
 	return r.inner.StartSession(ctx, req)
 }
 
-func (r *slowStopAppRuntime) ListSessions(ctx context.Context) ([]appruntime.Session, error) {
-	return r.inner.ListSessions(ctx)
+func (r *slowStopRuntime) ListSessions(ctx context.Context, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+	return r.inner.ListSessions(ctx, req)
 }
 
-func (r *slowStopAppRuntime) GetSession(ctx context.Context, req appruntime.GetSessionRequest) (*appruntime.Session, error) {
+func (r *slowStopRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
 	return r.inner.GetSession(ctx, req)
 }
 
-func (r *slowStopAppRuntime) StopSession(ctx context.Context, req appruntime.StopSessionRequest) error {
+func (r *slowStopRuntime) StopSession(ctx context.Context, req runtimeprovider.StopSessionRequest) error {
 	r.stopCount.Add(1)
 	<-ctx.Done()
 	return ctx.Err()
 }
 
-func (r *slowStopAppRuntime) StartApp(ctx context.Context, req appruntime.StartAppRequest) (*appruntime.HostedApp, error) {
+func (r *slowStopRuntime) StartApp(ctx context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
 	return r.inner.StartApp(ctx, req)
 }
 
-func (r *slowStopAppRuntime) Close() error {
+func (r *slowStopRuntime) Close() error {
 	return r.inner.Close()
 }
 
-type failingStartPluginSlowStopAppRuntime struct {
-	slowStopAppRuntime
+type failingStartAppSlowStopRuntime struct {
+	slowStopRuntime
 	err error
 }
 
-func (r *failingStartPluginSlowStopAppRuntime) StartApp(context.Context, appruntime.StartAppRequest) (*appruntime.HostedApp, error) {
+func (r *failingStartAppSlowStopRuntime) StartApp(context.Context, runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
 	return nil, r.err
 }
 
-type staticCapabilityAppRuntime struct {
-	inner   appruntime.Provider
-	support appruntime.Support
+type staticCapabilityRuntime struct {
+	inner   runtimeprovider.Provider
+	support runtimeprovider.Support
 }
 
-func (r *staticCapabilityAppRuntime) Support(context.Context) (appruntime.Support, error) {
+func (r *staticCapabilityRuntime) Support(context.Context) (runtimeprovider.Support, error) {
 	return r.support, nil
 }
 
-func (r *staticCapabilityAppRuntime) StartSession(ctx context.Context, req appruntime.StartSessionRequest) (*appruntime.Session, error) {
+func (r *staticCapabilityRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
 	return r.inner.StartSession(ctx, req)
 }
 
-func (r *staticCapabilityAppRuntime) ListSessions(ctx context.Context) ([]appruntime.Session, error) {
-	return r.inner.ListSessions(ctx)
+func (r *staticCapabilityRuntime) ListSessions(ctx context.Context, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+	return r.inner.ListSessions(ctx, req)
 }
 
-func (r *staticCapabilityAppRuntime) GetSession(ctx context.Context, req appruntime.GetSessionRequest) (*appruntime.Session, error) {
+func (r *staticCapabilityRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
 	return r.inner.GetSession(ctx, req)
 }
 
-func (r *staticCapabilityAppRuntime) StopSession(ctx context.Context, req appruntime.StopSessionRequest) error {
+func (r *staticCapabilityRuntime) StopSession(ctx context.Context, req runtimeprovider.StopSessionRequest) error {
 	return r.inner.StopSession(ctx, req)
 }
 
-func (r *staticCapabilityAppRuntime) StartApp(ctx context.Context, req appruntime.StartAppRequest) (*appruntime.HostedApp, error) {
+func (r *staticCapabilityRuntime) StartApp(ctx context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
 	return r.inner.StartApp(ctx, req)
 }
 
-func (r *staticCapabilityAppRuntime) Close() error {
+func (r *staticCapabilityRuntime) Close() error {
 	return r.inner.Close()
 }
 
@@ -4081,11 +4081,11 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	relaySrv.StartTLS()
 	testutil.CloseOnCleanup(t, relaySrv)
 
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 
@@ -4123,7 +4123,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		AgentManager:       manager,
 		PublicHostServices: publicHostServices,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -5606,7 +5606,7 @@ func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
 	}
 }
 
-func TestInjectedAppRuntimeStopsSessionOnProviderClose(t *testing.T) {
+func TestInjectedRuntimeStopsSessionOnProviderClose(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -5617,7 +5617,7 @@ func TestInjectedAppRuntimeStopsSessionOnProviderClose(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingAppRuntime()
+	runtimeProvider := newCapturingRuntime()
 	t.Cleanup(func() { _ = runtimeProvider.Close() })
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{
@@ -5631,7 +5631,7 @@ func TestInjectedAppRuntimeStopsSessionOnProviderClose(t *testing.T) {
 	}
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
-		AppRuntime: runtimeProvider,
+		Runtime: runtimeProvider,
 	})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -5648,11 +5648,11 @@ func TestInjectedAppRuntimeStopsSessionOnProviderClose(t *testing.T) {
 		t.Fatalf("CloseProviders: %v", err)
 	}
 	if runtimeProvider.stopCount.Load() == 0 {
-		t.Fatal("expected CloseProviders to stop the hosted app runtime session")
+		t.Fatal("expected CloseProviders to stop the hosted runtime session")
 	}
 }
 
-func TestInjectedAppRuntimeStopSessionTimeoutDoesNotHangProviderClose(t *testing.T) {
+func TestInjectedRuntimeStopSessionTimeoutDoesNotHangProviderClose(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -5663,7 +5663,7 @@ func TestInjectedAppRuntimeStopSessionTimeoutDoesNotHangProviderClose(t *testing
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := &slowStopAppRuntime{inner: appruntime.NewLocalProvider()}
+	runtimeProvider := &slowStopRuntime{inner: runtimeprovider.NewLocalProvider()}
 	t.Cleanup(func() { _ = runtimeProvider.Close() })
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{
@@ -5677,7 +5677,7 @@ func TestInjectedAppRuntimeStopSessionTimeoutDoesNotHangProviderClose(t *testing
 	}
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
-		AppRuntime: runtimeProvider,
+		Runtime: runtimeProvider,
 	})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -5706,11 +5706,11 @@ func TestInjectedAppRuntimeStopSessionTimeoutDoesNotHangProviderClose(t *testing
 	}
 
 	if runtimeProvider.stopCount.Load() == 0 {
-		t.Fatal("expected CloseProviders to attempt stopping the hosted app runtime session")
+		t.Fatal("expected CloseProviders to attempt stopping the hosted runtime session")
 	}
 }
 
-func TestInjectedAppRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *testing.T) {
+func TestInjectedRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -5721,9 +5721,9 @@ func TestInjectedAppRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *test
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := &failingStartPluginSlowStopAppRuntime{
-		slowStopAppRuntime: slowStopAppRuntime{inner: appruntime.NewLocalProvider()},
-		err:                fmt.Errorf("start failed"),
+	runtimeProvider := &failingStartAppSlowStopRuntime{
+		slowStopRuntime: slowStopRuntime{inner: runtimeprovider.NewLocalProvider()},
+		err:             fmt.Errorf("start failed"),
 	}
 	t.Cleanup(func() { _ = runtimeProvider.Close() })
 	cfg := &config.Config{
@@ -5743,7 +5743,7 @@ func TestInjectedAppRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *test
 	done := make(chan error, 1)
 	go func() {
 		_, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
-			AppRuntime: runtimeProvider,
+			Runtime: runtimeProvider,
 		}))
 		done <- err
 	}()
@@ -5758,11 +5758,11 @@ func TestInjectedAppRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *test
 	}
 
 	if runtimeProvider.stopCount.Load() == 0 {
-		t.Fatal("expected bootstrap failure to attempt stopping the hosted app runtime session")
+		t.Fatal("expected bootstrap failure to attempt stopping the hosted runtime session")
 	}
 }
 
-func TestAppRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *testing.T) {
+func TestRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *testing.T) {
 	t.Parallel()
 
 	type runtimeFactoryContextKey struct{}
@@ -5792,11 +5792,11 @@ func TestAppRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *testi
 		ArtifactPath: filepath.ToSlash(imageEntrypoint),
 		Args:         []string{"provider"},
 	}
-	runtimeProvider := newCapturingAppRuntime()
+	runtimeProvider := newCapturingRuntime()
 	ctxSentinel := &struct{}{}
 	var factoryContextValue any
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(ctx context.Context, _ string, _ *config.RuntimeProviderEntry, _ Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(ctx context.Context, _ string, _ *config.RuntimeProviderEntry, _ Deps) (runtimeprovider.Provider, error) {
 		factoryContextValue = ctx.Value(runtimeFactoryContextKey{})
 		return runtimeProvider, nil
 	}
@@ -5827,7 +5827,7 @@ func TestAppRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *testi
 	}
 
 	deps := Deps{
-		AppRuntimeRegistry: newAppRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		RuntimeRegistry: newRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	}
 	buildCtx := context.WithValue(context.Background(), runtimeFactoryContextKey{}, ctxSentinel)
 	providers, _, err := buildProvidersStrict(buildCtx, cfg, factories, deps)
@@ -5874,7 +5874,7 @@ func TestAppRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *testi
 	}
 }
 
-func TestAppRuntimeStartsHostedCommandWithoutBundleStaging(t *testing.T) {
+func TestRuntimeStartsHostedCommandWithoutBundleStaging(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -5917,9 +5917,9 @@ func TestAppRuntimeStartsHostedCommandWithoutBundleStaging(t *testing.T) {
 		t.Fatalf("WriteFile(manifest.yaml): %v", err)
 	}
 
-	runtimeProvider := newCapturingBundleAppRuntime()
+	runtimeProvider := newCapturingBundleRuntime()
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -5945,7 +5945,7 @@ func TestAppRuntimeStartsHostedCommandWithoutBundleStaging(t *testing.T) {
 	}
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		AppRuntimeRegistry: newAppRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		RuntimeRegistry: newRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -5976,7 +5976,7 @@ func TestAppRuntimeStartsHostedCommandWithoutBundleStaging(t *testing.T) {
 	}
 }
 
-func TestAppRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
+func TestRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	t.Parallel()
 
 	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
@@ -5991,10 +5991,10 @@ func TestAppRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 		Args:         []string{"--config", "/etc/gestalt/echo.yaml"},
 	}
 
-	runtimeProvider := newCapturingBundleAppRuntime()
+	runtimeProvider := newCapturingBundleRuntime()
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -6020,7 +6020,7 @@ func TestAppRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	}
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		AppRuntimeRegistry: newAppRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		RuntimeRegistry: newRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -6044,7 +6044,7 @@ func TestAppRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	}
 }
 
-func TestAppRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
+func TestRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 	t.Parallel()
 
 	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
@@ -6059,10 +6059,10 @@ func TestAppRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 		Args:         []string{"--config", "/etc/gestalt/echo.yaml"},
 	}
 
-	runtimeProvider := newCapturingBundleAppRuntime()
+	runtimeProvider := newCapturingBundleRuntime()
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -6090,7 +6090,7 @@ func TestAppRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 	}
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		AppRuntimeRegistry: newAppRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		RuntimeRegistry: newRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -6114,7 +6114,7 @@ func TestAppRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 	}
 }
 
-func TestAppRuntimeLocalFallbackImageLaunchUsesConfiguredCommand(t *testing.T) {
+func TestRuntimeLocalFallbackImageLaunchUsesConfiguredCommand(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -6163,7 +6163,7 @@ func TestAppRuntimeLocalFallbackImageLaunchUsesConfiguredCommand(t *testing.T) {
 	}
 }
 
-func TestAppRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *testing.T) {
+func TestRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -6174,11 +6174,11 @@ func TestAppRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -6214,7 +6214,7 @@ func TestAppRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *
 			"archive": &coretesting.StubS3{},
 		},
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -6424,7 +6424,7 @@ func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t 
 	t.Fatalf("public host services = %#v, want s3 verifier entry", publicHostServices.Snapshot())
 }
 
-func TestAppRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCapability(t *testing.T) {
+func TestRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCapability(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -6481,11 +6481,11 @@ func TestAppRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCap
 		t.Fatalf("os.WriteFile(manifest): %v", err)
 	}
 
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -6515,7 +6515,7 @@ func TestAppRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCap
 		EncryptionKey:         []byte("0123456789abcdef0123456789abcdef"),
 		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -6561,7 +6561,7 @@ func TestAppRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCap
 	}
 }
 
-func TestAppRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapability(t *testing.T) {
+func TestRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapability(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -6572,11 +6572,11 @@ func TestAppRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapabil
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -6618,7 +6618,7 @@ func TestAppRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapabil
 			return &coretesting.StubIndexedDB{}, nil
 		},
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -6666,7 +6666,7 @@ func TestAppRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapabil
 	}
 }
 
-func TestAppRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) {
+func TestRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
@@ -6692,12 +6692,12 @@ func TestAppRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) 
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 
@@ -6738,7 +6738,7 @@ func TestAppRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) 
 		},
 		PublicHostServices: publicHostServices,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -6788,7 +6788,7 @@ func TestAppRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) 
 	}
 
 	expiredAt := time.Now().Add(-time.Minute)
-	runtimeProvider.setSessionLifecycle(startRequests[0].SessionID, &appruntime.SessionLifecycle{
+	runtimeProvider.setSessionLifecycle(startRequests[0].SessionID, &runtimeprovider.SessionLifecycle{
 		ExpiresAt: &expiredAt,
 	})
 	_, err = prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
@@ -6801,7 +6801,7 @@ func TestAppRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) 
 	}
 }
 
-func TestAppRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapability(t *testing.T) {
+func TestRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapability(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -6812,11 +6812,11 @@ func TestAppRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapability(
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -6855,7 +6855,7 @@ func TestAppRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapability(
 			return coretesting.NewStubCache(), nil
 		},
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -6900,7 +6900,7 @@ func TestAppRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapability(
 	}
 }
 
-func TestAppRuntimePublicCacheRelayRoundTripsThroughHostedApp(t *testing.T) {
+func TestRuntimePublicCacheRelayRoundTripsThroughHostedApp(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
@@ -6925,12 +6925,12 @@ func TestAppRuntimePublicCacheRelayRoundTripsThroughHostedApp(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 
@@ -6967,7 +6967,7 @@ func TestAppRuntimePublicCacheRelayRoundTripsThroughHostedApp(t *testing.T) {
 		},
 		PublicHostServices: publicHostServices,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -7017,7 +7017,7 @@ func TestAppRuntimePublicCacheRelayRoundTripsThroughHostedApp(t *testing.T) {
 	assertStartAppRelayEnv(t, startRequests[0], "cache relay round-trip")
 }
 
-func TestAppRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
+func TestRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
@@ -7043,12 +7043,12 @@ func TestAppRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 
@@ -7082,7 +7082,7 @@ func TestAppRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 		},
 		PublicHostServices: publicHostServices,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -7149,7 +7149,7 @@ func TestAppRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 	assertStartAppRelayEnv(t, startRequests[0], "s3 multi-binding relay")
 }
 
-func TestAppRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T) {
+func TestRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
@@ -7178,12 +7178,12 @@ func TestAppRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T)
 		},
 	}
 
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 
@@ -7234,7 +7234,7 @@ func TestAppRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T)
 		AppInvoker:         bridge,
 		PublicHostServices: publicHostServices,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -7317,7 +7317,7 @@ func TestAppRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T)
 	}
 }
 
-func TestAppRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelCapability(t *testing.T) {
+func TestRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelCapability(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -7328,11 +7328,11 @@ func TestAppRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelC
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -7364,7 +7364,7 @@ func TestAppRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelC
 		Egress:          newEgressDeps(cfg),
 		WorkflowManager: newStubWorkflowManager(),
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -7409,7 +7409,7 @@ func TestAppRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelC
 	}
 }
 
-func TestAppRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T) {
+func TestRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -7420,14 +7420,14 @@ func TestAppRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := &staticCapabilityAppRuntime{
-		inner: appruntime.NewLocalProvider(),
-		support: appruntime.Support{
+	runtimeProvider := &staticCapabilityRuntime{
+		inner: runtimeprovider.NewLocalProvider(),
+		support: runtimeprovider.Support{
 			CanHostApps: true,
 		},
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -7454,14 +7454,14 @@ func TestAppRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T) {
 	}
 
 	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		AppRuntimeRegistry: newAppRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		RuntimeRegistry: newRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	})
 	if err == nil || !strings.Contains(err.Error(), "cannot preserve hostname-based egress required by this provider") {
 		t.Fatalf("buildProvidersStrict error = %v, want hostname-based egress requirement failure", err)
 	}
 }
 
-func TestAppRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
+func TestRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -7472,14 +7472,14 @@ func TestAppRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := &staticCapabilityAppRuntime{
-		inner: appruntime.NewLocalProvider(),
-		support: appruntime.Support{
+	runtimeProvider := &staticCapabilityRuntime{
+		inner: runtimeprovider.NewLocalProvider(),
+		support: runtimeprovider.Support{
 			CanHostApps: true,
 		},
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -7513,7 +7513,7 @@ func TestAppRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 			return coretesting.NewStubCache(), nil
 		},
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err == nil || !strings.Contains(err.Error(), "cannot provide host service access required by this provider") {
@@ -7521,7 +7521,7 @@ func TestAppRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	}
 }
 
-func TestAppRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T) {
+func TestRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -7532,10 +7532,10 @@ func TestAppRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingBundleAppRuntime()
+	runtimeProvider := newCapturingBundleRuntime()
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -7567,7 +7567,7 @@ func TestAppRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T) {
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 		Services:      services,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -7901,7 +7901,7 @@ func writeRuntimeRelayGRPCTrailersOnly(w http.ResponseWriter, code codes.Code, m
 	w.WriteHeader(http.StatusOK)
 }
 
-func TestAppRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.T) {
+func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
@@ -7915,11 +7915,11 @@ func TestAppRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testi
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -7964,7 +7964,7 @@ func TestAppRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testi
 		WorkflowManager:    manager,
 		PublicHostServices: publicHostServices,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -8042,7 +8042,7 @@ func TestAppRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testi
 	assertStartAppRelayEnv(t, startRequests[0], "workflow provider relay")
 }
 
-func TestAppRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing.T) {
+func TestRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
@@ -8078,11 +8078,11 @@ func TestAppRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing
 			},
 		},
 	}
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -8114,7 +8114,7 @@ func TestAppRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing
 		AuthorizationProvider: authz,
 		PublicHostServices:    publicHostServices,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -8178,7 +8178,7 @@ func TestAppRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing
 	assertStartAppRelayEnv(t, startRequests[0], "authorization")
 }
 
-func TestAppRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapability(t *testing.T) {
+func TestRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapability(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -8189,11 +8189,11 @@ func TestAppRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapabil
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -8225,7 +8225,7 @@ func TestAppRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapabil
 		EncryptionKey:       []byte("0123456789abcdef0123456789abcdef"),
 		Egress:              EgressDeps{DefaultAction: egress.PolicyDeny},
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -8261,10 +8261,10 @@ func TestAppRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapabil
 	if parsed.User == nil {
 		t.Fatal("HTTP_PROXY should include relay credentials")
 	}
-	assertStartPluginEgressPolicy(t, startRequests[0], []string{"api.github.com"}, appruntime.PolicyDeny)
+	assertStartAppEgressPolicy(t, startRequests[0], []string{"api.github.com"}, runtimeprovider.PolicyDeny)
 }
 
-func TestAppRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequired(t *testing.T) {
+func TestRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequired(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -8275,11 +8275,11 @@ func TestAppRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequired(t
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -8309,7 +8309,7 @@ func TestAppRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequired(t
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 		Egress:        EgressDeps{DefaultAction: egress.PolicyAllow},
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -8329,7 +8329,7 @@ func TestAppRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequired(t
 	}
 }
 
-func TestAppRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *testing.T) {
+func TestRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -8340,11 +8340,11 @@ func TestAppRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *testin
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -8382,7 +8382,7 @@ func TestAppRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *testin
 			return coretesting.NewStubCache(), nil
 		},
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -8401,10 +8401,10 @@ func TestAppRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *testin
 		t.Fatalf("StartApp HTTPS_PROXY = %q, want public egress proxy on gestalt.example.test", got)
 	}
 	assertStartAppRelayEnv(t, startRequests[0], "cache session binding relay")
-	assertStartPluginEgressPolicy(t, startRequests[0], []string{"api.github.com", "gestalt.example.test"}, appruntime.PolicyDeny)
+	assertStartAppEgressPolicy(t, startRequests[0], []string{"api.github.com", "gestalt.example.test"}, runtimeprovider.PolicyDeny)
 }
 
-func TestAppRuntimePublicEgressProxyRoundTripsThroughHostedApp(t *testing.T) {
+func TestRuntimePublicEgressProxyRoundTripsThroughHostedApp(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
@@ -8429,11 +8429,11 @@ func TestAppRuntimePublicEgressProxyRoundTripsThroughHostedApp(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Hosted egress proxy roundtrip")
-	runtimeProvider := newCapturingBundleAppRuntime()
-	runtimeProvider.support.EgressMode = appruntime.EgressModeHostname
+	runtimeProvider := newCapturingBundleRuntime()
+	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -8462,7 +8462,7 @@ func TestAppRuntimePublicEgressProxyRoundTripsThroughHostedApp(t *testing.T) {
 		BaseURL:       proxySrv.URL,
 		EncryptionKey: secret,
 	}
-	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -8505,7 +8505,7 @@ func TestAppRuntimePublicEgressProxyRoundTripsThroughHostedApp(t *testing.T) {
 	}
 }
 
-func TestAppRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t *testing.T) {
+func TestRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -8516,14 +8516,14 @@ func TestAppRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t *te
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := &staticCapabilityAppRuntime{
-		inner: appruntime.NewLocalProvider(),
-		support: appruntime.Support{
+	runtimeProvider := &staticCapabilityRuntime{
+		inner: runtimeprovider.NewLocalProvider(),
+		support: runtimeprovider.Support{
 			CanHostApps: true,
 		},
 	}
 	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (appruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -8550,7 +8550,7 @@ func TestAppRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t *te
 	}
 
 	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		AppRuntimeRegistry: newAppRuntimeRegistry(cfg, factories.Runtime, Deps{
+		RuntimeRegistry: newRuntimeRegistry(cfg, factories.Runtime, Deps{
 			Egress: EgressDeps{DefaultAction: egress.PolicyDeny},
 		}),
 		Egress: EgressDeps{DefaultAction: egress.PolicyDeny},
@@ -8646,7 +8646,7 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 				t.Parallel()
 
 				boundDB := &trackedIndexedDB{StubIndexedDB: coretesting.StubIndexedDB{}}
-				var runtimeProvider *capturingAppRuntime
+				var runtimeProvider *capturingRuntime
 				deps := Deps{
 					SelectedIndexedDBName: "memory",
 					IndexedDBDefs: map[string]*config.ProviderEntry{
@@ -8660,8 +8660,8 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 					},
 				}
 				if runtimeMode.hosted {
-					runtimeProvider = newCapturingAppRuntime()
-					deps.AppRuntime = runtimeProvider
+					runtimeProvider = newCapturingRuntime()
+					deps.Runtime = runtimeProvider
 					t.Cleanup(func() { _ = runtimeProvider.Close() })
 				}
 
@@ -8935,7 +8935,7 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 			var (
 				closeCount      atomic.Int32
 				boundDB         *trackedIndexedDB
-				runtimeProvider *capturingAppRuntime
+				runtimeProvider *capturingRuntime
 			)
 			deps := Deps{
 				SelectedIndexedDBName: "memory",
@@ -8954,8 +8954,8 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 				},
 			}
 			if runtimeMode.hosted {
-				runtimeProvider = newCapturingAppRuntime()
-				deps.AppRuntime = runtimeProvider
+				runtimeProvider = newCapturingRuntime()
+				deps.Runtime = runtimeProvider
 				t.Cleanup(func() { _ = runtimeProvider.Close() })
 			}
 
