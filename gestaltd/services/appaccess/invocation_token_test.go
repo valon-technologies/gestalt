@@ -273,6 +273,9 @@ func TestInvocationTokenRestoresWorkflowContext(t *testing.T) {
 		t.Fatalf("ResolveToken: %v", err)
 	}
 	restored := RestoreTokenContext(context.Background(), tokenCtx, "")
+	if got := InvocationTokenFromContext(restored); got != token {
+		t.Fatalf("restored invocation token = %q, want original token", got)
+	}
 	workflow := invocation.WorkflowContextFromContext(restored)
 	if got := invocation.WorkflowContextString(workflow, "providerName"); got != "temporal" {
 		t.Fatalf("providerName = %q, want temporal", got)

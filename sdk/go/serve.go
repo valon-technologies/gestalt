@@ -65,7 +65,7 @@ func withProviderCloser(ctx context.Context, provider any) context.Context {
 	return ctx
 }
 
-func serveProvider(ctx context.Context, register func(*grpc.Server)) error {
+func serveProvider(ctx context.Context, register func(*grpc.Server), opts ...grpc.ServerOption) error {
 	socket := os.Getenv(proto.EnvProviderSocket)
 	if socket == "" {
 		return fmt.Errorf("%s is required", proto.EnvProviderSocket)
@@ -90,7 +90,7 @@ func serveProvider(ctx context.Context, register func(*grpc.Server)) error {
 		_ = os.Remove(socket)
 	}()
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(opts...)
 	register(srv)
 
 	closer, _ := ctx.Value(providerCloserContextKey{}).(Closer)

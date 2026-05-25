@@ -78,6 +78,7 @@ type workflowGrantClaims struct {
 }
 
 type invocationTokenContext struct {
+	token                  string
 	principal              *principal.Principal
 	requestMeta            invocation.RequestMeta
 	credential             invocation.CredentialContext
@@ -167,6 +168,7 @@ func (m *InvocationTokenManager) resolveToken(token, appName string) (invocation
 		return invocationTokenContext{}, fmt.Errorf("app invocation token is not valid for %q", appName)
 	}
 	return invocationTokenContext{
+		token:     strings.TrimSpace(token),
 		principal: principalFromInvocationClaims(claims),
 		requestMeta: invocation.RequestMeta{
 			ClientIP:   claims.RequestMeta.ClientIP,
@@ -378,6 +380,9 @@ func restoreInvocationTokenContext(ctx context.Context, tokenCtx invocationToken
 	}
 	if tokenCtx.workflow != nil {
 		ctx = invocation.WithWorkflowContext(ctx, cloneInvocationTokenMap(tokenCtx.workflow))
+	}
+	if token := strings.TrimSpace(tokenCtx.token); token != "" {
+		ctx = WithInvocationToken(ctx, token)
 	}
 
 	connection := strings.TrimSpace(connectionOverride)
