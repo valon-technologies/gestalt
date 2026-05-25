@@ -1843,6 +1843,9 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 			proto.RegisterWorkflowHostServer(srv, workflowservice.NewHostServer(name, deps.WorkflowRuntime.Invoke))
 		},
 	}}
+	if deps.AuthorizationProvider != nil {
+		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
+	}
 	var cleanup func()
 	defer func() {
 		if cleanup != nil {

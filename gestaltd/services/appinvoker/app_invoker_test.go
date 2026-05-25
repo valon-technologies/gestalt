@@ -18,6 +18,7 @@ import (
 type recordingAppInvoker struct {
 	idempotencyKey        string
 	internalConnection    bool
+	workflowContext       map[string]any
 	providerName          string
 	instance              string
 	operation             string
@@ -32,11 +33,68 @@ type recordingAppInvoker struct {
 func (i *recordingAppInvoker) Invoke(ctx context.Context, _ *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
 	i.idempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
 	i.internalConnection = invocation.InternalConnectionAccessFromContext(ctx)
+	i.workflowContext = invocation.WorkflowContextFromContext(ctx)
 	i.providerName = providerName
 	i.instance = instance
 	i.operation = operation
 	i.params = params
 	return &core.OperationResult{Status: 202, Body: "accepted"}, nil
+}
+
+func TestAppInvokerServerInvokeRestoresWorkflowContext(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("plugin-invoker-workflow-context-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "service_account:workflow",
+		Kind:      principal.Kind("service_account"),
+		Source:    principal.SourceAPIToken,
+	})
+	ctx = invocation.WithWorkflowContext(ctx, map[string]any{
+		"providerName": "temporal",
+		"runId":        "run-123",
+		"step": map[string]any{
+			"id": "notify",
+		},
+	})
+	rootToken, err := tokens.MintRootToken(ctx, "workflow-provider", InvocationGrants{
+		"slack": {Operations: map[string]core.ConnectionMode{"chat.postMessage": ""}},
+	})
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+
+	invoker := &recordingAppInvoker{}
+	server := NewAppInvokerServer(
+		"workflow-provider",
+		[]invocation.AppInvocationDependency{{App: "slack", Operation: "chat.postMessage"}},
+		invoker,
+		tokens,
+	)
+	client := proto.NewAppInvokerClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppInvokerServer(srv, server)
+	}))
+	if _, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		InvocationToken: rootToken,
+		App:             "slack",
+		Operation:       "chat.postMessage",
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+
+	if got := invocation.WorkflowContextString(invoker.workflowContext, "providerName"); got != "temporal" {
+		t.Fatalf("providerName = %q, want temporal", got)
+	}
+	if got := invocation.WorkflowContextString(invoker.workflowContext, "runId"); got != "run-123" {
+		t.Fatalf("runId = %q, want run-123", got)
+	}
+	step := invocation.WorkflowContextMap(invoker.workflowContext, "step")
+	if got := invocation.WorkflowContextString(step, "id"); got != "notify" {
+		t.Fatalf("step.id = %q, want notify", got)
+	}
 }
 
 func TestAppInvokerServerInvokePropagatesInternalConnectionAccess(t *testing.T) {

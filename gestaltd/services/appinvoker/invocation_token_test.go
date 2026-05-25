@@ -234,6 +234,114 @@ func TestInvocationTokenResolvePreservesEmailOnlyPrincipals(t *testing.T) {
 	}
 }
 
+func TestInvocationTokenRestoresWorkflowContext(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewInvocationTokenManager([]byte("invocation-token-workflow-context-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+
+	ctx := principal.WithPrincipal(
+		context.Background(),
+		&principal.Principal{
+			SubjectID: "user:test-user",
+			UserID:    "test-user",
+			Kind:      principal.KindUser,
+			Source:    principal.SourceSession,
+		},
+	)
+	ctx = invocation.WithWorkflowContext(ctx, map[string]any{
+		"providerName":       "temporal",
+		"runId":              "run-123",
+		"definitionId":       "def-123",
+		"definitionRevision": "7",
+		"activationId":       "webhook",
+		"step": map[string]any{
+			"id": "notify",
+		},
+	})
+	token, err := manager.MintRootToken(ctx, "caller", InvocationGrants{
+		"slack": {Operations: map[string]core.ConnectionMode{"chat.postMessage": ""}},
+	})
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+
+	tokenCtx, err := manager.ResolveToken(token, "caller")
+	if err != nil {
+		t.Fatalf("ResolveToken: %v", err)
+	}
+	restored := RestoreTokenContext(context.Background(), tokenCtx, "")
+	workflow := invocation.WorkflowContextFromContext(restored)
+	if got := invocation.WorkflowContextString(workflow, "providerName"); got != "temporal" {
+		t.Fatalf("providerName = %q, want temporal", got)
+	}
+	if got := invocation.WorkflowContextString(workflow, "runId"); got != "run-123" {
+		t.Fatalf("runId = %q, want run-123", got)
+	}
+	step := invocation.WorkflowContextMap(workflow, "step")
+	if got := invocation.WorkflowContextString(step, "id"); got != "notify" {
+		t.Fatalf("step.id = %q, want notify", got)
+	}
+}
+
+func TestInvocationTokenExchangePreservesWorkflowContext(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewInvocationTokenManager([]byte("invocation-token-workflow-context-exchange-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+
+	ctx := principal.WithPrincipal(
+		context.Background(),
+		&principal.Principal{
+			SubjectID: "user:test-user",
+			UserID:    "test-user",
+			Kind:      principal.KindUser,
+			Source:    principal.SourceSession,
+		},
+	)
+	ctx = invocation.WithWorkflowContext(ctx, map[string]any{
+		"providerName": "temporal",
+		"runId":        "run-123",
+		"step": map[string]any{
+			"id": "notify",
+		},
+	})
+	rootToken, err := manager.MintRootToken(ctx, "caller", InvocationGrants{
+		"slack":  {Operations: map[string]core.ConnectionMode{"chat.postMessage": ""}},
+		"github": {Operations: map[string]core.ConnectionMode{"issues.create": ""}},
+	})
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+	childToken, err := manager.ExchangeToken(rootToken, "caller", InvocationGrants{
+		"slack": {Operations: map[string]core.ConnectionMode{"chat.postMessage": ""}},
+	}, time.Minute)
+	if err != nil {
+		t.Fatalf("ExchangeToken: %v", err)
+	}
+
+	tokenCtx, err := manager.ResolveToken(childToken, "caller")
+	if err != nil {
+		t.Fatalf("ResolveToken(child): %v", err)
+	}
+	restored := RestoreTokenContext(context.Background(), tokenCtx, "")
+	workflow := invocation.WorkflowContextFromContext(restored)
+	if got := invocation.WorkflowContextString(workflow, "providerName"); got != "temporal" {
+		t.Fatalf("providerName = %q, want temporal", got)
+	}
+	if got := invocation.WorkflowContextString(workflow, "runId"); got != "run-123" {
+		t.Fatalf("runId = %q, want run-123", got)
+	}
+	step := invocation.WorkflowContextMap(workflow, "step")
+	if got := invocation.WorkflowContextString(step, "id"); got != "notify" {
+		t.Fatalf("step.id = %q, want notify", got)
+	}
+}
+
 func TestDecodeInvocationGrantClaimsIgnoresModesForUndeclaredOperations(t *testing.T) {
 	t.Parallel()
 

@@ -169,6 +169,46 @@ func TestBuildWorkflowRegistersExecutableWorkflowHostPublicRelay(t *testing.T) {
 	}
 }
 
+func TestBuildWorkflowPassesAuthorizationHostService(t *testing.T) {
+	t.Parallel()
+
+	var hostServiceNames []string
+	factories := NewFactoryRegistry()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ Deps) (coreworkflow.Provider, error) {
+		for _, hostService := range hostServices {
+			hostServiceNames = append(hostServiceNames, hostService.Name)
+		}
+		return startupTestWorkflowProvider{}, nil
+	}
+	provider, err := buildWorkflow(context.Background(), "local", &config.ProviderEntry{
+		Config: mustNode(t, map[string]any{"command": "/bin/workflow-provider"}),
+	}, factories, Deps{
+		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
+	})
+	if err != nil {
+		t.Fatalf("buildWorkflow: %v", err)
+	}
+	if err := provider.Close(); err != nil {
+		t.Fatalf("provider.Close: %v", err)
+	}
+
+	if !hasHostServiceName(hostServiceNames, "workflow_host") {
+		t.Fatalf("workflow host services = %v, want workflow_host", hostServiceNames)
+	}
+	if !hasHostServiceName(hostServiceNames, "authorization") {
+		t.Fatalf("workflow host services = %v, want authorization", hostServiceNames)
+	}
+}
+
+func hasHostServiceName(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 func (noopTelemetryProvider) Logger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, nil))
 }
