@@ -127,6 +127,7 @@ message AppInvokeRequest {
   string instance = 6;
   string invocation_token = 7;
   string idempotency_key = 8;
+  string credential_mode = 9;
 }
 
 // AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin

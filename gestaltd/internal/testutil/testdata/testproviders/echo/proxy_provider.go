@@ -322,9 +322,9 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 
 		connection := strings.TrimSpace(input.Connection)
 		instance := strings.TrimSpace(input.Instance)
-		var opts *gestalt.InvokeOptions
+		var opts *gestalt.InvokeGraphQLOptions
 		if connection != "" || instance != "" {
-			opts = &gestalt.InvokeOptions{
+			opts = &gestalt.InvokeGraphQLOptions{
 				Connection: connection,
 				Instance:   instance,
 			}

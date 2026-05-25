@@ -152,7 +152,7 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	}
 	graphQLResult, err := client.InvokeGraphQL(context.Background(), "linear", " query { viewer { id } } ", map[string]any{
 		"team": "eng",
-	}, &gestalt.InvokeOptions{
+	}, &gestalt.InvokeGraphQLOptions{
 		IdempotencyKey: " graphql-call-42 ",
 	})
 	if err != nil {

@@ -70,7 +70,9 @@ pub use api::{
     Access, ConnectedToken, Credential, ExternalIdentity, HTTPSubjectRequest, Host, Provider,
     Request, Response, RuntimeMetadata, Subject, ok,
 };
-pub use app_access::{App, AppContract, AppError, InvocationGrant, InvokeOptions};
+pub use app_access::{
+    App, AppContract, AppError, InvocationGrant, InvokeGraphQLOptions, InvokeOptions,
+};
 pub use auth::{
     AuthSessionSettings, AuthenticatedUser, AuthenticationProvider, BeginLoginRequest,
     BeginLoginResponse, CompleteLoginRequest,

@@ -14,7 +14,7 @@ use generated::v1::{
     AppInvocationGrant, AppInvokeGraphQlRequest, AppInvokeRequest, ExchangeInvocationTokenRequest,
     ExchangeInvocationTokenResponse, OperationResult,
 };
-use gestalt::{App, InvocationGrant, InvokeOptions, Request};
+use gestalt::{App, InvocationGrant, InvokeGraphQLOptions, InvokeOptions, Request};
 use prost_types::Struct;
 use serde::Serialize;
 use tokio::net::{TcpListener, UnixListener};
@@ -43,6 +43,7 @@ struct SeenRequest {
     connection: String,
     instance: String,
     idempotency_key: String,
+    credential_mode: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -119,6 +120,7 @@ impl ProtoApp for TestAppServer {
                 connection: request.connection.clone(),
                 instance: request.instance.clone(),
                 idempotency_key: request.idempotency_key.clone(),
+                credential_mode: request.credential_mode.clone(),
             });
 
         Ok(GrpcResponse::new(OperationResult {
@@ -128,12 +130,13 @@ impl ProtoApp for TestAppServer {
                 "app": request.app,
                 "operation": request.operation,
                 "params": request.params.map(struct_to_json).unwrap_or_else(|| serde_json::json!({})),
-                "connection": request.connection,
-                "instance": request.instance,
-                "idempotency_key": request.idempotency_key,
-            })
-            .to_string(),
-        }))
+				"connection": request.connection,
+				"instance": request.instance,
+				"idempotency_key": request.idempotency_key,
+				"credential_mode": request.credential_mode,
+			})
+			.to_string(),
+		}))
     }
 
     async fn invoke_graph_ql(
@@ -201,6 +204,7 @@ async fn app_connects_over_unix_socket_and_sends_invocation_token() {
                 connection: "work".to_string(),
                 instance: "secondary".to_string(),
                 idempotency_key: " issue-42-create ".to_string(),
+                credential_mode: "none".to_string(),
             }),
         )
         .await
@@ -217,6 +221,7 @@ async fn app_connects_over_unix_socket_and_sends_invocation_token() {
             "connection": "work",
             "instance": "secondary",
             "idempotency_key": "issue-42-create",
+            "credential_mode": "none",
         })
     );
     let err = app
@@ -267,6 +272,7 @@ async fn app_connects_over_unix_socket_and_sends_invocation_token() {
             connection: "work".to_string(),
             instance: "secondary".to_string(),
             idempotency_key: "issue-42-create".to_string(),
+            credential_mode: "none".to_string(),
         }
     );
 
@@ -385,7 +391,7 @@ async fn app_invokes_graphql_surface() {
             "linear",
             "  query Viewer($team: String!) { viewer(team: $team) { id } }  ",
             Some(serde_json::json!({ "team": "eng" })),
-            Some(InvokeOptions {
+            Some(InvokeGraphQLOptions {
                 connection: "workspace".to_string(),
                 instance: "secondary".to_string(),
                 idempotency_key: " graphql-call-42 ".to_string(),

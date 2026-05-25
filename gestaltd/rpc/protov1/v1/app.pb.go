@@ -892,6 +892,7 @@ type AppInvokeRequest struct {
 	Instance        string                 `protobuf:"bytes,6,opt,name=instance,proto3" json:"instance,omitempty"`
 	InvocationToken string                 `protobuf:"bytes,7,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
 	IdempotencyKey  string                 `protobuf:"bytes,8,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	CredentialMode  string                 `protobuf:"bytes,9,opt,name=credential_mode,json=credentialMode,proto3" json:"credential_mode,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -971,6 +972,13 @@ func (x *AppInvokeRequest) GetInvocationToken() string {
 func (x *AppInvokeRequest) GetIdempotencyKey() string {
 	if x != nil {
 		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *AppInvokeRequest) GetCredentialMode() string {
+	if x != nil {
+		return x.CredentialMode
 	}
 	return ""
 }
@@ -2550,7 +2558,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\vttl_seconds\x18\x03 \x01(\x03R\n" +
 	"ttlSeconds\"L\n" +
 	"\x1fExchangeInvocationTokenResponse\x12)\n" +
-	"\x10invocation_token\x18\x01 \x01(\tR\x0finvocationToken\"\x99\x02\n" +
+	"\x10invocation_token\x18\x01 \x01(\tR\x0finvocationToken\"\xc2\x02\n" +
 	"\x10AppInvokeRequest\x12\x10\n" +
 	"\x03app\x18\x02 \x01(\tR\x03app\x12\x1c\n" +
 	"\toperation\x18\x03 \x01(\tR\toperation\x12/\n" +
@@ -2560,7 +2568,8 @@ const file_v1_app_proto_rawDesc = "" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x06 \x01(\tR\binstance\x12)\n" +
 	"\x10invocation_token\x18\a \x01(\tR\x0finvocationToken\x12'\n" +
-	"\x0fidempotency_key\x18\b \x01(\tR\x0eidempotencyKeyJ\x04\b\x01\x10\x02R\x0erequest_handle\"\x8e\x02\n" +
+	"\x0fidempotency_key\x18\b \x01(\tR\x0eidempotencyKey\x12'\n" +
+	"\x0fcredential_mode\x18\t \x01(\tR\x0ecredentialModeJ\x04\b\x01\x10\x02R\x0erequest_handle\"\x8e\x02\n" +
 	"\x17AppInvokeGraphQLRequest\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x12\x1a\n" +
 	"\bdocument\x18\x02 \x01(\tR\bdocument\x125\n" +

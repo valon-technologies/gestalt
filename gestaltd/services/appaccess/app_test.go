@@ -22,6 +22,7 @@ type recordingAppInvocation struct {
 	providerName          string
 	instance              string
 	operation             string
+	credentialMode        core.ConnectionMode
 	params                map[string]any
 	graphQLIdempotencyKey string
 	graphQLProviderName   string
@@ -37,6 +38,7 @@ func (i *recordingAppInvocation) Invoke(ctx context.Context, _ *principal.Princi
 	i.providerName = providerName
 	i.instance = instance
 	i.operation = operation
+	i.credentialMode = invocation.CredentialModeOverrideFromContext(ctx)
 	i.params = params
 	return &core.OperationResult{Status: 202, Body: "accepted"}, nil
 }
@@ -94,6 +96,93 @@ func TestAppServerInvokeRestoresWorkflowContext(t *testing.T) {
 	step := invocation.WorkflowContextMap(invoker.workflowContext, "step")
 	if got := invocation.WorkflowContextString(step, "id"); got != "notify" {
 		t.Fatalf("step.id = %q, want notify", got)
+	}
+}
+
+func TestAppServerInvokeCredentialModeForForwardedToken(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		grantMode   core.ConnectionMode
+		requestMode string
+		deps        []invocation.AppInvocationDependency
+		want        core.ConnectionMode
+		wantErr     codes.Code
+	}{
+		{
+			name:        "explicit token mode",
+			grantMode:   core.ConnectionModeNone,
+			requestMode: "none",
+			want:        core.ConnectionModeNone,
+		},
+		{
+			name:        "explicit unqualified mode",
+			requestMode: "none",
+			wantErr:     codes.PermissionDenied,
+		},
+		{
+			name: "host declared mode ignored for forwarded token",
+			deps: []invocation.AppInvocationDependency{{
+				App:            "slack",
+				Operation:      "chat.postMessage",
+				CredentialMode: core.ConnectionModeUser,
+			}},
+		},
+		{
+			name:        "explicit host declared mode ignored for forwarded token",
+			requestMode: "user",
+			deps: []invocation.AppInvocationDependency{{
+				App:            "slack",
+				Operation:      "chat.postMessage",
+				CredentialMode: core.ConnectionModeUser,
+			}},
+			wantErr: codes.PermissionDenied,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			tokens, err := NewInvocationTokenManager([]byte("forwarded-token-" + tc.name))
+			if err != nil {
+				t.Fatalf("NewInvocationTokenManager: %v", err)
+			}
+			ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+				SubjectID: "service_account:caller",
+				Kind:      principal.Kind("service_account"),
+				Source:    principal.SourceAPIToken,
+			})
+			rootToken, err := tokens.MintRootToken(ctx, "caller", InvocationGrants{
+				"slack": {Operations: map[string]core.ConnectionMode{"chat.postMessage": tc.grantMode}},
+			})
+			if err != nil {
+				t.Fatalf("MintRootToken: %v", err)
+			}
+
+			invoker := &recordingAppInvocation{}
+			server := NewAppServer("workflow-provider", tc.deps, invoker, tokens)
+			client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+				proto.RegisterAppServer(srv, server)
+			}))
+			_, err = client.Invoke(context.Background(), &proto.AppInvokeRequest{
+				InvocationToken: rootToken,
+				App:             "slack",
+				Operation:       "chat.postMessage",
+				CredentialMode:  tc.requestMode,
+			})
+			if tc.wantErr != codes.OK {
+				if got := status.Code(err); got != tc.wantErr {
+					t.Fatalf("Invoke status = %s, want %s (err=%v)", got, tc.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Invoke: %v", err)
+			}
+			if invoker.credentialMode != tc.want {
+				t.Fatalf("credential mode override = %q, want %q", invoker.credentialMode, tc.want)
+			}
+		})
 	}
 }
 

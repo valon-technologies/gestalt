@@ -79,6 +79,7 @@ type workflowGrantClaims struct {
 
 type invocationTokenContext struct {
 	token                  string
+	callerApp              string
 	principal              *principal.Principal
 	requestMeta            invocation.RequestMeta
 	credential             invocation.CredentialContext
@@ -164,11 +165,12 @@ func (m *InvocationTokenManager) resolveToken(token, appName string) (invocation
 	if err != nil {
 		return invocationTokenContext{}, err
 	}
-	if strings.TrimSpace(claims.CallerApp) != strings.TrimSpace(appName) {
+	if strings.TrimSpace(appName) != "" && strings.TrimSpace(claims.CallerApp) != strings.TrimSpace(appName) {
 		return invocationTokenContext{}, fmt.Errorf("app invocation token is not valid for %q", appName)
 	}
 	return invocationTokenContext{
 		token:     strings.TrimSpace(token),
+		callerApp: strings.TrimSpace(claims.CallerApp),
 		principal: principalFromInvocationClaims(claims),
 		requestMeta: invocation.RequestMeta{
 			ClientIP:   claims.RequestMeta.ClientIP,
@@ -191,7 +193,7 @@ func (m *InvocationTokenManager) resolveToken(token, appName string) (invocation
 		connection:         strings.TrimSpace(claims.Connection),
 		grants:             decodeInvocationGrantClaims(claims.Grants),
 		workflowGrants:     decodeWorkflowGrantClaims(claims.WorkflowGrants),
-		workflow:           cloneInvocationTokenMap(claims.Workflow),
+		workflow:           invocation.CloneWorkflowContext(claims.Workflow),
 	}, nil
 }
 
@@ -208,6 +210,10 @@ func (m *InvocationTokenManager) ResolveToken(token, appName string) (TokenConte
 		return TokenContext{}, err
 	}
 	return TokenContext{inner: tokenCtx}, nil
+}
+
+func (c TokenContext) CallerApp() string {
+	return strings.TrimSpace(c.inner.callerApp)
 }
 
 func (c TokenContext) Principal() *principal.Principal {
@@ -308,7 +314,7 @@ func claimsFromContext(ctx context.Context, appName string, grants InvocationGra
 		TokenPermissions:    encodePermissionSet(tokenPermissionsForInvocationClaims(p)),
 		Grants:              encodeInvocationGrantClaims(grants),
 		WorkflowGrants:      encodeWorkflowGrantClaims(workflowGrants),
-		Workflow:            cloneInvocationTokenMap(invocation.WorkflowContextFromContext(ctx)),
+		Workflow:            invocation.CloneWorkflowContext(invocation.WorkflowContextFromContext(ctx)),
 		RequestMeta: requestMetaClaims{
 			ClientIP:   reqMeta.ClientIP,
 			RemoteAddr: reqMeta.RemoteAddr,
@@ -379,7 +385,7 @@ func restoreInvocationTokenContext(ctx context.Context, tokenCtx invocationToken
 		ctx = invocation.WithInternalConnectionAccess(ctx)
 	}
 	if tokenCtx.workflow != nil {
-		ctx = invocation.WithWorkflowContext(ctx, cloneInvocationTokenMap(tokenCtx.workflow))
+		ctx = invocation.WithWorkflowContext(ctx, invocation.CloneWorkflowContext(tokenCtx.workflow))
 	}
 	if token := strings.TrimSpace(tokenCtx.token); token != "" {
 		ctx = WithInvocationToken(ctx, token)
@@ -396,39 +402,6 @@ func restoreInvocationTokenContext(ctx context.Context, tokenCtx invocationToken
 		ctx = invocation.WithConnection(ctx, connection)
 	}
 	return ctx
-}
-
-func cloneInvocationTokenMap(src map[string]any) map[string]any {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(src))
-	for key, value := range src {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		out[key] = cloneInvocationTokenValue(value)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func cloneInvocationTokenValue(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		return cloneInvocationTokenMap(typed)
-	case []any:
-		out := make([]any, len(typed))
-		for i := range typed {
-			out[i] = cloneInvocationTokenValue(typed[i])
-		}
-		return out
-	default:
-		return typed
-	}
 }
 
 func RestoreTokenContext(ctx context.Context, tokenCtx TokenContext, connectionOverride string) context.Context {
