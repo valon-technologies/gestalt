@@ -377,7 +377,7 @@ export interface AuthorizationWriteModelInput {
 const sharedAuthorizationTransport: {
   target: string;
   token: string;
-  client: HostAuthorization | undefined;
+  client: AuthorizationImpl | undefined;
 } = {
   target: "",
   token: "",
@@ -385,7 +385,7 @@ const sharedAuthorizationTransport: {
 };
 
 /**
- * Fakeable client contract for host authorization calls.
+ * Fakeable contract for authorization calls.
  */
 export interface Authorization {
   evaluate(request: AuthorizationEvaluateInput): Promise<AuthorizationDecision>;
@@ -425,12 +425,12 @@ export interface Authorization {
 }
 
 /**
- * Client for the host-configured authorization provider.
+ * Client for the configured authorization provider.
  *
  * The client accepts plain SDK request objects and keeps transport message
  * construction inside the SDK.
  */
-class HostAuthorization implements Authorization {
+class AuthorizationImpl implements Authorization {
   private readonly client: Client<typeof AuthorizationProviderService>;
 
   constructor(
@@ -849,7 +849,7 @@ function requiredAuthorizationResponse<T>(
 }
 
 /**
- * Returns a shared host authorization client for authored providers.
+ * Returns a shared authorization capability for authored providers.
  */
 export function Authorization(): Authorization {
   const target = resolveAuthorizationSocketTarget();
@@ -862,7 +862,7 @@ export function Authorization(): Authorization {
     return sharedAuthorizationTransport.client;
   }
 
-  const client = new HostAuthorization(target, token);
+  const client = new AuthorizationImpl(target, token);
   sharedAuthorizationTransport.target = target;
   sharedAuthorizationTransport.token = token;
   sharedAuthorizationTransport.client = client;

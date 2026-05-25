@@ -1156,7 +1156,7 @@ export function isAgentProvider(value: unknown): value is AgentProvider {
 }
 
 /** Client for the agent host service available inside agent providers. */
-class HostAgentHost implements AgentHost {
+class AgentHostImpl implements AgentHost {
   private readonly client: Client<typeof AgentHostService>;
 
   constructor() {
@@ -1406,7 +1406,7 @@ function listInteractionsResult(
   return "interactions" in value ? value.interactions : value;
 }
 
-export const AgentHost = HostAgentHost;
+export const AgentHost = AgentHostImpl;
 
 async function requireAgentProviderHandler<Request, Response>(
   action: string,

@@ -241,7 +241,7 @@ export interface Workflow {
  * constructed from a request, create operations reuse the request idempotency
  * key unless the call provides one explicitly.
  */
-class HostWorkflow implements Workflow {
+class WorkflowImpl implements Workflow {
   private readonly client: Client<typeof WorkflowProviderService>;
   private readonly invocationToken: string;
   private readonly idempotencyKey: string;
@@ -544,7 +544,7 @@ class HostWorkflow implements Workflow {
   }
 }
 
-export const Workflow = HostWorkflow;
+export const Workflow = WorkflowImpl;
 
 function normalizeInvocationToken(requestOrToken: Request | string): string {
   const invocationToken =
