@@ -9,23 +9,23 @@ import (
 
 	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	rpcidb "github.com/valon-technologies/gestalt/server/rpc/indexeddb"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 // IndexedDB data types (aliases to sdk/go/indexeddb).
 type (
-	Record                   = indexeddb.Record
-	KeyRange                 = indexeddb.KeyRange
-	CursorDirection          = indexeddb.CursorDirection
-	TransactionMode          = indexeddb.TransactionMode
+	Record                    = indexeddb.Record
+	KeyRange                  = indexeddb.KeyRange
+	CursorDirection           = indexeddb.CursorDirection
+	TransactionMode           = indexeddb.TransactionMode
 	TransactionDurabilityHint = indexeddb.TransactionDurabilityHint
-	TransactionOptions       = indexeddb.TransactionOptions
-	IndexSchema              = indexeddb.IndexSchema
-	ColumnType               = indexeddb.ColumnType
-	ColumnDef                = indexeddb.ColumnDef
-	ObjectStoreSchema        = indexeddb.ObjectStoreSchema
-	ObjectStoreOptions       = indexeddb.ObjectStoreOptions
+	TransactionOptions        = indexeddb.TransactionOptions
+	IndexSchema               = indexeddb.IndexSchema
+	ColumnType                = indexeddb.ColumnType
+	ColumnDef                 = indexeddb.ColumnDef
+	ObjectStoreSchema         = indexeddb.ObjectStoreSchema
+	ObjectStoreOptions        = indexeddb.ObjectStoreOptions
 )
 
 const (
@@ -59,15 +59,13 @@ var (
 	ErrInvalidTransaction = indexeddb.ErrInvalidTransaction
 )
 
-// IndexedDB client capability interfaces (provider-side types keep IndexedDB* names in indexeddb_provider.go).
+// IndexedDB capability interfaces (provider-side types keep IndexedDB* names in indexeddb_provider.go).
 type (
 	IndexedDBDatabase               = indexeddb.Database
-	IndexedDBObjectStore          = indexeddb.ObjectStore
+	IndexedDBObjectStore            = indexeddb.ObjectStore
 	IndexedDBIndex                  = indexeddb.Index
-	IndexedDBClientTransaction      = indexeddb.Transaction
 	IndexedDBTransactionObjectStore = indexeddb.TransactionObjectStore
 	IndexedDBTransactionIndex       = indexeddb.TransactionIndex
-	IndexedDBClientCursor             = indexeddb.Cursor
 	IndexedDBRangeDeleter           = indexeddb.RangeDeleter
 	IndexedDBMutableIndex           = indexeddb.MutableIndex
 )

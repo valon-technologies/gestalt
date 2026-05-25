@@ -319,12 +319,6 @@ export {
 } from "./target.ts";
 export {
   IndexedDB,
-  ObjectStore,
-  Index,
-  Transaction,
-  TransactionObjectStore,
-  TransactionIndex,
-  Cursor,
   CursorDirection,
   NotFoundError,
   AlreadyExistsError,
@@ -334,6 +328,12 @@ export {
   compareIndexedDBValues,
   indexedDBRangeBounds,
   newIndexedDBCursorSnapshot,
+  type ObjectStore,
+  type Index,
+  type Transaction,
+  type TransactionObjectStore,
+  type TransactionIndex,
+  type Cursor,
   type Record,
   type KeyRange,
   type IndexedDBCursorSnapshotEntry,
@@ -348,7 +348,6 @@ export {
 } from "./indexeddb.ts";
 export {
   S3,
-  S3Object,
   S3Provider,
   S3InvalidRangeError,
   S3NotFoundError,
@@ -357,6 +356,7 @@ export {
   createS3Service,
   defineS3Provider,
   isS3Provider,
+  type S3Object,
   type ByteRange,
   type CopyOptions,
   type ListOptions,

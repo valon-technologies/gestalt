@@ -5,8 +5,8 @@ import (
 	"io"
 )
 
-// Client is the request-oriented S3 capability interface.
-type Client interface {
+// S3 is the request-oriented S3-compatible capability interface.
+type S3 interface {
 	HeadObject(ctx context.Context, ref ObjectRef) (ObjectMeta, error)
 	ReadObject(ctx context.Context, req ReadRequest) (ReadResult, error)
 	WriteObject(ctx context.Context, req WriteRequest) (ObjectMeta, error)

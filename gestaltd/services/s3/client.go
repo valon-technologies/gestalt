@@ -26,12 +26,12 @@ type ExecConfig struct {
 }
 
 type remoteS3 struct {
-	s3sdk.Client
+	s3sdk.S3
 	runtime proto.ProviderLifecycleClient
 	closer  io.Closer
 }
 
-func NewExecutable(ctx context.Context, cfg ExecConfig) (s3sdk.Client, error) {
+func NewExecutable(ctx context.Context, cfg ExecConfig) (s3sdk.S3, error) {
 	proc, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
@@ -57,7 +57,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (s3sdk.Client, error) {
 		UnaryTimeout: runtimehost.ProviderRPCTimeout,
 	})
 	return &remoteS3{
-		Client:  client,
+		S3:      client,
 		runtime: runtimeClient,
 		closer:  proc,
 	}, nil

@@ -14,8 +14,8 @@ type Options struct {
 	UnaryTimeout time.Duration
 }
 
-// NewClient returns an s3.Client backed by existing gRPC stubs.
-func NewClient(grpcClient proto.S3Client, objectAccess proto.S3ObjectAccessClient, opts Options) s3.Client {
+// NewClient returns an s3.S3 implementation backed by existing gRPC stubs.
+func NewClient(grpcClient proto.S3Client, objectAccess proto.S3ObjectAccessClient, opts Options) s3.S3 {
 	return &rpcClient{
 		grpc:               grpcClient,
 		objectAccessClient: objectAccess,
@@ -23,8 +23,8 @@ func NewClient(grpcClient proto.S3Client, objectAccess proto.S3ObjectAccessClien
 	}
 }
 
-// NewConn builds an s3.Client from an existing connection.
-func NewConn(conn grpc.ClientConnInterface, opts Options) s3.Client {
+// NewConn builds an s3.S3 implementation from an existing connection.
+func NewConn(conn grpc.ClientConnInterface, opts Options) s3.S3 {
 	return NewClient(proto.NewS3Client(conn), proto.NewS3ObjectAccessClient(conn), opts)
 }
 
