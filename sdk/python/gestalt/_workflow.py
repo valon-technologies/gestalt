@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import ast
 import dataclasses as _dataclasses
 import datetime as _dt
+import json
 import os
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import grpc
 from google.protobuf import message as _message
@@ -36,9 +38,10 @@ from ._protocol import (
     dataclass_mapping as _dataclass_mapping,
 )
 from ._protocol import (
-    datetime_from_timestamp,
-    has_field,
-    struct_from_dict,
+	datetime_from_timestamp,
+	has_field,
+	json_from_native,
+	struct_from_dict,
     struct_to_dict,
     timestamp_from_datetime,
     value_from_json,
@@ -89,6 +92,7 @@ class WorkflowValue:
     """Native data for a workflow value expression."""
 
     literal: Any = _MISSING
+    literal_set: bool = False
     object: Mapping[str, Any] | None = None
     array: Sequence[Any] | None = None
     template: Any | None = None
@@ -812,7 +816,7 @@ def workflow_value_input_from_value(value: Any | None) -> WorkflowValue | None:
         return None
     kind = which_oneof(value, "kind")
     if kind == "literal":
-        return WorkflowValue(literal=value_to_json(value.literal))
+        return WorkflowValue(literal=value_to_json(value.literal), literal_set=True)
     if kind == "object":
         return WorkflowValue(
             object={
@@ -2749,3 +2753,483 @@ def _grpc_call(method: Any, request: Any) -> Any:
         return method(request)
     except grpc.RpcError:
         raise
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowExecutionRequest:
+    provider_name: str = ""
+    run_id: str = ""
+    target: BoundWorkflowTarget | None = None
+    trigger: WorkflowRunTrigger | None = None
+    input: Mapping[str, Any] | None = None
+    metadata: Mapping[str, Any] | None = None
+    created_by: Any | None = None
+    execution_ref: str = ""
+    invocation_token: str = ""
+    signals: Sequence[WorkflowSignal] | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowEvalContext:
+    request: WorkflowExecutionRequest
+    outputs: Mapping[str, Any] | None = None
+    inputs: Mapping[str, Any] | None = None
+    allow_inputs: bool = False
+
+
+class WorkflowValueError(ValueError):
+    pass
+
+
+def evaluate_workflow_step_inputs(
+    ctx: WorkflowEvalContext, values: Mapping[str, WorkflowValue] | None
+) -> dict[str, Any] | None:
+    if not values:
+        return None
+    out: dict[str, Any] = {}
+    for key, value in values.items():
+        resolved, ok = evaluate_workflow_value(ctx, value)
+        if not ok:
+            raise WorkflowValueError(f"inputs.{key} did not resolve")
+        out[key] = resolved
+    return out
+
+
+def evaluate_workflow_value(ctx: WorkflowEvalContext, value: WorkflowValue) -> tuple[Any, bool]:
+    if _literal_is_set(value):
+        return value.literal, True
+    if value.object is not None:
+        out: dict[str, Any] = {}
+        for key, child in value.object.items():
+            resolved, ok = evaluate_workflow_value(ctx, child)
+            if not ok:
+                return None, False
+            out[key] = resolved
+        return out, True
+    if value.array is not None:
+        out = []
+        for child in value.array:
+            resolved, ok = evaluate_workflow_value(ctx, child)
+            if not ok:
+                return None, False
+            out.append(resolved)
+        return out, True
+    if value.template is not None:
+        template = value.template.template if hasattr(value.template, "template") else str(value.template)
+        return render_workflow_template(ctx, template), True
+    if value.run_input.strip():
+        return map_path_value(ctx.request.input, value.run_input)
+    if value.signal_payload.strip():
+        signal = latest_workflow_signal(ctx.request.signals)
+        if signal is None:
+            return None, False
+        return path_value(signal.payload, value.signal_payload)
+    if value.step_output is not None:
+        step_id = value.step_output.step_id.strip()
+        outputs = ctx.outputs or {}
+        if step_id not in outputs:
+            raise WorkflowValueError(f'workflow step output references missing step "{step_id}"')
+        return path_value(outputs[step_id], value.step_output.path)
+    return None, True
+
+
+def render_workflow_template(ctx: WorkflowEvalContext, template: str) -> str:
+    out: list[str] = []
+    i = 0
+    while i < len(template):
+        if template.startswith("$${", i):
+            out.append("${")
+            i += 3
+            continue
+        if not template.startswith("${", i):
+            out.append(template[i])
+            i += 1
+            continue
+        end = template.find("}", i + 2)
+        if end < 0:
+            raise WorkflowValueError("unterminated template expression")
+        expr = template[i + 2 : end].strip()
+        value, ok = _template_expression_value(ctx, expr)
+        if not ok:
+            raise WorkflowValueError(f'template expression "{expr}" did not resolve')
+        out.append(_render_template_value(value))
+        i = end + 1
+    return "".join(out)
+
+
+def workflow_invocation_context(req: WorkflowExecutionRequest) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if req.run_id.strip():
+        out["runId"] = req.run_id.strip()
+    if req.provider_name.strip():
+        out["provider"] = req.provider_name.strip()
+    target = _workflow_target_context(req.target)
+    if target:
+        out["target"] = target
+    trigger = _workflow_trigger_context(req.trigger)
+    if trigger:
+        out["trigger"] = trigger
+    if req.input is not None:
+        out["input"] = dict(req.input)
+    if req.metadata is not None:
+        out["metadata"] = dict(req.metadata)
+    if req.execution_ref.strip():
+        out["executionRef"] = req.execution_ref.strip()
+    signal_context = workflow_signals_context(req.signals)
+    if signal_context:
+        out["signals"] = signal_context
+    created_by = _workflow_actor_context(req.created_by)
+    if created_by:
+        out["createdBy"] = created_by
+    return out
+
+
+def _workflow_target_context(target: BoundWorkflowTarget | Any | None) -> dict[str, Any]:
+    if target is None:
+        return {}
+    raw_steps = getattr(target, "steps", None)
+    if not raw_steps:
+        return {}
+    target_steps = cast(Sequence[Any], raw_steps)
+    steps: list[dict[str, Any]] = []
+    for step in target_steps:
+        item: dict[str, Any] = {"id": getattr(step, "id", "").strip()}
+        app = getattr(step, "app", None)
+        agent = getattr(step, "agent", None)
+        if app is not None:
+            item["kind"] = "app"
+            item["app"] = getattr(app, "name", "").strip()
+            item["operation"] = getattr(app, "operation", "").strip()
+            if getattr(app, "connection", "").strip():
+                item["connection"] = app.connection.strip()
+            if getattr(app, "instance", "").strip():
+                item["instance"] = app.instance.strip()
+            if getattr(app, "credential_mode", "").strip():
+                item["credentialMode"] = app.credential_mode.strip()
+        elif agent is not None:
+            item["kind"] = "agent"
+            item["agentProvider"] = getattr(agent, "provider", "").strip()
+            item["model"] = getattr(agent, "model", "").strip()
+        else:
+            item["kind"] = "unknown"
+        steps.append(item)
+    return {"kind": "steps", "steps": steps}
+
+
+def _workflow_trigger_context(trigger: WorkflowRunTrigger | Any | None) -> dict[str, Any]:
+    if trigger is None:
+        return {}
+    if getattr(trigger, "schedule", None) is not None:
+        schedule = trigger.schedule
+        out: dict[str, Any] = {
+            "kind": "schedule",
+            "scheduleId": getattr(schedule, "schedule_id", ""),
+        }
+        scheduled_for = _format_workflow_time(getattr(schedule, "scheduled_for", None))
+        if scheduled_for:
+            out["scheduledFor"] = scheduled_for
+        return out
+    if getattr(trigger, "event", None) is not None:
+        event_trigger = trigger.event
+        out = {
+            "kind": "event",
+            "triggerId": getattr(event_trigger, "trigger_id", ""),
+        }
+        event = _workflow_event_context(getattr(event_trigger, "event", None))
+        if event:
+            out["event"] = event
+        return out
+    if getattr(trigger, "manual", False):
+        return {"kind": "manual"}
+    return {}
+
+
+def _workflow_event_context(event: WorkflowEvent | Any | None) -> dict[str, Any]:
+    if event is None:
+        return {}
+    out: dict[str, Any] = {}
+    if getattr(event, "id", "").strip():
+        out["id"] = event.id.strip()
+    if getattr(event, "source", "").strip():
+        out["source"] = event.source.strip()
+    if getattr(event, "spec_version", "").strip():
+        out["specVersion"] = event.spec_version.strip()
+    if getattr(event, "type", "").strip():
+        out["type"] = event.type.strip()
+    if getattr(event, "subject", "").strip():
+        out["subject"] = event.subject.strip()
+    event_time = _format_workflow_time(getattr(event, "time", None))
+    if event_time:
+        out["time"] = event_time
+    if getattr(event, "datacontenttype", "").strip():
+        out["dataContentType"] = event.datacontenttype.strip()
+    if getattr(event, "data", None) is not None:
+        out["data"] = json_from_native(event.data)
+    extensions = getattr(event, "extensions", None)
+    if extensions is not None:
+        out["extensions"] = dict(cast(Mapping[str, Any], extensions))
+    return out
+
+
+def _workflow_actor_context(actor: WorkflowActor | Any | None) -> dict[str, Any]:
+    if actor is None:
+        return {}
+    out: dict[str, Any] = {}
+    if getattr(actor, "subject_id", "").strip():
+        out["subjectId"] = actor.subject_id.strip()
+    if getattr(actor, "subject_kind", "").strip():
+        out["subjectKind"] = actor.subject_kind.strip()
+    if getattr(actor, "display_name", "").strip():
+        out["displayName"] = actor.display_name.strip()
+    if getattr(actor, "auth_source", "").strip():
+        out["authSource"] = actor.auth_source.strip()
+    return out
+
+
+def workflow_signals_context(signals: Sequence[WorkflowSignal] | None) -> list[dict[str, Any]]:
+    if not signals:
+        return []
+    out: list[dict[str, Any]] = []
+    for signal in list(signals)[:10]:
+        item: dict[str, Any] = {}
+        if signal.id.strip():
+            item["id"] = signal.id.strip()
+        if signal.name.strip():
+            item["name"] = signal.name.strip()
+        if signal.payload is not None:
+            payload = _compact_workflow_signal_payload(signal.payload)
+            if payload:
+                item["payload"] = payload
+        if signal.metadata is not None:
+            item["metadata"] = _compact_json_value(signal.metadata, 4)
+        created_by = _workflow_actor_context(signal.created_by)
+        if created_by:
+            item["createdBy"] = created_by
+        created_at = _format_workflow_time(signal.created_at)
+        if created_at:
+            item["createdAt"] = created_at
+        if signal.idempotency_key.strip():
+            item["idempotencyKey"] = signal.idempotency_key.strip()
+        if signal.sequence:
+            item["sequence"] = signal.sequence
+        out.append(item)
+    return out
+
+
+def latest_workflow_signal(signals: Sequence[WorkflowSignal] | None) -> WorkflowSignal | None:
+    if not signals:
+        return None
+    return signals[-1]
+
+
+def map_path_value(values: Mapping[str, Any] | None, path: str) -> tuple[Any, bool]:
+    if not values:
+        return None, False
+    return path_value(values, path)
+
+
+def path_value(root: Any, path: str) -> tuple[Any, bool]:
+    path = path.strip()
+    if not path:
+        return root, True
+    current = root
+    for segment in _path_segments(path):
+        if isinstance(current, Mapping) and isinstance(segment, str):
+            if segment not in current:
+                return None, False
+            current = current[segment]
+        elif isinstance(current, Sequence) and not isinstance(current, (str, bytes)) and isinstance(segment, int):
+            if segment < 0 or segment >= len(current):
+                return None, False
+            current = current[segment]
+        else:
+            return None, False
+    return current, True
+
+
+def _template_expression_value(ctx: WorkflowEvalContext, expr: str) -> tuple[Any, bool]:
+    if expr.startswith("inputs."):
+        if not ctx.allow_inputs:
+            raise WorkflowValueError("inputs references are not allowed here")
+        return map_path_value(ctx.inputs, expr.removeprefix("inputs."))
+    if expr.startswith("runInput."):
+        return map_path_value(ctx.request.input, expr.removeprefix("runInput."))
+    if expr.startswith("signalPayload."):
+        signal = latest_workflow_signal(ctx.request.signals)
+        if signal is None:
+            return None, False
+        return path_value(signal.payload, expr.removeprefix("signalPayload."))
+    raise WorkflowValueError(f'unsupported template expression "{expr}"')
+
+
+def _render_template_value(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, separators=(",", ":"))
+
+
+def _path_segments(path: str) -> list[str | int]:
+    out: list[str | int] = []
+    i = 0
+    while i < len(path):
+        if path[i] == ".":
+            i += 1
+            continue
+        if path[i] == "[":
+            end = path.find("]", i)
+            if end < 0:
+                raise WorkflowValueError(f'invalid workflow path "{path}"')
+            token = path[i + 1 : end].strip()
+            if token.startswith(("'", '"')):
+                out.append(ast.literal_eval(token))
+            else:
+                out.append(int(token))
+            i = end + 1
+            continue
+        start = i
+        while i < len(path) and path[i] not in ".[":
+            i += 1
+        key = path[start:i].strip()
+        if not key:
+            raise WorkflowValueError(f'invalid workflow path "{path}"')
+        out.append(key)
+    return out
+
+
+def _format_workflow_time(value: Any | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, _timestamp_pb2.Timestamp):
+        value = datetime_from_timestamp(value)
+    if not isinstance(value, _dt.datetime):
+        return ""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=_dt.timezone.utc)
+    return value.astimezone(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _compact_workflow_signal_payload(payload: Any) -> dict[str, Any]:
+    source = _workflow_map_value(payload)
+    if not source:
+        return {}
+    out: dict[str, Any] = {}
+    for key in (
+        "delivery_id",
+        "deliveryId",
+        "github_event",
+        "githubEvent",
+        "github_action",
+        "githubAction",
+        "event",
+        "action",
+        "summary",
+        "user_prompt",
+        "userPrompt",
+        "payload_sha256",
+        "payloadSha256",
+        "payload_omitted",
+        "payloadOmitted",
+    ):
+        _copy_compact_payload_field(out, source, key)
+    for key in (
+        "agent_request",
+        "agentRequest",
+        "installation",
+        "repository",
+        "sender",
+        "webhook_policy",
+        "webhookPolicy",
+        "pull_request",
+        "pullRequest",
+        "issue",
+        "comment",
+        "review",
+        "ref",
+        "check_run",
+        "checkRun",
+        "check_suite",
+        "checkSuite",
+        "workflow_run",
+        "workflowRun",
+        "review_check_run",
+        "reviewCheckRun",
+    ):
+        if key in source:
+            out[key] = _compact_json_value(source[key], 4)
+    fields: dict[str, Any] = {}
+    for key in sorted(source):
+        if len(fields) >= 20:
+            break
+        if key in out or _workflow_signal_payload_key_excluded(key):
+            continue
+        compact, ok = _compact_json_scalar(source[key])
+        if ok:
+            fields[key] = compact
+    if fields:
+        out["fields"] = fields
+    out["payloadOmitted"] = True
+    return out
+
+
+def _workflow_map_value(value: Any) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        return dict(value)
+    return {"value": value}
+
+
+def _copy_compact_payload_field(
+    out: dict[str, Any], payload: Mapping[str, Any], key: str
+) -> None:
+    if key not in payload or _workflow_signal_payload_key_excluded(key):
+        return
+    compact, ok = _compact_json_scalar(payload[key])
+    out[key] = compact if ok else _compact_json_value(payload[key], 4)
+
+
+def _workflow_signal_payload_key_excluded(key: str) -> bool:
+    return key.strip() in ("", "payload", "_gestalt_payload_preview_json")
+
+
+def _compact_json_scalar(value: Any) -> tuple[Any, bool]:
+    if value is None or isinstance(value, (str, bool, int, float)):
+        if isinstance(value, str):
+            return _truncate_workflow_string(value, 4096), True
+        return value, True
+    return None, False
+
+
+def _compact_json_value(value: Any, depth: int) -> Any:
+    scalar, ok = _compact_json_scalar(value)
+    if ok:
+        return scalar
+    if depth <= 0:
+        return {"omitted": True}
+    if isinstance(value, Mapping):
+        out: dict[str, Any] = {}
+        items = sorted((str(k), item) for k, item in value.items())
+        items = [
+            (key, item)
+            for key, item in items
+            if not _workflow_signal_payload_key_excluded(key)
+        ]
+        for key, item in items[:20]:
+            out[key] = _compact_json_value(item, depth - 1)
+        if len(items) > len(out):
+            out["omittedFields"] = len(items) - len(out)
+        return out
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return [_compact_json_value(item, depth - 1) for item in list(value)[:20]]
+    return str(value)
+
+
+def _truncate_workflow_string(value: str, max_bytes: int) -> str:
+    if len(value.encode()) <= max_bytes:
+        return value
+    suffix = "..."
+    body = value.encode()[: max_bytes - len(suffix)].decode(errors="ignore")
+    while len((body + suffix).encode()) > max_bytes and body:
+        body = body[:-1]
+    return body + suffix
+
+
+def _literal_is_set(value: WorkflowValue) -> bool:
+    return bool(getattr(value, "literal_set", False)) or value.literal is not _MISSING

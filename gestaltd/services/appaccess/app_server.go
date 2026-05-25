@@ -85,6 +85,9 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 	if err != nil {
 		return nil, err
 	}
+	if workflow := req.GetWorkflow(); workflow != nil {
+		invokeCtx = invocation.WithWorkflowContext(invokeCtx, invocation.CloneWorkflowContext(workflow.AsMap()))
+	}
 	invokeCtx = invocation.WithIdempotencyKey(invokeCtx, req.GetIdempotencyKey())
 	params := map[string]any{}
 	if raw := req.GetParams(); raw != nil {

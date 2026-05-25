@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use serde::Serialize;
+use serde_json::Value;
 use tonic::codegen::async_trait;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
@@ -14,6 +15,7 @@ use crate::error::Result as ProviderResult;
 use crate::generated::v1 as pb;
 use crate::protocol;
 use crate::rpc_status::rpc_status;
+use crate::{Error, Result};
 
 /// Native JSON object used by authored workflow providers.
 pub type WorkflowJson = serde_json::Value;
@@ -2969,5 +2971,382 @@ where
             list_execution_references_response_to_proto(response)
                 .map_err(|error| rpc_status("workflow list execution references", error))?,
         ))
+    }
+}
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkflowExecutionRequest {
+    pub provider_name: String,
+    pub run_id: String,
+    pub target: Option<BoundWorkflowTarget>,
+    pub trigger: Option<WorkflowRunTrigger>,
+    pub input: Option<Value>,
+    pub metadata: Option<Value>,
+    pub execution_ref: String,
+    pub invocation_token: String,
+    pub signals: Vec<WorkflowSignal>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkflowEvalContext {
+    pub request: WorkflowExecutionRequest,
+    pub outputs: BTreeMap<String, Value>,
+    pub inputs: BTreeMap<String, Value>,
+    pub allow_inputs: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct WorkflowEvalResult {
+    pub value: Option<Value>,
+    pub resolved: bool,
+}
+
+pub fn evaluate_workflow_value(
+    ctx: &WorkflowEvalContext,
+    value: &WorkflowValue,
+) -> Result<WorkflowEvalResult> {
+    match value {
+        WorkflowValue::Empty => Ok(WorkflowEvalResult {
+            value: None,
+            resolved: true,
+        }),
+        WorkflowValue::Literal(value) => Ok(WorkflowEvalResult {
+            value: Some(value.clone()),
+            resolved: true,
+        }),
+        WorkflowValue::Object(values) => {
+            let mut out = serde_json::Map::new();
+            for (key, nested) in values {
+                let resolved = evaluate_workflow_value(ctx, nested)?;
+                if !resolved.resolved {
+                    return Ok(WorkflowEvalResult {
+                        value: None,
+                        resolved: false,
+                    });
+                }
+                out.insert(key.clone(), resolved.value.unwrap_or(Value::Null));
+            }
+            Ok(WorkflowEvalResult {
+                value: Some(Value::Object(out)),
+                resolved: true,
+            })
+        }
+        WorkflowValue::Array(values) => {
+            let mut out = Vec::with_capacity(values.len());
+            for nested in values {
+                let resolved = evaluate_workflow_value(ctx, nested)?;
+                if !resolved.resolved {
+                    return Ok(WorkflowEvalResult {
+                        value: None,
+                        resolved: false,
+                    });
+                }
+                out.push(resolved.value.unwrap_or(Value::Null));
+            }
+            Ok(WorkflowEvalResult {
+                value: Some(Value::Array(out)),
+                resolved: true,
+            })
+        }
+        WorkflowValue::Template(text) => Ok(WorkflowEvalResult {
+            value: Some(Value::String(render_workflow_template(
+                ctx,
+                &text.template,
+            )?)),
+            resolved: true,
+        }),
+        WorkflowValue::RunInput(path) => path_value_option(ctx.request.input.as_ref(), path),
+        WorkflowValue::SignalPayload(path) => match latest_workflow_signal(&ctx.request.signals) {
+            Some(signal) => path_value_option(signal.payload.as_ref(), path),
+            None => Ok(WorkflowEvalResult {
+                value: None,
+                resolved: false,
+            }),
+        },
+        WorkflowValue::StepOutput(source) => match ctx.outputs.get(source.step_id.trim()) {
+            Some(output) => path_value_option(Some(output), &source.path),
+            None => Err(Error::bad_request(format!(
+                "workflow step output references missing step {:?}",
+                source.step_id.trim()
+            ))),
+        },
+    }
+}
+
+pub fn render_workflow_template(ctx: &WorkflowEvalContext, template: &str) -> Result<String> {
+    let mut out = String::new();
+    let mut i = 0;
+    while i < template.len() {
+        let remaining = &template[i..];
+        if remaining.starts_with("$${") {
+            out.push_str("${");
+            i += 3;
+            continue;
+        }
+        if !remaining.starts_with("${") {
+            out.push(remaining.chars().next().expect("non-empty string"));
+            i += remaining
+                .chars()
+                .next()
+                .expect("non-empty string")
+                .len_utf8();
+            continue;
+        }
+        let end = remaining[2..]
+            .find('}')
+            .ok_or_else(|| Error::bad_request("unterminated template expression"))?;
+        let expr = remaining[2..2 + end].trim();
+        let resolved = template_expression_value(ctx, expr)?;
+        if !resolved.resolved {
+            return Err(Error::bad_request(format!(
+                "template expression {expr:?} did not resolve"
+            )));
+        }
+        out.push_str(&render_template_value(
+            resolved.value.unwrap_or(Value::Null),
+        )?);
+        i += 2 + end + 1;
+    }
+    Ok(out)
+}
+
+pub fn latest_workflow_signal(signals: &[WorkflowSignal]) -> Option<&WorkflowSignal> {
+    signals.last()
+}
+
+pub fn path_value(root: &Value, path: &str) -> Result<WorkflowEvalResult> {
+    if path.trim().is_empty() {
+        return Ok(WorkflowEvalResult {
+            value: Some(root.clone()),
+            resolved: true,
+        });
+    }
+    let mut current = root;
+    for segment in path_segments(path)? {
+        match (current, segment) {
+            (Value::Object(map), PathSegment::Key(key)) => match map.get(&key) {
+                Some(next) => current = next,
+                None => {
+                    return Ok(WorkflowEvalResult {
+                        value: None,
+                        resolved: false,
+                    });
+                }
+            },
+            (Value::Array(values), PathSegment::Index(index)) if index < values.len() => {
+                current = &values[index];
+            }
+            _ => {
+                return Ok(WorkflowEvalResult {
+                    value: None,
+                    resolved: false,
+                });
+            }
+        }
+    }
+    Ok(WorkflowEvalResult {
+        value: Some(current.clone()),
+        resolved: true,
+    })
+}
+
+fn path_value_option(root: Option<&Value>, path: &str) -> Result<WorkflowEvalResult> {
+    match root {
+        Some(root) => path_value(root, path),
+        None => Ok(WorkflowEvalResult {
+            value: None,
+            resolved: false,
+        }),
+    }
+}
+
+fn template_expression_value(ctx: &WorkflowEvalContext, expr: &str) -> Result<WorkflowEvalResult> {
+    if let Some(path) = expr.strip_prefix("inputs.") {
+        if !ctx.allow_inputs {
+            return Err(Error::bad_request("inputs references are not allowed here"));
+        }
+        return match ctx.inputs.get(path.split('.').next().unwrap_or_default()) {
+            Some(_) => path_value(
+                &Value::Object(ctx.inputs.clone().into_iter().collect()),
+                path,
+            ),
+            None => Ok(WorkflowEvalResult {
+                value: None,
+                resolved: false,
+            }),
+        };
+    }
+    if let Some(path) = expr.strip_prefix("runInput.") {
+        return path_value_option(ctx.request.input.as_ref(), path);
+    }
+    if let Some(path) = expr.strip_prefix("signalPayload.") {
+        return match latest_workflow_signal(&ctx.request.signals) {
+            Some(signal) => path_value_option(signal.payload.as_ref(), path),
+            None => Ok(WorkflowEvalResult {
+                value: None,
+                resolved: false,
+            }),
+        };
+    }
+    Err(Error::bad_request(format!(
+        "unsupported template expression {expr:?}"
+    )))
+}
+
+fn render_template_value(value: Value) -> Result<String> {
+    match value {
+        Value::String(value) => Ok(value),
+        other => Ok(serde_json::to_string(&other)?),
+    }
+}
+
+#[derive(Debug)]
+enum PathSegment {
+    Key(String),
+    Index(usize),
+}
+
+fn path_segments(path: &str) -> Result<Vec<PathSegment>> {
+    let chars: Vec<char> = path.trim().chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            '.' => i += 1,
+            '[' => {
+                let start = i + 1;
+                let mut end = start;
+                while end < chars.len() && chars[end] != ']' {
+                    end += 1;
+                }
+                if end >= chars.len() {
+                    return Err(Error::bad_request(format!(
+                        "invalid workflow path {path:?}"
+                    )));
+                }
+                let token: String = chars[start..end].iter().collect();
+                let token = token.trim();
+                if token.starts_with('"') || token.starts_with('\'') {
+                    out.push(PathSegment::Key(unquote_path_key(token, path)?));
+                } else {
+                    out.push(PathSegment::Index(token.parse().map_err(|_| {
+                        Error::bad_request(format!("invalid workflow path {path:?}"))
+                    })?));
+                }
+                i = end + 1;
+            }
+            _ => {
+                let start = i;
+                while i < chars.len() && chars[i] != '.' && chars[i] != '[' {
+                    i += 1;
+                }
+                let key: String = chars[start..i].iter().collect::<String>().trim().to_owned();
+                if key.is_empty() {
+                    return Err(Error::bad_request(format!(
+                        "invalid workflow path {path:?}"
+                    )));
+                }
+                out.push(PathSegment::Key(key));
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn unquote_path_key(token: &str, path: &str) -> Result<String> {
+    if token.starts_with('"') {
+        return serde_json::from_str(token)
+            .map_err(|_| Error::bad_request(format!("invalid workflow path {path:?}")));
+    }
+    if token.len() < 2 || !token.ends_with('\'') {
+        return Err(Error::bad_request(format!(
+            "invalid workflow path {path:?}"
+        )));
+    }
+    let mut out = String::new();
+    let mut chars = token[1..token.len() - 1].chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        let escaped = chars
+            .next()
+            .ok_or_else(|| Error::bad_request(format!("invalid workflow path {path:?}")))?;
+        match escaped {
+            '\'' | '"' | '\\' => out.push(escaped),
+            'n' => out.push('\n'),
+            'r' => out.push('\r'),
+            't' => out.push('\t'),
+            'u' => {
+                let mut hex = String::new();
+                for _ in 0..4 {
+                    hex.push(chars.next().ok_or_else(|| {
+                        Error::bad_request(format!("invalid workflow path {path:?}"))
+                    })?);
+                }
+                let code = u32::from_str_radix(&hex, 16)
+                    .map_err(|_| Error::bad_request(format!("invalid workflow path {path:?}")))?;
+                let value = char::from_u32(code)
+                    .ok_or_else(|| Error::bad_request(format!("invalid workflow path {path:?}")))?;
+                out.push(value);
+            }
+            other => out.push(other),
+        }
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::workflow::{
+        WorkflowEvalContext, WorkflowExecutionRequest, evaluate_workflow_value, path_value,
+        render_workflow_template,
+    };
+    use crate::workflow::{WorkflowSignal, WorkflowValue};
+
+    #[test]
+    fn evaluates_templates_and_paths() {
+        let ctx = WorkflowEvalContext {
+            request: WorkflowExecutionRequest {
+                provider_name: "indexeddb".to_owned(),
+                run_id: "run-1".to_owned(),
+                input: Some(json!({"customer": {"id": "cust_1"}})),
+                signals: vec![WorkflowSignal {
+                    id: "sig-1".to_owned(),
+                    payload: Some(json!({"thread": {"ts": "123.456"}})),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            inputs: [("thread".to_owned(), json!("123.456"))].into(),
+            allow_inputs: true,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            render_workflow_template(
+                &ctx,
+                "customer=${runInput.customer.id}; thread=${signalPayload.thread.ts}; input=${inputs.thread}; literal=$${x}",
+            )
+            .unwrap(),
+            "customer=cust_1; thread=123.456; input=123.456; literal=${x}"
+        );
+        assert_eq!(
+            evaluate_workflow_value(&ctx, &WorkflowValue::RunInput("customer.id".to_owned()))
+                .unwrap()
+                .value,
+            Some(json!("cust_1"))
+        );
+        assert_eq!(
+            path_value(
+                &json!({"quote'key": {"value": 42}}),
+                "['quote\\'key'].value"
+            )
+            .unwrap()
+            .value,
+            Some(json!(42))
+        );
     }
 }

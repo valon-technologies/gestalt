@@ -31,7 +31,7 @@ mod secrets;
 mod secrets_server;
 /// OpenTelemetry helpers for provider-authored GenAI instrumentation.
 pub mod telemetry;
-mod workflow;
+pub mod workflow;
 mod workflow_access;
 
 #[doc(hidden)]
@@ -142,16 +142,18 @@ pub use workflow::{
     SignalWorkflowRunResponse, StartWorkflowProviderRunRequest,
     UpsertWorkflowProviderEventTriggerRequest, UpsertWorkflowProviderScheduleRequest,
     WorkflowAccessPermission, WorkflowActor, WorkflowAgentMessage, WorkflowDefinition,
-    WorkflowEvent, WorkflowEventMatch, WorkflowEventTrigger, WorkflowEventTriggerInvocation,
-    WorkflowExecutionReference, WorkflowJson, WorkflowProvider, WorkflowRun, WorkflowRunAsSubject,
+    WorkflowEvalContext, WorkflowEvalResult, WorkflowEvent, WorkflowEventMatch,
+    WorkflowEventTrigger, WorkflowEventTriggerInvocation, WorkflowExecutionReference,
+    WorkflowExecutionRequest, WorkflowJson, WorkflowProvider, WorkflowRun, WorkflowRunAsSubject,
     WorkflowRunSignal, WorkflowRunStatus, WorkflowRunTrigger, WorkflowSchedule,
     WorkflowScheduleTrigger, WorkflowSignal, WorkflowStep, WorkflowStepAction,
     WorkflowStepAgentTurn, WorkflowStepAppCall, WorkflowStepOutputSource, WorkflowStepWhen,
     WorkflowText, WorkflowValue, bound_workflow_definition_input_from_definition,
     bound_workflow_event_trigger_input_from_trigger, bound_workflow_run_input_from_run,
     bound_workflow_schedule_input_from_schedule, bound_workflow_target_input_from_target,
-    new_bound_workflow_event_trigger, new_bound_workflow_event_trigger_from_trigger,
-    new_bound_workflow_run, new_bound_workflow_run_from_run, new_bound_workflow_schedule,
+    evaluate_workflow_value, latest_workflow_signal, new_bound_workflow_event_trigger,
+    new_bound_workflow_event_trigger_from_trigger, new_bound_workflow_run,
+    new_bound_workflow_run_from_run, new_bound_workflow_schedule,
     new_bound_workflow_schedule_from_schedule, new_bound_workflow_target,
     new_bound_workflow_target_from_target, new_workflow_access_permission, new_workflow_actor,
     new_workflow_agent_message, new_workflow_event, new_workflow_event_from_event,
@@ -160,13 +162,14 @@ pub use workflow::{
     new_workflow_run_as_subject, new_workflow_run_trigger, new_workflow_run_trigger_from_trigger,
     new_workflow_schedule_trigger, new_workflow_signal, new_workflow_signal_from_signal,
     new_workflow_step, new_workflow_step_agent_turn, new_workflow_step_app_call,
-    new_workflow_step_when, new_workflow_text, new_workflow_value,
-    workflow_access_permission_input_from_permission, workflow_actor_input_from_actor,
-    workflow_event_input_from_event, workflow_event_match_input_from_match,
-    workflow_execution_reference_input_from_reference, workflow_run_as_subject_input_from_subject,
-    workflow_run_trigger_input_from_trigger, workflow_signal_input_from_signal,
-    workflow_step_agent_turn_input_from_turn, workflow_step_app_call_input_from_call,
-    workflow_step_input_from_step, workflow_value_input_from_value,
+    new_workflow_step_when, new_workflow_text, new_workflow_value, path_value,
+    render_workflow_template, workflow_access_permission_input_from_permission,
+    workflow_actor_input_from_actor, workflow_event_input_from_event,
+    workflow_event_match_input_from_match, workflow_execution_reference_input_from_reference,
+    workflow_run_as_subject_input_from_subject, workflow_run_trigger_input_from_trigger,
+    workflow_signal_input_from_signal, workflow_step_agent_turn_input_from_turn,
+    workflow_step_app_call_input_from_call, workflow_step_input_from_step,
+    workflow_value_input_from_value,
 };
 pub use workflow_access::{
     Workflow, WorkflowContract, WorkflowCreateDefinition, WorkflowCreateEventTrigger,
@@ -177,7 +180,6 @@ pub use workflow_access::{
     WorkflowSignalRun, WorkflowStartRun, WorkflowUpdateDefinition, WorkflowUpdateEventTrigger,
     WorkflowUpdateSchedule,
 };
-
 #[doc(hidden)]
 pub trait IntoRouterResult<P> {
     fn into_router_result(self) -> Result<Router<P>>;

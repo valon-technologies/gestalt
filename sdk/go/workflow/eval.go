@@ -6,20 +6,21 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 )
 
 var ErrInvalidValue = errors.New("invalid workflow value")
 
 // EvalContext carries runtime inputs for workflow value and template evaluation.
 type EvalContext struct {
-	Request     InvokeOperationRequest
+	Request     Request
 	Outputs     map[string]any
 	Inputs      map[string]any
 	AllowInputs bool
 }
 
-// EvaluateStepInputs resolves step input values against the evaluation context.
-func (c EvalContext) EvaluateStepInputs(values map[string]Value) (map[string]any, error) {
+func (c EvalContext) EvaluateStepInputs(values map[string]gestalt.WorkflowValue) (map[string]any, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -37,8 +38,7 @@ func (c EvalContext) EvaluateStepInputs(values map[string]Value) (map[string]any
 	return out, nil
 }
 
-// EvaluateValue resolves a workflow value against the evaluation context.
-func (c EvalContext) EvaluateValue(value Value) (any, bool, error) {
+func (c EvalContext) EvaluateValue(value gestalt.WorkflowValue) (any, bool, error) {
 	switch {
 	case value.LiteralSet:
 		return value.Literal, true, nil
@@ -78,7 +78,7 @@ func (c EvalContext) EvaluateValue(value Value) (any, bool, error) {
 		if signal == nil {
 			return nil, false, nil
 		}
-		return MapPathValue(signal.Payload, value.SignalPayload)
+		return PathValue(signal.Payload, value.SignalPayload)
 	case value.StepOutput != nil:
 		stepID := strings.TrimSpace(value.StepOutput.StepID)
 		output, ok := c.Outputs[stepID]
@@ -91,7 +91,6 @@ func (c EvalContext) EvaluateValue(value Value) (any, bool, error) {
 	}
 }
 
-// RenderTemplate renders a workflow template string against the evaluation context.
 func (c EvalContext) RenderTemplate(template string) (string, error) {
 	var b strings.Builder
 	for i := 0; i < len(template); {
@@ -141,7 +140,7 @@ func (c EvalContext) templateExpressionValue(expr string) (any, bool, error) {
 		if signal == nil {
 			return nil, false, nil
 		}
-		return MapPathValue(signal.Payload, strings.TrimPrefix(expr, "signalPayload."))
+		return PathValue(signal.Payload, strings.TrimPrefix(expr, "signalPayload."))
 	default:
 		return nil, false, fmt.Errorf("%w: unsupported template expression %q", ErrInvalidValue, expr)
 	}
@@ -158,15 +157,13 @@ func templateRenderValue(value any) (string, error) {
 	return string(body), nil
 }
 
-// LatestSignal returns the most recent workflow signal, if any.
-func LatestSignal(signals []Signal) *Signal {
+func LatestSignal(signals []gestalt.WorkflowSignal) *gestalt.WorkflowSignal {
 	if len(signals) == 0 {
 		return nil
 	}
 	return &signals[len(signals)-1]
 }
 
-// MapPathValue resolves a path against a string-keyed map root.
 func MapPathValue(values map[string]any, path string) (any, bool, error) {
 	if len(values) == 0 {
 		return nil, false, nil
@@ -174,7 +171,6 @@ func MapPathValue(values map[string]any, path string) (any, bool, error) {
 	return PathValue(values, path)
 }
 
-// PathValue resolves a dotted/bracket path against a JSON-like value tree.
 func PathValue(root any, path string) (any, bool, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -273,7 +269,15 @@ func unquotePathKey(token string) (string, error) {
 	return out.String(), nil
 }
 
-// ScalarEqual compares scalar JSON values for workflow when-clause equality.
+func IsScalarJSON(value any) bool {
+	switch value.(type) {
+	case nil, string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, json.Number:
+		return true
+	default:
+		return false
+	}
+}
+
 func ScalarEqual(left, right any) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil

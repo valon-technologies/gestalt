@@ -329,6 +329,20 @@ _WORKFLOW_AUTHORED_EXPORTS = (
     "workflow_value_input_from_value",
 )
 
+_WORKFLOW_HELPER_EXPORTS = (
+    "WorkflowEvalContext",
+    "WorkflowExecutionRequest",
+    "WorkflowValueError",
+    "evaluate_workflow_step_inputs",
+    "evaluate_workflow_value",
+    "latest_workflow_signal",
+    "map_path_value",
+    "path_value",
+    "render_workflow_template",
+    "workflow_invocation_context",
+    "workflow_signals_context",
+)
+
 _LAZY_EXPORTS = {
     "AgentHost": ("._agent", "AgentHost"),
     "AgentHostProtocol": ("._agent", "AgentHostProtocol"),
@@ -462,6 +476,9 @@ _LAZY_EXPORTS.update(
 )
 _LAZY_EXPORTS.update(
     {name: ("._workflow", name) for name in _WORKFLOW_AUTHORED_EXPORTS}
+)
+_LAZY_EXPORTS.update(
+    {name: ("._workflow", name) for name in _WORKFLOW_HELPER_EXPORTS}
 )
 
 _LAZY_MODULES = {

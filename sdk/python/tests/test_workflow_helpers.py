@@ -174,5 +174,109 @@ class WorkflowHelperTests(unittest.TestCase):
             "agent.structuredOutput.actionableForPr",
         )
 
+    def test_workflow_evaluates_templates_and_paths(self) -> None:
+        req = gestalt.WorkflowExecutionRequest(
+            provider_name="indexeddb",
+            run_id="run-1",
+            input={"customer": {"id": "cust_1"}},
+            signals=[
+                gestalt.WorkflowSignal(
+                    id="sig-1",
+                    payload={"thread": {"ts": "123.456"}},
+                )
+            ],
+        )
+        ctx = gestalt.WorkflowEvalContext(
+            request=req,
+            inputs={"thread": "123.456"},
+            allow_inputs=True,
+        )
+
+        rendered = gestalt.render_workflow_template(
+            ctx,
+            "customer=${runInput.customer.id}; thread=${signalPayload.thread.ts}; input=${inputs.thread}; literal=$${x}",
+        )
+
+        self.assertEqual(
+            rendered,
+            "customer=cust_1; thread=123.456; input=123.456; literal=${x}",
+        )
+        value, ok = gestalt.evaluate_workflow_value(
+            ctx, gestalt.WorkflowValue(run_input="customer.id")
+        )
+        self.assertTrue(ok)
+        self.assertEqual(value, "cust_1")
+        quoted, ok = gestalt.path_value({"quote'key": {"value": 42}}, "['quote\\'key'].value")
+        self.assertTrue(ok)
+        self.assertEqual(quoted, 42)
+
+    def test_workflow_invocation_context_matches_runtime_shape(self) -> None:
+        created_at = dt.datetime(2026, 5, 8, 12, 0, tzinfo=dt.timezone.utc)
+        req = gestalt.WorkflowExecutionRequest(
+            provider_name="indexeddb",
+            run_id="run-1",
+            target=gestalt.BoundWorkflowTarget(
+                steps=[
+                    gestalt.WorkflowStep(
+                        id="notify",
+                        app=gestalt.WorkflowStepAppCall(
+                            name="slack",
+                            operation="chat.postMessage",
+                            credential_mode="user",
+                        ),
+                    )
+                ]
+            ),
+            trigger=gestalt.WorkflowRunTrigger(manual=True),
+            created_by=gestalt.WorkflowActor(subject_id="user-1", subject_kind="user"),
+            signals=[
+                gestalt.WorkflowSignal(
+                    id="sig-1",
+                    name="ready",
+                    payload={
+                        "delivery_id": "delivery-1",
+                        "payload": {"large": True},
+                        "extra": "kept",
+                    },
+                    created_at=created_at,
+                )
+            ],
+        )
+
+        ctx = gestalt.workflow_invocation_context(req)
+
+        self.assertEqual(
+            ctx["target"],
+            {
+                "kind": "steps",
+                "steps": [
+                    {
+                        "id": "notify",
+                        "kind": "app",
+                        "app": "slack",
+                        "operation": "chat.postMessage",
+                        "credentialMode": "user",
+                    }
+                ],
+            },
+        )
+        self.assertEqual(ctx["trigger"], {"kind": "manual"})
+        self.assertEqual(ctx["createdBy"], {"subjectId": "user-1", "subjectKind": "user"})
+        self.assertEqual(
+            ctx["signals"],
+            [
+                {
+                    "id": "sig-1",
+                    "name": "ready",
+                    "payload": {
+                        "delivery_id": "delivery-1",
+                        "fields": {"extra": "kept"},
+                        "payloadOmitted": True,
+                    },
+                    "createdAt": "2026-05-08T12:00:00Z",
+                }
+            ],
+        )
+
 if __name__ == "__main__":
     unittest.main()

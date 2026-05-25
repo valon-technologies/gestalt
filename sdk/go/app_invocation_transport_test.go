@@ -66,6 +66,7 @@ func (h *pluginAppTransportHarness) Invoke(ctx context.Context, req *proto.AppIn
 		Connection:      req.GetConnection(),
 		Instance:        req.GetInstance(),
 		IdempotencyKey:  req.GetIdempotencyKey(),
+		Workflow:        cloneStruct(req.GetWorkflow()),
 	})
 	h.mu.Unlock()
 
@@ -132,6 +133,10 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 		IssueNumber: 42,
 	}, &gestalt.InvokeOptions{
 		IdempotencyKey: " issue-42-create ",
+		WorkflowContext: map[string]any{
+			"runId": "run-42",
+			"step":  map[string]any{"id": "notify"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
@@ -202,6 +207,9 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	}
 	if got := harness.requests[0].GetParams().AsMap(); got["issue_number"] != float64(42) {
 		t.Fatalf("invoke params = %#v, want issue_number=42", got)
+	}
+	if got := harness.requests[0].GetWorkflow().AsMap(); got["runId"] != "run-42" {
+		t.Fatalf("invoke workflow context = %#v, want runId=run-42", got)
 	}
 	if got := harness.requests[1].GetParams().AsMap(); len(got) != 1 || got["issue_number"] != float64(43) {
 		t.Fatalf("omitempty invoke params = %#v, want only issue_number=43", got)

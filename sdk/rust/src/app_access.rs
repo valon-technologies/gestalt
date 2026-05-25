@@ -186,6 +186,7 @@ impl App {
                     .as_ref()
                     .map(|opts| opts.credential_mode.trim().to_string())
                     .unwrap_or_default(),
+                workflow: None,
             })
             .await?
             .into_inner();
