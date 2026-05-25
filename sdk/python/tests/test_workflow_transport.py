@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import dataclasses
 import os
 import tempfile
 import unittest
 from concurrent import futures
-from typing import Any, TypedDict
+from typing import Any
 
 import grpc
 
@@ -20,7 +19,6 @@ from gestalt import (
     WorkflowCreateDefinition,
     WorkflowCreateSchedule,
     WorkflowEvent,
-    WorkflowHost,
     WorkflowPublishEvent,
     WorkflowStep,
     WorkflowStepAppCall,
@@ -31,42 +29,9 @@ from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 workflow_pb2: Any = _workflow_pb2
 workflow_pb2_grpc: Any = _workflow_pb2_grpc
 _server: grpc.Server | None = None
-_manager_server: grpc.Server | None = None
 _socket_path: str = ""
-_manager_socket_path: str = ""
 _manager_requests: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
-
-
-class _AppStepDict(TypedDict):
-    name: str
-    operation: str
-
-
-class _WorkflowStepDict(TypedDict):
-    id: str
-    app: _AppStepDict
-
-
-class _BoundTargetDict(TypedDict):
-    steps: list[_WorkflowStepDict]
-
-
-@dataclasses.dataclass(slots=True)
-class _InvokeOperationRequestInput:
-    run_id: str
-    target: _BoundTargetDict
-
-
-class _WorkflowHostServicer(workflow_pb2_grpc.WorkflowHostServicer):
-    def InvokeOperation(self, request: Any, context: grpc.ServicerContext) -> Any:
-        target = request.target
-        app = target.steps[0].app if target is not None and target.steps else None
-        operation = app.operation if app is not None else ""
-        return workflow_pb2.InvokeWorkflowOperationResponse(
-            status=202,
-            body=f"{request.run_id}:{operation}",
-        )
 
 
 class _WorkflowServicer(workflow_pb2_grpc.WorkflowProviderServicer):
@@ -134,34 +99,19 @@ def _record_manager_relay_tokens(context: grpc.ServicerContext) -> None:
 
 
 def setUpModule() -> None:
-    global _server, _manager_server, _socket_path, _manager_socket_path
+    global _server, _socket_path
     _socket_path = os.path.join(
         tempfile.gettempdir(), f"py-workflow-test-{os.getpid()}.sock"
     )
-    _manager_socket_path = os.path.join(
-        tempfile.gettempdir(), f"py-workflow-access-test-{os.getpid()}.sock"
-    )
     if os.path.exists(_socket_path):
         os.remove(_socket_path)
-    if os.path.exists(_manager_socket_path):
-        os.remove(_manager_socket_path)
 
     _server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
-    workflow_pb2_grpc.add_WorkflowHostServicer_to_server(
-        _WorkflowHostServicer(), _server
-    )
     workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(
         _WorkflowServicer(), _server
     )
     _server.add_insecure_port(f"unix:{_socket_path}")
     _server.start()
-
-    _manager_server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
-    workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(
-        _WorkflowServicer(), _manager_server
-    )
-    _manager_server.add_insecure_port(f"unix:{_manager_socket_path}")
-    _manager_server.start()
 
     os.environ[ENV_HOST_SERVICE_SOCKET] = _socket_path
     os.environ[ENV_HOST_SERVICE_TOKEN] = "relay-token-py"
@@ -170,34 +120,14 @@ def setUpModule() -> None:
 def tearDownModule() -> None:
     if _server is not None:
         _server.stop(None)
-    if _manager_server is not None:
-        _manager_server.stop(None)
     if _socket_path and os.path.exists(_socket_path):
         os.remove(_socket_path)
-    if _manager_socket_path and os.path.exists(_manager_socket_path):
-        os.remove(_manager_socket_path)
 
 
 class WorkflowTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _manager_requests.clear()
         _manager_relay_tokens.clear()
-
-    def test_workflow_host_roundtrip(self) -> None:
-        target: _BoundTargetDict = {
-            "steps": [
-                {
-                    "id": "sync",
-                    "app": {"name": "demo", "operation": "sync"},
-                }
-            ]
-        }
-        with WorkflowHost() as host:
-            response = host.invoke_operation(
-                _InvokeOperationRequestInput(run_id="run-42", target=target)
-            )
-        self.assertEqual(response.status, 202)
-        self.assertEqual(response.body, "run-42:sync")
 
     def test_workflow_publish_event_roundtrip(self) -> None:
         event = workflow_pb2.WorkflowEvent(

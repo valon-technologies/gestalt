@@ -57,7 +57,6 @@ const (
 	WorkflowOperationPutExecutionReference   = "put_execution_reference"
 	WorkflowOperationGetExecutionReference   = "get_execution_reference"
 	WorkflowOperationListExecutionReferences = "list_execution_references"
-	WorkflowOperationInvokeOperation         = "invoke_operation"
 )
 
 var (
@@ -89,7 +88,6 @@ type workflowMatchedTriggersMetricSet struct {
 
 var (
 	workflowProviderOperationMetrics metricutil.MeterCache[metricSet]
-	workflowHostOperationMetrics     metricutil.MeterCache[metricSet]
 	workflowManagerOperationMetrics  metricutil.MeterCache[metricSet]
 	workflowRunStartedMetrics        metricutil.MeterCache[countMetricSet]
 	workflowRunCompletedMetrics      metricutil.MeterCache[workflowRunCompletedMetricSet]
@@ -100,10 +98,6 @@ var (
 
 func RecordWorkflowProviderOperation(ctx context.Context, startedAt time.Time, err error, dims WorkflowMetricDims) {
 	record(ctx, &workflowProviderOperationMetrics, "gestaltd.workflows.provider.operation", "gestaltd workflow provider operations", startedAt, err != nil, workflowMetricAttrs(dims, err)...)
-}
-
-func RecordWorkflowHostOperation(ctx context.Context, startedAt time.Time, err error, dims WorkflowMetricDims) {
-	record(ctx, &workflowHostOperationMetrics, "gestaltd.workflows.host.operation", "gestaltd workflow host operations", startedAt, err != nil, workflowMetricAttrs(dims, err)...)
 }
 
 func RecordWorkflowManagerOperation(ctx context.Context, startedAt time.Time, err error, dims WorkflowMetricDims) {

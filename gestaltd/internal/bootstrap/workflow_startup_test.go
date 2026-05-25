@@ -2,33 +2,20 @@ package bootstrap
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/test/bufconn"
 	"gopkg.in/yaml.v3"
 )
 
@@ -130,7 +117,7 @@ func (p startupTestWorkflowProvider) PublishEvent(_ context.Context, req corewor
 func (p startupTestWorkflowProvider) Ping(context.Context) error { return nil }
 func (p startupTestWorkflowProvider) Close() error               { return nil }
 
-func TestBuildWorkflowRegistersExecutableWorkflowHostPublicRelay(t *testing.T) {
+func TestBuildWorkflowRegistersIndexedDBPublicRelay(t *testing.T) {
 	t.Parallel()
 
 	factories := NewFactoryRegistry()
@@ -159,7 +146,6 @@ func TestBuildWorkflowRegistersExecutableWorkflowHostPublicRelay(t *testing.T) {
 		t.Fatalf("buildWorkflow: %v", err)
 	}
 
-	assertPublicHostServicesVerified(t, deps.PublicHostServices, "workflow_host")
 	assertPublicHostServicesVerified(t, deps.PublicHostServices, "indexeddb")
 	if err := provider.Close(); err != nil {
 		t.Fatalf("provider.Close: %v", err)
@@ -192,11 +178,8 @@ func TestBuildWorkflowPassesAuthorizationHostService(t *testing.T) {
 		t.Fatalf("provider.Close: %v", err)
 	}
 
-	if !hasHostServiceName(hostServiceNames, "workflow_host") {
-		t.Fatalf("workflow host services = %v, want workflow_host", hostServiceNames)
-	}
 	if !hasHostServiceName(hostServiceNames, "authorization") {
-		t.Fatalf("workflow host services = %v, want authorization", hostServiceNames)
+		t.Fatalf("workflow provider host services = %v, want authorization", hostServiceNames)
 	}
 }
 
@@ -220,207 +203,6 @@ func (noopTelemetryProvider) MeterProvider() metric.MeterProvider {
 }
 func (noopTelemetryProvider) PrometheusHandler() http.Handler { return http.NotFoundHandler() }
 func (noopTelemetryProvider) Shutdown(context.Context) error  { return nil }
-
-func workflowStartupTestConfig() *config.Config {
-	return &config.Config{
-		Apps: map[string]*config.ProviderEntry{},
-		Providers: config.ProvidersConfig{
-			Authentication: map[string]*config.ProviderEntry{
-				"default": {
-					Source: config.NewMetadataSource("https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-oidc/v0.0.1-alpha.1/provider-release.yaml"),
-					Config: yaml.Node{Kind: yaml.MappingNode},
-				},
-			},
-			Secrets: map[string]*config.ProviderEntry{
-				"default": {Source: config.ProviderSource{Builtin: "test-secrets"}},
-			},
-			Telemetry: map[string]*config.ProviderEntry{
-				"default": {Source: config.ProviderSource{Builtin: "test-telemetry"}},
-			},
-			IndexedDB: map[string]*config.ProviderEntry{
-				"test": {Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml")},
-			},
-		},
-		Server: config.ServerConfig{
-			BaseURL:       "https://gestalt.example.test",
-			Public:        config.ListenerConfig{Port: 8080},
-			EncryptionKey: "test-key",
-			Providers:     config.ServerProvidersConfig{IndexedDB: "test"},
-		},
-	}
-}
-
-func workflowStartupTestFactories() *FactoryRegistry {
-	f := NewFactoryRegistry()
-	f.Auth = func(yaml.Node, Deps) (core.AuthenticationProvider, error) {
-		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
-	}
-	f.ExternalCredentials = func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (core.ExternalCredentialProvider, error) {
-		return coretesting.NewStubExternalCredentialProvider(), nil
-	}
-	f.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) {
-		return &coretesting.StubIndexedDB{}, nil
-	}
-	f.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
-		return &coretesting.StubSecretManager{}, nil
-	}
-	f.Telemetry["test-telemetry"] = func(yaml.Node) (core.TelemetryProvider, error) {
-		return noopTelemetryProvider{}, nil
-	}
-	return f
-}
-
-func buildModifiedExampleProviderBinary(t *testing.T, mutate func(string) string) (string, string) {
-	t.Helper()
-
-	root := t.TempDir()
-	testutil.CopyExampleProviderPlugin(t, root)
-	providerPath := filepath.Join(root, "provider.go")
-	source, err := os.ReadFile(providerPath)
-	if err != nil {
-		t.Fatalf("read provider.go: %v", err)
-	}
-	updated := mutate(string(source))
-	if err := os.WriteFile(providerPath, []byte(updated), 0o644); err != nil {
-		t.Fatalf("write provider.go: %v", err)
-	}
-
-	bin := filepath.Join(root, filepath.Base(root))
-	if err := buildBootstrapTestBinary(root, "", bin, false); err != nil {
-		t.Fatalf("build custom provider binary: %v", err)
-	}
-	return bin, root
-}
-
-func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []runtimehost.HostService, req *proto.InvokeWorkflowOperationRequest) (*proto.InvokeWorkflowOperationResponse, error) {
-	t.Helper()
-
-	if len(hostServices) != 1 {
-		t.Fatalf("workflow host services = %d, want 1", len(hostServices))
-	}
-	lis := bufconn.Listen(1024 * 1024)
-	srv := grpc.NewServer()
-	hostServices[0].Register(srv)
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(func() {
-		srv.Stop()
-		_ = lis.Close()
-	})
-
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	return proto.NewWorkflowHostClient(conn).InvokeOperation(context.Background(), req)
-}
-
-func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, target coreworkflow.Target) string {
-	t.Helper()
-	if len(target.Steps) == 0 || target.Steps[0].App == nil {
-		t.Fatalf("workflow target app step is missing: %#v", target)
-		return ""
-	}
-	appStep := target.Steps[0].App
-	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
-	if err != nil {
-		t.Fatalf("resolve workflow provider %q: %v", providerName, err)
-	}
-	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
-	if !ok {
-		t.Fatalf("workflow provider %q does not support execution refs", providerName)
-	}
-	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, appStep.Operation),
-		ProviderName: providerName,
-		Target:       target,
-		SubjectID:    "system:config",
-		Permissions:  workflowExecutionRefPermissionsForTarget(target),
-	})
-	if err != nil {
-		t.Fatalf("store workflow execution ref: %v", err)
-	}
-	return ref.ID
-}
-
-func TestBootstrapWorkflowStartupCallbackWaitsForDelayedAppProvider(t *testing.T) {
-	t.Parallel()
-
-	bin, manifestRoot := buildModifiedExampleProviderBinary(t, func(source string) string {
-		source = strings.Replace(source, "\"net/http\"\n", "\"net/http\"\n\t\"time\"\n", 1)
-		return strings.Replace(source,
-			"func (p *Provider) Configure(_ context.Context, name string, config map[string]any) error {\n",
-			"func (p *Provider) Configure(_ context.Context, name string, config map[string]any) error {\n\ttime.Sleep(300 * time.Millisecond)\n",
-			1,
-		)
-	})
-
-	cfg := workflowStartupTestConfig()
-	cfg.Apps = map[string]*config.ProviderEntry{
-		"roadmap": {
-			Command:              bin,
-			ResolvedManifest:     newExecutableManifest("Roadmap", "Delayed startup provider"),
-			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-			ConnectionMode:       providermanifestv1.ConnectionModeUser,
-		},
-	}
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-
-	factories := workflowStartupTestFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreworkflow.Provider, error) {
-		if name != "temporal" {
-			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
-		}
-		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-			SubjectID:   "system:config",
-			Integration: "roadmap",
-			Connection:  config.AppConnectionName,
-			Instance:    "default",
-			AccessToken: "workflow-startup-token",
-		}); err != nil {
-			return nil, fmt.Errorf("store startup token: %w", err)
-		}
-		executionRef := storeStartupExecutionRef(t, deps, name, testWorkflowAppStepTarget("roadmap", "status"))
-		resp, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target: &proto.BoundWorkflowTarget{
-				Steps: []*proto.WorkflowStep{{
-					Id: "status",
-					Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{
-						Name:      "roadmap",
-						Operation: "status",
-					}},
-				}},
-			},
-			ExecutionRef: executionRef,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("startup callback: %w", err)
-		}
-		if resp.GetStatus() != http.StatusOK {
-			return nil, fmt.Errorf("startup callback status = %d, want %d", resp.GetStatus(), http.StatusOK)
-		}
-		if !strings.Contains(resp.GetBody(), `"name":"roadmap"`) {
-			return nil, fmt.Errorf("startup callback body = %q", resp.GetBody())
-		}
-		return startupTestWorkflowProvider{}, nil
-	}
-
-	result, err := Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-}
 
 func TestResultStartWorkflowProvidersIsSeparateFromAuthorizerStart(t *testing.T) {
 	t.Parallel()
@@ -489,64 +271,4 @@ func TestWorkflowCleanupWrappersForwardStart(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
-	t.Parallel()
-
-	bin, manifestRoot := buildModifiedExampleProviderBinary(t, func(source string) string { return source })
-
-	cfg := workflowStartupTestConfig()
-	cfg.Apps = map[string]*config.ProviderEntry{
-		"roadmap": {
-			Command:              bin,
-			ResolvedManifest:     newExecutableManifest("Roadmap", "Startup callback provider"),
-			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-			ConnectionMode:       providermanifestv1.ConnectionModeUser,
-		},
-	}
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-
-	factories := workflowStartupTestFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreworkflow.Provider, error) {
-		if name != "temporal" {
-			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
-		}
-		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-			SubjectID:   "system:config",
-			Integration: "roadmap",
-			Connection:  config.AppConnectionName,
-			Instance:    "default",
-			AccessToken: "workflow-startup-token",
-		}); err != nil {
-			return nil, fmt.Errorf("store startup token: %w", err)
-		}
-		_, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target: &proto.BoundWorkflowTarget{
-				Steps: []*proto.WorkflowStep{{
-					Id: "status",
-					Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{
-						Name:      "roadmap",
-						Operation: "status",
-					}},
-				}},
-			},
-		})
-		if err == nil {
-			return nil, fmt.Errorf("startup callback unexpectedly succeeded without execution_ref")
-		}
-		if got, want := status.Code(err), codes.InvalidArgument; got != want {
-			return nil, fmt.Errorf("startup callback code = %v, want %v (err=%v)", got, want, err)
-		}
-		return startupTestWorkflowProvider{}, nil
-	}
-
-	result, err := Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
 }

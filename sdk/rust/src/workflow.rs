@@ -2,33 +2,18 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use hyper_util::rt::TokioIo;
 use serde::Serialize;
-use tokio::net::UnixStream;
 use tonic::codegen::async_trait;
-use tonic::metadata::MetadataValue;
-use tonic::service::Interceptor;
-use tonic::service::interceptor::InterceptedService;
-use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
-use tower::service_fn;
 
 use crate::agent::{
     AgentToolRef, agent_tool_ref_from_proto, agent_tool_ref_to_proto, new_agent_tool_ref,
 };
 use crate::api::RuntimeMetadata;
-use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
-use crate::error::Error;
 use crate::error::Result as ProviderResult;
-use crate::generated::v1::{
-    self as pb, workflow_host_client::WorkflowHostClient as ProtoWorkflowHostClient,
-};
+use crate::generated::v1 as pb;
 use crate::protocol;
 use crate::rpc_status::rpc_status;
-
-type WorkflowHostTransport = InterceptedService<Channel, WorkflowHostRelayTokenInterceptor>;
-
-const WORKFLOW_HOST_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 /// Native JSON object used by authored workflow providers.
 pub type WorkflowJson = serde_json::Value;
@@ -606,40 +591,6 @@ pub struct GetWorkflowExecutionReferenceRequest {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ListWorkflowExecutionReferencesRequest {
     pub subject_id: String,
-}
-
-/// Input for invoking a workflow operation through the host service.
-#[derive(Clone, Debug, Default)]
-pub struct InvokeWorkflowOperationInput {
-    pub target: Option<BoundWorkflowTarget>,
-    pub run_id: String,
-    pub trigger: Option<WorkflowRunTrigger>,
-    pub input: Option<serde_json::Value>,
-    pub metadata: Option<serde_json::Value>,
-    pub created_by: Option<WorkflowActor>,
-    pub execution_ref: String,
-    pub signals: Vec<WorkflowSignal>,
-}
-
-impl InvokeWorkflowOperationInput {
-    /// Sets operation input from any JSON-object-like serializable value.
-    pub fn with_input<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
-        self.input = Some(protocol::json_from_serializable(value)?);
-        Ok(self)
-    }
-
-    /// Sets workflow invocation metadata from any JSON-object-like serializable value.
-    pub fn with_metadata<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
-        self.metadata = Some(protocol::json_from_serializable(value)?);
-        Ok(self)
-    }
-}
-
-/// Native response returned after invoking a workflow operation.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct InvokeWorkflowOperationResponse {
-    pub status: i32,
-    pub body: String,
 }
 
 /// Creates workflow actor metadata.
@@ -1982,48 +1933,6 @@ pub fn new_workflow_execution_reference_from_reference(
     Ok(input.clone())
 }
 
-fn invoke_workflow_operation_request_from_input(
-    input: InvokeWorkflowOperationInput,
-) -> ProviderResult<pb::InvokeWorkflowOperationRequest> {
-    Ok(pb::InvokeWorkflowOperationRequest {
-        target: input
-            .target
-            .map(new_bound_workflow_target)
-            .transpose()?
-            .map(bound_workflow_target_to_proto)
-            .transpose()?,
-        run_id: input.run_id,
-        trigger: input
-            .trigger
-            .map(new_workflow_run_trigger)
-            .transpose()?
-            .map(workflow_run_trigger_to_proto)
-            .transpose()?,
-        input: input.input.map(protocol::struct_from_json).transpose()?,
-        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
-        created_by: input
-            .created_by
-            .map(new_workflow_actor)
-            .map(workflow_actor_to_proto),
-        execution_ref: input.execution_ref,
-        signals: input
-            .signals
-            .into_iter()
-            .map(new_workflow_signal)
-            .map(|signal| signal.and_then(workflow_signal_to_proto))
-            .collect::<ProviderResult<Vec<_>>>()?,
-    })
-}
-
-fn invoke_workflow_operation_response_from_proto(
-    response: pb::InvokeWorkflowOperationResponse,
-) -> InvokeWorkflowOperationResponse {
-    InvokeWorkflowOperationResponse {
-        status: response.status,
-        body: response.body,
-    }
-}
-
 fn start_workflow_provider_run_request_from_proto(
     request: pb::StartWorkflowProviderRunRequest,
 ) -> ProviderResult<StartWorkflowProviderRunRequest> {
@@ -2233,182 +2142,6 @@ pub(crate) fn workflow_run_signal_from_proto(
         started_run: input.started_run,
         workflow_key: input.workflow_key,
     })
-}
-
-#[derive(Debug, thiserror::Error)]
-/// Errors returned by [`WorkflowHost`].
-pub enum WorkflowHostError {
-    /// The host-service transport could not be created.
-    #[error("{0}")]
-    Transport(#[from] tonic::transport::Error),
-    /// The host-service RPC returned a gRPC status.
-    #[error("{0}")]
-    Status(#[from] tonic::Status),
-    /// The operation input could not be converted into the wire protocol.
-    #[error("{0}")]
-    Conversion(#[from] Error),
-    /// Required environment or target configuration was invalid.
-    #[error("{0}")]
-    Env(String),
-}
-
-#[async_trait]
-/// Fakeable client contract for workflow host calls.
-pub trait WorkflowHostApi: Send {
-    async fn invoke_operation(
-        &mut self,
-        input: InvokeWorkflowOperationInput,
-    ) -> std::result::Result<InvokeWorkflowOperationResponse, WorkflowHostError>;
-}
-
-/// Client for invoking operations from workflow provider code.
-pub struct WorkflowHost {
-    client: ProtoWorkflowHostClient<WorkflowHostTransport>,
-}
-
-impl WorkflowHost {
-    /// Connects to the workflow host service described by the environment.
-    pub async fn connect() -> std::result::Result<Self, WorkflowHostError> {
-        let target = std::env::var(ENV_HOST_SERVICE_SOCKET)
-            .map_err(|_| WorkflowHostError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
-        let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
-        let channel = match parse_workflow_host_target(&target)? {
-            WorkflowHostTarget::Unix(path) => connect_unix(path).await?,
-            WorkflowHostTarget::Tcp(address) => {
-                Endpoint::from_shared(format!("http://{address}"))?
-                    .connect()
-                    .await?
-            }
-            WorkflowHostTarget::Tls(address) => {
-                Endpoint::from_shared(format!("https://{address}"))?
-                    .tls_config(ClientTlsConfig::new().with_native_roots())?
-                    .connect()
-                    .await?
-            }
-        };
-        Ok(Self {
-            client: ProtoWorkflowHostClient::with_interceptor(
-                channel,
-                workflow_host_relay_token_interceptor(relay_token.trim())?,
-            ),
-        })
-    }
-
-    /// Invokes an operation through the workflow host service.
-    pub async fn invoke_operation(
-        &mut self,
-        input: InvokeWorkflowOperationInput,
-    ) -> std::result::Result<InvokeWorkflowOperationResponse, WorkflowHostError> {
-        let request = invoke_workflow_operation_request_from_input(input)?;
-        let response = self.client.invoke_operation(request).await?.into_inner();
-        Ok(invoke_workflow_operation_response_from_proto(response))
-    }
-}
-
-#[async_trait]
-impl WorkflowHostApi for WorkflowHost {
-    async fn invoke_operation(
-        &mut self,
-        input: InvokeWorkflowOperationInput,
-    ) -> std::result::Result<InvokeWorkflowOperationResponse, WorkflowHostError> {
-        WorkflowHost::invoke_operation(self, input).await
-    }
-}
-
-async fn connect_unix(
-    socket_path: String,
-) -> std::result::Result<Channel, tonic::transport::Error> {
-    Endpoint::try_from("http://[::]:50051")?
-        .connect_with_connector(service_fn(move |_: Uri| {
-            let path = socket_path.clone();
-            async move { UnixStream::connect(path).await.map(TokioIo::new) }
-        }))
-        .await
-}
-
-#[derive(Clone)]
-struct WorkflowHostRelayTokenInterceptor {
-    token: Option<MetadataValue<tonic::metadata::Ascii>>,
-}
-
-impl Interceptor for WorkflowHostRelayTokenInterceptor {
-    fn call(
-        &mut self,
-        mut request: tonic::Request<()>,
-    ) -> std::result::Result<tonic::Request<()>, tonic::Status> {
-        if let Some(token) = self.token.clone() {
-            request
-                .metadata_mut()
-                .insert(WORKFLOW_HOST_RELAY_TOKEN_HEADER, token);
-        }
-        Ok(request)
-    }
-}
-
-fn workflow_host_relay_token_interceptor(
-    token: &str,
-) -> std::result::Result<WorkflowHostRelayTokenInterceptor, WorkflowHostError> {
-    let trimmed = token.trim();
-    let token = if trimmed.is_empty() {
-        None
-    } else {
-        Some(MetadataValue::try_from(trimmed).map_err(|err| {
-            WorkflowHostError::Env(format!(
-                "workflow host: invalid relay token metadata: {err}"
-            ))
-        })?)
-    };
-    Ok(WorkflowHostRelayTokenInterceptor { token })
-}
-
-enum WorkflowHostTarget {
-    Unix(String),
-    Tcp(String),
-    Tls(String),
-}
-
-fn parse_workflow_host_target(
-    raw: &str,
-) -> std::result::Result<WorkflowHostTarget, WorkflowHostError> {
-    let target = raw.trim();
-    if target.is_empty() {
-        return Err(WorkflowHostError::Env(
-            "workflow host: transport target is required".to_string(),
-        ));
-    }
-    if let Some(address) = target.strip_prefix("tcp://") {
-        let address = address.trim();
-        if address.is_empty() {
-            return Err(WorkflowHostError::Env(format!(
-                "workflow host: tcp target {raw:?} is missing host:port"
-            )));
-        }
-        return Ok(WorkflowHostTarget::Tcp(address.to_string()));
-    }
-    if let Some(address) = target.strip_prefix("tls://") {
-        let address = address.trim();
-        if address.is_empty() {
-            return Err(WorkflowHostError::Env(format!(
-                "workflow host: tls target {raw:?} is missing host:port"
-            )));
-        }
-        return Ok(WorkflowHostTarget::Tls(address.to_string()));
-    }
-    if let Some(path) = target.strip_prefix("unix://") {
-        let path = path.trim();
-        if path.is_empty() {
-            return Err(WorkflowHostError::Env(format!(
-                "workflow host: unix target {raw:?} is missing a socket path"
-            )));
-        }
-        return Ok(WorkflowHostTarget::Unix(path.to_string()));
-    }
-    if target.contains("://") {
-        return Err(WorkflowHostError::Env(format!(
-            "workflow host: unsupported target scheme in {raw:?}"
-        )));
-    }
-    Ok(WorkflowHostTarget::Unix(target.to_string()))
 }
 
 #[async_trait]

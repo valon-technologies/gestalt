@@ -503,28 +503,6 @@ class WorkflowEventTrigger:
     trigger: BoundWorkflowEventTrigger | None = None
 
 
-@_dataclasses.dataclass(slots=True)
-class InvokeWorkflowOperationInput:
-    """Native data for invoking a workflow operation through the host."""
-
-    target: Any | None = None
-    run_id: str = ""
-    trigger: Any | None = None
-    input: Any | None = None
-    metadata: Any | None = None
-    created_by: Any | None = None
-    execution_ref: str = ""
-    signals: Sequence[Any] | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class InvokeWorkflowOperationResponse:
-    """Native response returned after invoking a workflow operation."""
-
-    status: int = 0
-    body: str = ""
-
-
 def _optional_struct(value: Any | None) -> Any | None:
     if value is None:
         return None
@@ -1281,27 +1259,6 @@ def workflow_run_trigger_from_trigger(value: Any | None) -> Any | None:
 
     data = workflow_run_trigger_input_from_trigger(value)
     return workflow_run_trigger(data) if data is not None else None
-
-
-def _invoke_workflow_operation_request(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow host InvokeOperation request ."""
-
-    if isinstance(value, pb.InvokeWorkflowOperationRequest):
-        return _copy(value)
-    data = _data(value, kwargs)
-    target = data.get("target")
-    trigger = data.get("trigger")
-    created_by = data.get("created_by")
-    return pb.InvokeWorkflowOperationRequest(
-        target=bound_workflow_target(target) if target is not None else None,
-        run_id=data.get("run_id", ""),
-        trigger=workflow_run_trigger(trigger) if trigger is not None else None,
-        input=_optional_struct(data.get("input")),
-        metadata=_optional_struct(data.get("metadata")),
-        created_by=workflow_actor(created_by) if created_by is not None else None,
-        execution_ref=data.get("execution_ref", ""),
-        signals=[workflow_signal(item) for item in (data.get("signals") or [])],
-    )
 
 
 def _workflow_start_run_request(value: Any | None = None, **kwargs: Any) -> Any:
@@ -2405,64 +2362,6 @@ def workflow_run_status_name(status: int) -> str:
         return pb.WorkflowRunStatus.Name(status)
     except ValueError:
         return str(status)
-
-
-class WorkflowHostProtocol(Protocol):
-    """Fakeable contract for workflow host calls."""
-
-    def close(self) -> None:
-        """Close the client."""
-
-    def invoke_operation(
-        self, request: Any | None = None, **kwargs: Any
-    ) -> InvokeWorkflowOperationResponse:
-        """Invoke an operation through the workflow host."""
-
-
-class WorkflowHost:
-    """Client for the workflow host service available inside workflow code.
-
-    ``WorkflowHost`` reads ``GESTALT_HOST_SERVICE_SOCKET`` and its optional
-    relay token from the environment, then exposes the host operation-invocation
-    RPC used by workflow providers.
-    """
-
-    def __init__(self) -> None:
-        target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
-        if not target:
-            raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
-        relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
-        self._channel = host_service_channel("workflow host", target, token=relay_token)
-        self._stub = pb_grpc.WorkflowHostStub(self._channel)
-
-    def close(self) -> None:
-        """Close the underlying gRPC channel."""
-
-        self._channel.close()
-
-    def invoke_operation(
-        self, request: Any | None = None, **kwargs: Any
-    ) -> InvokeWorkflowOperationResponse:
-        """Invoke an operation through the workflow host."""
-
-        response = _grpc_call(
-            self._stub.InvokeOperation,
-            _invoke_workflow_operation_request(request, **kwargs),
-        )
-        return InvokeWorkflowOperationResponse(
-            status=response.status,
-            body=response.body,
-        )
-
-    def __enter__(self) -> WorkflowHost:
-        """Return the client for ``with`` statements."""
-
-        return self
-
-    def __exit__(self, *args: Any) -> None:
-        """Close the client at the end of a context manager block."""
-
-        self.close()
 
 
 class WorkflowProtocol(Protocol):

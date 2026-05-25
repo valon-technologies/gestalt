@@ -39,7 +39,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
-	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
@@ -1836,13 +1835,7 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 			return nil, fmt.Errorf("workflow provider: %w", err)
 		}
 	}
-	hostServices := []runtimehost.HostService{{
-		Name:           "workflow_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
-		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowHostServer(srv, workflowservice.NewHostServer(name, deps.WorkflowRuntime.Invoke))
-		},
-	}}
+	var hostServices []runtimehost.HostService
 	if deps.AuthorizationProvider != nil {
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
 	}
@@ -1865,11 +1858,11 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
 	if !entry.UsesRuntimePlacement() {
-		publicWorkflowHostServicesCleanup, err := registerPublicWorkflowHostServices(name, hostServices, deps)
+		publicWorkflowProviderHostServicesCleanup, err := registerPublicWorkflowProviderHostServices(name, hostServices, deps)
 		if err != nil {
 			return nil, fmt.Errorf("workflow provider: %w", err)
 		}
-		cleanup = chainCleanup(cleanup, publicWorkflowHostServicesCleanup)
+		cleanup = chainCleanup(cleanup, publicWorkflowProviderHostServicesCleanup)
 	}
 	if factories.Workflow == nil {
 		return nil, fmt.Errorf("workflow factory is not registered")

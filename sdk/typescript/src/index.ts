@@ -435,7 +435,6 @@ export {
   type UpdateAgentProviderSessionRequest,
 } from "./agent.ts";
 export {
-  WorkflowHost,
   WorkflowProvider,
   WorkflowRunStatus,
   boundWorkflowDefinition,
@@ -499,8 +498,6 @@ export {
   type GetWorkflowProviderEventTriggerRequest,
   type GetWorkflowProviderRunRequest,
   type GetWorkflowProviderScheduleRequest,
-  type InvokeWorkflowOperationInput,
-  type InvokeWorkflowOperationResponse,
   type ListWorkflowExecutionReferencesRequest,
   type ListWorkflowProviderEventTriggersRequest,
   type ListWorkflowProviderRunsRequest,

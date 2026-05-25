@@ -3703,32 +3703,6 @@ pub struct PublishWorkflowProviderEventRequest {
     pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct InvokeWorkflowOperationRequest {
-    #[prost(message, optional, tag = "1")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(string, tag = "2")]
-    pub run_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub trigger: ::core::option::Option<WorkflowRunTrigger>,
-    #[prost(message, optional, tag = "4")]
-    pub input: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "5")]
-    pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "7")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
-    #[prost(string, tag = "8")]
-    pub execution_ref: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "9")]
-    pub signals: ::prost::alloc::vec::Vec<WorkflowSignal>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct InvokeWorkflowOperationResponse {
-    #[prost(int32, tag = "1")]
-    pub status: i32,
-    #[prost(string, tag = "2")]
-    pub body: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateWorkflowProviderDefinitionRequest {
     #[prost(string, tag = "1")]
     pub provider_name: ::prost::alloc::string::String,

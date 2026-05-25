@@ -472,27 +472,6 @@ func workflowDefinitionToProto(ref *coreworkflow.ExecutionReference) (*proto.Bou
 	}, nil
 }
 
-func workflowInvokeRequestFromProto(req *proto.InvokeWorkflowOperationRequest) (coreworkflow.InvokeOperationRequest, error) {
-	if req == nil {
-		return coreworkflow.InvokeOperationRequest{}, nil
-	}
-	target := workflowTargetFromProto(req.GetTarget())
-	trigger, err := workflowRunTriggerFromProto(req.GetTrigger())
-	if err != nil {
-		return coreworkflow.InvokeOperationRequest{}, err
-	}
-	return coreworkflow.InvokeOperationRequest{
-		RunID:        req.GetRunId(),
-		Trigger:      trigger,
-		Target:       target,
-		Input:        mapFromStruct(req.GetInput()),
-		Metadata:     mapFromStruct(req.GetMetadata()),
-		CreatedBy:    workflowActorFromProto(req.GetCreatedBy()),
-		ExecutionRef: req.GetExecutionRef(),
-		Signals:      workflowSignalsFromProto(req.GetSignals()),
-	}, nil
-}
-
 func workflowSignalToProto(signal coreworkflow.Signal) (*proto.WorkflowSignal, error) {
 	payload, err := structFromMap(signal.Payload)
 	if err != nil {
@@ -530,17 +509,6 @@ func workflowSignalFromProto(signal *proto.WorkflowSignal) coreworkflow.Signal {
 	}
 }
 
-func workflowSignalsFromProto(signals []*proto.WorkflowSignal) []coreworkflow.Signal {
-	if len(signals) == 0 {
-		return nil
-	}
-	out := make([]coreworkflow.Signal, 0, len(signals))
-	for _, signal := range signals {
-		out = append(out, workflowSignalFromProto(signal))
-	}
-	return out
-}
-
 func workflowSignalRunResponseFromProto(resp *proto.SignalWorkflowRunResponse) (*coreworkflow.SignalRunResponse, error) {
 	if resp == nil {
 		return nil, nil
@@ -555,16 +523,6 @@ func workflowSignalRunResponseFromProto(resp *proto.SignalWorkflowRunResponse) (
 		StartedRun:  resp.GetStartedRun(),
 		WorkflowKey: resp.GetWorkflowKey(),
 	}, nil
-}
-
-func workflowInvokeResponseToProto(resp *coreworkflow.InvokeOperationResponse) *proto.InvokeWorkflowOperationResponse {
-	if resp == nil {
-		return nil
-	}
-	return &proto.InvokeWorkflowOperationResponse{
-		Status: int32(resp.Status),
-		Body:   resp.Body,
-	}
 }
 
 func managedWorkflowScheduleToProto(managed *workflowmanager.ManagedSchedule) (*proto.BoundWorkflowSchedule, error) {

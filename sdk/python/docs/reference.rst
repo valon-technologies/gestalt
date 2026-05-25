@@ -755,7 +755,6 @@ These clients connect to host services made available to a provider process by
    RuntimeLogHost
    RuntimeLogWriter
    RuntimeLogHandler
-   WorkflowHost
    Workflow
 
 .. autodata:: ENV_RUNTIME_SESSION_ID
@@ -787,11 +786,6 @@ These clients connect to host services made available to a provider process by
 
 .. autoclass:: RuntimeLogHandler
    :members:
-   :exclude-members: __dict__, __module__, __weakref__
-
-.. autoclass:: WorkflowHost
-   :members:
-   :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
 
 .. autoclass:: Workflow
