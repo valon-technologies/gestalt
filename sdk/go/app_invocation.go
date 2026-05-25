@@ -20,6 +20,8 @@ type InvokeOptions struct {
 	IdempotencyKey string
 	// CredentialMode selects the credential mode for this operation when the caller declared one.
 	CredentialMode string
+	// WorkflowContext attaches workflow metadata to the downstream operation request.
+	WorkflowContext map[string]any
 }
 
 // InvokeGraphQLOptions selects a target connection for a GraphQL surface invocation.
@@ -119,6 +121,13 @@ func (c *appClient) Invoke(ctx context.Context, app, operation string, params an
 		req.Instance = opts.Instance
 		req.IdempotencyKey = strings.TrimSpace(opts.IdempotencyKey)
 		req.CredentialMode = strings.TrimSpace(opts.CredentialMode)
+		if opts.WorkflowContext != nil {
+			workflow, err := structFromAny(opts.WorkflowContext)
+			if err != nil {
+				return nil, fmt.Errorf("app: encode workflow context: %w", err)
+			}
+			req.Workflow = workflow
+		}
 	}
 
 	resp, err := c.client.Invoke(ctx, req)

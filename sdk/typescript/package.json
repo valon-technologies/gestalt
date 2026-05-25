@@ -13,7 +13,8 @@
     "./runtime": "./src/runtime.ts",
     "./schema": "./src/schema.ts",
     "./telemetry": "./src/telemetry.ts",
-    "./target": "./src/target.ts"
+    "./target": "./src/target.ts",
+    "./workflow": "./src/workflow.ts"
   },
   "bin": {
     "gestalt-ts-build": "src/build.ts",

@@ -570,6 +570,19 @@ export {
   type WorkflowValue,
 } from "./workflow.ts";
 export {
+  WorkflowValueError,
+  evaluateWorkflowStepInputs,
+  evaluateWorkflowValue,
+  latestWorkflowSignal,
+  mapPathValue,
+  pathValue,
+  renderWorkflowTemplate,
+  workflowInvocationContext,
+  workflowSignalsContext,
+  type WorkflowEvalContext,
+  type WorkflowExecutionRequest,
+} from "./workflow.ts";
+export {
   GENAI_OPERATION_CHAT,
   GENAI_OPERATION_EXECUTE_TOOL,
   GENAI_OPERATION_INVOKE_AGENT,

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	sdkworkflow "github.com/valon-technologies/gestalt/sdk/go/workflow"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -666,8 +667,10 @@ func TestWorkflowStepIdempotencyKeyIncludesSignalIdentity(t *testing.T) {
 	second := first
 	second.Signals = []coreworkflow.Signal{{ID: "signal-2"}}
 
-	firstKey := workflowStepIdempotencyKey(first, workflowStepInvocationScope(first), "diagnosis", "agent-turn")
-	secondKey := workflowStepIdempotencyKey(second, workflowStepInvocationScope(second), "diagnosis", "agent-turn")
+	firstReq := workflowExecRequestFromCore(first, first.Target)
+	secondReq := workflowExecRequestFromCore(second, second.Target)
+	firstKey := sdkworkflow.WorkflowStepIdempotencyKey(firstReq, sdkworkflow.WorkflowStepInvocationScope(firstReq), "diagnosis", "agent-turn")
+	secondKey := sdkworkflow.WorkflowStepIdempotencyKey(secondReq, sdkworkflow.WorkflowStepInvocationScope(secondReq), "diagnosis", "agent-turn")
 	if firstKey == secondKey {
 		t.Fatalf("signal-scoped idempotency keys matched: %q", firstKey)
 	}

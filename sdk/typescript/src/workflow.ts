@@ -2978,3 +2978,579 @@ async function requireWorkflowProviderHandler<Request, Response>(
   }
   return await fn(request);
 }
+export interface WorkflowExecutionRequest {
+  providerName?: string | undefined;
+  runId?: string | undefined;
+  target?: BoundWorkflowTarget | undefined;
+  trigger?: WorkflowRunTrigger | undefined;
+  input?: Record<string, JsonInput> | undefined;
+  metadata?: Record<string, JsonInput> | undefined;
+  createdBy?: WorkflowActor | undefined;
+  executionRef?: string | undefined;
+  invocationToken?: string | undefined;
+  signals?: readonly WorkflowSignal[] | undefined;
+}
+
+export interface WorkflowEvalContext {
+  request: WorkflowExecutionRequest;
+  outputs?: Record<string, unknown> | undefined;
+  inputs?: Record<string, unknown> | undefined;
+  allowInputs?: boolean | undefined;
+}
+
+export class WorkflowValueError extends Error {}
+
+export function evaluateWorkflowStepInputs(
+  ctx: WorkflowEvalContext,
+  values?: Record<string, WorkflowValue> | undefined,
+): Record<string, unknown> | undefined {
+  if (values === undefined || Object.keys(values).length === 0) {
+    return undefined;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(values)) {
+    const resolved = evaluateWorkflowValue(ctx, value);
+    if (!resolved.ok) {
+      throw new WorkflowValueError(`inputs.${key} did not resolve`);
+    }
+    out[key] = resolved.value;
+  }
+  return out;
+}
+
+export function evaluateWorkflowValue(
+  ctx: WorkflowEvalContext,
+  input: WorkflowValue,
+): { value: unknown; ok: boolean } {
+  const value = workflowValue(input);
+  const kind = value.kind;
+  switch (kind?.case) {
+    case "literal":
+      return { value: kind.value, ok: true };
+    case "object": {
+      const out: Record<string, unknown> = {};
+      for (const [key, child] of Object.entries(kind.value)) {
+        const resolved = evaluateWorkflowValue(ctx, child);
+        if (!resolved.ok) {
+          return { value: undefined, ok: false };
+        }
+        out[key] = resolved.value;
+      }
+      return { value: out, ok: true };
+    }
+    case "array": {
+      const out: unknown[] = [];
+      for (const child of kind.value) {
+        const resolved = evaluateWorkflowValue(ctx, child);
+        if (!resolved.ok) {
+          return { value: undefined, ok: false };
+        }
+        out.push(resolved.value);
+      }
+      return { value: out, ok: true };
+    }
+    case "template":
+      return {
+        value: renderWorkflowTemplate(
+          ctx,
+          typeof kind.value === "string" ? kind.value : (kind.value.template ?? ""),
+        ),
+        ok: true,
+      };
+    case "runInput":
+      return mapPathValue(ctx.request.input, kind.value);
+    case "signalPayload": {
+      const signal = latestWorkflowSignal(ctx.request.signals);
+      return signal === undefined
+        ? { value: undefined, ok: false }
+        : pathValue(signal.payload, kind.value);
+    }
+    case "stepOutput": {
+      const stepId = kind.value.stepId?.trim() ?? "";
+      const outputs = ctx.outputs ?? {};
+      if (!Object.prototype.hasOwnProperty.call(outputs, stepId)) {
+        throw new WorkflowValueError(
+          `workflow step output references missing step "${stepId}"`,
+        );
+      }
+      return pathValue(outputs[stepId], kind.value.path ?? "");
+    }
+    default:
+      return { value: undefined, ok: true };
+  }
+}
+
+export function renderWorkflowTemplate(
+  ctx: WorkflowEvalContext,
+  template: string,
+): string {
+  let out = "";
+  for (let i = 0; i < template.length; ) {
+    if (template.startsWith("$${", i)) {
+      out += "${";
+      i += 3;
+      continue;
+    }
+    if (!template.startsWith("${", i)) {
+      out += template[i];
+      i += 1;
+      continue;
+    }
+    const end = template.indexOf("}", i + 2);
+    if (end < 0) {
+      throw new WorkflowValueError("unterminated template expression");
+    }
+    const expr = template.slice(i + 2, end).trim();
+    const resolved = templateExpressionValue(ctx, expr);
+    if (!resolved.ok) {
+      throw new WorkflowValueError(`template expression "${expr}" did not resolve`);
+    }
+    out += renderTemplateValue(resolved.value);
+    i = end + 1;
+  }
+  return out;
+}
+
+export function workflowInvocationContext(
+  req: WorkflowExecutionRequest,
+): Record<string, JsonInput> {
+  const out: Record<string, JsonInput> = {};
+  if (req.runId?.trim()) {
+    out.runId = req.runId.trim();
+  }
+  if (req.providerName?.trim()) {
+    out.provider = req.providerName.trim();
+  }
+  const target = workflowTargetContext(req.target);
+  if (target !== undefined) {
+    out.target = target;
+  }
+  const trigger = workflowTriggerContext(req.trigger);
+  if (trigger !== undefined) {
+    out.trigger = trigger;
+  }
+  if (req.input !== undefined) {
+    out.input = { ...req.input };
+  }
+  if (req.metadata !== undefined) {
+    out.metadata = { ...req.metadata };
+  }
+  const signals = workflowSignalsContext(req.signals);
+  if (signals.length > 0) {
+    out.signals = signals;
+  }
+  if (req.executionRef?.trim()) {
+    out.executionRef = req.executionRef.trim();
+  }
+  const createdBy = workflowActorContext(req.createdBy);
+  if (createdBy !== undefined) {
+    out.createdBy = createdBy;
+  }
+  return out;
+}
+
+function workflowTargetContext(
+  target?: BoundWorkflowTarget,
+): Record<string, JsonInput> | undefined {
+  if (target?.steps === undefined || target.steps.length === 0) {
+    return undefined;
+  }
+  return {
+    kind: "steps",
+    steps: target.steps.map((step) => {
+      const item: Record<string, JsonInput> = { id: step.id?.trim() ?? "" };
+      const app = step.app ?? workflowStepAppAction(step.action);
+      const agent = step.agent ?? workflowStepAgentAction(step.action);
+      if (app !== undefined) {
+        item.kind = "app";
+        item.app = app.name?.trim() ?? "";
+        item.operation = app.operation?.trim() ?? "";
+        if (app.connection?.trim()) item.connection = app.connection.trim();
+        if (app.instance?.trim()) item.instance = app.instance.trim();
+        if (app.credentialMode?.trim()) item.credentialMode = app.credentialMode.trim();
+        return item;
+      }
+      if (agent !== undefined) {
+        item.kind = "agent";
+        item.agentProvider = agent.provider?.trim() ?? "";
+        item.model = agent.model?.trim() ?? "";
+        return item;
+      }
+      item.kind = "unknown";
+      return item;
+    }),
+  };
+}
+
+function workflowTriggerContext(
+  trigger?: WorkflowRunTrigger,
+): Record<string, JsonInput> | undefined {
+  if (trigger === undefined) {
+    return undefined;
+  }
+  const normalized = workflowRunTrigger(trigger);
+  switch (normalized.kind?.case) {
+    case "schedule": {
+      const value: Record<string, JsonInput> = {
+        kind: "schedule",
+        scheduleId: normalized.kind.value.scheduleId ?? "",
+      };
+      if (normalized.kind.value.scheduledFor !== undefined) {
+        value.scheduledFor = normalized.kind.value.scheduledFor.toISOString();
+      }
+      return value;
+    }
+    case "event": {
+      const value: Record<string, JsonInput> = {
+        kind: "event",
+        triggerId: normalized.kind.value.triggerId ?? "",
+      };
+      const event = workflowEventContext(normalized.kind.value.event);
+      if (event !== undefined) {
+        value.event = event;
+      }
+      return value;
+    }
+    case "manual":
+      return { kind: "manual" };
+    default:
+      return undefined;
+  }
+}
+
+function workflowEventContext(event?: WorkflowEvent): Record<string, JsonInput> | undefined {
+  if (event === undefined) {
+    return undefined;
+  }
+  const out: Record<string, JsonInput> = {};
+  if (event.id?.trim()) out.id = event.id.trim();
+  if (event.source?.trim()) out.source = event.source.trim();
+  if (event.specVersion?.trim()) out.specVersion = event.specVersion.trim();
+  if (event.type?.trim()) out.type = event.type.trim();
+  if (event.subject?.trim()) out.subject = event.subject.trim();
+  if (event.time !== undefined) out.time = event.time.toISOString();
+  if (event.datacontenttype?.trim()) out.dataContentType = event.datacontenttype.trim();
+  if (event.data !== undefined) out.data = jsonClone(event.data);
+  if (event.extensions !== undefined) out.extensions = { ...event.extensions };
+  return Object.keys(out).length === 0 ? undefined : out;
+}
+
+function workflowActorContext(actor?: WorkflowActor): Record<string, JsonInput> | undefined {
+  if (actor === undefined) {
+    return undefined;
+  }
+  const out: Record<string, JsonInput> = {};
+  if (actor.subjectId?.trim()) out.subjectId = actor.subjectId.trim();
+  if (actor.subjectKind?.trim()) out.subjectKind = actor.subjectKind.trim();
+  if (actor.displayName?.trim()) out.displayName = actor.displayName.trim();
+  if (actor.authSource?.trim()) out.authSource = actor.authSource.trim();
+  return Object.keys(out).length === 0 ? undefined : out;
+}
+
+export function workflowSignalsContext(
+  signals?: readonly WorkflowSignal[] | undefined,
+): Array<Record<string, JsonInput>> {
+  return (signals ?? []).slice(0, 10).map((signal) => {
+    const out: Record<string, JsonInput> = {};
+    if (signal.id?.trim()) out.id = signal.id.trim();
+    if (signal.name?.trim()) out.name = signal.name.trim();
+    if (signal.payload !== undefined) {
+      const payload = compactWorkflowSignalPayload(signal.payload);
+      if (Object.keys(payload).length > 0) out.payload = payload;
+    }
+    if (signal.metadata !== undefined) out.metadata = compactJsonValue(signal.metadata, 4);
+    const createdBy = workflowActorContext(signal.createdBy);
+    if (createdBy !== undefined) out.createdBy = createdBy;
+    if (signal.createdAt !== undefined) out.createdAt = signal.createdAt.toISOString();
+    if (signal.idempotencyKey?.trim()) {
+      out.idempotencyKey = signal.idempotencyKey.trim();
+    }
+    if (signal.sequence !== undefined && signal.sequence !== 0) {
+      out.sequence = Number(signal.sequence);
+    }
+    return out;
+  });
+}
+
+export function latestWorkflowSignal(
+  signals?: readonly WorkflowSignal[] | undefined,
+): WorkflowSignal | undefined {
+  return signals === undefined || signals.length === 0
+    ? undefined
+    : signals[signals.length - 1];
+}
+
+export function mapPathValue(
+  values: Record<string, unknown> | undefined,
+  path: string,
+): { value: unknown; ok: boolean } {
+  return values === undefined || Object.keys(values).length === 0
+    ? { value: undefined, ok: false }
+    : pathValue(values, path);
+}
+
+export function pathValue(
+  root: unknown,
+  path: string,
+): { value: unknown; ok: boolean } {
+  const trimmed = path.trim();
+  if (!trimmed) {
+    return { value: root, ok: true };
+  }
+  let current = root;
+  for (const segment of pathSegments(trimmed)) {
+    if (
+      typeof segment === "string" &&
+      current !== null &&
+      typeof current === "object" &&
+      !Array.isArray(current)
+    ) {
+      if (!Object.prototype.hasOwnProperty.call(current, segment)) {
+        return { value: undefined, ok: false };
+      }
+      current = (current as Record<string, unknown>)[segment];
+      continue;
+    }
+    if (typeof segment === "number" && Array.isArray(current)) {
+      if (segment < 0 || segment >= current.length) {
+        return { value: undefined, ok: false };
+      }
+      current = current[segment];
+      continue;
+    }
+    return { value: undefined, ok: false };
+  }
+  return { value: current, ok: true };
+}
+
+function templateExpressionValue(
+  ctx: WorkflowEvalContext,
+  expr: string,
+): { value: unknown; ok: boolean } {
+  if (expr.startsWith("inputs.")) {
+    if (!ctx.allowInputs) {
+      throw new WorkflowValueError("inputs references are not allowed here");
+    }
+    return mapPathValue(ctx.inputs, expr.slice("inputs.".length));
+  }
+  if (expr.startsWith("runInput.")) {
+    return mapPathValue(ctx.request.input, expr.slice("runInput.".length));
+  }
+  if (expr.startsWith("signalPayload.")) {
+    const signal = latestWorkflowSignal(ctx.request.signals);
+    return signal === undefined
+      ? { value: undefined, ok: false }
+      : pathValue(signal.payload, expr.slice("signalPayload.".length));
+  }
+  throw new WorkflowValueError(`unsupported template expression "${expr}"`);
+}
+
+function renderTemplateValue(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function pathSegments(path: string): Array<string | number> {
+  const out: Array<string | number> = [];
+  for (let i = 0; i < path.length; ) {
+    if (path[i] === ".") {
+      i += 1;
+      continue;
+    }
+    if (path[i] === "[") {
+      const end = path.indexOf("]", i);
+      if (end < 0) throw new WorkflowValueError(`invalid workflow path "${path}"`);
+      const token = path.slice(i + 1, end).trim();
+      out.push(parseBracketPathToken(token, path));
+      i = end + 1;
+      continue;
+    }
+    const start = i;
+    while (i < path.length && path[i] !== "." && path[i] !== "[") i += 1;
+    const key = path.slice(start, i).trim();
+    if (!key) throw new WorkflowValueError(`invalid workflow path "${path}"`);
+    out.push(key);
+  }
+  return out;
+}
+
+function parseBracketPathToken(token: string, path: string): string | number {
+  if (token.startsWith("'") || token.startsWith('"')) {
+    return unquotePathKey(token, path);
+  }
+  const index = Number.parseInt(token, 10);
+  if (!/^[+-]?\d+$/.test(token) || !Number.isInteger(index)) {
+    throw new WorkflowValueError(`invalid workflow path "${path}"`);
+  }
+  return index;
+}
+
+function unquotePathKey(token: string, path: string): string {
+  if (token.startsWith('"')) {
+    try {
+      return JSON.parse(token);
+    } catch {
+      throw new WorkflowValueError(`invalid workflow path "${path}"`);
+    }
+  }
+  if (token.length < 2 || !token.endsWith("'")) {
+    throw new WorkflowValueError(`invalid workflow path "${path}"`);
+  }
+  let out = "";
+  for (let i = 1; i < token.length - 1;) {
+    const ch = token[i];
+    if (ch !== "\\") {
+      out += ch;
+      i += 1;
+      continue;
+    }
+    i += 1;
+    if (i >= token.length - 1) {
+      throw new WorkflowValueError(`invalid workflow path "${path}"`);
+    }
+    const escaped = token[i];
+    switch (escaped) {
+      case "'":
+      case '"':
+      case "\\":
+        out += escaped;
+        i += 1;
+        break;
+      case "n":
+        out += "\n";
+        i += 1;
+        break;
+      case "r":
+        out += "\r";
+        i += 1;
+        break;
+      case "t":
+        out += "\t";
+        i += 1;
+        break;
+      case "u": {
+        const hex = token.slice(i + 1, i + 5);
+        if (!/^[0-9a-fA-F]{4}$/.test(hex)) {
+          throw new WorkflowValueError(`invalid workflow path "${path}"`);
+        }
+        out += String.fromCharCode(Number.parseInt(hex, 16));
+        i += 5;
+        break;
+      }
+      default:
+        out += escaped;
+        i += 1;
+        break;
+    }
+  }
+  return out;
+}
+
+function compactWorkflowSignalPayload(payload: JsonInput): Record<string, JsonInput> {
+  const source = workflowMapValue(payload);
+  if (Object.keys(source).length === 0) return {};
+  const out: Record<string, JsonInput> = {};
+  for (const key of [
+    "delivery_id", "deliveryId", "github_event", "githubEvent", "github_action", "githubAction",
+    "event", "action", "summary", "user_prompt", "userPrompt", "payload_sha256", "payloadSha256",
+    "payload_omitted", "payloadOmitted",
+  ]) {
+    copyCompactPayloadField(out, source, key);
+  }
+  for (const key of [
+    "agent_request", "agentRequest", "installation", "repository", "sender", "webhook_policy",
+    "webhookPolicy", "pull_request", "pullRequest", "issue", "comment", "review", "ref",
+    "check_run", "checkRun", "check_suite", "checkSuite", "workflow_run", "workflowRun",
+    "review_check_run", "reviewCheckRun",
+  ]) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      const value = source[key];
+      if (value !== undefined) out[key] = compactJsonValue(value, 4);
+    }
+  }
+  const fields: Record<string, JsonInput> = {};
+  for (const key of Object.keys(source).sort()) {
+    if (Object.keys(fields).length >= 20) break;
+    if (Object.prototype.hasOwnProperty.call(out, key) || workflowSignalPayloadKeyExcluded(key)) {
+      continue;
+    }
+    const value = source[key];
+    if (value === undefined) continue;
+    const compact = compactJsonScalar(value);
+    if (compact.ok) fields[key] = compact.value;
+  }
+  if (Object.keys(fields).length > 0) out.fields = fields;
+  out.payloadOmitted = true;
+  return out;
+}
+
+function workflowMapValue(value: JsonInput): Record<string, JsonInput> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? { ...(value as Record<string, JsonInput>) }
+    : { value };
+}
+
+function copyCompactPayloadField(
+  out: Record<string, JsonInput>,
+  payload: Record<string, JsonInput>,
+  key: string,
+): void {
+  if (!Object.prototype.hasOwnProperty.call(payload, key) || workflowSignalPayloadKeyExcluded(key)) {
+    return;
+  }
+  const value = payload[key];
+  if (value === undefined) return;
+  const compact = compactJsonScalar(value);
+  out[key] = compact.ok ? compact.value : compactJsonValue(value, 4);
+}
+
+function workflowSignalPayloadKeyExcluded(key: string): boolean {
+  return key.trim() === "" || key === "payload" || key === "_gestalt_payload_preview_json";
+}
+
+function compactJsonScalar(value: JsonInput): { value: JsonInput; ok: boolean } {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    typeof value === "number"
+  ) {
+    return {
+      value: typeof value === "string" ? truncateWorkflowString(value, 4096) : value,
+      ok: true,
+    };
+  }
+  return { value: null, ok: false };
+}
+
+function compactJsonValue(value: JsonInput, depth: number): JsonInput {
+  const scalar = compactJsonScalar(value);
+  if (scalar.ok) return scalar.value;
+  if (depth <= 0) return { omitted: true };
+  if (Array.isArray(value)) return value.slice(0, 20).map((item) => compactJsonValue(item, depth - 1));
+  const objectValue = value as Record<string, JsonInput>;
+  const keys = Object.keys(objectValue)
+    .filter((key) => !workflowSignalPayloadKeyExcluded(key))
+    .sort();
+  const out: Record<string, JsonInput> = {};
+  for (const key of keys.slice(0, 20)) {
+    const item = objectValue[key];
+    if (item !== undefined) out[key] = compactJsonValue(item, depth - 1);
+  }
+  if (keys.length > Object.keys(out).length) {
+    out.omittedFields = keys.length - Object.keys(out).length;
+  }
+  return out;
+}
+
+function truncateWorkflowString(value: string, maxBytes: number): string {
+  const encoded = new TextEncoder().encode(value);
+  if (encoded.length <= maxBytes) return value;
+  const suffix = "...";
+  let bytes = encoded.slice(0, Math.max(0, maxBytes - suffix.length));
+  let text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  while (new TextEncoder().encode(text + suffix).length > maxBytes && text.length > 0) {
+    text = text.slice(0, -1);
+    bytes = new TextEncoder().encode(text);
+  }
+  return new TextDecoder().decode(bytes) + suffix;
+}

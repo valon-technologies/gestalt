@@ -99,6 +99,70 @@ func TestAppServerInvokeRestoresWorkflowContext(t *testing.T) {
 	}
 }
 
+func TestAppServerInvokeUsesRequestWorkflowContext(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("plugin-invoker-request-workflow-context-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "service_account:workflow",
+		Kind:      principal.Kind("service_account"),
+		Source:    principal.SourceAPIToken,
+	})
+	ctx = invocation.WithWorkflowContext(ctx, map[string]any{
+		"providerName": "temporal",
+		"runId":        "run-from-token",
+	})
+	rootToken, err := tokens.MintRootToken(ctx, "workflow-provider", InvocationGrants{
+		"slack": {Operations: map[string]core.ConnectionMode{"chat.postMessage": ""}},
+	})
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+	workflow, err := structpb.NewStruct(map[string]any{
+		"providerName": "indexeddb",
+		"runId":        "run-from-request",
+		"step": map[string]any{
+			"id": "notify",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewStruct: %v", err)
+	}
+
+	invoker := &recordingAppInvocation{}
+	server := NewAppServer(
+		"workflow-provider",
+		[]invocation.AppInvocationDependency{{App: "slack", Operation: "chat.postMessage"}},
+		invoker,
+		tokens,
+	)
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
+	}))
+	if _, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		InvocationToken: rootToken,
+		App:             "slack",
+		Operation:       "chat.postMessage",
+		Workflow:        workflow,
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+
+	if got := invocation.WorkflowContextString(invoker.workflowContext, "providerName"); got != "indexeddb" {
+		t.Fatalf("providerName = %q, want indexeddb", got)
+	}
+	if got := invocation.WorkflowContextString(invoker.workflowContext, "runId"); got != "run-from-request" {
+		t.Fatalf("runId = %q, want run-from-request", got)
+	}
+	step := invocation.WorkflowContextMap(invoker.workflowContext, "step")
+	if got := invocation.WorkflowContextString(step, "id"); got != "notify" {
+		t.Fatalf("step.id = %q, want notify", got)
+	}
+}
+
 func TestAppServerInvokeCredentialModeForForwardedToken(t *testing.T) {
 	t.Parallel()
 
