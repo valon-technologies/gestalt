@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"strings"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
@@ -13,12 +14,23 @@ func ServeWorkflowProvider(ctx context.Context, provider WorkflowProvider) error
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindWorkflow, provider))
 		proto.RegisterWorkflowProviderServer(srv, workflowProviderServer{provider: provider})
-	})
+	}, grpc.UnaryInterceptor(workflowProviderInvocationUnaryInterceptor))
 }
 
 type workflowProviderServer struct {
 	proto.UnimplementedWorkflowProviderServer
 	provider WorkflowProvider
+}
+
+type workflowProviderInvocationTokenRequest interface {
+	GetInvocationToken() string
+}
+
+func workflowProviderInvocationUnaryInterceptor(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	if tokenReq, ok := req.(workflowProviderInvocationTokenRequest); ok {
+		ctx = workflowProviderInvocationContext(ctx, tokenReq.GetInvocationToken())
+	}
+	return handler(ctx, req)
 }
 
 func (s workflowProviderServer) CreateDefinition(ctx context.Context, req *proto.CreateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
@@ -72,9 +84,9 @@ func (s workflowProviderServer) GetRun(ctx context.Context, req *proto.GetWorkfl
 
 func (s workflowProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
 	resp, err := s.provider.ListRuns(ctx, &ListWorkflowProviderRunsRequest{
-		PageSize:     int(req.GetPageSize()),
-		PageToken:    req.GetPageToken(),
-		Status:       WorkflowRunStatus(req.GetStatus()),
+		PageSize:  int(req.GetPageSize()),
+		PageToken: req.GetPageToken(),
+		Status:    WorkflowRunStatus(req.GetStatus()),
 		TargetApp: req.GetTargetApp(),
 	})
 	if err != nil {
@@ -271,6 +283,13 @@ func (s workflowProviderServer) PublishEvent(ctx context.Context, req *proto.Pub
 	return event, providerRPCError("workflow publish event", err)
 }
 
+func workflowProviderInvocationContext(ctx context.Context, token string) context.Context {
+	if strings.TrimSpace(token) == "" {
+		return ctx
+	}
+	return withInvocationToken(ctx, token)
+}
+
 func createWorkflowProviderDefinitionRequestFromProto(req *proto.CreateWorkflowProviderDefinitionRequest) *CreateWorkflowProviderDefinitionRequest {
 	if req == nil {
 		return &CreateWorkflowProviderDefinitionRequest{}
@@ -383,7 +402,7 @@ func publishWorkflowProviderEventRequestFromProto(req *proto.PublishWorkflowProv
 		event = &input
 	}
 	return &PublishWorkflowProviderEventRequest{
-		AppName:  req.GetAppName(),
+		AppName:     req.GetAppName(),
 		Event:       event,
 		PublishedBy: workflowActorInputPtrFromActor(req.GetPublishedBy()),
 	}
