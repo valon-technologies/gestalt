@@ -14,7 +14,7 @@ dependencies = [
   "opentelemetry-api==1.41.1",
   "opentelemetry-sdk==1.41.1",
   "opentelemetry-exporter-otlp-proto-grpc==1.41.1",
-  "opentelemetry-exporter-otlp-proto-http==1.41.1",
+  "opentelemetry-exporter-otlp-proto-http==1.42.1",
   "pyyaml==6.0.3",
   "pyinstaller<7",
   "protobuf>=6.33.1,<8",
