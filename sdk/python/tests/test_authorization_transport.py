@@ -11,7 +11,7 @@ import grpc
 from google.protobuf import empty_pb2 as _empty_pb2
 
 from gestalt import (
-    AuthorizationClient,
+    Authorization,
     AuthorizationProvider,
     _runtime,
 )
@@ -184,7 +184,7 @@ class AuthorizationTransportTest(unittest.TestCase):
             server.add_insecure_port(f"unix:{socket_path}")
             server.start()
             try:
-                client = AuthorizationClient(f"unix://{socket_path}")
+                client = Authorization(f"unix://{socket_path}")
                 resource_response = client.effective_search_resources(
                     ResourceSearchRequest(
                         subject=AuthorizationSubject(

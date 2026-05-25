@@ -773,7 +773,7 @@ func decodeJSONParams[T any](params map[string]any) (T, error) {
 	return input, nil
 }
 
-func workflowManagerFromContext(ctx context.Context, invocationToken string) (*gestalt.WorkflowManagerClient, error) {
+func workflowManagerFromContext(ctx context.Context, invocationToken string) (gestalt.WorkflowManagerAPI, error) {
 	token := strings.TrimSpace(invocationToken)
 	if token == "" {
 		token = invocationTokenFromContext(ctx)

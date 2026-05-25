@@ -26,7 +26,7 @@ else:
 
 if TYPE_CHECKING:
     from ._agent import AgentManager, AgentToolRef
-    from ._authorization import AuthorizationClient
+    from ._authorization import Authorization
     from ._host_app import AppProtocol
     from ._workflow import WorkflowManager
 
@@ -129,10 +129,10 @@ class Request:
             idempotency_key=self.idempotency_key,
         )
 
-    def authorization(self) -> "AuthorizationClient":
-        from ._authorization import Authorization
+    def authorization(self) -> "Authorization":
+        from ._authorization import _shared_authorization_client
 
-        return Authorization()
+        return _shared_authorization_client()
 
 
 @dataclasses.dataclass(slots=True)

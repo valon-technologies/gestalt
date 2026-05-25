@@ -1349,7 +1349,6 @@ func (p *Provider) ResolveHTTPSubject(ctx context.Context, req gestalt.HTTPSubje
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = authz.Close() }()
 
 	resp, err := authz.SearchSubjects(ctx, &gestalt.SubjectSearchRequest{
 		SubjectType: "user",
