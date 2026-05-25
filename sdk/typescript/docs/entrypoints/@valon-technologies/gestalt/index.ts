@@ -107,7 +107,7 @@ export {
   type AppGraphQLInvokeOptions,
   type AppInvocationGrant,
   type AppInvokeOptions,
-} from "../../../../src/host-app.ts";
+} from "../../../../src/app-access.ts";
 export {
   Agent,
   type AgentCancelTurn,

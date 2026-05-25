@@ -153,7 +153,7 @@ func TestBuildWorkflowRegistersExecutableWorkflowHostPublicRelay(t *testing.T) {
 	}
 	provider, err := buildWorkflow(context.Background(), "local", &config.ProviderEntry{
 		Config:    mustNode(t, map[string]any{"command": "/bin/workflow-provider"}),
-		IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "main"},
+		IndexedDB: &config.IndexedDBBindingConfig{Provider: "main"},
 	}, factories, deps)
 	if err != nil {
 		t.Fatalf("buildWorkflow: %v", err)

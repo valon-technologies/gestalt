@@ -1,4 +1,4 @@
-package appinvoker
+package appaccess
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-type recordingAppInvoker struct {
+type recordingAppInvocation struct {
 	idempotencyKey        string
 	internalConnection    bool
 	providerName          string
@@ -29,7 +29,7 @@ type recordingAppInvoker struct {
 	graphQLVariables      map[string]any
 }
 
-func (i *recordingAppInvoker) Invoke(ctx context.Context, _ *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+func (i *recordingAppInvocation) Invoke(ctx context.Context, _ *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
 	i.idempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
 	i.internalConnection = invocation.InternalConnectionAccessFromContext(ctx)
 	i.providerName = providerName
@@ -39,7 +39,7 @@ func (i *recordingAppInvoker) Invoke(ctx context.Context, _ *principal.Principal
 	return &core.OperationResult{Status: 202, Body: "accepted"}, nil
 }
 
-func TestAppInvokerServerInvokePropagatesInternalConnectionAccess(t *testing.T) {
+func TestAppServerInvokePropagatesInternalConnectionAccess(t *testing.T) {
 	t.Parallel()
 
 	tokens, err := NewInvocationTokenManager([]byte("plugin-invoker-test-secret"))
@@ -59,8 +59,8 @@ func TestAppInvokerServerInvokePropagatesInternalConnectionAccess(t *testing.T) 
 		t.Fatalf("MintRootToken: %v", err)
 	}
 
-	invoker := &recordingAppInvoker{}
-	server := NewAppInvokerServer(
+	invoker := &recordingAppInvocation{}
+	server := NewAppServer(
 		"brain",
 		[]invocation.AppInvocationDependency{
 			{App: "slack", Operation: "conversations.history"},
@@ -68,8 +68,8 @@ func TestAppInvokerServerInvokePropagatesInternalConnectionAccess(t *testing.T) 
 		invoker,
 		tokens,
 	)
-	client := proto.NewAppInvokerClient(newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterAppInvokerServer(srv, server)
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
 	}))
 	if _, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
 		InvocationToken: rootToken,
@@ -84,7 +84,7 @@ func TestAppInvokerServerInvokePropagatesInternalConnectionAccess(t *testing.T) 
 	}
 }
 
-func TestAppInvokerServerInvokeMapsInvalidInvocationToInvalidArgument(t *testing.T) {
+func TestAppServerInvokeMapsInvalidInvocationToInvalidArgument(t *testing.T) {
 	t.Parallel()
 
 	tokens, err := NewInvocationTokenManager([]byte("plugin-invoker-invalid-test-secret"))
@@ -103,14 +103,14 @@ func TestAppInvokerServerInvokeMapsInvalidInvocationToInvalidArgument(t *testing
 		t.Fatalf("MintRootToken: %v", err)
 	}
 
-	server := NewAppInvokerServer(
+	server := NewAppServer(
 		"brain",
 		[]invocation.AppInvocationDependency{{App: "gmail", Operation: "gmail.users.messages.modify"}},
-		erroringAppInvoker{err: fmt.Errorf("%w: bad connection override", invocation.ErrInvalidInvocation)},
+		erroringAppInvocation{err: fmt.Errorf("%w: bad connection override", invocation.ErrInvalidInvocation)},
 		tokens,
 	)
-	client := proto.NewAppInvokerClient(newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterAppInvokerServer(srv, server)
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
 	}))
 	_, err = client.Invoke(context.Background(), &proto.AppInvokeRequest{
 		InvocationToken: rootToken,
@@ -123,7 +123,7 @@ func TestAppInvokerServerInvokeMapsInvalidInvocationToInvalidArgument(t *testing
 	}
 }
 
-func (i *recordingAppInvoker) InvokeGraphQL(ctx context.Context, _ *principal.Principal, providerName, instance string, request invocation.GraphQLRequest) (*core.OperationResult, error) {
+func (i *recordingAppInvocation) InvokeGraphQL(ctx context.Context, _ *principal.Principal, providerName, instance string, request invocation.GraphQLRequest) (*core.OperationResult, error) {
 	i.graphQLIdempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
 	i.graphQLProviderName = providerName
 	i.graphQLInstance = instance
@@ -132,15 +132,15 @@ func (i *recordingAppInvoker) InvokeGraphQL(ctx context.Context, _ *principal.Pr
 	return &core.OperationResult{Status: 208, Body: "graphql-accepted"}, nil
 }
 
-type erroringAppInvoker struct {
+type erroringAppInvocation struct {
 	err error
 }
 
-func (i erroringAppInvoker) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+func (i erroringAppInvocation) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
 	return nil, i.err
 }
 
-func TestAppInvokerServerInvokePropagatesIdempotencyKey(t *testing.T) {
+func TestAppServerInvokePropagatesIdempotencyKey(t *testing.T) {
 	t.Parallel()
 
 	tokens, err := NewInvocationTokenManager([]byte("plugin-invoker-test-secret"))
@@ -161,8 +161,8 @@ func TestAppInvokerServerInvokePropagatesIdempotencyKey(t *testing.T) {
 		t.Fatalf("MintRootToken: %v", err)
 	}
 
-	invoker := &recordingAppInvoker{}
-	server := NewAppInvokerServer(
+	invoker := &recordingAppInvocation{}
+	server := NewAppServer(
 		"caller",
 		[]invocation.AppInvocationDependency{
 			{App: "github", Operation: "issues.create"},
@@ -175,8 +175,8 @@ func TestAppInvokerServerInvokePropagatesIdempotencyKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStruct: %v", err)
 	}
-	client := proto.NewAppInvokerClient(newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterAppInvokerServer(srv, server)
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
 	}))
 	resp, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
 		InvocationToken: rootToken,

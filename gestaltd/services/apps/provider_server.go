@@ -8,7 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
@@ -43,7 +43,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	ctx = applyRequestContext(ctx, req.GetContext())
-	ctx = appinvokerservice.WithInvocationToken(ctx, req.GetInvocationToken())
+	ctx = appaccessservice.WithInvocationToken(ctx, req.GetInvocationToken())
 	ctx = invocation.WithIdempotencyKey(ctx, req.GetIdempotencyKey())
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())

@@ -533,7 +533,7 @@ apps:
 	if authorizationName != "indexeddb" || authorizationEntry == nil {
 		t.Fatalf("SelectedAuthorizationProvider = (%q, %#v), want indexeddb", authorizationName, authorizationEntry)
 	}
-	wantIndexedDB := &HostIndexedDBBindingConfig{Provider: "archive"}
+	wantIndexedDB := &IndexedDBBindingConfig{Provider: "archive"}
 	if got := cfg.Apps["service-a"].IndexedDB; !reflect.DeepEqual(got, wantIndexedDB) {
 		t.Fatalf("Apps[service-a].IndexedDB = %#v, want %#v", got, wantIndexedDB)
 	}
@@ -2596,7 +2596,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		want := &HostIndexedDBBindingConfig{
+		want := &IndexedDBBindingConfig{
 			Provider:     "archive",
 			DB:           "roadmap_review",
 			ObjectStores: []string{"tasks", "snapshots"},
@@ -2632,7 +2632,7 @@ server:
 			t.Fatalf("Load: %v", err)
 		}
 		got := cfg.Apps["roadmap"].IndexedDB
-		want := &HostIndexedDBBindingConfig{
+		want := &IndexedDBBindingConfig{
 			Provider: "sqlite",
 		}
 		if !reflect.DeepEqual(got, want) {
@@ -2730,7 +2730,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		want := &HostIndexedDBBindingConfig{DB: "app_data"}
+		want := &IndexedDBBindingConfig{DB: "app_data"}
 		if got := cfg.Apps["datadog"].IndexedDB; !reflect.DeepEqual(got, want) {
 			t.Fatalf("Apps[datadog].IndexedDB = %#v, want %#v", got, want)
 		}
@@ -2828,7 +2828,7 @@ server:
 		}
 	})
 
-	t.Run("rejects explicit indexeddb object without provider or inherited host indexeddb", func(t *testing.T) {
+	t.Run("rejects explicit indexeddb object without provider or inherited indexeddb provider", func(t *testing.T) {
 		t.Parallel()
 
 		cases := []struct {
@@ -2875,14 +2875,14 @@ server:
 				if err == nil {
 					t.Fatal("Load: expected error, got nil")
 				}
-				if !strings.Contains(err.Error(), `apps.roadmap.indexeddb requires idb.provider or an available selected/default host indexeddb`) {
+				if !strings.Contains(err.Error(), `apps.roadmap.indexeddb requires idb.provider or an available selected/default indexeddb provider`) {
 					t.Fatalf("unexpected error: %v", err)
 				}
 			})
 		}
 	})
 
-	t.Run("accepts empty indexeddb object without inherited host indexeddb", func(t *testing.T) {
+	t.Run("accepts empty indexeddb object without inherited indexeddb provider", func(t *testing.T) {
 		t.Parallel()
 
 		cases := []struct {
@@ -2891,7 +2891,7 @@ server:
 			wantIndexedDB bool
 		}{
 			{
-				name: "empty object with no host indexeddb definitions",
+				name: "empty object with no indexeddb provider definitions",
 				body: `
 apps:
   roadmap:
@@ -2904,7 +2904,7 @@ server:
 				wantIndexedDB: true,
 			},
 			{
-				name: "omitted indexeddb with no host indexeddb definitions",
+				name: "omitted indexeddb with no indexeddb provider definitions",
 				body: `
 apps:
   roadmap:
@@ -3820,7 +3820,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		want := &HostIndexedDBBindingConfig{
+		want := &IndexedDBBindingConfig{
 			Provider:     "workflow_state",
 			DB:           "workflow",
 			ObjectStores: []string{"workflow_schedules", "workflow_runs"},
@@ -3866,7 +3866,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		want := &HostIndexedDBBindingConfig{
+		want := &IndexedDBBindingConfig{
 			Provider:     "agent_state",
 			DB:           "agent_simple",
 			ObjectStores: []string{"runs", "run_idempotency"},
@@ -6651,7 +6651,7 @@ func TestApplyAppScopeKeepsAppClosureAndUI(t *testing.T) {
 				UI:        "alpha_ui",
 				MountPath: "/alpha",
 				RouteAuth: &RouteAuthDef{Provider: "server"},
-				IndexedDB: &HostIndexedDBBindingConfig{
+				IndexedDB: &IndexedDBBindingConfig{
 					Provider: "sqlite",
 				},
 				Cache:   []string{"session"},

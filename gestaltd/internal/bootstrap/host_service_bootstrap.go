@@ -18,7 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
-	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
@@ -37,13 +37,13 @@ const (
 	hostServiceTLSCAPEMEnv          = "GESTALT_HOST_SERVICE_TLS_CA_PEM"
 )
 
-func buildRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, *appinvokerservice.InvocationTokenManager, func(), error) {
+func buildRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, *appaccessservice.InvocationTokenManager, func(), error) {
 	var (
 		hostServices []runtimehost.HostService
 		cleanup      func()
-		invTokens    *appinvokerservice.InvocationTokenManager
+		invTokens    *appaccessservice.InvocationTokenManager
 	)
-	fail := func(err error) ([]runtimehost.HostService, *appinvokerservice.InvocationTokenManager, func(), error) {
+	fail := func(err error) ([]runtimehost.HostService, *appaccessservice.InvocationTokenManager, func(), error) {
 		if cleanup != nil {
 			cleanup()
 			cleanup = nil
@@ -56,7 +56,7 @@ func buildRuntimeHostServices(name string, entry *config.ProviderEntry, deps Dep
 		return fail(err)
 	}
 	if effectiveIndexedDB.Enabled {
-		services, indexedDBCleanup, err := buildIndexedDBHostServices(name, effectiveIndexedDB.ProviderName, effectiveIndexedDB, deps)
+		services, indexedDBCleanup, err := buildIndexedDBServices(name, effectiveIndexedDB.ProviderName, effectiveIndexedDB, deps)
 		if err != nil {
 			return fail(err)
 		}
@@ -64,7 +64,7 @@ func buildRuntimeHostServices(name string, entry *config.ProviderEntry, deps Dep
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
 	if len(entry.Cache) > 0 {
-		services, cacheCleanup, err := buildPluginCacheHostServices(name, entry, deps)
+		services, cacheCleanup, err := buildPluginCacheServices(name, entry, deps)
 		if err != nil {
 			return fail(err)
 		}
@@ -72,7 +72,7 @@ func buildRuntimeHostServices(name string, entry *config.ProviderEntry, deps Dep
 		cleanup = chainCleanup(cleanup, cacheCleanup)
 	}
 	if len(entry.S3) > 0 {
-		services, err := buildPluginS3HostServices(name, entry, deps)
+		services, err := buildPluginS3Services(name, entry, deps)
 		if err != nil {
 			return fail(err)
 		}
@@ -85,7 +85,7 @@ func buildRuntimeHostServices(name string, entry *config.ProviderEntry, deps Dep
 		needInvocationTokens = true
 	}
 	if needInvocationTokens {
-		invTokens, err = appinvokerservice.NewInvocationTokenManager(deps.EncryptionKey)
+		invTokens, err = appaccessservice.NewInvocationTokenManager(deps.EncryptionKey)
 		if err != nil {
 			return fail(err)
 		}
@@ -103,7 +103,7 @@ func buildRuntimeHostServices(name string, entry *config.ProviderEntry, deps Dep
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
 	}
 	if len(entry.Invokes) > 0 {
-		hostServices = append(hostServices, buildAppInvokerHostService(name, entry, deps, invTokens))
+		hostServices = append(hostServices, buildAppInvocationHostService(name, entry, deps, invTokens))
 	}
 	return hostServices, invTokens, cleanup, nil
 }
@@ -328,9 +328,9 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, de
 		runtimehost.DefaultHostServiceTokenEnv: token,
 	}, relayHost, true, nil
 }
-func buildIndexedDBHostServices(serverLabel, metricsName string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]runtimehost.HostService, func(), error) {
+func buildIndexedDBServices(serverLabel, metricsName string, effective config.EffectiveIndexedDBBinding, deps Deps) ([]runtimehost.HostService, func(), error) {
 	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
-		return nil, nil, fmt.Errorf("indexeddb host services are not available")
+		return nil, nil, fmt.Errorf("indexeddb services are not available")
 	}
 
 	ds, err := buildScopedIndexedDB(scopedIndexedDBBuildOptions{
@@ -343,7 +343,7 @@ func buildIndexedDBHostServices(serverLabel, metricsName string, effective confi
 	}
 
 	return []runtimehost.HostService{
-			indexedDBHostService(serverLabel, map[string]indexeddb.IndexedDB{serverLabel: ds}, indexeddbservice.ServerOptions{AllowedStores: effective.ObjectStores}, serverLabel),
+			indexedDBService(serverLabel, map[string]indexeddb.IndexedDB{serverLabel: ds}, indexeddbservice.ServerOptions{AllowedStores: effective.ObjectStores}, serverLabel),
 		}, func() {
 			_ = closeIndexedDBs(ds)
 		}, nil
@@ -362,7 +362,7 @@ func indexedDBBindingsFromInstances(instances map[string]indexeddb.IndexedDB) ma
 	return bindings
 }
 
-func indexedDBHostService(defaultBinding string, bindings map[string]indexeddb.IndexedDB, opts indexeddbservice.ServerOptions, pluginName string) runtimehost.HostService {
+func indexedDBService(defaultBinding string, bindings map[string]indexeddb.IndexedDB, opts indexeddbservice.ServerOptions, pluginName string) runtimehost.HostService {
 	if strings.TrimSpace(pluginName) == "" {
 		pluginName = strings.TrimSpace(defaultBinding)
 	}
@@ -375,28 +375,28 @@ func indexedDBHostService(defaultBinding string, bindings map[string]indexeddb.I
 	}
 }
 
-func hostIndexedDBServicesFromDeps(deps Deps, opts indexeddbservice.ServerOptions, pluginName string) []runtimehost.HostService {
+func indexedDBServicesFromDeps(deps Deps, opts indexeddbservice.ServerOptions, pluginName string) []runtimehost.HostService {
 	bindings := indexedDBBindingsFromInstances(deps.IndexedDBs)
 	if len(bindings) == 0 {
 		return nil
 	}
-	return []runtimehost.HostService{indexedDBHostService(deps.SelectedIndexedDBName, bindings, opts, pluginName)}
+	return []runtimehost.HostService{indexedDBService(deps.SelectedIndexedDBName, bindings, opts, pluginName)}
 }
 
 func buildExternalCredentialsHostServices(name string, deps Deps) ([]runtimehost.HostService, error) {
 	if deps.SelectedIndexedDBName == "" || len(deps.IndexedDBs) == 0 {
-		return nil, fmt.Errorf("indexeddb host services are not available")
+		return nil, fmt.Errorf("indexeddb services are not available")
 	}
-	services := hostIndexedDBServicesFromDeps(deps, indexeddbservice.ServerOptions{AllowedStores: []string{"external_credentials"}}, name)
+	services := indexedDBServicesFromDeps(deps, indexeddbservice.ServerOptions{AllowedStores: []string{"external_credentials"}}, name)
 	if len(services) == 0 {
 		return nil, fmt.Errorf("indexeddb %q is not available", deps.SelectedIndexedDBName)
 	}
 	return services, nil
 }
 
-func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, func(), error) {
+func buildPluginCacheServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, func(), error) {
 	if deps.CacheFactory == nil || len(deps.CacheDefs) == 0 {
-		return nil, nil, fmt.Errorf("cache host services are not available")
+		return nil, nil, fmt.Errorf("cache services are not available")
 	}
 
 	bindings := make(map[string]corecache.Cache, len(entry.Cache))
@@ -431,9 +431,9 @@ func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry
 	}, nil
 }
 
-func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, error) {
+func buildPluginS3Services(pluginName string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, error) {
 	if len(deps.S3) == 0 {
-		return nil, fmt.Errorf("s3 host services are not available")
+		return nil, fmt.Errorf("s3 services are not available")
 	}
 
 	var accessURLs *s3.ObjectAccessURLManager
@@ -499,7 +499,7 @@ func registerS3Servers(bindings map[string]s3sdk.S3, defaultBinding, pluginName 
 	return s3.NewRoutingServers(bindings, defaultBinding, pluginName, accessURLs)
 }
 
-func buildWorkflowProviderHostService(appName string, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
+func buildWorkflowProviderHostService(appName string, deps Deps, tokens *appaccessservice.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.WorkflowManager
 	if manager == nil {
 		manager = unavailableWorkflowManager{}
@@ -513,7 +513,7 @@ func buildWorkflowProviderHostService(appName string, deps Deps, tokens *appinvo
 	}
 }
 
-func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
+func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *appaccessservice.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.AgentManager
 	if manager == nil {
 		manager = unavailableAgentManager{}
@@ -547,16 +547,16 @@ func buildPluginExternalCredentialsHostService(provider core.ExternalCredentialP
 	}
 }
 
-func buildAppInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
-	invoker := deps.AppInvoker
+func buildAppInvocationHostService(pluginName string, entry *config.ProviderEntry, deps Deps, tokens *appaccessservice.InvocationTokenManager) runtimehost.HostService {
+	invoker := deps.AppInvocation
 	if invoker == nil {
-		invoker = unavailableAppInvoker{}
+		invoker = unavailableAppInvocation{}
 	}
 	return runtimehost.HostService{
-		Name:           "app_invoker",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.AppInvoker_ServiceDesc.ServiceName)},
+		Name:           "app",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.App_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAppInvokerServer(srv, appinvokerservice.NewServer(
+			proto.RegisterAppServer(srv, appaccessservice.NewServer(
 				pluginName,
 				invocationconfig.AppInvocationDependencies(entry.Invokes),
 				invoker,

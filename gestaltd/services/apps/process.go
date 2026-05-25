@@ -9,7 +9,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -30,8 +30,8 @@ type ExecConfig struct {
 	Cleanup          func()
 	HostServices     []runtimehost.HostService
 	PublicBaseURL    string
-	InvocationTokens *appinvokerservice.InvocationTokenManager
-	InvocationGrants appinvokerservice.InvocationGrants
+	InvocationTokens *appaccessservice.InvocationTokenManager
+	InvocationGrants appaccessservice.InvocationGrants
 	WorkflowGrants   workflowgrants.Grants
 	ProviderName     string
 	Telemetry        metricutil.TelemetryProviders

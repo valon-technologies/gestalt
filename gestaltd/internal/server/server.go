@@ -165,7 +165,7 @@ type Config struct {
 	Workflow              bootstrap.WorkflowControl
 	Runtimes              bootstrap.RuntimeInspector
 	Invoker               invocation.Invoker
-	AppInvoker            invocation.Invoker
+	AppInvocation         invocation.Invoker
 	DefaultConnection     map[string]string
 	CatalogConnection     map[string]string
 	ConnectionAuth        func() map[string]map[string]bootstrap.OAuthHandler
@@ -203,7 +203,7 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Invoker == nil {
 		return nil, fmt.Errorf("invoker is required")
 	}
-	pluginInvoker := cfg.AppInvoker
+	pluginInvoker := cfg.AppInvocation
 	if pluginInvoker == nil {
 		pluginInvoker = cfg.Invoker
 	}

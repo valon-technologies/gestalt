@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use generated::v1::app_invoker_server::{AppInvoker as ProtoAppInvoker, AppInvokerServer};
+use generated::v1::app_server::{App as ProtoApp, AppServer};
 use generated::v1::{
     AppInvocationGrant, AppInvokeGraphQlRequest, AppInvokeRequest, ExchangeInvocationTokenRequest,
     ExchangeInvocationTokenResponse, OperationResult,
@@ -64,7 +64,7 @@ struct SeenExchangeRequest {
 }
 
 #[derive(Clone, Default)]
-struct TestAppInvokerServer {
+struct TestAppServer {
     seen_invokes: Arc<Mutex<Vec<SeenRequest>>>,
     seen_graphql_invokes: Arc<Mutex<Vec<SeenGraphQlRequest>>>,
     seen_exchanges: Arc<Mutex<Vec<SeenExchangeRequest>>>,
@@ -72,7 +72,7 @@ struct TestAppInvokerServer {
 }
 
 #[async_trait]
-impl ProtoAppInvoker for TestAppInvokerServer {
+impl ProtoApp for TestAppServer {
     async fn exchange_invocation_token(
         &self,
         request: GrpcRequest<ExchangeInvocationTokenRequest>,
@@ -177,7 +177,7 @@ async fn app_connects_over_unix_socket_and_sends_invocation_token() {
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
-    let server = TestAppInvokerServer::default();
+    let server = TestAppServer::default();
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
@@ -281,7 +281,7 @@ async fn request_app_uses_embedded_invocation_token() {
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
-    let server = TestAppInvokerServer::default();
+    let server = TestAppServer::default();
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
@@ -331,11 +331,11 @@ async fn app_connects_over_tcp_and_forwards_relay_token() {
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, format!("tcp://{address}"));
     let _token_guard = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
-    let server = TestAppInvokerServer::default();
+    let server = TestAppServer::default();
     let serve_server = server.clone();
     let serve_task = tokio::spawn(async move {
         Server::builder()
-            .add_service(AppInvokerServer::new(serve_server))
+            .add_service(AppServer::new(serve_server))
             .serve_with_incoming(TcpListenerStream::new(listener))
             .await
             .expect("serve app over tcp");
@@ -366,7 +366,7 @@ async fn app_invokes_graphql_surface() {
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
-    let server = TestAppInvokerServer::default();
+    let server = TestAppServer::default();
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
@@ -440,7 +440,7 @@ async fn app_exchanges_invocation_tokens_with_grants_and_ttl() {
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
-    let server = TestAppInvokerServer::default();
+    let server = TestAppServer::default();
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
@@ -530,14 +530,14 @@ async fn app_exchanges_invocation_tokens_with_grants_and_ttl() {
 }
 
 async fn serve_app(
-    server: TestAppInvokerServer,
+    server: TestAppServer,
     socket: &Path,
 ) -> std::result::Result<(), tonic::transport::Error> {
     let _ = std::fs::remove_file(socket);
     let listener = UnixListener::bind(socket).expect("bind unix listener");
 
     Server::builder()
-        .add_service(AppInvokerServer::new(server))
+        .add_service(AppServer::new(server))
         .serve_with_incoming(UnixListenerStream::new(listener))
         .await
 }

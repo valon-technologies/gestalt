@@ -12,7 +12,7 @@ import { expect, test } from "bun:test";
 import {
   ExchangeInvocationTokenResponseSchema,
   OperationResultSchema,
-  AppInvoker as AppService,
+  App as AppService,
 } from "../src/internal/gen/v1/app_pb.ts";
 import {
   ENV_HOST_SERVICE_SOCKET,

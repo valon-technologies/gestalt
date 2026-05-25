@@ -404,7 +404,7 @@ _LAZY_EXPORTS = {
     "ObjectStoreSchema": ("._indexeddb", "ObjectStoreSchema"),
     "OperationAnnotations": ("._catalog", "OperationAnnotations"),
     "App": ("._app", "App"),
-    "AppProtocol": ("._host_app", "AppProtocol"),
+    "AppProtocol": ("._app_access", "AppProtocol"),
     "AppProvider": ("._providers", "AppProvider"),
     "AppProviderAdapter": ("._providers", "AppProviderAdapter"),
     "RuntimeProvider": ("._providers", "RuntimeProvider"),

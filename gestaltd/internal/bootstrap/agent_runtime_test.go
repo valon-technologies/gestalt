@@ -1236,7 +1236,7 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command:   bin,
-					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
+					IndexedDB: &config.IndexedDBBindingConfig{Provider: "agent_state"},
 					Runtime:   runtimeConfig,
 				},
 			},
@@ -1327,7 +1327,7 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command:   bin,
-					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
+					IndexedDB: &config.IndexedDBBindingConfig{Provider: "agent_state"},
 					Runtime:   runtimeConfig,
 				},
 			},
@@ -1437,7 +1437,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command:   bin,
-					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
+					IndexedDB: &config.IndexedDBBindingConfig{Provider: "agent_state"},
 					Runtime:   runtimeConfig,
 				},
 			},
@@ -1546,7 +1546,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command:   bin,
-					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
+					IndexedDB: &config.IndexedDBBindingConfig{Provider: "agent_state"},
 					Runtime:   runtimeConfig,
 				},
 			},
@@ -1624,7 +1624,7 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command:   bin,
-					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
+					IndexedDB: &config.IndexedDBBindingConfig{Provider: "agent_state"},
 					Runtime:   runtimeConfig,
 				},
 			},
@@ -1695,7 +1695,7 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command:   bin,
-					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
+					IndexedDB: &config.IndexedDBBindingConfig{Provider: "agent_state"},
 					Runtime:   runtimeConfig,
 				},
 			},

@@ -1,4 +1,4 @@
-package appinvoker
+package appaccess
 
 import (
 	"context"
@@ -150,7 +150,7 @@ func TestInvocationTokenExchangeAllowsNarrowingWildcardGrants(t *testing.T) {
 	}
 }
 
-func TestAppInvokerExchangeRequiresExplicitGrantScope(t *testing.T) {
+func TestAppInvocationExchangeRequiresExplicitGrantScope(t *testing.T) {
 	t.Parallel()
 
 	manager, err := NewInvocationTokenManager([]byte("invocation-token-test-secret"))
@@ -177,7 +177,7 @@ func TestAppInvokerExchangeRequiresExplicitGrantScope(t *testing.T) {
 		t.Fatalf("MintRootToken: %v", err)
 	}
 
-	server := NewAppInvokerServer("caller", []invocation.AppInvocationDependency{{
+	server := NewAppServer("caller", []invocation.AppInvocationDependency{{
 		App:       "example",
 		Operation: "request_context",
 	}}, nil, manager)

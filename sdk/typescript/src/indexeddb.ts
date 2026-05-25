@@ -890,7 +890,7 @@ function compareBytes(left: Uint8Array, right: Uint8Array): number {
 }
 
 /**
- * Client for invoking a host-provided IndexedDB service over the Gestalt transport.
+ * Client for invoking a provider-backed IndexedDB service over the Gestalt transport.
  *
  * @example
  * ```ts

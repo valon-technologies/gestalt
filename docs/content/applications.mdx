@@ -646,8 +646,8 @@ details. Those come from the deployment bindings.
 
 ## Calling Another App From Your Application
 
-Use `AppInvoker` when executable app code needs to call another
-configured app as part of the same request. The caller must declare the
+Use `App` when executable app code needs to call another configured app as
+part of the same request. The caller must declare the
 allowed call graph in `apps.<caller>.invokes`; at runtime the SDK sends the
 current invocation token to the host, and the host preserves the original
 subject, credential context, and permission ceiling for the nested call.
@@ -676,13 +676,13 @@ apps:
     )
 
     func loadLinkedIssue(ctx context.Context, request gestalt.Request, issueNumber int) (map[string]any, error) {
-        invoker, err := request.Invoker()
+        app, err := request.App()
         if err != nil {
             return nil, err
         }
-        defer invoker.Close()
+        defer app.Close()
 
-        result, err := invoker.Invoke(ctx, "github", "issues.get", map[string]any{
+        result, err := app.Invoke(ctx, "github", "issues.get", map[string]any{
             "owner":  "acme",
             "repo":   "roadmap",
             "number": issueNumber,
@@ -712,8 +712,8 @@ apps:
         request: Request,
         issue_number: int,
     ) -> dict[str, object]:
-        with request.invoker() as invoker:
-            result = invoker.invoke(
+        with request.app() as app:
+            result = app.invoke(
                 "github",
                 "issues.get",
                 {
@@ -737,9 +737,9 @@ apps:
         request: &Request,
         issue_number: i64,
     ) -> Result<Value, Box<dyn std::error::Error>> {
-        let mut invoker = request.invoker().await?;
+        let mut app = request.app().await?;
 
-        let result = invoker
+        let result = app
             .invoke(
                 "github",
                 "issues.get",
@@ -762,12 +762,12 @@ apps:
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { AppInvoker, type Request } from "@valon-technologies/gestalt";
+    import { App, type Request } from "@valon-technologies/gestalt";
 
     export async function loadLinkedIssue(request: Request, issueNumber: number) {
-      const invoker = new AppInvoker(request);
+      const app = new App(request);
 
-      const result = await invoker.invoke(
+      const result = await app.invoke(
         "github",
         "issues.get",
         {

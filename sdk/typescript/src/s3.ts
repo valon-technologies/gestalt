@@ -573,7 +573,7 @@ export function createS3Service(
 }
 
 /**
- * Client for invoking a host-provided S3 service over the Gestalt transport.
+ * Client for invoking a provider-backed S3 service over the Gestalt transport.
  *
  * @example
  * ```ts

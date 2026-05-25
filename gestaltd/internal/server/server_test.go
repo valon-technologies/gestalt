@@ -51,7 +51,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
-	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
 	"github.com/valon-technologies/gestalt/server/services/apps/composite"
@@ -1154,7 +1154,7 @@ func TestHostServiceRelayStopsServingUnregisteredProviderService(t *testing.T) {
 	}
 }
 
-func TestHostServiceRelayRoutesRegisteredAppInvokerService(t *testing.T) {
+func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("relay-test-secret-0123456789abcd")
@@ -1164,17 +1164,17 @@ func TestHostServiceRelayRoutesRegisteredAppInvokerService(t *testing.T) {
 		Operation:      "events.reply",
 		CredentialMode: core.ConnectionModeNone,
 	}}
-	invocationTokens, err := appinvokerservice.NewInvocationTokenManager(secret)
+	invocationTokens, err := appaccessservice.NewInvocationTokenManager(secret)
 	if err != nil {
 		t.Fatalf("NewInvocationTokenManager: %v", err)
 	}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	sessionVerifier := newRelayTestSessionVerifier("provider-dev-session")
 	publicHostServices.RegisterVerified("support", sessionVerifier, runtimehost.HostService{
-		Name:           "app_invoker",
-		MethodPrefixes: []string{"/" + proto.AppInvoker_ServiceDesc.ServiceName + "/"},
+		Name:           "app",
+		MethodPrefixes: []string{"/" + proto.App_ServiceDesc.ServiceName + "/"},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAppInvokerServer(srv, appinvokerservice.NewServer("support", invokes, invoker, invocationTokens))
+			proto.RegisterAppServer(srv, appaccessservice.NewServer("support", invokes, invoker, invocationTokens))
 		},
 	})
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
@@ -1193,8 +1193,8 @@ func TestHostServiceRelayRoutesRegisteredAppInvokerService(t *testing.T) {
 	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		AppName:      "support",
 		SessionID:    "provider-dev-session",
-		Service:      "app_invoker",
-		MethodPrefix: "/" + proto.AppInvoker_ServiceDesc.ServiceName + "/",
+		Service:      "app",
+		MethodPrefix: "/" + proto.App_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})
 	if err != nil {
@@ -1206,7 +1206,7 @@ func TestHostServiceRelayRoutesRegisteredAppInvokerService(t *testing.T) {
 		Kind:      principal.KindUser,
 		Source:    principal.SourceSession,
 	})
-	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "support", appinvokerservice.InvocationDependencyGrants(invokes))
+	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "support", appaccessservice.InvocationDependencyGrants(invokes))
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
 	}
@@ -1216,7 +1216,7 @@ func TestHostServiceRelayRoutesRegisteredAppInvokerService(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	_, err = proto.NewAppInvokerClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
+	_, err = proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
 		InvocationToken: invocationToken,
 		App:             "slack",
 		Operation:       "events.reply",
@@ -1224,7 +1224,7 @@ func TestHostServiceRelayRoutesRegisteredAppInvokerService(t *testing.T) {
 		IdempotencyKey:  "provider-dev-call",
 	})
 	if err != nil {
-		t.Fatalf("AppInvoker.Invoke via registered relay: %v", err)
+		t.Fatalf("AppInvocation.Invoke via registered relay: %v", err)
 	}
 	if call := invoker.snapshot(); call.calls != 1 || call.providerName != "slack" || call.operation != "events.reply" || call.instance != "prod" {
 		t.Fatalf("plugin invoker call = %+v, want slack events.reply/prod", call)
@@ -1234,13 +1234,13 @@ func TestHostServiceRelayRoutesRegisteredAppInvokerService(t *testing.T) {
 	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer staleCancel()
 	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	_, err = proto.NewAppInvokerClient(conn).Invoke(staleCtx, &proto.AppInvokeRequest{
+	_, err = proto.NewAppClient(conn).Invoke(staleCtx, &proto.AppInvokeRequest{
 		InvocationToken: invocationToken,
 		App:             "slack",
 		Operation:       "events.reply",
 	})
 	if grpcstatus.Code(err) != codes.Unauthenticated {
-		t.Fatalf("AppInvoker.Invoke stale session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
+		t.Fatalf("AppInvocation.Invoke stale session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
 	}
 	if call := invoker.snapshot(); call.calls != 1 {
 		t.Fatalf("plugin invoker calls = %d, want only the verified call", call.calls)
@@ -1425,8 +1425,8 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		AppName:      "support",
 		SessionID:    "provider-dev-session",
-		Service:      "app_invoker",
-		MethodPrefix: "/" + proto.AppInvoker_ServiceDesc.ServiceName + "/",
+		Service:      "app",
+		MethodPrefix: "/" + proto.App_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})
 	if err != nil {
@@ -1438,9 +1438,9 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	_, err = proto.NewAppInvokerClient(conn).Invoke(ctx, &proto.AppInvokeRequest{})
+	_, err = proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{})
 	if grpcstatus.Code(err) != codes.Unavailable {
-		t.Fatalf("AppInvoker.Invoke without registered service code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
+		t.Fatalf("AppInvocation.Invoke without registered service code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
 	}
 	if call := invoker.snapshot(); call.providerName != "" {
 		t.Fatalf("invoker was called without registered relay service: %+v", call)

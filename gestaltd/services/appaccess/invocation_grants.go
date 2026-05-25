@@ -1,4 +1,4 @@
-package appinvoker
+package appaccess
 
 import (
 	"fmt"

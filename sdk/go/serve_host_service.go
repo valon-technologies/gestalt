@@ -7,20 +7,8 @@ import (
 	"os"
 	"strings"
 
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 )
-
-// RegisterIndexedDBHostService registers an IndexedDB host service on srv.
-func RegisterIndexedDBHostService(srv *grpc.Server, datastore IndexedDBProvider) {
-	proto.RegisterIndexedDBServer(srv, indexedDBProviderServer{provider: datastore})
-}
-
-// RegisterExternalCredentialHostService registers an external credential host
-// service on srv.
-func RegisterExternalCredentialHostService(srv *grpc.Server, provider ExternalCredentialProvider) {
-	proto.RegisterExternalCredentialProviderServer(srv, newExternalCredentialProviderServer(provider))
-}
 
 // ServeHostServiceGRPC serves host-service gRPC handlers on a unix socket until
 // ctx is cancelled. The register callback should register one or more host

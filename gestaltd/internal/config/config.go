@@ -502,7 +502,7 @@ type ProviderEntry struct {
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	Invokes           []AppInvocationDependency     `yaml:"invokes,omitempty"`
 	Capabilities      *AppCapabilitiesConfig        `yaml:"capabilities,omitempty"`
-	IndexedDB         *HostIndexedDBBindingConfig   `yaml:"indexeddb,omitempty"`
+	IndexedDB         *IndexedDBBindingConfig       `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
 	Runtime           *RuntimePlacementConfig       `yaml:"runtime,omitempty"`
@@ -664,7 +664,7 @@ type ProviderSurfaceOverrides struct {
 type HTTPSecurityScheme = providermanifestv1.HTTPSecurityScheme
 type HTTPBinding = providermanifestv1.HTTPBinding
 
-type HostIndexedDBBindingConfig struct {
+type IndexedDBBindingConfig struct {
 	Provider     string   `yaml:"provider,omitempty"`
 	DB           string   `yaml:"db,omitempty"`
 	ObjectStores []string `yaml:"objectStores,omitempty"`
@@ -1043,7 +1043,7 @@ type WorkflowEventMatch struct {
 	Subject string `yaml:"subject,omitempty"`
 }
 
-func (c *HostIndexedDBBindingConfig) UnmarshalYAML(value *yaml.Node) error {
+func (c *IndexedDBBindingConfig) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Kind {
 	case yaml.ScalarNode:
 		c.Provider = strings.TrimSpace(value.Value)
@@ -1051,7 +1051,7 @@ func (c *HostIndexedDBBindingConfig) UnmarshalYAML(value *yaml.Node) error {
 	case yaml.SequenceNode:
 		return fmt.Errorf("indexeddb must be a mapping or scalar provider name")
 	default:
-		type raw HostIndexedDBBindingConfig
+		type raw IndexedDBBindingConfig
 		return decodeYAMLNodeKnownFields(value, (*raw)(c))
 	}
 }

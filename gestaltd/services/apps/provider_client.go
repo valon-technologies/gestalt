@@ -11,7 +11,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
@@ -52,9 +52,9 @@ type remoteProviderBase struct {
 	discovery      *core.DiscoveryConfig
 	closer         io.Closer
 	publicBaseURL  string
-	invTokens      *appinvokerservice.InvocationTokenManager
+	invTokens      *appaccessservice.InvocationTokenManager
 	callerApp      string
-	invokeGrants   appinvokerservice.InvocationGrants
+	invokeGrants   appaccessservice.InvocationGrants
 	workflowGrants workflowgrants.Grants
 }
 
@@ -81,14 +81,14 @@ func WithHostContext(publicBaseURL string) RemoteProviderOption {
 	return func(b *remoteProviderBase) { b.publicBaseURL = normalizePublicBaseURL(publicBaseURL) }
 }
 
-func WithInvocationTokens(tokens *appinvokerservice.InvocationTokenManager) RemoteProviderOption {
+func WithInvocationTokens(tokens *appaccessservice.InvocationTokenManager) RemoteProviderOption {
 	return func(b *remoteProviderBase) { b.invTokens = tokens }
 }
 
-func WithInvocationTokenSubject(pluginName string, grants appinvokerservice.InvocationGrants) RemoteProviderOption {
+func WithInvocationTokenSubject(pluginName string, grants appaccessservice.InvocationGrants) RemoteProviderOption {
 	return func(b *remoteProviderBase) {
 		b.callerApp = strings.TrimSpace(pluginName)
-		b.invokeGrants = appinvokerservice.CloneInvocationGrants(grants)
+		b.invokeGrants = appaccessservice.CloneInvocationGrants(grants)
 	}
 }
 

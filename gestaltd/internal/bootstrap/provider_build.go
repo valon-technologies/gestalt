@@ -24,7 +24,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
-	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/composite"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
@@ -1124,7 +1124,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 			appservice.WithInvocationTokens(invTokens),
 			appservice.WithInvocationTokenSubject(
 				name,
-				appinvokerservice.InvocationDependencyGrants(
+				appaccessservice.InvocationDependencyGrants(
 					invocationconfig.AppInvocationDependencies(entry.Invokes),
 				),
 			),
@@ -1745,13 +1745,13 @@ func hostedAgentAllowedHosts(allowedHosts []string, runtimePlan RuntimePlacement
 	return out
 }
 
-type unavailableAppInvoker struct{}
+type unavailableAppInvocation struct{}
 
-func (unavailableAppInvoker) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+func (unavailableAppInvocation) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
 	return nil, fmt.Errorf("plugin invoker is not available")
 }
 
-func (unavailableAppInvoker) InvokeGraphQL(context.Context, *principal.Principal, string, string, invocation.GraphQLRequest) (*core.OperationResult, error) {
+func (unavailableAppInvocation) InvokeGraphQL(context.Context, *principal.Principal, string, string, invocation.GraphQLRequest) (*core.OperationResult, error) {
 	return nil, fmt.Errorf("plugin invoker is not available")
 }
 
