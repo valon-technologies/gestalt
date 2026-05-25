@@ -43,8 +43,8 @@ func (r Request) InvocationToken() string {
 	return r.invocationToken
 }
 
-func (r Request) Invoker() (*InvokerClient, error) {
-	return Invoker(r.invocationToken)
+func (r Request) App() (AppAPI, error) {
+	return App(r.invocationToken)
 }
 
 func (r Request) WorkflowManager() (WorkflowManagerAPI, error) {

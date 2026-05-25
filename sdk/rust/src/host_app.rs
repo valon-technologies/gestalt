@@ -4,6 +4,7 @@ use hyper_util::rt::TokioIo;
 use serde::Serialize;
 use tokio::net::UnixStream;
 use tonic::Request;
+use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
@@ -11,24 +12,20 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
 use crate::OperationResult;
+use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::generated::v1::{
     self as pb, app_invoker_client::AppInvokerClient as ProtoAppInvokerClient,
 };
 use crate::protocol;
 
-type AppInvokerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
-
-/// Environment variable containing the plugin-invoker host-service target.
-pub const ENV_PLUGIN_INVOKER_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
-/// Environment variable containing the optional plugin-invoker relay token.
-pub const ENV_PLUGIN_INVOKER_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
-const PLUGIN_INVOKER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
+type AppTransport = InterceptedService<Channel, RelayTokenInterceptor>;
+const APP_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
-/// Errors returned by [`AppInvoker`].
-pub enum AppInvokerError {
+/// Errors returned by [`App`].
+pub enum AppError {
     /// The invocation token was empty.
-    #[error("app invoker: invocation token is not available")]
+    #[error("app: invocation token is not available")]
     MissingInvocationToken,
     /// The host-service transport could not be created.
     #[error("{0}")]
@@ -71,28 +68,50 @@ pub struct InvokeOptions {
     pub idempotency_key: String,
 }
 
+#[async_trait]
+/// Fakeable contract for app invocation calls.
+pub trait AppApi: Send {
+    async fn invoke(
+        &mut self,
+        plugin: String,
+        operation: String,
+        params: serde_json::Value,
+        options: Option<InvokeOptions>,
+    ) -> std::result::Result<OperationResult, AppError>;
+    async fn invoke_graphql(
+        &mut self,
+        plugin: String,
+        document: String,
+        variables: Option<serde_json::Value>,
+        options: Option<InvokeOptions>,
+    ) -> std::result::Result<OperationResult, AppError>;
+    async fn exchange_invocation_token(
+        &mut self,
+        grants: &[InvocationGrant],
+        ttl: Option<Duration>,
+    ) -> std::result::Result<String, AppError>;
+}
+
 /// Client for invoking sibling app operations through the host.
-pub struct AppInvoker {
-    client: ProtoAppInvokerClient<AppInvokerTransport>,
+pub struct App {
+    client: ProtoAppInvokerClient<AppTransport>,
     invocation_token: String,
 }
 
-impl AppInvoker {
-    /// Connects to the app invoker with an invocation token from the host.
-    pub async fn connect(
-        invocation_token: impl AsRef<str>,
-    ) -> std::result::Result<Self, AppInvokerError> {
+impl App {
+    /// Connects to the app host service with an invocation token from the host.
+    pub async fn connect(invocation_token: impl AsRef<str>) -> std::result::Result<Self, AppError> {
         let invocation_token = invocation_token.as_ref().trim().to_owned();
         if invocation_token.is_empty() {
-            return Err(AppInvokerError::MissingInvocationToken);
+            return Err(AppError::MissingInvocationToken);
         }
 
-        let socket_path = std::env::var(ENV_PLUGIN_INVOKER_SOCKET)
-            .map_err(|_| AppInvokerError::Env(format!("{ENV_PLUGIN_INVOKER_SOCKET} is not set")))?;
-        let relay_token = std::env::var(ENV_PLUGIN_INVOKER_SOCKET_TOKEN).unwrap_or_default();
+        let socket_path = std::env::var(ENV_HOST_SERVICE_SOCKET)
+            .map_err(|_| AppError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
+        let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
 
-        let channel = match parse_app_invoker_target(&socket_path)? {
-            AppInvokerTarget::Unix(path) => {
+        let channel = match parse_app_target(&socket_path)? {
+            AppTarget::Unix(path) => {
                 Endpoint::try_from("http://[::]:50051")?
                     .connect_with_connector(service_fn(move |_: Uri| {
                         let path = path.clone();
@@ -100,12 +119,12 @@ impl AppInvoker {
                     }))
                     .await?
             }
-            AppInvokerTarget::Tcp(address) => {
+            AppTarget::Tcp(address) => {
                 Endpoint::from_shared(format!("http://{address}"))?
                     .connect()
                     .await?
             }
-            AppInvokerTarget::Tls(address) => {
+            AppTarget::Tls(address) => {
                 Endpoint::from_shared(format!("https://{address}"))?
                     .tls_config(ClientTlsConfig::new().with_native_roots())?
                     .connect()
@@ -129,7 +148,7 @@ impl AppInvoker {
         operation: &str,
         params: P,
         options: Option<InvokeOptions>,
-    ) -> std::result::Result<OperationResult, AppInvokerError>
+    ) -> std::result::Result<OperationResult, AppError>
     where
         P: Serialize,
     {
@@ -157,10 +176,7 @@ impl AppInvoker {
             .into_inner();
 
         let status = u16::try_from(response.status).map_err(|_| {
-            AppInvokerError::Protocol(format!(
-                "app invoker: invalid response status {}",
-                response.status
-            ))
+            AppError::Protocol(format!("app: invalid response status {}", response.status))
         })?;
 
         Ok(OperationResult {
@@ -176,14 +192,14 @@ impl AppInvoker {
         document: &str,
         variables: Option<V>,
         options: Option<InvokeOptions>,
-    ) -> std::result::Result<OperationResult, AppInvokerError>
+    ) -> std::result::Result<OperationResult, AppError>
     where
         V: Serialize,
     {
         let document = document.trim();
         if document.is_empty() {
-            return Err(AppInvokerError::Protocol(
-                "app invoker: graphql document is required".to_string(),
+            return Err(AppError::Protocol(
+                "app: graphql document is required".to_string(),
             ));
         }
 
@@ -214,10 +230,7 @@ impl AppInvoker {
             .into_inner();
 
         let status = u16::try_from(response.status).map_err(|_| {
-            AppInvokerError::Protocol(format!(
-                "app invoker: invalid response status {}",
-                response.status
-            ))
+            AppError::Protocol(format!("app: invalid response status {}", response.status))
         })?;
 
         Ok(OperationResult {
@@ -231,7 +244,7 @@ impl AppInvoker {
         &mut self,
         grants: &[InvocationGrant],
         ttl: Option<Duration>,
-    ) -> std::result::Result<String, AppInvokerError> {
+    ) -> std::result::Result<String, AppError> {
         let ttl_seconds = ttl
             .map(duration_to_ttl_seconds)
             .transpose()?
@@ -250,53 +263,84 @@ impl AppInvoker {
     }
 }
 
-enum AppInvokerTarget {
+#[async_trait]
+impl AppApi for App {
+    async fn invoke(
+        &mut self,
+        plugin: String,
+        operation: String,
+        params: serde_json::Value,
+        options: Option<InvokeOptions>,
+    ) -> std::result::Result<OperationResult, AppError> {
+        App::invoke(self, &plugin, &operation, params, options).await
+    }
+
+    async fn invoke_graphql(
+        &mut self,
+        plugin: String,
+        document: String,
+        variables: Option<serde_json::Value>,
+        options: Option<InvokeOptions>,
+    ) -> std::result::Result<OperationResult, AppError> {
+        App::invoke_graphql(self, &plugin, &document, variables, options).await
+    }
+
+    async fn exchange_invocation_token(
+        &mut self,
+        grants: &[InvocationGrant],
+        ttl: Option<Duration>,
+    ) -> std::result::Result<String, AppError> {
+        App::exchange_invocation_token(self, grants, ttl).await
+    }
+}
+
+enum AppTarget {
     Unix(String),
     Tcp(String),
     Tls(String),
 }
 
-fn parse_app_invoker_target(raw_target: &str) -> Result<AppInvokerTarget, AppInvokerError> {
+fn parse_app_target(raw_target: &str) -> Result<AppTarget, AppError> {
     let target = raw_target.trim();
     if target.is_empty() {
-        return Err(AppInvokerError::Env(
-            "app invoker: transport target is required".to_string(),
+        return Err(AppError::Env(
+            "app: transport target is required".to_string(),
         ));
     }
     if let Some(address) = target.strip_prefix("tcp://") {
         let address = address.trim();
         if address.is_empty() {
-            return Err(AppInvokerError::Env(format!(
-                "app invoker: tcp target {raw_target:?} is missing host:port"
+            return Err(AppError::Env(format!(
+                "app: tcp target {raw_target:?} is missing host:port"
             )));
         }
-        return Ok(AppInvokerTarget::Tcp(address.to_string()));
+        return Ok(AppTarget::Tcp(address.to_string()));
     }
     if let Some(address) = target.strip_prefix("tls://") {
         let address = address.trim();
         if address.is_empty() {
-            return Err(AppInvokerError::Env(format!(
-                "app invoker: tls target {raw_target:?} is missing host:port"
+            return Err(AppError::Env(format!(
+                "app: tls target {raw_target:?} is missing host:port"
             )));
         }
-        return Ok(AppInvokerTarget::Tls(address.to_string()));
+        return Ok(AppTarget::Tls(address.to_string()));
     }
     if let Some(path) = target.strip_prefix("unix://") {
         let path = path.trim();
         if path.is_empty() {
-            return Err(AppInvokerError::Env(format!(
-                "app invoker: unix target {raw_target:?} is missing a socket path"
+            return Err(AppError::Env(format!(
+                "app: unix target {raw_target:?} is missing a socket path"
             )));
         }
-        return Ok(AppInvokerTarget::Unix(path.to_string()));
+        return Ok(AppTarget::Unix(path.to_string()));
     }
     if target.contains("://") {
         let scheme = target.split("://").next().unwrap_or_default();
-        return Err(AppInvokerError::Env(format!(
-            "app invoker: unsupported target scheme {scheme:?}"
+        return Err(AppError::Env(format!(
+            "app: unsupported target scheme {scheme:?}"
         )));
     }
-    Ok(AppInvokerTarget::Unix(target.to_string()))
+    Ok(AppTarget::Unix(target.to_string()))
 }
 
 fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::AppInvocationGrant> {
@@ -332,26 +376,25 @@ fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::AppInvocation
         .collect()
 }
 
-fn duration_to_ttl_seconds(ttl: Duration) -> std::result::Result<i64, AppInvokerError> {
+fn duration_to_ttl_seconds(ttl: Duration) -> std::result::Result<i64, AppError> {
     if ttl.is_zero() {
         return Ok(0);
     }
 
     let ttl_seconds = ttl.as_secs().max(1);
     i64::try_from(ttl_seconds).map_err(|_| {
-        AppInvokerError::Protocol(
-            "app invoker: exchange token ttl exceeds supported range".to_string(),
-        )
+        AppError::Protocol("app: exchange token ttl exceeds supported range".to_string())
     })
 }
 
-fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, AppInvokerError> {
+fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, AppError> {
     let header = if token.trim().is_empty() {
         None
     } else {
-        Some(MetadataValue::try_from(token.to_string()).map_err(|err| {
-            AppInvokerError::Env(format!("invalid app invoker relay token metadata: {err}"))
-        })?)
+        Some(
+            MetadataValue::try_from(token.to_string())
+                .map_err(|err| AppError::Env(format!("invalid app relay token metadata: {err}")))?,
+        )
     };
     Ok(RelayTokenInterceptor { header })
 }
@@ -366,7 +409,7 @@ impl Interceptor for RelayTokenInterceptor {
         if let Some(header) = self.header.clone() {
             request
                 .metadata_mut()
-                .insert(PLUGIN_INVOKER_RELAY_TOKEN_HEADER, header);
+                .insert(APP_RELAY_TOKEN_HEADER, header);
         }
         Ok(request)
     }
@@ -375,7 +418,7 @@ impl Interceptor for RelayTokenInterceptor {
 fn serializable_to_struct<T: Serialize>(
     value: T,
     field_name: &str,
-) -> std::result::Result<prost_types::Struct, AppInvokerError> {
+) -> std::result::Result<prost_types::Struct, AppError> {
     let value = protocol::json_value_from_serializable(value)?;
     Ok(json_to_optional_struct(value, field_name)?.unwrap_or_default())
 }
@@ -383,25 +426,25 @@ fn serializable_to_struct<T: Serialize>(
 fn json_to_optional_struct(
     value: serde_json::Value,
     field_name: &str,
-) -> std::result::Result<Option<prost_types::Struct>, AppInvokerError> {
+) -> std::result::Result<Option<prost_types::Struct>, AppError> {
     if value.is_null() {
         return Ok(None);
     }
     let serde_json::Value::Object(_) = &value else {
-        return Err(AppInvokerError::Protocol(format!(
-            "app invoker: {field_name} must serialize to a JSON object"
+        return Err(AppError::Protocol(format!(
+            "app: {field_name} must serialize to a JSON object"
         )));
     };
 
     protocol::struct_from_json(value)
         .map(Some)
-        .map_err(|err| AppInvokerError::Protocol(err.to_string()))
+        .map_err(|err| AppError::Protocol(err.to_string()))
 }
 
 fn serializable_to_optional_struct<T: Serialize>(
     value: T,
     field_name: &str,
-) -> std::result::Result<Option<prost_types::Struct>, AppInvokerError> {
+) -> std::result::Result<Option<prost_types::Struct>, AppError> {
     let value = protocol::json_value_from_serializable(value)?;
     json_to_optional_struct(value, field_name)
 }

@@ -72,7 +72,7 @@ The top-level `gestalt` package exposes the supported authoring API:
   `WorkflowProvider`, `AgentProvider`, and `RuntimeProvider` for
   host-service provider runtimes.
 - `Cache`, `IndexedDB`, `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`,
-  `AgentManager`, and `AppInvoker` for calling sibling host services.
+  `AgentManager`, and `Request.app()` for calling sibling host services.
 - `gestalt.testing` for native fixture helpers used by SDK transport tests.
 - `gestalt.telemetry` for provider-authored GenAI spans and metrics.
 

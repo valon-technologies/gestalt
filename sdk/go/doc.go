@@ -63,7 +63,7 @@
 // own transport conversion.
 //
 // Host-service capabilities include [Cache], [WorkflowHost],
-// [WorkflowManager], [AgentHost], [AgentManager], [Authorization], and App.
+// [WorkflowManager], [AgentHost], [AgentManager], [Authorization], and [App].
 // Apps reach IndexedDB and S3 through [IndexedDB] and [S3], which return the
 // capability interfaces rather than transport-specific client types.
 //

@@ -1,6 +1,6 @@
 import { createClient, type Client } from "@connectrpc/connect";
 
-import { AppInvoker as AppInvokerService } from "./internal/gen/v1/app_pb.ts";
+import { AppInvoker as AppService } from "./internal/gen/v1/app_pb.ts";
 import type { OperationResult, Request } from "./api.ts";
 import { structFromObject, type JsonObjectInput } from "./protocol.ts";
 import {
@@ -36,14 +36,34 @@ export interface AppGraphQLInvokeOptions extends AppInvokeOptions {
   /** GraphQL variables encoded as a JSON object. */
   variables?: JsonObjectInput;
 }
+
+/** Fakeable contract for app invocation calls. */
+export interface App {
+  invoke(
+    app: string,
+    operation: string,
+    params?: JsonObjectInput,
+    options?: AppInvokeOptions,
+  ): Promise<OperationResult>;
+  invokeGraphQL(
+    app: string,
+    document: string,
+    options?: AppGraphQLInvokeOptions,
+  ): Promise<OperationResult>;
+  exchangeInvocationToken(options?: {
+    grants?: AppInvocationGrant[];
+    ttlSeconds?: number;
+  }): Promise<string>;
+}
+
 /**
- * Client for invoking sibling app operations through the host.
+ * Transport-backed implementation for invoking sibling app operations.
  *
  * The constructor accepts either a Gestalt request or an invocation token. The
  * token is attached to every operation, GraphQL, and token-exchange request.
  */
-export class AppInvoker {
-  private readonly client: Client<typeof AppInvokerService>;
+class HostApp implements App {
+  private readonly client: Client<typeof AppService>;
   private readonly invocationToken: string;
 
   constructor(request: Request);
@@ -51,12 +71,12 @@ export class AppInvoker {
   constructor(requestOrToken: Request | string) {
     this.invocationToken = normalizeInvocationToken(requestOrToken);
 
-    const { target, token } = requireHostServiceTarget("app invoker");
+    const { target, token } = requireHostServiceTarget("app");
     const transport = createHostServiceGrpcTransport(
-      parseHostServiceTarget("app invoker", target),
+      parseHostServiceTarget("app", target),
       hostServiceMetadataInterceptors(token, ""),
     );
-    this.client = createClient(AppInvokerService, transport);
+    this.client = createClient(AppService, transport);
   }
 
   /** Invokes one operation on another app. */
@@ -89,7 +109,7 @@ export class AppInvoker {
   ): Promise<OperationResult> {
     const trimmedDocument = document.trim();
     if (!trimmedDocument) {
-      throw new Error("app invoker: graphql document is required");
+      throw new Error("app: graphql document is required");
     }
 
     const response = await this.client.invokeGraphQL({
@@ -136,6 +156,8 @@ export class AppInvoker {
   }
 }
 
+export const App = HostApp;
+
 function normalizeInvocationToken(requestOrToken: Request | string): string {
   const invocationToken =
     typeof requestOrToken === "string"
@@ -143,7 +165,7 @@ function normalizeInvocationToken(requestOrToken: Request | string): string {
       : requestOrToken.invocationToken;
   const trimmed = invocationToken.trim();
   if (!trimmed) {
-    throw new Error("app invoker: invocation token is not available");
+    throw new Error("app: invocation token is not available");
   }
   return trimmed;
 }

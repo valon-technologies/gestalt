@@ -14,7 +14,7 @@ use generated::v1::{
     AppInvocationGrant, AppInvokeGraphQlRequest, AppInvokeRequest, ExchangeInvocationTokenRequest,
     ExchangeInvocationTokenResponse, OperationResult,
 };
-use gestalt::{AppInvoker, InvocationGrant, InvokeOptions, Request};
+use gestalt::{App, InvocationGrant, InvokeOptions, Request};
 use prost_types::Struct;
 use serde::Serialize;
 use tokio::net::{TcpListener, UnixListener};
@@ -171,9 +171,9 @@ impl ProtoAppInvoker for TestAppInvokerServer {
 }
 
 #[tokio::test]
-async fn app_invoker_connects_over_unix_socket_and_sends_invocation_token() {
+async fn app_connects_over_unix_socket_and_sends_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
-    let socket = helpers::temp_socket("gestalt-rust-plugin-invoker.sock");
+    let socket = helpers::temp_socket("gestalt-rust-plugin-app.sock");
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
@@ -181,17 +181,15 @@ async fn app_invoker_connects_over_unix_socket_and_sends_invocation_token() {
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
-        serve_app_invoker(serve_server, &serve_socket)
+        serve_app(serve_server, &serve_socket)
             .await
-            .expect("serve app invoker");
+            .expect("serve app");
     });
 
     helpers::wait_for_socket(&socket).await;
 
-    let mut invoker = AppInvoker::connect("token-123")
-        .await
-        .expect("connect invoker");
-    let response = invoker
+    let mut app = App::connect("token-123").await.expect("connect app");
+    let response = app
         .invoke(
             "github",
             "get_issue",
@@ -221,7 +219,7 @@ async fn app_invoker_connects_over_unix_socket_and_sends_invocation_token() {
             "idempotency_key": "issue-42-create",
         })
     );
-    let err = invoker
+    let err = app
         .invoke("github", "bad", "not-object", None)
         .await
         .expect_err("non-object params should fail");
@@ -229,7 +227,7 @@ async fn app_invoker_connects_over_unix_socket_and_sends_invocation_token() {
         err.to_string().contains("must serialize to a JSON object"),
         "unexpected error: {err}"
     );
-    let err = invoker
+    let err = app
         .invoke("github", "bad", BadNumberParams { score: f64::NAN }, None)
         .await
         .expect_err("non-finite params should fail");
@@ -237,7 +235,7 @@ async fn app_invoker_connects_over_unix_socket_and_sends_invocation_token() {
         err.to_string().contains("finite"),
         "unexpected error: {err}"
     );
-    let err = invoker
+    let err = app
         .invoke(
             "github",
             "bad",
@@ -277,9 +275,9 @@ async fn app_invoker_connects_over_unix_socket_and_sends_invocation_token() {
 }
 
 #[tokio::test]
-async fn request_invoker_uses_embedded_invocation_token() {
+async fn request_app_uses_embedded_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
-    let socket = helpers::temp_socket("gestalt-rust-request-invoker.sock");
+    let socket = helpers::temp_socket("gestalt-rust-request-app.sock");
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
@@ -287,9 +285,9 @@ async fn request_invoker_uses_embedded_invocation_token() {
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
-        serve_app_invoker(serve_server, &serve_socket)
+        serve_app(serve_server, &serve_socket)
             .await
-            .expect("serve app invoker");
+            .expect("serve app");
     });
 
     helpers::wait_for_socket(&socket).await;
@@ -298,8 +296,8 @@ async fn request_invoker_uses_embedded_invocation_token() {
         invocation_token: "token-embedded".to_string(),
         ..Request::default()
     };
-    let mut invoker = request.invoker().await.expect("request invoker");
-    let response = invoker
+    let mut app = request.app().await.expect("request app");
+    let response = app
         .invoke("linear", "search_issues", serde_json::json!({}), None)
         .await
         .expect("invoke nested operation");
@@ -323,7 +321,7 @@ async fn request_invoker_uses_embedded_invocation_token() {
 }
 
 #[tokio::test]
-async fn app_invoker_connects_over_tcp_and_forwards_relay_token() {
+async fn app_connects_over_tcp_and_forwards_relay_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -340,13 +338,11 @@ async fn app_invoker_connects_over_tcp_and_forwards_relay_token() {
             .add_service(AppInvokerServer::new(serve_server))
             .serve_with_incoming(TcpListenerStream::new(listener))
             .await
-            .expect("serve app invoker over tcp");
+            .expect("serve app over tcp");
     });
 
-    let mut invoker = AppInvoker::connect("tcp-token-123")
-        .await
-        .expect("connect invoker");
-    let response = invoker
+    let mut app = App::connect("tcp-token-123").await.expect("connect app");
+    let response = app
         .invoke("github", "plain_text", serde_json::json!({}), None)
         .await
         .expect("invoke nested operation");
@@ -364,9 +360,9 @@ async fn app_invoker_connects_over_tcp_and_forwards_relay_token() {
 }
 
 #[tokio::test]
-async fn app_invoker_invokes_graphql_surface() {
+async fn app_invokes_graphql_surface() {
     let _env_lock = helpers::env_lock().lock().await;
-    let socket = helpers::temp_socket("gestalt-rust-graphql-invoker.sock");
+    let socket = helpers::temp_socket("gestalt-rust-graphql-app.sock");
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
@@ -374,17 +370,17 @@ async fn app_invoker_invokes_graphql_surface() {
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
-        serve_app_invoker(serve_server, &serve_socket)
+        serve_app(serve_server, &serve_socket)
             .await
-            .expect("serve app invoker");
+            .expect("serve app");
     });
 
     helpers::wait_for_socket(&socket).await;
 
-    let mut invoker = AppInvoker::connect("graphql-token-123")
+    let mut app = App::connect("graphql-token-123")
         .await
-        .expect("connect invoker");
-    let response = invoker
+        .expect("connect app");
+    let response = app
         .invoke_graphql(
             "linear",
             "  query Viewer($team: String!) { viewer(team: $team) { id } }  ",
@@ -438,9 +434,9 @@ async fn app_invoker_invokes_graphql_surface() {
 }
 
 #[tokio::test]
-async fn app_invoker_exchanges_invocation_tokens_with_grants_and_ttl() {
+async fn app_exchanges_invocation_tokens_with_grants_and_ttl() {
     let _env_lock = helpers::env_lock().lock().await;
-    let socket = helpers::temp_socket("gestalt-rust-exchange-invoker.sock");
+    let socket = helpers::temp_socket("gestalt-rust-exchange-app.sock");
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
@@ -448,17 +444,15 @@ async fn app_invoker_exchanges_invocation_tokens_with_grants_and_ttl() {
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
-        serve_app_invoker(serve_server, &serve_socket)
+        serve_app(serve_server, &serve_socket)
             .await
-            .expect("serve app invoker");
+            .expect("serve app");
     });
 
     helpers::wait_for_socket(&socket).await;
 
-    let mut invoker = AppInvoker::connect("parent-token-123")
-        .await
-        .expect("connect invoker");
-    let child_token = invoker
+    let mut app = App::connect("parent-token-123").await.expect("connect app");
+    let child_token = app
         .exchange_invocation_token(
             &[
                 InvocationGrant {
@@ -535,7 +529,7 @@ async fn app_invoker_exchanges_invocation_tokens_with_grants_and_ttl() {
     let _ = serve_task.await;
 }
 
-async fn serve_app_invoker(
+async fn serve_app(
     server: TestAppInvokerServer,
     socket: &Path,
 ) -> std::result::Result<(), tonic::transport::Error> {

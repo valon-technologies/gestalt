@@ -93,7 +93,7 @@ var (
 	invokeRequestContextOperation = gestalt.Operation[InvokeRequestContextInput, RequestContextOutput]{
 		ID:          "invoke_request_context",
 		Method:      http.MethodGet,
-		Description: "Invoke request_context through InvokerFromContext",
+		Description: "Invoke request_context through AppFromContext",
 		ReadOnly:    true,
 	}
 	Router = gestalt.MustRouter(
@@ -155,11 +155,10 @@ func (p *Provider) requestContext(_ context.Context, _ RequestContextInput, req 
 }
 
 func (p *Provider) invokeRequestContext(ctx context.Context, _ InvokeRequestContextInput, _ gestalt.Request) (gestalt.Response[RequestContextOutput], error) {
-	invoker, err := gestalt.InvokerFromContext(ctx)
+	invoker, err := gestalt.AppFromContext(ctx)
 	if err != nil {
 		return gestalt.Response[RequestContextOutput]{}, err
 	}
-	defer func() { _ = invoker.Close() }()
 
 	result, err := invoker.Invoke(ctx, "example", "request_context", nil, nil)
 	if err != nil {
