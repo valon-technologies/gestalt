@@ -57,7 +57,6 @@ const (
 	WorkflowOperationPutExecutionReference   = "put_execution_reference"
 	WorkflowOperationGetExecutionReference   = "get_execution_reference"
 	WorkflowOperationListExecutionReferences = "list_execution_references"
-	WorkflowOperationInvokeOperation         = "invoke_operation"
 
 	workflowTelemetrySourceProvider = "provider"
 )

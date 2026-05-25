@@ -62,8 +62,8 @@
 // Workflow structs use native Go values at provider boundaries; SDK adapters
 // own transport conversion.
 //
-// Host-service capabilities include [Cache], [WorkflowHost],
-// [Workflow], [AgentHost], [Agent], [Authorization], and [App].
+// Host-service capabilities include [Cache], [Workflow], [AgentHost],
+// [Agent], [Authorization], and [App].
 // Apps reach IndexedDB and S3 through [IndexedDB] and [S3], which return the
 // capability interfaces rather than transport-specific client types.
 //
@@ -86,8 +86,8 @@
 // AgentProvider, and RuntimeProvider.
 //
 // Use the host-service capabilities when provider code needs to call sibling
-// services exposed by gestaltd. These include Cache, WorkflowHost,
-// Workflow, AgentHost, Agent, Authorization, and App. Apps use
+// services exposed by gestaltd. These include Cache, Workflow, AgentHost,
+// Agent, Authorization, and App. Apps use
 // [IndexedDB] and [S3] for datastore and object storage bindings.
 //
 // AgentHost includes plain Go helper methods such as ExecuteToolForTurn,

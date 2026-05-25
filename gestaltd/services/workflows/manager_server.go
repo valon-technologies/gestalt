@@ -623,6 +623,13 @@ func workflowManagerSignalOrStartMetricDims(req *proto.SignalOrStartWorkflowProv
 	}
 }
 
+func workflowProtoTargetKind(target *proto.BoundWorkflowTarget) string {
+	if len(target.GetSteps()) > 0 {
+		return observability.WorkflowTargetKindSteps
+	}
+	return observability.WorkflowTargetKindUnknown
+}
+
 func workflowManagerScheduleUpsert(
 	providerName string,
 	cron string,

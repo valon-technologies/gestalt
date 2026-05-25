@@ -60,8 +60,8 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		"command": "/bin/temporal-provider",
 		"config":  map[string]any{"namespace": "default"},
 	}), []runtimehost.HostService{{
-		Name:           "workflow_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
+		Name:           "indexeddb",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.IndexedDB_ServiceDesc.ServiceName)},
 	}}, deps)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
@@ -70,7 +70,7 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 	provider := wrapWorkflowProviderWithRuntimeWorkers(control, workers)
 	result := &Result{ExtraWorkflows: []workflow.Provider{provider}}
 	t.Cleanup(func() { _ = provider.Close() })
-	assertPublicHostServicesVerified(t, deps.PublicHostServices, "workflow_host")
+	assertPublicHostServicesVerified(t, deps.PublicHostServices, "indexeddb")
 	executionRefs, ok := provider.(workflow.ExecutionReferenceStore)
 	if !ok {
 		t.Fatalf("hosted workflow pool does not expose ExecutionReferenceStore")
@@ -182,8 +182,8 @@ func TestHostedWorkflowProviderPoolStartupDoesNotBlockWorkflowReadiness(t *testi
 	workers, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 	}), []runtimehost.HostService{{
-		Name:           "workflow_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
+		Name:           "indexeddb",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.IndexedDB_ServiceDesc.ServiceName)},
 	}}, deps)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
@@ -241,8 +241,8 @@ func TestWorkflowConfigReconciliationWaitsForRuntimeWorkers(t *testing.T) {
 	workers, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 	}), []runtimehost.HostService{{
-		Name:           "workflow_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
+		Name:           "indexeddb",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.IndexedDB_ServiceDesc.ServiceName)},
 	}}, deps)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
@@ -404,8 +404,8 @@ func TestHostedWorkflowProviderPoolRejectsIncompatibleStartupSession(t *testing.
 	pool, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 	}), []runtimehost.HostService{{
-		Name:           "workflow_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
+		Name:           "indexeddb",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.IndexedDB_ServiceDesc.ServiceName)},
 	}}, deps)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
@@ -666,8 +666,8 @@ func TestHostedWorkflowProviderKeepsSharedRuntimeOpen(t *testing.T) {
 	workers, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 	}), []runtimehost.HostService{{
-		Name:           "workflow_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
+		Name:           "indexeddb",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.IndexedDB_ServiceDesc.ServiceName)},
 	}}, deps)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
@@ -709,8 +709,8 @@ func TestHostedWorkflowProviderPoolDrainWaitsBeforeClosingWorker(t *testing.T) {
 	pool, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 	}), []runtimehost.HostService{{
-		Name:           "workflow_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
+		Name:           "indexeddb",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.IndexedDB_ServiceDesc.ServiceName)},
 	}}, deps)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)

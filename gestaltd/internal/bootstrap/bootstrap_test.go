@@ -55,40 +55,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, providerName string, target coreworkflow.Target) string {
-	t.Helper()
-	var appStep *coreworkflow.AppCall
-	if len(target.Steps) > 0 {
-		appStep = target.Steps[0].App
-	}
-	if appStep == nil {
-		t.Fatalf("workflow target app step is nil: %#v", target)
-		return ""
-	}
-	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
-	if err != nil {
-		t.Fatalf("resolve workflow provider %q: %v", providerName, err)
-	}
-	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
-	if !ok {
-		t.Fatalf("workflow provider %q does not support execution refs", providerName)
-	}
-	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, appStep.Operation),
-		ProviderName: providerName,
-		Target:       target,
-		SubjectID:    "system:config",
-		Permissions: []core.AccessPermission{{
-			App:        appStep.Name,
-			Operations: []string{appStep.Operation},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("store workflow execution ref: %v", err)
-	}
-	return ref.ID
-}
-
 func bootstrapGraphQLStringPtr(value string) *string {
 	return &value
 }
@@ -1686,41 +1652,6 @@ func validFactories() *bootstrap.FactoryRegistry {
 	return f
 }
 
-func invokeWorkflowHostCallback(t *testing.T, hostServices []runtimehost.HostService, req *proto.InvokeWorkflowOperationRequest) (*proto.InvokeWorkflowOperationResponse, error) {
-	t.Helper()
-
-	if len(hostServices) != 1 {
-		t.Fatalf("workflow host services = %d, want 1", len(hostServices))
-	}
-	if hostServices[0].Register == nil {
-		t.Fatal("workflow host register func is nil")
-	}
-
-	lis := bufconn.Listen(1024 * 1024)
-	srv := grpc.NewServer()
-	hostServices[0].Register(srv)
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(func() {
-		srv.Stop()
-		_ = lis.Close()
-	})
-
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-
-	return proto.NewWorkflowHostClient(conn).InvokeOperation(context.Background(), req)
-}
-
 func invokeAgentHostCallback(t *testing.T, hostServices []runtimehost.HostService, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
 	t.Helper()
 
@@ -1962,15 +1893,6 @@ func requireCoreWorkflowAppStep(t *testing.T, target coreworkflow.Target) *corew
 func coreWorkflowAppStepTarget(appName, operation string) coreworkflow.Target {
 	return coreworkflow.Target{
 		Steps: []coreworkflow.Step{{ID: operation, App: &coreworkflow.AppCall{Name: appName, Operation: operation}}},
-	}
-}
-
-func protoWorkflowAppStepTarget(appName, operation string) *proto.BoundWorkflowTarget {
-	return &proto.BoundWorkflowTarget{
-		Steps: []*proto.WorkflowStep{{
-			Id:     operation,
-			Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{Name: appName, Operation: operation}},
-		}},
 	}
 }
 
@@ -2402,7 +2324,6 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 
 	factories := validFactories()
 	seen := make(map[string]struct{}, len(cfg.Providers.Workflow))
-	hostSockets := make(map[string]string, len(cfg.Providers.Workflow))
 	factories.Workflow = func(_ context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		var runtime struct {
 			Name string `yaml:"name"`
@@ -2411,10 +2332,9 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 			return nil, err
 		}
 		seen[runtime.Name] = struct{}{}
-		if len(hostServices) != 1 {
-			return nil, fmt.Errorf("workflow host services = %d, want 1", len(hostServices))
+		if len(hostServices) != 0 {
+			return nil, fmt.Errorf("workflow provider host services = %d, want none", len(hostServices))
 		}
-		hostSockets[name] = hostServices[0].Name
 		return &stubWorkflowProvider{}, nil
 	}
 
@@ -2431,9 +2351,6 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 	for _, name := range []string{"cleanup", "temporal"} {
 		if _, ok := seen[name]; !ok {
 			t.Fatalf("missing workflow runtime name %q in %v", name, seen)
-		}
-		if got := hostSockets[name]; got != "workflow_host" {
-			t.Fatalf("workflow host env for %q = %q, want %q", name, got, "workflow_host")
 		}
 	}
 }
@@ -4260,14 +4177,11 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	<-result.ProvidersReady
 
 	got := hostEnvs["basic"]
-	if len(got) != 2 {
-		t.Fatalf("workflow host services = %v, want 2 entries", got)
+	if len(got) != 1 {
+		t.Fatalf("workflow provider host services = %v, want 1 entry", got)
 	}
-	if got[0] != "workflow_host" {
-		t.Fatalf("workflow host env = %q, want %q", got[0], "workflow_host")
-	}
-	if got[1] != "indexeddb" {
-		t.Fatalf("workflow indexeddb env = %q, want %q", got[1], "indexeddb")
+	if got[0] != "indexeddb" {
+		t.Fatalf("workflow indexeddb env = %q, want %q", got[0], "indexeddb")
 	}
 }
 
@@ -4593,8 +4507,8 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	if len(hostEnv) != 2 {
-		t.Fatalf("workflow host services = %d, want 2", len(hostEnv))
+	if len(hostEnv) != 1 {
+		t.Fatalf("workflow provider host services = %d, want 1", len(hostEnv))
 	}
 
 	var indexedDBService runtimehost.HostService
@@ -6964,164 +6878,6 @@ func workflowConfigEventTriggerID(triggerKey string) string {
 	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
 }
 
-func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
-	t.Parallel()
-
-	var requestPath atomic.Value
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestPath.Store(r.URL.Path)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
-
-	cfg := workflowStartupCallbackConfig(srv.URL)
-	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
-		if name != "temporal" {
-			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
-		}
-		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-			SubjectID:   "system:config",
-			Integration: "roadmap",
-			Connection:  config.AppConnectionName,
-			Instance:    "default",
-			AccessToken: "workflow-bootstrap-token",
-		}); err != nil {
-			return nil, fmt.Errorf("store startup token: %w", err)
-		}
-		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowAppStepTarget("roadmap", "sync"))
-		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target:       protoWorkflowAppStepTarget("roadmap", "sync"),
-			ExecutionRef: executionRef,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("startup callback: %w", err)
-		}
-		if resp.GetStatus() != http.StatusOK || !strings.Contains(resp.GetBody(), `"finalStepId":"sync"`) {
-			return nil, fmt.Errorf("startup callback response = %#v", resp)
-		}
-		return &stubWorkflowProvider{}, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	if got, _ := requestPath.Load().(string); got != "/sync" {
-		t.Fatalf("request path = %q, want %q", got, "/sync")
-	}
-}
-
-func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
-	t.Parallel()
-
-	var requestPath atomic.Value
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestPath.Store(r.URL.Path)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
-
-	cfg := workflowStartupCallbackConfig(srv.URL)
-	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
-		if name != "temporal" {
-			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
-		}
-		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-			SubjectID:   "system:config",
-			Integration: "roadmap",
-			Connection:  config.AppConnectionName,
-			Instance:    "default",
-			AccessToken: "workflow-validate-token",
-		}); err != nil {
-			return nil, fmt.Errorf("store startup token: %w", err)
-		}
-		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowAppStepTarget("roadmap", "sync"))
-		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target:       protoWorkflowAppStepTarget("roadmap", "sync"),
-			ExecutionRef: executionRef,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("startup callback: %w", err)
-		}
-		if resp.GetStatus() != http.StatusOK || !strings.Contains(resp.GetBody(), `"finalStepId":"sync"`) {
-			return nil, fmt.Errorf("startup callback response = %#v", resp)
-		}
-		return &stubWorkflowProvider{}, nil
-	}
-
-	if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
-		t.Fatalf("Validate: %v", err)
-	}
-	if got, _ := requestPath.Load().(string); got != "/sync" {
-		t.Fatalf("request path = %q, want %q", got, "/sync")
-	}
-}
-
-func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
-
-	cfg := workflowStartupCallbackConfig(srv.URL)
-	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
-	cfg.Apps["roadmap"].AuthorizationPolicy = "roadmap-policy"
-	cfg.Apps["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
-	cfg.Authorization.Policies = map[string]config.SubjectPolicyDef{
-		"roadmap-policy": {
-			Members: []config.SubjectPolicyMemberDef{{
-				SubjectID: principal.UserSubjectID("viewer-user"),
-				Role:      "viewer",
-			}},
-		},
-	}
-
-	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
-		if name != "temporal" {
-			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
-		}
-		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-			SubjectID:   "system:config",
-			Integration: "roadmap",
-			Connection:  config.AppConnectionName,
-			Instance:    "default",
-			AccessToken: "workflow-startup-token",
-		}); err != nil {
-			return nil, fmt.Errorf("store startup token: %w", err)
-		}
-		_, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target: protoWorkflowAppStepTarget("roadmap", "sync"),
-		})
-		if err == nil {
-			return nil, fmt.Errorf("expected startup callback execution_ref failure")
-		}
-		if status.Code(err) != codes.InvalidArgument {
-			return nil, fmt.Errorf("startup callback status = %s, want %s", status.Code(err), codes.InvalidArgument)
-		}
-		return &stubWorkflowProvider{}, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-}
-
 func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	t.Parallel()
 
@@ -7615,13 +7371,15 @@ func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedAp
 	})
 
 	recorder := &recordingWorkflowProvider{}
-	var hostServices []runtimehost.HostService
+	var workflowRuntime interface {
+		Invoke(context.Context, coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error)
+	}
 	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, services []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		hostServices = append([]runtimehost.HostService(nil), services...)
+		workflowRuntime = deps.WorkflowRuntime
 		return recorder, nil
 	}
 
@@ -7639,22 +7397,26 @@ func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedAp
 	if executionRef == "" {
 		t.Fatal("execution ref is empty")
 	}
-	resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-		Target:       protoWorkflowAppStepTarget("roadmap", "sync"),
+	if workflowRuntime == nil {
+		t.Fatal("workflow runtime was not captured")
+	}
+	resp, err := workflowRuntime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		Target:       coreWorkflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: executionRef,
 	})
 	if err != nil {
-		t.Fatalf("invoke workflow host callback: %v", err)
+		t.Fatalf("Invoke: %v", err)
 	}
-	if resp.GetStatus() != http.StatusOK || !strings.Contains(resp.GetBody(), `"finalStepId":"sync"`) {
-		t.Fatalf("workflow host callback response = %#v", resp)
+	if resp.Status != http.StatusOK || !strings.Contains(resp.Body, `"finalStepId":"sync"`) {
+		t.Fatalf("workflow invoke response = %#v", resp)
 	}
 	if got, _ := requestPath.Load().(string); got != "/sync" {
 		t.Fatalf("request path = %q, want %q", got, "/sync")
 	}
 }
 
-func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testing.T) {
+func TestValidateManagedWorkflowStartupInvokeUsesPreparedProviderStub(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -7704,7 +7466,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 			})
 
 			factories := validFactories()
-			factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+			factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
 				if name != "temporal" {
 					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 				}
@@ -7717,16 +7479,24 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				}); err != nil {
 					return nil, fmt.Errorf("store startup token: %w", err)
 				}
-				executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowAppStepTarget("roadmap", "sync"))
-				resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-					Target:       protoWorkflowAppStepTarget("roadmap", "sync"),
-					ExecutionRef: executionRef,
-				})
-				if err != nil {
-					return nil, fmt.Errorf("startup callback: %w", err)
+				req := coreworkflow.InvokeOperationRequest{
+					ProviderName: name,
+					Target:       coreWorkflowAppStepTarget("roadmap", "sync"),
 				}
-				if resp.GetStatus() != http.StatusOK || !strings.Contains(resp.GetBody(), `"finalStepId":"sync"`) {
-					return nil, fmt.Errorf("startup callback response = %#v", resp)
+				configPrincipal := &principal.Principal{
+					SubjectID:           "system:config",
+					CredentialSubjectID: "system:config",
+					TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
+						App:        "roadmap",
+						Operations: []string{"sync"},
+					}}),
+				}
+				resp, err := deps.WorkflowRuntime.Invoke(principal.WithPrincipal(context.Background(), configPrincipal), req)
+				if err != nil {
+					return nil, fmt.Errorf("workflow runtime invoke: %w", err)
+				}
+				if resp.Status != http.StatusOK || !strings.Contains(resp.Body, `"finalStepId":"sync"`) {
+					return nil, fmt.Errorf("workflow runtime response = %#v", resp)
 				}
 				return &stubWorkflowProvider{}, nil
 			}

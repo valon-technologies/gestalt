@@ -260,19 +260,19 @@ func registerPublicRuntimeHostServices(providerName string, hostServices []runti
 	}, false)
 }
 
-type workflowHostServiceSessionVerifier struct{}
+type workflowProviderHostServiceSessionVerifier struct{}
 
-func (workflowHostServiceSessionVerifier) VerifyHostServiceSession(context.Context, string) error {
+func (workflowProviderHostServiceSessionVerifier) VerifyHostServiceSession(context.Context, string) error {
 	// Non-runtime workflow providers do not allocate runtime sessions; the
 	// signed relay token is scoped by provider, service, and method.
 	return nil
 }
 
-func registerPublicWorkflowHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps) (func(), error) {
+func registerPublicWorkflowProviderHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps) (func(), error) {
 	if !hostCanRelayRuntimeHostServices(deps) {
 		return nil, nil
 	}
-	return registerVerifiedPublicHostServices(providerName, hostServices, deps, workflowHostServiceSessionVerifier{}, true)
+	return registerVerifiedPublicHostServices(providerName, hostServices, deps, workflowProviderHostServiceSessionVerifier{}, true)
 }
 
 func registerVerifiedPublicHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, verifier runtimehost.PublicHostServiceSessionVerifier, skipNilRegister bool) (func(), error) {
