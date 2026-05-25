@@ -696,34 +696,6 @@ class PublishWorkflowProviderEventRequest(_message.Message):
     provider_name: str
     def __init__(self, app_name: _Optional[str] = ..., event: _Optional[_Union[WorkflowEvent, _Mapping]] = ..., published_by: _Optional[_Union[WorkflowActor, _Mapping]] = ..., invocation_token: _Optional[str] = ..., provider_name: _Optional[str] = ...) -> None: ...
 
-class InvokeWorkflowOperationRequest(_message.Message):
-    __slots__ = ()
-    TARGET_FIELD_NUMBER: _ClassVar[int]
-    RUN_ID_FIELD_NUMBER: _ClassVar[int]
-    TRIGGER_FIELD_NUMBER: _ClassVar[int]
-    INPUT_FIELD_NUMBER: _ClassVar[int]
-    METADATA_FIELD_NUMBER: _ClassVar[int]
-    CREATED_BY_FIELD_NUMBER: _ClassVar[int]
-    EXECUTION_REF_FIELD_NUMBER: _ClassVar[int]
-    SIGNALS_FIELD_NUMBER: _ClassVar[int]
-    target: BoundWorkflowTarget
-    run_id: str
-    trigger: WorkflowRunTrigger
-    input: _struct_pb2.Struct
-    metadata: _struct_pb2.Struct
-    created_by: WorkflowActor
-    execution_ref: str
-    signals: _containers.RepeatedCompositeFieldContainer[WorkflowSignal]
-    def __init__(self, target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., run_id: _Optional[str] = ..., trigger: _Optional[_Union[WorkflowRunTrigger, _Mapping]] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by: _Optional[_Union[WorkflowActor, _Mapping]] = ..., execution_ref: _Optional[str] = ..., signals: _Optional[_Iterable[_Union[WorkflowSignal, _Mapping]]] = ...) -> None: ...
-
-class InvokeWorkflowOperationResponse(_message.Message):
-    __slots__ = ()
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    BODY_FIELD_NUMBER: _ClassVar[int]
-    status: int
-    body: str
-    def __init__(self, status: _Optional[int] = ..., body: _Optional[str] = ...) -> None: ...
-
 class CreateWorkflowProviderDefinitionRequest(_message.Message):
     __slots__ = ()
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
