@@ -43,7 +43,7 @@ type embeddedIssueParams struct {
 }
 
 type pluginAppTransportHarness struct {
-	proto.UnimplementedAppInvokerServer
+	proto.UnimplementedAppServer
 
 	mu       sync.Mutex
 	requests []*proto.AppInvokeRequest
@@ -110,7 +110,7 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 
 	harness := &pluginAppTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterAppInvokerServer(srv, harness)
+	proto.RegisterAppServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()

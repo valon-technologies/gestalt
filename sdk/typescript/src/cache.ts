@@ -66,7 +66,7 @@ export interface CacheProviderOptions extends ProviderBaseOptions {
 }
 
 /**
- * Client for invoking a host-provided cache over the Gestalt transport.
+ * Client for invoking a provider-backed cache over the Gestalt transport.
  *
  * @example
  * ```ts
@@ -76,7 +76,7 @@ export interface CacheProviderOptions extends ProviderBaseOptions {
  * await cache.set("session", new TextEncoder().encode("hello"));
  * ```
  */
-class HostCache implements Cache {
+class RemoteCache implements Cache {
   private readonly client: ConnectClient<typeof CacheService>;
 
   constructor(name?: string) {
@@ -160,7 +160,7 @@ class HostCache implements Cache {
   }
 }
 
-export const Cache = HostCache;
+export const Cache = RemoteCache;
 
 /**
  * Cache provider implementation consumed by the Gestalt runtime.

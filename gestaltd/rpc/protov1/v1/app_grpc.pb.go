@@ -316,177 +316,177 @@ var AppProvider_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	AppInvoker_ExchangeInvocationToken_FullMethodName = "/gestalt.provider.v1.AppInvoker/ExchangeInvocationToken"
-	AppInvoker_Invoke_FullMethodName                  = "/gestalt.provider.v1.AppInvoker/Invoke"
-	AppInvoker_InvokeGraphQL_FullMethodName           = "/gestalt.provider.v1.AppInvoker/InvokeGraphQL"
+	App_ExchangeInvocationToken_FullMethodName = "/gestalt.provider.v1.App/ExchangeInvocationToken"
+	App_Invoke_FullMethodName                  = "/gestalt.provider.v1.App/Invoke"
+	App_InvokeGraphQL_FullMethodName           = "/gestalt.provider.v1.App/InvokeGraphQL"
 )
 
-// AppInvokerClient is the client API for AppInvoker service.
+// AppClient is the client API for App service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type AppInvokerClient interface {
+type AppClient interface {
 	ExchangeInvocationToken(ctx context.Context, in *ExchangeInvocationTokenRequest, opts ...grpc.CallOption) (*ExchangeInvocationTokenResponse, error)
 	Invoke(ctx context.Context, in *AppInvokeRequest, opts ...grpc.CallOption) (*OperationResult, error)
 	InvokeGraphQL(ctx context.Context, in *AppInvokeGraphQLRequest, opts ...grpc.CallOption) (*OperationResult, error)
 }
 
-type appInvokerClient struct {
+type appClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewAppInvokerClient(cc grpc.ClientConnInterface) AppInvokerClient {
-	return &appInvokerClient{cc}
+func NewAppClient(cc grpc.ClientConnInterface) AppClient {
+	return &appClient{cc}
 }
 
-func (c *appInvokerClient) ExchangeInvocationToken(ctx context.Context, in *ExchangeInvocationTokenRequest, opts ...grpc.CallOption) (*ExchangeInvocationTokenResponse, error) {
+func (c *appClient) ExchangeInvocationToken(ctx context.Context, in *ExchangeInvocationTokenRequest, opts ...grpc.CallOption) (*ExchangeInvocationTokenResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ExchangeInvocationTokenResponse)
-	err := c.cc.Invoke(ctx, AppInvoker_ExchangeInvocationToken_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, App_ExchangeInvocationToken_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *appInvokerClient) Invoke(ctx context.Context, in *AppInvokeRequest, opts ...grpc.CallOption) (*OperationResult, error) {
+func (c *appClient) Invoke(ctx context.Context, in *AppInvokeRequest, opts ...grpc.CallOption) (*OperationResult, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(OperationResult)
-	err := c.cc.Invoke(ctx, AppInvoker_Invoke_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, App_Invoke_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *appInvokerClient) InvokeGraphQL(ctx context.Context, in *AppInvokeGraphQLRequest, opts ...grpc.CallOption) (*OperationResult, error) {
+func (c *appClient) InvokeGraphQL(ctx context.Context, in *AppInvokeGraphQLRequest, opts ...grpc.CallOption) (*OperationResult, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(OperationResult)
-	err := c.cc.Invoke(ctx, AppInvoker_InvokeGraphQL_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, App_InvokeGraphQL_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// AppInvokerServer is the server API for AppInvoker service.
-// All implementations must embed UnimplementedAppInvokerServer
+// AppServer is the server API for App service.
+// All implementations must embed UnimplementedAppServer
 // for forward compatibility.
-type AppInvokerServer interface {
+type AppServer interface {
 	ExchangeInvocationToken(context.Context, *ExchangeInvocationTokenRequest) (*ExchangeInvocationTokenResponse, error)
 	Invoke(context.Context, *AppInvokeRequest) (*OperationResult, error)
 	InvokeGraphQL(context.Context, *AppInvokeGraphQLRequest) (*OperationResult, error)
-	mustEmbedUnimplementedAppInvokerServer()
+	mustEmbedUnimplementedAppServer()
 }
 
-// UnimplementedAppInvokerServer must be embedded to have
+// UnimplementedAppServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedAppInvokerServer struct{}
+type UnimplementedAppServer struct{}
 
-func (UnimplementedAppInvokerServer) ExchangeInvocationToken(context.Context, *ExchangeInvocationTokenRequest) (*ExchangeInvocationTokenResponse, error) {
+func (UnimplementedAppServer) ExchangeInvocationToken(context.Context, *ExchangeInvocationTokenRequest) (*ExchangeInvocationTokenResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExchangeInvocationToken not implemented")
 }
-func (UnimplementedAppInvokerServer) Invoke(context.Context, *AppInvokeRequest) (*OperationResult, error) {
+func (UnimplementedAppServer) Invoke(context.Context, *AppInvokeRequest) (*OperationResult, error) {
 	return nil, status.Error(codes.Unimplemented, "method Invoke not implemented")
 }
-func (UnimplementedAppInvokerServer) InvokeGraphQL(context.Context, *AppInvokeGraphQLRequest) (*OperationResult, error) {
+func (UnimplementedAppServer) InvokeGraphQL(context.Context, *AppInvokeGraphQLRequest) (*OperationResult, error) {
 	return nil, status.Error(codes.Unimplemented, "method InvokeGraphQL not implemented")
 }
-func (UnimplementedAppInvokerServer) mustEmbedUnimplementedAppInvokerServer() {}
-func (UnimplementedAppInvokerServer) testEmbeddedByValue()                    {}
+func (UnimplementedAppServer) mustEmbedUnimplementedAppServer() {}
+func (UnimplementedAppServer) testEmbeddedByValue()             {}
 
-// UnsafeAppInvokerServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to AppInvokerServer will
+// UnsafeAppServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AppServer will
 // result in compilation errors.
-type UnsafeAppInvokerServer interface {
-	mustEmbedUnimplementedAppInvokerServer()
+type UnsafeAppServer interface {
+	mustEmbedUnimplementedAppServer()
 }
 
-func RegisterAppInvokerServer(s grpc.ServiceRegistrar, srv AppInvokerServer) {
-	// If the following call panics, it indicates UnimplementedAppInvokerServer was
+func RegisterAppServer(s grpc.ServiceRegistrar, srv AppServer) {
+	// If the following call panics, it indicates UnimplementedAppServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&AppInvoker_ServiceDesc, srv)
+	s.RegisterService(&App_ServiceDesc, srv)
 }
 
-func _AppInvoker_ExchangeInvocationToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _App_ExchangeInvocationToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExchangeInvocationTokenRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AppInvokerServer).ExchangeInvocationToken(ctx, in)
+		return srv.(AppServer).ExchangeInvocationToken(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AppInvoker_ExchangeInvocationToken_FullMethodName,
+		FullMethod: App_ExchangeInvocationToken_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppInvokerServer).ExchangeInvocationToken(ctx, req.(*ExchangeInvocationTokenRequest))
+		return srv.(AppServer).ExchangeInvocationToken(ctx, req.(*ExchangeInvocationTokenRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AppInvoker_Invoke_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _App_Invoke_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AppInvokeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AppInvokerServer).Invoke(ctx, in)
+		return srv.(AppServer).Invoke(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AppInvoker_Invoke_FullMethodName,
+		FullMethod: App_Invoke_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppInvokerServer).Invoke(ctx, req.(*AppInvokeRequest))
+		return srv.(AppServer).Invoke(ctx, req.(*AppInvokeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AppInvoker_InvokeGraphQL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _App_InvokeGraphQL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AppInvokeGraphQLRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AppInvokerServer).InvokeGraphQL(ctx, in)
+		return srv.(AppServer).InvokeGraphQL(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AppInvoker_InvokeGraphQL_FullMethodName,
+		FullMethod: App_InvokeGraphQL_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppInvokerServer).InvokeGraphQL(ctx, req.(*AppInvokeGraphQLRequest))
+		return srv.(AppServer).InvokeGraphQL(ctx, req.(*AppInvokeGraphQLRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// AppInvoker_ServiceDesc is the grpc.ServiceDesc for AppInvoker service.
+// App_ServiceDesc is the grpc.ServiceDesc for App service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var AppInvoker_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.provider.v1.AppInvoker",
-	HandlerType: (*AppInvokerServer)(nil),
+var App_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.provider.v1.App",
+	HandlerType: (*AppServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "ExchangeInvocationToken",
-			Handler:    _AppInvoker_ExchangeInvocationToken_Handler,
+			Handler:    _App_ExchangeInvocationToken_Handler,
 		},
 		{
 			MethodName: "Invoke",
-			Handler:    _AppInvoker_Invoke_Handler,
+			Handler:    _App_Invoke_Handler,
 		},
 		{
 			MethodName: "InvokeGraphQL",
-			Handler:    _AppInvoker_InvokeGraphQL_Handler,
+			Handler:    _App_InvokeGraphQL_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

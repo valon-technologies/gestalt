@@ -1,4 +1,4 @@
-package appinvoker
+package appaccess
 
 import (
 	"context"
@@ -15,8 +15,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type AppInvokerServer struct {
-	proto.UnimplementedAppInvokerServer
+type AppServer struct {
+	proto.UnimplementedAppServer
 
 	pluginName string
 	invoker    invocation.Invoker
@@ -24,8 +24,8 @@ type AppInvokerServer struct {
 	allowed    InvocationGrants
 }
 
-func NewAppInvokerServer(pluginName string, deps []invocation.AppInvocationDependency, invoker invocation.Invoker, tokens *InvocationTokenManager) *AppInvokerServer {
-	return &AppInvokerServer{
+func NewAppServer(pluginName string, deps []invocation.AppInvocationDependency, invoker invocation.Invoker, tokens *InvocationTokenManager) *AppServer {
+	return &AppServer{
 		pluginName: pluginName,
 		invoker:    invoker,
 		tokens:     tokens,
@@ -33,11 +33,11 @@ func NewAppInvokerServer(pluginName string, deps []invocation.AppInvocationDepen
 	}
 }
 
-func NewServer(pluginName string, deps []invocation.AppInvocationDependency, invoker invocation.Invoker, tokens *InvocationTokenManager) proto.AppInvokerServer {
-	return NewAppInvokerServer(pluginName, deps, invoker, tokens)
+func NewServer(pluginName string, deps []invocation.AppInvocationDependency, invoker invocation.Invoker, tokens *InvocationTokenManager) proto.AppServer {
+	return NewAppServer(pluginName, deps, invoker, tokens)
 }
 
-func (s *AppInvokerServer) ExchangeInvocationToken(_ context.Context, req *proto.ExchangeInvocationTokenRequest) (*proto.ExchangeInvocationTokenResponse, error) {
+func (s *AppServer) ExchangeInvocationToken(_ context.Context, req *proto.ExchangeInvocationTokenRequest) (*proto.ExchangeInvocationTokenResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -63,7 +63,7 @@ func (s *AppInvokerServer) ExchangeInvocationToken(_ context.Context, req *proto
 	}, nil
 }
 
-func (s *AppInvokerServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*proto.OperationResult, error) {
+func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*proto.OperationResult, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -105,7 +105,7 @@ func (s *AppInvokerServer) Invoke(ctx context.Context, req *proto.AppInvokeReque
 	}, nil
 }
 
-func (s *AppInvokerServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraphQLRequest) (*proto.OperationResult, error) {
+func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraphQLRequest) (*proto.OperationResult, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -156,21 +156,21 @@ func (s *AppInvokerServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvo
 	}, nil
 }
 
-func (s *AppInvokerServer) allows(plugin, operation string) bool {
+func (s *AppServer) allows(plugin, operation string) bool {
 	if s == nil {
 		return false
 	}
 	return allowsOperation(s.allowed, plugin, operation)
 }
 
-func (s *AppInvokerServer) allowsSurface(plugin, surface string) bool {
+func (s *AppServer) allowsSurface(plugin, surface string) bool {
 	if s == nil {
 		return false
 	}
 	return allowsSurface(s.allowed, plugin, surface)
 }
 
-func (s *AppInvokerServer) tokenContextForInvoke(req *proto.AppInvokeRequest, targetApp, targetOperation string) (invocationTokenContext, error) {
+func (s *AppServer) tokenContextForInvoke(req *proto.AppInvokeRequest, targetApp, targetOperation string) (invocationTokenContext, error) {
 	invocationToken := strings.TrimSpace(req.GetInvocationToken())
 	if invocationToken == "" {
 		return invocationTokenContext{}, status.Error(codes.FailedPrecondition, "invocation token is required")
@@ -189,7 +189,7 @@ func (s *AppInvokerServer) tokenContextForInvoke(req *proto.AppInvokeRequest, ta
 	return tokenCtx, nil
 }
 
-func (s *AppInvokerServer) tokenContextForSurfaceInvoke(req *proto.AppInvokeGraphQLRequest, targetApp, surface string) (invocationTokenContext, error) {
+func (s *AppServer) tokenContextForSurfaceInvoke(req *proto.AppInvokeGraphQLRequest, targetApp, surface string) (invocationTokenContext, error) {
 	invocationToken := strings.TrimSpace(req.GetInvocationToken())
 	if invocationToken == "" {
 		return invocationTokenContext{}, status.Error(codes.FailedPrecondition, "invocation token is required")

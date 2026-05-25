@@ -174,7 +174,7 @@ type Deps struct {
 	AgentManager          agentmanager.Service
 	Egress                EgressDeps
 	AuthorizationProvider core.AuthorizationProvider
-	AppInvoker            invocation.Invoker
+	AppInvocation         invocation.Invoker
 	Runtime               runtimeprovider.Provider
 	RuntimeRegistry       *runtimeRegistry
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
@@ -240,7 +240,7 @@ type Result struct {
 	ConnectionAuth        func() map[string]map[string]OAuthHandler
 	ManualConnectionAuth  func() map[string]map[string]ManualTokenExchanger
 	Invoker               invocation.Invoker
-	AppInvoker            invocation.Invoker
+	AppInvocation         invocation.Invoker
 	CapabilityLister      invocation.CapabilityLister
 	AuditSink             core.AuditSink
 	SecretManager         core.SecretManager
@@ -958,7 +958,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = store.Close()
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, svcErr)
 	}
-	hostIndexedDBs := map[string]indexeddb.IndexedDB{selectedIndexedDBName: store}
+	indexedDBs := map[string]indexeddb.IndexedDB{selectedIndexedDBName: store}
 	var extraIndexedDBs []indexeddb.IndexedDB
 	for name, entry := range cfg.Providers.IndexedDB {
 		if name == selectedIndexedDBName || entry == nil {
@@ -971,7 +971,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 			return nil, fmt.Errorf("bootstrap: indexeddb from resource %q: %w", name, err)
 		}
 		ds = metricutil.InstrumentIndexedDB(ds, name)
-		hostIndexedDBs[name] = ds
+		indexedDBs[name] = ds
 		extraIndexedDBs = append(extraIndexedDBs, ds)
 	}
 	closeSvc := true
@@ -1008,7 +1008,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 
 	deps.Egress = newEgressDeps(cfg)
 	deps.Services = svc
-	deps.IndexedDBs = hostIndexedDBs
+	deps.IndexedDBs = indexedDBs
 	deps.SelectedIndexedDBName = selectedIndexedDBName
 	deps.IndexedDBDefs = cfg.Providers.IndexedDB
 	deps.IndexedDBFactory = factories.IndexedDB
@@ -1121,7 +1121,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	agentManager := newLazyAgentManager()
 	workflowTools := newWorkflowSystemTools(workflowManager, prepared.Deps.WorkflowRuntime)
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	prepared.Deps.AppInvoker = pluginInvoker
+	prepared.Deps.AppInvocation = pluginInvoker
 	prepared.Deps.WorkflowManager = workflowManager
 	prepared.Deps.AgentManager = agentManager
 	prepared.Deps.PublicHostServices = publicHostServices
@@ -1297,7 +1297,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		ConnectionAuth:               connAuthResolver,
 		ManualConnectionAuth:         manualConnAuthResolver,
 		Invoker:                      sharedInvoker,
-		AppInvoker:                   pluginInvoker,
+		AppInvocation:                pluginInvoker,
 		CapabilityLister:             sharedInvoker,
 		AuditSink:                    audit,
 		SecretManager:                prepared.SecretManager,
@@ -1751,7 +1751,7 @@ func buildAuthorization(cfg *config.Config, factories *FactoryRegistry, deps Dep
 			return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 		}
 	}
-	provider, err := factories.Authorization(node, hostIndexedDBServicesFromDeps(deps, indexeddbservice.ServerOptions{}, ""), deps)
+	provider, err := factories.Authorization(node, indexedDBServicesFromDeps(deps, indexeddbservice.ServerOptions{}, ""), deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 	}
@@ -1854,11 +1854,11 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		return nil, fmt.Errorf("workflow provider: %w", err)
 	}
 	if effectiveIndexedDB.Enabled {
-		indexedDBHostServices, indexedDBCleanup, err := buildIndexedDBHostServices(name, name, effectiveIndexedDB, deps)
+		indexedDBServices, indexedDBCleanup, err := buildIndexedDBServices(name, name, effectiveIndexedDB, deps)
 		if err != nil {
 			return nil, fmt.Errorf("workflow provider: %w", err)
 		}
-		hostServices = append(hostServices, indexedDBHostServices...)
+		hostServices = append(hostServices, indexedDBServices...)
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
 	if !entry.UsesRuntimePlacement() {
@@ -1931,11 +1931,11 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		return nil, fmt.Errorf("agent provider: %w", err)
 	}
 	if effectiveIndexedDB.Enabled {
-		indexedDBHostServices, indexedDBCleanup, err := buildIndexedDBHostServices(name, name, effectiveIndexedDB, deps)
+		indexedDBServices, indexedDBCleanup, err := buildIndexedDBServices(name, name, effectiveIndexedDB, deps)
 		if err != nil {
 			return nil, fmt.Errorf("agent provider: %w", err)
 		}
-		hostServices = append(hostServices, indexedDBHostServices...)
+		hostServices = append(hostServices, indexedDBServices...)
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
 	var (

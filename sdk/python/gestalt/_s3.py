@@ -391,7 +391,7 @@ class S3ReadStream:
 
 
 class S3:
-    """Client for a host-provided Gestalt S3 runtime."""
+    """Client for a provider-backed Gestalt S3 runtime."""
 
     def __init__(self, name: str | None = None) -> None:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")

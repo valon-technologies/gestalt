@@ -155,8 +155,7 @@ pub struct ExchangeInvocationTokenResponse {
     #[prost(string, tag = "1")]
     pub invocation_token: ::prost::alloc::string::String,
 }
-/// AppInvokeRequest invokes a declared operation on another app through
-/// the host-side invoker service.
+/// AppInvokeRequest invokes a declared operation on another app through Gestalt.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AppInvokeRequest {
     #[prost(string, tag = "2")]
@@ -175,7 +174,7 @@ pub struct AppInvokeRequest {
     pub idempotency_key: ::prost::alloc::string::String,
 }
 /// AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
-/// through the host-side invoker service.
+/// through Gestalt.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AppInvokeGraphQlRequest {
     #[prost(string, tag = "1")]

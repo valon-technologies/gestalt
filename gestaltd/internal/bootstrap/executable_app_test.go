@@ -43,7 +43,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
-	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -611,7 +611,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req runtimeprovider.StartApp
 			case "invoke_plugin":
 				targetApp, _ := params["app"].(string)
 				targetOperation, _ := params["operation"].(string)
-				envelope, err := fakeHostedInvokePlugin(targetApp, targetOperation, appinvokerservice.InvocationTokenFromContext(ctx), env)
+				envelope, err := fakeHostedInvokePlugin(targetApp, targetOperation, appaccessservice.InvocationTokenFromContext(ctx), env)
 				if err != nil {
 					envelope = invokePluginEnvelope{
 						OK:              false,
@@ -626,7 +626,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req runtimeprovider.StartApp
 				}
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "workflow_manager_roundtrip":
-				record, err := fakeHostedWorkflowManagerRoundTrip(appinvokerservice.InvocationTokenFromContext(ctx), env)
+				record, err := fakeHostedWorkflowManagerRoundTrip(appaccessservice.InvocationTokenFromContext(ctx), env)
 				if err != nil {
 					return nil, err
 				}
@@ -636,7 +636,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req runtimeprovider.StartApp
 				}
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "agent_manager_roundtrip":
-				record, err := fakeHostedAgentManagerRoundTrip(appinvokerservice.InvocationTokenFromContext(ctx), env)
+				record, err := fakeHostedAgentManagerRoundTrip(appaccessservice.InvocationTokenFromContext(ctx), env)
 				if err != nil {
 					return nil, err
 				}
@@ -1213,7 +1213,7 @@ func fakeHostedInvokePlugin(targetApp, targetOperation, invocationToken string, 
 	ctx, cancel := fakeHostedHostServiceContext(token, "")
 	defer cancel()
 
-	resp, err := proto.NewAppInvokerClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
+	resp, err := proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
 		InvocationToken: invocationToken,
 		App:             targetApp,
 		Operation:       targetOperation,
@@ -3152,7 +3152,7 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey: secret,
-		AppInvoker:    bridge,
+		AppInvocation: bridge,
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -3283,7 +3283,7 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey: secret,
-		AppInvoker:    bridge,
+		AppInvocation: bridge,
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -3780,7 +3780,7 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 
-	makeConfig := func(indexedDB *config.HostIndexedDBBindingConfig) *config.Config {
+	makeConfig := func(indexedDB *config.IndexedDBBindingConfig) *config.Config {
 		return &config.Config{
 			Apps: map[string]*config.ProviderEntry{
 				"echoext": {
@@ -3805,7 +3805,7 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 		},
 	}
 
-	checkEnv := func(t *testing.T, indexedDB *config.HostIndexedDBBindingConfig, envName string) bool {
+	checkEnv := func(t *testing.T, indexedDB *config.IndexedDBBindingConfig, envName string) bool {
 		t.Helper()
 		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(indexedDB), NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 			SelectedIndexedDBName: "main",
@@ -3840,16 +3840,16 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 	if got := checkEnv(t, nil, runtimehost.DefaultHostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set when app omits indexeddb and inherits the host selection")
 	}
-	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{}, runtimehost.DefaultHostServiceSocketEnv); !got {
+	if got := checkEnv(t, &config.IndexedDBBindingConfig{}, runtimehost.DefaultHostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set when app indexeddb is explicitly empty")
 	}
-	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{Provider: "archive"}, runtimehost.DefaultHostServiceSocketEnv); !got {
+	if got := checkEnv(t, &config.IndexedDBBindingConfig{Provider: "archive"}, runtimehost.DefaultHostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set when app explicitly selects one indexeddb provider")
 	}
 	if got := checkEnv(t, nil, "GESTALT_INDEXEDDB_SOCKET_MAIN"); got {
 		t.Fatal("named IndexedDB env should not be set for inherited app indexeddb access")
 	}
-	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{Provider: "archive"}, "GESTALT_INDEXEDDB_SOCKET_ARCHIVE"); got {
+	if got := checkEnv(t, &config.IndexedDBBindingConfig{Provider: "archive"}, "GESTALT_INDEXEDDB_SOCKET_ARCHIVE"); got {
 		t.Fatal("named IndexedDB env should not be set when apps expose a single indexeddb socket")
 	}
 }
@@ -6598,7 +6598,7 @@ func TestRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapability
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Runtime:              &config.RuntimePlacementConfig{},
-				IndexedDB:            &config.HostIndexedDBBindingConfig{ObjectStores: []string{"tasks"}},
+				IndexedDB:            &config.IndexedDBBindingConfig{ObjectStores: []string{"tasks"}},
 			},
 		},
 	}
@@ -6717,7 +6717,7 @@ func TestRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) {
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Runtime:              &config.RuntimePlacementConfig{},
-				IndexedDB:            &config.HostIndexedDBBindingConfig{ObjectStores: []string{"tasks"}},
+				IndexedDB:            &config.IndexedDBBindingConfig{ObjectStores: []string{"tasks"}},
 			},
 		},
 	}
@@ -7149,7 +7149,7 @@ func TestRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 	assertStartAppRelayEnv(t, startRequests[0], "s3 multi-binding relay")
 }
 
-func TestRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T) {
+func TestRuntimePublicAppInvocationRelayRoundTripsThroughHostedApp(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
@@ -7231,7 +7231,7 @@ func TestRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T) {
 	deps := Deps{
 		BaseURL:            relaySrv.URL,
 		EncryptionKey:      secret,
-		AppInvoker:         bridge,
+		AppInvocation:      bridge,
 		PublicHostServices: publicHostServices,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
@@ -7241,7 +7241,7 @@ func TestRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T) {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
-	assertPublicHostServicesVerified(t, publicHostServices, "app_invoker")
+	assertPublicHostServicesVerified(t, publicHostServices, "app")
 
 	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
@@ -7311,7 +7311,7 @@ func TestRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartAppRelayEnv(t, startRequests[0], "app_invoker")
+	assertStartAppRelayEnv(t, startRequests[0], "app")
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); len(allowedHosts) != 0 {
 		t.Fatalf("StartApp allowed hosts = %#v, want none when hostname egress enforcement is not required", allowedHosts)
 	}
@@ -8624,11 +8624,11 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 
 	cases := []struct {
 		name      string
-		indexedDB *config.HostIndexedDBBindingConfig
+		indexedDB *config.IndexedDBBindingConfig
 	}{
 		{name: "omitted indexeddb inherits host selection"},
-		{name: "empty indexeddb inherits host selection", indexedDB: &config.HostIndexedDBBindingConfig{}},
-		{name: "objectStores-only indexeddb inherits host selection", indexedDB: &config.HostIndexedDBBindingConfig{ObjectStores: []string{"tasks"}}},
+		{name: "empty indexeddb inherits host selection", indexedDB: &config.IndexedDBBindingConfig{}},
+		{name: "objectStores-only indexeddb inherits host selection", indexedDB: &config.IndexedDBBindingConfig{ObjectStores: []string{"tasks"}}},
 	}
 	runtimeModes := []struct {
 		name   string
@@ -8701,7 +8701,7 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 					t.Fatalf("record value = %#v, want %q", got, "ship-it")
 				}
 				if _, err := boundDB.ObjectStore("tasks").Get(context.Background(), "task-1"); err != nil {
-					t.Fatalf("inherited host indexeddb should expose logical store name directly: %v", err)
+					t.Fatalf("inherited indexeddb provider should expose logical store name directly: %v", err)
 				}
 				if runtimeProvider != nil {
 					startRequests := runtimeProvider.startAppRequestsCopy()
@@ -8731,7 +8731,7 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 		Config map[string]any `yaml:"config"`
 	}
 
-	makeConfig := func(indexedDB *config.HostIndexedDBBindingConfig) *config.Config {
+	makeConfig := func(indexedDB *config.IndexedDBBindingConfig) *config.Config {
 		return &config.Config{
 			Apps: map[string]*config.ProviderEntry{
 				"echoext": {
@@ -8785,7 +8785,7 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 
 	cases := []struct {
 		name       string
-		indexedDB  *config.HostIndexedDBBindingConfig
+		indexedDB  *config.IndexedDBBindingConfig
 		wantDSN    string
 		wantDB     string
 		wantSQLite bool
@@ -8793,26 +8793,26 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 	}{
 		{
 			name:      "defaults db to app name for postgres",
-			indexedDB: &config.HostIndexedDBBindingConfig{Provider: "postgres"},
+			indexedDB: &config.IndexedDBBindingConfig{Provider: "postgres"},
 			wantDSN:   "postgres://db.example.test/gestalt",
 			wantDB:    "echoext",
 		},
 		{
 			name:      "uses db override for postgres",
-			indexedDB: &config.HostIndexedDBBindingConfig{Provider: "postgres", DB: "roadmap_state"},
+			indexedDB: &config.IndexedDBBindingConfig{Provider: "postgres", DB: "roadmap_state"},
 			wantDSN:   "postgres://db.example.test/gestalt",
 			wantDB:    "roadmap_state",
 		},
 		{
 			name:       "uses db override for sqlite table prefixes",
-			indexedDB:  &config.HostIndexedDBBindingConfig{Provider: "sqlite", DB: "roadmap_state"},
+			indexedDB:  &config.IndexedDBBindingConfig{Provider: "sqlite", DB: "roadmap_state"},
 			wantDSN:    "sqlite://plugin-state.db",
 			wantDB:     "roadmap_state",
 			wantSQLite: true,
 		},
 		{
 			name:       "uses schema scope for secret-backed relational DSNs",
-			indexedDB:  &config.HostIndexedDBBindingConfig{Provider: "mysql-secret", DB: "secret_state"},
+			indexedDB:  &config.IndexedDBBindingConfig{Provider: "mysql-secret", DB: "secret_state"},
 			wantDB:     "secret_state",
 			wantSecret: true,
 		},
@@ -8966,7 +8966,7 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 						Args:                 []string{"provider"},
 						ResolvedManifest:     manifest,
 						ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-						IndexedDB: &config.HostIndexedDBBindingConfig{
+						IndexedDB: &config.IndexedDBBindingConfig{
 							Provider:     "memory",
 							DB:           "roadmap",
 							ObjectStores: []string{"tasks"},
@@ -9031,7 +9031,7 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 	}
 }
 
-func TestPluginIndexedDBProviderOverrideUsesExplicitHostIndexedDB(t *testing.T) {
+func TestPluginIndexedDBProviderOverrideUsesExplicitIndexedDB(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -9059,7 +9059,7 @@ func TestPluginIndexedDBProviderOverrideUsesExplicitHostIndexedDB(t *testing.T) 
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				IndexedDB: &config.HostIndexedDBBindingConfig{
+				IndexedDB: &config.IndexedDBBindingConfig{
 					Provider: "archive",
 					DB:       "roadmap",
 				},
@@ -9146,7 +9146,7 @@ func TestPluginIndexedDBBindingsCleanupOnS3BindingFailure(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				IndexedDB:            &config.HostIndexedDBBindingConfig{Provider: "main"},
+				IndexedDB:            &config.IndexedDBBindingConfig{Provider: "main"},
 				S3:                   []string{"missing"},
 			},
 		},

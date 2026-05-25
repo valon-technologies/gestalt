@@ -602,7 +602,7 @@ pub mod app_provider_server {
     }
 }
 /// Generated client implementations.
-pub mod app_invoker_client {
+pub mod app_client {
     #![allow(
         unused_variables,
         dead_code,
@@ -614,10 +614,10 @@ pub mod app_invoker_client {
     use tonic::codegen::*;
     ///
     #[derive(Debug, Clone)]
-    pub struct AppInvokerClient<T> {
+    pub struct AppClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl AppInvokerClient<tonic::transport::Channel> {
+    impl AppClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -628,7 +628,7 @@ pub mod app_invoker_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> AppInvokerClient<T>
+    impl<T> AppClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::Body>,
         T::Error: Into<StdError>,
@@ -643,10 +643,7 @@ pub mod app_invoker_client {
             let inner = tonic::client::Grpc::with_origin(inner, origin);
             Self { inner }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> AppInvokerClient<InterceptedService<T, F>>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> AppClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -659,7 +656,7 @@ pub mod app_invoker_client {
             <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
                 Into<StdError> + std::marker::Send + std::marker::Sync,
         {
-            AppInvokerClient::new(InterceptedService::new(inner, interceptor))
+            AppClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -705,11 +702,11 @@ pub mod app_invoker_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AppInvoker/ExchangeInvocationToken",
+                "/gestalt.provider.v1.App/ExchangeInvocationToken",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AppInvoker",
+                "gestalt.provider.v1.App",
                 "ExchangeInvocationToken",
             ));
             self.inner.unary(req, path, codec).await
@@ -723,11 +720,10 @@ pub mod app_invoker_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AppInvoker/Invoke");
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.App/Invoke");
             let mut req = request.into_request();
             req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.AppInvoker", "Invoke"));
+                .insert(GrpcMethod::new("gestalt.provider.v1.App", "Invoke"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -739,20 +735,17 @@ pub mod app_invoker_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AppInvoker/InvokeGraphQL",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.App/InvokeGraphQL");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AppInvoker",
-                "InvokeGraphQL",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.App", "InvokeGraphQL"));
             self.inner.unary(req, path, codec).await
         }
     }
 }
 /// Generated server implementations.
-pub mod app_invoker_server {
+pub mod app_server {
     #![allow(
         unused_variables,
         dead_code,
@@ -761,9 +754,9 @@ pub mod app_invoker_server {
         clippy::let_unit_value
     )]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with AppInvokerServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with AppServer.
     #[async_trait]
-    pub trait AppInvoker: std::marker::Send + std::marker::Sync + 'static {
+    pub trait App: std::marker::Send + std::marker::Sync + 'static {
         ///
         async fn exchange_invocation_token(
             &self,
@@ -785,14 +778,14 @@ pub mod app_invoker_server {
     }
     ///
     #[derive(Debug)]
-    pub struct AppInvokerServer<T> {
+    pub struct AppServer<T> {
         inner: Arc<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
         max_decoding_message_size: Option<usize>,
         max_encoding_message_size: Option<usize>,
     }
-    impl<T> AppInvokerServer<T> {
+    impl<T> AppServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -840,9 +833,9 @@ pub mod app_invoker_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for AppInvokerServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for AppServer<T>
     where
-        T: AppInvoker,
+        T: App,
         B: Body + std::marker::Send + 'static,
         B::Error: Into<StdError> + std::marker::Send + 'static,
     {
@@ -857,11 +850,10 @@ pub mod app_invoker_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.AppInvoker/ExchangeInvocationToken" => {
+                "/gestalt.provider.v1.App/ExchangeInvocationToken" => {
                     #[allow(non_camel_case_types)]
-                    struct ExchangeInvocationTokenSvc<T: AppInvoker>(pub Arc<T>);
-                    impl<T: AppInvoker>
-                        tonic::server::UnaryService<super::ExchangeInvocationTokenRequest>
+                    struct ExchangeInvocationTokenSvc<T: App>(pub Arc<T>);
+                    impl<T: App> tonic::server::UnaryService<super::ExchangeInvocationTokenRequest>
                         for ExchangeInvocationTokenSvc<T>
                     {
                         type Response = super::ExchangeInvocationTokenResponse;
@@ -872,7 +864,7 @@ pub mod app_invoker_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AppInvoker>::exchange_invocation_token(&inner, request).await
+                                <T as App>::exchange_invocation_token(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -899,10 +891,10 @@ pub mod app_invoker_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AppInvoker/Invoke" => {
+                "/gestalt.provider.v1.App/Invoke" => {
                     #[allow(non_camel_case_types)]
-                    struct InvokeSvc<T: AppInvoker>(pub Arc<T>);
-                    impl<T: AppInvoker> tonic::server::UnaryService<super::AppInvokeRequest> for InvokeSvc<T> {
+                    struct InvokeSvc<T: App>(pub Arc<T>);
+                    impl<T: App> tonic::server::UnaryService<super::AppInvokeRequest> for InvokeSvc<T> {
                         type Response = super::OperationResult;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
@@ -910,8 +902,7 @@ pub mod app_invoker_server {
                             request: tonic::Request<super::AppInvokeRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut =
-                                async move { <T as AppInvoker>::invoke(&inner, request).await };
+                            let fut = async move { <T as App>::invoke(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -937,12 +928,10 @@ pub mod app_invoker_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AppInvoker/InvokeGraphQL" => {
+                "/gestalt.provider.v1.App/InvokeGraphQL" => {
                     #[allow(non_camel_case_types)]
-                    struct InvokeGraphQLSvc<T: AppInvoker>(pub Arc<T>);
-                    impl<T: AppInvoker> tonic::server::UnaryService<super::AppInvokeGraphQlRequest>
-                        for InvokeGraphQLSvc<T>
-                    {
+                    struct InvokeGraphQLSvc<T: App>(pub Arc<T>);
+                    impl<T: App> tonic::server::UnaryService<super::AppInvokeGraphQlRequest> for InvokeGraphQLSvc<T> {
                         type Response = super::OperationResult;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
@@ -950,9 +939,8 @@ pub mod app_invoker_server {
                             request: tonic::Request<super::AppInvokeGraphQlRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AppInvoker>::invoke_graph_ql(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as App>::invoke_graph_ql(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -994,7 +982,7 @@ pub mod app_invoker_server {
             }
         }
     }
-    impl<T> Clone for AppInvokerServer<T> {
+    impl<T> Clone for AppServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -1007,8 +995,8 @@ pub mod app_invoker_server {
         }
     }
     /// Generated gRPC service name
-    pub const SERVICE_NAME: &str = "gestalt.provider.v1.AppInvoker";
-    impl<T> tonic::server::NamedService for AppInvokerServer<T> {
+    pub const SERVICE_NAME: &str = "gestalt.provider.v1.App";
+    impl<T> tonic::server::NamedService for AppServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }

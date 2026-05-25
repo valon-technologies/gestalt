@@ -12,16 +12,11 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// RegisterS3HostService registers an S3 host service on srv.
-func RegisterS3HostService(srv *grpc.Server, provider S3Provider) {
-	proto.RegisterS3Server(srv, s3ProviderServer{provider: provider})
-}
-
 // ServeS3Provider starts a gRPC server for an [S3Provider].
 func ServeS3Provider(ctx context.Context, provider S3Provider) error {
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindS3, provider))
-		RegisterS3HostService(srv, provider)
+		proto.RegisterS3Server(srv, s3ProviderServer{provider: provider})
 	})
 }
 

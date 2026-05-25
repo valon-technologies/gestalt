@@ -19,9 +19,9 @@ from gestalt import (
     ENV_HOST_SERVICE_TOKEN,
     Request,
 )
+from gestalt._app_access import _AppClient
 from gestalt._gen.v1 import app_pb2 as _app_pb2
 from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
-from gestalt._host_app import _HostApp
 
 app_pb2: Any = _app_pb2
 app_pb2_grpc: Any = _app_pb2_grpc
@@ -41,7 +41,7 @@ _graphql_requests: list[dict[str, Any]] = []
 _relay_tokens: list[str] = []
 
 
-class _AppInvokerServicer(app_pb2_grpc.AppInvokerServicer):
+class _AppServicer(app_pb2_grpc.AppServicer):
     def ExchangeInvocationToken(self, request, context):
         _exchange_requests.append(
             {
@@ -145,8 +145,8 @@ def setUpModule() -> None:
         os.remove(_socket_path)
 
     _server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-    app_pb2_grpc.add_AppInvokerServicer_to_server(
-        _AppInvokerServicer(),
+    app_pb2_grpc.add_AppServicer_to_server(
+        _AppServicer(),
         _server,
     )
     _server.add_insecure_port(f"unix:{_socket_path}")
@@ -247,7 +247,7 @@ class AppTransportTests(unittest.TestCase):
         class BadParams:
             created_at: datetime
 
-        with _HostApp("invoke-bad") as client:
+        with _AppClient("invoke-bad") as client:
             with self.assertRaisesRegex(TypeError, "timestamp helpers"):
                 client.invoke(
                     "github",
@@ -256,12 +256,12 @@ class AppTransportTests(unittest.TestCase):
                 )
 
     def test_invoke_rejects_dataclass_types(self) -> None:
-        with _HostApp("invoke-bad-type") as client:
+        with _AppClient("invoke-bad-type") as client:
             with self.assertRaisesRegex(TypeError, "dataclass instance"):
                 client.invoke("github", "bad", IssueParams)
 
     def test_invoke_graphql_roundtrip(self) -> None:
-        with _HostApp("invoke-graphql") as client:
+        with _AppClient("invoke-graphql") as client:
             response = client.invoke_graphql(
                 "linear",
                 "  query Viewer($team: String!) { viewer(team: $team) { id } }  ",
@@ -305,21 +305,21 @@ class AppTransportTests(unittest.TestCase):
         )
 
     def test_invocation_token_constructor_roundtrip(self) -> None:
-        with _HostApp("invoke-456") as client:
+        with _AppClient("invoke-456") as client:
             response = client.invoke("slack", "plain_text")
 
         self.assertEqual(response.status, 200)
         self.assertEqual(response.body, "plain response")
 
     def test_invoke_graphql_requires_nonempty_document(self) -> None:
-        with _HostApp("invoke-graphql-empty") as client:
+        with _AppClient("invoke-graphql-empty") as client:
             with self.assertRaisesRegex(
                 RuntimeError, "app: graphql document is required"
             ):
                 client.invoke_graphql("linear", "   ")
 
     def test_empty_dict_params_are_preserved_as_present(self) -> None:
-        with _HostApp("invoke-789") as client:
+        with _AppClient("invoke-789") as client:
             response = client.invoke("github", "get_issue", {})
 
         self.assertEqual(response.status, 200)
@@ -341,12 +341,12 @@ class AppTransportTests(unittest.TestCase):
         with self.assertRaisesRegex(
             RuntimeError, "app: invocation token is not available"
         ):
-            _HostApp("   ")
+            _AppClient("   ")
 
     def test_tcp_target_token_env_is_forwarded(self) -> None:
         tcp_server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-        app_pb2_grpc.add_AppInvokerServicer_to_server(
-            _AppInvokerServicer(),
+        app_pb2_grpc.add_AppServicer_to_server(
+            _AppServicer(),
             tcp_server,
         )
         port = tcp_server.add_insecure_port("127.0.0.1:0")
@@ -356,7 +356,7 @@ class AppTransportTests(unittest.TestCase):
         os.environ[ENV_HOST_SERVICE_SOCKET] = f"tcp://127.0.0.1:{port}"
         os.environ[ENV_HOST_SERVICE_TOKEN] = "relay-token-python"
         try:
-            with _HostApp("invoke-tcp") as client:
+            with _AppClient("invoke-tcp") as client:
                 response = client.invoke("github", "plain_text")
 
             self.assertEqual(response.status, 200)
@@ -375,8 +375,8 @@ class AppTransportTests(unittest.TestCase):
 
     def test_tcp_target_ignores_proxy_env(self) -> None:
         tcp_server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-        app_pb2_grpc.add_AppInvokerServicer_to_server(
-            _AppInvokerServicer(),
+        app_pb2_grpc.add_AppServicer_to_server(
+            _AppServicer(),
             tcp_server,
         )
         port = tcp_server.add_insecure_port("127.0.0.1:0")
@@ -390,7 +390,7 @@ class AppTransportTests(unittest.TestCase):
         os.environ["http_proxy"] = "http://127.0.0.1:1"
         os.environ["https_proxy"] = "http://127.0.0.1:1"
         try:
-            with _HostApp("invoke-proxy") as client:
+            with _AppClient("invoke-proxy") as client:
                 response = client.invoke("github", "plain_text")
 
             self.assertEqual(response.status, 200)

@@ -32,8 +32,8 @@ type InvocationGrant struct {
 	AllOperations bool
 }
 
-type hostApp struct {
-	client          proto.AppInvokerClient
+type appClient struct {
+	client          proto.AppClient
 	invocationToken string
 }
 
@@ -44,7 +44,7 @@ type App interface {
 	ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error)
 }
 
-var sharedAppTransport sharedManagerTransport[proto.AppInvokerClient]
+var sharedAppTransport sharedManagerTransport[proto.AppClient]
 
 // NewApp returns a capability that attaches invocationToken to every request.
 func NewApp(invocationToken string) (App, error) {
@@ -59,12 +59,12 @@ func NewApp(invocationToken string) (App, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "app", target, token, &sharedAppTransport, proto.NewAppInvokerClient)
+	client, err := managerTransportClient(ctx, "app", target, token, &sharedAppTransport, proto.NewAppClient)
 	if err != nil {
 		return nil, err
 	}
 
-	return &hostApp{
+	return &appClient{
 		client:          client,
 		invocationToken: strings.TrimSpace(invocationToken),
 	}, nil
@@ -76,12 +76,12 @@ func AppFromContext(ctx context.Context) (App, error) {
 }
 
 // Close is a no-op because this capability uses shared transport.
-func (c *hostApp) Close() error {
+func (c *appClient) Close() error {
 	return nil
 }
 
 // Invoke calls one operation on another app.
-func (c *hostApp) Invoke(ctx context.Context, app, operation string, params any, opts *InvokeOptions) (*OperationResult, error) {
+func (c *appClient) Invoke(ctx context.Context, app, operation string, params any, opts *InvokeOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("app: client is not initialized")
 	}
@@ -119,7 +119,7 @@ func (c *hostApp) Invoke(ctx context.Context, app, operation string, params any,
 }
 
 // InvokeGraphQL calls another plugin's GraphQL surface.
-func (c *hostApp) InvokeGraphQL(ctx context.Context, app, document string, variables any, opts *InvokeOptions) (*OperationResult, error) {
+func (c *appClient) InvokeGraphQL(ctx context.Context, app, document string, variables any, opts *InvokeOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("app: client is not initialized")
 	}
@@ -163,7 +163,7 @@ func (c *hostApp) InvokeGraphQL(ctx context.Context, app, document string, varia
 }
 
 // ExchangeInvocationToken exchanges this invocation token for a narrower child token.
-func (c *hostApp) ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error) {
+func (c *appClient) ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error) {
 	if c == nil || c.client == nil {
 		return "", fmt.Errorf("app: client is not initialized")
 	}

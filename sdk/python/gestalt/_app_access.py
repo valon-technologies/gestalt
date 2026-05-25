@@ -26,8 +26,8 @@ from ._protocol import (
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 
-# Matches the host-side socket name exposed by gestaltd.
-_HOST_APP_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
+# Matches the app socket name exposed by gestaltd.
+_APP_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 
 
 class AppProtocol(Protocol):
@@ -75,7 +75,7 @@ class AppProtocol(Protocol):
         """Exchange this invocation token for a narrower child token."""
 
 
-class _HostApp:
+class _AppClient:
     """Transport-backed implementation for invoking sibling app operations.
 
     Provider code should obtain this through :meth:`gestalt.Request.app`.
@@ -93,8 +93,8 @@ class _HostApp:
             )
         relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
 
-        self._channel = _host_app_channel(socket_path, token=relay_token)
-        self._stub = pb_grpc.AppInvokerStub(self._channel)
+        self._channel = _app_channel(socket_path, token=relay_token)
+        self._stub = pb_grpc.AppStub(self._channel)
         self._invocation_token = trimmed_token
 
     def close(self) -> None:
@@ -184,7 +184,7 @@ class _HostApp:
         response = self._stub.ExchangeInvocationToken(request)
         return response.invocation_token
 
-    def __enter__(self) -> _HostApp:
+    def __enter__(self) -> _AppClient:
         """Return the client for ``with`` statements."""
 
         return self
@@ -274,7 +274,7 @@ def _grant_parts(value: Any) -> tuple[str, list[str], list[str], bool]:
     )
 
 
-def _host_app_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
+def _app_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
     target = raw_target.strip()
     if not target:
         raise RuntimeError("app: transport target is required")
@@ -284,7 +284,7 @@ def _host_app_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
             raise RuntimeError(
                 f"app: tcp target {raw_target!r} is missing host:port"
             )
-        return _with_host_app_relay_token(
+        return _with_app_relay_token(
             insecure_internal_channel(internal_channel_target("tcp", address)),
             token,
         )
@@ -294,7 +294,7 @@ def _host_app_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
             raise RuntimeError(
                 f"app: tls target {raw_target!r} is missing host:port"
             )
-        return _with_host_app_relay_token(
+        return _with_app_relay_token(
             secure_internal_channel(internal_channel_target("tls", address)),
             token,
         )
@@ -304,7 +304,7 @@ def _host_app_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
             raise RuntimeError(
                 f"app: unix target {raw_target!r} is missing a socket path"
             )
-        return _with_host_app_relay_token(
+        return _with_app_relay_token(
             insecure_internal_channel(internal_channel_target("unix", socket_path)),
             token,
         )
@@ -313,13 +313,13 @@ def _host_app_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
         raise RuntimeError(
             f"app: unsupported target scheme {parsed.scheme!r}"
         )
-    return _with_host_app_relay_token(
+    return _with_app_relay_token(
         insecure_internal_channel(internal_channel_target("unix", target)),
         token,
     )
 
 
-def _with_host_app_relay_token(channel: grpc.Channel, token: str) -> grpc.Channel:
+def _with_app_relay_token(channel: grpc.Channel, token: str) -> grpc.Channel:
     token = token.strip()
     if not token:
         return channel
@@ -366,7 +366,7 @@ class _RelayTokenInterceptor(grpc.UnaryUnaryClientInterceptor):
     ) -> Any:
         fields = cast(_ClientCallDetailsFields, client_call_details)
         metadata = list(fields.metadata or [])
-        metadata.append((_HOST_APP_RELAY_TOKEN_HEADER, self._token))
+        metadata.append((_APP_RELAY_TOKEN_HEADER, self._token))
         return continuation(
             _ClientCallDetails(
                 fields.method,

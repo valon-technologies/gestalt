@@ -112,7 +112,7 @@ func (c *Config) SelectedRuntimeProvider() (string, *RuntimeProviderEntry, error
 	return ResolveSelectedRuntimeProvider(c.Server.Runtime.SelectedDefaultProvider(), c.Runtime.Providers)
 }
 
-type EffectiveHostIndexedDBBinding struct {
+type EffectiveIndexedDBBinding struct {
 	Enabled      bool
 	ProviderName string
 	Provider     *ProviderEntry
@@ -131,10 +131,10 @@ type EffectiveRuntimePlacement struct {
 	Workspace     *RuntimePlacementWorkspaceConfig
 }
 
-func (c *Config) EffectiveAppIndexedDB(pluginName string, entry *ProviderEntry) (EffectiveHostIndexedDBBinding, error) {
+func (c *Config) EffectiveAppIndexedDB(pluginName string, entry *ProviderEntry) (EffectiveIndexedDBBinding, error) {
 	selectedName, _, err := c.SelectedIndexedDBProvider()
 	if err != nil {
-		return EffectiveHostIndexedDBBinding{}, err
+		return EffectiveIndexedDBBinding{}, err
 	}
 	return ResolveEffectiveAppIndexedDB(pluginName, entry, selectedName, c.Providers.IndexedDB)
 }
@@ -169,11 +169,11 @@ func (c *Config) EffectiveAgentProvider(providerName string) (string, *ProviderE
 	return c.SelectedAgentProvider()
 }
 
-func (c *Config) EffectiveWorkflowIndexedDB(name string, entry *ProviderEntry) (EffectiveHostIndexedDBBinding, error) {
+func (c *Config) EffectiveWorkflowIndexedDB(name string, entry *ProviderEntry) (EffectiveIndexedDBBinding, error) {
 	return ResolveEffectiveWorkflowIndexedDB(name, entry, c.Providers.IndexedDB)
 }
 
-func (c *Config) EffectiveAgentIndexedDB(name string, entry *ProviderEntry) (EffectiveHostIndexedDBBinding, error) {
+func (c *Config) EffectiveAgentIndexedDB(name string, entry *ProviderEntry) (EffectiveIndexedDBBinding, error) {
 	return ResolveEffectiveAgentIndexedDB(name, entry, c.Providers.IndexedDB)
 }
 
@@ -188,9 +188,9 @@ func (c *Config) EffectiveRuntimePlacement(configPath string, entry *ProviderEnt
 	return ResolveEffectiveRuntimePlacement(configPath, entry, selectedName, c.Runtime.Providers)
 }
 
-func ResolveEffectiveAppIndexedDB(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectiveHostIndexedDBBinding, error) {
+func ResolveEffectiveAppIndexedDB(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectiveIndexedDBBinding, error) {
 	if entry == nil {
-		return EffectiveHostIndexedDBBinding{}, nil
+		return EffectiveIndexedDBBinding{}, nil
 	}
 
 	providerName := ""
@@ -202,14 +202,14 @@ func ResolveEffectiveAppIndexedDB(pluginName string, entry *ProviderEntry, selec
 	}
 	if providerName == "" {
 		if entry.IndexedDB != nil && (strings.TrimSpace(entry.IndexedDB.DB) != "" || len(entry.IndexedDB.ObjectStores) > 0) {
-			return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: apps.%s.indexeddb requires idb.provider or an available selected/default host indexeddb", pluginName)
+			return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: apps.%s.indexeddb requires idb.provider or an available selected/default indexeddb provider", pluginName)
 		}
-		return EffectiveHostIndexedDBBinding{}, nil
+		return EffectiveIndexedDBBinding{}, nil
 	}
 
 	provider, ok := entries[providerName]
 	if !ok || provider == nil {
-		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: apps.%s.idb.provider references unknown indexeddb %q", pluginName, providerName)
+		return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: apps.%s.idb.provider references unknown indexeddb %q", pluginName, providerName)
 	}
 
 	dbName := pluginName
@@ -222,7 +222,7 @@ func ResolveEffectiveAppIndexedDB(pluginName string, entry *ProviderEntry, selec
 		objectStores = slices.Clone(entry.IndexedDB.ObjectStores)
 	}
 
-	return EffectiveHostIndexedDBBinding{
+	return EffectiveIndexedDBBinding{
 		Enabled:      true,
 		ProviderName: providerName,
 		Provider:     provider,
@@ -231,19 +231,19 @@ func ResolveEffectiveAppIndexedDB(pluginName string, entry *ProviderEntry, selec
 	}, nil
 }
 
-func ResolveEffectiveWorkflowIndexedDB(name string, entry *ProviderEntry, entries map[string]*ProviderEntry) (EffectiveHostIndexedDBBinding, error) {
+func ResolveEffectiveWorkflowIndexedDB(name string, entry *ProviderEntry, entries map[string]*ProviderEntry) (EffectiveIndexedDBBinding, error) {
 	if entry == nil || entry.IndexedDB == nil {
-		return EffectiveHostIndexedDBBinding{}, nil
+		return EffectiveIndexedDBBinding{}, nil
 	}
 
 	providerName := strings.TrimSpace(entry.IndexedDB.Provider)
 	if providerName == "" {
-		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: providers.workflow.%s.idb.provider is required", name)
+		return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: providers.workflow.%s.idb.provider is required", name)
 	}
 
 	provider, ok := entries[providerName]
 	if !ok || provider == nil {
-		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: providers.workflow.%s.idb.provider references unknown indexeddb %q", name, providerName)
+		return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: providers.workflow.%s.idb.provider references unknown indexeddb %q", name, providerName)
 	}
 
 	dbName := strings.TrimSpace(entry.IndexedDB.DB)
@@ -251,7 +251,7 @@ func ResolveEffectiveWorkflowIndexedDB(name string, entry *ProviderEntry, entrie
 		dbName = name
 	}
 
-	return EffectiveHostIndexedDBBinding{
+	return EffectiveIndexedDBBinding{
 		Enabled:      true,
 		ProviderName: providerName,
 		Provider:     provider,
@@ -260,19 +260,19 @@ func ResolveEffectiveWorkflowIndexedDB(name string, entry *ProviderEntry, entrie
 	}, nil
 }
 
-func ResolveEffectiveAgentIndexedDB(name string, entry *ProviderEntry, entries map[string]*ProviderEntry) (EffectiveHostIndexedDBBinding, error) {
+func ResolveEffectiveAgentIndexedDB(name string, entry *ProviderEntry, entries map[string]*ProviderEntry) (EffectiveIndexedDBBinding, error) {
 	if entry == nil || entry.IndexedDB == nil {
-		return EffectiveHostIndexedDBBinding{}, nil
+		return EffectiveIndexedDBBinding{}, nil
 	}
 
 	providerName := strings.TrimSpace(entry.IndexedDB.Provider)
 	if providerName == "" {
-		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: providers.agent.%s.idb.provider is required", name)
+		return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: providers.agent.%s.idb.provider is required", name)
 	}
 
 	provider, ok := entries[providerName]
 	if !ok || provider == nil {
-		return EffectiveHostIndexedDBBinding{}, fmt.Errorf("config validation: providers.agent.%s.idb.provider references unknown indexeddb %q", name, providerName)
+		return EffectiveIndexedDBBinding{}, fmt.Errorf("config validation: providers.agent.%s.idb.provider references unknown indexeddb %q", name, providerName)
 	}
 
 	dbName := strings.TrimSpace(entry.IndexedDB.DB)
@@ -280,7 +280,7 @@ func ResolveEffectiveAgentIndexedDB(name string, entry *ProviderEntry, entries m
 		dbName = name
 	}
 
-	return EffectiveHostIndexedDBBinding{
+	return EffectiveIndexedDBBinding{
 		Enabled:      true,
 		ProviderName: providerName,
 		Provider:     provider,

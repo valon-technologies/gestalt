@@ -116,8 +116,7 @@ message ExchangeInvocationTokenResponse {
   string invocation_token = 1;
 }
 
-// AppInvokeRequest invokes a declared operation on another app through
-// the host-side invoker service.
+// AppInvokeRequest invokes a declared operation on another app through Gestalt.
 message AppInvokeRequest {
   reserved 1;
   reserved "request_handle";
@@ -131,7 +130,7 @@ message AppInvokeRequest {
 }
 
 // AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
-// through the host-side invoker service.
+// through Gestalt.
 message AppInvokeGraphQLRequest {
   string app = 1;
   string document = 2;
@@ -337,7 +336,7 @@ service AppProvider {
   rpc PostConnect(PostConnectRequest) returns (PostConnectResponse);
 }
 
-service AppInvoker {
+service App {
   rpc ExchangeInvocationToken(ExchangeInvocationTokenRequest) returns (ExchangeInvocationTokenResponse);
   rpc Invoke(AppInvokeRequest) returns (OperationResult);
   rpc InvokeGraphQL(AppInvokeGraphQLRequest) returns (OperationResult);

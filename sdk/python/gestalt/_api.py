@@ -26,8 +26,8 @@ else:
 
 if TYPE_CHECKING:
     from ._agent import Agent, AgentToolRef
+    from ._app_access import AppProtocol
     from ._authorization import Authorization
-    from ._host_app import AppProtocol
     from ._workflow import Workflow
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
@@ -112,9 +112,9 @@ class Request:
         return self.connection_params.get(name)
 
     def app(self) -> "AppProtocol":
-        from ._host_app import _HostApp
+        from ._app_access import _AppClient
 
-        return _HostApp(self.invocation_token)
+        return _AppClient(self.invocation_token)
 
     def agent(self) -> "Agent":
         from ._agent import Agent

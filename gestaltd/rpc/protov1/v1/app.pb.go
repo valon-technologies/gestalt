@@ -882,8 +882,7 @@ func (x *ExchangeInvocationTokenResponse) GetInvocationToken() string {
 	return ""
 }
 
-// AppInvokeRequest invokes a declared operation on another app through
-// the host-side invoker service.
+// AppInvokeRequest invokes a declared operation on another app through Gestalt.
 type AppInvokeRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	App             string                 `protobuf:"bytes,2,opt,name=app,proto3" json:"app,omitempty"`
@@ -977,7 +976,7 @@ func (x *AppInvokeRequest) GetIdempotencyKey() string {
 }
 
 // AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
-// through the host-side invoker service.
+// through Gestalt.
 type AppInvokeGraphQLRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	App             string                 `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
@@ -2723,9 +2722,8 @@ const file_v1_app_proto_rawDesc = "" +
 	"\aExecute\x12#.gestalt.provider.v1.ExecuteRequest\x1a$.gestalt.provider.v1.OperationResult\x12u\n" +
 	"\x12ResolveHTTPSubject\x12..gestalt.provider.v1.ResolveHTTPSubjectRequest\x1a/.gestalt.provider.v1.ResolveHTTPSubjectResponse\x12r\n" +
 	"\x11GetSessionCatalog\x12-.gestalt.provider.v1.GetSessionCatalogRequest\x1a..gestalt.provider.v1.GetSessionCatalogResponse\x12`\n" +
-	"\vPostConnect\x12'.gestalt.provider.v1.PostConnectRequest\x1a(.gestalt.provider.v1.PostConnectResponse2\xcf\x02\n" +
-	"\n" +
-	"AppInvoker\x12\x84\x01\n" +
+	"\vPostConnect\x12'.gestalt.provider.v1.PostConnectRequest\x1a(.gestalt.provider.v1.PostConnectResponse2\xc8\x02\n" +
+	"\x03App\x12\x84\x01\n" +
 	"\x17ExchangeInvocationToken\x123.gestalt.provider.v1.ExchangeInvocationTokenRequest\x1a4.gestalt.provider.v1.ExchangeInvocationTokenResponse\x12U\n" +
 	"\x06Invoke\x12%.gestalt.provider.v1.AppInvokeRequest\x1a$.gestalt.provider.v1.OperationResult\x12c\n" +
 	"\rInvokeGraphQL\x12,.gestalt.provider.v1.AppInvokeGraphQLRequest\x1a$.gestalt.provider.v1.OperationResultB\xd4\x01\n" +
@@ -2841,18 +2839,18 @@ var file_v1_app_proto_depIdxs = []int32{
 	23, // 47: gestalt.provider.v1.AppProvider.ResolveHTTPSubject:input_type -> gestalt.provider.v1.ResolveHTTPSubjectRequest
 	26, // 48: gestalt.provider.v1.AppProvider.GetSessionCatalog:input_type -> gestalt.provider.v1.GetSessionCatalogRequest
 	28, // 49: gestalt.provider.v1.AppProvider.PostConnect:input_type -> gestalt.provider.v1.PostConnectRequest
-	9,  // 50: gestalt.provider.v1.AppInvoker.ExchangeInvocationToken:input_type -> gestalt.provider.v1.ExchangeInvocationTokenRequest
-	11, // 51: gestalt.provider.v1.AppInvoker.Invoke:input_type -> gestalt.provider.v1.AppInvokeRequest
-	12, // 52: gestalt.provider.v1.AppInvoker.InvokeGraphQL:input_type -> gestalt.provider.v1.AppInvokeGraphQLRequest
+	9,  // 50: gestalt.provider.v1.App.ExchangeInvocationToken:input_type -> gestalt.provider.v1.ExchangeInvocationTokenRequest
+	11, // 51: gestalt.provider.v1.App.Invoke:input_type -> gestalt.provider.v1.AppInvokeRequest
+	12, // 52: gestalt.provider.v1.App.InvokeGraphQL:input_type -> gestalt.provider.v1.AppInvokeGraphQLRequest
 	6,  // 53: gestalt.provider.v1.AppProvider.GetMetadata:output_type -> gestalt.provider.v1.ProviderMetadata
 	31, // 54: gestalt.provider.v1.AppProvider.StartProvider:output_type -> gestalt.provider.v1.StartProviderResponse
 	7,  // 55: gestalt.provider.v1.AppProvider.Execute:output_type -> gestalt.provider.v1.OperationResult
 	24, // 56: gestalt.provider.v1.AppProvider.ResolveHTTPSubject:output_type -> gestalt.provider.v1.ResolveHTTPSubjectResponse
 	27, // 57: gestalt.provider.v1.AppProvider.GetSessionCatalog:output_type -> gestalt.provider.v1.GetSessionCatalogResponse
 	29, // 58: gestalt.provider.v1.AppProvider.PostConnect:output_type -> gestalt.provider.v1.PostConnectResponse
-	10, // 59: gestalt.provider.v1.AppInvoker.ExchangeInvocationToken:output_type -> gestalt.provider.v1.ExchangeInvocationTokenResponse
-	7,  // 60: gestalt.provider.v1.AppInvoker.Invoke:output_type -> gestalt.provider.v1.OperationResult
-	7,  // 61: gestalt.provider.v1.AppInvoker.InvokeGraphQL:output_type -> gestalt.provider.v1.OperationResult
+	10, // 59: gestalt.provider.v1.App.ExchangeInvocationToken:output_type -> gestalt.provider.v1.ExchangeInvocationTokenResponse
+	7,  // 60: gestalt.provider.v1.App.Invoke:output_type -> gestalt.provider.v1.OperationResult
+	7,  // 61: gestalt.provider.v1.App.InvokeGraphQL:output_type -> gestalt.provider.v1.OperationResult
 	53, // [53:62] is the sub-list for method output_type
 	44, // [44:53] is the sub-list for method input_type
 	44, // [44:44] is the sub-list for extension type_name

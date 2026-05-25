@@ -1,6 +1,6 @@
 import { createClient, type Client } from "@connectrpc/connect";
 
-import { AppInvoker as AppService } from "./internal/gen/v1/app_pb.ts";
+import { App as AppService } from "./internal/gen/v1/app_pb.ts";
 import type { OperationResult, Request } from "./api.ts";
 import { structFromObject, type JsonObjectInput } from "./protocol.ts";
 import {
@@ -62,7 +62,7 @@ export interface App {
  * The constructor accepts either a Gestalt request or an invocation token. The
  * token is attached to every operation, GraphQL, and token-exchange request.
  */
-class HostApp implements App {
+class RemoteApp implements App {
   private readonly client: Client<typeof AppService>;
   private readonly invocationToken: string;
 
@@ -156,7 +156,7 @@ class HostApp implements App {
   }
 }
 
-export const App = HostApp;
+export const App = RemoteApp;
 
 function normalizeInvocationToken(requestOrToken: Request | string): string {
   const invocationToken =

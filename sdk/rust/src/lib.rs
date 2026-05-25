@@ -4,6 +4,7 @@
 mod agent;
 mod agent_access;
 mod api;
+mod app_access;
 mod auth;
 mod auth_server;
 mod authorization;
@@ -13,7 +14,6 @@ mod catalog;
 mod env;
 mod error;
 mod generated;
-mod host_app;
 /// IndexedDB-style datastore client and provider helpers.
 pub mod indexeddb;
 mod protocol;
@@ -70,6 +70,7 @@ pub use api::{
     Access, ConnectedToken, Credential, ExternalIdentity, HTTPSubjectRequest, Host, Provider,
     Request, Response, RuntimeMetadata, Subject, ok,
 };
+pub use app_access::{App, AppContract, AppError, InvocationGrant, InvokeOptions};
 pub use auth::{
     AuthSessionSettings, AuthenticatedUser, AuthenticationProvider, BeginLoginRequest,
     BeginLoginResponse, CompleteLoginRequest,
@@ -96,7 +97,6 @@ pub use env::{
     CURRENT_PROTOCOL_VERSION, ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, ENV_PROVIDER_SOCKET,
 };
 pub use error::{Error, Result};
-pub use host_app::{App, AppContract, AppError, InvocationGrant, InvokeOptions};
 pub use indexeddb::{
     Cursor, CursorApi, CursorDirection, Index, IndexApi, IndexedDB, IndexedDBApi,
     IndexedDBCursorSnapshot, IndexedDBCursorSnapshotEntry, IndexedDBError,

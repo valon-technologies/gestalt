@@ -140,7 +140,7 @@ export {
   type AppGraphQLInvokeOptions,
   type AppInvocationGrant,
   type AppInvokeOptions,
-} from "./host-app.ts";
+} from "./app-access.ts";
 export {
   Agent,
   type AgentCancelTurn,

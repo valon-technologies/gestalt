@@ -13,9 +13,7 @@ use tower::service_fn;
 
 use crate::OperationResult;
 use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
-use crate::generated::v1::{
-    self as pb, app_invoker_client::AppInvokerClient as ProtoAppInvokerClient,
-};
+use crate::generated::v1::{self as pb, app_client::AppClient as ProtoAppClient};
 use crate::protocol;
 
 type AppTransport = InterceptedService<Channel, RelayTokenInterceptor>;
@@ -92,14 +90,14 @@ pub trait AppContract: Send {
     ) -> std::result::Result<String, AppError>;
 }
 
-/// Client for invoking sibling app operations through the host.
+/// Client for invoking sibling app operations through Gestalt.
 pub struct App {
-    client: ProtoAppInvokerClient<AppTransport>,
+    client: ProtoAppClient<AppTransport>,
     invocation_token: String,
 }
 
 impl App {
-    /// Connects to the app host service with an invocation token from the host.
+    /// Connects to the app service with an invocation token from Gestalt.
     pub async fn connect(invocation_token: impl AsRef<str>) -> std::result::Result<Self, AppError> {
         let invocation_token = invocation_token.as_ref().trim().to_owned();
         if invocation_token.is_empty() {
@@ -133,7 +131,7 @@ impl App {
         };
 
         Ok(Self {
-            client: ProtoAppInvokerClient::with_interceptor(
+            client: ProtoAppClient::with_interceptor(
                 channel,
                 relay_token_interceptor(relay_token.trim())?,
             ),

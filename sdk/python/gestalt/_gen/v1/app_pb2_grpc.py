@@ -316,7 +316,7 @@ class AppProvider(object):
             _registered_method=True)
 
 
-class AppInvokerStub(object):
+class AppStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -326,23 +326,23 @@ class AppInvokerStub(object):
             channel: A grpc.Channel.
         """
         self.ExchangeInvocationToken = channel.unary_unary(
-                '/gestalt.provider.v1.AppInvoker/ExchangeInvocationToken',
+                '/gestalt.provider.v1.App/ExchangeInvocationToken',
                 request_serializer=v1_dot_app__pb2.ExchangeInvocationTokenRequest.SerializeToString,
                 response_deserializer=v1_dot_app__pb2.ExchangeInvocationTokenResponse.FromString,
                 _registered_method=True)
         self.Invoke = channel.unary_unary(
-                '/gestalt.provider.v1.AppInvoker/Invoke',
+                '/gestalt.provider.v1.App/Invoke',
                 request_serializer=v1_dot_app__pb2.AppInvokeRequest.SerializeToString,
                 response_deserializer=v1_dot_app__pb2.OperationResult.FromString,
                 _registered_method=True)
         self.InvokeGraphQL = channel.unary_unary(
-                '/gestalt.provider.v1.AppInvoker/InvokeGraphQL',
+                '/gestalt.provider.v1.App/InvokeGraphQL',
                 request_serializer=v1_dot_app__pb2.AppInvokeGraphQLRequest.SerializeToString,
                 response_deserializer=v1_dot_app__pb2.OperationResult.FromString,
                 _registered_method=True)
 
 
-class AppInvokerServicer(object):
+class AppServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def ExchangeInvocationToken(self, request, context):
@@ -364,7 +364,7 @@ class AppInvokerServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_AppInvokerServicer_to_server(servicer, server):
+def add_AppServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'ExchangeInvocationToken': grpc.unary_unary_rpc_method_handler(
                     servicer.ExchangeInvocationToken,
@@ -383,13 +383,13 @@ def add_AppInvokerServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.provider.v1.AppInvoker', rpc_method_handlers)
+            'gestalt.provider.v1.App', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.provider.v1.AppInvoker', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.App', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class AppInvoker(object):
+class App(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -406,7 +406,7 @@ class AppInvoker(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AppInvoker/ExchangeInvocationToken',
+            '/gestalt.provider.v1.App/ExchangeInvocationToken',
             v1_dot_app__pb2.ExchangeInvocationTokenRequest.SerializeToString,
             v1_dot_app__pb2.ExchangeInvocationTokenResponse.FromString,
             options,
@@ -433,7 +433,7 @@ class AppInvoker(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AppInvoker/Invoke',
+            '/gestalt.provider.v1.App/Invoke',
             v1_dot_app__pb2.AppInvokeRequest.SerializeToString,
             v1_dot_app__pb2.OperationResult.FromString,
             options,
@@ -460,7 +460,7 @@ class AppInvoker(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AppInvoker/InvokeGraphQL',
+            '/gestalt.provider.v1.App/InvokeGraphQL',
             v1_dot_app__pb2.AppInvokeGraphQLRequest.SerializeToString,
             v1_dot_app__pb2.OperationResult.FromString,
             options,

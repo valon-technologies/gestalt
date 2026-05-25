@@ -41,7 +41,7 @@ pub enum S3ReadObjectFrame {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-/// One frame in a host-provided object write stream.
+/// One frame in a provider-backed object write stream.
 pub enum S3WriteObjectFrame {
     Open(Box<S3WriteObjectOpen>),
     Data(Vec<u8>),

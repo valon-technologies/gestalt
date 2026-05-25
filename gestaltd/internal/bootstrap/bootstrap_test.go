@@ -2515,7 +2515,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		"managed": {
 			Source:  config.ProviderSource{Path: "stub"},
 			Default: true,
-			IndexedDB: &config.HostIndexedDBBindingConfig{
+			IndexedDB: &config.IndexedDBBindingConfig{
 				Provider:     "test",
 				DB:           "agent_resume",
 				ObjectStores: []string{"provider_state"},
@@ -4224,7 +4224,7 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"basic": {
 			Source: config.ProviderSource{Path: "stub"},
-			IndexedDB: &config.HostIndexedDBBindingConfig{
+			IndexedDB: &config.IndexedDBBindingConfig{
 				Provider:     "workflow_state",
 				DB:           "workflow",
 				ObjectStores: []string{"workflow_schedules", "workflow_runs"},
@@ -4289,7 +4289,7 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 	cfg.Providers.Agent = map[string]*config.ProviderEntry{
 		"simple": {
 			Source: config.ProviderSource{Path: "stub"},
-			IndexedDB: &config.HostIndexedDBBindingConfig{
+			IndexedDB: &config.IndexedDBBindingConfig{
 				Provider:     "agent_state",
 				DB:           "agent_simple",
 				ObjectStores: []string{"runs"},
@@ -4426,7 +4426,7 @@ func TestBootstrapClosesWorkflowIndexedDBAndAppliesScopedConfig(t *testing.T) {
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"basic": {
 			Source: config.ProviderSource{Path: "stub"},
-			IndexedDB: &config.HostIndexedDBBindingConfig{
+			IndexedDB: &config.IndexedDBBindingConfig{
 				Provider:     "workflow_state",
 				DB:           "workflow",
 				ObjectStores: []string{"workflow_runs"},
@@ -4559,7 +4559,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"basic": {
 			Source: config.ProviderSource{Path: "stub"},
-			IndexedDB: &config.HostIndexedDBBindingConfig{
+			IndexedDB: &config.IndexedDBBindingConfig{
 				Provider:     "workflow_state",
 				DB:           "workflow",
 				ObjectStores: []string{"workflow_runs"},
@@ -4597,14 +4597,14 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		t.Fatalf("workflow host services = %d, want 2", len(hostEnv))
 	}
 
-	var indexedDBHost runtimehost.HostService
+	var indexedDBService runtimehost.HostService
 	for _, hostService := range hostEnv {
 		if hostService.Name == "indexeddb" {
-			indexedDBHost = hostService
+			indexedDBService = hostService
 			break
 		}
 	}
-	if indexedDBHost.Name == "" {
+	if indexedDBService.Name == "" {
 		t.Fatal("missing workflow indexeddb host service")
 	}
 
@@ -4629,7 +4629,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		t.Fatalf("underlying workflow provider missing execution ref: %v", err)
 	}
 
-	withIndexedDBHostClient(t, indexedDBHost, func(client proto.IndexedDBClient) {
+	withIndexedDBHostClient(t, indexedDBService, func(client proto.IndexedDBClient) {
 		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
 			Name:   "workflow_runs",
 			Schema: &proto.ObjectStoreSchema{},

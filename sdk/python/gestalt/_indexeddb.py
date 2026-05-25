@@ -587,7 +587,7 @@ def _cmp(left: Any, right: Any) -> int:
 
 
 class IndexedDB:
-    """Client for a host-provided IndexedDB-compatible store."""
+    """Client for a provider-backed IndexedDB-compatible store."""
 
     def __init__(self, name: str | None = None) -> None:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")

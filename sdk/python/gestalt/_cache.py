@@ -66,7 +66,7 @@ class CacheProtocol(Protocol):
 
 
 class Cache:
-    """Client for a host-provided Gestalt cache provider."""
+    """Client for a provider-backed Gestalt cache provider."""
 
     def __init__(self, name: str | None = None) -> None:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
