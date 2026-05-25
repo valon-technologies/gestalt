@@ -1,6 +1,7 @@
 use hyper_util::rt::TokioIo;
 use tokio::net::UnixStream;
 use tonic::Request;
+use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
@@ -212,6 +213,55 @@ pub struct AgentManagerListTurnEventsResponse {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct AgentManagerListInteractionsResponse {
     pub interactions: Vec<AgentInteraction>,
+}
+
+#[async_trait]
+/// Fakeable client contract for managing agent sessions and turns.
+pub trait AgentManagerApi: Send {
+    async fn create_session(
+        &mut self,
+        input: AgentManagerCreateSession,
+    ) -> std::result::Result<AgentSession, AgentManagerError>;
+    async fn get_session(
+        &mut self,
+        input: AgentManagerGetSession,
+    ) -> std::result::Result<AgentSession, AgentManagerError>;
+    async fn list_sessions(
+        &mut self,
+        input: AgentManagerListSessions,
+    ) -> std::result::Result<AgentManagerListSessionsResponse, AgentManagerError>;
+    async fn update_session(
+        &mut self,
+        input: AgentManagerUpdateSession,
+    ) -> std::result::Result<AgentSession, AgentManagerError>;
+    async fn create_turn(
+        &mut self,
+        input: AgentManagerCreateTurn,
+    ) -> std::result::Result<AgentTurn, AgentManagerError>;
+    async fn get_turn(
+        &mut self,
+        input: AgentManagerGetTurn,
+    ) -> std::result::Result<AgentTurn, AgentManagerError>;
+    async fn list_turns(
+        &mut self,
+        input: AgentManagerListTurns,
+    ) -> std::result::Result<AgentManagerListTurnsResponse, AgentManagerError>;
+    async fn cancel_turn(
+        &mut self,
+        input: AgentManagerCancelTurn,
+    ) -> std::result::Result<AgentTurn, AgentManagerError>;
+    async fn list_turn_events(
+        &mut self,
+        input: AgentManagerListTurnEvents,
+    ) -> std::result::Result<AgentManagerListTurnEventsResponse, AgentManagerError>;
+    async fn list_interactions(
+        &mut self,
+        input: AgentManagerListInteractions,
+    ) -> std::result::Result<AgentManagerListInteractionsResponse, AgentManagerError>;
+    async fn resolve_interaction(
+        &mut self,
+        input: AgentManagerResolveInteraction,
+    ) -> std::result::Result<AgentInteraction, AgentManagerError>;
 }
 
 /// Creates a protocol create-session request.
@@ -564,6 +614,86 @@ impl AgentManager {
         Ok(interaction_from_proto(
             self.client.resolve_interaction(request).await?.into_inner(),
         )?)
+    }
+}
+
+#[async_trait]
+impl AgentManagerApi for AgentManager {
+    async fn create_session(
+        &mut self,
+        input: AgentManagerCreateSession,
+    ) -> std::result::Result<AgentSession, AgentManagerError> {
+        AgentManager::create_session(self, input).await
+    }
+
+    async fn get_session(
+        &mut self,
+        input: AgentManagerGetSession,
+    ) -> std::result::Result<AgentSession, AgentManagerError> {
+        AgentManager::get_session(self, input).await
+    }
+
+    async fn list_sessions(
+        &mut self,
+        input: AgentManagerListSessions,
+    ) -> std::result::Result<AgentManagerListSessionsResponse, AgentManagerError> {
+        AgentManager::list_sessions(self, input).await
+    }
+
+    async fn update_session(
+        &mut self,
+        input: AgentManagerUpdateSession,
+    ) -> std::result::Result<AgentSession, AgentManagerError> {
+        AgentManager::update_session(self, input).await
+    }
+
+    async fn create_turn(
+        &mut self,
+        input: AgentManagerCreateTurn,
+    ) -> std::result::Result<AgentTurn, AgentManagerError> {
+        AgentManager::create_turn(self, input).await
+    }
+
+    async fn get_turn(
+        &mut self,
+        input: AgentManagerGetTurn,
+    ) -> std::result::Result<AgentTurn, AgentManagerError> {
+        AgentManager::get_turn(self, input).await
+    }
+
+    async fn list_turns(
+        &mut self,
+        input: AgentManagerListTurns,
+    ) -> std::result::Result<AgentManagerListTurnsResponse, AgentManagerError> {
+        AgentManager::list_turns(self, input).await
+    }
+
+    async fn cancel_turn(
+        &mut self,
+        input: AgentManagerCancelTurn,
+    ) -> std::result::Result<AgentTurn, AgentManagerError> {
+        AgentManager::cancel_turn(self, input).await
+    }
+
+    async fn list_turn_events(
+        &mut self,
+        input: AgentManagerListTurnEvents,
+    ) -> std::result::Result<AgentManagerListTurnEventsResponse, AgentManagerError> {
+        AgentManager::list_turn_events(self, input).await
+    }
+
+    async fn list_interactions(
+        &mut self,
+        input: AgentManagerListInteractions,
+    ) -> std::result::Result<AgentManagerListInteractionsResponse, AgentManagerError> {
+        AgentManager::list_interactions(self, input).await
+    }
+
+    async fn resolve_interaction(
+        &mut self,
+        input: AgentManagerResolveInteraction,
+    ) -> std::result::Result<AgentInteraction, AgentManagerError> {
+        AgentManager::resolve_interaction(self, input).await
     }
 }
 

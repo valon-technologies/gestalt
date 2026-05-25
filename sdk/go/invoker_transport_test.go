@@ -60,7 +60,7 @@ func (h *pluginInvokerTransportHarness) Invoke(ctx context.Context, req *proto.A
 	}
 	h.requests = append(h.requests, &proto.AppInvokeRequest{
 		InvocationToken: req.GetInvocationToken(),
-		App: req.GetApp(),
+		App:             req.GetApp(),
 		Operation:       req.GetOperation(),
 		Params:          cloneStruct(req.GetParams()),
 		Connection:      req.GetConnection(),
@@ -81,7 +81,7 @@ func (h *pluginInvokerTransportHarness) InvokeGraphQL(ctx context.Context, req *
 	}
 	h.graphQL = append(h.graphQL, &proto.AppInvokeGraphQLRequest{
 		InvocationToken: req.GetInvocationToken(),
-		App: req.GetApp(),
+		App:             req.GetApp(),
 		Document:        req.GetDocument(),
 		Variables:       cloneStruct(req.GetVariables()),
 		Connection:      req.GetConnection(),

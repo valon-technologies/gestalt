@@ -541,6 +541,26 @@ export interface AgentHostResolveConnectionInput {
   runGrant?: string | undefined;
 }
 
+/** Fakeable client contract for agent host calls. */
+export interface AgentHost {
+  executeTool(
+    request: ExecuteAgentToolRequest,
+  ): Promise<ExecuteAgentToolResponse>;
+  executeToolForTurn(
+    input: AgentHostExecuteToolInput,
+  ): Promise<ExecuteAgentToolResponse>;
+  listTools(request: ListAgentToolsRequest): Promise<ListAgentToolsResponse>;
+  listToolsForTurn(
+    input: AgentHostListToolsInput,
+  ): Promise<ListAgentToolsResponse>;
+  resolveConnection(
+    request: ResolveAgentConnectionRequest,
+  ): Promise<ResolvedAgentConnection>;
+  resolveConnectionForTurn(
+    input: AgentHostResolveConnectionInput,
+  ): Promise<ResolvedAgentConnection>;
+}
+
 /** Handlers and runtime metadata for an agent provider. */
 export interface AgentProviderOptions extends ProviderBaseOptions {
   createSession?: (
@@ -1136,7 +1156,7 @@ export function isAgentProvider(value: unknown): value is AgentProvider {
 }
 
 /** Client for the agent host service available inside agent providers. */
-export class AgentHost {
+class HostAgentHost implements AgentHost {
   private readonly client: Client<typeof AgentHostService>;
 
   constructor() {
@@ -1385,6 +1405,8 @@ function listInteractionsResult(
 ): readonly AgentInteraction[] {
   return "interactions" in value ? value.interactions : value;
 }
+
+export const AgentHost = HostAgentHost;
 
 async function requireAgentProviderHandler<Request, Response>(
   action: string,
