@@ -697,7 +697,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		value, _ := params["value"].(string)
 
 		var (
-			client gestalt.S3Client
+			client s3sdk.S3
 			err    error
 		)
 		if binding != "" {

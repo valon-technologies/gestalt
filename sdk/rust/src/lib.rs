@@ -100,9 +100,11 @@ pub use env::{
 pub use error::{Error, Result};
 pub use host_app::{App, AppApi, AppError, InvocationGrant, InvokeOptions};
 pub use indexeddb::{
-    Cursor, CursorDirection, IndexedDB, IndexedDBCursorSnapshot, IndexedDBCursorSnapshotEntry,
-    IndexedDBError, IndexedDBOpenCursorRequest, Transaction, TransactionDurabilityHint,
-    TransactionIndexClient, TransactionMode, TransactionObjectStore, TransactionOptions,
+    Cursor, CursorApi, CursorDirection, Index, IndexApi, IndexedDB, IndexedDBApi,
+    IndexedDBCursorSnapshot, IndexedDBCursorSnapshotEntry, IndexedDBError,
+    IndexedDBOpenCursorRequest, ObjectStore, ObjectStoreApi, Transaction, TransactionApi,
+    TransactionDurabilityHint, TransactionIndex, TransactionIndexApi, TransactionMode,
+    TransactionObjectStore, TransactionObjectStoreApi, TransactionOptions,
     compare_indexeddb_values, indexeddb_range_bounds, new_indexeddb_cursor_snapshot,
 };
 #[doc(hidden)]
@@ -119,7 +121,7 @@ pub use runtime_provider::{
     RuntimeSessionLifecycle, RuntimeSupport, StartHostedAppRequest, StartRuntimeSessionRequest,
     StopRuntimeSessionRequest,
 };
-pub use s3::{S3, S3Error, S3Provider};
+pub use s3::{S3, S3Api, S3Error, S3Object, S3ObjectApi, S3Provider};
 pub use s3::{S3ReadObjectFrame, S3ReadObjectStream, S3WriteObjectFrame, S3WriteObjectStream};
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;

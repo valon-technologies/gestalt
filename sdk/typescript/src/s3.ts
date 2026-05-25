@@ -216,6 +216,73 @@ export interface ReadResult {
 }
 
 /**
+ * Fakeable S3-compatible client contract.
+ */
+export interface S3 {
+  close(): void;
+  object(bucket: string, key: string): S3Object;
+  objectVersion(bucket: string, key: string, versionId: string): S3Object;
+  headObject(ref: ObjectRef): Promise<ObjectMeta>;
+  readObject(ref: ObjectRef, options?: ReadOptions): Promise<ReadResult>;
+  writeObject(
+    ref: ObjectRef,
+    body?: S3BodySource,
+    options?: WriteOptions,
+  ): Promise<ObjectMeta>;
+  deleteObject(ref: ObjectRef): Promise<void>;
+  listObjects(options: ListOptions): Promise<ListPage>;
+  copyObject(
+    source: ObjectRef,
+    destination: ObjectRef,
+    options?: CopyOptions,
+  ): Promise<ObjectMeta>;
+  presignObject(
+    ref: ObjectRef,
+    options?: PresignOptions,
+  ): Promise<PresignResult>;
+  createObjectAccessURL(
+    ref: ObjectRef,
+    options?: ObjectAccessURLOptions,
+  ): Promise<ObjectAccessURL>;
+  createObjectAccessUrl(
+    ref: ObjectRef,
+    options?: ObjectAccessURLOptions,
+  ): Promise<ObjectAccessURL>;
+  createAccessURL(
+    ref: ObjectRef,
+    options?: ObjectAccessURLOptions,
+  ): Promise<ObjectAccessURL>;
+  createAccessUrl(
+    ref: ObjectRef,
+    options?: ObjectAccessURLOptions,
+  ): Promise<ObjectAccessURL>;
+}
+
+/**
+ * Fakeable convenience contract for one S3 object reference.
+ */
+export interface S3Object {
+  readonly ref: ObjectRef;
+  stat(): Promise<ObjectMeta>;
+  exists(): Promise<boolean>;
+  read(options?: ReadOptions): Promise<ReadResult>;
+  stream(options?: ReadOptions): Promise<AsyncIterable<Uint8Array>>;
+  bytes(options?: ReadOptions): Promise<Uint8Array>;
+  text(options?: ReadOptions, encoding?: string): Promise<string>;
+  json<T = unknown>(options?: ReadOptions): Promise<T>;
+  write(body?: S3BodySource, options?: WriteOptions): Promise<ObjectMeta>;
+  writeBytes(
+    body: Uint8Array | ArrayBuffer | ArrayBufferView,
+  ): Promise<ObjectMeta>;
+  writeString(body: string, options?: WriteOptions): Promise<ObjectMeta>;
+  writeJSON(value: unknown, options?: WriteOptions): Promise<ObjectMeta>;
+  delete(): Promise<void>;
+  presign(options?: PresignOptions): Promise<PresignResult>;
+  createAccessURL(options?: ObjectAccessURLOptions): Promise<ObjectAccessURL>;
+  createAccessUrl(options?: ObjectAccessURLOptions): Promise<ObjectAccessURL>;
+}
+
+/**
  * Result returned by an authored S3 provider implementation.
  */
 export interface ProviderReadResult {
@@ -516,7 +583,7 @@ export function createS3Service(
  * await s3.object("example-bucket", "hello.json").writeJSON({ ok: true });
  * ```
  */
-export class S3 {
+class RemoteS3 implements S3 {
   private readonly transport: Transport;
   private readonly client: Client<typeof S3Service>;
   private objectAccessClient?: Client<typeof S3ObjectAccessService>;
@@ -531,14 +598,17 @@ export class S3 {
     this.client = createClient(S3Service, transport);
   }
 
+  /** Releases client resources. */
+  close(): void {}
+
   /** Returns a convenience helper for the latest version of an object. */
   object(bucket: string, key: string): S3Object {
-    return new S3Object(this, { bucket, key });
+    return new RemoteS3Object(this, { bucket, key });
   }
 
   /** Returns a convenience helper pinned to a specific object version. */
   objectVersion(bucket: string, key: string, versionId: string): S3Object {
-    return new S3Object(this, { bucket, key, versionId });
+    return new RemoteS3Object(this, { bucket, key, versionId });
   }
 
   /** Fetches object metadata without reading the object body. */
@@ -721,7 +791,7 @@ export class S3 {
 /**
  * Convenience wrapper for working with a single S3 object reference.
  */
-export class S3Object {
+class RemoteS3Object implements S3Object {
   constructor(
     private readonly client: S3,
     readonly ref: ObjectRef,
@@ -1317,3 +1387,5 @@ function messageFromError(error: unknown): string {
   }
   return errorMessage(error);
 }
+
+export const S3 = RemoteS3;

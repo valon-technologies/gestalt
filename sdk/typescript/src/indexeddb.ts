@@ -95,9 +95,122 @@ export interface OpenCursorOptions {
 }
 
 /**
+ * Fakeable client contract for IndexedDB-compatible storage.
+ */
+export interface IndexedDB {
+  close(): void;
+  createObjectStore(
+    name: string,
+    schema?: ObjectStoreSchema,
+  ): Promise<ObjectStore>;
+  deleteObjectStore(name: string): Promise<void>;
+  objectStore(name: string): ObjectStore;
+  transaction(
+    stores: string[],
+    mode?: TransactionMode,
+    options?: TransactionOptions,
+  ): Promise<Transaction>;
+}
+
+/**
+ * Fakeable IndexedDB object-store contract.
+ */
+export interface ObjectStore {
+  get(id: string): Promise<Record>;
+  getKey(id: string): Promise<string>;
+  add(record: Record): Promise<void>;
+  put(record: Record): Promise<void>;
+  delete(id: string): Promise<void>;
+  clear(): Promise<void>;
+  getAll(keyRange?: KeyRange): Promise<Record[]>;
+  getAllKeys(keyRange?: KeyRange): Promise<string[]>;
+  count(keyRange?: KeyRange): Promise<number>;
+  deleteRange(keyRange: KeyRange): Promise<number>;
+  openCursor(options?: OpenCursorOptions): Promise<Cursor | null>;
+  openKeyCursor(options?: OpenCursorOptions): Promise<Cursor | null>;
+  index(name: string): Index;
+}
+
+/**
+ * Fakeable IndexedDB secondary-index contract.
+ */
+export interface Index {
+  get(...values: unknown[]): Promise<Record>;
+  getKey(...values: unknown[]): Promise<string>;
+  getAll(keyRange?: KeyRange, ...values: unknown[]): Promise<Record[]>;
+  getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]>;
+  count(keyRange?: KeyRange, ...values: unknown[]): Promise<number>;
+  delete(...values: unknown[]): Promise<number>;
+  deleteRange(keyRange: KeyRange, ...values: unknown[]): Promise<number>;
+  openCursor(
+    options?: OpenCursorOptions,
+    ...values: unknown[]
+  ): Promise<Cursor | null>;
+  openKeyCursor(
+    options?: OpenCursorOptions,
+    ...values: unknown[]
+  ): Promise<Cursor | null>;
+}
+
+/**
+ * Fakeable explicit IndexedDB transaction contract.
+ */
+export interface Transaction {
+  objectStore(name: string): TransactionObjectStore;
+  commit(): Promise<void>;
+  abort(reason?: string): Promise<void>;
+}
+
+/**
+ * Fakeable transaction-scoped object-store contract.
+ */
+export interface TransactionObjectStore {
+  get(id: string): Promise<Record>;
+  getKey(id: string): Promise<string>;
+  add(record: Record): Promise<void>;
+  put(record: Record): Promise<void>;
+  delete(id: string): Promise<void>;
+  clear(): Promise<void>;
+  getAll(keyRange?: KeyRange): Promise<Record[]>;
+  getAllKeys(keyRange?: KeyRange): Promise<string[]>;
+  count(keyRange?: KeyRange): Promise<number>;
+  deleteRange(keyRange: KeyRange): Promise<number>;
+  index(name: string): TransactionIndex;
+}
+
+/**
+ * Fakeable transaction-scoped secondary-index contract.
+ */
+export interface TransactionIndex {
+  get(...values: unknown[]): Promise<Record>;
+  getKey(...values: unknown[]): Promise<string>;
+  getAll(keyRange?: KeyRange, ...values: unknown[]): Promise<Record[]>;
+  getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]>;
+  count(keyRange?: KeyRange, ...values: unknown[]): Promise<number>;
+  delete(...values: unknown[]): Promise<number>;
+  deleteRange(keyRange: KeyRange, ...values: unknown[]): Promise<number>;
+}
+
+/**
+ * Fakeable IndexedDB cursor contract.
+ */
+export interface Cursor {
+  readonly key: unknown;
+  readonly primaryKey: string;
+  readonly value: Record | undefined;
+  readonly done: boolean;
+  continue(): Promise<boolean>;
+  continueToKey(key: unknown): Promise<boolean>;
+  advance(count: number): Promise<boolean>;
+  delete(): Promise<void>;
+  update(record: Record): Promise<void>;
+  close(): void;
+}
+
+/**
  * Streaming cursor over an object store or secondary index.
  */
-export class Cursor {
+class RemoteCursor implements Cursor {
   private sendQueue: AsyncQueue<any>;
   private responseIterator: AsyncIterator<any>;
   private _key: unknown = undefined;
@@ -152,7 +265,7 @@ export class Cursor {
     const responseIterator = responses[Symbol.asyncIterator]();
 
     const isIndex = !!options?.index;
-    const cursor = new Cursor(sendQueue, responseIterator, isIndex);
+    const cursor = new RemoteCursor(sendQueue, responseIterator, isIndex);
     // Read the open ack to surface creation errors synchronously.
     await cursor.recvOpenAck();
     return cursor;
@@ -787,7 +900,7 @@ function compareBytes(left: Uint8Array, right: Uint8Array): number {
  * const todos = db.objectStore("todos");
  * ```
  */
-export class IndexedDB {
+class RemoteIndexedDB implements IndexedDB {
   private client: Client<typeof IndexedDBService>;
 
   constructor(name?: string) {
@@ -800,12 +913,18 @@ export class IndexedDB {
   }
 
   /**
+   * Releases client resources. The current Connect transport has no explicit
+   * shutdown hook, so this is a lifecycle-compatible no-op.
+   */
+  close(): void {}
+
+  /**
    * Creates an object store.
    */
   async createObjectStore(
     name: string,
     schema?: ObjectStoreSchema,
-  ): Promise<void> {
+  ): Promise<ObjectStore> {
     await this.client.createObjectStore({
       name,
       schema: {
@@ -823,6 +942,7 @@ export class IndexedDB {
         })),
       },
     });
+    return this.objectStore(name);
   }
 
   /**
@@ -836,7 +956,7 @@ export class IndexedDB {
    * Returns a client bound to a single object store.
    */
   objectStore(name: string): ObjectStore {
-    return new ObjectStore(this.client, name);
+    return new RemoteObjectStore(this.client, name);
   }
 
   /**
@@ -847,14 +967,14 @@ export class IndexedDB {
     mode: TransactionMode = "readonly",
     options?: TransactionOptions,
   ): Promise<Transaction> {
-    return Transaction.open(this.client, stores, mode, options);
+    return RemoteTransaction.open(this.client, stores, mode, options);
   }
 }
 
 /**
  * Explicit transaction over one or more object stores.
  */
-export class Transaction {
+class RemoteTransaction implements Transaction {
   private sendQueue: AsyncQueue<any>;
   private responseIterator: AsyncIterator<any>;
   private closed = false;
@@ -893,7 +1013,7 @@ export class Transaction {
     });
     const responses = client.transaction(sendQueue);
     const responseIterator = responses[Symbol.asyncIterator]();
-    const tx = new Transaction(sendQueue, responseIterator);
+    const tx = new RemoteTransaction(sendQueue, responseIterator);
     try {
       const { value: resp, done } = await responseIterator.next();
       if (done || !resp) {
@@ -915,7 +1035,7 @@ export class Transaction {
    * Returns a transaction-scoped object store.
    */
   objectStore(name: string): TransactionObjectStore {
-    return new TransactionObjectStore(this, name);
+    return new RemoteTransactionObjectStore(this, name);
   }
 
   /**
@@ -1040,12 +1160,12 @@ export class Transaction {
 /**
  * Transaction-scoped object-store client.
  */
-export class TransactionObjectStore {
+class RemoteTransactionObjectStore implements TransactionObjectStore {
   /**
    * @internal
    */
   constructor(
-    private tx: Transaction,
+    private tx: RemoteTransaction,
     private store: string,
   ) {}
 
@@ -1168,19 +1288,19 @@ export class TransactionObjectStore {
    * Returns a transaction-scoped secondary index.
    */
   index(name: string): TransactionIndex {
-    return new TransactionIndex(this.tx, this.store, name);
+    return new RemoteTransactionIndex(this.tx, this.store, name);
   }
 }
 
 /**
  * Transaction-scoped secondary-index client.
  */
-export class TransactionIndex {
+class RemoteTransactionIndex implements TransactionIndex {
   /**
    * @internal
    */
   constructor(
-    private tx: Transaction,
+    private tx: RemoteTransaction,
     private store: string,
     private indexName: string,
   ) {}
@@ -1254,6 +1374,17 @@ export class TransactionIndex {
     return Number(resp.result.value.deleted);
   }
 
+  /**
+   * Deletes indexed records inside the transaction that match a key range.
+   */
+  async deleteRange(keyRange: KeyRange, ...values: unknown[]): Promise<number> {
+    const resp = await this.tx.sendOperation({
+      case: "indexDelete" as const,
+      value: this.indexRequest(values, keyRange),
+    });
+    return Number(resp.result.value.deleted);
+  }
+
   private indexRequest(values: unknown[], keyRange?: KeyRange): any {
     return {
       store: this.store,
@@ -1267,7 +1398,7 @@ export class TransactionIndex {
 /**
  * Object store client used for primary-key operations.
  */
-export class ObjectStore {
+class RemoteObjectStore implements ObjectStore {
   /**
    * @internal
    */
@@ -1372,28 +1503,31 @@ export class ObjectStore {
    * Opens a cursor over the object store.
    */
   async openCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
-    return Cursor.open(this.client, this.store, options);
+    return RemoteCursor.open(this.client, this.store, options);
   }
 
   /**
    * Opens a key-only cursor over the object store.
    */
   async openKeyCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
-    return Cursor.open(this.client, this.store, { ...options, keysOnly: true });
+    return RemoteCursor.open(this.client, this.store, {
+      ...options,
+      keysOnly: true,
+    });
   }
 
   /**
    * Returns a client bound to a secondary index.
    */
   index(name: string): Index {
-    return new Index(this.client, this.store, name);
+    return new RemoteIndex(this.client, this.store, name);
   }
 }
 
 /**
  * Secondary-index client used for lookup and cursor operations.
  */
-export class Index {
+class RemoteIndex implements Index {
   /**
    * @internal
    */
@@ -1486,13 +1620,26 @@ export class Index {
   }
 
   /**
+   * Deletes records matching the supplied index values and optional range.
+   */
+  async deleteRange(keyRange: KeyRange, ...values: unknown[]): Promise<number> {
+    const resp = await this.client.indexDelete({
+      store: this.store,
+      index: this.indexName,
+      values: values.map(toProtoTypedValue),
+      range: toProtoKeyRange(keyRange),
+    });
+    return Number(resp.deleted);
+  }
+
+  /**
    * Opens a cursor over the index.
    */
   async openCursor(
     options?: OpenCursorOptions,
     ...values: unknown[]
   ): Promise<Cursor | null> {
-    return Cursor.open(this.client, this.store, {
+    return RemoteCursor.open(this.client, this.store, {
       ...options,
       index: this.indexName,
       indexValues: values,
@@ -1506,7 +1653,7 @@ export class Index {
     options?: OpenCursorOptions,
     ...values: unknown[]
   ): Promise<Cursor | null> {
-    return Cursor.open(this.client, this.store, {
+    return RemoteCursor.open(this.client, this.store, {
       ...options,
       keysOnly: true,
       index: this.indexName,
@@ -1747,3 +1894,5 @@ function mapTransactionTransportError(err: any): never {
     throw new TransactionError(err.message);
   throw err;
 }
+
+export const IndexedDB = RemoteIndexedDB;

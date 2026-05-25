@@ -23,7 +23,7 @@ import (
 
 type s3Server struct {
 	proto.UnimplementedS3Server
-	client      s3sdk.Client
+	client      s3sdk.S3
 	keyPrefix   string
 	pluginName  string
 	bindingName string
@@ -37,11 +37,11 @@ type ServerOptions struct {
 	AccessURLs  *ObjectAccessURLManager
 }
 
-func NewServer(client s3sdk.Client, pluginName string) proto.S3Server {
+func NewServer(client s3sdk.S3, pluginName string) proto.S3Server {
 	return NewServerWithOptions(client, pluginName, ServerOptions{})
 }
 
-func NewServerWithOptions(client s3sdk.Client, pluginName string, opts ServerOptions) proto.S3Server {
+func NewServerWithOptions(client s3sdk.S3, pluginName string, opts ServerOptions) proto.S3Server {
 	return &s3Server{
 		client:      client,
 		keyPrefix:   s3NamespacePrefix(pluginName),
@@ -63,7 +63,7 @@ type routingS3ObjectAccessServer struct {
 	defaultBinding string
 }
 
-func NewRoutingServers(clients map[string]s3sdk.Client, defaultBinding string, pluginName string, accessURLs *ObjectAccessURLManager) (proto.S3Server, proto.S3ObjectAccessServer) {
+func NewRoutingServers(clients map[string]s3sdk.S3, defaultBinding string, pluginName string, accessURLs *ObjectAccessURLManager) (proto.S3Server, proto.S3ObjectAccessServer) {
 	s3Servers := make(map[string]proto.S3Server, len(clients))
 	accessServers := make(map[string]proto.S3ObjectAccessServer, len(clients))
 	for binding, client := range clients {

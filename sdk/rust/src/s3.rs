@@ -372,6 +372,155 @@ pub type ObjectAccessURLOptions = PresignOptions;
 pub type ObjectAccessURL = PresignResult;
 
 #[async_trait]
+/// Fakeable S3-compatible client contract.
+pub trait S3Api: Send {
+    type Object: S3ObjectApi;
+
+    /// Returns a convenience handle for one object key.
+    fn object(&self, bucket: &str, key: &str) -> Self::Object;
+
+    /// Returns a convenience handle for one object version.
+    fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> Self::Object;
+
+    /// Fetches metadata for one object.
+    async fn head_object(
+        &mut self,
+        reference: ObjectRef,
+    ) -> std::result::Result<ObjectMeta, S3Error>;
+
+    /// Opens a streaming object reader.
+    async fn read_object(
+        &mut self,
+        reference: ObjectRef,
+        options: Option<ReadOptions>,
+    ) -> std::result::Result<ObjectReader, S3Error>;
+
+    /// Uploads an object from contiguous bytes.
+    async fn write_object(
+        &mut self,
+        reference: ObjectRef,
+        body: Vec<u8>,
+        options: Option<WriteOptions>,
+    ) -> std::result::Result<ObjectMeta, S3Error>;
+
+    /// Deletes one object.
+    async fn delete_object(&mut self, reference: ObjectRef) -> std::result::Result<(), S3Error>;
+
+    /// Lists objects in a bucket.
+    async fn list_objects(
+        &mut self,
+        options: ListOptions,
+    ) -> std::result::Result<ListPage, S3Error>;
+
+    /// Copies one object to another location.
+    async fn copy_object(
+        &mut self,
+        source: ObjectRef,
+        destination: ObjectRef,
+        options: Option<CopyOptions>,
+    ) -> std::result::Result<ObjectMeta, S3Error>;
+
+    /// Creates a provider-generated presigned URL.
+    async fn presign_object(
+        &mut self,
+        reference: ObjectRef,
+        options: Option<PresignOptions>,
+    ) -> std::result::Result<PresignResult, S3Error>;
+
+    /// Creates a host-mediated object-access URL.
+    async fn create_object_access_url(
+        &mut self,
+        reference: ObjectRef,
+        options: Option<ObjectAccessURLOptions>,
+    ) -> std::result::Result<ObjectAccessURL, S3Error>;
+
+    /// Alias for creating a host-mediated object-access URL.
+    async fn create_access_url(
+        &mut self,
+        reference: ObjectRef,
+        options: Option<ObjectAccessURLOptions>,
+    ) -> std::result::Result<ObjectAccessURL, S3Error>;
+}
+
+#[async_trait]
+/// Fakeable convenience contract for one S3 object reference.
+pub trait S3ObjectApi: Send {
+    /// Returns the referenced object key and version.
+    fn reference(&self) -> &ObjectRef;
+
+    /// Fetches metadata for the current object.
+    async fn stat(&mut self) -> std::result::Result<ObjectMeta, S3Error>;
+
+    /// Reports whether the current object exists.
+    async fn exists(&mut self) -> std::result::Result<bool, S3Error>;
+
+    /// Opens a streaming reader for the current object.
+    async fn stream(
+        &mut self,
+        options: Option<ReadOptions>,
+    ) -> std::result::Result<ObjectReader, S3Error>;
+
+    /// Reads the entire object into memory.
+    async fn bytes(
+        &mut self,
+        options: Option<ReadOptions>,
+    ) -> std::result::Result<Vec<u8>, S3Error>;
+
+    /// Reads the entire object as UTF-8 text.
+    async fn text(&mut self, options: Option<ReadOptions>) -> std::result::Result<String, S3Error>;
+
+    /// Reads and decodes the entire object as JSON.
+    async fn json<T>(&mut self, options: Option<ReadOptions>) -> std::result::Result<T, S3Error>
+    where
+        T: DeserializeOwned + Send;
+
+    /// Uploads a new object body.
+    async fn write(
+        &mut self,
+        body: Vec<u8>,
+        options: Option<WriteOptions>,
+    ) -> std::result::Result<ObjectMeta, S3Error>;
+
+    /// Uploads raw bytes.
+    async fn write_bytes(
+        &mut self,
+        body: Vec<u8>,
+        options: Option<WriteOptions>,
+    ) -> std::result::Result<ObjectMeta, S3Error>;
+
+    /// Uploads UTF-8 text.
+    async fn write_string(
+        &mut self,
+        body: String,
+        options: Option<WriteOptions>,
+    ) -> std::result::Result<ObjectMeta, S3Error>;
+
+    /// Uploads JSON, defaulting the content type when omitted.
+    async fn write_json<T>(
+        &mut self,
+        value: &T,
+        options: Option<WriteOptions>,
+    ) -> std::result::Result<ObjectMeta, S3Error>
+    where
+        T: serde::Serialize + Sync + ?Sized;
+
+    /// Deletes the current object.
+    async fn delete(&mut self) -> std::result::Result<(), S3Error>;
+
+    /// Creates a presigned URL for the current object.
+    async fn presign(
+        &mut self,
+        options: Option<PresignOptions>,
+    ) -> std::result::Result<PresignResult, S3Error>;
+
+    /// Creates a host-mediated object-access URL for the current object.
+    async fn create_access_url(
+        &mut self,
+        options: Option<ObjectAccessURLOptions>,
+    ) -> std::result::Result<ObjectAccessURL, S3Error>;
+}
+
+#[async_trait]
 /// Lifecycle and RPC contract for S3-compatible providers.
 pub trait S3Provider: Send + Sync + 'static {
     /// Configures the provider before it starts serving requests.
@@ -643,8 +792,8 @@ impl S3 {
     }
 
     /// Returns a convenience handle for one object key.
-    pub fn object(&self, bucket: &str, key: &str) -> Object {
-        Object {
+    pub fn object(&self, bucket: &str, key: &str) -> S3Object {
+        S3Object {
             client: self.client.clone(),
             object_access_client: self.object_access_client.clone(),
             reference: ObjectRef {
@@ -656,8 +805,8 @@ impl S3 {
     }
 
     /// Returns a convenience handle for one object version.
-    pub fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> Object {
-        Object {
+    pub fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> S3Object {
+        S3Object {
             client: self.client.clone(),
             object_access_client: self.object_access_client.clone(),
             reference: ObjectRef {
@@ -931,14 +1080,95 @@ impl S3 {
     }
 }
 
+#[async_trait]
+impl S3Api for S3 {
+    type Object = S3Object;
+
+    fn object(&self, bucket: &str, key: &str) -> S3Object {
+        S3::object(self, bucket, key)
+    }
+
+    fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> S3Object {
+        S3::object_version(self, bucket, key, version_id)
+    }
+
+    async fn head_object(
+        &mut self,
+        reference: ObjectRef,
+    ) -> std::result::Result<ObjectMeta, S3Error> {
+        S3::head_object(self, reference).await
+    }
+
+    async fn read_object(
+        &mut self,
+        reference: ObjectRef,
+        options: Option<ReadOptions>,
+    ) -> std::result::Result<ObjectReader, S3Error> {
+        S3::read_object(self, reference, options).await
+    }
+
+    async fn write_object(
+        &mut self,
+        reference: ObjectRef,
+        body: Vec<u8>,
+        options: Option<WriteOptions>,
+    ) -> std::result::Result<ObjectMeta, S3Error> {
+        S3::write_object(self, reference, body, options).await
+    }
+
+    async fn delete_object(&mut self, reference: ObjectRef) -> std::result::Result<(), S3Error> {
+        S3::delete_object(self, reference).await
+    }
+
+    async fn list_objects(
+        &mut self,
+        options: ListOptions,
+    ) -> std::result::Result<ListPage, S3Error> {
+        S3::list_objects(self, options).await
+    }
+
+    async fn copy_object(
+        &mut self,
+        source: ObjectRef,
+        destination: ObjectRef,
+        options: Option<CopyOptions>,
+    ) -> std::result::Result<ObjectMeta, S3Error> {
+        S3::copy_object(self, source, destination, options).await
+    }
+
+    async fn presign_object(
+        &mut self,
+        reference: ObjectRef,
+        options: Option<PresignOptions>,
+    ) -> std::result::Result<PresignResult, S3Error> {
+        S3::presign_object(self, reference, options).await
+    }
+
+    async fn create_object_access_url(
+        &mut self,
+        reference: ObjectRef,
+        options: Option<ObjectAccessURLOptions>,
+    ) -> std::result::Result<ObjectAccessURL, S3Error> {
+        S3::create_object_access_url(self, reference, options).await
+    }
+
+    async fn create_access_url(
+        &mut self,
+        reference: ObjectRef,
+        options: Option<ObjectAccessURLOptions>,
+    ) -> std::result::Result<ObjectAccessURL, S3Error> {
+        S3::create_access_url(self, reference, options).await
+    }
+}
+
 /// Convenience wrapper around repeated operations on one object key.
-pub struct Object {
+pub struct S3Object {
     client: ProtoS3Client<S3Transport>,
     object_access_client: ProtoS3ObjectAccessClient<S3Transport>,
     reference: ObjectRef,
 }
 
-impl Object {
+impl S3Object {
     /// Returns the referenced object key and version.
     pub fn reference(&self) -> &ObjectRef {
         &self.reference
@@ -1106,7 +1336,100 @@ impl Object {
     }
 }
 
-/// Streaming reader returned by [`S3::read_object`] and [`Object::stream`].
+#[async_trait]
+impl S3ObjectApi for S3Object {
+    fn reference(&self) -> &ObjectRef {
+        S3Object::reference(self)
+    }
+
+    async fn stat(&mut self) -> std::result::Result<ObjectMeta, S3Error> {
+        S3Object::stat(self).await
+    }
+
+    async fn exists(&mut self) -> std::result::Result<bool, S3Error> {
+        S3Object::exists(self).await
+    }
+
+    async fn stream(
+        &mut self,
+        options: Option<ReadOptions>,
+    ) -> std::result::Result<ObjectReader, S3Error> {
+        S3Object::stream(self, options).await
+    }
+
+    async fn bytes(
+        &mut self,
+        options: Option<ReadOptions>,
+    ) -> std::result::Result<Vec<u8>, S3Error> {
+        S3Object::bytes(self, options).await
+    }
+
+    async fn text(&mut self, options: Option<ReadOptions>) -> std::result::Result<String, S3Error> {
+        S3Object::text(self, options).await
+    }
+
+    async fn json<T>(&mut self, options: Option<ReadOptions>) -> std::result::Result<T, S3Error>
+    where
+        T: DeserializeOwned + Send,
+    {
+        S3Object::json(self, options).await
+    }
+
+    async fn write(
+        &mut self,
+        body: Vec<u8>,
+        options: Option<WriteOptions>,
+    ) -> std::result::Result<ObjectMeta, S3Error> {
+        S3Object::write(self, body, options).await
+    }
+
+    async fn write_bytes(
+        &mut self,
+        body: Vec<u8>,
+        options: Option<WriteOptions>,
+    ) -> std::result::Result<ObjectMeta, S3Error> {
+        S3Object::write_bytes(self, body, options).await
+    }
+
+    async fn write_string(
+        &mut self,
+        body: String,
+        options: Option<WriteOptions>,
+    ) -> std::result::Result<ObjectMeta, S3Error> {
+        S3Object::write_string(self, body, options).await
+    }
+
+    async fn write_json<T>(
+        &mut self,
+        value: &T,
+        options: Option<WriteOptions>,
+    ) -> std::result::Result<ObjectMeta, S3Error>
+    where
+        T: serde::Serialize + Sync + ?Sized,
+    {
+        S3Object::write_json(self, value, options).await
+    }
+
+    async fn delete(&mut self) -> std::result::Result<(), S3Error> {
+        S3Object::delete(self).await
+    }
+
+    async fn presign(
+        &mut self,
+        options: Option<PresignOptions>,
+    ) -> std::result::Result<PresignResult, S3Error> {
+        S3Object::presign(self, options).await
+    }
+
+    async fn create_access_url(
+        &mut self,
+        options: Option<ObjectAccessURLOptions>,
+    ) -> std::result::Result<ObjectAccessURL, S3Error> {
+        S3Object::create_access_url(self, options).await
+    }
+}
+
+/// Streaming reader returned by [`S3::read_object`] and [`S3Object::stream`].
 pub struct ObjectReader {
     meta: ObjectMeta,
     stream: tonic::Streaming<pb::ReadObjectChunk>,

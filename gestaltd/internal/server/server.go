@@ -130,7 +130,7 @@ type Server struct {
 	hostServiceMu           sync.Mutex
 	hostServiceHandlers     map[uint64]http.Handler
 	publicHostServices      *runtimehost.PublicHostServiceRegistry
-	s3                      map[string]s3sdk.Client
+	s3                      map[string]s3sdk.S3
 	s3ObjectAccessURLs      *s3.ObjectAccessURLManager
 	egressProxyTokens       *egressproxy.TokenManager
 	providerDevSessions     *providerdev.Manager
@@ -187,7 +187,7 @@ type Config struct {
 	PrometheusMetrics     http.Handler
 	MCPHandler            http.Handler
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
-	S3                    map[string]s3sdk.Client
+	S3                    map[string]s3sdk.S3
 	ProviderDevSessions   *providerdev.Manager
 	ProviderDevAttach     bool
 	MountedUIs            []MountedUI
