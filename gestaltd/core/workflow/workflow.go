@@ -137,29 +137,6 @@ func cloneLiteral(value any) any {
 	}
 }
 
-type ExecutionReference struct {
-	ID                  string
-	ProviderName        string
-	Target              Target
-	CallerAppName       string
-	SourceDefinitionID  string
-	SubjectID           string
-	SubjectKind         string
-	DisplayName         string
-	AuthSource          string
-	CredentialSubjectID string
-	RunAs               *core.RunAsSubject
-	Permissions         []core.AccessPermission
-	CreatedAt           *time.Time
-	RevokedAt           *time.Time
-}
-
-type ExecutionReferenceStore interface {
-	PutExecutionReference(ctx context.Context, ref *ExecutionReference) (*ExecutionReference, error)
-	GetExecutionReference(ctx context.Context, id string) (*ExecutionReference, error)
-	ListExecutionReferences(ctx context.Context, subjectID string) ([]*ExecutionReference, error)
-}
-
 type Event struct {
 	ID              string
 	Source          string
@@ -199,8 +176,8 @@ type Run struct {
 	Status        RunStatus
 	WorkflowKey   string
 	Target        Target
+	DefinitionID  string
 	Trigger       RunTrigger
-	ExecutionRef  string
 	CreatedBy     Actor
 	CreatedAt     *time.Time
 	StartedAt     *time.Time
@@ -214,8 +191,8 @@ type Schedule struct {
 	Cron         string
 	Timezone     string
 	Target       Target
+	DefinitionID string
 	Paused       bool
-	ExecutionRef string
 	CreatedBy    Actor
 	CreatedAt    *time.Time
 	UpdatedAt    *time.Time
@@ -226,11 +203,38 @@ type EventTrigger struct {
 	ID           string
 	Match        EventMatch
 	Target       Target
+	DefinitionID string
 	Paused       bool
-	ExecutionRef string
 	CreatedBy    Actor
 	CreatedAt    *time.Time
 	UpdatedAt    *time.Time
+}
+
+type Definition struct {
+	ID        string
+	Target    Target
+	CreatedBy Actor
+	CreatedAt *time.Time
+}
+
+type CreateDefinitionRequest struct {
+	Target         Target
+	IdempotencyKey string
+	CreatedBy      Actor
+}
+
+type GetDefinitionRequest struct {
+	DefinitionID string
+}
+
+type UpdateDefinitionRequest struct {
+	DefinitionID string
+	Target       Target
+	RequestedBy  Actor
+}
+
+type DeleteDefinitionRequest struct {
+	DefinitionID string
 }
 
 type StartRunRequest struct {
@@ -238,7 +242,7 @@ type StartRunRequest struct {
 	IdempotencyKey string
 	WorkflowKey    string
 	CreatedBy      Actor
-	ExecutionRef   string
+	DefinitionID   string
 }
 
 type GetRunRequest struct {
@@ -283,7 +287,7 @@ type SignalOrStartRunRequest struct {
 	Target         Target
 	IdempotencyKey string
 	CreatedBy      Actor
-	ExecutionRef   string
+	DefinitionID   string
 	Signal         Signal
 }
 
@@ -301,7 +305,7 @@ type UpsertScheduleRequest struct {
 	Target       Target
 	Paused       bool
 	RequestedBy  Actor
-	ExecutionRef string
+	DefinitionID string
 }
 
 type ListSchedulesRequest struct{}
@@ -328,7 +332,7 @@ type UpsertEventTriggerRequest struct {
 	Target       Target
 	Paused       bool
 	RequestedBy  Actor
-	ExecutionRef string
+	DefinitionID string
 }
 
 type ListEventTriggersRequest struct{}
@@ -355,24 +359,11 @@ type PublishEventRequest struct {
 	PublishedBy Actor
 }
 
-type InvokeOperationRequest struct {
-	ProviderName string
-	RunID        string
-	Trigger      RunTrigger
-	Target       Target
-	Input        map[string]any
-	Metadata     map[string]any
-	CreatedBy    Actor
-	ExecutionRef string
-	Signals      []Signal
-}
-
-type InvokeOperationResponse struct {
-	Status int
-	Body   string
-}
-
 type Provider interface {
+	CreateDefinition(ctx context.Context, req CreateDefinitionRequest) (*Definition, error)
+	GetDefinition(ctx context.Context, req GetDefinitionRequest) (*Definition, error)
+	UpdateDefinition(ctx context.Context, req UpdateDefinitionRequest) (*Definition, error)
+	DeleteDefinition(ctx context.Context, req DeleteDefinitionRequest) error
 	StartRun(ctx context.Context, req StartRunRequest) (*Run, error)
 	GetRun(ctx context.Context, req GetRunRequest) (*Run, error)
 	ListRuns(ctx context.Context, req ListRunsRequest) (*ListRunsResponse, error)
@@ -394,10 +385,6 @@ type Provider interface {
 	PublishEvent(ctx context.Context, req PublishEventRequest) (*Event, error)
 	Ping(ctx context.Context) error
 	Close() error
-}
-
-type Host interface {
-	InvokeOperation(ctx context.Context, req InvokeOperationRequest) (*InvokeOperationResponse, error)
 }
 
 func TargetsEqual(left, right Target) bool {

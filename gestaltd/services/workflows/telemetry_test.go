@@ -135,18 +135,6 @@ func (workflowTelemetryProviderServer) ResumeEventTrigger(context.Context, *prot
 	return telemetryEventTrigger("trigger-1"), nil
 }
 
-func (workflowTelemetryProviderServer) PutExecutionReference(_ context.Context, req *proto.PutWorkflowExecutionReferenceRequest) (*proto.WorkflowExecutionReference, error) {
-	return req.GetReference(), nil
-}
-
-func (workflowTelemetryProviderServer) GetExecutionReference(context.Context, *proto.GetWorkflowExecutionReferenceRequest) (*proto.WorkflowExecutionReference, error) {
-	return telemetryExecutionReference(), nil
-}
-
-func (workflowTelemetryProviderServer) ListExecutionReferences(context.Context, *proto.ListWorkflowExecutionReferencesRequest) (*proto.ListWorkflowExecutionReferencesResponse, error) {
-	return &proto.ListWorkflowExecutionReferencesResponse{References: []*proto.WorkflowExecutionReference{telemetryExecutionReference()}}, nil
-}
-
 func (workflowTelemetryProviderServer) PublishEvent(context.Context, *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
 	return &proto.WorkflowEvent{Type: "ignored"}, nil
 }
@@ -243,22 +231,6 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 			return p.Ping(ctx)
 		}},
 	}
-	store := workflow.(coreworkflow.ExecutionReferenceStore)
-	calls = append(calls,
-		workflowProviderMetricCall{"put execution ref", observability.WorkflowOperationPutExecutionReference, workflowMetricAttrsWith(observability.WorkflowOperationPutExecutionReference, observability.WorkflowTriggerKindNone, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, _ coreworkflow.Provider) error {
-			_, err := store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{ID: "ref-1", Target: telemetryCoreAppStepTarget()})
-			return err
-		}},
-		workflowProviderMetricCall{"get execution ref", observability.WorkflowOperationGetExecutionReference, workflowMetricAttrs(observability.WorkflowOperationGetExecutionReference), func(ctx context.Context, _ coreworkflow.Provider) error {
-			_, err := store.GetExecutionReference(ctx, "ref-1")
-			return err
-		}},
-		workflowProviderMetricCall{"list execution refs", observability.WorkflowOperationListExecutionReferences, workflowMetricAttrs(observability.WorkflowOperationListExecutionReferences), func(ctx context.Context, _ coreworkflow.Provider) error {
-			_, err := store.ListExecutionReferences(ctx, "subject-1")
-			return err
-		}},
-	)
-
 	for _, tc := range calls {
 		if err := tc.call(ctx, workflow); err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
@@ -301,7 +273,6 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 	})
 	startRunAttrs := workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown)
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.run.id")
-	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.execution_ref")
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.app.operation")
 }
 
@@ -517,7 +488,6 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"caller_app",
 		"workflow_key_sha256",
 		"gestaltd.workflow.run.id",
-		"gestaltd.workflow.execution_ref",
 		"gestaltd.workflow.app.operation",
 	} {
 		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.manager.operation.duration", successAttrs, forbidden)
@@ -561,7 +531,6 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"caller_app",
 		"subject_id",
 		"subject_kind",
-		"execution_ref_id",
 		"target_authorization_provider",
 		"target_authorization_operation",
 		"target_authorization_tool_ref_index",
@@ -722,12 +691,6 @@ func assertWorkflowManagerFailureLog(t *testing.T, output, workflowKey, phase st
 		assertWorkflowManagerLogField(t, record, "workflow_key_sha256", expectedHash)
 		assertWorkflowManagerLogField(t, record, "phase", phase)
 		for key, value := range want {
-			if key == "execution_ref_id_set" {
-				if value == true && !workflowManagerLogStringPresent(record, "execution_ref_id") {
-					t.Fatalf("execution_ref_id missing from record %#v", record)
-				}
-				continue
-			}
 			if key == "request_id_set" {
 				if value == true && !workflowManagerLogStringPresent(record, "request_id") {
 					t.Fatalf("request_id missing from record %#v", record)
@@ -882,13 +845,12 @@ type workflowManagerTelemetryAgentManager struct {
 
 type workflowManagerTelemetryProvider struct {
 	coreworkflow.Provider
-	refs               map[string]*coreworkflow.ExecutionReference
 	signalOrStartCalls atomic.Int64
 	signalOrStartErr   error
 }
 
 func newWorkflowManagerTelemetryProvider() *workflowManagerTelemetryProvider {
-	return &workflowManagerTelemetryProvider{refs: map[string]*coreworkflow.ExecutionReference{}}
+	return &workflowManagerTelemetryProvider{}
 }
 
 func (p *workflowManagerTelemetryProvider) SignalOrStartRun(_ context.Context, req coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
@@ -902,44 +864,16 @@ func (p *workflowManagerTelemetryProvider) SignalOrStartRun(_ context.Context, r
 	}
 	return &coreworkflow.SignalRunResponse{
 		Run: &coreworkflow.Run{
-			ID:           "run-signal-started",
-			Status:       coreworkflow.RunStatusRunning,
-			WorkflowKey:  req.WorkflowKey,
-			Target:       req.Target,
-			ExecutionRef: req.ExecutionRef,
-			CreatedBy:    req.CreatedBy,
+			ID:          "run-signal-started",
+			Status:      coreworkflow.RunStatusRunning,
+			WorkflowKey: req.WorkflowKey,
+			Target:      req.Target,
+			CreatedBy:   req.CreatedBy,
 		},
 		Signal:      signal,
 		StartedRun:  true,
 		WorkflowKey: req.WorkflowKey,
 	}, nil
-}
-
-func (p *workflowManagerTelemetryProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
-	copied := *ref
-	p.refs[copied.ID] = &copied
-	return &copied, nil
-}
-
-func (p *workflowManagerTelemetryProvider) GetExecutionReference(_ context.Context, id string) (*coreworkflow.ExecutionReference, error) {
-	ref := p.refs[strings.TrimSpace(id)]
-	if ref == nil {
-		return nil, core.ErrNotFound
-	}
-	copied := *ref
-	return &copied, nil
-}
-
-func (p *workflowManagerTelemetryProvider) ListExecutionReferences(_ context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
-	var out []*coreworkflow.ExecutionReference
-	for _, ref := range p.refs {
-		if strings.TrimSpace(ref.SubjectID) != strings.TrimSpace(subjectID) {
-			continue
-		}
-		copied := *ref
-		out = append(out, &copied)
-	}
-	return out, nil
 }
 
 func telemetryRun(id string, status proto.WorkflowRunStatus) *proto.BoundWorkflowRun {
@@ -967,15 +901,6 @@ func telemetryEventTrigger(id string) *proto.BoundWorkflowEventTrigger {
 		UpdatedAt: timestamppb.Now(),
 		Match:     &proto.WorkflowEventMatch{Type: "ignored"},
 		Target:    telemetryProtoAppStepTarget("ignored", "ignored"),
-	}
-}
-
-func telemetryExecutionReference() *proto.WorkflowExecutionReference {
-	return &proto.WorkflowExecutionReference{
-		Id:           "ref-1",
-		ProviderName: "workflow-metrics",
-		Target:       telemetryProtoAppStepTarget("ignored", "ignored"),
-		CreatedAt:    timestamppb.Now(),
 	}
 }
 

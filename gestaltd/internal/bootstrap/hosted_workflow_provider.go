@@ -293,23 +293,11 @@ type workflowProviderWithRuntimeWorkers struct {
 	workers *hostedWorkflowWorkerPool
 }
 
-type workflowProviderWithRuntimeWorkersAndExecutionReferences struct {
-	*workflowProviderWithRuntimeWorkers
-	coreworkflow.ExecutionReferenceStore
-}
-
 func wrapWorkflowProviderWithRuntimeWorkers(provider coreworkflow.Provider, workers *hostedWorkflowWorkerPool) coreworkflow.Provider {
-	wrapped := &workflowProviderWithRuntimeWorkers{
+	return &workflowProviderWithRuntimeWorkers{
 		Provider: provider,
 		workers:  workers,
 	}
-	if executionRefs, ok := provider.(coreworkflow.ExecutionReferenceStore); ok {
-		return &workflowProviderWithRuntimeWorkersAndExecutionReferences{
-			workflowProviderWithRuntimeWorkers: wrapped,
-			ExecutionReferenceStore:            executionRefs,
-		}
-	}
-	return wrapped
 }
 
 func (p *workflowProviderWithRuntimeWorkers) Start(ctx context.Context) error {

@@ -21,37 +21,37 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var (
 	ErrWorkflowNotConfigured      = errors.New("workflow is not configured")
-	ErrExecutionRefsNotConfigured = errors.New("workflow execution refs are not configured")
 	ErrWorkflowSubjectRequired    = errors.New("workflow subject is required")
 	ErrWorkflowScheduleSubject    = ErrWorkflowSubjectRequired
-	ErrDuplicateExecutionRefs     = errors.New("workflow object matched multiple execution references")
+	ErrDuplicateWorkflowObjects   = errors.New("workflow object matched multiple providers")
 	ErrWorkflowEventMatchRequired = errors.New("workflow trigger match.type is required")
 	ErrWorkflowEventTypeRequired  = errors.New("workflow event type is required")
 	ErrWorkflowKeyRequired        = errors.New("workflow key is required")
 	ErrWorkflowSignalNameRequired = errors.New("workflow signal name is required")
 )
 
-const workflowScheduleExecutionRefBasePrefix = "workflow_schedule:"
-const workflowEventTriggerExecutionRefBasePrefix = "workflow_event_trigger:"
-const workflowRunExecutionRefBasePrefix = "workflow_run:"
-const workflowDefinitionExecutionRefBasePrefix = "workflow_definition:"
-const workflowNoProviderPermissionsApp = "__gestalt.workflow.no_provider_permissions__"
 const defaultWorkflowEventSpecVersion = "1.0"
 const workflowRunListDefaultPageSize = 100
 const workflowRunListMaxPageSize = 200
 
-type signalTargetPrincipalSource uint8
+type callerAppNameContextKey struct{}
 
-const (
-	signalTargetPrincipalCaller signalTargetPrincipalSource = iota
-	signalTargetPrincipalExecutionRef
-)
+func WithCallerAppName(ctx context.Context, callerAppName string) context.Context {
+	callerAppName = strings.TrimSpace(callerAppName)
+	if callerAppName == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, callerAppNameContextKey{}, callerAppName)
+}
+
+func callerAppNameFromContext(ctx context.Context) string {
+	value, _ := ctx.Value(callerAppNameContextKey{}).(string)
+	return strings.TrimSpace(value)
+}
 
 type WorkflowControl interface {
 	ResolveProvider(name string) (coreworkflow.Provider, error)
@@ -125,16 +125,14 @@ type Manager struct {
 }
 
 type ScheduleUpsert struct {
-	ProviderName       string
-	Cron               string
-	Timezone           string
-	Target             coreworkflow.Target
-	DefinitionID       string
-	SourceDefinitionID string
-	Paused             bool
-	IdempotencyKey     string
-	CallerAppName      string
-	Permissions        []core.AccessPermission
+	ProviderName   string
+	Cron           string
+	Timezone       string
+	Target         coreworkflow.Target
+	DefinitionID   string
+	Paused         bool
+	IdempotencyKey string
+	CallerAppName  string
 }
 
 type DefinitionUpsert struct {
@@ -142,7 +140,6 @@ type DefinitionUpsert struct {
 	Target         coreworkflow.Target
 	IdempotencyKey string
 	CallerAppName  string
-	Permissions    []core.AccessPermission
 }
 
 type EventTriggerUpsert struct {
@@ -162,7 +159,6 @@ type RunStart struct {
 	IdempotencyKey string
 	WorkflowKey    string
 	CallerAppName  string
-	Permissions    []core.AccessPermission
 }
 
 type RunSignal struct {
@@ -190,28 +186,25 @@ type EventPublish struct {
 
 type ManagedDefinition struct {
 	ProviderName string
-	Definition   *coreworkflow.ExecutionReference
+	Definition   *coreworkflow.Definition
 	provider     coreworkflow.Provider
 }
 
 type ManagedSchedule struct {
 	ProviderName string
 	Schedule     *coreworkflow.Schedule
-	ExecutionRef *coreworkflow.ExecutionReference
 	provider     coreworkflow.Provider
 }
 
 type ManagedEventTrigger struct {
 	ProviderName string
 	Trigger      *coreworkflow.EventTrigger
-	ExecutionRef *coreworkflow.ExecutionReference
 	provider     coreworkflow.Provider
 }
 
 type ManagedRun struct {
 	ProviderName string
 	Run          *coreworkflow.Run
-	ExecutionRef *coreworkflow.ExecutionReference
 	provider     coreworkflow.Provider
 }
 
@@ -221,7 +214,6 @@ type ManagedRunSignal struct {
 	Signal       coreworkflow.Signal
 	StartedRun   bool
 	WorkflowKey  string
-	ExecutionRef *coreworkflow.ExecutionReference
 	provider     coreworkflow.Provider
 }
 
@@ -396,13 +388,13 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 		return nil, err
 	}
 	if m == nil || m.workflow == nil {
-		return nil, ErrExecutionRefsNotConfigured
+		return nil, ErrWorkflowNotConfigured
 	}
 	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
 	if subjectID == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	providerNames := m.workflow.ProviderNames()
+	providerNames := m.providerNames()
 	states, err := decodeWorkflowRunListPageToken(req.PageToken, providerNames, req, pageSize)
 	if err != nil {
 		return nil, err
@@ -418,10 +410,6 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 			continue
 		}
 		provider, err := m.resolveProviderByName(providerName)
-		if err != nil {
-			return nil, err
-		}
-		store, err := workflowExecutionReferenceStore(providerName, provider)
 		if err != nil {
 			return nil, err
 		}
@@ -483,15 +471,15 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 					}
 					seenProviderRunIDs[runID] = struct{}{}
 				}
-				ref, err := m.executionRefForRun(ctx, store, providerName, run)
-				if err != nil {
-					return nil, err
+				if !runMatchesListFilters(run, req) {
+					continue
 				}
-				if ref == nil ||
-					!executionRefOwnedBy(ref, p) ||
-					!m.allowTarget(ctx, p, ref.Target) ||
-					!runMatchesExecutionRef(providerName, run, ref) ||
-					!runMatchesListFilters(run, req) {
+				managed := &ManagedRun{
+					ProviderName: providerName,
+					Run:          run,
+					provider:     provider,
+				}
+				if !m.runAccessible(ctx, p, managed) {
 					continue
 				}
 				if !providerStateSet {
@@ -521,12 +509,7 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 					ProviderOrder: providerCandidates,
 					RunID:         runID,
 					ResumeState:   resume,
-					Run: &ManagedRun{
-						ProviderName: providerName,
-						Run:          run,
-						ExecutionRef: ref,
-						provider:     provider,
-					},
+					Run:           managed,
 				})
 				providerCandidates++
 				if providerCandidates >= pageSize && nextProviderToken != "" {
@@ -631,24 +614,6 @@ func workflowManagedRunValue(managed *ManagedRun) *coreworkflow.Run {
 		return nil
 	}
 	return managed.Run
-}
-
-func (m *Manager) executionRefForRun(ctx context.Context, store coreworkflow.ExecutionReferenceStore, providerName string, run *coreworkflow.Run) (*coreworkflow.ExecutionReference, error) {
-	executionRefID := ""
-	if run != nil {
-		executionRefID = strings.TrimSpace(run.ExecutionRef)
-	}
-	if executionRefID == "" {
-		return nil, nil
-	}
-	ref, err := store.GetExecutionReference(ctx, executionRefID)
-	if errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return workflowExecutionRefForProvider(ref, providerName), nil
 }
 
 func effectiveWorkflowRunListPageSize(pageSize int) (int, error) {

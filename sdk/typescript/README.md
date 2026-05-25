@@ -102,8 +102,8 @@ as `CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
 fields use native `Date`; the SDK runtime owns transport serialization at the
 transport boundary. `AgentHost` includes plain-object helpers named
 `listToolsForTurn`, `executeToolForTurn`, and `resolveConnectionForTurn`.
-Workflow helpers such as `boundWorkflowTarget`, `workflowSignal`,
-`boundWorkflowRun`, and `workflowExecutionReference` accept plain JSON objects
+Workflow helpers such as `boundWorkflowTarget`, `workflowSignal`, and
+`boundWorkflowRun` accept plain JSON objects
 and native `Date` values. Copy helpers such as `boundWorkflowTargetFromTarget`
 preserve request shape without requiring provider code to assemble transport
 objects. Provider-facing APIs should accept native TypeScript values and keep

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"net/http"
 	"reflect"
@@ -125,16 +126,6 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 	upsert := workflowProvider.upsertedSchedules[0]
 	if len(upsert.Target.Steps) != 1 || upsert.Target.Steps[0].App == nil || upsert.Target.Steps[0].App.Name != "roadmap" || upsert.Target.Steps[0].App.Operation != "sync" {
 		t.Fatalf("upsert target = %#v", upsert.Target)
-	}
-	ref, err := workflowProvider.GetExecutionReference(context.Background(), upsert.ExecutionRef)
-	if err != nil {
-		t.Fatalf("GetExecutionReference: %v", err)
-	}
-	if len(ref.Permissions) != 1 || ref.Permissions[0].App != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
-		t.Fatalf("execution ref permissions = %#v", ref.Permissions)
-	}
-	if ref.CallerAppName != "agent:managed" {
-		t.Fatalf("execution ref caller = %q, want agent:managed", ref.CallerAppName)
 	}
 }
 
@@ -481,15 +472,6 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 	if definitionID == "" || definitionBody.Definition.Provider != "temporal" || len(definitionBody.Definition.Target.Steps) != 1 || definitionBody.Definition.Target.Steps[0].Agent.Provider != "managed" {
 		t.Fatalf("definition response = %#v", definitionBody.Definition)
 	}
-	definitionRef, err := workflowProvider.GetExecutionReference(context.Background(), definitionID)
-	if err != nil {
-		t.Fatalf("GetExecutionReference(definition): %v", err)
-	}
-	assertWorkflowSystemPermissions(t, definitionRef.Permissions, []core.AccessPermission{
-		{App: "managed"},
-		{App: "roadmap", Operations: []string{"sync"}},
-	})
-
 	scheduleResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "managed",
 		SessionID:    "session-1",
@@ -511,9 +493,9 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 	}
 	var scheduleBody struct {
 		Schedule struct {
-			ID                 string `json:"id"`
-			SourceDefinitionID string `json:"sourceDefinitionId"`
-			Target             struct {
+			ID           string `json:"id"`
+			DefinitionID string `json:"definitionId"`
+			Target       struct {
 				Steps []struct {
 					Agent struct {
 						Provider string `json:"provider"`
@@ -525,24 +507,16 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 	if err := json.Unmarshal([]byte(scheduleResp.Body), &scheduleBody); err != nil {
 		t.Fatalf("decode schedule response body: %v", err)
 	}
-	if scheduleBody.Schedule.ID == "" || scheduleBody.Schedule.SourceDefinitionID != definitionID || len(scheduleBody.Schedule.Target.Steps) != 1 || scheduleBody.Schedule.Target.Steps[0].Agent.Provider != "managed" {
+	if scheduleBody.Schedule.ID == "" || scheduleBody.Schedule.DefinitionID != definitionID || len(scheduleBody.Schedule.Target.Steps) != 1 || scheduleBody.Schedule.Target.Steps[0].Agent.Provider != "managed" {
 		t.Fatalf("schedule response = %#v", scheduleBody.Schedule)
 	}
 	if len(workflowProvider.upsertedSchedules) != 1 {
 		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
 	}
 	upsert := workflowProvider.upsertedSchedules[0]
-	scheduleRef, err := workflowProvider.GetExecutionReference(context.Background(), upsert.ExecutionRef)
-	if err != nil {
-		t.Fatalf("GetExecutionReference(schedule): %v", err)
+	if upsert.DefinitionID != definitionID {
+		t.Fatalf("schedule definition id = %q, want %q", upsert.DefinitionID, definitionID)
 	}
-	if scheduleRef.SourceDefinitionID != definitionID {
-		t.Fatalf("schedule ref source definition id = %q, want %q", scheduleRef.SourceDefinitionID, definitionID)
-	}
-	assertWorkflowSystemPermissions(t, scheduleRef.Permissions, []core.AccessPermission{
-		{App: "managed"},
-		{App: "roadmap", Operations: []string{"sync"}},
-	})
 
 	runResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "managed",
@@ -565,17 +539,9 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 	if len(workflowProvider.startedRuns) != 1 {
 		t.Fatalf("started runs = %d, want 1", len(workflowProvider.startedRuns))
 	}
-	runRef, err := workflowProvider.GetExecutionReference(context.Background(), workflowProvider.startedRuns[0].ExecutionRef)
-	if err != nil {
-		t.Fatalf("GetExecutionReference(run): %v", err)
+	if workflowProvider.startedRuns[0].DefinitionID != definitionID {
+		t.Fatalf("run definition id = %q, want %q", workflowProvider.startedRuns[0].DefinitionID, definitionID)
 	}
-	if runRef.SourceDefinitionID != definitionID {
-		t.Fatalf("run ref source definition id = %q, want %q", runRef.SourceDefinitionID, definitionID)
-	}
-	assertWorkflowSystemPermissions(t, runRef.Permissions, []core.AccessPermission{
-		{App: "managed"},
-		{App: "roadmap", Operations: []string{"sync"}},
-	})
 }
 
 func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionWithInheritedAgentToolRefs(t *testing.T) {
@@ -635,12 +601,12 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionWithInheritedAgentToolRe
 	if err := json.Unmarshal([]byte(resp.Body), &body); err != nil {
 		t.Fatalf("decode definition response body: %v", err)
 	}
-	ref, err := workflowProvider.GetExecutionReference(context.Background(), body.Definition.ID)
+	definition, err := workflowProvider.GetDefinition(context.Background(), coreworkflow.GetDefinitionRequest{DefinitionID: body.Definition.ID})
 	if err != nil {
-		t.Fatalf("GetExecutionReference(definition): %v", err)
+		t.Fatalf("GetDefinition: %v", err)
 	}
-	if len(ref.Target.Steps) != 1 || ref.Target.Steps[0].Agent == nil {
-		t.Fatalf("definition target = %#v, want agent", ref.Target)
+	if len(definition.Target.Steps) != 1 || definition.Target.Steps[0].Agent == nil {
+		t.Fatalf("definition target = %#v, want agent", definition.Target)
 	}
 	wantRefs := []coreagent.ToolRef{
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
@@ -649,15 +615,9 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionWithInheritedAgentToolRe
 		{App: "linear", Operation: "viewer"},
 		{App: "slack", Operation: "chat.postMessage"},
 	}
-	if !reflect.DeepEqual(ref.Target.Steps[0].Agent.ToolRefs, wantRefs) {
-		t.Fatalf("inherited tool refs = %#v, want %#v", ref.Target.Steps[0].Agent.ToolRefs, wantRefs)
+	if !reflect.DeepEqual(definition.Target.Steps[0].Agent.ToolRefs, wantRefs) {
+		t.Fatalf("inherited tool refs = %#v, want %#v", definition.Target.Steps[0].Agent.ToolRefs, wantRefs)
 	}
-	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
-		{App: "linear", Operations: []string{"viewer"}},
-		{App: "managed"},
-		{App: "roadmap", Operations: []string{"sync"}},
-		{App: "slack", Operations: []string{"chat.postMessage"}},
-	})
 }
 
 func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithInheritedAgentToolRefs(t *testing.T) {
@@ -789,13 +749,6 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithGrantedCallerToolRefs(
 	if !reflect.DeepEqual(upsert.Target.Steps[0].Agent.ToolRefs, wantRefs) {
 		t.Fatalf("inherited tool refs = %#v, want %#v", upsert.Target.Steps[0].Agent.ToolRefs, wantRefs)
 	}
-	ref, err := workflowProvider.GetExecutionReference(context.Background(), upsert.ExecutionRef)
-	if err != nil {
-		t.Fatalf("GetExecutionReference(schedule): %v", err)
-	}
-	if ref.CallerAppName != "slack" {
-		t.Fatalf("schedule caller app = %q, want slack", ref.CallerAppName)
-	}
 }
 
 func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithExplicitEmptyAgentToolRefs(t *testing.T) {
@@ -851,11 +804,6 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithExplicitEmptyAgentTool
 	if len(upsert.Target.Steps[0].Agent.ToolRefs) != 0 {
 		t.Fatalf("explicit empty tool refs = %#v, want empty slice", upsert.Target.Steps[0].Agent.ToolRefs)
 	}
-	ref, err := workflowProvider.GetExecutionReference(context.Background(), upsert.ExecutionRef)
-	if err != nil {
-		t.Fatalf("GetExecutionReference: %v", err)
-	}
-	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{{App: "managed"}})
 }
 
 func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T) {
@@ -935,12 +883,12 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T)
 	if updateResp == nil || updateResp.Status != http.StatusOK {
 		t.Fatalf("update definition response = %#v, want 200", updateResp)
 	}
-	ref, err := workflowProvider.GetExecutionReference(context.Background(), definitionID)
+	definition, err := workflowProvider.GetDefinition(context.Background(), coreworkflow.GetDefinitionRequest{DefinitionID: definitionID})
 	if err != nil {
-		t.Fatalf("GetExecutionReference(definition): %v", err)
+		t.Fatalf("GetDefinition: %v", err)
 	}
-	if len(ref.Target.Steps) != 1 || ref.Target.Steps[0].Agent == nil || ref.Target.Steps[0].Agent.Prompt.Template != "Sync the roadmap and summarize changes." {
-		t.Fatalf("definition target = %#v", ref.Target)
+	if len(definition.Target.Steps) != 1 || definition.Target.Steps[0].Agent == nil || definition.Target.Steps[0].Agent.Prompt.Template != "Sync the roadmap and summarize changes." {
+		t.Fatalf("definition target = %#v", definition.Target)
 	}
 	wantRefs := []coreagent.ToolRef{
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
@@ -949,13 +897,9 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T)
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsDelete},
 		{App: "roadmap", Operation: "sync"},
 	}
-	if !reflect.DeepEqual(ref.Target.Steps[0].Agent.ToolRefs, wantRefs) {
-		t.Fatalf("updated definition inherited tool refs = %#v, want %#v", ref.Target.Steps[0].Agent.ToolRefs, wantRefs)
+	if !reflect.DeepEqual(definition.Target.Steps[0].Agent.ToolRefs, wantRefs) {
+		t.Fatalf("updated definition inherited tool refs = %#v, want %#v", definition.Target.Steps[0].Agent.ToolRefs, wantRefs)
 	}
-	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
-		{App: "managed"},
-		{App: "roadmap", Operations: []string{"sync"}},
-	})
 
 	getResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "managed",
@@ -1071,15 +1015,15 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesSchedule(t *testing.T) {
 	}
 	var createBody struct {
 		Schedule struct {
-			ID                 string `json:"id"`
-			SourceDefinitionID string `json:"sourceDefinitionId"`
+			ID           string `json:"id"`
+			DefinitionID string `json:"definitionId"`
 		} `json:"schedule"`
 	}
 	if err := json.Unmarshal([]byte(createResp.Body), &createBody); err != nil {
 		t.Fatalf("decode create schedule response body: %v", err)
 	}
 	scheduleID := createBody.Schedule.ID
-	if scheduleID == "" || createBody.Schedule.SourceDefinitionID != definitionBody.Definition.ID {
+	if scheduleID == "" || createBody.Schedule.DefinitionID != definitionBody.Definition.ID {
 		t.Fatalf("created schedule = %#v", createBody.Schedule)
 	}
 
@@ -1104,16 +1048,16 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesSchedule(t *testing.T) {
 	}
 	var updateBody struct {
 		Schedule struct {
-			ID                 string `json:"id"`
-			Cron               string `json:"cron"`
-			Paused             bool   `json:"paused"`
-			SourceDefinitionID string `json:"sourceDefinitionId"`
+			ID           string `json:"id"`
+			Cron         string `json:"cron"`
+			Paused       bool   `json:"paused"`
+			DefinitionID string `json:"definitionId"`
 		} `json:"schedule"`
 	}
 	if err := json.Unmarshal([]byte(updateResp.Body), &updateBody); err != nil {
 		t.Fatalf("decode update schedule response body: %v", err)
 	}
-	if updateBody.Schedule.ID != scheduleID || updateBody.Schedule.Cron != "*/15 * * * *" || !updateBody.Schedule.Paused || updateBody.Schedule.SourceDefinitionID != definitionBody.Definition.ID {
+	if updateBody.Schedule.ID != scheduleID || updateBody.Schedule.Cron != "*/15 * * * *" || !updateBody.Schedule.Paused || updateBody.Schedule.DefinitionID != definitionBody.Definition.ID {
 		t.Fatalf("updated schedule = %#v", updateBody.Schedule)
 	}
 	if len(workflowProvider.upsertedSchedules) != 2 {
@@ -1123,12 +1067,8 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesSchedule(t *testing.T) {
 	if len(updateUpsert.Target.Steps) != 1 || updateUpsert.Target.Steps[0].Agent == nil || updateUpsert.Target.Steps[0].Agent.Prompt.Template != "Sync the roadmap." {
 		t.Fatalf("updated upsert target = %#v", updateUpsert.Target)
 	}
-	scheduleRef, err := workflowProvider.GetExecutionReference(context.Background(), updateUpsert.ExecutionRef)
-	if err != nil {
-		t.Fatalf("GetExecutionReference(schedule): %v", err)
-	}
-	if scheduleRef.SourceDefinitionID != definitionBody.Definition.ID {
-		t.Fatalf("schedule source definition id = %q, want %q", scheduleRef.SourceDefinitionID, definitionBody.Definition.ID)
+	if updateUpsert.DefinitionID != definitionBody.Definition.ID {
+		t.Fatalf("schedule definition id = %q, want %q", updateUpsert.DefinitionID, definitionBody.Definition.ID)
 	}
 
 	deleteResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
@@ -1160,6 +1100,78 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesSchedule(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeWorkflowSystemToolUpdateDefinitionScheduleUsesManagementPrincipal(t *testing.T) {
+	t.Parallel()
+
+	permissions := principal.CompilePermissions([]core.AccessPermission{
+		{App: "roadmap", Operations: []string{"sync"}},
+		{App: "notification", Operations: []string{"reply"}},
+	})
+	owner := coreworkflow.Actor{SubjectID: principal.UserSubjectID("ada")}
+	target := workflowSystemToolTestAppStepTarget("roadmap", "sync")
+	manager := &workflowSystemToolPrincipalRecordingManager{
+		schedule: &workflowmanager.ManagedSchedule{
+			ProviderName: "temporal",
+			Schedule: &coreworkflow.Schedule{
+				ID:           "schedule-1",
+				Cron:         "*/5 * * * *",
+				Timezone:     "UTC",
+				Target:       target,
+				DefinitionID: "definition-1",
+				CreatedBy:    owner,
+			},
+		},
+		definition: &workflowmanager.ManagedDefinition{
+			ProviderName: "temporal",
+			Definition: &coreworkflow.Definition{
+				ID:        "definition-1",
+				Target:    target,
+				CreatedBy: owner,
+			},
+		},
+	}
+	tools := newWorkflowSystemTools(manager, nil)
+
+	resp, err := tools.executeUpdateSchedule(context.Background(), agentSystemToolExecutionRequest{
+		Principal: &principal.Principal{
+			SubjectID:        principal.UserSubjectID("ada"),
+			Kind:             principal.KindUser,
+			TokenPermissions: permissions,
+			Scopes:           principal.PermissionApps(permissions),
+		},
+		ProviderName: "managed",
+		Arguments: map[string]any{
+			"scheduleId": "schedule-1",
+			"cron":       "*/15 * * * *",
+		},
+		ToolRefs: []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
+	})
+	if err != nil {
+		t.Fatalf("executeUpdateSchedule: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusOK {
+		t.Fatalf("update schedule response = %#v, want 200", resp)
+	}
+	if manager.getSchedulePrincipal == nil || manager.updateSchedulePrincipal == nil {
+		t.Fatalf("schedule principals were not recorded")
+	}
+	if !reflect.DeepEqual(manager.updateSchedulePrincipal.TokenPermissions, manager.getSchedulePrincipal.TokenPermissions) {
+		t.Fatalf("update token permissions = %#v, want management permissions %#v", manager.updateSchedulePrincipal.TokenPermissions, manager.getSchedulePrincipal.TokenPermissions)
+	}
+	if !principal.AllowsOperationPermission(manager.updateSchedulePrincipal, "notification", "reply") {
+		t.Fatalf("definition schedule metadata update used narrowed target permissions: %#v", manager.updateSchedulePrincipal.TokenPermissions)
+	}
+	if !principal.AllowsProviderPermission(manager.updateSchedulePrincipal, "managed") {
+		t.Fatalf("definition schedule metadata update lost trusted agent provider: %#v", manager.updateSchedulePrincipal.TokenPermissions)
+	}
+	if manager.updateScheduleID != "schedule-1" || manager.updateReq.DefinitionID != "definition-1" || manager.updateReq.Cron != "*/15 * * * *" {
+		t.Fatalf("update request = id %q req %#v", manager.updateScheduleID, manager.updateReq)
+	}
+	if len(manager.updateReq.Target.Steps) != 0 {
+		t.Fatalf("definition-linked schedule update target = %#v, want empty upsert target", manager.updateReq.Target)
+	}
+}
+
 func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *testing.T) {
 	t.Parallel()
 
@@ -1175,23 +1187,12 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 	})
 	roadmapTarget := workflowSystemToolTestAppStepTarget("roadmap", "sync")
 	notificationTarget := workflowSystemToolTestAppStepTarget("notification", "reply")
+	owner := coreworkflow.Actor{SubjectID: principal.UserSubjectID("ada")}
 	workflowProvider.runs = map[string]*coreworkflow.Run{
-		"run-a": {ID: "run-a", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, ExecutionRef: "ref-a"},
-		"run-b": {ID: "run-b", Status: coreworkflow.RunStatusSucceeded, Target: notificationTarget, ExecutionRef: "ref-b"},
-		"run-c": {ID: "run-c", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, ExecutionRef: "ref-c"},
-		"run-d": {ID: "run-d", Status: coreworkflow.RunStatusFailed, Target: roadmapTarget, ExecutionRef: "ref-d"},
-	}
-	for runID, run := range workflowProvider.runs {
-		_, err := workflowProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-			ID:           run.ExecutionRef,
-			ProviderName: "temporal",
-			Target:       run.Target,
-			SubjectID:    principal.UserSubjectID("ada"),
-			SubjectKind:  string(principal.KindUser),
-		})
-		if err != nil {
-			t.Fatalf("PutExecutionReference(%s): %v", runID, err)
-		}
+		"run-a": {ID: "run-a", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, CreatedBy: owner},
+		"run-b": {ID: "run-b", Status: coreworkflow.RunStatusSucceeded, Target: notificationTarget, CreatedBy: owner},
+		"run-c": {ID: "run-c", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, CreatedBy: owner},
+		"run-d": {ID: "run-d", Status: coreworkflow.RunStatusFailed, Target: roadmapTarget, CreatedBy: owner},
 	}
 
 	firstResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
@@ -1614,7 +1615,6 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 		},
 	}
 	agentManager := workflowSystemToolAgentManagerStub{}
-	workflowRuntime.SetAgentManager(agentManager)
 	workflowManager := workflowmanager.New(workflowmanager.Config{
 		Providers:    &reg.Providers,
 		Workflow:     workflowRuntime,
@@ -1653,13 +1653,132 @@ func (workflowSystemToolAgentManagerStub) Available() bool {
 	return true
 }
 
+type workflowSystemToolPrincipalRecordingManager struct {
+	workflowmanager.Service
+
+	getSchedulePrincipal    *principal.Principal
+	getDefinitionPrincipal  *principal.Principal
+	updateSchedulePrincipal *principal.Principal
+	updateScheduleID        string
+	updateReq               workflowmanager.ScheduleUpsert
+	schedule                *workflowmanager.ManagedSchedule
+	definition              *workflowmanager.ManagedDefinition
+}
+
+func (m *workflowSystemToolPrincipalRecordingManager) GetSchedule(_ context.Context, p *principal.Principal, scheduleID string) (*workflowmanager.ManagedSchedule, error) {
+	m.getSchedulePrincipal = principal.Canonicalized(p)
+	if m.schedule == nil || m.schedule.Schedule == nil || m.schedule.Schedule.ID != scheduleID {
+		return nil, core.ErrNotFound
+	}
+	schedule := *m.schedule.Schedule
+	return &workflowmanager.ManagedSchedule{ProviderName: m.schedule.ProviderName, Schedule: &schedule}, nil
+}
+
+func (m *workflowSystemToolPrincipalRecordingManager) GetDefinition(_ context.Context, p *principal.Principal, definitionID string) (*workflowmanager.ManagedDefinition, error) {
+	m.getDefinitionPrincipal = principal.Canonicalized(p)
+	if m.definition == nil || m.definition.Definition == nil || m.definition.Definition.ID != definitionID {
+		return nil, core.ErrNotFound
+	}
+	definition := *m.definition.Definition
+	return &workflowmanager.ManagedDefinition{ProviderName: m.definition.ProviderName, Definition: &definition}, nil
+}
+
+func (m *workflowSystemToolPrincipalRecordingManager) UpdateSchedule(_ context.Context, p *principal.Principal, scheduleID string, req workflowmanager.ScheduleUpsert) (*workflowmanager.ManagedSchedule, error) {
+	m.updateSchedulePrincipal = principal.Canonicalized(p)
+	m.updateScheduleID = scheduleID
+	m.updateReq = req
+	if m.schedule == nil || m.schedule.Schedule == nil || m.schedule.Schedule.ID != scheduleID {
+		return nil, core.ErrNotFound
+	}
+
+	schedule := *m.schedule.Schedule
+	schedule.Cron = strings.TrimSpace(req.Cron)
+	schedule.Timezone = strings.TrimSpace(req.Timezone)
+	schedule.Paused = req.Paused
+	schedule.DefinitionID = strings.TrimSpace(req.DefinitionID)
+	schedule.Target = req.Target
+	if schedule.DefinitionID != "" && len(schedule.Target.Steps) == 0 && m.definition != nil && m.definition.Definition != nil {
+		schedule.Target = m.definition.Definition.Target
+	}
+	providerName := strings.TrimSpace(req.ProviderName)
+	if providerName == "" {
+		providerName = m.schedule.ProviderName
+	}
+	return &workflowmanager.ManagedSchedule{ProviderName: providerName, Schedule: &schedule}, nil
+}
+
 type workflowSystemToolRecordingProvider struct {
 	startedRuns       []coreworkflow.StartRunRequest
 	runs              map[string]*coreworkflow.Run
 	runIdempotency    map[string]string
+	definitions       map[string]*coreworkflow.Definition
+	definitionCounter int
 	upsertedSchedules []coreworkflow.UpsertScheduleRequest
 	schedules         map[string]*coreworkflow.Schedule
-	executionRefs     map[string]*coreworkflow.ExecutionReference
+}
+
+func (p *workflowSystemToolRecordingProvider) CreateDefinition(_ context.Context, req coreworkflow.CreateDefinitionRequest) (*coreworkflow.Definition, error) {
+	if p.definitions == nil {
+		p.definitions = map[string]*coreworkflow.Definition{}
+	}
+	id := strings.TrimSpace(req.IdempotencyKey)
+	if id == "" {
+		p.definitionCounter++
+		id = fmt.Sprintf("definition-%d", p.definitionCounter)
+	} else {
+		id = "definition-" + id
+	}
+	if existing := p.definitions[id]; existing != nil {
+		value := *existing
+		return &value, nil
+	}
+	definition := &coreworkflow.Definition{
+		ID:        id,
+		Target:    req.Target,
+		CreatedBy: req.CreatedBy,
+	}
+	p.definitions[id] = definition
+	value := *definition
+	return &value, nil
+}
+
+func (p *workflowSystemToolRecordingProvider) GetDefinition(_ context.Context, req coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
+	if definition := p.definitions[strings.TrimSpace(req.DefinitionID)]; definition != nil {
+		value := *definition
+		return &value, nil
+	}
+	return nil, core.ErrNotFound
+}
+
+func (p *workflowSystemToolRecordingProvider) UpdateDefinition(_ context.Context, req coreworkflow.UpdateDefinitionRequest) (*coreworkflow.Definition, error) {
+	if p.definitions == nil {
+		p.definitions = map[string]*coreworkflow.Definition{}
+	}
+	id := strings.TrimSpace(req.DefinitionID)
+	existing, ok := p.definitions[id]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	definition := &coreworkflow.Definition{
+		ID:        id,
+		Target:    req.Target,
+		CreatedBy: existing.CreatedBy,
+	}
+	p.definitions[id] = definition
+	value := *definition
+	return &value, nil
+}
+
+func (p *workflowSystemToolRecordingProvider) DeleteDefinition(_ context.Context, req coreworkflow.DeleteDefinitionRequest) error {
+	if p.definitions == nil {
+		return core.ErrNotFound
+	}
+	id := strings.TrimSpace(req.DefinitionID)
+	if p.definitions[id] == nil {
+		return core.ErrNotFound
+	}
+	delete(p.definitions, id)
+	return nil
 }
 
 func (p *workflowSystemToolRecordingProvider) StartRun(_ context.Context, req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
@@ -1673,8 +1792,8 @@ func (p *workflowSystemToolRecordingProvider) StartRun(_ context.Context, req co
 		for runID, idempotencyKey := range p.runIdempotency {
 			if idempotencyKey == req.IdempotencyKey {
 				run := p.runs[runID]
-				if run.ExecutionRef != req.ExecutionRef {
-					return nil, errors.New("idempotent run replay used a different execution ref")
+				if run.DefinitionID != req.DefinitionID {
+					return nil, errors.New("idempotent run replay used a different definition id")
 				}
 				value := *run
 				return &value, nil
@@ -1682,12 +1801,16 @@ func (p *workflowSystemToolRecordingProvider) StartRun(_ context.Context, req co
 		}
 	}
 	p.startedRuns = append(p.startedRuns, req)
+	runID := "run-" + req.WorkflowKey
+	if runID == "run-" {
+		runID = fmt.Sprintf("run-%d", len(p.runs)+1)
+	}
 	run := &coreworkflow.Run{
-		ID:           "run-" + req.ExecutionRef,
+		ID:           runID,
 		Status:       coreworkflow.RunStatusPending,
 		WorkflowKey:  req.WorkflowKey,
 		Target:       req.Target,
-		ExecutionRef: req.ExecutionRef,
+		DefinitionID: req.DefinitionID,
 		CreatedBy:    req.CreatedBy,
 	}
 	p.runs[run.ID] = run
@@ -1779,8 +1902,8 @@ func (p *workflowSystemToolRecordingProvider) UpsertSchedule(_ context.Context, 
 		Cron:         req.Cron,
 		Timezone:     req.Timezone,
 		Target:       req.Target,
+		DefinitionID: req.DefinitionID,
 		Paused:       req.Paused,
-		ExecutionRef: req.ExecutionRef,
 		CreatedBy:    req.RequestedBy,
 	}
 	if p.schedules == nil {
@@ -1834,32 +1957,6 @@ func (p *workflowSystemToolRecordingProvider) ResumeEventTrigger(context.Context
 }
 func (p *workflowSystemToolRecordingProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
 	return &req.Event, nil
-}
-func (p *workflowSystemToolRecordingProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
-	if p.executionRefs == nil {
-		p.executionRefs = map[string]*coreworkflow.ExecutionReference{}
-	}
-	value := *ref
-	p.executionRefs[value.ID] = &value
-	return &value, nil
-}
-func (p *workflowSystemToolRecordingProvider) GetExecutionReference(_ context.Context, id string) (*coreworkflow.ExecutionReference, error) {
-	if ref := p.executionRefs[id]; ref != nil {
-		value := *ref
-		return &value, nil
-	}
-	return nil, core.ErrNotFound
-}
-func (p *workflowSystemToolRecordingProvider) ListExecutionReferences(_ context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
-	out := make([]*coreworkflow.ExecutionReference, 0, len(p.executionRefs))
-	for _, ref := range p.executionRefs {
-		if ref.SubjectID != subjectID {
-			continue
-		}
-		value := *ref
-		out = append(out, &value)
-	}
-	return out, nil
 }
 func (p *workflowSystemToolRecordingProvider) Ping(context.Context) error { return nil }
 func (p *workflowSystemToolRecordingProvider) Close() error               { return nil }
@@ -1925,12 +2022,4 @@ func mustWorkflowSystemTool(t *testing.T, runtime *agentRuntime, operation strin
 	}
 	tool.ID = mustMintAgentToolID(t, workflowSystemRunGrants(t, runtime), tool.Target)
 	return tool
-}
-
-func assertWorkflowSystemPermissions(t *testing.T, got, want []core.AccessPermission) {
-	t.Helper()
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("permissions = %#v, want %#v", got, want)
-	}
 }

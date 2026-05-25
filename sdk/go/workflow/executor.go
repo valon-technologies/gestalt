@@ -22,7 +22,6 @@ type Request struct {
 	Input           map[string]any
 	Metadata        map[string]any
 	CreatedBy       *gestalt.WorkflowActor
-	ExecutionRef    string
 	InvocationToken string
 	Signals         []gestalt.WorkflowSignal
 }

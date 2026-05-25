@@ -82,10 +82,10 @@ func (s *stubWorkflowControl) ProviderNames() []string {
 }
 
 type memoryWorkflowProvider struct {
+	definitions          map[string]*coreworkflow.Definition
 	schedules            map[string]*coreworkflow.Schedule
 	triggers             map[string]*coreworkflow.EventTrigger
 	runs                 map[string]*coreworkflow.Run
-	executionRefs        map[string]*coreworkflow.ExecutionReference
 	publishEventReqs     []coreworkflow.PublishEventRequest
 	upsertReqs           []coreworkflow.UpsertScheduleRequest
 	upsertTriggerReqs    []coreworkflow.UpsertEventTriggerRequest
@@ -112,11 +112,48 @@ type memoryWorkflowProvider struct {
 
 func newMemoryWorkflowProvider() *memoryWorkflowProvider {
 	return &memoryWorkflowProvider{
-		schedules:     map[string]*coreworkflow.Schedule{},
-		triggers:      map[string]*coreworkflow.EventTrigger{},
-		runs:          map[string]*coreworkflow.Run{},
-		executionRefs: map[string]*coreworkflow.ExecutionReference{},
+		definitions: map[string]*coreworkflow.Definition{},
+		schedules:   map[string]*coreworkflow.Schedule{},
+		triggers:    map[string]*coreworkflow.EventTrigger{},
+		runs:        map[string]*coreworkflow.Run{},
 	}
+}
+
+func (p *memoryWorkflowProvider) CreateDefinition(_ context.Context, req coreworkflow.CreateDefinitionRequest) (*coreworkflow.Definition, error) {
+	id := strings.TrimSpace(req.IdempotencyKey)
+	if id == "" {
+		id = "definition"
+	}
+	definition := &coreworkflow.Definition{ID: id, Target: cloneWorkflowTarget(req.Target), CreatedBy: req.CreatedBy}
+	p.definitions[id] = definition
+	return cloneWorkflowDefinition(definition), nil
+}
+
+func (p *memoryWorkflowProvider) GetDefinition(_ context.Context, req coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
+	definition := p.definitions[strings.TrimSpace(req.DefinitionID)]
+	if definition == nil {
+		return nil, core.ErrNotFound
+	}
+	return cloneWorkflowDefinition(definition), nil
+}
+
+func (p *memoryWorkflowProvider) UpdateDefinition(_ context.Context, req coreworkflow.UpdateDefinitionRequest) (*coreworkflow.Definition, error) {
+	id := strings.TrimSpace(req.DefinitionID)
+	if p.definitions[id] == nil {
+		return nil, core.ErrNotFound
+	}
+	definition := &coreworkflow.Definition{ID: id, Target: cloneWorkflowTarget(req.Target)}
+	p.definitions[id] = definition
+	return cloneWorkflowDefinition(definition), nil
+}
+
+func (p *memoryWorkflowProvider) DeleteDefinition(_ context.Context, req coreworkflow.DeleteDefinitionRequest) error {
+	id := strings.TrimSpace(req.DefinitionID)
+	if p.definitions[id] == nil {
+		return core.ErrNotFound
+	}
+	delete(p.definitions, id)
+	return nil
 }
 
 func (p *memoryWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
@@ -192,8 +229,8 @@ func (p *memoryWorkflowProvider) UpsertSchedule(_ context.Context, req coreworkf
 		Cron:         req.Cron,
 		Timezone:     req.Timezone,
 		Target:       req.Target,
+		DefinitionID: req.DefinitionID,
 		Paused:       req.Paused,
-		ExecutionRef: req.ExecutionRef,
 		CreatedBy:    req.RequestedBy,
 		CreatedAt:    createdAt,
 		UpdatedAt:    &now,
@@ -277,8 +314,8 @@ func (p *memoryWorkflowProvider) UpsertEventTrigger(_ context.Context, req corew
 		ID:           req.TriggerID,
 		Match:        req.Match,
 		Target:       req.Target,
+		DefinitionID: req.DefinitionID,
 		Paused:       req.Paused,
-		ExecutionRef: req.ExecutionRef,
 		CreatedBy:    req.RequestedBy,
 		CreatedAt:    createdAt,
 		UpdatedAt:    &now,
@@ -354,63 +391,18 @@ func (p *memoryWorkflowProvider) PublishEvent(_ context.Context, req coreworkflo
 	return &req.Event, nil
 }
 
-func (p *memoryWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
-	if p.executionRefs == nil {
-		p.executionRefs = map[string]*coreworkflow.ExecutionReference{}
-	}
-	stored := cloneWorkflowExecutionReference(ref)
-	p.executionRefs[stored.ID] = stored
-	return cloneWorkflowExecutionReference(stored), nil
-}
-
-func (p *memoryWorkflowProvider) GetExecutionReference(_ context.Context, id string) (*coreworkflow.ExecutionReference, error) {
-	ref := p.executionRefs[strings.TrimSpace(id)]
-	if ref == nil {
-		return nil, core.ErrNotFound
-	}
-	return cloneWorkflowExecutionReference(ref), nil
-}
-
-func (p *memoryWorkflowProvider) ListExecutionReferences(_ context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
-	subjectID = strings.TrimSpace(subjectID)
-	out := make([]*coreworkflow.ExecutionReference, 0, len(p.executionRefs))
-	for _, ref := range p.executionRefs {
-		if ref == nil {
-			continue
-		}
-		if subjectID != "" && strings.TrimSpace(ref.SubjectID) != subjectID {
-			continue
-		}
-		out = append(out, cloneWorkflowExecutionReference(ref))
-	}
-	return out, nil
-}
-
 func (p *memoryWorkflowProvider) Ping(context.Context) error { return nil }
 func (p *memoryWorkflowProvider) Close() error               { return nil }
 
-func cloneWorkflowExecutionReference(ref *coreworkflow.ExecutionReference) *coreworkflow.ExecutionReference {
-	if ref == nil {
+func cloneWorkflowDefinition(definition *coreworkflow.Definition) *coreworkflow.Definition {
+	if definition == nil {
 		return nil
 	}
-	cloned := *ref
-	cloned.Target = cloneWorkflowTarget(ref.Target)
-	if ref.RunAs != nil {
-		runAs := *core.NormalizeRunAsSubject(ref.RunAs)
-		cloned.RunAs = &runAs
-	}
-	cloned.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
-	for i := range cloned.Permissions {
-		cloned.Permissions[i].Operations = append([]string(nil), cloned.Permissions[i].Operations...)
-		cloned.Permissions[i].Actions = append([]string(nil), cloned.Permissions[i].Actions...)
-	}
-	if ref.CreatedAt != nil {
-		value := *ref.CreatedAt
+	cloned := *definition
+	cloned.Target = cloneWorkflowTarget(definition.Target)
+	if definition.CreatedAt != nil {
+		value := *definition.CreatedAt
 		cloned.CreatedAt = &value
-	}
-	if ref.RevokedAt != nil {
-		value := *ref.RevokedAt
-		cloned.RevokedAt = &value
 	}
 	return &cloned
 }
@@ -752,22 +744,6 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	if createUpsertApp.Name != "roadmap" || createUpsertApp.Operation != "sync" {
 		t.Fatalf("upsert target = %#v", createUpsert.Target)
 	}
-	if createUpsert.ExecutionRef == "" {
-		t.Fatal("expected execution ref to be stored on create")
-	}
-	ref, err := provider.GetExecutionReference(context.Background(), createUpsert.ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get execution ref: %v", err)
-	}
-	if ref.SubjectID != principal.UserSubjectID(user.ID) {
-		t.Fatalf("execution ref = %#v", ref)
-	}
-	if ref.SubjectKind != "user" || ref.DisplayName != "Ada" || ref.AuthSource != "session" {
-		t.Fatalf("execution ref subject metadata = (%q, %q, %q), want user/Ada/session", ref.SubjectKind, ref.DisplayName, ref.AuthSource)
-	}
-	if !coreworkflow.TargetsEqual(ref.Target, createUpsert.Target) {
-		t.Fatalf("execution ref target = %#v, want %#v", ref.Target, createUpsert.Target)
-	}
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
 	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -808,15 +784,9 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 		t.Fatalf("upsert requests after update = %d, want 2", len(provider.upsertReqs))
 	}
 	updateUpsert := provider.upsertReqs[len(provider.upsertReqs)-1]
-	if updateUpsert.ExecutionRef == "" || updateUpsert.ExecutionRef == createUpsert.ExecutionRef {
-		t.Fatalf("update execution ref = %q, want rotated from %q", updateUpsert.ExecutionRef, createUpsert.ExecutionRef)
-	}
-	oldRef, err := provider.GetExecutionReference(context.Background(), createUpsert.ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get rotated old ref: %v", err)
-	}
-	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
-		t.Fatalf("expected rotated execution ref to be revoked, got %#v", oldRef)
+	updateUpsertApp := requireCoreWorkflowAppStep(t, updateUpsert.Target)
+	if updateUpsertApp.Input.Object["mode"].Literal != "full" {
+		t.Fatalf("update target input = %#v", updateUpsertApp.Input)
 	}
 
 	pauseReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/"+created.ID+"/pause", nil)
@@ -853,13 +823,6 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	}
 	if _, ok := provider.schedules[created.ID]; ok {
 		t.Fatal("expected schedule to be deleted from provider")
-	}
-	ref, err = provider.GetExecutionReference(context.Background(), updateUpsert.ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get revoked ref: %v", err)
-	}
-	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
-		t.Fatalf("expected revoked execution ref, got %#v", ref)
 	}
 }
 
@@ -941,17 +904,6 @@ func TestWorkflowScheduleAgentStepCreateAndList(t *testing.T) {
 	storedApp := requireCoreWorkflowAppStep(t, storedTarget)
 	if storedApp.Name != "roadmap" || storedApp.Operation != "sync" {
 		t.Fatalf("stored app step = %#v", storedApp)
-	}
-	if provider.upsertReqs[0].ExecutionRef == "" {
-		t.Fatal("expected execution ref")
-	}
-	ref, err := provider.GetExecutionReference(context.Background(), provider.upsertReqs[0].ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get execution ref: %v", err)
-	}
-	requireCoreWorkflowAgentStep(t, ref.Target)
-	if !coreworkflow.TargetsEqual(ref.Target, storedTarget) {
-		t.Fatalf("execution ref target = %#v, want %#v", ref.Target, storedTarget)
 	}
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
@@ -1060,14 +1012,6 @@ func TestWorkflowScheduleAgentStepPreservesWorkflowSystemToolRefs(t *testing.T) 
 	if storedStep.Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow || storedStep.Agent.ToolRefs[0].Operation != "schedules.list" {
 		t.Fatalf("stored system tool ref = %#v", storedStep.Agent.ToolRefs[0])
 	}
-	ref, err := provider.GetExecutionReference(context.Background(), provider.upsertReqs[0].ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get execution ref: %v", err)
-	}
-	refStep := requireCoreWorkflowAgentStep(t, ref.Target)
-	if len(refStep.Agent.ToolRefs) != 2 || refStep.Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow {
-		t.Fatalf("execution ref target = %#v", ref.Target)
-	}
 }
 
 func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
@@ -1079,20 +1023,20 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	provider := newMemoryWorkflowProvider()
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.schedules["sched-ada"] = &coreworkflow.Schedule{
-		ID:           "sched-ada",
-		Cron:         "*/5 * * * *",
-		Target:       workflowAppStepTarget("roadmap", "sync"),
-		ExecutionRef: "workflow_schedule:sched-ada:ref-ada",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
+		ID:        "sched-ada",
+		Cron:      "*/5 * * * *",
+		Target:    workflowAppStepTarget("roadmap", "sync"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(ada.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 	provider.schedules["sched-grace"] = &coreworkflow.Schedule{
-		ID:           "sched-grace",
-		Cron:         "0 * * * *",
-		Target:       workflowAppStepTarget("roadmap", "sync"),
-		ExecutionRef: "workflow_schedule:sched-grace:ref-grace",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
+		ID:        "sched-grace",
+		Cron:      "0 * * * *",
+		Target:    workflowAppStepTarget("roadmap", "sync"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(grace.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 	provider.schedules["sched-analytics"] = &coreworkflow.Schedule{
 		ID:   "sched-analytics",
@@ -1105,33 +1049,9 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 				CredentialMode: core.ConnectionModeNone,
 			},
 		}}},
-		ExecutionRef: "workflow_schedule:sched-analytics:ref-analytics",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
-	}
-	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-ada:ref-ada",
-		ProviderName: "basic",
-		Target:       provider.schedules["sched-ada"].Target,
-		SubjectID:    principal.UserSubjectID(ada.ID),
-	}); err != nil {
-		t.Fatalf("Put ada ref: %v", err)
-	}
-	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-grace:ref-grace",
-		ProviderName: "basic",
-		Target:       provider.schedules["sched-grace"].Target,
-		SubjectID:    principal.UserSubjectID(grace.ID),
-	}); err != nil {
-		t.Fatalf("Put grace ref: %v", err)
-	}
-	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-analytics:ref-analytics",
-		ProviderName: "basic",
-		Target:       provider.schedules["sched-analytics"].Target,
-		SubjectID:    principal.UserSubjectID(ada.ID),
-	}); err != nil {
-		t.Fatalf("Put analytics ref: %v", err)
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(ada.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -1402,38 +1322,20 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 	provider := newMemoryWorkflowProvider()
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.schedules["sched-sync"] = &coreworkflow.Schedule{
-		ID:           "sched-sync",
-		Cron:         "*/5 * * * *",
-		Target:       workflowAppStepTarget("roadmap", "sync"),
-		ExecutionRef: "workflow_schedule:sched-sync:ref-sync",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
+		ID:        "sched-sync",
+		Cron:      "*/5 * * * *",
+		Target:    workflowAppStepTarget("roadmap", "sync"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 	provider.schedules["sched-export"] = &coreworkflow.Schedule{
-		ID:           "sched-export",
-		Cron:         "0 * * * *",
-		Target:       workflowAppStepTarget("roadmap", "export"),
-		ExecutionRef: "workflow_schedule:sched-export:ref-export",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
-	}
-	for _, ref := range []*coreworkflow.ExecutionReference{
-		{
-			ID:           "workflow_schedule:sched-sync:ref-sync",
-			ProviderName: "basic",
-			Target:       provider.schedules["sched-sync"].Target,
-			SubjectID:    principal.UserSubjectID(user.ID),
-		},
-		{
-			ID:           "workflow_schedule:sched-export:ref-export",
-			ProviderName: "basic",
-			Target:       provider.schedules["sched-export"].Target,
-			SubjectID:    principal.UserSubjectID(user.ID),
-		},
-	} {
-		if _, err := provider.PutExecutionReference(context.Background(), ref); err != nil {
-			t.Fatalf("Put execution ref %q: %v", ref.ID, err)
-		}
+		ID:        "sched-export",
+		Cron:      "0 * * * *",
+		Target:    workflowAppStepTarget("roadmap", "export"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -1519,7 +1421,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 	}
 }
 
-func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
+func TestWorkflowScheduleUpdateFailureKeepsExistingTarget(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
@@ -1538,21 +1440,13 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.schedules["sched-ada"] = &coreworkflow.Schedule{
-		ID:           "sched-ada",
-		Cron:         "*/5 * * * *",
-		Timezone:     "UTC",
-		Target:       oldTarget,
-		ExecutionRef: "workflow_schedule:sched-ada:ref-old",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
-	}
-	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-ada:ref-old",
-		ProviderName: "basic",
-		Target:       oldTarget,
-		SubjectID:    principal.UserSubjectID(user.ID),
-	}); err != nil {
-		t.Fatalf("Put old ref: %v", err)
+		ID:        "sched-ada",
+		Cron:      "*/5 * * * *",
+		Timezone:  "UTC",
+		Target:    oldTarget,
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 	provider.nextUpsertErr = errors.New("boom")
 
@@ -1603,25 +1497,8 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
-	if provider.schedules["sched-ada"].ExecutionRef != "workflow_schedule:sched-ada:ref-old" {
-		t.Fatalf("schedule execution ref = %q, want workflow_schedule:sched-ada:ref-old", provider.schedules["sched-ada"].ExecutionRef)
-	}
 	if requireCoreWorkflowAppStep(t, provider.schedules["sched-ada"].Target).Instance != "tenant-a" {
 		t.Fatalf("schedule target after failed update = %#v", provider.schedules["sched-ada"].Target)
-	}
-	oldRef, err := provider.GetExecutionReference(context.Background(), "workflow_schedule:sched-ada:ref-old")
-	if err != nil {
-		t.Fatalf("Get old ref: %v", err)
-	}
-	if oldRef.RevokedAt != nil && !oldRef.RevokedAt.IsZero() {
-		t.Fatalf("expected old ref to remain active, got %#v", oldRef)
-	}
-	newRef, err := provider.GetExecutionReference(context.Background(), provider.upsertReqs[0].ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get new ref: %v", err)
-	}
-	if newRef.RevokedAt == nil || newRef.RevokedAt.IsZero() {
-		t.Fatalf("expected failed-update ref to be revoked, got %#v", newRef)
 	}
 }
 
@@ -1779,20 +1656,12 @@ func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing
 
 	now := time.Now().UTC().Truncate(time.Second)
 	basicProvider.schedules["sched-ada-basic"] = &coreworkflow.Schedule{
-		ID:           "sched-ada-basic",
-		Cron:         "*/5 * * * *",
-		Target:       workflowAppStepTarget("roadmap", "sync"),
-		ExecutionRef: "workflow_schedule:sched-ada-basic:ref-basic",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
-	}
-	if _, err := basicProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-ada-basic:ref-basic",
-		ProviderName: "basic",
-		Target:       basicProvider.schedules["sched-ada-basic"].Target,
-		SubjectID:    principal.UserSubjectID(user.ID),
-	}); err != nil {
-		t.Fatalf("Put execution ref: %v", err)
+		ID:        "sched-ada-basic",
+		Cron:      "*/5 * * * *",
+		Target:    workflowAppStepTarget("roadmap", "sync"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -1867,74 +1736,6 @@ func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing
 	if getResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(getResp.Body)
 		t.Fatalf("expected 200, got %d: %s", getResp.StatusCode, body)
-	}
-}
-
-func TestGlobalWorkflowScheduleRejectsDuplicateActiveExecutionRefs(t *testing.T) {
-	t.Parallel()
-
-	services := testutil.NewStubServices(t)
-	user := seedUser(t, services, "ada@example.test")
-	provider := newMemoryWorkflowProvider()
-	now := time.Now().UTC().Truncate(time.Second)
-	schedule := &coreworkflow.Schedule{
-		ID:           "sched-ada",
-		Cron:         "*/5 * * * *",
-		Target:       workflowAppStepTarget("roadmap", "sync"),
-		ExecutionRef: "workflow_schedule:sched-ada:active-ref-1",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
-	}
-	provider.schedules[schedule.ID] = schedule
-	for _, refID := range []string{"workflow_schedule:sched-ada:active-ref-1", "workflow_schedule:sched-ada:active-ref-2"} {
-		if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-			ID:           refID,
-			ProviderName: "basic",
-			Target:       schedule.Target,
-			SubjectID:    principal.UserSubjectID(user.ID),
-		}); err != nil {
-			t.Fatalf("Put execution ref %q: %v", refID, err)
-		}
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
-			},
-		}
-		cfg.Services = services
-		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
-			CatalogVal: &catalog.Catalog{
-				Name: "roadmap",
-				Operations: []catalog.CatalogOperation{
-					{ID: "sync", Method: http.MethodPost},
-				},
-			},
-		})
-		cfg.Workflow = &stubWorkflowControl{
-			defaultProviderName: "basic",
-			provider:            provider,
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/sched-ada", nil)
-	getReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	getResp, err := http.DefaultClient.Do(getReq)
-	if err != nil {
-		t.Fatalf("get request: %v", err)
-	}
-	defer func() { _ = getResp.Body.Close() }()
-	if getResp.StatusCode != http.StatusInternalServerError {
-		body, _ := io.ReadAll(getResp.Body)
-		t.Fatalf("expected 500, got %d: %s", getResp.StatusCode, body)
 	}
 }
 
@@ -2034,7 +1835,6 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if requireCoreWorkflowAppStep(t, basicProvider.upsertReqs[0].Target).Name != "roadmap" {
 		t.Fatalf("basic create target = %#v", basicProvider.upsertReqs[0].Target)
 	}
-	initialExecutionRef := basicProvider.upsertReqs[0].ExecutionRef
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
 	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -2096,17 +1896,6 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if _, ok := advancedProvider.schedules[created.ID]; !ok {
 		t.Fatal("expected global update to store schedule in new provider")
 	}
-	updatedExecutionRef := advancedProvider.upsertReqs[0].ExecutionRef
-	if updatedExecutionRef == "" || updatedExecutionRef == initialExecutionRef {
-		t.Fatalf("updated execution ref = %q, want rotated from %q", updatedExecutionRef, initialExecutionRef)
-	}
-	oldRef, err := basicProvider.GetExecutionReference(context.Background(), initialExecutionRef)
-	if err != nil {
-		t.Fatalf("Get initial execution ref: %v", err)
-	}
-	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
-		t.Fatalf("expected initial execution ref to be revoked, got %#v", oldRef)
-	}
 
 	pauseReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/"+created.ID+"/pause", nil)
 	pauseReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -2149,13 +1938,6 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if _, ok := advancedProvider.schedules[created.ID]; ok {
 		t.Fatal("expected schedule to be deleted from current global provider")
 	}
-	finalRef, err := advancedProvider.GetExecutionReference(context.Background(), updatedExecutionRef)
-	if err != nil {
-		t.Fatalf("Get final execution ref: %v", err)
-	}
-	if finalRef.RevokedAt == nil || finalRef.RevokedAt.IsZero() {
-		t.Fatalf("expected final execution ref to be revoked, got %#v", finalRef)
-	}
 }
 
 func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *testing.T) {
@@ -2169,56 +1951,28 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 	now := time.Now().UTC().Truncate(time.Second)
 
 	basicProvider.schedules["sched-ada-basic"] = &coreworkflow.Schedule{
-		ID:           "sched-ada-basic",
-		Cron:         "*/5 * * * *",
-		Target:       workflowAppStepTarget("roadmap", "sync"),
-		ExecutionRef: "workflow_schedule:sched-ada-basic:ref-basic",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
+		ID:        "sched-ada-basic",
+		Cron:      "*/5 * * * *",
+		Target:    workflowAppStepTarget("roadmap", "sync"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(ada.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 	advancedProvider.schedules["sched-ada-advanced"] = &coreworkflow.Schedule{
-		ID:           "sched-ada-advanced",
-		Cron:         "0 * * * *",
-		Target:       workflowAppStepTarget("analytics", "sync"),
-		ExecutionRef: "workflow_schedule:sched-ada-advanced:ref-advanced",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
+		ID:        "sched-ada-advanced",
+		Cron:      "0 * * * *",
+		Target:    workflowAppStepTarget("analytics", "sync"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(ada.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 	advancedProvider.schedules["sched-grace-advanced"] = &coreworkflow.Schedule{
-		ID:           "sched-grace-advanced",
-		Cron:         "15 * * * *",
-		Target:       workflowAppStepTarget("analytics", "sync"),
-		ExecutionRef: "workflow_schedule:sched-grace-advanced:ref-grace-advanced",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
-	}
-	for _, ref := range []*coreworkflow.ExecutionReference{
-		{
-			ID:           "workflow_schedule:sched-ada-basic:ref-basic",
-			ProviderName: "basic",
-			Target:       basicProvider.schedules["sched-ada-basic"].Target,
-			SubjectID:    principal.UserSubjectID(ada.ID),
-		},
-		{
-			ID:           "workflow_schedule:sched-ada-advanced:ref-advanced",
-			ProviderName: "advanced",
-			Target:       advancedProvider.schedules["sched-ada-advanced"].Target,
-			SubjectID:    principal.UserSubjectID(ada.ID),
-		},
-		{
-			ID:           "workflow_schedule:sched-grace-advanced:ref-grace-advanced",
-			ProviderName: "advanced",
-			Target:       advancedProvider.schedules["sched-grace-advanced"].Target,
-			SubjectID:    principal.UserSubjectID(grace.ID),
-		},
-	} {
-		targetProvider := basicProvider
-		if ref.ProviderName == "advanced" {
-			targetProvider = advancedProvider
-		}
-		if _, err := targetProvider.PutExecutionReference(context.Background(), ref); err != nil {
-			t.Fatalf("Put execution ref %q: %v", ref.ID, err)
-		}
+		ID:        "sched-grace-advanced",
+		Cron:      "15 * * * *",
+		Target:    workflowAppStepTarget("analytics", "sync"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(grace.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -2404,7 +2158,6 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	if requireCoreWorkflowAppStep(t, basicProvider.upsertTriggerReqs[0].Target).Name != "roadmap" {
 		t.Fatalf("basic create target = %#v", basicProvider.upsertTriggerReqs[0].Target)
 	}
-	initialExecutionRef := basicProvider.upsertTriggerReqs[0].ExecutionRef
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/event-triggers/", nil)
 	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -2462,17 +2215,6 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	if _, ok := advancedProvider.triggers[created.ID]; !ok {
 		t.Fatal("expected global update to store event trigger in new provider")
 	}
-	updatedExecutionRef := advancedProvider.upsertTriggerReqs[0].ExecutionRef
-	if updatedExecutionRef == "" || updatedExecutionRef == initialExecutionRef {
-		t.Fatalf("updated execution ref = %q, want rotated from %q", updatedExecutionRef, initialExecutionRef)
-	}
-	oldRef, err := basicProvider.GetExecutionReference(context.Background(), initialExecutionRef)
-	if err != nil {
-		t.Fatalf("Get initial execution ref: %v", err)
-	}
-	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
-		t.Fatalf("expected initial execution ref to be revoked, got %#v", oldRef)
-	}
 
 	pauseReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/event-triggers/"+created.ID+"/pause", nil)
 	pauseReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -2514,13 +2256,6 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	}
 	if _, ok := advancedProvider.triggers[created.ID]; ok {
 		t.Fatal("expected event trigger to be deleted from current global provider")
-	}
-	finalRef, err := advancedProvider.GetExecutionReference(context.Background(), updatedExecutionRef)
-	if err != nil {
-		t.Fatalf("Get final execution ref: %v", err)
-	}
-	if finalRef.RevokedAt == nil || finalRef.RevokedAt.IsZero() {
-		t.Fatalf("expected final execution ref to be revoked, got %#v", finalRef)
 	}
 }
 
@@ -2602,13 +2337,6 @@ func TestWorkflowEventTriggerAgentThenAppStepsCreateAndList(t *testing.T) {
 	storedApp := requireCoreWorkflowAppStep(t, storedTarget)
 	if storedApp.Name != "roadmap" || storedApp.Operation != "sync" {
 		t.Fatalf("stored app step = %#v", storedApp)
-	}
-	ref, err := provider.GetExecutionReference(context.Background(), provider.upsertTriggerReqs[0].ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get execution ref: %v", err)
-	}
-	if !coreworkflow.TargetsEqual(ref.Target, storedTarget) {
-		t.Fatalf("execution ref target = %#v, want %#v", ref.Target, storedTarget)
 	}
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/event-triggers/", nil)
@@ -2716,12 +2444,12 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 	now := time.Now().UTC().Truncate(time.Second)
 
 	basicProvider.triggers["trg-ada-basic"] = &coreworkflow.EventTrigger{
-		ID:           "trg-ada-basic",
-		Match:        coreworkflow.EventMatch{Type: "roadmap.item.updated"},
-		Target:       workflowAppStepTarget("roadmap", "sync"),
-		ExecutionRef: "workflow_event_trigger:trg-ada-basic:ref-basic",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
+		ID:        "trg-ada-basic",
+		Match:     coreworkflow.EventMatch{Type: "roadmap.item.updated"},
+		Target:    workflowAppStepTarget("roadmap", "sync"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(ada.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 	advancedProvider.triggers["trg-ada-advanced"] = &coreworkflow.EventTrigger{
 		ID:    "trg-ada-advanced",
@@ -2734,45 +2462,17 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 				CredentialMode: core.ConnectionModeNone,
 			},
 		}}},
-		ExecutionRef: "workflow_event_trigger:trg-ada-advanced:ref-advanced",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(ada.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 	advancedProvider.triggers["trg-grace-advanced"] = &coreworkflow.EventTrigger{
-		ID:           "trg-grace-advanced",
-		Match:        coreworkflow.EventMatch{Type: "analytics.item.failed"},
-		Target:       workflowAppStepTarget("analytics", "sync"),
-		ExecutionRef: "workflow_event_trigger:trg-grace-advanced:ref-grace-advanced",
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
-	}
-	for _, ref := range []*coreworkflow.ExecutionReference{
-		{
-			ID:           "workflow_event_trigger:trg-ada-basic:ref-basic",
-			ProviderName: "basic",
-			Target:       basicProvider.triggers["trg-ada-basic"].Target,
-			SubjectID:    principal.UserSubjectID(ada.ID),
-		},
-		{
-			ID:           "workflow_event_trigger:trg-ada-advanced:ref-advanced",
-			ProviderName: "advanced",
-			Target:       advancedProvider.triggers["trg-ada-advanced"].Target,
-			SubjectID:    principal.UserSubjectID(ada.ID),
-		},
-		{
-			ID:           "workflow_event_trigger:trg-grace-advanced:ref-grace-advanced",
-			ProviderName: "advanced",
-			Target:       advancedProvider.triggers["trg-grace-advanced"].Target,
-			SubjectID:    principal.UserSubjectID(grace.ID),
-		},
-	} {
-		targetProvider := basicProvider
-		if ref.ProviderName == "advanced" {
-			targetProvider = advancedProvider
-		}
-		if _, err := targetProvider.PutExecutionReference(context.Background(), ref); err != nil {
-			t.Fatalf("Put execution ref %q: %v", ref.ID, err)
-		}
+		ID:        "trg-grace-advanced",
+		Match:     coreworkflow.EventMatch{Type: "analytics.item.failed"},
+		Target:    workflowAppStepTarget("analytics", "sync"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(grace.ID)},
+		CreatedAt: &now,
+		UpdatedAt: &now,
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {

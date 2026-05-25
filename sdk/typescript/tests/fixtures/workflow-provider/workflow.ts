@@ -122,8 +122,8 @@ export const provider = defineWorkflowProvider({
       status: WorkflowRunStatus.PENDING,
       target: request.target,
       createdBy: request.createdBy,
-      executionRef: request.executionRef,
       workflowKey: request.workflowKey,
+      definitionId: request.definitionId,
     });
     runs.set(run.id ?? "", run);
     return {
@@ -311,6 +311,7 @@ function createRun(
     statusMessage,
     ...(request.createdBy ? { createdBy: request.createdBy } : {}),
     ...(request.target ? { target: request.target } : {}),
+    ...(request.definitionId ? { definitionId: request.definitionId } : {}),
   });
 }
 
@@ -329,6 +330,7 @@ function createSchedule(
         ? { createdBy: request.requestedBy }
         : {}),
     ...(request.target ? { target: request.target } : {}),
+    ...(request.definitionId ? { definitionId: request.definitionId } : {}),
   });
 }
 
@@ -346,5 +348,6 @@ function createTrigger(
         : {}),
     ...(request.match ? { match: request.match } : {}),
     ...(request.target ? { target: request.target } : {}),
+    ...(request.definitionId ? { definitionId: request.definitionId } : {}),
   });
 }

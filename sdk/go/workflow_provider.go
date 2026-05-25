@@ -7,7 +7,6 @@ type StartWorkflowProviderRunRequest struct {
 	Target         *BoundWorkflowTarget
 	IdempotencyKey string
 	CreatedBy      *WorkflowActor
-	ExecutionRef   string
 	WorkflowKey    string
 	DefinitionID   string
 }
@@ -19,9 +18,9 @@ type GetWorkflowProviderRunRequest struct {
 
 // ListWorkflowProviderRunsRequest requests workflow runs visible to the caller.
 type ListWorkflowProviderRunsRequest struct {
-	PageSize     int
-	PageToken    string
-	Status       WorkflowRunStatus
+	PageSize  int
+	PageToken string
+	Status    WorkflowRunStatus
 	TargetApp string
 }
 
@@ -66,7 +65,6 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 	Target         *BoundWorkflowTarget
 	IdempotencyKey string
 	CreatedBy      *WorkflowActor
-	ExecutionRef   string
 	Signal         *WorkflowSignal
 	DefinitionID   string
 }
@@ -76,6 +74,7 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 type CreateWorkflowProviderDefinitionRequest struct {
 	Target         *BoundWorkflowTarget
 	IdempotencyKey string
+	CreatedBy      *WorkflowActor
 }
 
 // GetWorkflowProviderDefinitionRequest identifies one workflow definition.
@@ -88,6 +87,7 @@ type GetWorkflowProviderDefinitionRequest struct {
 type UpdateWorkflowProviderDefinitionRequest struct {
 	DefinitionID string
 	Target       *BoundWorkflowTarget
+	RequestedBy  *WorkflowActor
 }
 
 // DeleteWorkflowProviderDefinitionRequest identifies a workflow definition to
@@ -117,7 +117,6 @@ type UpsertWorkflowProviderScheduleRequest struct {
 	Target         *BoundWorkflowTarget
 	Paused         bool
 	RequestedBy    *WorkflowActor
-	ExecutionRef   string
 	IdempotencyKey string
 	DefinitionID   string
 }
@@ -169,7 +168,6 @@ type UpsertWorkflowProviderEventTriggerRequest struct {
 	Target         *BoundWorkflowTarget
 	Paused         bool
 	RequestedBy    *WorkflowActor
-	ExecutionRef   string
 	IdempotencyKey string
 	DefinitionID   string
 }
@@ -214,39 +212,9 @@ type ResumeWorkflowProviderEventTriggerRequest struct {
 	TriggerID string
 }
 
-// PutWorkflowExecutionReferenceRequest contains a native execution reference to
-// store.
-type PutWorkflowExecutionReferenceRequest struct {
-	Reference *WorkflowExecutionReference
-}
-
-// GetWorkflowExecutionReferenceRequest identifies one execution reference.
-type GetWorkflowExecutionReferenceRequest struct {
-	ID string
-}
-
-// ListWorkflowExecutionReferencesRequest requests execution references for a
-// subject.
-type ListWorkflowExecutionReferencesRequest struct {
-	SubjectID string
-}
-
-// ListWorkflowExecutionReferencesResponse contains workflow execution references.
-type ListWorkflowExecutionReferencesResponse struct {
-	References []WorkflowExecutionReference
-}
-
-// GetReferences returns workflow execution references from the response.
-func (r *ListWorkflowExecutionReferencesResponse) GetReferences() []WorkflowExecutionReference {
-	if r == nil {
-		return nil
-	}
-	return r.References
-}
-
 // PublishWorkflowProviderEventRequest requests publishing a workflow event.
 type PublishWorkflowProviderEventRequest struct {
-	AppName  string
+	AppName     string
 	Event       *WorkflowEvent
 	PublishedBy *WorkflowActor
 }
@@ -300,12 +268,6 @@ type WorkflowProvider interface {
 	PauseEventTrigger(ctx context.Context, req *PauseWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error)
 	// ResumeEventTrigger resumes a paused workflow event trigger.
 	ResumeEventTrigger(ctx context.Context, req *ResumeWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error)
-	// PutExecutionReference stores or updates a workflow execution reference.
-	PutExecutionReference(ctx context.Context, req *PutWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error)
-	// GetExecutionReference returns one workflow execution reference.
-	GetExecutionReference(ctx context.Context, req *GetWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error)
-	// ListExecutionReferences returns workflow execution references for a scope.
-	ListExecutionReferences(ctx context.Context, req *ListWorkflowExecutionReferencesRequest) (*ListWorkflowExecutionReferencesResponse, error)
 	// PublishEvent publishes a workflow event for trigger matching.
 	PublishEvent(ctx context.Context, req *PublishWorkflowProviderEventRequest) (*WorkflowEvent, error)
 }
@@ -405,18 +367,6 @@ func (UnimplementedWorkflowProvider) PauseEventTrigger(context.Context, *PauseWo
 
 func (UnimplementedWorkflowProvider) ResumeEventTrigger(context.Context, *ResumeWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error) {
 	return nil, Unimplemented("workflow resume event trigger is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) PutExecutionReference(context.Context, *PutWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error) {
-	return nil, Unimplemented("workflow put execution reference is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) GetExecutionReference(context.Context, *GetWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error) {
-	return nil, Unimplemented("workflow get execution reference is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) ListExecutionReferences(context.Context, *ListWorkflowExecutionReferencesRequest) (*ListWorkflowExecutionReferencesResponse, error) {
-	return nil, Unimplemented("workflow list execution references is not implemented")
 }
 
 func (UnimplementedWorkflowProvider) PublishEvent(context.Context, *PublishWorkflowProviderEventRequest) (*WorkflowEvent, error) {

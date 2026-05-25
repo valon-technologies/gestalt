@@ -340,6 +340,7 @@ pub(crate) fn new_workflow_create_definition_request(
             .transpose()?,
         invocation_token: String::new(),
         idempotency_key: input.idempotency_key,
+        created_by: None,
     })
 }
 
@@ -365,6 +366,7 @@ pub(crate) fn new_workflow_update_definition_request(
             .map(bound_workflow_target_to_proto)
             .transpose()?,
         invocation_token: String::new(),
+        requested_by: None,
     })
 }
 

@@ -28,6 +28,7 @@ import (
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -468,12 +469,6 @@ type workflowProviderWithCleanup struct {
 	cleanup func()
 }
 
-type workflowProviderWithExecutionReferencesAndCleanup struct {
-	coreworkflow.Provider
-	coreworkflow.ExecutionReferenceStore
-	cleanup func()
-}
-
 func (p *workflowProviderWithCleanup) Close() error {
 	var errs []error
 	if p != nil && p.Provider != nil {
@@ -498,39 +493,6 @@ func (p *workflowProviderWithCleanup) Start(ctx context.Context) error {
 }
 
 func (p *workflowProviderWithCleanup) WaitRuntimeWorkersReady(ctx context.Context) error {
-	if p == nil || p.Provider == nil {
-		return nil
-	}
-	if workerProvider, ok := p.Provider.(runtimeWorkerWorkflowProvider); ok {
-		return workerProvider.WaitRuntimeWorkersReady(ctx)
-	}
-	return nil
-}
-
-func (p *workflowProviderWithExecutionReferencesAndCleanup) Close() error {
-	var errs []error
-	if p != nil && p.Provider != nil {
-		if err := p.Provider.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if p != nil && p.cleanup != nil {
-		p.cleanup()
-	}
-	return errors.Join(errs...)
-}
-
-func (p *workflowProviderWithExecutionReferencesAndCleanup) Start(ctx context.Context) error {
-	if p == nil || p.Provider == nil {
-		return nil
-	}
-	if starter, ok := p.Provider.(startableWorkflowProvider); ok {
-		return starter.Start(ctx)
-	}
-	return nil
-}
-
-func (p *workflowProviderWithExecutionReferencesAndCleanup) WaitRuntimeWorkersReady(ctx context.Context) error {
 	if p == nil || p.Provider == nil {
 		return nil
 	}
@@ -1124,7 +1086,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	prepared.Deps.WorkflowManager = workflowManager
 	prepared.Deps.AgentManager = agentManager
 	prepared.Deps.PublicHostServices = publicHostServices
-	prepared.Deps.WorkflowRuntime.SetAgentManager(agentManager)
 
 	providers, providersReady, connAuthResolver, manualConnAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
@@ -1185,7 +1146,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithProviderOverrides(providerDevSessions),
 	)
-	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
@@ -1246,11 +1206,15 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
+	workflowConfigTokens, err := appaccessservice.NewInvocationTokenManager(prepared.Deps.EncryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: workflow config invocation tokens: %w", err)
+	}
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
-		if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
+		if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime, workflowConfigTokens, includeProvider); err != nil {
 			return err
 		}
-		if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
+		if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, prepared.Deps.WorkflowRuntime, workflowConfigTokens, includeProvider); err != nil {
 			return err
 		}
 		return nil
@@ -1880,17 +1844,9 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		provider = wrapWorkflowProviderWithRuntimeWorkers(provider, workerPool)
 	}
 	if cleanup != nil {
-		if executionRefs, ok := provider.(coreworkflow.ExecutionReferenceStore); ok {
-			provider = &workflowProviderWithExecutionReferencesAndCleanup{
-				Provider:                provider,
-				ExecutionReferenceStore: executionRefs,
-				cleanup:                 cleanup,
-			}
-		} else {
-			provider = &workflowProviderWithCleanup{
-				Provider: provider,
-				cleanup:  cleanup,
-			}
+		provider = &workflowProviderWithCleanup{
+			Provider: provider,
+			cleanup:  cleanup,
 		}
 		cleanup = nil
 	}

@@ -1409,55 +1409,6 @@ def _workflow_provider_servicer(provider: AppProvider) -> Any:
             )
             return _workflow_native.bound_workflow_event_trigger(result)
 
-        @_grpc_handler("workflow put execution reference")
-        def PutExecutionReference(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "put_execution_reference",
-                "PutExecutionReference",
-                _workflow_native.put_workflow_execution_reference_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _workflow_native.workflow_execution_reference(result)
-
-        @_grpc_handler("workflow get execution reference")
-        def GetExecutionReference(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "get_execution_reference",
-                "GetExecutionReference",
-                _workflow_native.get_workflow_execution_reference_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _workflow_native.workflow_execution_reference(result)
-
-        @_grpc_handler("workflow list execution references")
-        def ListExecutionReferences(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "list_execution_references",
-                "ListExecutionReferences",
-                _workflow_native.list_workflow_execution_references_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return (
-                _workflow_native.list_workflow_execution_references_response_to_proto(
-                    result
-                )
-            )
-
         @_grpc_handler("workflow publish event")
         def PublishEvent(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(

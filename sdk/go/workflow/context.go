@@ -92,9 +92,6 @@ func WorkflowInvocationContext(req Request) map[string]any {
 	if createdBy := WorkflowActorContext(req.CreatedBy); len(createdBy) > 0 {
 		ctxValue["createdBy"] = createdBy
 	}
-	if executionRef := strings.TrimSpace(req.ExecutionRef); executionRef != "" {
-		ctxValue["executionRef"] = executionRef
-	}
 	return ctxValue
 }
 

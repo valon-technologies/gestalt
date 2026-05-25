@@ -87,6 +87,18 @@ func staleRuntimeSessionForTest() *runtimeprovider.Session {
 
 type noopWorkflowProvider struct{}
 
+func (p *noopWorkflowProvider) CreateDefinition(context.Context, coreworkflow.CreateDefinitionRequest) (*coreworkflow.Definition, error) {
+	return nil, nil
+}
+func (p *noopWorkflowProvider) GetDefinition(context.Context, coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
+	return nil, nil
+}
+func (p *noopWorkflowProvider) UpdateDefinition(context.Context, coreworkflow.UpdateDefinitionRequest) (*coreworkflow.Definition, error) {
+	return nil, nil
+}
+func (p *noopWorkflowProvider) DeleteDefinition(context.Context, coreworkflow.DeleteDefinitionRequest) error {
+	return nil
+}
 func (p *noopWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
 	return nil, nil
 }

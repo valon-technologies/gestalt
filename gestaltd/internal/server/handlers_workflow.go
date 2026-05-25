@@ -781,12 +781,11 @@ func (s *Server) writeWorkflowScheduleProviderError(ctx context.Context, w http.
 
 func (s *Server) writeWorkflowScheduleManagerError(w http.ResponseWriter, r *http.Request, appName, operation, scheduleID string, err error) {
 	switch {
-	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured),
-		errors.Is(err, workflowmanager.ErrExecutionRefsNotConfigured):
+	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowScheduleSubject):
 		writeError(w, http.StatusUnauthorized, err.Error())
-	case errors.Is(err, workflowmanager.ErrDuplicateExecutionRefs):
+	case errors.Is(err, workflowmanager.ErrDuplicateWorkflowObjects):
 		writeError(w, http.StatusInternalServerError, err.Error())
 	case errors.Is(err, invocation.ErrProviderNotFound),
 		errors.Is(err, invocation.ErrOperationNotFound),

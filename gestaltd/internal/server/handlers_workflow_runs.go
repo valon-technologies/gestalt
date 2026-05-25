@@ -267,8 +267,7 @@ func workflowActorInfoFromCore(actor coreworkflow.Actor) *workflowActorInfo {
 
 func (s *Server) writeWorkflowRunManagerError(w http.ResponseWriter, r *http.Request, runID string, err error) {
 	switch {
-	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured),
-		errors.Is(err, workflowmanager.ErrExecutionRefsNotConfigured):
+	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowSubjectRequired),
 		errors.Is(err, workflowmanager.ErrWorkflowScheduleSubject):

@@ -136,7 +136,6 @@ non-aliased message copies.
    BoundWorkflowRun
    BoundWorkflowSchedule
    BoundWorkflowEventTrigger
-   WorkflowExecutionReference
    bound_workflow_target
    bound_workflow_target_from_target
    workflow_step
@@ -155,8 +154,6 @@ non-aliased message copies.
    bound_workflow_schedule_from_schedule
    bound_workflow_event_trigger
    bound_workflow_event_trigger_from_trigger
-   workflow_execution_reference
-   workflow_execution_reference_from_reference
 
 .. autoclass:: BoundWorkflowTarget
 
@@ -173,8 +170,6 @@ non-aliased message copies.
 .. autoclass:: BoundWorkflowSchedule
 
 .. autoclass:: BoundWorkflowEventTrigger
-
-.. autoclass:: WorkflowExecutionReference
 
 .. autofunction:: bound_workflow_target
 
@@ -211,10 +206,6 @@ non-aliased message copies.
 .. autofunction:: bound_workflow_event_trigger
 
 .. autofunction:: bound_workflow_event_trigger_from_trigger
-
-.. autofunction:: workflow_execution_reference
-
-.. autofunction:: workflow_execution_reference_from_reference
 
 .. _python-agent-provider-models:
 

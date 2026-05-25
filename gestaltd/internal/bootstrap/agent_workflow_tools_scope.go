@@ -354,46 +354,14 @@ func workflowSystemToolPermissionsForTarget(target coreworkflow.Target, defaultA
 	return out
 }
 
-func workflowSystemToolScopedPermissions(req agentSystemToolExecutionRequest, target coreworkflow.Target) ([]core.AccessPermission, error) {
-	permissions := workflowSystemToolPermissionsForTarget(target, req.ProviderName)
-	scopedPrincipal, err := workflowSystemToolScopedPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
-	if err != nil {
-		return nil, err
-	}
-	return workflowSystemToolPermissionsFromPrincipal(scopedPrincipal), nil
-}
-
-func workflowSystemToolPermissionsFromPrincipal(p *principal.Principal) []core.AccessPermission {
-	p = principal.Canonicalized(p)
-	if p == nil || p.TokenPermissions == nil {
-		return nil
-	}
-	return principal.PermissionsToAccessPermissions(p.TokenPermissions)
-}
-
 func workflowSystemToolExistingScheduleTarget(schedule *workflowmanager.ManagedSchedule) coreworkflow.Target {
 	if schedule == nil {
 		return coreworkflow.Target{}
-	}
-	if schedule.ExecutionRef != nil && len(schedule.ExecutionRef.Target.Steps) > 0 {
-		return schedule.ExecutionRef.Target
 	}
 	if schedule.Schedule != nil {
 		return schedule.Schedule.Target
 	}
 	return coreworkflow.Target{}
-}
-
-func workflowSystemToolClonePermissions(src []core.AccessPermission) []core.AccessPermission {
-	if src == nil {
-		return nil
-	}
-	out := append([]core.AccessPermission(nil), src...)
-	for i := range out {
-		out[i].Operations = append([]string(nil), out[i].Operations...)
-		out[i].Actions = append([]string(nil), out[i].Actions...)
-	}
-	return out
 }
 
 func workflowSystemToolTrustedAgentProvider(req agentSystemToolExecutionRequest, target coreworkflow.Target) string {

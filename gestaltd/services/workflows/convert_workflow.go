@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -54,119 +53,6 @@ func workflowActorFromProto(actor *proto.WorkflowActor) coreworkflow.Actor {
 		DisplayName: actor.GetDisplayName(),
 		AuthSource:  actor.GetAuthSource(),
 	}
-}
-
-func workflowRunAsSubjectToProto(subject *core.RunAsSubject) *proto.WorkflowRunAsSubject {
-	subject = core.NormalizeRunAsSubject(subject)
-	if subject == nil {
-		return nil
-	}
-	return &proto.WorkflowRunAsSubject{
-		SubjectId:   subject.SubjectID,
-		SubjectKind: subject.SubjectKind,
-		DisplayName: subject.DisplayName,
-		AuthSource:  subject.AuthSource,
-	}
-}
-
-func workflowRunAsSubjectFromProto(subject *proto.WorkflowRunAsSubject) *core.RunAsSubject {
-	if subject == nil {
-		return nil
-	}
-	return core.NormalizeRunAsSubject(&core.RunAsSubject{
-		SubjectID:   subject.GetSubjectId(),
-		SubjectKind: subject.GetSubjectKind(),
-		DisplayName: subject.GetDisplayName(),
-		AuthSource:  subject.GetAuthSource(),
-	})
-}
-
-func workflowExecutionReferenceToProto(ref *coreworkflow.ExecutionReference) (*proto.WorkflowExecutionReference, error) {
-	if ref == nil {
-		return nil, nil
-	}
-	target, err := workflowTargetToProto(ref.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowExecutionReference{
-		Id:                  ref.ID,
-		ProviderName:        ref.ProviderName,
-		Target:              target,
-		CallerAppName:       ref.CallerAppName,
-		SourceDefinitionId:  ref.SourceDefinitionID,
-		SubjectId:           ref.SubjectID,
-		SubjectKind:         ref.SubjectKind,
-		DisplayName:         ref.DisplayName,
-		AuthSource:          ref.AuthSource,
-		CredentialSubjectId: ref.CredentialSubjectID,
-		RunAs:               workflowRunAsSubjectToProto(ref.RunAs),
-		Permissions:         workflowAccessPermissionsToProto(ref.Permissions),
-		CreatedAt:           timeToProto(ref.CreatedAt),
-		RevokedAt:           timeToProto(ref.RevokedAt),
-	}, nil
-}
-
-func workflowExecutionReferenceFromProto(ref *proto.WorkflowExecutionReference) (*coreworkflow.ExecutionReference, error) {
-	if ref == nil {
-		return nil, nil
-	}
-	target := workflowTargetFromProto(ref.GetTarget())
-	return &coreworkflow.ExecutionReference{
-		ID:                  strings.TrimSpace(ref.GetId()),
-		ProviderName:        strings.TrimSpace(ref.GetProviderName()),
-		Target:              target,
-		CallerAppName:       strings.TrimSpace(ref.GetCallerAppName()),
-		SourceDefinitionID:  strings.TrimSpace(ref.GetSourceDefinitionId()),
-		SubjectID:           strings.TrimSpace(ref.GetSubjectId()),
-		SubjectKind:         strings.TrimSpace(ref.GetSubjectKind()),
-		DisplayName:         strings.TrimSpace(ref.GetDisplayName()),
-		AuthSource:          strings.TrimSpace(ref.GetAuthSource()),
-		CredentialSubjectID: strings.TrimSpace(ref.GetCredentialSubjectId()),
-		RunAs:               workflowRunAsSubjectFromProto(ref.GetRunAs()),
-		Permissions:         workflowAccessPermissionsFromProto(ref.GetPermissions()),
-		CreatedAt:           timeFromProto(ref.GetCreatedAt()),
-		RevokedAt:           timeFromProto(ref.GetRevokedAt()),
-	}, nil
-}
-
-func workflowAccessPermissionsToProto(values []core.AccessPermission) []*proto.WorkflowAccessPermission {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]*proto.WorkflowAccessPermission, 0, len(values))
-	for _, value := range values {
-		appName := strings.TrimSpace(value.App)
-		if appName == "" {
-			continue
-		}
-		out = append(out, &proto.WorkflowAccessPermission{
-			App:        appName,
-			Operations: append([]string(nil), value.Operations...),
-		})
-	}
-	return out
-}
-
-func workflowAccessPermissionsFromProto(values []*proto.WorkflowAccessPermission) []core.AccessPermission {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]core.AccessPermission, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		appName := strings.TrimSpace(value.GetApp())
-		if appName == "" {
-			continue
-		}
-		out = append(out, core.AccessPermission{
-			App:        appName,
-			Operations: append([]string(nil), value.GetOperations()...),
-		})
-	}
-	return out
 }
 
 func workflowEventToProto(event coreworkflow.Event) (*proto.WorkflowEvent, error) {
@@ -319,8 +205,8 @@ func workflowRunFromProto(run *proto.BoundWorkflowRun) (*coreworkflow.Run, error
 		Status:        status,
 		WorkflowKey:   run.GetWorkflowKey(),
 		Target:        workflowTargetFromProto(run.GetTarget()),
+		DefinitionID:  run.GetDefinitionId(),
 		Trigger:       trigger,
-		ExecutionRef:  run.GetExecutionRef(),
 		CreatedBy:     workflowActorFromProto(run.GetCreatedBy()),
 		CreatedAt:     timeFromProto(run.GetCreatedAt()),
 		StartedAt:     timeFromProto(run.GetStartedAt()),
@@ -353,8 +239,8 @@ func workflowRunToProto(run *coreworkflow.Run) (*proto.BoundWorkflowRun, error) 
 		StatusMessage: run.StatusMessage,
 		ResultBody:    run.ResultBody,
 		CreatedBy:     workflowActorToProto(run.CreatedBy),
-		ExecutionRef:  run.ExecutionRef,
 		WorkflowKey:   run.WorkflowKey,
+		DefinitionId:  run.DefinitionID,
 	}, nil
 }
 
@@ -384,8 +270,8 @@ func workflowScheduleFromProto(schedule *proto.BoundWorkflowSchedule) (*corework
 		Cron:         schedule.GetCron(),
 		Timezone:     schedule.GetTimezone(),
 		Target:       workflowTargetFromProto(schedule.GetTarget()),
+		DefinitionID: schedule.GetDefinitionId(),
 		Paused:       schedule.GetPaused(),
-		ExecutionRef: schedule.GetExecutionRef(),
 		CreatedBy:    workflowActorFromProto(schedule.GetCreatedBy()),
 		CreatedAt:    timeFromProto(schedule.GetCreatedAt()),
 		UpdatedAt:    timeFromProto(schedule.GetUpdatedAt()),
@@ -411,7 +297,7 @@ func workflowScheduleToProto(schedule *coreworkflow.Schedule) (*proto.BoundWorkf
 		UpdatedAt:    timeToProto(schedule.UpdatedAt),
 		NextRunAt:    timeToProto(schedule.NextRunAt),
 		CreatedBy:    workflowActorToProto(schedule.CreatedBy),
-		ExecutionRef: schedule.ExecutionRef,
+		DefinitionId: schedule.DefinitionID,
 	}, nil
 }
 
@@ -423,8 +309,8 @@ func workflowEventTriggerFromProto(trigger *proto.BoundWorkflowEventTrigger) (*c
 		ID:           trigger.GetId(),
 		Match:        workflowEventMatchFromProto(trigger.GetMatch()),
 		Target:       workflowTargetFromProto(trigger.GetTarget()),
+		DefinitionID: trigger.GetDefinitionId(),
 		Paused:       trigger.GetPaused(),
-		ExecutionRef: trigger.GetExecutionRef(),
 		CreatedBy:    workflowActorFromProto(trigger.GetCreatedBy()),
 		CreatedAt:    timeFromProto(trigger.GetCreatedAt()),
 		UpdatedAt:    timeFromProto(trigger.GetUpdatedAt()),
@@ -447,28 +333,35 @@ func workflowEventTriggerToProto(trigger *coreworkflow.EventTrigger) (*proto.Bou
 		CreatedAt:    timeToProto(trigger.CreatedAt),
 		UpdatedAt:    timeToProto(trigger.UpdatedAt),
 		CreatedBy:    workflowActorToProto(trigger.CreatedBy),
-		ExecutionRef: trigger.ExecutionRef,
+		DefinitionId: trigger.DefinitionID,
 	}, nil
 }
 
-func workflowDefinitionToProto(ref *coreworkflow.ExecutionReference) (*proto.BoundWorkflowDefinition, error) {
-	if ref == nil {
+func workflowDefinitionFromProto(definition *proto.BoundWorkflowDefinition) (*coreworkflow.Definition, error) {
+	if definition == nil {
 		return nil, nil
 	}
-	target, err := workflowTargetToProto(ref.Target)
+	return &coreworkflow.Definition{
+		ID:        definition.GetId(),
+		Target:    workflowTargetFromProto(definition.GetTarget()),
+		CreatedBy: workflowActorFromProto(definition.GetCreatedBy()),
+		CreatedAt: timeFromProto(definition.GetCreatedAt()),
+	}, nil
+}
+
+func workflowDefinitionToProto(definition *coreworkflow.Definition) (*proto.BoundWorkflowDefinition, error) {
+	if definition == nil {
+		return nil, nil
+	}
+	target, err := workflowTargetToProto(definition.Target)
 	if err != nil {
 		return nil, err
 	}
 	return &proto.BoundWorkflowDefinition{
-		Id:     ref.ID,
-		Target: target,
-		CreatedBy: workflowActorToProto(coreworkflow.Actor{
-			SubjectID:   ref.SubjectID,
-			SubjectKind: ref.SubjectKind,
-			DisplayName: ref.DisplayName,
-			AuthSource:  ref.AuthSource,
-		}),
-		CreatedAt: timeToProto(ref.CreatedAt),
+		Id:        definition.ID,
+		Target:    target,
+		CreatedBy: workflowActorToProto(definition.CreatedBy),
+		CreatedAt: timeToProto(definition.CreatedAt),
 	}, nil
 }
 

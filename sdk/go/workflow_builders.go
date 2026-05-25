@@ -790,9 +790,9 @@ type BoundWorkflowRun struct {
 	StatusMessage string
 	ResultBody    string
 	CreatedBy     *WorkflowActor
-	ExecutionRef  string
 	WorkflowKey   string
 	ProviderName  string
+	DefinitionID  string
 }
 
 // boundWorkflowRunToProto creates a bound workflow run.
@@ -816,9 +816,9 @@ func boundWorkflowRunToProto(input BoundWorkflowRun) (*proto.BoundWorkflowRun, e
 		StatusMessage: input.StatusMessage,
 		ResultBody:    input.ResultBody,
 		CreatedBy:     workflowActorFromInput(input.CreatedBy),
-		ExecutionRef:  input.ExecutionRef,
 		WorkflowKey:   input.WorkflowKey,
 		ProviderName:  input.ProviderName,
+		DefinitionId:  input.DefinitionID,
 	}, nil
 }
 
@@ -850,9 +850,9 @@ func boundWorkflowRunFromProto(value *proto.BoundWorkflowRun) (BoundWorkflowRun,
 		StatusMessage: value.GetStatusMessage(),
 		ResultBody:    value.GetResultBody(),
 		CreatedBy:     workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		ExecutionRef:  value.GetExecutionRef(),
 		WorkflowKey:   value.GetWorkflowKey(),
 		ProviderName:  value.GetProviderName(),
+		DefinitionID:  value.GetDefinitionId(),
 	}, nil
 }
 
@@ -928,8 +928,8 @@ type BoundWorkflowSchedule struct {
 	UpdatedAt    time.Time
 	NextRunAt    *time.Time
 	CreatedBy    *WorkflowActor
-	ExecutionRef string
 	ProviderName string
+	DefinitionID string
 }
 
 // boundWorkflowScheduleToProto creates a bound workflow schedule.
@@ -948,8 +948,8 @@ func boundWorkflowScheduleToProto(input BoundWorkflowSchedule) (*proto.BoundWork
 		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
 		NextRunAt:    timestampFromOptionalTime(input.NextRunAt),
 		CreatedBy:    workflowActorFromInput(input.CreatedBy),
-		ExecutionRef: input.ExecutionRef,
 		ProviderName: input.ProviderName,
+		DefinitionId: input.DefinitionID,
 	}, nil
 }
 
@@ -973,8 +973,8 @@ func boundWorkflowScheduleFromProto(value *proto.BoundWorkflowSchedule) (BoundWo
 		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
 		NextRunAt:    nextRunAt,
 		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		ExecutionRef: value.GetExecutionRef(),
 		ProviderName: value.GetProviderName(),
+		DefinitionID: value.GetDefinitionId(),
 	}, nil
 }
 
@@ -998,8 +998,8 @@ type BoundWorkflowEventTrigger struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	CreatedBy    *WorkflowActor
-	ExecutionRef string
 	ProviderName string
+	DefinitionID string
 }
 
 // WorkflowEventMatch contains fields for matching workflow
@@ -1024,8 +1024,8 @@ func boundWorkflowEventTriggerToProto(input BoundWorkflowEventTrigger) (*proto.B
 		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
 		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
 		CreatedBy:    workflowActorFromInput(input.CreatedBy),
-		ExecutionRef: input.ExecutionRef,
 		ProviderName: input.ProviderName,
+		DefinitionId: input.DefinitionID,
 	}, nil
 }
 
@@ -1043,8 +1043,8 @@ func boundWorkflowEventTriggerFromProto(value *proto.BoundWorkflowEventTrigger) 
 		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
 		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
 		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		ExecutionRef: value.GetExecutionRef(),
 		ProviderName: value.GetProviderName(),
+		DefinitionID: value.GetDefinitionId(),
 	}, nil
 }
 
@@ -1056,103 +1056,6 @@ func cloneBoundWorkflowEventTriggerProto(value *proto.BoundWorkflowEventTrigger)
 		return nil, err
 	}
 	return boundWorkflowEventTriggerToProto(input)
-}
-
-// WorkflowExecutionReference contains fields for constructing a
-// WorkflowExecutionReference.
-type WorkflowExecutionReference struct {
-	ID                  string
-	ProviderName        string
-	Target              *BoundWorkflowTarget
-	SubjectID           string
-	CredentialSubjectID string
-	Permissions         []WorkflowAccessPermission
-	CreatedAt           time.Time
-	RevokedAt           *time.Time
-	SubjectKind         string
-	DisplayName         string
-	AuthSource          string
-	CallerAppName       string
-	RunAs               *WorkflowRunAsSubject
-	SourceDefinitionID  string
-}
-
-// WorkflowAccessPermission contains fields for an execution
-// reference permission.
-type WorkflowAccessPermission struct {
-	App        string
-	Operations []string
-}
-
-// WorkflowRunAsSubject contains fields for workflow run-as
-// metadata.
-type WorkflowRunAsSubject struct {
-	SubjectID   string
-	SubjectKind string
-	DisplayName string
-	AuthSource  string
-}
-
-// workflowExecutionReferenceToProto creates a workflow execution reference.
-func workflowExecutionReferenceToProto(input WorkflowExecutionReference) (*proto.WorkflowExecutionReference, error) {
-	target, err := newOptionalBoundWorkflowTarget(input.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowExecutionReference{
-		Id:                  input.ID,
-		ProviderName:        input.ProviderName,
-		Target:              target,
-		SubjectId:           input.SubjectID,
-		CredentialSubjectId: input.CredentialSubjectID,
-		Permissions:         workflowAccessPermissionsFromInputs(input.Permissions),
-		CreatedAt:           timestampFromNonZeroTime(input.CreatedAt),
-		RevokedAt:           timestampFromOptionalTime(input.RevokedAt),
-		SubjectKind:         input.SubjectKind,
-		DisplayName:         input.DisplayName,
-		AuthSource:          input.AuthSource,
-		CallerAppName:       input.CallerAppName,
-		RunAs:               workflowRunAsSubjectFromInput(input.RunAs),
-		SourceDefinitionId:  input.SourceDefinitionID,
-	}, nil
-}
-
-// workflowExecutionReferenceFromProto converts an existing protocol
-// execution reference into builder input.
-func workflowExecutionReferenceFromProto(value *proto.WorkflowExecutionReference) (WorkflowExecutionReference, error) {
-	if value == nil {
-		return WorkflowExecutionReference{}, nil
-	}
-	revokedAt, err := timePtrFromTimestamp(value.GetRevokedAt())
-	if err != nil {
-		return WorkflowExecutionReference{}, err
-	}
-	return WorkflowExecutionReference{
-		ID:                  value.GetId(),
-		ProviderName:        value.GetProviderName(),
-		Target:              workflowTargetInputPtrFromTarget(value.GetTarget()),
-		SubjectID:           value.GetSubjectId(),
-		CredentialSubjectID: value.GetCredentialSubjectId(),
-		Permissions:         workflowAccessPermissionInputsFromPermissions(value.GetPermissions()),
-		CreatedAt:           timeFromTimestamp(value.GetCreatedAt()),
-		RevokedAt:           revokedAt,
-		SubjectKind:         value.GetSubjectKind(),
-		DisplayName:         value.GetDisplayName(),
-		AuthSource:          value.GetAuthSource(),
-		CallerAppName:       value.GetCallerAppName(),
-		RunAs:               workflowRunAsSubjectInputPtrFromSubject(value.GetRunAs()),
-		SourceDefinitionID:  value.GetSourceDefinitionId(),
-	}, nil
-}
-
-// cloneWorkflowExecutionReferenceProto creates a copy of an existing
-// execution reference through the execution reference input builder.
-func cloneWorkflowExecutionReferenceProto(value *proto.WorkflowExecutionReference) (*proto.WorkflowExecutionReference, error) {
-	input, err := workflowExecutionReferenceFromProto(value)
-	if err != nil || value == nil {
-		return nil, err
-	}
-	return workflowExecutionReferenceToProto(input)
 }
 
 func timestampFromNonZeroTime(value time.Time) *timestamppb.Timestamp {
@@ -1226,59 +1129,4 @@ func workflowEventMatchInputPtrFromMatch(value *proto.WorkflowEventMatch) *Workf
 		Source:  value.GetSource(),
 		Subject: value.GetSubject(),
 	}
-}
-
-func workflowRunAsSubjectFromInput(input *WorkflowRunAsSubject) *proto.WorkflowRunAsSubject {
-	if input == nil {
-		return nil
-	}
-	return &proto.WorkflowRunAsSubject{
-		SubjectId:   input.SubjectID,
-		SubjectKind: input.SubjectKind,
-		DisplayName: input.DisplayName,
-		AuthSource:  input.AuthSource,
-	}
-}
-
-func workflowRunAsSubjectInputPtrFromSubject(value *proto.WorkflowRunAsSubject) *WorkflowRunAsSubject {
-	if value == nil {
-		return nil
-	}
-	return &WorkflowRunAsSubject{
-		SubjectID:   value.GetSubjectId(),
-		SubjectKind: value.GetSubjectKind(),
-		DisplayName: value.GetDisplayName(),
-		AuthSource:  value.GetAuthSource(),
-	}
-}
-
-func workflowAccessPermissionsFromInputs(values []WorkflowAccessPermission) []*proto.WorkflowAccessPermission {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]*proto.WorkflowAccessPermission, 0, len(values))
-	for _, value := range values {
-		out = append(out, &proto.WorkflowAccessPermission{
-			App:        value.App,
-			Operations: append([]string(nil), value.Operations...),
-		})
-	}
-	return out
-}
-
-func workflowAccessPermissionInputsFromPermissions(values []*proto.WorkflowAccessPermission) []WorkflowAccessPermission {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]WorkflowAccessPermission, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		out = append(out, WorkflowAccessPermission{
-			App:        value.GetApp(),
-			Operations: append([]string(nil), value.GetOperations()...),
-		})
-	}
-	return out
 }

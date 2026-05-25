@@ -12,24 +12,20 @@ import {
   BoundWorkflowRunSchema,
   BoundWorkflowScheduleSchema,
   BoundWorkflowTargetSchema,
-  ListWorkflowExecutionReferencesResponseSchema,
   ListWorkflowProviderEventTriggersResponseSchema,
   ListWorkflowProviderRunsResponseSchema,
   ListWorkflowProviderSchedulesResponseSchema,
   SignalWorkflowRunResponseSchema,
-  WorkflowAccessPermissionSchema,
   WorkflowActorSchema,
   WorkflowEventMatchSchema,
   WorkflowEventSchema,
   WorkflowEventTriggerInvocationSchema,
-  WorkflowExecutionReferenceSchema,
   WorkflowManualTriggerSchema,
   WorkflowAgentMessageSchema,
   WorkflowArraySchema,
   WorkflowObjectSchema,
   WorkflowPathSourceSchema,
   WorkflowProvider as WorkflowProviderService,
-  WorkflowRunAsSubjectSchema,
   WorkflowRunStatus as ProtoWorkflowRunStatus,
   WorkflowRunTriggerSchema,
   WorkflowScheduleTriggerSchema,
@@ -44,19 +40,16 @@ import {
   type DeleteWorkflowProviderDefinitionRequest as ProtoDeleteWorkflowProviderDefinitionRequest,
   type DeleteWorkflowProviderEventTriggerRequest as ProtoDeleteWorkflowProviderEventTriggerRequest,
   type DeleteWorkflowProviderScheduleRequest as ProtoDeleteWorkflowProviderScheduleRequest,
-  type GetWorkflowExecutionReferenceRequest as ProtoGetWorkflowExecutionReferenceRequest,
   type GetWorkflowProviderDefinitionRequest as ProtoGetWorkflowProviderDefinitionRequest,
   type GetWorkflowProviderEventTriggerRequest as ProtoGetWorkflowProviderEventTriggerRequest,
   type GetWorkflowProviderRunRequest as ProtoGetWorkflowProviderRunRequest,
   type GetWorkflowProviderScheduleRequest as ProtoGetWorkflowProviderScheduleRequest,
-  type ListWorkflowExecutionReferencesRequest as ProtoListWorkflowExecutionReferencesRequest,
   type ListWorkflowProviderEventTriggersRequest as ProtoListWorkflowProviderEventTriggersRequest,
   type ListWorkflowProviderRunsRequest as ProtoListWorkflowProviderRunsRequest,
   type ListWorkflowProviderSchedulesRequest as ProtoListWorkflowProviderSchedulesRequest,
   type PauseWorkflowProviderEventTriggerRequest as ProtoPauseWorkflowProviderEventTriggerRequest,
   type PauseWorkflowProviderScheduleRequest as ProtoPauseWorkflowProviderScheduleRequest,
   type PublishWorkflowProviderEventRequest as ProtoPublishWorkflowProviderEventRequest,
-  type PutWorkflowExecutionReferenceRequest as ProtoPutWorkflowExecutionReferenceRequest,
   type ResumeWorkflowProviderEventTriggerRequest as ProtoResumeWorkflowProviderEventTriggerRequest,
   type ResumeWorkflowProviderScheduleRequest as ProtoResumeWorkflowProviderScheduleRequest,
   type SignalOrStartWorkflowProviderRunRequest as ProtoSignalOrStartWorkflowProviderRunRequest,
@@ -66,12 +59,10 @@ import {
   type UpdateWorkflowProviderDefinitionRequest as ProtoUpdateWorkflowProviderDefinitionRequest,
   type UpsertWorkflowProviderEventTriggerRequest as ProtoUpsertWorkflowProviderEventTriggerRequest,
   type UpsertWorkflowProviderScheduleRequest as ProtoUpsertWorkflowProviderScheduleRequest,
-  type WorkflowAccessPermission as ProtoWorkflowAccessPermission,
   type WorkflowActor as ProtoWorkflowActor,
   type WorkflowEvent as ProtoWorkflowEvent,
   type WorkflowEventMatch as ProtoWorkflowEventMatch,
   type WorkflowEventTriggerInvocation as ProtoWorkflowEventTriggerInvocation,
-  type WorkflowExecutionReference as ProtoWorkflowExecutionReference,
   WorkflowStepAgentTurnSchema,
   WorkflowStepOutputSourceSchema,
   WorkflowStepAppCallSchema,
@@ -80,7 +71,6 @@ import {
   WorkflowTextSchema,
   WorkflowValueSchema,
   type WorkflowAgentMessage as ProtoWorkflowAgentMessage,
-  type WorkflowRunAsSubject as ProtoWorkflowRunAsSubject,
   type WorkflowRunTrigger as ProtoWorkflowRunTrigger,
   type WorkflowScheduleTrigger as ProtoWorkflowScheduleTrigger,
   type WorkflowSignal as ProtoWorkflowSignal,
@@ -230,18 +220,6 @@ export interface WorkflowActor {
   authSource?: string | undefined;
 }
 
-export interface WorkflowRunAsSubject {
-  subjectId?: string | undefined;
-  subjectKind?: string | undefined;
-  displayName?: string | undefined;
-  authSource?: string | undefined;
-}
-
-export interface WorkflowAccessPermission {
-  app?: string | undefined;
-  operations?: readonly string[] | undefined;
-}
-
 export interface WorkflowEvent {
   id?: string | undefined;
   source?: string | undefined;
@@ -305,9 +283,9 @@ export interface BoundWorkflowRun {
   statusMessage?: string | undefined;
   resultBody?: string | undefined;
   createdBy?: WorkflowActor | undefined;
-  executionRef?: string | undefined;
   workflowKey?: string | undefined;
   providerName?: string | undefined;
+  definitionId?: string | undefined;
 }
 
 export interface BoundWorkflowSchedule {
@@ -320,8 +298,8 @@ export interface BoundWorkflowSchedule {
   updatedAt?: Date | undefined;
   nextRunAt?: Date | undefined;
   createdBy?: WorkflowActor | undefined;
-  executionRef?: string | undefined;
   providerName?: string | undefined;
+  definitionId?: string | undefined;
 }
 
 export interface BoundWorkflowEventTrigger {
@@ -332,8 +310,8 @@ export interface BoundWorkflowEventTrigger {
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
   createdBy?: WorkflowActor | undefined;
-  executionRef?: string | undefined;
   providerName?: string | undefined;
+  definitionId?: string | undefined;
 }
 
 export interface BoundWorkflowDefinition {
@@ -344,28 +322,10 @@ export interface BoundWorkflowDefinition {
   providerName?: string | undefined;
 }
 
-export interface WorkflowExecutionReference {
-  id?: string | undefined;
-  providerName?: string | undefined;
-  target?: BoundWorkflowTarget | undefined;
-  subjectId?: string | undefined;
-  credentialSubjectId?: string | undefined;
-  permissions?: readonly WorkflowAccessPermission[] | undefined;
-  createdAt?: Date | undefined;
-  revokedAt?: Date | undefined;
-  subjectKind?: string | undefined;
-  displayName?: string | undefined;
-  authSource?: string | undefined;
-  callerAppName?: string | undefined;
-  runAs?: WorkflowRunAsSubject | undefined;
-  sourceDefinitionId?: string | undefined;
-}
-
 export interface StartWorkflowProviderRunRequest {
   target?: BoundWorkflowTarget | undefined;
   idempotencyKey: string;
   createdBy?: WorkflowActor | undefined;
-  executionRef: string;
   workflowKey: string;
   definitionId?: string | undefined;
 }
@@ -401,7 +361,6 @@ export interface SignalOrStartWorkflowProviderRunRequest {
   target?: BoundWorkflowTarget | undefined;
   idempotencyKey: string;
   createdBy?: WorkflowActor | undefined;
-  executionRef: string;
   signal?: WorkflowSignal | undefined;
   definitionId?: string | undefined;
 }
@@ -416,6 +375,7 @@ export interface SignalWorkflowRunResponse {
 export interface CreateWorkflowProviderDefinitionRequest {
   target?: BoundWorkflowTarget | undefined;
   idempotencyKey: string;
+  createdBy?: WorkflowActor | undefined;
 }
 
 export interface GetWorkflowProviderDefinitionRequest {
@@ -425,6 +385,7 @@ export interface GetWorkflowProviderDefinitionRequest {
 export interface UpdateWorkflowProviderDefinitionRequest {
   definitionId: string;
   target?: BoundWorkflowTarget | undefined;
+  requestedBy?: WorkflowActor | undefined;
 }
 
 export interface DeleteWorkflowProviderDefinitionRequest {
@@ -438,7 +399,6 @@ export interface UpsertWorkflowProviderScheduleRequest {
   target?: BoundWorkflowTarget | undefined;
   paused: boolean;
   requestedBy?: WorkflowActor | undefined;
-  executionRef: string;
   idempotencyKey?: string | undefined;
   definitionId?: string | undefined;
 }
@@ -467,7 +427,6 @@ export interface UpsertWorkflowProviderEventTriggerRequest {
   target?: BoundWorkflowTarget | undefined;
   paused: boolean;
   requestedBy?: WorkflowActor | undefined;
-  executionRef: string;
   idempotencyKey?: string | undefined;
   definitionId?: string | undefined;
 }
@@ -488,18 +447,6 @@ export interface PauseWorkflowProviderEventTriggerRequest {
 
 export interface ResumeWorkflowProviderEventTriggerRequest {
   triggerId: string;
-}
-
-export interface PutWorkflowExecutionReferenceRequest {
-  reference?: WorkflowExecutionReference | undefined;
-}
-
-export interface GetWorkflowExecutionReferenceRequest {
-  id: string;
-}
-
-export interface ListWorkflowExecutionReferencesRequest {
-  subjectId: string;
 }
 
 export interface PublishWorkflowProviderEventRequest {
@@ -549,45 +496,6 @@ export function workflowActor(input: WorkflowActor = {}): WorkflowActor {
 /** Returns native input copied from workflow actor metadata. */
 export function workflowActorInputFromActor(input?: WorkflowActor): WorkflowActor | undefined {
   return input === undefined ? undefined : { ...input };
-}
-
-/** Creates workflow run-as metadata from native input. */
-export function workflowRunAsSubject(
-  input: WorkflowRunAsSubject = {},
-): WorkflowRunAsSubject {
-  return {
-    subjectId: input.subjectId ?? "",
-    subjectKind: input.subjectKind ?? "",
-    displayName: input.displayName ?? "",
-    authSource: input.authSource ?? "",
-  };
-}
-
-/** Returns native input copied from workflow run-as metadata. */
-export function workflowRunAsSubjectInputFromSubject(
-  input?: WorkflowRunAsSubject,
-): WorkflowRunAsSubject | undefined {
-  return input === undefined ? undefined : { ...input };
-}
-
-/** Creates an execution-reference permission from native input. */
-export function workflowAccessPermission(
-  input: WorkflowAccessPermission = {},
-): WorkflowAccessPermission {
-  return {
-    app: input.app ?? "",
-    operations: [...(input.operations ?? [])],
-  };
-}
-
-/** Returns native input copied from an execution-reference permission. */
-export function workflowAccessPermissionInputFromPermission(
-  input: WorkflowAccessPermission,
-): WorkflowAccessPermission {
-  return {
-    app: input.app,
-    operations: [...(input.operations ?? [])],
-  };
 }
 
 /** Creates workflow event-match fields from native input. */
@@ -1098,9 +1006,9 @@ export function boundWorkflowRun(input: BoundWorkflowRun = {}): BoundWorkflowRun
     statusMessage: input.statusMessage ?? "",
     resultBody: input.resultBody ?? "",
     createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
-    executionRef: input.executionRef ?? "",
     workflowKey: input.workflowKey ?? "",
     providerName: input.providerName ?? "",
+    definitionId: input.definitionId ?? "",
   };
 }
 
@@ -1174,8 +1082,8 @@ export function boundWorkflowSchedule(
     updatedAt: input.updatedAt,
     nextRunAt: input.nextRunAt,
     createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
-    executionRef: input.executionRef ?? "",
     providerName: input.providerName ?? "",
+    definitionId: input.definitionId ?? "",
   };
 }
 
@@ -1212,8 +1120,8 @@ export function boundWorkflowEventTrigger(
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
     createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
-    executionRef: input.executionRef ?? "",
     providerName: input.providerName ?? "",
+    definitionId: input.definitionId ?? "",
   };
 }
 
@@ -1237,50 +1145,6 @@ export function boundWorkflowEventTriggerFromTrigger(
   input: BoundWorkflowEventTrigger,
 ): BoundWorkflowEventTrigger {
   return boundWorkflowEventTrigger(boundWorkflowEventTriggerInputFromTrigger(input) ?? {});
-}
-
-/** Creates a workflow execution reference from native input. */
-export function workflowExecutionReference(
-  input: WorkflowExecutionReference = {},
-): WorkflowExecutionReference {
-  return {
-    id: input.id ?? "",
-    providerName: input.providerName ?? "",
-    target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
-    subjectId: input.subjectId ?? "",
-    credentialSubjectId: input.credentialSubjectId ?? "",
-    permissions: input.permissions?.map((permission) => workflowAccessPermission(permission)) ?? [],
-    createdAt: input.createdAt,
-    revokedAt: input.revokedAt,
-    subjectKind: input.subjectKind ?? "",
-    displayName: input.displayName ?? "",
-    authSource: input.authSource ?? "",
-    callerAppName: input.callerAppName ?? "",
-    runAs: input.runAs === undefined ? undefined : workflowRunAsSubject(input.runAs),
-    sourceDefinitionId: input.sourceDefinitionId ?? "",
-  };
-}
-
-/** Returns native input copied from a workflow execution reference. */
-export function workflowExecutionReferenceInputFromReference(
-  input?: WorkflowExecutionReference,
-): WorkflowExecutionReference | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    ...input,
-    target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
-    permissions: input.permissions?.map((permission) => workflowAccessPermissionInputFromPermission(permission)) ?? [],
-    runAs: workflowRunAsSubjectInputFromSubject(input.runAs),
-  };
-}
-
-/** Returns a deep copy of a workflow execution reference. */
-export function workflowExecutionReferenceFromReference(
-  input: WorkflowExecutionReference,
-): WorkflowExecutionReference {
-  return workflowExecutionReference(workflowExecutionReferenceInputFromReference(input) ?? {});
 }
 
 /** Handlers and runtime metadata for a workflow provider. */
@@ -1351,18 +1215,6 @@ export interface WorkflowProviderOptions extends ProviderBaseOptions {
   resumeEventTrigger: (
     request: ResumeWorkflowProviderEventTriggerRequest,
   ) => MaybePromise<BoundWorkflowEventTrigger>;
-  /** Store or update an execution reference for a workflow target. */
-  putExecutionReference?: (
-    request: PutWorkflowExecutionReferenceRequest,
-  ) => MaybePromise<WorkflowExecutionReference>;
-  /** Load one execution reference by provider-owned lookup fields. */
-  getExecutionReference?: (
-    request: GetWorkflowExecutionReferenceRequest,
-  ) => MaybePromise<WorkflowExecutionReference>;
-  /** List execution references for the requested scope. */
-  listExecutionReferences?: (
-    request: ListWorkflowExecutionReferencesRequest,
-  ) => MaybePromise<readonly WorkflowExecutionReference[]>;
   publishEvent: (
     request: PublishWorkflowProviderEventRequest,
   ) => MaybePromise<WorkflowEvent>;
@@ -1394,9 +1246,6 @@ export class WorkflowProvider extends ProviderBase {
   private readonly deleteEventTriggerHandler: WorkflowProviderOptions["deleteEventTrigger"];
   private readonly pauseEventTriggerHandler: WorkflowProviderOptions["pauseEventTrigger"];
   private readonly resumeEventTriggerHandler: WorkflowProviderOptions["resumeEventTrigger"];
-  private readonly putExecutionReferenceHandler: WorkflowProviderOptions["putExecutionReference"];
-  private readonly getExecutionReferenceHandler: WorkflowProviderOptions["getExecutionReference"];
-  private readonly listExecutionReferencesHandler: WorkflowProviderOptions["listExecutionReferences"];
   private readonly publishEventHandler: WorkflowProviderOptions["publishEvent"];
 
   constructor(options: WorkflowProviderOptions) {
@@ -1423,9 +1272,6 @@ export class WorkflowProvider extends ProviderBase {
     this.deleteEventTriggerHandler = options.deleteEventTrigger;
     this.pauseEventTriggerHandler = options.pauseEventTrigger;
     this.resumeEventTriggerHandler = options.resumeEventTrigger;
-    this.putExecutionReferenceHandler = options.putExecutionReference;
-    this.getExecutionReferenceHandler = options.getExecutionReference;
-    this.listExecutionReferencesHandler = options.listExecutionReferences;
     this.publishEventHandler = options.publishEvent;
   }
 
@@ -1537,39 +1383,6 @@ export class WorkflowProvider extends ProviderBase {
     request: ResumeWorkflowProviderEventTriggerRequest,
   ): Promise<BoundWorkflowEventTrigger> {
     return await this.resumeEventTriggerHandler(request);
-  }
-
-  /** Store or update an execution reference for a workflow target. */
-  async putExecutionReference(
-    request: PutWorkflowExecutionReferenceRequest,
-  ): Promise<WorkflowExecutionReference> {
-    return await requireWorkflowProviderHandler(
-      "put execution reference",
-      this.putExecutionReferenceHandler,
-      request,
-    );
-  }
-
-  /** Load one execution reference by provider-owned lookup fields. */
-  async getExecutionReference(
-    request: GetWorkflowExecutionReferenceRequest,
-  ): Promise<WorkflowExecutionReference> {
-    return await requireWorkflowProviderHandler(
-      "get execution reference",
-      this.getExecutionReferenceHandler,
-      request,
-    );
-  }
-
-  /** List execution references for the requested scope. */
-  async listExecutionReferences(
-    request: ListWorkflowExecutionReferencesRequest,
-  ): Promise<readonly WorkflowExecutionReference[]> {
-    return await requireWorkflowProviderHandler(
-      "list execution references",
-      this.listExecutionReferencesHandler,
-      request,
-    );
   }
 
   async publishEvent(request: PublishWorkflowProviderEventRequest): Promise<WorkflowEvent> {
@@ -1829,35 +1642,6 @@ export function createWorkflowProviderService(
         ),
       );
     },
-    async putExecutionReference(request) {
-      return create(
-        WorkflowExecutionReferenceSchema,
-        workflowExecutionReferenceToProto(
-          await invokeWorkflowProvider("put execution reference", () =>
-            provider.putExecutionReference(putWorkflowExecutionReferenceRequestFromProto(request)),
-          ),
-        ),
-      );
-    },
-    async getExecutionReference(request) {
-      return create(
-        WorkflowExecutionReferenceSchema,
-        workflowExecutionReferenceToProto(
-          await invokeWorkflowProvider("get execution reference", () =>
-            provider.getExecutionReference(getWorkflowExecutionReferenceRequestFromProto(request)),
-          ),
-        ),
-      );
-    },
-    async listExecutionReferences(request) {
-      return create(ListWorkflowExecutionReferencesResponseSchema, {
-        references: (
-          await invokeWorkflowProvider("list execution references", () =>
-            provider.listExecutionReferences(listWorkflowExecutionReferencesRequestFromProto(request)),
-          )
-        ).map(workflowExecutionReferenceToProto),
-      });
-    },
     async publishEvent(request) {
       return workflowEventToProto(
         await invokeWorkflowProvider("publish event", () =>
@@ -1889,50 +1673,6 @@ export function workflowActorFromProto(input?: ProtoWorkflowActor | undefined): 
     subjectKind: input.subjectKind,
     displayName: input.displayName,
     authSource: input.authSource,
-  };
-}
-
-export function workflowRunAsSubjectToProto(
-  input?: WorkflowRunAsSubject | undefined,
-): ProtoWorkflowRunAsSubject | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return create(WorkflowRunAsSubjectSchema, {
-    subjectId: input.subjectId ?? "",
-    subjectKind: input.subjectKind ?? "",
-    displayName: input.displayName ?? "",
-    authSource: input.authSource ?? "",
-  });
-}
-
-export function workflowRunAsSubjectFromProto(
-  input?: ProtoWorkflowRunAsSubject | undefined,
-): WorkflowRunAsSubject | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    subjectId: input.subjectId,
-    subjectKind: input.subjectKind,
-    displayName: input.displayName,
-    authSource: input.authSource,
-  };
-}
-
-export function workflowAccessPermissionToProto(input: WorkflowAccessPermission) {
-  return create(WorkflowAccessPermissionSchema, {
-    app: input.app ?? "",
-    operations: [...(input.operations ?? [])],
-  });
-}
-
-export function workflowAccessPermissionFromProto(
-  input: ProtoWorkflowAccessPermission,
-): WorkflowAccessPermission {
-  return {
-    app: input.app,
-    operations: [...input.operations],
   };
 }
 
@@ -2461,9 +2201,9 @@ export function boundWorkflowRunToProto(input: BoundWorkflowRun): ProtoBoundWork
     statusMessage: input.statusMessage ?? "",
     resultBody: input.resultBody ?? "",
     createdBy: workflowActorToProto(input.createdBy),
-    executionRef: input.executionRef ?? "",
     workflowKey: input.workflowKey ?? "",
     providerName: input.providerName ?? "",
+    definitionId: input.definitionId ?? "",
   });
 }
 
@@ -2482,9 +2222,9 @@ export function boundWorkflowRunFromProto(input?: ProtoBoundWorkflowRun | undefi
     statusMessage: input.statusMessage,
     resultBody: input.resultBody,
     createdBy: workflowActorFromProto(input.createdBy),
-    executionRef: input.executionRef,
     workflowKey: input.workflowKey,
     providerName: input.providerName,
+    definitionId: input.definitionId,
   };
 }
 
@@ -2510,8 +2250,8 @@ export function boundWorkflowScheduleToProto(input: BoundWorkflowSchedule): Prot
     updatedAt: optionalTimestamp(input.updatedAt),
     nextRunAt: optionalTimestamp(input.nextRunAt),
     createdBy: workflowActorToProto(input.createdBy),
-    executionRef: input.executionRef ?? "",
     providerName: input.providerName ?? "",
+    definitionId: input.definitionId ?? "",
   });
 }
 
@@ -2531,8 +2271,8 @@ export function boundWorkflowScheduleFromProto(
     updatedAt: optionalDate(input.updatedAt),
     nextRunAt: optionalDate(input.nextRunAt),
     createdBy: workflowActorFromProto(input.createdBy),
-    executionRef: input.executionRef,
     providerName: input.providerName,
+    definitionId: input.definitionId,
   };
 }
 
@@ -2547,8 +2287,8 @@ export function boundWorkflowEventTriggerToProto(
     createdAt: optionalTimestamp(input.createdAt),
     updatedAt: optionalTimestamp(input.updatedAt),
     createdBy: workflowActorToProto(input.createdBy),
-    executionRef: input.executionRef ?? "",
     providerName: input.providerName ?? "",
+    definitionId: input.definitionId ?? "",
   });
 }
 
@@ -2566,8 +2306,8 @@ export function boundWorkflowEventTriggerFromProto(
     createdAt: optionalDate(input.createdAt),
     updatedAt: optionalDate(input.updatedAt),
     createdBy: workflowActorFromProto(input.createdBy),
-    executionRef: input.executionRef,
     providerName: input.providerName,
+    definitionId: input.definitionId,
   };
 }
 
@@ -2596,62 +2336,16 @@ export function boundWorkflowDefinitionFromProto(
   };
 }
 
-export function workflowExecutionReferenceToProto(
-  input: WorkflowExecutionReference,
-): ProtoWorkflowExecutionReference {
-  return create(WorkflowExecutionReferenceSchema, {
-    id: input.id ?? "",
-    providerName: input.providerName ?? "",
-    target: boundWorkflowTargetToProto(input.target),
-    subjectId: input.subjectId ?? "",
-    credentialSubjectId: input.credentialSubjectId ?? "",
-    permissions: input.permissions?.map(workflowAccessPermissionToProto) ?? [],
-    createdAt: optionalTimestamp(input.createdAt),
-    revokedAt: optionalTimestamp(input.revokedAt),
-    subjectKind: input.subjectKind ?? "",
-    displayName: input.displayName ?? "",
-    authSource: input.authSource ?? "",
-    callerAppName: input.callerAppName ?? "",
-    runAs: workflowRunAsSubjectToProto(input.runAs),
-    sourceDefinitionId: input.sourceDefinitionId ?? "",
-  });
-}
-
-export function workflowExecutionReferenceFromProto(
-  input?: ProtoWorkflowExecutionReference | undefined,
-): WorkflowExecutionReference | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    id: input.id,
-    providerName: input.providerName,
-    target: boundWorkflowTargetFromProto(input.target),
-    subjectId: input.subjectId,
-    credentialSubjectId: input.credentialSubjectId,
-    permissions: input.permissions.map(workflowAccessPermissionFromProto),
-    createdAt: optionalDate(input.createdAt),
-    revokedAt: optionalDate(input.revokedAt),
-    subjectKind: input.subjectKind,
-    displayName: input.displayName,
-    authSource: input.authSource,
-    callerAppName: input.callerAppName,
-    runAs: workflowRunAsSubjectFromProto(input.runAs),
-    sourceDefinitionId: input.sourceDefinitionId,
-  };
-}
-
 function startWorkflowProviderRunRequestFromProto(
   input: ProtoStartWorkflowProviderRunRequest,
 ): StartWorkflowProviderRunRequest {
-  return {
-    target: boundWorkflowTargetFromProto(input.target),
-    idempotencyKey: input.idempotencyKey,
-    createdBy: workflowActorFromProto(input.createdBy),
-    executionRef: input.executionRef,
-    workflowKey: input.workflowKey,
-    definitionId: input.definitionId,
-  };
+	return {
+		target: boundWorkflowTargetFromProto(input.target),
+		idempotencyKey: input.idempotencyKey,
+		createdBy: workflowActorFromProto(input.createdBy),
+		workflowKey: input.workflowKey,
+		definitionId: input.definitionId,
+	};
 }
 
 function getWorkflowProviderRunRequestFromProto(
@@ -2694,7 +2388,6 @@ function signalOrStartWorkflowProviderRunRequestFromProto(
     target: boundWorkflowTargetFromProto(input.target),
     idempotencyKey: input.idempotencyKey,
     createdBy: workflowActorFromProto(input.createdBy),
-    executionRef: input.executionRef,
     signal: workflowSignalFromProto(input.signal),
     definitionId: input.definitionId,
   };
@@ -2703,10 +2396,11 @@ function signalOrStartWorkflowProviderRunRequestFromProto(
 function createWorkflowProviderDefinitionRequestFromProto(
   input: ProtoCreateWorkflowProviderDefinitionRequest,
 ): CreateWorkflowProviderDefinitionRequest {
-  return {
-    target: boundWorkflowTargetFromProto(input.target),
-    idempotencyKey: input.idempotencyKey,
-  };
+	return {
+		target: boundWorkflowTargetFromProto(input.target),
+		idempotencyKey: input.idempotencyKey,
+		createdBy: workflowActorFromProto(input.createdBy),
+	};
 }
 
 function getWorkflowProviderDefinitionRequestFromProto(
@@ -2721,6 +2415,7 @@ function updateWorkflowProviderDefinitionRequestFromProto(
   return {
     definitionId: input.definitionId,
     target: boundWorkflowTargetFromProto(input.target),
+    requestedBy: workflowActorFromProto(input.requestedBy),
   };
 }
 
@@ -2740,7 +2435,6 @@ function upsertWorkflowProviderScheduleRequestFromProto(
     target: boundWorkflowTargetFromProto(input.target),
     paused: input.paused,
     requestedBy: workflowActorFromProto(input.requestedBy),
-    executionRef: input.executionRef,
     idempotencyKey: input.idempotencyKey,
     definitionId: input.definitionId,
   };
@@ -2785,7 +2479,6 @@ function upsertWorkflowProviderEventTriggerRequestFromProto(
     target: boundWorkflowTargetFromProto(input.target),
     paused: input.paused,
     requestedBy: workflowActorFromProto(input.requestedBy),
-    executionRef: input.executionRef,
     idempotencyKey: input.idempotencyKey,
     definitionId: input.definitionId,
   };
@@ -2819,24 +2512,6 @@ function resumeWorkflowProviderEventTriggerRequestFromProto(
   input: ProtoResumeWorkflowProviderEventTriggerRequest,
 ): ResumeWorkflowProviderEventTriggerRequest {
   return { triggerId: input.triggerId };
-}
-
-function putWorkflowExecutionReferenceRequestFromProto(
-  input: ProtoPutWorkflowExecutionReferenceRequest,
-): PutWorkflowExecutionReferenceRequest {
-  return { reference: workflowExecutionReferenceFromProto(input.reference) };
-}
-
-function getWorkflowExecutionReferenceRequestFromProto(
-  input: ProtoGetWorkflowExecutionReferenceRequest,
-): GetWorkflowExecutionReferenceRequest {
-  return { id: input.id };
-}
-
-function listWorkflowExecutionReferencesRequestFromProto(
-  input: ProtoListWorkflowExecutionReferencesRequest,
-): ListWorkflowExecutionReferencesRequest {
-  return { subjectId: input.subjectId };
 }
 
 function publishWorkflowProviderEventRequestFromProto(
@@ -2965,19 +2640,6 @@ async function invokeWorkflowProvider<T>(
   }
 }
 
-async function requireWorkflowProviderHandler<Request, Response>(
-  action: string,
-  fn: ((request: Request) => MaybePromise<Response>) | undefined,
-  request: Request,
-): Promise<Response> {
-  if (!fn) {
-    throw new ConnectError(
-      `workflow provider ${action} is not implemented`,
-      Code.Unimplemented,
-    );
-  }
-  return await fn(request);
-}
 export interface WorkflowExecutionRequest {
   providerName?: string | undefined;
   runId?: string | undefined;
@@ -2986,7 +2648,6 @@ export interface WorkflowExecutionRequest {
   input?: Record<string, JsonInput> | undefined;
   metadata?: Record<string, JsonInput> | undefined;
   createdBy?: WorkflowActor | undefined;
-  executionRef?: string | undefined;
   invocationToken?: string | undefined;
   signals?: readonly WorkflowSignal[] | undefined;
 }
@@ -3138,9 +2799,6 @@ export function workflowInvocationContext(
   const signals = workflowSignalsContext(req.signals);
   if (signals.length > 0) {
     out.signals = signals;
-  }
-  if (req.executionRef?.trim()) {
-    out.executionRef = req.executionRef.trim();
   }
   const createdBy = workflowActorContext(req.createdBy);
   if (createdBy !== undefined) {

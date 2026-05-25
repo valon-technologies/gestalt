@@ -1416,12 +1416,11 @@ func (m *stubWorkflowManager) CreateDefinition(_ context.Context, p *principal.P
 	now := time.Now().UTC().Truncate(time.Second)
 	value := &workflowmanager.ManagedDefinition{
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
-		Definition: &coreworkflow.ExecutionReference{
-			ID:           id,
-			ProviderName: defaultWorkflowProviderName(req.ProviderName),
-			Target:       cloneWorkflowTarget(req.Target),
-			SubjectID:    subjectIDOf(p),
-			CreatedAt:    &now,
+		Definition: &coreworkflow.Definition{
+			ID:        id,
+			Target:    cloneWorkflowTarget(req.Target),
+			CreatedBy: coreworkflow.Actor{SubjectID: subjectIDOf(p)},
+			CreatedAt: &now,
 		},
 	}
 	m.definitions[id] = value
@@ -1449,7 +1448,6 @@ func (m *stubWorkflowManager) UpdateDefinition(_ context.Context, p *principal.P
 		return nil, core.ErrNotFound
 	}
 	value.ProviderName = defaultWorkflowProviderName(req.ProviderName)
-	value.Definition.ProviderName = defaultWorkflowProviderName(req.ProviderName)
 	value.Definition.Target = cloneWorkflowTarget(req.Target)
 	return cloneManagedDefinition(value), nil
 }
@@ -1485,13 +1483,14 @@ func (m *stubWorkflowManager) CreateSchedule(_ context.Context, p *principal.Pri
 	value := &workflowmanager.ManagedSchedule{
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
 		Schedule: &coreworkflow.Schedule{
-			ID:        id,
-			Cron:      req.Cron,
-			Timezone:  req.Timezone,
-			Target:    cloneWorkflowTarget(req.Target),
-			Paused:    req.Paused,
-			CreatedAt: &now,
-			UpdatedAt: &now,
+			ID:           id,
+			Cron:         req.Cron,
+			Timezone:     req.Timezone,
+			Target:       cloneWorkflowTarget(req.Target),
+			DefinitionID: strings.TrimSpace(req.DefinitionID),
+			Paused:       req.Paused,
+			CreatedAt:    &now,
+			UpdatedAt:    &now,
 		},
 	}
 	m.schedules[id] = value
@@ -1523,6 +1522,7 @@ func (m *stubWorkflowManager) UpdateSchedule(_ context.Context, p *principal.Pri
 	value.Schedule.Cron = req.Cron
 	value.Schedule.Timezone = req.Timezone
 	value.Schedule.Target = cloneWorkflowTarget(req.Target)
+	value.Schedule.DefinitionID = strings.TrimSpace(req.DefinitionID)
 	value.Schedule.Paused = req.Paused
 	value.Schedule.UpdatedAt = &now
 	return cloneManagedSchedule(value), nil
@@ -1587,12 +1587,13 @@ func (m *stubWorkflowManager) CreateEventTrigger(_ context.Context, p *principal
 	value := &workflowmanager.ManagedEventTrigger{
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
 		Trigger: &coreworkflow.EventTrigger{
-			ID:        id,
-			Match:     cloneWorkflowEventMatch(req.Match),
-			Target:    cloneWorkflowTarget(req.Target),
-			Paused:    req.Paused,
-			CreatedAt: &now,
-			UpdatedAt: &now,
+			ID:           id,
+			Match:        cloneWorkflowEventMatch(req.Match),
+			Target:       cloneWorkflowTarget(req.Target),
+			DefinitionID: strings.TrimSpace(req.DefinitionID),
+			Paused:       req.Paused,
+			CreatedAt:    &now,
+			UpdatedAt:    &now,
 		},
 	}
 	m.triggers[id] = value
@@ -1623,6 +1624,7 @@ func (m *stubWorkflowManager) UpdateEventTrigger(_ context.Context, p *principal
 	value.ProviderName = defaultWorkflowProviderName(req.ProviderName)
 	value.Trigger.Match = cloneWorkflowEventMatch(req.Match)
 	value.Trigger.Target = cloneWorkflowTarget(req.Target)
+	value.Trigger.DefinitionID = strings.TrimSpace(req.DefinitionID)
 	value.Trigger.Paused = req.Paused
 	value.Trigger.UpdatedAt = &now
 	return cloneManagedEventTrigger(value), nil
@@ -1686,11 +1688,12 @@ func (m *stubWorkflowManager) StartRun(_ context.Context, p *principal.Principal
 	value := &workflowmanager.ManagedRun{
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
 		Run: &coreworkflow.Run{
-			ID:          id,
-			Target:      cloneWorkflowTarget(req.Target),
-			WorkflowKey: req.WorkflowKey,
-			CreatedAt:   &now,
-			CreatedBy:   coreworkflow.Actor{SubjectID: subjectIDOf(p)},
+			ID:           id,
+			Target:       cloneWorkflowTarget(req.Target),
+			DefinitionID: strings.TrimSpace(req.DefinitionID),
+			WorkflowKey:  req.WorkflowKey,
+			CreatedAt:    &now,
+			CreatedBy:    coreworkflow.Actor{SubjectID: subjectIDOf(p)},
 		},
 	}
 	m.runs[id] = value
@@ -2054,11 +2057,6 @@ func cloneManagedSchedule(value *workflowmanager.ManagedSchedule) *workflowmanag
 		schedule.Target = cloneWorkflowTarget(value.Schedule.Target)
 		out.Schedule = &schedule
 	}
-	if value.ExecutionRef != nil {
-		executionRef := *value.ExecutionRef
-		executionRef.Target = cloneWorkflowTarget(value.ExecutionRef.Target)
-		out.ExecutionRef = &executionRef
-	}
 	return &out
 }
 
@@ -2072,11 +2070,6 @@ func cloneManagedEventTrigger(value *workflowmanager.ManagedEventTrigger) *workf
 		trigger.Match = cloneWorkflowEventMatch(value.Trigger.Match)
 		trigger.Target = cloneWorkflowTarget(value.Trigger.Target)
 		out.Trigger = &trigger
-	}
-	if value.ExecutionRef != nil {
-		executionRef := *value.ExecutionRef
-		executionRef.Target = cloneWorkflowTarget(value.ExecutionRef.Target)
-		out.ExecutionRef = &executionRef
 	}
 	return &out
 }
@@ -2103,11 +2096,6 @@ func cloneManagedRun(value *workflowmanager.ManagedRun) *workflowmanager.Managed
 		run := *value.Run
 		run.Target = cloneWorkflowTarget(value.Run.Target)
 		out.Run = &run
-	}
-	if value.ExecutionRef != nil {
-		executionRef := *value.ExecutionRef
-		executionRef.Target = cloneWorkflowTarget(value.ExecutionRef.Target)
-		out.ExecutionRef = &executionRef
 	}
 	return &out
 }

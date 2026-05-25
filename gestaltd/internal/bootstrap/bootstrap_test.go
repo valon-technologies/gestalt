@@ -37,6 +37,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -487,6 +488,18 @@ func stubIndexedDBFactory() bootstrap.IndexedDBFactory {
 
 type stubWorkflowProvider struct{}
 
+func (s *stubWorkflowProvider) CreateDefinition(context.Context, coreworkflow.CreateDefinitionRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
+}
+func (s *stubWorkflowProvider) GetDefinition(context.Context, coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
+}
+func (s *stubWorkflowProvider) UpdateDefinition(context.Context, coreworkflow.UpdateDefinitionRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
+}
+func (s *stubWorkflowProvider) DeleteDefinition(context.Context, coreworkflow.DeleteDefinitionRequest) error {
+	return nil
+}
 func (s *stubWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
 	return &coreworkflow.Run{}, nil
 }
@@ -1285,30 +1298,86 @@ func cloneBootstrapAgentMessages(src []coreagent.Message) []coreagent.Message {
 }
 
 type recordingWorkflowProvider struct {
-	upsertedSchedules           []coreworkflow.UpsertScheduleRequest
-	listedSchedules             []*coreworkflow.Schedule
-	listSchedulesErr            error
-	deletedSchedules            []coreworkflow.DeleteScheduleRequest
-	deleteScheduleErr           error
-	getSchedule                 *coreworkflow.Schedule
-	getScheduleErr              error
-	schedules                   map[string]*coreworkflow.Schedule
-	omitScheduleExecutionRef    bool
-	upsertedEventTriggers       []coreworkflow.UpsertEventTriggerRequest
-	listedEventTriggers         []*coreworkflow.EventTrigger
-	listEventTriggersErr        error
-	deletedEventTriggers        []coreworkflow.DeleteEventTriggerRequest
-	deleteEventTriggerErr       error
-	getEventTrigger             *coreworkflow.EventTrigger
-	getEventTriggerErr          error
-	eventTriggers               map[string]*coreworkflow.EventTrigger
-	executionRefs               map[string]*coreworkflow.ExecutionReference
-	getExecutionReferenceErrs   map[string]error
-	putExecutionReferenceErr    error
-	dropExecutionReferenceRunAs bool
-	deleteMissingNotFound       bool
-	deleteEventMissingNotFound  bool
-	closed                      *atomic.Bool
+	definitions                map[string]*coreworkflow.Definition
+	nextDefinitionID           int
+	upsertedSchedules          []coreworkflow.UpsertScheduleRequest
+	upsertedScheduleTokens     []string
+	listedSchedules            []*coreworkflow.Schedule
+	listSchedulesErr           error
+	deletedSchedules           []coreworkflow.DeleteScheduleRequest
+	deleteScheduleErr          error
+	getSchedule                *coreworkflow.Schedule
+	getScheduleErr             error
+	schedules                  map[string]*coreworkflow.Schedule
+	upsertedEventTriggers      []coreworkflow.UpsertEventTriggerRequest
+	upsertedEventTriggerTokens []string
+	listedEventTriggers        []*coreworkflow.EventTrigger
+	listEventTriggersErr       error
+	deletedEventTriggers       []coreworkflow.DeleteEventTriggerRequest
+	deleteEventTriggerErr      error
+	getEventTrigger            *coreworkflow.EventTrigger
+	getEventTriggerErr         error
+	eventTriggers              map[string]*coreworkflow.EventTrigger
+	deleteMissingNotFound      bool
+	deleteEventMissingNotFound bool
+	closed                     *atomic.Bool
+}
+
+func (p *recordingWorkflowProvider) CreateDefinition(_ context.Context, req coreworkflow.CreateDefinitionRequest) (*coreworkflow.Definition, error) {
+	if p.definitions == nil {
+		p.definitions = map[string]*coreworkflow.Definition{}
+	}
+	p.nextDefinitionID++
+	id := fmt.Sprintf("workflow-definition:%d", p.nextDefinitionID)
+	if req.IdempotencyKey != "" {
+		id = "workflow-definition:" + strings.TrimSpace(req.IdempotencyKey)
+	}
+	if existing := p.definitions[id]; existing != nil {
+		value := *existing
+		return &value, nil
+	}
+	definition := &coreworkflow.Definition{
+		ID:        id,
+		Target:    cloneBootstrapWorkflowTarget(req.Target),
+		CreatedBy: req.CreatedBy,
+	}
+	p.definitions[id] = definition
+	value := *definition
+	return &value, nil
+}
+
+func (p *recordingWorkflowProvider) GetDefinition(_ context.Context, req coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
+	if definition := p.definitions[strings.TrimSpace(req.DefinitionID)]; definition != nil {
+		value := *definition
+		value.Target = cloneBootstrapWorkflowTarget(definition.Target)
+		return &value, nil
+	}
+	return nil, core.ErrNotFound
+}
+
+func (p *recordingWorkflowProvider) UpdateDefinition(_ context.Context, req coreworkflow.UpdateDefinitionRequest) (*coreworkflow.Definition, error) {
+	if p.definitions == nil {
+		p.definitions = map[string]*coreworkflow.Definition{}
+	}
+	id := strings.TrimSpace(req.DefinitionID)
+	if p.definitions[id] == nil {
+		return nil, core.ErrNotFound
+	}
+	definition := &coreworkflow.Definition{
+		ID:     id,
+		Target: cloneBootstrapWorkflowTarget(req.Target),
+	}
+	p.definitions[id] = definition
+	value := *definition
+	return &value, nil
+}
+
+func (p *recordingWorkflowProvider) DeleteDefinition(_ context.Context, req coreworkflow.DeleteDefinitionRequest) error {
+	if p.definitions == nil || p.definitions[strings.TrimSpace(req.DefinitionID)] == nil {
+		return core.ErrNotFound
+	}
+	delete(p.definitions, strings.TrimSpace(req.DefinitionID))
+	return nil
 }
 
 func (p *recordingWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
@@ -1329,15 +1398,16 @@ func (p *recordingWorkflowProvider) SignalRun(context.Context, coreworkflow.Sign
 func (p *recordingWorkflowProvider) SignalOrStartRun(context.Context, coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
 	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
 }
-func (p *recordingWorkflowProvider) UpsertSchedule(_ context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
+func (p *recordingWorkflowProvider) UpsertSchedule(ctx context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
 	p.upsertedSchedules = append(p.upsertedSchedules, req)
+	p.upsertedScheduleTokens = append(p.upsertedScheduleTokens, appaccessservice.InvocationTokenFromContext(ctx))
 	schedule := &coreworkflow.Schedule{
 		ID:           req.ScheduleID,
 		Cron:         req.Cron,
 		Timezone:     req.Timezone,
 		Target:       req.Target,
+		DefinitionID: req.DefinitionID,
 		Paused:       req.Paused,
-		ExecutionRef: req.ExecutionRef,
 		CreatedBy:    req.RequestedBy,
 	}
 	if p.schedules == nil {
@@ -1395,14 +1465,15 @@ func (p *recordingWorkflowProvider) PauseSchedule(context.Context, coreworkflow.
 func (p *recordingWorkflowProvider) ResumeSchedule(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
 	return &coreworkflow.Schedule{}, nil
 }
-func (p *recordingWorkflowProvider) UpsertEventTrigger(_ context.Context, req coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+func (p *recordingWorkflowProvider) UpsertEventTrigger(ctx context.Context, req coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
 	p.upsertedEventTriggers = append(p.upsertedEventTriggers, req)
+	p.upsertedEventTriggerTokens = append(p.upsertedEventTriggerTokens, appaccessservice.InvocationTokenFromContext(ctx))
 	trigger := &coreworkflow.EventTrigger{
 		ID:           req.TriggerID,
 		Match:        req.Match,
 		Target:       req.Target,
+		DefinitionID: req.DefinitionID,
 		Paused:       req.Paused,
-		ExecutionRef: req.ExecutionRef,
 		CreatedBy:    req.RequestedBy,
 	}
 	if p.eventTriggers == nil {
@@ -1463,43 +1534,6 @@ func (p *recordingWorkflowProvider) ResumeEventTrigger(context.Context, corework
 func (p *recordingWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
 	return &req.Event, nil
 }
-func (p *recordingWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
-	if p.putExecutionReferenceErr != nil {
-		return nil, p.putExecutionReferenceErr
-	}
-	if p.executionRefs == nil {
-		p.executionRefs = map[string]*coreworkflow.ExecutionReference{}
-	}
-	stored := cloneBootstrapWorkflowExecutionRef(ref)
-	if p.dropExecutionReferenceRunAs {
-		stored.RunAs = nil
-	}
-	p.executionRefs[stored.ID] = stored
-	return cloneBootstrapWorkflowExecutionRef(stored), nil
-}
-func (p *recordingWorkflowProvider) GetExecutionReference(_ context.Context, id string) (*coreworkflow.ExecutionReference, error) {
-	if err := p.getExecutionReferenceErrs[strings.TrimSpace(id)]; err != nil {
-		return nil, err
-	}
-	if ref := p.executionRefs[strings.TrimSpace(id)]; ref != nil {
-		return cloneBootstrapWorkflowExecutionRef(ref), nil
-	}
-	return nil, core.ErrNotFound
-}
-func (p *recordingWorkflowProvider) ListExecutionReferences(_ context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
-	subjectID = strings.TrimSpace(subjectID)
-	out := make([]*coreworkflow.ExecutionReference, 0, len(p.executionRefs))
-	for _, ref := range p.executionRefs {
-		if ref == nil {
-			continue
-		}
-		if subjectID != "" && strings.TrimSpace(ref.SubjectID) != subjectID {
-			continue
-		}
-		out = append(out, cloneBootstrapWorkflowExecutionRef(ref))
-	}
-	return out, nil
-}
 func (p *recordingWorkflowProvider) Ping(context.Context) error { return nil }
 func (p *recordingWorkflowProvider) Close() error {
 	if p.closed != nil {
@@ -1508,41 +1542,63 @@ func (p *recordingWorkflowProvider) Close() error {
 	return nil
 }
 
+type recordingWorkflowConfigAppInvoker struct {
+	providerName string
+	operation    string
+	subjectID    string
+}
+
+func (i *recordingWorkflowConfigAppInvoker) Invoke(_ context.Context, p *principal.Principal, providerName, _ string, operation string, _ map[string]any) (*core.OperationResult, error) {
+	i.providerName = providerName
+	i.operation = operation
+	if p != nil {
+		i.subjectID = p.SubjectID
+	}
+	return &core.OperationResult{Status: http.StatusOK}, nil
+}
+
+func requireWorkflowConfigTokenContext(t *testing.T, encryptionKey []byte, token string) appaccessservice.TokenContext {
+	t.Helper()
+	if strings.TrimSpace(token) == "" {
+		t.Fatal("upsert invocation token is empty")
+	}
+	tokens, err := appaccessservice.NewInvocationTokenManager(encryptionKey)
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	tokenCtx, err := tokens.ResolveToken(token, "system:config")
+	if err != nil {
+		t.Fatalf("ResolveToken(config token): %v", err)
+	}
+	return tokenCtx
+}
+
+func assertWorkflowConfigTokenAllowsAppInvoke(t *testing.T, encryptionKey []byte, token, appName, operation string) {
+	t.Helper()
+	tokens, err := appaccessservice.NewInvocationTokenManager(encryptionKey)
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	invoker := &recordingWorkflowConfigAppInvoker{}
+	appServer := appaccessservice.NewAppServer("temporal", nil, invoker, tokens)
+	if _, err := appServer.Invoke(context.Background(), &proto.AppInvokeRequest{
+		InvocationToken: token,
+		App:             appName,
+		Operation:       operation,
+	}); err != nil {
+		t.Fatalf("Invoke(%s.%s) with config token: %v", appName, operation, err)
+	}
+	if invoker.providerName != appName || invoker.operation != operation {
+		t.Fatalf("invoked %s.%s, want %s.%s", invoker.providerName, invoker.operation, appName, operation)
+	}
+}
+
 func (p *recordingWorkflowProvider) scheduleGetResponse(schedule *coreworkflow.Schedule) *coreworkflow.Schedule {
 	if schedule == nil {
 		return nil
 	}
 	value := *schedule
-	if p.omitScheduleExecutionRef {
-		value.ExecutionRef = ""
-	}
 	return &value
-}
-
-func cloneBootstrapWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *coreworkflow.ExecutionReference {
-	if ref == nil {
-		return nil
-	}
-	clone := *ref
-	clone.Target = cloneBootstrapWorkflowTarget(ref.Target)
-	if ref.RunAs != nil {
-		runAs := *core.NormalizeRunAsSubject(ref.RunAs)
-		clone.RunAs = &runAs
-	}
-	clone.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
-	for i := range clone.Permissions {
-		clone.Permissions[i].Operations = append([]string(nil), clone.Permissions[i].Operations...)
-		clone.Permissions[i].Actions = append([]string(nil), clone.Permissions[i].Actions...)
-	}
-	if ref.CreatedAt != nil {
-		createdAt := ref.CreatedAt.UTC()
-		clone.CreatedAt = &createdAt
-	}
-	if ref.RevokedAt != nil {
-		revokedAt := ref.RevokedAt.UTC()
-		clone.RevokedAt = &revokedAt
-	}
-	return &clone
 }
 
 func cloneBootstrapWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
@@ -4522,27 +4578,6 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		t.Fatal("missing workflow indexeddb host service")
 	}
 
-	provider, err := result.WorkflowControl.ResolveProvider("basic")
-	if err != nil {
-		t.Fatalf("ResolveProvider(basic): %v", err)
-	}
-	executionRefs, ok := provider.(coreworkflow.ExecutionReferenceStore)
-	if !ok {
-		t.Fatal("workflow provider with indexeddb cleanup does not preserve execution reference store")
-	}
-	target := coreWorkflowAppStepTarget("roadmap", "sync")
-	if _, err := executionRefs.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-test:ref-test",
-		ProviderName: "basic",
-		Target:       target,
-		SubjectID:    "user:ada",
-	}); err != nil {
-		t.Fatalf("PutExecutionReference: %v", err)
-	}
-	if _, err := workflowProvider.GetExecutionReference(context.Background(), "workflow_schedule:sched-test:ref-test"); err != nil {
-		t.Fatalf("underlying workflow provider missing execution ref: %v", err)
-	}
-
 	withIndexedDBHostClient(t, indexedDBService, func(client proto.IndexedDBClient) {
 		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
 			Name:   "workflow_runs",
@@ -4633,7 +4668,9 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 
 	factories := validFactories()
 	recorders := map[string]*recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	var workflowEncryptionKey []byte
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+		workflowEncryptionKey = append([]byte(nil), deps.EncryptionKey...)
 		recorder := &recordingWorkflowProvider{}
 		recorders[name] = recorder
 		return recorder, nil
@@ -4671,229 +4708,25 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if got.RequestedBy.SubjectID != "system:config" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", got.RequestedBy)
 	}
-	if strings.TrimSpace(got.ExecutionRef) == "" {
-		t.Fatal("execution ref = empty")
+	if len(recorder.upsertedScheduleTokens) != 1 {
+		t.Fatalf("upserted schedule tokens = %d, want 1", len(recorder.upsertedScheduleTokens))
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), got.ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get execution ref: %v", err)
+	tokenCtx := requireWorkflowConfigTokenContext(t, workflowEncryptionKey, recorder.upsertedScheduleTokens[0])
+	if got := tokenCtx.CallerApp(); got != "system:config" {
+		t.Fatalf("token caller app = %q, want system:config", got)
 	}
-	if ref.SubjectID != "system:config" {
-		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
+	tokenPrincipal := tokenCtx.Principal()
+	if tokenPrincipal == nil || tokenPrincipal.SubjectID != "system:config" || tokenPrincipal.Kind != "system" || tokenPrincipal.AuthSource() != "config" {
+		t.Fatalf("token principal = %#v", tokenPrincipal)
 	}
-	wantPermissions := []core.AccessPermission{
-		{App: "roadmap", Operations: []string{"sync"}},
-		{App: "slack", Operations: []string{"conversations.list", "conversations.history"}},
+	if !principal.AllowsOperationPermission(tokenPrincipal, "roadmap", "sync") {
+		t.Fatalf("token principal does not allow roadmap.sync: %#v", tokenPrincipal.TokenPermissions)
 	}
-	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
-		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
+	if !principal.AllowsOperationPermission(tokenPrincipal, "slack", "conversations.history") {
+		t.Fatalf("token principal does not allow slack.conversations.history: %#v", tokenPrincipal.TokenPermissions)
 	}
-}
-
-func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenInvokesChange(t *testing.T) {
-	t.Parallel()
-
-	factories := validFactories()
-	recorders := []*recordingWorkflowProvider{}
-	sharedSchedules := map[string]*coreworkflow.Schedule{}
-	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		recorder := &recordingWorkflowProvider{
-			schedules:     sharedSchedules,
-			executionRefs: sharedExecutionRefs,
-		}
-		recorders = append(recorders, recorder)
-		return recorder, nil
-	}
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap initial: %v", err)
-	}
-	<-result.ProvidersReady
-	if len(recorders) != 1 || len(recorders[0].upsertedSchedules) != 1 {
-		t.Fatalf("initial upserts = %#v", recorders)
-	}
-	initialExecutionRef := recorders[0].upsertedSchedules[0].ExecutionRef
-	if strings.TrimSpace(initialExecutionRef) == "" {
-		t.Fatal("initial execution ref = empty")
-	}
-	_ = result.Close(context.Background())
-
-	cfg = workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Apps["slack"] = &config.ProviderEntry{
-		ConnectionMode: providermanifestv1.ConnectionModeNone,
-		ResolvedManifest: &providermanifestv1.Manifest{
-			Spec: &providermanifestv1.Spec{
-				Surfaces: &providermanifestv1.ProviderSurfaces{
-					REST: &providermanifestv1.RESTSurface{
-						BaseURL: "https://slack.example.invalid",
-						Operations: []providermanifestv1.ProviderOperation{
-							{Name: "conversations.history", Method: http.MethodPost, Path: "/conversations.history"},
-						},
-					},
-				},
-			},
-		},
-	}
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Invokes = []config.WorkflowInvokeConfig{{App: "slack", Operation: "conversations.history"}}
-	cfg.Workflows.Schedules["nightly_sync"] = nightly
-
-	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap with invokes: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	if len(recorders) != 2 || len(recorders[1].upsertedSchedules) != 1 {
-		t.Fatalf("second upserts = %#v", recorders)
-	}
-	nextExecutionRef := recorders[1].upsertedSchedules[0].ExecutionRef
-	if nextExecutionRef == initialExecutionRef {
-		t.Fatalf("execution ref = %q, want recreated after invokes change", nextExecutionRef)
-	}
-	oldRef, err := recorders[1].GetExecutionReference(context.Background(), initialExecutionRef)
-	if err != nil {
-		t.Fatalf("Get old execution ref: %v", err)
-	}
-	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
-		t.Fatalf("old execution ref revokedAt = %#v, want set", oldRef.RevokedAt)
-	}
-	nextRef, err := recorders[1].GetExecutionReference(context.Background(), nextExecutionRef)
-	if err != nil {
-		t.Fatalf("Get new execution ref: %v", err)
-	}
-	wantPermissions := []core.AccessPermission{
-		{App: "roadmap", Operations: []string{"sync"}},
-		{App: "slack", Operations: []string{"conversations.history"}},
-	}
-	if !reflect.DeepEqual(nextRef.Permissions, wantPermissions) {
-		t.Fatalf("permissions = %#v, want %#v", nextRef.Permissions, wantPermissions)
-	}
-}
-
-func TestBootstrapKeepsExistingConfiguredWorkflowScheduleWhenExecutionRefRefreshFails(t *testing.T) {
-	t.Parallel()
-
-	factories := validFactories()
-	recorders := []*recordingWorkflowProvider{}
-	sharedSchedules := map[string]*coreworkflow.Schedule{}
-	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
-	failExecutionRefWrites := false
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		recorder := &recordingWorkflowProvider{
-			schedules:     sharedSchedules,
-			executionRefs: sharedExecutionRefs,
-		}
-		if failExecutionRefWrites {
-			recorder.putExecutionReferenceErr = errors.New("execution ref index unavailable")
-		}
-		recorders = append(recorders, recorder)
-		return recorder, nil
-	}
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap initial: %v", err)
-	}
-	<-result.ProvidersReady
-	if len(recorders) != 1 || len(recorders[0].upsertedSchedules) != 1 {
-		t.Fatalf("initial upserts = %#v", recorders)
-	}
-	initialExecutionRef := recorders[0].upsertedSchedules[0].ExecutionRef
-	if strings.TrimSpace(initialExecutionRef) == "" {
-		t.Fatal("initial execution ref = empty")
-	}
-	_ = result.Close(context.Background())
-	existingSchedule := sharedSchedules[workflowConfigScheduleID("nightly_sync")]
-	if existingSchedule == nil || len(existingSchedule.Target.Steps) == 0 || existingSchedule.Target.Steps[0].App == nil {
-		t.Fatalf("existing schedule target = %#v", existingSchedule)
-	}
-	existingSchedule.Target.Steps[0].App.Input = coreworkflow.Value{Object: map[string]coreworkflow.Value{}}
-
-	cfg = workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Apps["slack"] = &config.ProviderEntry{
-		ConnectionMode: providermanifestv1.ConnectionModeNone,
-		ResolvedManifest: &providermanifestv1.Manifest{
-			Spec: &providermanifestv1.Spec{
-				Surfaces: &providermanifestv1.ProviderSurfaces{
-					REST: &providermanifestv1.RESTSurface{
-						BaseURL: "https://slack.example.invalid",
-						Operations: []providermanifestv1.ProviderOperation{
-							{Name: "conversations.history", Method: http.MethodPost, Path: "/conversations.history"},
-						},
-					},
-				},
-			},
-		},
-	}
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Invokes = []config.WorkflowInvokeConfig{{App: "slack", Operation: "conversations.history"}}
-	cfg.Workflows.Schedules["nightly_sync"] = nightly
-	failExecutionRefWrites = true
-
-	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap with stale execution ref index: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	if len(recorders) != 2 {
-		t.Fatalf("recorders = %d, want 2", len(recorders))
-	}
-	if len(recorders[1].upsertedSchedules) != 0 {
-		t.Fatalf("second upserts = %d, want 0", len(recorders[1].upsertedSchedules))
-	}
-	if _, err := recorders[1].GetExecutionReference(context.Background(), initialExecutionRef); err != nil {
-		t.Fatalf("existing execution ref should remain available: %v", err)
-	}
+	assertWorkflowConfigTokenAllowsAppInvoke(t, workflowEncryptionKey, recorder.upsertedScheduleTokens[0], "roadmap", "sync")
+	assertWorkflowConfigTokenAllowsAppInvoke(t, workflowEncryptionKey, recorder.upsertedScheduleTokens[0], "slack", "conversations.history")
 }
 
 func TestValidateDoesNotApplyConfiguredWorkflowSchedules(t *testing.T) {
@@ -5057,56 +4890,9 @@ func TestBootstrapConfiguredWorkflowScheduleRunAsAllowsUserCredentialedTarget(t 
 	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
 		t.Fatalf("recorded schedules = %#v", recorders)
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedSchedules[0].ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get execution ref: %v", err)
-	}
-	if ref.SubjectID != "system:config" || ref.SubjectKind != "system" || ref.CredentialSubjectID != "system:config" {
-		t.Fatalf("owner subject fields = (%q, %q, %q), want config owner", ref.SubjectID, ref.SubjectKind, ref.CredentialSubjectID)
-	}
-	if ref.RunAs == nil {
-		t.Fatal("runAs = nil")
-	}
-	if ref.RunAs.SubjectID != "service_account:roadmap-sync" || ref.RunAs.SubjectKind != "service_account" || ref.RunAs.CredentialSubjectID != "service_account:roadmap-sync" {
-		t.Fatalf("runAs = %#v, want service account subject", ref.RunAs)
-	}
-	if ref.RunAs.DisplayName != "Roadmap sync" {
-		t.Fatalf("runAs displayName = %q", ref.RunAs.DisplayName)
-	}
-}
-
-func TestBootstrapRejectsConfiguredWorkflowScheduleWhenProviderDropsRunAs(t *testing.T) {
-	t.Parallel()
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.RunAs = &config.WorkflowRunAsConfig{
-		Subject: &config.WorkflowRunAsSubjectConfig{ID: "service_account:roadmap-sync"},
-	}
-	cfg.Workflows.Schedules["nightly_sync"] = nightly
-
-	factories := validFactories()
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return &recordingWorkflowProvider{dropExecutionReferenceRunAs: true}, nil
-	}
-
-	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil {
-		t.Fatal("expected Bootstrap to reject a provider that drops config-managed runAs metadata")
-	}
-	if !strings.Contains(err.Error(), `provider did not preserve runAs subject "service_account:roadmap-sync"`) {
-		t.Fatalf("Bootstrap error = %v, want runAs preservation error", err)
+	got := recorder.upsertedSchedules[0]
+	if got.RequestedBy.SubjectID != "system:config" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
+		t.Fatalf("requestedBy = %#v", got.RequestedBy)
 	}
 }
 
@@ -5248,85 +5034,6 @@ func TestBootstrapAllowsConfiguredWorkflowScheduleInvokesForUserCredentialedApps
 	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
 		t.Fatalf("recorded schedules = %#v", recorders)
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedSchedules[0].ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get execution ref: %v", err)
-	}
-	wantPermissions := []core.AccessPermission{
-		{App: "roadmap", Operations: []string{"sync"}},
-		{App: "slack", Operations: []string{"conversations.list"}},
-	}
-	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
-		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
-	}
-}
-
-func TestBootstrapConfiguredWorkflowScheduleInvokesScopesExecutionRef(t *testing.T) {
-	t.Parallel()
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Apps["slack"] = &config.ProviderEntry{
-		ConnectionMode: providermanifestv1.ConnectionModeUser,
-		ResolvedManifest: &providermanifestv1.Manifest{
-			Spec: &providermanifestv1.Spec{
-				Surfaces: &providermanifestv1.ProviderSurfaces{
-					REST: &providermanifestv1.RESTSurface{
-						BaseURL: "https://slack.example.invalid",
-						Operations: []providermanifestv1.ProviderOperation{
-							{Name: "conversations.list", Method: http.MethodPost, Path: "/conversations.list"},
-						},
-					},
-				},
-			},
-		},
-	}
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Invokes = []config.WorkflowInvokeConfig{{
-		App:       " slack ",
-		Operation: " conversations.list ",
-	}}
-	cfg.Workflows.Schedules["nightly_sync"] = nightly
-
-	factories := validFactories()
-	recorders := map[string]*recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		recorder := &recordingWorkflowProvider{}
-		recorders[name] = recorder
-		return recorder, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	recorder := recorders["temporal"]
-	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
-		t.Fatalf("recorded schedules = %#v", recorders)
-	}
-	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedSchedules[0].ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get execution ref: %v", err)
-	}
-	wantPermissions := []core.AccessPermission{
-		{App: "roadmap", Operations: []string{"sync"}},
-		{App: "slack", Operations: []string{"conversations.list"}},
-	}
-	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
-		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
-	}
 }
 
 func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
@@ -5337,11 +5044,9 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := []*recordingWorkflowProvider{}
 	sharedSchedules := map[string]*coreworkflow.Schedule{}
-	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
 	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{
-			schedules:     sharedSchedules,
-			executionRefs: sharedExecutionRefs,
+			schedules: sharedSchedules,
 		}
 		recorders = append(recorders, recorder)
 		return recorder, nil
@@ -5372,7 +5077,6 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 	if len(recorders) != 1 || len(recorders[0].upsertedSchedules) != 1 {
 		t.Fatalf("initial upserts = %#v", recorders)
 	}
-	initialExecutionRef := recorders[0].upsertedSchedules[0].ExecutionRef
 	_ = result.Close(context.Background())
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
@@ -5403,13 +5107,6 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 	}
 	if len(recorder.upsertedSchedules) != 0 {
 		t.Fatalf("upserted schedules = %d, want 0", len(recorder.upsertedSchedules))
-	}
-	ref, err := recorder.GetExecutionReference(context.Background(), initialExecutionRef)
-	if err != nil {
-		t.Fatalf("Get revoked execution ref: %v", err)
-	}
-	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
-		t.Fatalf("revokedAt = %#v, want set", ref.RevokedAt)
 	}
 }
 
@@ -5459,17 +5156,12 @@ func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := map[string][]*recordingWorkflowProvider{}
 	sharedSchedules := map[string]map[string]*coreworkflow.Schedule{}
-	sharedExecutionRefs := map[string]map[string]*coreworkflow.ExecutionReference{}
 	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		if sharedSchedules[name] == nil {
 			sharedSchedules[name] = map[string]*coreworkflow.Schedule{}
 		}
-		if sharedExecutionRefs[name] == nil {
-			sharedExecutionRefs[name] = map[string]*coreworkflow.ExecutionReference{}
-		}
 		recorder := &recordingWorkflowProvider{
-			schedules:     sharedSchedules[name],
-			executionRefs: sharedExecutionRefs[name],
+			schedules: sharedSchedules[name],
 		}
 		recorders[name] = append(recorders[name], recorder)
 		return recorder, nil
@@ -5501,7 +5193,6 @@ func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
 	if len(recorders["temporal"]) != 1 || len(recorders["temporal"][0].upsertedSchedules) != 1 {
 		t.Fatalf("initial temporal recorders = %#v", recorders["temporal"])
 	}
-	initialExecutionRef := recorders["temporal"][0].upsertedSchedules[0].ExecutionRef
 	_ = result.Close(context.Background())
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
@@ -5539,24 +5230,6 @@ func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
 	if len(recorders["backup"][1].upsertedSchedules) != 1 {
 		t.Fatalf("backup upserted schedules = %d, want 1", len(recorders["backup"][1].upsertedSchedules))
 	}
-	backupExecutionRef := recorders["backup"][1].upsertedSchedules[0].ExecutionRef
-	oldRef, err := recorders["temporal"][1].GetExecutionReference(context.Background(), initialExecutionRef)
-	if err != nil {
-		t.Fatalf("Get initial execution ref: %v", err)
-	}
-	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
-		t.Fatalf("initial revokedAt = %#v, want set", oldRef.RevokedAt)
-	}
-	newRef, err := recorders["backup"][1].GetExecutionReference(context.Background(), backupExecutionRef)
-	if err != nil {
-		t.Fatalf("Get backup execution ref: %v", err)
-	}
-	if newRef.ProviderName != "backup" {
-		t.Fatalf("providerName = %q, want %q", newRef.ProviderName, "backup")
-	}
-	if newRef.RevokedAt != nil {
-		t.Fatalf("backup revokedAt = %#v, want nil", newRef.RevokedAt)
-	}
 }
 
 func TestBootstrapClosesWorkflowProvidersWhenConfigScheduleReconcileFails(t *testing.T) {
@@ -5575,15 +5248,13 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigScheduleReconcileFails(t *tes
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	temporalSchedules := map[string]*coreworkflow.Schedule{}
-	temporalExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
 	temporalStarts := 0
 	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		if name == "temporal" {
 			temporalStarts++
 			provider := &recordingWorkflowProvider{
-				schedules:     temporalSchedules,
-				executionRefs: temporalExecutionRefs,
-				closed:        closed,
+				schedules: temporalSchedules,
+				closed:    closed,
 			}
 			if temporalStarts > 1 {
 				provider.deleteScheduleErr = fmt.Errorf("delete boom")
@@ -5714,193 +5385,6 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowScheduleID(t *testing.T) {
 	}
 	if len(recorder.upsertedSchedules) != 0 {
 		t.Fatalf("upserted schedules = %d, want 0", len(recorder.upsertedSchedules))
-	}
-}
-
-func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t *testing.T) {
-	t.Parallel()
-
-	db := &coretesting.StubIndexedDB{}
-	provider := &recordingWorkflowProvider{}
-	factories := validFactories()
-	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return provider, nil
-	}
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-				Input: map[string]any{
-					"limit": 1,
-				},
-			},
-		},
-	})
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap initial: %v", err)
-	}
-	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
-	provider.executionRefs[initialExecutionRef].Target.Steps[0].App.Input.Object["limit"] = coreworkflow.Value{Literal: float64(1), LiteralSet: true}
-	_ = result.Close(context.Background())
-
-	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap replay: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	if len(provider.upsertedSchedules) != 2 {
-		t.Fatalf("upserted schedules = %d, want 2", len(provider.upsertedSchedules))
-	}
-	reusedExecutionRef := provider.upsertedSchedules[1].ExecutionRef
-	if reusedExecutionRef != initialExecutionRef {
-		t.Fatalf("execution ref = %q, want reuse of %q", reusedExecutionRef, initialExecutionRef)
-	}
-	ref, err := provider.GetExecutionReference(context.Background(), initialExecutionRef)
-	if err != nil {
-		t.Fatalf("Get execution ref: %v", err)
-	}
-	if ref.RevokedAt != nil {
-		t.Fatalf("revokedAt = %#v, want nil", ref.RevokedAt)
-	}
-}
-
-func TestBootstrapReplacesUnreadableConfiguredWorkflowExecutionRef(t *testing.T) {
-	t.Parallel()
-
-	const staleExecutionRef = "workflow_schedule:stale-ref"
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-
-	provider := &recordingWorkflowProvider{
-		schedules: map[string]*coreworkflow.Schedule{
-			workflowConfigScheduleID("nightly_sync"): {
-				ID:           workflowConfigScheduleID("nightly_sync"),
-				Cron:         "0 2 * * *",
-				Timezone:     "UTC",
-				Target:       coreWorkflowAppStepTarget("roadmap", "sync"),
-				ExecutionRef: staleExecutionRef,
-				CreatedBy: coreworkflow.Actor{
-					SubjectID:   "system:config",
-					SubjectKind: "system",
-					AuthSource:  "config",
-				},
-			},
-		},
-		getExecutionReferenceErrs: map[string]error{
-			staleExecutionRef: status.Error(codes.Internal, "query temporal index: workflow task failed"),
-		},
-	}
-	factories := validFactories()
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return provider, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	if len(provider.upsertedSchedules) != 1 {
-		t.Fatalf("upserted schedules = %d, want 1", len(provider.upsertedSchedules))
-	}
-	replacementExecutionRef := provider.upsertedSchedules[0].ExecutionRef
-	if replacementExecutionRef == "" || replacementExecutionRef == staleExecutionRef {
-		t.Fatalf("replacement execution ref = %q, want fresh ref", replacementExecutionRef)
-	}
-	if _, err := provider.GetExecutionReference(context.Background(), replacementExecutionRef); err != nil {
-		t.Fatalf("Get replacement execution ref: %v", err)
-	}
-}
-
-func TestBootstrapRefreshesConfiguredWorkflowExecutionRefWhenMetadataChanges(t *testing.T) {
-	t.Parallel()
-
-	db := &coretesting.StubIndexedDB{}
-	provider := &recordingWorkflowProvider{}
-	factories := validFactories()
-	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return provider, nil
-	}
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap initial: %v", err)
-	}
-	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
-	_ = result.Close(context.Background())
-	provider.executionRefs[initialExecutionRef].DisplayName = "Stale config name"
-
-	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap replay: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	if len(provider.upsertedSchedules) != 2 {
-		t.Fatalf("upserted schedules = %d, want 2", len(provider.upsertedSchedules))
-	}
-	refreshedExecutionRef := provider.upsertedSchedules[1].ExecutionRef
-	if refreshedExecutionRef == initialExecutionRef {
-		t.Fatalf("execution ref = %q, want refreshed ref after display name drift", refreshedExecutionRef)
-	}
-	ref, err := provider.GetExecutionReference(context.Background(), refreshedExecutionRef)
-	if err != nil {
-		t.Fatalf("Get refreshed execution ref: %v", err)
-	}
-	if ref.DisplayName != "Gestalt config" {
-		t.Fatalf("displayName = %q, want refreshed config display name", ref.DisplayName)
-	}
-	oldRef, err := provider.GetExecutionReference(context.Background(), initialExecutionRef)
-	if err != nil {
-		t.Fatalf("Get old execution ref: %v", err)
-	}
-	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
-		t.Fatalf("old revokedAt = %#v, want set", oldRef.RevokedAt)
 	}
 }
 
@@ -6036,64 +5520,6 @@ func TestBootstrapIgnoresMissingPreviousScheduleDuringWorkflowProviderMove(t *te
 	}
 }
 
-func TestBootstrapDeletesRemovedConfiguredWorkflowSchedulesWhenProviderDropsExecutionRef(t *testing.T) {
-	t.Parallel()
-
-	db := &coretesting.StubIndexedDB{}
-	provider := &recordingWorkflowProvider{}
-	factories := validFactories()
-	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return provider, nil
-	}
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap initial: %v", err)
-	}
-	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
-	_ = result.Close(context.Background())
-
-	provider.omitScheduleExecutionRef = true
-	cfg = workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-	})
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-
-	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap remove schedule: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	ref, err := provider.GetExecutionReference(context.Background(), initialExecutionRef)
-	if err != nil {
-		t.Fatalf("Get revoked execution ref: %v", err)
-	}
-	if ref.RevokedAt != nil {
-		t.Fatalf("revokedAt = %#v, want nil when provider omits execution_ref", ref.RevokedAt)
-	}
-}
-
 func TestBootstrapSkipsRemovedWorkflowScheduleCleanupWhenProviderListFails(t *testing.T) {
 	t.Parallel()
 
@@ -6168,7 +5594,9 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 
 	factories := validFactories()
 	recorders := map[string]*recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	var workflowEncryptionKey []byte
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+		workflowEncryptionKey = append([]byte(nil), deps.EncryptionKey...)
 		recorder := &recordingWorkflowProvider{}
 		recorders[name] = recorder
 		return recorder, nil
@@ -6206,23 +5634,19 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	if got.RequestedBy.SubjectID != "system:config" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", got.RequestedBy)
 	}
-	if strings.TrimSpace(got.ExecutionRef) == "" {
-		t.Fatal("execution ref = empty")
+	if len(recorder.upsertedEventTriggerTokens) != 1 {
+		t.Fatalf("upserted event trigger tokens = %d, want 1", len(recorder.upsertedEventTriggerTokens))
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), got.ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get execution ref: %v", err)
+	tokenCtx := requireWorkflowConfigTokenContext(t, workflowEncryptionKey, recorder.upsertedEventTriggerTokens[0])
+	tokenPrincipal := tokenCtx.Principal()
+	if tokenPrincipal == nil || !principal.AllowsOperationPermission(tokenPrincipal, "roadmap", "sync") {
+		t.Fatalf("token principal does not allow roadmap.sync: %#v", tokenPrincipal)
 	}
-	if ref.SubjectID != "system:config" {
-		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
+	if tokenPrincipal == nil || !principal.AllowsOperationPermission(tokenPrincipal, "slack", "conversations.history") {
+		t.Fatalf("token principal does not allow slack.conversations.history: %#v", tokenPrincipal)
 	}
-	wantPermissions := []core.AccessPermission{
-		{App: "roadmap", Operations: []string{"sync"}},
-		{App: "slack", Operations: []string{"conversations.history"}},
-	}
-	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
-		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
-	}
+	assertWorkflowConfigTokenAllowsAppInvoke(t, workflowEncryptionKey, recorder.upsertedEventTriggerTokens[0], "roadmap", "sync")
+	assertWorkflowConfigTokenAllowsAppInvoke(t, workflowEncryptionKey, recorder.upsertedEventTriggerTokens[0], "slack", "conversations.history")
 }
 
 func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarget(t *testing.T) {
@@ -6253,7 +5677,9 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 
 	factories := validFactories()
 	recorders := map[string]*recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	var workflowEncryptionKey []byte
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+		workflowEncryptionKey = append([]byte(nil), deps.EncryptionKey...)
 		recorder := &recordingWorkflowProvider{}
 		recorders[name] = recorder
 		return recorder, nil
@@ -6270,15 +5696,16 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 	if recorder == nil || len(recorder.upsertedEventTriggers) != 1 {
 		t.Fatalf("recorded event triggers = %#v", recorders)
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedEventTriggers[0].ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get execution ref: %v", err)
+	got := recorder.upsertedEventTriggers[0]
+	if got.RequestedBy.SubjectID != "system:config" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
+		t.Fatalf("requestedBy = %#v", got.RequestedBy)
 	}
-	if ref.SubjectID != "system:config" || ref.CredentialSubjectID != "system:config" {
-		t.Fatalf("owner subject fields = (%q, %q), want config owner", ref.SubjectID, ref.CredentialSubjectID)
+	if len(recorder.upsertedEventTriggerTokens) != 1 {
+		t.Fatalf("upserted event trigger tokens = %d, want 1", len(recorder.upsertedEventTriggerTokens))
 	}
-	if ref.RunAs == nil || ref.RunAs.SubjectID != "service_account:roadmap-events" || ref.RunAs.SubjectKind != "service_account" {
-		t.Fatalf("runAs = %#v, want service_account:roadmap-events", ref.RunAs)
+	tokenPrincipal := requireWorkflowConfigTokenContext(t, workflowEncryptionKey, recorder.upsertedEventTriggerTokens[0]).Principal()
+	if tokenPrincipal == nil || tokenPrincipal.SubjectID != "service_account:roadmap-events" || tokenPrincipal.Kind != "service_account" || tokenPrincipal.CredentialSubjectID != "service_account:roadmap-events" || tokenPrincipal.AuthSource() != "config" {
+		t.Fatalf("token principal = %#v", tokenPrincipal)
 	}
 }
 
@@ -6361,31 +5788,6 @@ func TestBootstrapConfigManagedAgentStepsPreserveWorkflowSystemToolRefs(t *testi
 			t.Fatalf("%s app tool ref = %#v", label, target.Steps[0].Agent.ToolRefs[1])
 		}
 	}
-	for _, executionRef := range []string{
-		recorder.upsertedSchedules[0].ExecutionRef,
-		recorder.upsertedEventTriggers[0].ExecutionRef,
-	} {
-		ref, err := recorder.GetExecutionReference(context.Background(), executionRef)
-		if err != nil {
-			t.Fatalf("Get execution ref %q: %v", executionRef, err)
-		}
-		if len(ref.Permissions) != 2 {
-			t.Fatalf("permissions = %#v", ref.Permissions)
-		}
-		seenAgentProvider := false
-		seenAppOperation := false
-		for _, permission := range ref.Permissions {
-			if permission.App == "managed" && len(permission.Operations) == 0 {
-				seenAgentProvider = true
-			}
-			if permission.App == "roadmap" && len(permission.Operations) == 1 && permission.Operations[0] == "sync" {
-				seenAppOperation = true
-			}
-		}
-		if !seenAgentProvider || !seenAppOperation {
-			t.Fatalf("permissions = %#v", ref.Permissions)
-		}
-	}
 }
 
 func TestValidateDoesNotApplyConfiguredWorkflowEventTriggers(t *testing.T) {
@@ -6441,11 +5843,9 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowEventTriggers(t *testing.T) {
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := []*recordingWorkflowProvider{}
 	sharedEventTriggers := map[string]*coreworkflow.EventTrigger{}
-	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
 	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{
 			eventTriggers: sharedEventTriggers,
-			executionRefs: sharedExecutionRefs,
 		}
 		recorders = append(recorders, recorder)
 		return recorder, nil
@@ -6515,17 +5915,12 @@ func TestBootstrapMovesConfiguredWorkflowEventTriggersToNewProvider(t *testing.T
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := map[string][]*recordingWorkflowProvider{}
 	sharedEventTriggers := map[string]map[string]*coreworkflow.EventTrigger{}
-	sharedExecutionRefs := map[string]map[string]*coreworkflow.ExecutionReference{}
 	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		if sharedEventTriggers[name] == nil {
 			sharedEventTriggers[name] = map[string]*coreworkflow.EventTrigger{}
 		}
-		if sharedExecutionRefs[name] == nil {
-			sharedExecutionRefs[name] = map[string]*coreworkflow.ExecutionReference{}
-		}
 		recorder := &recordingWorkflowProvider{
 			eventTriggers: sharedEventTriggers[name],
-			executionRefs: sharedExecutionRefs[name],
 		}
 		recorders[name] = append(recorders[name], recorder)
 		return recorder, nil
@@ -7334,276 +6729,6 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 		Arguments:  args,
 	}); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("invoke agent host callback after mismatch status = %s, want %s", status.Code(err), codes.PermissionDenied)
-	}
-}
-
-func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedApp(t *testing.T) {
-	t.Parallel()
-
-	var requestPath atomic.Value
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestPath.Store(r.URL.Path)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
-
-	cfg := workflowStartupCallbackConfig(srv.URL)
-	cfg.Apps["roadmap"].AuthorizationPolicy = "roadmap-policy"
-	cfg.Apps["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
-	cfg.Authorization.Policies = map[string]config.SubjectPolicyDef{
-		"roadmap-policy": {
-			Members: []config.SubjectPolicyMemberDef{{
-				SubjectID: principal.UserSubjectID("viewer-user"),
-				Role:      "viewer",
-			}},
-		},
-	}
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Operation: "sync",
-			},
-		},
-	})
-
-	recorder := &recordingWorkflowProvider{}
-	var workflowRuntime interface {
-		Invoke(context.Context, coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error)
-	}
-	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
-		if name != "temporal" {
-			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
-		}
-		workflowRuntime = deps.WorkflowRuntime
-		return recorder, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	if len(recorder.upsertedSchedules) != 1 {
-		t.Fatalf("upserted schedules = %d, want 1", len(recorder.upsertedSchedules))
-	}
-	executionRef := recorder.upsertedSchedules[0].ExecutionRef
-	if executionRef == "" {
-		t.Fatal("execution ref is empty")
-	}
-	if workflowRuntime == nil {
-		t.Fatal("workflow runtime was not captured")
-	}
-	resp, err := workflowRuntime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
-		ProviderName: "temporal",
-		Target:       coreWorkflowAppStepTarget("roadmap", "sync"),
-		ExecutionRef: executionRef,
-	})
-	if err != nil {
-		t.Fatalf("Invoke: %v", err)
-	}
-	if resp.Status != http.StatusOK || !strings.Contains(resp.Body, `"finalStepId":"sync"`) {
-		t.Fatalf("workflow invoke response = %#v", resp)
-	}
-	if got, _ := requestPath.Load().(string); got != "/sync" {
-		t.Fatalf("request path = %q, want %q", got, "/sync")
-	}
-}
-
-func TestValidateManagedWorkflowStartupInvokeUsesPreparedProviderStub(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name   string
-		source config.ProviderSource
-	}{
-		{
-			name:   "remote release metadata",
-			source: config.NewMetadataSource("https://example.invalid/github-com-example-roadmap/v0.0.1/provider-release.yaml"),
-		},
-		{
-			name:   "local release metadata",
-			source: config.NewLocalReleaseMetadataSource(filepath.Join(t.TempDir(), "roadmap", "dist", "provider-release.yaml")),
-		},
-	} {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			cfg := validConfig()
-			cfg.Apps = map[string]*config.ProviderEntry{
-				"roadmap": {
-					Source:         tc.source,
-					ConnectionMode: providermanifestv1.ConnectionModeUser,
-					ResolvedManifest: &providermanifestv1.Manifest{
-						DisplayName: "Roadmap",
-						Description: "Managed roadmap app",
-						Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: "roadmap"},
-						Spec: &providermanifestv1.Spec{
-							Surfaces: &providermanifestv1.ProviderSurfaces{
-								REST: &providermanifestv1.RESTSurface{
-									BaseURL: "https://example.invalid",
-									Operations: []providermanifestv1.ProviderOperation{
-										{Name: "sync", Method: http.MethodPost, Path: "/sync"},
-									},
-								},
-							},
-						},
-					},
-				},
-			}
-			cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-				"temporal": {Source: config.ProviderSource{Path: "stub"}},
-			}
-			setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-				Provider: "temporal",
-			})
-
-			factories := validFactories()
-			factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
-				if name != "temporal" {
-					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
-				}
-				if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-					SubjectID:   "system:config",
-					Integration: "roadmap",
-					Connection:  config.AppConnectionName,
-					Instance:    "default",
-					AccessToken: "workflow-validate-token",
-				}); err != nil {
-					return nil, fmt.Errorf("store startup token: %w", err)
-				}
-				req := coreworkflow.InvokeOperationRequest{
-					ProviderName: name,
-					Target:       coreWorkflowAppStepTarget("roadmap", "sync"),
-				}
-				configPrincipal := &principal.Principal{
-					SubjectID:           "system:config",
-					CredentialSubjectID: "system:config",
-					TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-						App:        "roadmap",
-						Operations: []string{"sync"},
-					}}),
-				}
-				resp, err := deps.WorkflowRuntime.Invoke(principal.WithPrincipal(context.Background(), configPrincipal), req)
-				if err != nil {
-					return nil, fmt.Errorf("workflow runtime invoke: %w", err)
-				}
-				if resp.Status != http.StatusOK || !strings.Contains(resp.Body, `"finalStepId":"sync"`) {
-					return nil, fmt.Errorf("workflow runtime response = %#v", resp)
-				}
-				return &stubWorkflowProvider{}, nil
-			}
-
-			if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
-				t.Fatalf("Validate: %v", err)
-			}
-		})
-	}
-}
-
-func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	catalogData, err := yaml.Marshal(&catalog.Catalog{
-		Name: "roadmap",
-		Operations: []catalog.CatalogOperation{{
-			ID:        "sync",
-			Method:    http.MethodPost,
-			Transport: catalog.TransportMCPPassthrough,
-		}},
-	})
-	if err != nil {
-		t.Fatalf("yaml.Marshal(catalog): %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "catalog.yaml"), catalogData, 0o644); err != nil {
-		t.Fatalf("WriteFile(catalog.yaml): %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "manifest.yaml"), []byte("kind: app\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(manifest.yaml): %v", err)
-	}
-
-	cfg := validConfig()
-	cfg.Apps = map[string]*config.ProviderEntry{
-		"roadmap": {
-			Source:               config.NewMetadataSource("https://example.invalid/github-com-example-roadmap/v0.0.1/provider-release.yaml"),
-			ConnectionMode:       providermanifestv1.ConnectionModeUser,
-			ResolvedManifestPath: filepath.Join(root, "manifest.yaml"),
-			ResolvedManifest: &providermanifestv1.Manifest{
-				DisplayName: "Roadmap",
-				Description: "Managed roadmap app",
-				Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: "roadmap"},
-				Spec: &providermanifestv1.Spec{
-					Surfaces: &providermanifestv1.ProviderSurfaces{
-						MCP: &providermanifestv1.MCPSurface{
-							Connection: config.AppConnectionName,
-							URL:        "https://example.invalid/mcp",
-						},
-					},
-				},
-			},
-		},
-	}
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-	})
-
-	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
-		if name != "temporal" {
-			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
-		}
-		connMaps, err := bootstrap.BuildConnectionMaps(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("build connection maps: %w", err)
-		}
-		connection := connMaps.DefaultConnection["roadmap"]
-		if connection == "" {
-			connection = config.AppConnectionName
-		}
-		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-			SubjectID:   "system:config",
-			Integration: "roadmap",
-			Connection:  connection,
-			Instance:    "default",
-			AccessToken: "workflow-validate-token",
-		}); err != nil {
-			return nil, fmt.Errorf("store startup token for connection %q: %w", connection, err)
-		}
-		req := coreworkflow.InvokeOperationRequest{
-			ProviderName: name,
-			Target:       coreWorkflowAppStepTarget("roadmap", "sync"),
-		}
-		configPrincipal := &principal.Principal{
-			SubjectID:           "system:config",
-			CredentialSubjectID: "system:config",
-			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-				App:        "roadmap",
-				Operations: []string{"sync"},
-			}}),
-		}
-		resp, err := deps.WorkflowRuntime.Invoke(principal.WithPrincipal(context.Background(), configPrincipal), req)
-		if err != nil {
-			return nil, fmt.Errorf("workflow runtime invoke: %w", err)
-		}
-		if resp.Status != http.StatusOK || !strings.Contains(resp.Body, `"finalStepId":"sync"`) {
-			return nil, fmt.Errorf("startup invoke response = %#v", resp)
-		}
-		return &stubWorkflowProvider{}, nil
-	}
-
-	if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
-		t.Fatalf("Validate: %v", err)
 	}
 }
 

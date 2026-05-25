@@ -20,9 +20,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -71,31 +68,6 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 	result := &Result{ExtraWorkflows: []workflow.Provider{provider}}
 	t.Cleanup(func() { _ = provider.Close() })
 	assertPublicHostServicesVerified(t, deps.PublicHostServices, "indexeddb")
-	executionRefs, ok := provider.(workflow.ExecutionReferenceStore)
-	if !ok {
-		t.Fatalf("hosted workflow pool does not expose ExecutionReferenceStore")
-	}
-	ref, err := executionRefs.PutExecutionReference(ctx, &workflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-test:ref-test",
-		ProviderName: "temporal",
-		SubjectID:    "subject-test",
-		SubjectKind:  "user",
-		Target: workflow.Target{
-			Steps: []workflow.Step{{
-				ID:  "sync",
-				App: &workflow.AppCall{Name: "roadmap", Operation: "sync_items"},
-			}},
-		},
-	})
-	if err != nil {
-		t.Fatalf("PutExecutionReference: %v", err)
-	}
-	if ref.ID != "workflow_schedule:sched-test:ref-test" {
-		t.Fatalf("PutExecutionReference id = %q, want workflow_schedule:sched-test:ref-test", ref.ID)
-	}
-	if _, err := executionRefs.GetExecutionReference(ctx, "workflow_schedule:sched-test:ref-test"); err != nil {
-		t.Fatalf("GetExecutionReference: %v", err)
-	}
 
 	if got := runtimeProvider.startProviderCalls(); got != 0 {
 		t.Fatalf("StartProvider calls before StartWorkflowProviders = %d, want 0", got)
@@ -348,10 +320,10 @@ func TestWorkflowConfigReconciliationReconcilesReadyRuntimeProvidersIndependentl
 	workflowRuntime.PublishProvider("ready", readyProvider)
 	workflowRuntime.PublishProvider("stuck", stuckProvider)
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
-		if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, includeProvider); err != nil {
+		if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, nil, includeProvider); err != nil {
 			return err
 		}
-		return reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, includeProvider)
+		return reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, nil, includeProvider)
 	}
 	result := &Result{
 		workflowConfigReconcileTasks: runtimeWorkflowConfigReconcileTasks(workflowRuntime, runtimePlacedWorkflowProviderNames(cfg), reconcileWorkflowConfig),
@@ -579,10 +551,10 @@ func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T)
 		return ok
 	}
 
-	if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, localFilter); err != nil {
+	if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, nil, localFilter); err != nil {
 		t.Fatalf("reconcile local schedules: %v", err)
 	}
-	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, localFilter); err != nil {
+	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, nil, localFilter); err != nil {
 		t.Fatalf("reconcile local event triggers: %v", err)
 	}
 	if got := len(localProvider.upsertedSchedules); got != 1 {
@@ -598,10 +570,10 @@ func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T)
 		t.Fatalf("runtime upserted event triggers during local reconcile = %d, want 0", got)
 	}
 
-	if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, runtimeFilter); err != nil {
+	if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, nil, runtimeFilter); err != nil {
 		t.Fatalf("reconcile runtime schedules: %v", err)
 	}
-	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, runtimeFilter); err != nil {
+	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, nil, runtimeFilter); err != nil {
 		t.Fatalf("reconcile runtime event triggers: %v", err)
 	}
 	if got := len(runtimeProvider.upsertedSchedules); got != 1 {
@@ -833,42 +805,10 @@ func (p *blockingRuntimeWorkflowControlProvider) WaitRuntimeWorkersReady(ctx con
 
 type recordingWorkflowControlProvider struct {
 	noopWorkflowProvider
-	refs                  map[string]*workflow.ExecutionReference
 	schedules             map[string]*workflow.Schedule
 	upsertedSchedules     []workflow.UpsertScheduleRequest
 	eventTriggers         map[string]*workflow.EventTrigger
 	upsertedEventTriggers []workflow.UpsertEventTriggerRequest
-}
-
-func (p *recordingWorkflowControlProvider) PutExecutionReference(_ context.Context, ref *workflow.ExecutionReference) (*workflow.ExecutionReference, error) {
-	if p.refs == nil {
-		p.refs = map[string]*workflow.ExecutionReference{}
-	}
-	stored := cloneWorkflowExecutionReference(ref)
-	p.refs[stored.ID] = stored
-	return cloneWorkflowExecutionReference(stored), nil
-}
-
-func (p *recordingWorkflowControlProvider) GetExecutionReference(_ context.Context, id string) (*workflow.ExecutionReference, error) {
-	ref := p.refs[id]
-	if ref == nil {
-		return nil, status.Error(codes.NotFound, "execution reference not found")
-	}
-	return cloneWorkflowExecutionReference(ref), nil
-}
-
-func (p *recordingWorkflowControlProvider) ListExecutionReferences(_ context.Context, subjectID string) ([]*workflow.ExecutionReference, error) {
-	out := make([]*workflow.ExecutionReference, 0, len(p.refs))
-	for _, ref := range p.refs {
-		if ref == nil {
-			continue
-		}
-		if subjectID != "" && ref.SubjectID != subjectID {
-			continue
-		}
-		out = append(out, cloneWorkflowExecutionReference(ref))
-	}
-	return out, nil
 }
 
 func (p *recordingWorkflowControlProvider) GetSchedule(_ context.Context, req workflow.GetScheduleRequest) (*workflow.Schedule, error) {
@@ -890,7 +830,7 @@ func (p *recordingWorkflowControlProvider) UpsertSchedule(_ context.Context, req
 		Target:       req.Target,
 		Paused:       req.Paused,
 		CreatedBy:    req.RequestedBy,
-		ExecutionRef: req.ExecutionRef,
+		DefinitionID: req.DefinitionID,
 	}
 	p.schedules[req.ScheduleID] = schedule
 	return cloneWorkflowSchedule(schedule), nil
@@ -922,7 +862,7 @@ func (p *recordingWorkflowControlProvider) UpsertEventTrigger(_ context.Context,
 		Target:       req.Target,
 		Paused:       req.Paused,
 		CreatedBy:    req.RequestedBy,
-		ExecutionRef: req.ExecutionRef,
+		DefinitionID: req.DefinitionID,
 	}
 	p.eventTriggers[req.TriggerID] = trigger
 	return cloneWorkflowEventTrigger(trigger), nil
@@ -934,14 +874,6 @@ func (p *recordingWorkflowControlProvider) ListEventTriggers(context.Context, wo
 		out = append(out, cloneWorkflowEventTrigger(trigger))
 	}
 	return out, nil
-}
-
-func cloneWorkflowExecutionReference(ref *workflow.ExecutionReference) *workflow.ExecutionReference {
-	if ref == nil {
-		return nil
-	}
-	clone := *ref
-	return &clone
 }
 
 func cloneWorkflowSchedule(schedule *workflow.Schedule) *workflow.Schedule {
@@ -1134,14 +1066,10 @@ type recordingHostedWorkflowServer struct {
 	proto.UnimplementedWorkflowProviderServer
 
 	startProviderCalls atomic.Int32
-	mu                 sync.Mutex
-	executionRefs      map[string]*proto.WorkflowExecutionReference
 }
 
 func newRecordingHostedWorkflowServer() *recordingHostedWorkflowServer {
-	return &recordingHostedWorkflowServer{
-		executionRefs: map[string]*proto.WorkflowExecutionReference{},
-	}
+	return &recordingHostedWorkflowServer{}
 }
 
 func (s *recordingHostedWorkflowServer) GetProviderIdentity(context.Context, *emptypb.Empty) (*proto.ProviderIdentity, error) {
@@ -1164,37 +1092,4 @@ func (s *recordingHostedWorkflowServer) HealthCheck(context.Context, *emptypb.Em
 func (s *recordingHostedWorkflowServer) StartProvider(context.Context, *emptypb.Empty) (*proto.StartRuntimeProviderResponse, error) {
 	s.startProviderCalls.Add(1)
 	return &proto.StartRuntimeProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
-}
-
-func (s *recordingHostedWorkflowServer) PutExecutionReference(_ context.Context, req *proto.PutWorkflowExecutionReferenceRequest) (*proto.WorkflowExecutionReference, error) {
-	ref := req.GetReference()
-	if ref.GetId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "missing execution reference id")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.executionRefs[ref.GetId()] = gproto.Clone(ref).(*proto.WorkflowExecutionReference)
-	return gproto.Clone(ref).(*proto.WorkflowExecutionReference), nil
-}
-
-func (s *recordingHostedWorkflowServer) GetExecutionReference(_ context.Context, req *proto.GetWorkflowExecutionReferenceRequest) (*proto.WorkflowExecutionReference, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ref := s.executionRefs[req.GetId()]
-	if ref == nil {
-		return nil, status.Error(codes.NotFound, "execution reference not found")
-	}
-	return gproto.Clone(ref).(*proto.WorkflowExecutionReference), nil
-}
-
-func (s *recordingHostedWorkflowServer) ListExecutionReferences(_ context.Context, req *proto.ListWorkflowExecutionReferencesRequest) (*proto.ListWorkflowExecutionReferencesResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	refs := make([]*proto.WorkflowExecutionReference, 0, len(s.executionRefs))
-	for _, ref := range s.executionRefs {
-		if req.GetSubjectId() == "" || ref.GetSubjectId() == req.GetSubjectId() {
-			refs = append(refs, gproto.Clone(ref).(*proto.WorkflowExecutionReference))
-		}
-	}
-	return &proto.ListWorkflowExecutionReferencesResponse{References: refs}, nil
 }
