@@ -33,16 +33,14 @@ use generated::v1::{
     WorkflowExecutionReference, workflow_step,
 };
 use gestalt::{
-    BoundWorkflowTarget, Request, WorkflowAgentMessage, WorkflowEvent, WorkflowEventMatch,
-    WorkflowManager, WorkflowManagerCreateDefinition, WorkflowManagerCreateEventTrigger,
-    WorkflowManagerCreateSchedule, WorkflowManagerDeleteDefinition,
-    WorkflowManagerDeleteEventTrigger, WorkflowManagerDeleteSchedule, WorkflowManagerGetDefinition,
-    WorkflowManagerGetEventTrigger, WorkflowManagerGetSchedule, WorkflowManagerPauseEventTrigger,
-    WorkflowManagerPauseSchedule, WorkflowManagerPublishEvent, WorkflowManagerResumeEventTrigger,
-    WorkflowManagerResumeSchedule, WorkflowManagerSignalOrStartRun, WorkflowManagerSignalRun,
-    WorkflowManagerStartRun, WorkflowManagerUpdateDefinition, WorkflowManagerUpdateEventTrigger,
-    WorkflowManagerUpdateSchedule, WorkflowSignal, WorkflowStep, WorkflowStepAction,
-    WorkflowStepAgentTurn, WorkflowStepAppCall, WorkflowText,
+    BoundWorkflowTarget, Request, Workflow, WorkflowAgentMessage, WorkflowCreateDefinition,
+    WorkflowCreateEventTrigger, WorkflowCreateSchedule, WorkflowDeleteDefinition,
+    WorkflowDeleteEventTrigger, WorkflowDeleteSchedule, WorkflowEvent, WorkflowEventMatch,
+    WorkflowGetDefinition, WorkflowGetEventTrigger, WorkflowGetSchedule, WorkflowPauseEventTrigger,
+    WorkflowPauseSchedule, WorkflowPublishEvent, WorkflowResumeEventTrigger,
+    WorkflowResumeSchedule, WorkflowSignal, WorkflowSignalOrStartRun, WorkflowSignalRun,
+    WorkflowStartRun, WorkflowStep, WorkflowStepAction, WorkflowStepAgentTurn, WorkflowStepAppCall,
+    WorkflowText, WorkflowUpdateDefinition, WorkflowUpdateEventTrigger, WorkflowUpdateSchedule,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -60,7 +58,7 @@ struct SeenRequest {
 }
 
 #[derive(Clone, Default)]
-struct TestWorkflowManagerServer {
+struct TestWorkflowServer {
     seen: Arc<Mutex<Vec<SeenRequest>>>,
     relay_tokens: Arc<Mutex<Vec<String>>>,
     idempotency_keys: Arc<Mutex<Vec<String>>>,
@@ -82,7 +80,7 @@ fn app_target(app_name: &str, operation: &str) -> BoundWorkflowTarget {
 }
 
 #[async_trait]
-impl ProtoWorkflowProvider for TestWorkflowManagerServer {
+impl ProtoWorkflowProvider for TestWorkflowServer {
     async fn start_run(
         &self,
         request: GrpcRequest<StartWorkflowProviderRunRequest>,
@@ -623,7 +621,7 @@ impl ProtoWorkflowProvider for TestWorkflowManagerServer {
 }
 
 #[tokio::test]
-async fn workflow_manager_connects_over_tcp_and_sends_relay_token() {
+async fn workflow_connects_over_tcp_and_sends_relay_token() {
     let _env_lock = helpers::env_lock().lock().await;
 
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -634,20 +632,20 @@ async fn workflow_manager_connects_over_tcp_and_sends_relay_token() {
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, format!("tcp://{address}"));
     let _token_guard = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
-    let server = TestWorkflowManagerServer::default();
+    let server = TestWorkflowServer::default();
     let serve_server = server.clone();
     let serve_task = tokio::spawn(async move {
-        serve_workflow_manager_tcp(serve_server, listener)
+        serve_workflow_tcp(serve_server, listener)
             .await
-            .expect("serve workflow manager");
+            .expect("serve workflow");
     });
 
     let mut manager =
-        WorkflowManager::connect_with_idempotency_key("token-123", "workflow-request-key-rust")
+        Workflow::connect_with_idempotency_key("token-123", "workflow-request-key-rust")
             .await
-            .expect("connect workflow manager");
+            .expect("connect workflow");
     let created = manager
-        .create_schedule(WorkflowManagerCreateSchedule {
+        .create_schedule(WorkflowCreateSchedule {
             provider_name: "managed".to_string(),
             cron: "*/5 * * * *".to_string(),
             ..Default::default()
@@ -670,29 +668,29 @@ async fn workflow_manager_connects_over_tcp_and_sends_relay_token() {
 }
 
 #[tokio::test]
-async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token() {
+async fn workflow_connects_over_unix_socket_and_sends_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-wm.sock");
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
-    let server = TestWorkflowManagerServer::default();
+    let server = TestWorkflowServer::default();
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
-        serve_workflow_manager(serve_server, &serve_socket)
+        serve_workflow(serve_server, &serve_socket)
             .await
-            .expect("serve workflow manager");
+            .expect("serve workflow");
     });
 
     helpers::wait_for_socket(&socket).await;
 
     let mut manager =
-        WorkflowManager::connect_with_idempotency_key("token-123", "workflow-request-key-rust")
+        Workflow::connect_with_idempotency_key("token-123", "workflow-request-key-rust")
             .await
-            .expect("connect workflow manager");
+            .expect("connect workflow");
     let started_run = manager
-        .start_run(WorkflowManagerStartRun {
+        .start_run(WorkflowStartRun {
             provider_name: "basic".to_string(),
             workflow_key: "workflow-key-1".to_string(),
             target: Some(app_target("roadmap", "sync")),
@@ -701,7 +699,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("start run");
     let signaled_run = manager
-        .signal_run(WorkflowManagerSignalRun {
+        .signal_run(WorkflowSignalRun {
             run_id: "run-1".to_string(),
             signal: Some(WorkflowSignal {
                 name: "slack.event".to_string(),
@@ -711,7 +709,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("signal run");
     let signaled_or_started_run = manager
-        .signal_or_start_run(WorkflowManagerSignalOrStartRun {
+        .signal_or_start_run(WorkflowSignalOrStartRun {
             provider_name: "basic".to_string(),
             workflow_key: "workflow-key-1".to_string(),
             target: Some(app_target("roadmap", "sync")),
@@ -724,7 +722,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("signal or start run");
     let created_definition = manager
-        .create_definition(WorkflowManagerCreateDefinition {
+        .create_definition(WorkflowCreateDefinition {
             provider_name: "basic".to_string(),
             target: Some(app_target("roadmap", "sync")),
             ..Default::default()
@@ -732,13 +730,13 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("create definition");
     let fetched_definition = manager
-        .get_definition(WorkflowManagerGetDefinition {
+        .get_definition(WorkflowGetDefinition {
             definition_id: "definition-1".to_string(),
         })
         .await
         .expect("get definition");
     let updated_definition = manager
-        .update_definition(WorkflowManagerUpdateDefinition {
+        .update_definition(WorkflowUpdateDefinition {
             definition_id: "definition-1".to_string(),
             provider_name: "secondary".to_string(),
             target: Some(app_target("roadmap", "status")),
@@ -746,13 +744,13 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("update definition");
     manager
-        .delete_definition(WorkflowManagerDeleteDefinition {
+        .delete_definition(WorkflowDeleteDefinition {
             definition_id: "definition-1".to_string(),
         })
         .await
         .expect("delete definition");
     let created = manager
-        .create_schedule(WorkflowManagerCreateSchedule {
+        .create_schedule(WorkflowCreateSchedule {
             provider_name: "basic".to_string(),
             cron: "*/5 * * * *".to_string(),
             timezone: "UTC".to_string(),
@@ -763,13 +761,13 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("create schedule");
     let fetched = manager
-        .get_schedule(WorkflowManagerGetSchedule {
+        .get_schedule(WorkflowGetSchedule {
             schedule_id: "sched-1".to_string(),
         })
         .await
         .expect("get schedule");
     let updated = manager
-        .update_schedule(WorkflowManagerUpdateSchedule {
+        .update_schedule(WorkflowUpdateSchedule {
             schedule_id: "sched-1".to_string(),
             provider_name: "secondary".to_string(),
             cron: "0 * * * *".to_string(),
@@ -781,25 +779,25 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("update schedule");
     let paused = manager
-        .pause_schedule(WorkflowManagerPauseSchedule {
+        .pause_schedule(WorkflowPauseSchedule {
             schedule_id: "sched-1".to_string(),
         })
         .await
         .expect("pause schedule");
     let resumed = manager
-        .resume_schedule(WorkflowManagerResumeSchedule {
+        .resume_schedule(WorkflowResumeSchedule {
             schedule_id: "sched-1".to_string(),
         })
         .await
         .expect("resume schedule");
     manager
-        .delete_schedule(WorkflowManagerDeleteSchedule {
+        .delete_schedule(WorkflowDeleteSchedule {
             schedule_id: "sched-1".to_string(),
         })
         .await
         .expect("delete schedule");
     let created_trigger = manager
-        .create_trigger(WorkflowManagerCreateEventTrigger {
+        .create_trigger(WorkflowCreateEventTrigger {
             provider_name: "basic".to_string(),
             event_match: Some(WorkflowEventMatch {
                 event_type: "roadmap.item.updated".to_string(),
@@ -813,13 +811,13 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("create trigger");
     let fetched_trigger = manager
-        .get_trigger(WorkflowManagerGetEventTrigger {
+        .get_trigger(WorkflowGetEventTrigger {
             trigger_id: "trg-1".to_string(),
         })
         .await
         .expect("get trigger");
     let updated_trigger = manager
-        .update_trigger(WorkflowManagerUpdateEventTrigger {
+        .update_trigger(WorkflowUpdateEventTrigger {
             trigger_id: "trg-1".to_string(),
             provider_name: "secondary".to_string(),
             event_match: Some(WorkflowEventMatch {
@@ -833,25 +831,25 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("update trigger");
     let paused_trigger = manager
-        .pause_trigger(WorkflowManagerPauseEventTrigger {
+        .pause_trigger(WorkflowPauseEventTrigger {
             trigger_id: "trg-1".to_string(),
         })
         .await
         .expect("pause trigger");
     let resumed_trigger = manager
-        .resume_trigger(WorkflowManagerResumeEventTrigger {
+        .resume_trigger(WorkflowResumeEventTrigger {
             trigger_id: "trg-1".to_string(),
         })
         .await
         .expect("resume trigger");
     manager
-        .delete_trigger(WorkflowManagerDeleteEventTrigger {
+        .delete_trigger(WorkflowDeleteEventTrigger {
             trigger_id: "trg-1".to_string(),
         })
         .await
         .expect("delete trigger");
     let published_event = manager
-        .publish_event(WorkflowManagerPublishEvent {
+        .publish_event(WorkflowPublishEvent {
             event: Some(WorkflowEvent {
                 event_type: "roadmap.item.updated".to_string(),
                 source: "roadmap".to_string(),
@@ -1088,29 +1086,29 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
 }
 
 #[tokio::test]
-async fn workflow_manager_signal_or_start_accepts_native_values() {
+async fn workflow_signal_or_start_accepts_native_values() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-wm-native.sock");
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
-    let server = TestWorkflowManagerServer::default();
+    let server = TestWorkflowServer::default();
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
-        serve_workflow_manager(serve_server, &serve_socket)
+        serve_workflow(serve_server, &serve_socket)
             .await
-            .expect("serve workflow manager");
+            .expect("serve workflow");
     });
 
     helpers::wait_for_socket(&socket).await;
 
     let mut manager =
-        WorkflowManager::connect_with_idempotency_key("token-123", "workflow-request-key-rust")
+        Workflow::connect_with_idempotency_key("token-123", "workflow-request-key-rust")
             .await
-            .expect("connect workflow manager");
+            .expect("connect workflow");
     let signaled = manager
-        .signal_or_start_run(WorkflowManagerSignalOrStartRun {
+        .signal_or_start_run(WorkflowSignalOrStartRun {
             provider_name: "basic".to_string(),
             workflow_key: "workflow-key-1".to_string(),
             idempotency_key: "signal-request-key".to_string(),
@@ -1186,19 +1184,19 @@ async fn workflow_manager_signal_or_start_accepts_native_values() {
 }
 
 #[tokio::test]
-async fn request_workflow_manager_uses_embedded_invocation_token() {
+async fn request_workflow_uses_embedded_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-req-wm.sock");
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
-    let server = TestWorkflowManagerServer::default();
+    let server = TestWorkflowServer::default();
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
-        serve_workflow_manager(serve_server, &serve_socket)
+        serve_workflow(serve_server, &serve_socket)
             .await
-            .expect("serve workflow manager");
+            .expect("serve workflow");
     });
 
     helpers::wait_for_socket(&socket).await;
@@ -1207,12 +1205,9 @@ async fn request_workflow_manager_uses_embedded_invocation_token() {
         invocation_token: "token-embedded".to_string(),
         ..Request::default()
     };
-    let mut manager = request
-        .workflow_manager()
-        .await
-        .expect("request workflow manager");
+    let mut manager = request.workflow().await.expect("request workflow");
     let response = manager
-        .get_schedule(WorkflowManagerGetSchedule {
+        .get_schedule(WorkflowGetSchedule {
             schedule_id: "sched-1".to_string(),
         })
         .await
@@ -1229,8 +1224,8 @@ async fn request_workflow_manager_uses_embedded_invocation_token() {
     let _ = serve_task.await;
 }
 
-async fn serve_workflow_manager(
-    server: TestWorkflowManagerServer,
+async fn serve_workflow(
+    server: TestWorkflowServer,
     socket: &Path,
 ) -> std::result::Result<(), tonic::transport::Error> {
     let _ = std::fs::remove_file(socket);
@@ -1242,8 +1237,8 @@ async fn serve_workflow_manager(
         .await
 }
 
-async fn serve_workflow_manager_tcp(
-    server: TestWorkflowManagerServer,
+async fn serve_workflow_tcp(
+    server: TestWorkflowServer,
     listener: TcpListener,
 ) -> std::result::Result<(), tonic::transport::Error> {
     Server::builder()

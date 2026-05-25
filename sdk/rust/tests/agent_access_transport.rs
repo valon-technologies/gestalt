@@ -27,12 +27,11 @@ use generated::v1::{
     UpdateAgentProviderSessionRequest,
 };
 use gestalt::{
-    AgentInteractionState, AgentManager, AgentManagerCancelTurn, AgentManagerCreateSession,
-    AgentManagerCreateTurn, AgentManagerGetSession, AgentManagerGetTurn,
-    AgentManagerListInteractions, AgentManagerListSessions, AgentManagerListTurnEvents,
-    AgentManagerListTurns, AgentManagerResolveInteraction, AgentManagerUpdateSession, AgentMessage,
-    AgentMessagePart, AgentMessagePartType as NativeAgentMessagePartType, AgentSessionState,
-    AgentToolRef, AgentToolSourceMode, ExternalIdentity, Request, Subject,
+    Agent, AgentCancelTurn, AgentCreateSession, AgentCreateTurn, AgentGetSession, AgentGetTurn,
+    AgentInteractionState, AgentListInteractions, AgentListSessions, AgentListTurnEvents,
+    AgentListTurns, AgentMessage, AgentMessagePart,
+    AgentMessagePartType as NativeAgentMessagePartType, AgentResolveInteraction, AgentSessionState,
+    AgentToolRef, AgentToolSourceMode, AgentUpdateSession, ExternalIdentity, Request, Subject,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -52,14 +51,14 @@ struct SeenRequest {
 }
 
 #[derive(Clone, Default)]
-struct TestAgentManagerServer {
+struct TestAgentServer {
     seen: Arc<Mutex<Vec<SeenRequest>>>,
     relay_tokens: Arc<Mutex<Vec<String>>>,
     create_turn_requests: Arc<Mutex<Vec<CreateAgentProviderTurnRequest>>>,
 }
 
 #[async_trait]
-impl ProtoAgentProvider for TestAgentManagerServer {
+impl ProtoAgentProvider for TestAgentServer {
     async fn create_session(
         &self,
         request: GrpcRequest<CreateAgentProviderSessionRequest>,
@@ -401,7 +400,7 @@ impl ProtoAgentProvider for TestAgentManagerServer {
 }
 
 #[tokio::test]
-async fn agent_manager_connects_over_tcp_and_sends_relay_token() {
+async fn agent_connects_over_tcp_and_sends_relay_token() {
     let _env_lock = helpers::env_lock().lock().await;
 
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -412,19 +411,17 @@ async fn agent_manager_connects_over_tcp_and_sends_relay_token() {
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, format!("tcp://{address}"));
     let _token_guard = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
-    let server = TestAgentManagerServer::default();
+    let server = TestAgentServer::default();
     let serve_server = server.clone();
     let serve_task = tokio::spawn(async move {
-        serve_agent_manager_tcp(serve_server, listener)
+        serve_agent_tcp(serve_server, listener)
             .await
-            .expect("serve agent manager");
+            .expect("serve agent");
     });
 
-    let mut manager = AgentManager::connect("token-123")
-        .await
-        .expect("connect agent manager");
+    let mut manager = Agent::connect("token-123").await.expect("connect agent");
     let created = manager
-        .create_session(AgentManagerCreateSession {
+        .create_session(AgentCreateSession {
             provider_name: "openai".to_string(),
             model: "gpt-5.1".to_string(),
             client_ref: "cli-session-1".to_string(),
@@ -448,28 +445,26 @@ async fn agent_manager_connects_over_tcp_and_sends_relay_token() {
 }
 
 #[tokio::test]
-async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
+async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
-    let socket = helpers::temp_socket("g-rust-agent-manager.sock");
+    let socket = helpers::temp_socket("g-rust-agent.sock");
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
-    let server = TestAgentManagerServer::default();
+    let server = TestAgentServer::default();
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
-        serve_agent_manager(serve_server, &serve_socket)
+        serve_agent(serve_server, &serve_socket)
             .await
-            .expect("serve agent manager");
+            .expect("serve agent");
     });
 
     helpers::wait_for_socket(&socket).await;
 
-    let mut manager = AgentManager::connect("token-123")
-        .await
-        .expect("connect agent manager");
+    let mut manager = Agent::connect("token-123").await.expect("connect agent");
     let created_session = manager
-        .create_session(AgentManagerCreateSession {
+        .create_session(AgentCreateSession {
             provider_name: "openai".to_string(),
             model: "gpt-5.1".to_string(),
             client_ref: "cli-session-1".to_string(),
@@ -478,20 +473,20 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
         .await
         .expect("create session");
     let fetched_session = manager
-        .get_session(AgentManagerGetSession {
+        .get_session(AgentGetSession {
             session_id: "session-managed-1".to_string(),
         })
         .await
         .expect("get session");
     let listed_sessions = manager
-        .list_sessions(AgentManagerListSessions {
+        .list_sessions(AgentListSessions {
             provider_name: "openai".to_string(),
             ..Default::default()
         })
         .await
         .expect("list sessions");
     let updated_session = manager
-        .update_session(AgentManagerUpdateSession {
+        .update_session(AgentUpdateSession {
             session_id: "session-managed-1".to_string(),
             client_ref: "cli-session-2".to_string(),
             state: AgentSessionState::Archived,
@@ -500,7 +495,7 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
         .await
         .expect("update session");
     let created_turn = manager
-        .create_turn(AgentManagerCreateTurn {
+        .create_turn(AgentCreateTurn {
             session_id: "session-managed-1".to_string(),
             model: "gpt-5.1".to_string(),
             messages: vec![AgentMessage {
@@ -519,27 +514,27 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
         .await
         .expect("create turn");
     let fetched_turn = manager
-        .get_turn(AgentManagerGetTurn {
+        .get_turn(AgentGetTurn {
             turn_id: "turn-managed-1".to_string(),
         })
         .await
         .expect("get turn");
     let listed_turns = manager
-        .list_turns(AgentManagerListTurns {
+        .list_turns(AgentListTurns {
             session_id: "session-managed-1".to_string(),
             ..Default::default()
         })
         .await
         .expect("list turns");
     let canceled_turn = manager
-        .cancel_turn(AgentManagerCancelTurn {
+        .cancel_turn(AgentCancelTurn {
             turn_id: "turn-managed-1".to_string(),
             reason: "user canceled".to_string(),
         })
         .await
         .expect("cancel turn");
     let turn_events = manager
-        .list_turn_events(AgentManagerListTurnEvents {
+        .list_turn_events(AgentListTurnEvents {
             turn_id: "turn-managed-1".to_string(),
             after_seq: 0,
             limit: 10,
@@ -547,13 +542,13 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
         .await
         .expect("list turn events");
     let interactions = manager
-        .list_interactions(AgentManagerListInteractions {
+        .list_interactions(AgentListInteractions {
             turn_id: "turn-managed-1".to_string(),
         })
         .await
         .expect("list interactions");
     let resolved = manager
-        .resolve_interaction(AgentManagerResolveInteraction {
+        .resolve_interaction(AgentResolveInteraction {
             turn_id: "turn-managed-1".to_string(),
             interaction_id: "interaction-1".to_string(),
             resolution: Some(serde_json::json!({
@@ -688,28 +683,26 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
 }
 
 #[tokio::test]
-async fn agent_manager_create_turn_accepts_native_values() {
+async fn agent_create_turn_accepts_native_values() {
     let _env_lock = helpers::env_lock().lock().await;
-    let socket = helpers::temp_socket("g-rust-agent-manager-native.sock");
+    let socket = helpers::temp_socket("g-rust-agent-native.sock");
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
-    let server = TestAgentManagerServer::default();
+    let server = TestAgentServer::default();
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
-        serve_agent_manager(serve_server, &serve_socket)
+        serve_agent(serve_server, &serve_socket)
             .await
-            .expect("serve agent manager");
+            .expect("serve agent");
     });
 
     helpers::wait_for_socket(&socket).await;
 
-    let mut manager = AgentManager::connect("token-123")
-        .await
-        .expect("connect agent manager");
+    let mut manager = Agent::connect("token-123").await.expect("connect agent");
     let created_turn = manager
-        .create_turn(AgentManagerCreateTurn {
+        .create_turn(AgentCreateTurn {
             session_id: "session-managed-1".to_string(),
             model: "gpt-5.1".to_string(),
             messages: vec![AgentMessage {
@@ -811,19 +804,19 @@ async fn agent_manager_create_turn_accepts_native_values() {
 }
 
 #[tokio::test]
-async fn request_agent_manager_uses_embedded_invocation_token() {
+async fn request_agent_uses_embedded_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
-    let socket = helpers::temp_socket("g-rust-req-agent-manager.sock");
+    let socket = helpers::temp_socket("g-rust-req-agent.sock");
     let _socket_guard =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
-    let server = TestAgentManagerServer::default();
+    let server = TestAgentServer::default();
     let serve_server = server.clone();
     let serve_socket = socket.clone();
     let serve_task = tokio::spawn(async move {
-        serve_agent_manager(serve_server, &serve_socket)
+        serve_agent(serve_server, &serve_socket)
             .await
-            .expect("serve agent manager");
+            .expect("serve agent");
     });
 
     helpers::wait_for_socket(&socket).await;
@@ -832,12 +825,9 @@ async fn request_agent_manager_uses_embedded_invocation_token() {
         invocation_token: "token-embedded".to_string(),
         ..Request::default()
     };
-    let mut manager = request
-        .agent_manager()
-        .await
-        .expect("request agent manager");
+    let mut manager = request.agent().await.expect("request agent");
     let response = manager
-        .get_session(AgentManagerGetSession {
+        .get_session(AgentGetSession {
             session_id: "session-managed-1".to_string(),
         })
         .await
@@ -854,8 +844,8 @@ async fn request_agent_manager_uses_embedded_invocation_token() {
     let _ = serve_task.await;
 }
 
-async fn serve_agent_manager(
-    server: TestAgentManagerServer,
+async fn serve_agent(
+    server: TestAgentServer,
     socket: &Path,
 ) -> std::result::Result<(), tonic::transport::Error> {
     let _ = std::fs::remove_file(socket);
@@ -867,8 +857,8 @@ async fn serve_agent_manager(
         .await
 }
 
-async fn serve_agent_manager_tcp(
-    server: TestAgentManagerServer,
+async fn serve_agent_tcp(
+    server: TestAgentServer,
     listener: TcpListener,
 ) -> std::result::Result<(), tonic::transport::Error> {
     Server::builder()

@@ -91,7 +91,7 @@ class AgentWorkspace:
 
 
 @dataclass(slots=True)
-class AgentManagerCreateSession:
+class AgentCreateSession:
     provider_name: str = ""
     model: str = ""
     client_ref: str = ""
@@ -101,12 +101,12 @@ class AgentManagerCreateSession:
 
 
 @dataclass(slots=True)
-class AgentManagerGetSession:
+class AgentGetSession:
     session_id: str = ""
 
 
 @dataclass(slots=True)
-class AgentManagerListSessions:
+class AgentListSessions:
     provider_name: str = ""
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
     limit: int = 0
@@ -114,7 +114,7 @@ class AgentManagerListSessions:
 
 
 @dataclass(slots=True)
-class AgentManagerUpdateSession:
+class AgentUpdateSession:
     session_id: str = ""
     client_ref: str = ""
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
@@ -122,7 +122,7 @@ class AgentManagerUpdateSession:
 
 
 @dataclass(slots=True)
-class AgentManagerCreateTurn:
+class AgentCreateTurn:
     session_id: str = ""
     model: str = ""
     messages: Sequence[Any] | None = None
@@ -137,12 +137,12 @@ class AgentManagerCreateTurn:
 
 
 @dataclass(slots=True)
-class AgentManagerGetTurn:
+class AgentGetTurn:
     turn_id: str = ""
 
 
 @dataclass(slots=True)
-class AgentManagerListTurns:
+class AgentListTurns:
     session_id: str = ""
     status: int = AGENT_EXECUTION_STATUS_UNSPECIFIED
     limit: int = 0
@@ -150,47 +150,47 @@ class AgentManagerListTurns:
 
 
 @dataclass(slots=True)
-class AgentManagerCancelTurn:
+class AgentCancelTurn:
     turn_id: str = ""
     reason: str = ""
 
 
 @dataclass(slots=True)
-class AgentManagerListTurnEvents:
+class AgentListTurnEvents:
     turn_id: str = ""
     after_seq: int = 0
     limit: int = 0
 
 
 @dataclass(slots=True)
-class AgentManagerListInteractions:
+class AgentListInteractions:
     turn_id: str = ""
 
 
 @dataclass(slots=True)
-class AgentManagerResolveInteraction:
+class AgentResolveInteraction:
     turn_id: str = ""
     interaction_id: str = ""
     resolution: Any | None = None
 
 
 @dataclass(slots=True)
-class ListAgentManagerSessionsResponse:
+class ListAgentSessionsResponse:
     sessions: Iterable["AgentSession"] = field(default_factory=list)
 
 
 @dataclass(slots=True)
-class ListAgentManagerTurnsResponse:
+class ListAgentTurnsResponse:
     turns: Iterable["AgentTurn"] = field(default_factory=list)
 
 
 @dataclass(slots=True)
-class ListAgentManagerTurnEventsResponse:
+class ListAgentTurnEventsResponse:
     events: Iterable["AgentTurnEvent"] = field(default_factory=list)
 
 
 @dataclass(slots=True)
-class ListAgentManagerInteractionsResponse:
+class ListAgentInteractionsResponse:
     interactions: Iterable["AgentInteraction"] = field(default_factory=list)
 
 
@@ -1251,10 +1251,10 @@ def agent_session_from_proto(value: Any) -> AgentSession:
     )
 
 
-def list_agent_manager_sessions_response_from_proto(
+def list_agent_sessions_response_from_proto(
     value: Any,
-) -> ListAgentManagerSessionsResponse:
-    return ListAgentManagerSessionsResponse(
+) -> ListAgentSessionsResponse:
+    return ListAgentSessionsResponse(
         sessions=[agent_session_from_proto(session) for session in value.sessions]
     )
 
@@ -1288,10 +1288,10 @@ def agent_turn_from_proto(value: Any) -> AgentTurn:
     )
 
 
-def list_agent_manager_turns_response_from_proto(
+def list_agent_turns_response_from_proto(
     value: Any,
-) -> ListAgentManagerTurnsResponse:
-    return ListAgentManagerTurnsResponse(
+) -> ListAgentTurnsResponse:
+    return ListAgentTurnsResponse(
         turns=[agent_turn_from_proto(turn) for turn in value.turns]
     )
 
@@ -1331,10 +1331,10 @@ def agent_turn_event_from_proto(value: Any) -> AgentTurnEvent:
     )
 
 
-def list_agent_manager_turn_events_response_from_proto(
+def list_agent_turn_events_response_from_proto(
     value: Any,
-) -> ListAgentManagerTurnEventsResponse:
-    return ListAgentManagerTurnEventsResponse(
+) -> ListAgentTurnEventsResponse:
+    return ListAgentTurnEventsResponse(
         events=[agent_turn_event_from_proto(event) for event in value.events]
     )
 
@@ -1361,10 +1361,10 @@ def agent_interaction_from_proto(value: Any) -> AgentInteraction:
     )
 
 
-def list_agent_manager_interactions_response_from_proto(
+def list_agent_interactions_response_from_proto(
     value: Any,
-) -> ListAgentManagerInteractionsResponse:
-    return ListAgentManagerInteractionsResponse(
+) -> ListAgentInteractionsResponse:
+    return ListAgentInteractionsResponse(
         interactions=[
             agent_interaction_from_proto(interaction)
             for interaction in value.interactions
@@ -2006,7 +2006,7 @@ def _agent_workspace_value(value: Any | None) -> Any | None:
     )
 
 
-def _agent_manager_create_session_request(
+def _agent_create_session_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
     if isinstance(value, pb.CreateAgentProviderSessionRequest):
@@ -2024,14 +2024,14 @@ def _agent_manager_create_session_request(
     return request
 
 
-def _agent_manager_get_session_request(value: Any | None = None, **kwargs: Any) -> Any:
+def _agent_get_session_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.GetAgentProviderSessionRequest):
         return _copy(value)
     data = _data(value, kwargs)
     return pb.GetAgentProviderSessionRequest(session_id=data.get("session_id", ""))
 
 
-def _agent_manager_list_sessions_request(
+def _agent_list_sessions_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
     if isinstance(value, pb.ListAgentProviderSessionsRequest):
@@ -2045,7 +2045,7 @@ def _agent_manager_list_sessions_request(
     )
 
 
-def _agent_manager_update_session_request(
+def _agent_update_session_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
     if isinstance(value, pb.UpdateAgentProviderSessionRequest):
@@ -2061,7 +2061,7 @@ def _agent_manager_update_session_request(
     return request
 
 
-def _agent_manager_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
+def _agent_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.CreateAgentProviderTurnRequest):
         return _copy(value)
     data = _data(value, kwargs)
@@ -2087,14 +2087,14 @@ def _agent_manager_create_turn_request(value: Any | None = None, **kwargs: Any) 
     return request
 
 
-def _agent_manager_get_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
+def _agent_get_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.GetAgentProviderTurnRequest):
         return _copy(value)
     data = _data(value, kwargs)
     return pb.GetAgentProviderTurnRequest(turn_id=data.get("turn_id", ""))
 
 
-def _agent_manager_list_turns_request(value: Any | None = None, **kwargs: Any) -> Any:
+def _agent_list_turns_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.ListAgentProviderTurnsRequest):
         return _copy(value)
     data = _data(value, kwargs)
@@ -2106,7 +2106,7 @@ def _agent_manager_list_turns_request(value: Any | None = None, **kwargs: Any) -
     )
 
 
-def _agent_manager_cancel_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
+def _agent_cancel_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.CancelAgentProviderTurnRequest):
         return _copy(value)
     data = _data(value, kwargs)
@@ -2116,7 +2116,7 @@ def _agent_manager_cancel_turn_request(value: Any | None = None, **kwargs: Any) 
     )
 
 
-def _agent_manager_list_turn_events_request(
+def _agent_list_turn_events_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
     if isinstance(value, pb.ListAgentProviderTurnEventsRequest):
@@ -2129,7 +2129,7 @@ def _agent_manager_list_turn_events_request(
     )
 
 
-def _agent_manager_list_interactions_request(
+def _agent_list_interactions_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
     if isinstance(value, pb.ListAgentProviderInteractionsRequest):
@@ -2138,7 +2138,7 @@ def _agent_manager_list_interactions_request(
     return pb.ListAgentProviderInteractionsRequest(turn_id=data.get("turn_id", ""))
 
 
-def _agent_manager_resolve_interaction_request(
+def _agent_resolve_interaction_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
     if isinstance(value, pb.ResolveAgentProviderInteractionRequest):
@@ -2153,7 +2153,7 @@ def _agent_manager_resolve_interaction_request(
     return request
 
 
-class AgentManagerProtocol(Protocol):
+class AgentProtocol(Protocol):
     """Fakeable contract for agent management calls."""
 
     def close(self) -> None:
@@ -2167,7 +2167,7 @@ class AgentManagerProtocol(Protocol):
 
     def list_sessions(
         self, request: Any | None = None, **kwargs: Any
-    ) -> ListAgentManagerSessionsResponse:
+    ) -> ListAgentSessionsResponse:
         """List agent sessions."""
 
     def update_session(self, request: Any | None = None, **kwargs: Any) -> AgentSession:
@@ -2181,7 +2181,7 @@ class AgentManagerProtocol(Protocol):
 
     def list_turns(
         self, request: Any | None = None, **kwargs: Any
-    ) -> ListAgentManagerTurnsResponse:
+    ) -> ListAgentTurnsResponse:
         """List agent turns."""
 
     def cancel_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
@@ -2189,12 +2189,12 @@ class AgentManagerProtocol(Protocol):
 
     def list_turn_events(
         self, request: Any | None = None, **kwargs: Any
-    ) -> ListAgentManagerTurnEventsResponse:
+    ) -> ListAgentTurnEventsResponse:
         """List agent turn events."""
 
     def list_interactions(
         self, request: Any | None = None, **kwargs: Any
-    ) -> ListAgentManagerInteractionsResponse:
+    ) -> ListAgentInteractionsResponse:
         """List agent interactions."""
 
     def resolve_interaction(
@@ -2203,25 +2203,25 @@ class AgentManagerProtocol(Protocol):
         """Resolve an agent interaction."""
 
 
-class AgentManager:
+class Agent:
     """Client for managing agent sessions, turns, events, and interactions.
 
-    The manager is for provider code that receives an invocation token and then
-    needs to call the host's agent-management API. Each request passed to a
+    This capability is for provider code that receives an invocation token and then
+    needs to call the host's agent API. Each request passed to a
     method is mutated to include that invocation token before the RPC is sent.
     """
 
     def __init__(self, invocation_token: str) -> None:
         trimmed_token = invocation_token.strip()
         if not trimmed_token:
-            raise RuntimeError("agent manager: invocation token is not available")
+            raise RuntimeError("agent: invocation token is not available")
 
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
-            raise RuntimeError(f"agent manager: {ENV_HOST_SERVICE_SOCKET} is not set")
+            raise RuntimeError(f"agent: {ENV_HOST_SERVICE_SOCKET} is not set")
         relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
 
-        self._channel = host_service_channel("agent manager", target, token=relay_token)
+        self._channel = host_service_channel("agent", target, token=relay_token)
         self._stub = pb_grpc.AgentProviderStub(self._channel)
         self._invocation_token = trimmed_token
 
@@ -2235,25 +2235,25 @@ class AgentManager:
     ) -> AgentSession:
         """Create an agent session."""
 
-        request = _agent_manager_create_session_request(request, **kwargs)
+        request = _agent_create_session_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return agent_session_from_proto(_grpc_call(self._stub.CreateSession, request))
 
     def get_session(self, request: Any | None = None, **kwargs: Any) -> AgentSession:
         """Fetch one agent session."""
 
-        request = _agent_manager_get_session_request(request, **kwargs)
+        request = _agent_get_session_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return agent_session_from_proto(_grpc_call(self._stub.GetSession, request))
 
     def list_sessions(
         self, request: Any | None = None, **kwargs: Any
-    ) -> ListAgentManagerSessionsResponse:
+    ) -> ListAgentSessionsResponse:
         """List agent sessions visible to the invocation token."""
 
-        request = _agent_manager_list_sessions_request(request, **kwargs)
+        request = _agent_list_sessions_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return list_agent_manager_sessions_response_from_proto(
+        return list_agent_sessions_response_from_proto(
             _grpc_call(self._stub.ListSessions, request)
         )
 
@@ -2262,61 +2262,61 @@ class AgentManager:
     ) -> AgentSession:
         """Update mutable fields on an agent session."""
 
-        request = _agent_manager_update_session_request(request, **kwargs)
+        request = _agent_update_session_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return agent_session_from_proto(_grpc_call(self._stub.UpdateSession, request))
 
     def create_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
         """Create an agent turn."""
 
-        request = _agent_manager_create_turn_request(request, **kwargs)
+        request = _agent_create_turn_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return agent_turn_from_proto(_grpc_call(self._stub.CreateTurn, request))
 
     def get_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
         """Fetch one agent turn."""
 
-        request = _agent_manager_get_turn_request(request, **kwargs)
+        request = _agent_get_turn_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return agent_turn_from_proto(_grpc_call(self._stub.GetTurn, request))
 
     def list_turns(
         self, request: Any | None = None, **kwargs: Any
-    ) -> ListAgentManagerTurnsResponse:
+    ) -> ListAgentTurnsResponse:
         """List turns for an agent session."""
 
-        request = _agent_manager_list_turns_request(request, **kwargs)
+        request = _agent_list_turns_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return list_agent_manager_turns_response_from_proto(
+        return list_agent_turns_response_from_proto(
             _grpc_call(self._stub.ListTurns, request)
         )
 
     def cancel_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
         """Cancel an in-progress agent turn."""
 
-        request = _agent_manager_cancel_turn_request(request, **kwargs)
+        request = _agent_cancel_turn_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return agent_turn_from_proto(_grpc_call(self._stub.CancelTurn, request))
 
     def list_turn_events(
         self, request: Any | None = None, **kwargs: Any
-    ) -> ListAgentManagerTurnEventsResponse:
+    ) -> ListAgentTurnEventsResponse:
         """List events emitted for an agent turn."""
 
-        request = _agent_manager_list_turn_events_request(request, **kwargs)
+        request = _agent_list_turn_events_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return list_agent_manager_turn_events_response_from_proto(
+        return list_agent_turn_events_response_from_proto(
             _grpc_call(self._stub.ListTurnEvents, request)
         )
 
     def list_interactions(
         self, request: Any | None = None, **kwargs: Any
-    ) -> ListAgentManagerInteractionsResponse:
+    ) -> ListAgentInteractionsResponse:
         """List pending or completed agent interactions."""
 
-        request = _agent_manager_list_interactions_request(request, **kwargs)
+        request = _agent_list_interactions_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return list_agent_manager_interactions_response_from_proto(
+        return list_agent_interactions_response_from_proto(
             _grpc_call(self._stub.ListInteractions, request)
         )
 
@@ -2325,13 +2325,13 @@ class AgentManager:
     ) -> AgentInteraction:
         """Resolve an agent interaction with a host response."""
 
-        request = _agent_manager_resolve_interaction_request(request, **kwargs)
+        request = _agent_resolve_interaction_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return agent_interaction_from_proto(
             _grpc_call(self._stub.ResolveInteraction, request)
         )
 
-    def __enter__(self) -> AgentManager:
+    def __enter__(self) -> Agent:
         """Return the client for ``with`` statements."""
 
         return self

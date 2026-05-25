@@ -207,7 +207,7 @@ cat <<'JSON' | gestalt --format json agent turns create <session-id> --input -
 JSON
 ```
 
-Provider code can invoke agents through the SDK agent manager:
+Provider code can invoke agents through the SDK `Agent` capability:
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -219,20 +219,20 @@ Provider code can invoke agents through the SDK agent manager:
     )
 
     func summarize(ctx context.Context, req gestalt.Request) (string, error) {
-        agents, err := req.AgentManager()
+        agents, err := req.Agent()
         if err != nil {
             return "", err
         }
         defer agents.Close()
 
-        session, err := agents.CreateSession(ctx, gestalt.AgentManagerCreateSession{
+        session, err := agents.CreateSession(ctx, gestalt.AgentCreateSession{
             ClientRef: "roadmap-risk",
         })
         if err != nil {
             return "", err
         }
 
-        turn, err := agents.CreateTurn(ctx, gestalt.AgentManagerCreateTurn{
+        turn, err := agents.CreateTurn(ctx, gestalt.AgentCreateTurn{
             SessionID: session.GetId(),
             Messages: []gestalt.AgentMessage{{
                 Role: "user",
@@ -248,16 +248,16 @@ Provider code can invoke agents through the SDK agent manager:
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    from gestalt import AgentManagerCreateSession, AgentManagerCreateTurn
+    from gestalt import AgentCreateSession, AgentCreateTurn
     from gestalt import AgentMessage, Request
 
     def summarize(request: Request) -> str:
-        with request.agent_manager() as agents:
+        with request.agent() as agents:
             session = agents.create_session(
-                AgentManagerCreateSession(client_ref="roadmap-risk")
+                AgentCreateSession(client_ref="roadmap-risk")
             )
             turn = agents.create_turn(
-                AgentManagerCreateTurn(
+                AgentCreateTurn(
                     session_id=session.id,
                     messages=[
                         AgentMessage(
@@ -273,18 +273,18 @@ Provider code can invoke agents through the SDK agent manager:
   <Tabs.Tab>
     ```rust
     use gestalt::{
-        AgentManagerCreateSession, AgentManagerCreateTurn,
+        AgentCreateSession, AgentCreateTurn,
         AgentMessage, Request,
     };
 
     async fn summarize(req: &Request) -> Result<String, Box<dyn std::error::Error>> {
-        let mut agents = req.agent_manager().await?;
-        let session = agents.create_session(AgentManagerCreateSession {
+        let mut agents = req.agent().await?;
+        let session = agents.create_session(AgentCreateSession {
             client_ref: "roadmap-risk".into(),
             ..Default::default()
         }).await?;
 
-        let turn = agents.create_turn(AgentManagerCreateTurn {
+        let turn = agents.create_turn(AgentCreateTurn {
             session_id: session.id,
             messages: vec![AgentMessage {
                 role: "user".into(),
@@ -300,10 +300,10 @@ Provider code can invoke agents through the SDK agent manager:
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { AgentManager, type Request } from "@valon-technologies/gestalt";
+    import { Agent, type Request } from "@valon-technologies/gestalt";
 
     export async function summarize(request: Request) {
-      const agents = new AgentManager(request);
+      const agents = new Agent(request);
       const session = await agents.createSession({
         clientRef: "roadmap-risk",
       });
@@ -468,4 +468,4 @@ raw event `type` and `data` remain the source of truth.
 - [CLI](/client/cli): `gestalt agent`, `gestalt agent sessions`, and `gestalt agent turns`
 - [Runtime](/providers/runtime): sandboxing hosted agent providers
 - [Workflow](/providers/workflow): schedules, triggers, and workflow steps
-- [SDK](/reference/sdk): provider, host, and manager helpers by language
+- [SDK](/reference/sdk): provider and host-service helpers by language

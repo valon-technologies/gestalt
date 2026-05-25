@@ -61,7 +61,7 @@ credential resolution.
 You need at least one entry under `providers.workflow`. Workflow providers back
 global runs, schedules, triggers, and events. Configure the provider once, then
 reference it from config-managed workflows, CLI-created workflows, HTTP API
-requests, or the app-facing `WorkflowManager`.
+requests, or the app-facing `Workflow`.
 
 If you configure exactly one workflow provider, or mark one as `default: true`,
 then schedules and triggers may omit `provider`.
@@ -365,7 +365,7 @@ workflows.
 
 The public HTTP route and CLI publish to every configured workflow provider.
 App code can be more specific when it already knows where triggers are
-stored. The workflow-manager SDK accepts a provider selection field on
+stored. The workflow SDK accepts a provider selection field on
 `PublishEvent` (`providerName` in TypeScript, `provider_name` in Python and
 Rust, `ProviderName` in Go); setting it publishes only to that workflow
 provider. This selection names the workflow backend, not the app that owns
@@ -409,17 +409,17 @@ For a provider that receives external callbacks, the usual shape is to publish
 an integration-neutral workflow event from the provider and let a configured
 trigger route it to deployer-owned code.
 
-## Using `WorkflowManager` from a app
+## Using `Workflow` from an app
 
-Apps and other executable provider code can use `WorkflowManager` to create
+Apps and other executable provider code can use `Workflow` to create
 reusable workflow definitions, publish workflow events, start runs, signal runs,
 and create schedules or triggers from the current provider request. The SDK
-attaches the request invocation token to each manager call, so the host keeps
+attaches the request invocation token to each workflow call, so the host keeps
 the same subject and permission ceiling.
 
 Deployments can make this host-service access explicit with app workflow
-capabilities. When `capabilities.workflow` is omitted, workflow-manager calls
-from that app are denied. Set `operations` to the workflow-manager methods that
+capabilities. When `capabilities.workflow` is omitted, workflow calls
+from that app are denied. Set `operations` to the workflow methods that
 app code may call:
 
 ```yaml
@@ -436,11 +436,11 @@ apps:
           - events.publish
 ```
 
-Workflow capabilities gate the manager method only. The workflow target still
+Workflow capabilities gate the workflow method only. The workflow target still
 has to pass the same provider, operation, credential-mode, catalog, and runtime
 authorization checks as any other delayed workflow invocation.
 
-Workflow-manager mutating actions and event publishes emit audit records with
+Workflow mutating actions and event publishes emit audit records with
 `source=workflow_manager`, including the caller app, selected workflow
 backend, target object, and target authorization context. See
 [Audit Logging](/audit-logging#workflow-manager-events) for the event names and
@@ -465,13 +465,13 @@ definition do not silently change existing automation.
         request gestalt.Request,
         slackEvent map[string]any,
     ) (string, error) {
-        workflows, err := request.WorkflowManager()
+        workflows, err := request.Workflow()
         if err != nil {
             return "", err
         }
         defer workflows.Close()
 
-        published, err := workflows.PublishEvent(ctx, gestalt.WorkflowManagerPublishEvent{
+        published, err := workflows.PublishEvent(ctx, gestalt.WorkflowPublishEvent{
             ProviderName: "local",
             Event: &gestalt.WorkflowEvent{
                 Type:            "slack.event.received",
@@ -490,15 +490,15 @@ definition do not silently change existing automation.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    from gestalt import Request, WorkflowEvent, WorkflowManagerPublishEvent
+    from gestalt import Request, WorkflowEvent, WorkflowPublishEvent
 
     def publish_slack_event(
         request: Request,
         slack_event: dict[str, object],
     ) -> str:
-        with request.workflow_manager() as workflows:
+        with request.workflows() as workflows:
             published = workflows.publish_event(
-                WorkflowManagerPublishEvent(
+                WorkflowPublishEvent(
                     provider_name="local",
                     event=WorkflowEvent(
                         type="slack.event.received",
@@ -515,16 +515,16 @@ definition do not silently change existing automation.
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
-    use gestalt::{WorkflowEvent, WorkflowManagerPublishEvent};
+    use gestalt::{WorkflowEvent, WorkflowPublishEvent};
     use serde_json::json;
 
     async fn publish_slack_event(
         request: &gestalt::Request,
         slack_event: serde_json::Value,
     ) -> Result<String, Box<dyn std::error::Error>> {
-        let mut workflows = request.workflow_manager().await?;
+        let mut workflows = request.workflows().await?;
         let event = workflows
-            .publish_event(WorkflowManagerPublishEvent {
+            .publish_event(WorkflowPublishEvent {
                 provider_name: "local".to_string(),
                 event: Some(WorkflowEvent {
                     event_type: "slack.event.received".to_string(),
@@ -545,7 +545,7 @@ definition do not silently change existing automation.
   <Tabs.Tab>
     ```ts
     import {
-      WorkflowManager,
+      Workflow,
       workflowEvent,
       type Request,
     } from "@valon-technologies/gestalt";
@@ -554,9 +554,9 @@ definition do not silently change existing automation.
       request: Request,
       slackEvent: Record<string, unknown>,
     ) {
-      const workflowManager = new WorkflowManager(request);
+      const workflows = new Workflow(request);
 
-      const event = await workflowManager.publishEvent({
+      const event = await workflows.publishEvent({
         providerName: "local",
         event: workflowEvent({
           type: "slack.event.received",
@@ -674,7 +674,7 @@ reindexing.
 
 You can publish that handoff event from outside Gestalt through
 `POST /api/v1/workflow/events`, or from app code through the app-facing
-workflow manager `PublishEvent` call. External publishing is useful when some
+workflow `PublishEvent` call. External publishing is useful when some
 other system already knows the step finished. App-side publishing is useful
 when the operation itself owns the next handoff.
 

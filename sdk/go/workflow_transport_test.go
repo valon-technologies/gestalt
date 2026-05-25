@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type workflowManagerTransportHarness struct {
+type workflowTransportHarness struct {
 	proto.UnimplementedWorkflowProviderServer
 
 	mu       sync.Mutex
@@ -24,7 +24,7 @@ type workflowManagerTransportHarness struct {
 	tokens   []string
 }
 
-func (h *workflowManagerTransportHarness) UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+func (h *workflowTransportHarness) UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
@@ -41,7 +41,7 @@ func (h *workflowManagerTransportHarness) UpsertSchedule(ctx context.Context, re
 	}, nil
 }
 
-func (h *workflowManagerTransportHarness) SignalOrStartRun(ctx context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
+func (h *workflowTransportHarness) SignalOrStartRun(ctx context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
@@ -63,7 +63,7 @@ func (h *workflowManagerTransportHarness) SignalOrStartRun(ctx context.Context, 
 	}, nil
 }
 
-func TestTransport_WorkflowManagerTCPTargetTokenEnv(t *testing.T) {
+func TestTransport_WorkflowTCPTargetTokenEnv(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -71,7 +71,7 @@ func TestTransport_WorkflowManagerTCPTargetTokenEnv(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = lis.Close() })
 
-	harness := &workflowManagerTransportHarness{}
+	harness := &workflowTransportHarness{}
 	srv := grpc.NewServer()
 	proto.RegisterWorkflowProviderServer(srv, harness)
 	go func() {
@@ -82,13 +82,13 @@ func TestTransport_WorkflowManagerTCPTargetTokenEnv(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.WorkflowManager("parent-token")
+	client, err := gestalt.NewWorkflow("parent-token")
 	if err != nil {
-		t.Fatalf("WorkflowManager: %v", err)
+		t.Fatalf("Workflow: %v", err)
 	}
 	defer func() { _ = client.Close() }()
 
-	created, err := client.CreateSchedule(context.Background(), gestalt.WorkflowManagerCreateSchedule{
+	created, err := client.CreateSchedule(context.Background(), gestalt.WorkflowCreateSchedule{
 		ProviderName:   "managed",
 		Cron:           "*/5 * * * *",
 		IdempotencyKey: "workflow-schedule-key-go",
@@ -122,7 +122,7 @@ func TestTransport_WorkflowManagerTCPTargetTokenEnv(t *testing.T) {
 	}
 }
 
-func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *testing.T) {
+func TestTransport_WorkflowSignalOrStartRunInjectsInvocationToken(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -130,7 +130,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	}
 	t.Cleanup(func() { _ = lis.Close() })
 
-	harness := &workflowManagerTransportHarness{}
+	harness := &workflowTransportHarness{}
 	srv := grpc.NewServer()
 	proto.RegisterWorkflowProviderServer(srv, harness)
 	go func() {
@@ -141,14 +141,14 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.WorkflowManager("parent-token")
+	client, err := gestalt.NewWorkflow("parent-token")
 	if err != nil {
-		t.Fatalf("WorkflowManager: %v", err)
+		t.Fatalf("Workflow: %v", err)
 	}
 	defer func() { _ = client.Close() }()
 
 	createdAtValue := time.Date(1969, 12, 31, 23, 59, 59, 999_000_000, time.UTC)
-	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowManagerSignalOrStartRun{
+	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowSignalOrStartRun{
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
 		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
@@ -207,7 +207,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	}
 }
 
-func TestTransport_WorkflowManagerSignalOrStartRunNativeValues(t *testing.T) {
+func TestTransport_WorkflowSignalOrStartRunNativeValues(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -215,7 +215,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunNativeValues(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = lis.Close() })
 
-	harness := &workflowManagerTransportHarness{}
+	harness := &workflowTransportHarness{}
 	srv := grpc.NewServer()
 	proto.RegisterWorkflowProviderServer(srv, harness)
 	go func() {
@@ -226,14 +226,14 @@ func TestTransport_WorkflowManagerSignalOrStartRunNativeValues(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.WorkflowManager("parent-token")
+	client, err := gestalt.NewWorkflow("parent-token")
 	if err != nil {
-		t.Fatalf("WorkflowManager: %v", err)
+		t.Fatalf("Workflow: %v", err)
 	}
 	defer func() { _ = client.Close() }()
 
 	createdAt := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
-	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowManagerSignalOrStartRun{
+	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowSignalOrStartRun{
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
 		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{

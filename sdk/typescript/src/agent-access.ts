@@ -47,50 +47,50 @@ import {
   ENV_HOST_SERVICE_TOKEN,
 } from "./host-service.ts";
 
-export interface AgentManagerWorkspaceGitCheckout {
+export interface AgentWorkspaceGitCheckout {
   url?: string | undefined;
   ref?: string | undefined;
   path?: string | undefined;
 }
 
-export interface AgentManagerWorkspace {
-  checkouts?: readonly AgentManagerWorkspaceGitCheckout[] | undefined;
+export interface AgentWorkspace {
+  checkouts?: readonly AgentWorkspaceGitCheckout[] | undefined;
   cwd?: string | undefined;
 }
 
-/** Shape accepted when creating an agent session through the manager facade. */
-export interface AgentManagerCreateSession {
+/** Shape accepted when creating an agent session through the agent facade. */
+export interface AgentCreateSession {
   providerName: string;
   model?: string | undefined;
   clientRef?: string | undefined;
   metadata?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
-  workspace?: AgentManagerWorkspace | undefined;
+  workspace?: AgentWorkspace | undefined;
 }
 
-/** Shape accepted when fetching an agent session through the manager facade. */
-export interface AgentManagerGetSession {
+/** Shape accepted when fetching an agent session through the agent facade. */
+export interface AgentGetSession {
   sessionId: string;
 }
 
-/** Shape accepted when listing agent sessions through the manager facade. */
-export interface AgentManagerListSessions {
+/** Shape accepted when listing agent sessions through the agent facade. */
+export interface AgentListSessions {
   providerName?: string | undefined;
   state?: AgentSessionState | undefined;
   limit?: number | undefined;
   summaryOnly?: boolean | undefined;
 }
 
-/** Shape accepted when updating an agent session through the manager facade. */
-export interface AgentManagerUpdateSession {
+/** Shape accepted when updating an agent session through the agent facade. */
+export interface AgentUpdateSession {
   sessionId: string;
   clientRef?: string | undefined;
   state?: AgentSessionState | undefined;
   metadata?: JsonObjectInput | undefined;
 }
 
-/** Shape accepted when creating an agent turn through the manager facade. */
-export interface AgentManagerCreateTurn {
+/** Shape accepted when creating an agent turn through the agent facade. */
+export interface AgentCreateTurn {
   sessionId: string;
   model?: string | undefined;
   messages?: readonly AgentMessage[] | undefined;
@@ -104,60 +104,60 @@ export interface AgentManagerCreateTurn {
   timeoutSeconds?: number | undefined;
 }
 
-/** Shape accepted when fetching an agent turn through the manager facade. */
-export interface AgentManagerGetTurn {
+/** Shape accepted when fetching an agent turn through the agent facade. */
+export interface AgentGetTurn {
   turnId: string;
 }
 
-/** Shape accepted when listing agent turns through the manager facade. */
-export interface AgentManagerListTurns {
+/** Shape accepted when listing agent turns through the agent facade. */
+export interface AgentListTurns {
   sessionId: string;
   status?: AgentExecutionStatus | undefined;
   limit?: number | undefined;
   summaryOnly?: boolean | undefined;
 }
 
-/** Shape accepted when cancelling an agent turn through the manager facade. */
-export interface AgentManagerCancelTurn {
+/** Shape accepted when cancelling an agent turn through the agent facade. */
+export interface AgentCancelTurn {
   turnId: string;
   reason?: string | undefined;
 }
 
 /** Shape accepted when listing events for an agent turn. */
-export interface AgentManagerListTurnEvents {
+export interface AgentListTurnEvents {
   turnId: string;
   afterSeq?: bigint | number | undefined;
   limit?: number | undefined;
 }
 
 /** Shape accepted when listing agent interactions. */
-export interface AgentManagerListInteractions {
+export interface AgentListInteractions {
   turnId: string;
 }
 
 /** Shape accepted when resolving an agent interaction. */
-export interface AgentManagerResolveInteraction {
+export interface AgentResolveInteraction {
   turnId: string;
   interactionId: string;
   resolution?: JsonObjectInput | undefined;
 }
 
 /** Fakeable client contract for managing agent sessions and turns. */
-export interface AgentManager {
-  createSession(request: AgentManagerCreateSession): Promise<AgentSession>;
-  getSession(request: AgentManagerGetSession): Promise<AgentSession>;
-  listSessions(request?: AgentManagerListSessions): Promise<AgentSession[]>;
-  updateSession(request: AgentManagerUpdateSession): Promise<AgentSession>;
-  createTurn(request: AgentManagerCreateTurn): Promise<AgentTurn>;
-  getTurn(request: AgentManagerGetTurn): Promise<AgentTurn>;
-  listTurns(request: AgentManagerListTurns): Promise<AgentTurn[]>;
-  cancelTurn(request: AgentManagerCancelTurn): Promise<AgentTurn>;
-  listTurnEvents(request: AgentManagerListTurnEvents): Promise<AgentTurnEvent[]>;
+export interface Agent {
+  createSession(request: AgentCreateSession): Promise<AgentSession>;
+  getSession(request: AgentGetSession): Promise<AgentSession>;
+  listSessions(request?: AgentListSessions): Promise<AgentSession[]>;
+  updateSession(request: AgentUpdateSession): Promise<AgentSession>;
+  createTurn(request: AgentCreateTurn): Promise<AgentTurn>;
+  getTurn(request: AgentGetTurn): Promise<AgentTurn>;
+  listTurns(request: AgentListTurns): Promise<AgentTurn[]>;
+  cancelTurn(request: AgentCancelTurn): Promise<AgentTurn>;
+  listTurnEvents(request: AgentListTurnEvents): Promise<AgentTurnEvent[]>;
   listInteractions(
-    request: AgentManagerListInteractions,
+    request: AgentListInteractions,
   ): Promise<AgentInteraction[]>;
   resolveInteraction(
-    request: AgentManagerResolveInteraction,
+    request: AgentResolveInteraction,
   ): Promise<AgentInteraction>;
 }
 
@@ -165,9 +165,9 @@ export interface AgentManager {
  * Client for managing agent sessions, turns, events, and interactions.
  *
  * The constructor accepts either a Gestalt request or an invocation token. Each
- * manager call forwards that token to the agent-provider facade.
+ * agent call forwards that token to the agent-provider facade.
  */
-class HostAgentManager implements AgentManager {
+class HostAgent implements Agent {
   private readonly client: Client<typeof AgentProviderService>;
   private readonly invocationToken: string;
 
@@ -178,13 +178,13 @@ class HostAgentManager implements AgentManager {
 
     const target = process.env[ENV_HOST_SERVICE_SOCKET]?.trim();
     if (!target) {
-      throw new Error(`agent manager: ${ENV_HOST_SERVICE_SOCKET} is not set`);
+      throw new Error(`agent: ${ENV_HOST_SERVICE_SOCKET} is not set`);
     }
     const relayToken =
       process.env[ENV_HOST_SERVICE_TOKEN]?.trim() ?? "";
 
     const transport = createHostServiceGrpcTransport(
-      parseHostServiceTarget("agent manager", target),
+      parseHostServiceTarget("agent", target),
       hostServiceMetadataInterceptors(relayToken, ""),
     );
     this.client = createClient(AgentProviderService, transport);
@@ -192,7 +192,7 @@ class HostAgentManager implements AgentManager {
 
   /** Creates an agent session. */
   async createSession(
-    request: AgentManagerCreateSession,
+    request: AgentCreateSession,
   ): Promise<AgentSession> {
     return agentSessionFromProto(
       await this.client.createSession({
@@ -208,7 +208,7 @@ class HostAgentManager implements AgentManager {
   }
 
   /** Fetches one agent session. */
-  async getSession(request: AgentManagerGetSession): Promise<AgentSession> {
+  async getSession(request: AgentGetSession): Promise<AgentSession> {
     return agentSessionFromProto(
       await this.client.getSession({
         sessionId: request.sessionId,
@@ -219,7 +219,7 @@ class HostAgentManager implements AgentManager {
 
   /** Lists agent sessions visible to the invocation token. */
   async listSessions(
-    request: AgentManagerListSessions = {},
+    request: AgentListSessions = {},
   ): Promise<AgentSession[]> {
     const response = await this.client.listSessions({
       providerName: request.providerName ?? "",
@@ -233,7 +233,7 @@ class HostAgentManager implements AgentManager {
 
   /** Updates mutable fields on an agent session. */
   async updateSession(
-    request: AgentManagerUpdateSession,
+    request: AgentUpdateSession,
   ): Promise<AgentSession> {
     return agentSessionFromProto(
       await this.client.updateSession({
@@ -247,7 +247,7 @@ class HostAgentManager implements AgentManager {
   }
 
   /** Creates an agent turn. */
-  async createTurn(request: AgentManagerCreateTurn): Promise<AgentTurn> {
+  async createTurn(request: AgentCreateTurn): Promise<AgentTurn> {
     return agentTurnFromProto(
       await this.client.createTurn({
         sessionId: request.sessionId,
@@ -267,7 +267,7 @@ class HostAgentManager implements AgentManager {
   }
 
   /** Fetches one agent turn. */
-  async getTurn(request: AgentManagerGetTurn): Promise<AgentTurn> {
+  async getTurn(request: AgentGetTurn): Promise<AgentTurn> {
     return agentTurnFromProto(
       await this.client.getTurn({
         turnId: request.turnId,
@@ -277,7 +277,7 @@ class HostAgentManager implements AgentManager {
   }
 
   /** Lists turns for an agent session. */
-  async listTurns(request: AgentManagerListTurns): Promise<AgentTurn[]> {
+  async listTurns(request: AgentListTurns): Promise<AgentTurn[]> {
     const response = await this.client.listTurns({
       sessionId: request.sessionId,
       invocationToken: this.invocationToken,
@@ -289,7 +289,7 @@ class HostAgentManager implements AgentManager {
   }
 
   /** Cancels an in-progress agent turn. */
-  async cancelTurn(request: AgentManagerCancelTurn): Promise<AgentTurn> {
+  async cancelTurn(request: AgentCancelTurn): Promise<AgentTurn> {
     return agentTurnFromProto(
       await this.client.cancelTurn({
         turnId: request.turnId,
@@ -301,7 +301,7 @@ class HostAgentManager implements AgentManager {
 
   /** Lists events emitted for an agent turn. */
   async listTurnEvents(
-    request: AgentManagerListTurnEvents,
+    request: AgentListTurnEvents,
   ): Promise<AgentTurnEvent[]> {
     const response = await this.client.listTurnEvents({
       turnId: request.turnId,
@@ -314,7 +314,7 @@ class HostAgentManager implements AgentManager {
 
   /** Lists pending or completed agent interactions. */
   async listInteractions(
-    request: AgentManagerListInteractions,
+    request: AgentListInteractions,
   ): Promise<AgentInteraction[]> {
     const response = await this.client.listInteractions({
       turnId: request.turnId,
@@ -325,7 +325,7 @@ class HostAgentManager implements AgentManager {
 
   /** Resolves an agent interaction with a host response. */
   async resolveInteraction(
-    request: AgentManagerResolveInteraction,
+    request: AgentResolveInteraction,
   ): Promise<AgentInteraction> {
     return agentInteractionFromProto(
       await this.client.resolveInteraction({
@@ -345,12 +345,12 @@ function normalizeInvocationToken(requestOrToken: Request | string): string {
       : requestOrToken.invocationToken;
   const trimmed = invocationToken.trim();
   if (!trimmed) {
-    throw new Error("agent manager: invocation token is not available");
+    throw new Error("agent: invocation token is not available");
   }
   return trimmed;
 }
 
-function workspaceToProto(workspace?: AgentManagerWorkspace | undefined) {
+function workspaceToProto(workspace?: AgentWorkspace | undefined) {
   if (workspace === undefined) {
     return undefined;
   }
@@ -364,7 +364,7 @@ function workspaceToProto(workspace?: AgentManagerWorkspace | undefined) {
   };
 }
 
-export const AgentManager = HostAgentManager;
+export const Agent = HostAgent;
 
 function agentSessionFromProto(session: ProtoAgentSession): AgentSession {
   return {

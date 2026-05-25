@@ -16,21 +16,21 @@ import {
 import type { Request } from "./api.ts";
 import {
   boundWorkflowTargetToProto,
-  workflowManagerDefinitionFromProto,
-  workflowManagerEventTriggerFromProto,
-  workflowManagerRunFromProto,
-  workflowManagerRunSignalFromProto,
-  workflowManagerScheduleFromProto,
+  workflowDefinitionFromProto,
+  workflowEventTriggerFromProto,
+  workflowRunFromProto,
+  workflowRunSignalFromProto,
+  workflowScheduleFromProto,
   workflowEventFromProto,
   workflowEventMatchToProto,
   workflowEventToProto,
   workflowSignalToProto,
   type BoundWorkflowTarget,
-  type WorkflowManagerDefinition,
-  type WorkflowManagerEventTrigger,
-  type WorkflowManagerRun,
-  type WorkflowManagerRunSignal,
-  type WorkflowManagerSchedule,
+  type WorkflowDefinition,
+  type WorkflowEventTrigger,
+  type WorkflowRun,
+  type WorkflowRunSignal,
+  type WorkflowSchedule,
   type WorkflowEvent,
   type WorkflowEventMatch,
   type WorkflowSignal,
@@ -39,11 +39,11 @@ import {
 /**
  * Environment variable containing the gestaltd workflow-provider facade target.
  *
- * Manager clients call the facade. Provider runtimes still listen on
+ * Workflow calls call the facade. Provider runtimes still listen on
  * GESTALT_PROVIDER_SOCKET.
  */
 /** Shape accepted when starting a workflow run. */
-export interface WorkflowManagerStartRun {
+export interface WorkflowStartRun {
   providerName: string;
   target?: BoundWorkflowTarget | undefined;
   idempotencyKey?: string | undefined;
@@ -52,13 +52,13 @@ export interface WorkflowManagerStartRun {
 }
 
 /** Shape accepted when signaling an existing workflow run. */
-export interface WorkflowManagerSignalRun {
+export interface WorkflowSignalRun {
   runId: string;
   signal?: WorkflowSignal | undefined;
 }
 
 /** Shape accepted when signaling a run or starting it if missing. */
-export interface WorkflowManagerSignalOrStartRun {
+export interface WorkflowSignalOrStartRun {
   providerName: string;
   workflowKey: string;
   target?: BoundWorkflowTarget | undefined;
@@ -68,31 +68,31 @@ export interface WorkflowManagerSignalOrStartRun {
 }
 
 /** Shape accepted when creating a workflow definition. */
-export interface WorkflowManagerCreateDefinition {
+export interface WorkflowCreateDefinition {
   providerName: string;
   target?: BoundWorkflowTarget | undefined;
   idempotencyKey?: string | undefined;
 }
 
 /** Shape accepted when fetching a workflow definition. */
-export interface WorkflowManagerGetDefinition {
+export interface WorkflowGetDefinition {
   definitionId: string;
 }
 
 /** Shape accepted when updating a workflow definition. */
-export interface WorkflowManagerUpdateDefinition {
+export interface WorkflowUpdateDefinition {
   definitionId: string;
   providerName?: string | undefined;
   target?: BoundWorkflowTarget | undefined;
 }
 
 /** Shape accepted when deleting a workflow definition. */
-export interface WorkflowManagerDeleteDefinition {
+export interface WorkflowDeleteDefinition {
   definitionId: string;
 }
 
 /** Shape accepted when creating a workflow schedule. */
-export interface WorkflowManagerCreateSchedule {
+export interface WorkflowCreateSchedule {
   providerName: string;
   cron: string;
   timezone?: string | undefined;
@@ -103,7 +103,7 @@ export interface WorkflowManagerCreateSchedule {
 }
 
 /** Shape accepted when creating an event trigger. */
-export interface WorkflowManagerCreateTrigger {
+export interface WorkflowCreateTrigger {
   providerName: string;
   match?: WorkflowEventMatch | undefined;
   target?: BoundWorkflowTarget | undefined;
@@ -113,17 +113,17 @@ export interface WorkflowManagerCreateTrigger {
 }
 
 /** Shape accepted when fetching a workflow schedule. */
-export interface WorkflowManagerGetSchedule {
+export interface WorkflowGetSchedule {
   scheduleId: string;
 }
 
 /** Shape accepted when fetching an event trigger. */
-export interface WorkflowManagerGetTrigger {
+export interface WorkflowGetTrigger {
   triggerId: string;
 }
 
 /** Shape accepted when updating a workflow schedule. */
-export interface WorkflowManagerUpdateSchedule {
+export interface WorkflowUpdateSchedule {
   scheduleId: string;
   providerName?: string | undefined;
   cron?: string | undefined;
@@ -134,7 +134,7 @@ export interface WorkflowManagerUpdateSchedule {
 }
 
 /** Shape accepted when updating an event trigger. */
-export interface WorkflowManagerUpdateTrigger {
+export interface WorkflowUpdateTrigger {
   triggerId: string;
   providerName?: string | undefined;
   match?: WorkflowEventMatch | undefined;
@@ -144,104 +144,104 @@ export interface WorkflowManagerUpdateTrigger {
 }
 
 /** Shape accepted when deleting a workflow schedule. */
-export interface WorkflowManagerDeleteSchedule {
+export interface WorkflowDeleteSchedule {
   scheduleId: string;
 }
 
 /** Shape accepted when deleting an event trigger. */
-export interface WorkflowManagerDeleteTrigger {
+export interface WorkflowDeleteTrigger {
   triggerId: string;
 }
 
 /** Shape accepted when pausing a workflow schedule. */
-export interface WorkflowManagerPauseSchedule {
+export interface WorkflowPauseSchedule {
   scheduleId: string;
 }
 
 /** Shape accepted when pausing an event trigger. */
-export interface WorkflowManagerPauseTrigger {
+export interface WorkflowPauseTrigger {
   triggerId: string;
 }
 
 /** Shape accepted when resuming a workflow schedule. */
-export interface WorkflowManagerResumeSchedule {
+export interface WorkflowResumeSchedule {
   scheduleId: string;
 }
 
 /** Shape accepted when resuming an event trigger. */
-export interface WorkflowManagerResumeTrigger {
+export interface WorkflowResumeTrigger {
   triggerId: string;
 }
 
 /** Shape accepted when publishing a workflow event. */
-export interface WorkflowManagerPublishEvent {
+export interface WorkflowPublishEvent {
   event?: WorkflowEvent | undefined;
   providerName?: string | undefined;
 }
 
-/** Fakeable client contract for workflow manager calls. */
-export interface WorkflowManager {
-  startRun(request: WorkflowManagerStartRun): Promise<WorkflowManagerRun>;
+/** Fakeable client contract for workflow calls. */
+export interface Workflow {
+  startRun(request: WorkflowStartRun): Promise<WorkflowRun>;
   signalRun(
-    request: WorkflowManagerSignalRun,
-  ): Promise<WorkflowManagerRunSignal>;
+    request: WorkflowSignalRun,
+  ): Promise<WorkflowRunSignal>;
   signalOrStartRun(
-    request: WorkflowManagerSignalOrStartRun,
-  ): Promise<WorkflowManagerRunSignal>;
+    request: WorkflowSignalOrStartRun,
+  ): Promise<WorkflowRunSignal>;
   createDefinition(
-    request: WorkflowManagerCreateDefinition,
-  ): Promise<WorkflowManagerDefinition>;
+    request: WorkflowCreateDefinition,
+  ): Promise<WorkflowDefinition>;
   getDefinition(
-    request: WorkflowManagerGetDefinition,
-  ): Promise<WorkflowManagerDefinition>;
+    request: WorkflowGetDefinition,
+  ): Promise<WorkflowDefinition>;
   updateDefinition(
-    request: WorkflowManagerUpdateDefinition,
-  ): Promise<WorkflowManagerDefinition>;
-  deleteDefinition(request: WorkflowManagerDeleteDefinition): Promise<void>;
+    request: WorkflowUpdateDefinition,
+  ): Promise<WorkflowDefinition>;
+  deleteDefinition(request: WorkflowDeleteDefinition): Promise<void>;
   createSchedule(
-    request: WorkflowManagerCreateSchedule,
-  ): Promise<WorkflowManagerSchedule>;
+    request: WorkflowCreateSchedule,
+  ): Promise<WorkflowSchedule>;
   getSchedule(
-    request: WorkflowManagerGetSchedule,
-  ): Promise<WorkflowManagerSchedule>;
+    request: WorkflowGetSchedule,
+  ): Promise<WorkflowSchedule>;
   updateSchedule(
-    request: WorkflowManagerUpdateSchedule,
-  ): Promise<WorkflowManagerSchedule>;
-  deleteSchedule(request: WorkflowManagerDeleteSchedule): Promise<void>;
+    request: WorkflowUpdateSchedule,
+  ): Promise<WorkflowSchedule>;
+  deleteSchedule(request: WorkflowDeleteSchedule): Promise<void>;
   pauseSchedule(
-    request: WorkflowManagerPauseSchedule,
-  ): Promise<WorkflowManagerSchedule>;
+    request: WorkflowPauseSchedule,
+  ): Promise<WorkflowSchedule>;
   resumeSchedule(
-    request: WorkflowManagerResumeSchedule,
-  ): Promise<WorkflowManagerSchedule>;
+    request: WorkflowResumeSchedule,
+  ): Promise<WorkflowSchedule>;
   createTrigger(
-    request: WorkflowManagerCreateTrigger,
-  ): Promise<WorkflowManagerEventTrigger>;
+    request: WorkflowCreateTrigger,
+  ): Promise<WorkflowEventTrigger>;
   getTrigger(
-    request: WorkflowManagerGetTrigger,
-  ): Promise<WorkflowManagerEventTrigger>;
+    request: WorkflowGetTrigger,
+  ): Promise<WorkflowEventTrigger>;
   updateTrigger(
-    request: WorkflowManagerUpdateTrigger,
-  ): Promise<WorkflowManagerEventTrigger>;
-  deleteTrigger(request: WorkflowManagerDeleteTrigger): Promise<void>;
+    request: WorkflowUpdateTrigger,
+  ): Promise<WorkflowEventTrigger>;
+  deleteTrigger(request: WorkflowDeleteTrigger): Promise<void>;
   pauseTrigger(
-    request: WorkflowManagerPauseTrigger,
-  ): Promise<WorkflowManagerEventTrigger>;
+    request: WorkflowPauseTrigger,
+  ): Promise<WorkflowEventTrigger>;
   resumeTrigger(
-    request: WorkflowManagerResumeTrigger,
-  ): Promise<WorkflowManagerEventTrigger>;
-  publishEvent(request: WorkflowManagerPublishEvent): Promise<WorkflowEvent>;
+    request: WorkflowResumeTrigger,
+  ): Promise<WorkflowEventTrigger>;
+  publishEvent(request: WorkflowPublishEvent): Promise<WorkflowEvent>;
 }
 
 /**
  * Client for creating and controlling workflow schedules and event triggers.
  *
  * The constructor accepts either a Gestalt request or an invocation token. Each
- * manager call forwards that token to the workflow-provider facade. When
+ * agent call forwards that token to the workflow-provider facade. When
  * constructed from a request, create operations reuse the request idempotency
  * key unless the call provides one explicitly.
  */
-class HostWorkflowManager implements WorkflowManager {
+class HostWorkflow implements Workflow {
   private readonly client: Client<typeof WorkflowProviderService>;
   private readonly invocationToken: string;
   private readonly idempotencyKey: string;
@@ -255,14 +255,14 @@ class HostWorkflowManager implements WorkflowManager {
     const target = process.env[ENV_HOST_SERVICE_SOCKET]?.trim();
     if (!target) {
       throw new Error(
-        `workflow manager: ${ENV_HOST_SERVICE_SOCKET} is not set`,
+        `workflow: ${ENV_HOST_SERVICE_SOCKET} is not set`,
       );
     }
     const relayToken =
       process.env[ENV_HOST_SERVICE_TOKEN]?.trim() ?? "";
 
     const transport = createHostServiceGrpcTransport(
-      parseHostServiceTarget("workflow manager", target),
+      parseHostServiceTarget("workflow", target),
       hostServiceMetadataInterceptors(relayToken, ""),
     );
     this.client = createClient(WorkflowProviderService, transport);
@@ -270,9 +270,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Starts a workflow run immediately. */
   async startRun(
-    request: WorkflowManagerStartRun,
-  ): Promise<WorkflowManagerRun> {
-    return workflowManagerRunFromProto(
+    request: WorkflowStartRun,
+  ): Promise<WorkflowRun> {
+    return workflowRunFromProto(
       await this.client.startRun({
         providerName: request.providerName,
         target: boundWorkflowTargetToProto(request.target),
@@ -286,9 +286,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Signals an existing workflow run. */
   async signalRun(
-    request: WorkflowManagerSignalRun,
-  ): Promise<WorkflowManagerRunSignal> {
-    return workflowManagerRunSignalFromProto(
+    request: WorkflowSignalRun,
+  ): Promise<WorkflowRunSignal> {
+    return workflowRunSignalFromProto(
       await this.client.signalRun({
         runId: request.runId,
         signal: workflowSignalToProto(request.signal),
@@ -299,9 +299,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Signals a workflow run, or starts it when no run exists for the key. */
   async signalOrStartRun(
-    request: WorkflowManagerSignalOrStartRun,
-  ): Promise<WorkflowManagerRunSignal> {
-    return workflowManagerRunSignalFromProto(
+    request: WorkflowSignalOrStartRun,
+  ): Promise<WorkflowRunSignal> {
+    return workflowRunSignalFromProto(
       await this.client.signalOrStartRun({
         providerName: request.providerName,
         workflowKey: request.workflowKey,
@@ -316,9 +316,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Creates a reusable workflow definition. */
   async createDefinition(
-    request: WorkflowManagerCreateDefinition,
-  ): Promise<WorkflowManagerDefinition> {
-    return workflowManagerDefinitionFromProto(
+    request: WorkflowCreateDefinition,
+  ): Promise<WorkflowDefinition> {
+    return workflowDefinitionFromProto(
       await this.client.createDefinition({
         providerName: request.providerName,
         target: boundWorkflowTargetToProto(request.target),
@@ -330,9 +330,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Fetches one workflow definition. */
   async getDefinition(
-    request: WorkflowManagerGetDefinition,
-  ): Promise<WorkflowManagerDefinition> {
-    return workflowManagerDefinitionFromProto(
+    request: WorkflowGetDefinition,
+  ): Promise<WorkflowDefinition> {
+    return workflowDefinitionFromProto(
       await this.client.getDefinition({
         definitionId: request.definitionId,
         invocationToken: this.invocationToken,
@@ -342,9 +342,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Updates a workflow definition. */
   async updateDefinition(
-    request: WorkflowManagerUpdateDefinition,
-  ): Promise<WorkflowManagerDefinition> {
-    return workflowManagerDefinitionFromProto(
+    request: WorkflowUpdateDefinition,
+  ): Promise<WorkflowDefinition> {
+    return workflowDefinitionFromProto(
       await this.client.updateDefinition({
         definitionId: request.definitionId,
         providerName: request.providerName ?? "",
@@ -356,7 +356,7 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Deletes a workflow definition. */
   async deleteDefinition(
-    request: WorkflowManagerDeleteDefinition,
+    request: WorkflowDeleteDefinition,
   ): Promise<void> {
     await this.client.deleteDefinition({
       definitionId: request.definitionId,
@@ -366,9 +366,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Creates a workflow schedule. */
   async createSchedule(
-    request: WorkflowManagerCreateSchedule,
-  ): Promise<WorkflowManagerSchedule> {
-    return workflowManagerScheduleFromProto(
+    request: WorkflowCreateSchedule,
+  ): Promise<WorkflowSchedule> {
+    return workflowScheduleFromProto(
       await this.client.upsertSchedule({
         providerName: request.providerName,
         cron: request.cron,
@@ -384,9 +384,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Fetches one workflow schedule. */
   async getSchedule(
-    request: WorkflowManagerGetSchedule,
-  ): Promise<WorkflowManagerSchedule> {
-    return workflowManagerScheduleFromProto(
+    request: WorkflowGetSchedule,
+  ): Promise<WorkflowSchedule> {
+    return workflowScheduleFromProto(
       await this.client.getSchedule({
         scheduleId: request.scheduleId,
         invocationToken: this.invocationToken,
@@ -396,9 +396,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Updates a workflow schedule. */
   async updateSchedule(
-    request: WorkflowManagerUpdateSchedule,
-  ): Promise<WorkflowManagerSchedule> {
-    return workflowManagerScheduleFromProto(
+    request: WorkflowUpdateSchedule,
+  ): Promise<WorkflowSchedule> {
+    return workflowScheduleFromProto(
       await this.client.upsertSchedule({
         scheduleId: request.scheduleId,
         providerName: request.providerName ?? "",
@@ -414,7 +414,7 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Deletes a workflow schedule. */
   async deleteSchedule(
-    request: WorkflowManagerDeleteSchedule,
+    request: WorkflowDeleteSchedule,
   ): Promise<void> {
     await this.client.deleteSchedule({
       scheduleId: request.scheduleId,
@@ -424,9 +424,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Pauses a workflow schedule. */
   async pauseSchedule(
-    request: WorkflowManagerPauseSchedule,
-  ): Promise<WorkflowManagerSchedule> {
-    return workflowManagerScheduleFromProto(
+    request: WorkflowPauseSchedule,
+  ): Promise<WorkflowSchedule> {
+    return workflowScheduleFromProto(
       await this.client.pauseSchedule({
         scheduleId: request.scheduleId,
         invocationToken: this.invocationToken,
@@ -436,9 +436,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Resumes a workflow schedule. */
   async resumeSchedule(
-    request: WorkflowManagerResumeSchedule,
-  ): Promise<WorkflowManagerSchedule> {
-    return workflowManagerScheduleFromProto(
+    request: WorkflowResumeSchedule,
+  ): Promise<WorkflowSchedule> {
+    return workflowScheduleFromProto(
       await this.client.resumeSchedule({
         scheduleId: request.scheduleId,
         invocationToken: this.invocationToken,
@@ -448,9 +448,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Creates an event trigger. */
   async createTrigger(
-    request: WorkflowManagerCreateTrigger,
-  ): Promise<WorkflowManagerEventTrigger> {
-    return workflowManagerEventTriggerFromProto(
+    request: WorkflowCreateTrigger,
+  ): Promise<WorkflowEventTrigger> {
+    return workflowEventTriggerFromProto(
       await this.client.upsertEventTrigger({
         providerName: request.providerName,
         match: workflowEventMatchToProto(request.match),
@@ -465,9 +465,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Fetches one event trigger. */
   async getTrigger(
-    request: WorkflowManagerGetTrigger,
-  ): Promise<WorkflowManagerEventTrigger> {
-    return workflowManagerEventTriggerFromProto(
+    request: WorkflowGetTrigger,
+  ): Promise<WorkflowEventTrigger> {
+    return workflowEventTriggerFromProto(
       await this.client.getEventTrigger({
         triggerId: request.triggerId,
         invocationToken: this.invocationToken,
@@ -477,9 +477,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Updates an event trigger. */
   async updateTrigger(
-    request: WorkflowManagerUpdateTrigger,
-  ): Promise<WorkflowManagerEventTrigger> {
-    return workflowManagerEventTriggerFromProto(
+    request: WorkflowUpdateTrigger,
+  ): Promise<WorkflowEventTrigger> {
+    return workflowEventTriggerFromProto(
       await this.client.upsertEventTrigger({
         triggerId: request.triggerId,
         providerName: request.providerName ?? "",
@@ -494,7 +494,7 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Deletes an event trigger. */
   async deleteTrigger(
-    request: WorkflowManagerDeleteTrigger,
+    request: WorkflowDeleteTrigger,
   ): Promise<void> {
     await this.client.deleteEventTrigger({
       triggerId: request.triggerId,
@@ -504,9 +504,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Pauses an event trigger. */
   async pauseTrigger(
-    request: WorkflowManagerPauseTrigger,
-  ): Promise<WorkflowManagerEventTrigger> {
-    return workflowManagerEventTriggerFromProto(
+    request: WorkflowPauseTrigger,
+  ): Promise<WorkflowEventTrigger> {
+    return workflowEventTriggerFromProto(
       await this.client.pauseEventTrigger({
         triggerId: request.triggerId,
         invocationToken: this.invocationToken,
@@ -516,9 +516,9 @@ class HostWorkflowManager implements WorkflowManager {
 
   /** Resumes an event trigger. */
   async resumeTrigger(
-    request: WorkflowManagerResumeTrigger,
-  ): Promise<WorkflowManagerEventTrigger> {
-    return workflowManagerEventTriggerFromProto(
+    request: WorkflowResumeTrigger,
+  ): Promise<WorkflowEventTrigger> {
+    return workflowEventTriggerFromProto(
       await this.client.resumeEventTrigger({
         triggerId: request.triggerId,
         invocationToken: this.invocationToken,
@@ -526,9 +526,9 @@ class HostWorkflowManager implements WorkflowManager {
     );
   }
 
-  /** Publishes an event into the workflow manager. */
+  /** Publishes an event into the workflow. */
   async publishEvent(
-    request: WorkflowManagerPublishEvent,
+    request: WorkflowPublishEvent,
   ): Promise<WorkflowEvent> {
     const event = workflowEventFromProto(
       await this.client.publishEvent({
@@ -538,13 +538,13 @@ class HostWorkflowManager implements WorkflowManager {
       }),
     );
     if (event === undefined) {
-      throw new Error("WorkflowManager.publishEvent returned no event");
+      throw new Error("Workflow.publishEvent returned no event");
     }
     return event;
   }
 }
 
-export const WorkflowManager = HostWorkflowManager;
+export const Workflow = HostWorkflow;
 
 function normalizeInvocationToken(requestOrToken: Request | string): string {
   const invocationToken =
@@ -553,7 +553,7 @@ function normalizeInvocationToken(requestOrToken: Request | string): string {
       : requestOrToken.invocationToken;
   const trimmed = invocationToken.trim();
   if (!trimmed) {
-    throw new Error("workflow manager: invocation token is not available");
+    throw new Error("workflow: invocation token is not available");
   }
   return trimmed;
 }

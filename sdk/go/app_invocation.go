@@ -37,8 +37,8 @@ type hostApp struct {
 	invocationToken string
 }
 
-// AppAPI is the fakeable contract for app invocation calls.
-type AppAPI interface {
+// App is the fakeable contract for app invocation calls.
+type App interface {
 	Invoke(ctx context.Context, app string, operation string, params any, opts *InvokeOptions) (*OperationResult, error)
 	InvokeGraphQL(ctx context.Context, app string, document string, variables any, opts *InvokeOptions) (*OperationResult, error)
 	ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error)
@@ -46,8 +46,8 @@ type AppAPI interface {
 
 var sharedAppTransport sharedManagerTransport[proto.AppInvokerClient]
 
-// App returns a capability that attaches invocationToken to every request.
-func App(invocationToken string) (AppAPI, error) {
+// NewApp returns a capability that attaches invocationToken to every request.
+func NewApp(invocationToken string) (App, error) {
 	if strings.TrimSpace(invocationToken) == "" {
 		return nil, fmt.Errorf("app: invocation token is not available")
 	}
@@ -71,8 +71,8 @@ func App(invocationToken string) (AppAPI, error) {
 }
 
 // AppFromContext returns an App using the context invocation token.
-func AppFromContext(ctx context.Context) (AppAPI, error) {
-	return App(InvocationTokenFromContext(ctx))
+func AppFromContext(ctx context.Context) (App, error) {
+	return NewApp(InvocationTokenFromContext(ctx))
 }
 
 // Close is a no-op because this capability uses shared transport.

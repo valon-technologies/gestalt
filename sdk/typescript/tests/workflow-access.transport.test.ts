@@ -22,7 +22,7 @@ import {
 import {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
-  WorkflowManager,
+  Workflow,
   request,
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
@@ -39,9 +39,9 @@ function workflowAgentStepTarget(provider: string, prompt: string) {
   };
 }
 
-test("WorkflowManager forwards invocation tokens from strings and Request objects", async () => {
-  const tempDir = mkdtempSync(join(tmpdir(), "gts-workflow-manager-"));
-  const socketPath = join(tempDir, "workflow-manager.sock");
+test("Workflow forwards invocation tokens from strings and Request objects", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "gts-workflow-"));
+  const socketPath = join(tempDir, "workflow.sock");
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const calls: Array<{
     method: string;
@@ -308,7 +308,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
 
     process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
 
-    const fromHandle = new WorkflowManager("invocation-token-123");
+    const fromHandle = new Workflow("invocation-token-123");
     const created = await fromHandle.createSchedule({
       providerName: "basic",
       cron: "*/5 * * * *",
@@ -321,7 +321,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     expect(created.providerName).toBe("basic");
     expect(created.schedule?.id).toBe("sched-1");
 
-    const fromRequest = new WorkflowManager(
+    const fromRequest = new Workflow(
       request(
         "tok",
         {},
@@ -556,13 +556,13 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
   }
 });
 
-test("WorkflowManager prioritizes invocation-token validation over socket configuration", () => {
+test("Workflow prioritizes invocation-token validation over socket configuration", () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
 
   try {
     delete process.env[ENV_HOST_SERVICE_SOCKET];
-    expect(() => new WorkflowManager("   ")).toThrow(
-      "workflow manager: invocation token is not available",
+    expect(() => new Workflow("   ")).toThrow(
+      "workflow: invocation token is not available",
     );
   } finally {
     if (previousSocket === undefined) {
@@ -596,7 +596,7 @@ async function reserveTCPAddress(): Promise<string> {
   });
 }
 
-test("WorkflowManager honors tcp target env and relay token env", async () => {
+test("Workflow honors tcp target env and relay token env", async () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
   const seenTokens: string[] = [];
@@ -638,7 +638,7 @@ test("WorkflowManager honors tcp target env and relay token env", async () => {
     process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
     process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
-    const manager = new WorkflowManager("invoke-token");
+    const manager = new Workflow("invoke-token");
     const created = await manager.createSchedule({
       providerName: "basic",
       cron: "*/5 * * * *",

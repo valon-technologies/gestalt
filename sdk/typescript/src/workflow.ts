@@ -544,27 +544,27 @@ export interface WorkflowHost {
   ): Promise<InvokeWorkflowOperationResponse>;
 }
 
-export interface WorkflowManagerSchedule {
+export interface WorkflowSchedule {
   providerName?: string | undefined;
   schedule?: BoundWorkflowSchedule | undefined;
 }
 
-export interface WorkflowManagerEventTrigger {
+export interface WorkflowEventTrigger {
   providerName?: string | undefined;
   trigger?: BoundWorkflowEventTrigger | undefined;
 }
 
-export interface WorkflowManagerDefinition {
+export interface WorkflowDefinition {
   providerName?: string | undefined;
   definition?: BoundWorkflowDefinition | undefined;
 }
 
-export interface WorkflowManagerRun {
+export interface WorkflowRun {
   providerName?: string | undefined;
   run?: BoundWorkflowRun | undefined;
 }
 
-export interface WorkflowManagerRunSignal {
+export interface WorkflowRunSignal {
   providerName?: string | undefined;
   run?: BoundWorkflowRun | undefined;
   signal?: WorkflowSignal | undefined;
@@ -2924,45 +2924,45 @@ function publishWorkflowProviderEventRequestFromProto(
   };
 }
 
-export function workflowManagerScheduleFromProto(
+export function workflowScheduleFromProto(
   input: ProtoBoundWorkflowSchedule,
-): WorkflowManagerSchedule {
+): WorkflowSchedule {
   return {
     providerName: input.providerName,
     schedule: boundWorkflowScheduleFromProto(input),
   };
 }
 
-export function workflowManagerEventTriggerFromProto(
+export function workflowEventTriggerFromProto(
   input: ProtoBoundWorkflowEventTrigger,
-): WorkflowManagerEventTrigger {
+): WorkflowEventTrigger {
   return {
     providerName: input.providerName,
     trigger: boundWorkflowEventTriggerFromProto(input),
   };
 }
 
-export function workflowManagerDefinitionFromProto(
+export function workflowDefinitionFromProto(
   input: ProtoBoundWorkflowDefinition,
-): WorkflowManagerDefinition {
+): WorkflowDefinition {
   return {
     providerName: input.providerName,
     definition: boundWorkflowDefinitionFromProto(input),
   };
 }
 
-export function workflowManagerRunFromProto(
+export function workflowRunFromProto(
   input: ProtoBoundWorkflowRun,
-): WorkflowManagerRun {
+): WorkflowRun {
   return {
     providerName: input.providerName,
     run: boundWorkflowRunFromProto(input),
   };
 }
 
-export function workflowManagerRunSignalFromProto(
+export function workflowRunSignalFromProto(
   input: ProtoSignalWorkflowRunResponse,
-): WorkflowManagerRunSignal {
+): WorkflowRunSignal {
   return {
     providerName: input.run?.providerName,
     run: boundWorkflowRunFromProto(input.run),

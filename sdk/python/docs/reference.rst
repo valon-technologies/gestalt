@@ -749,14 +749,14 @@ These clients connect to host services made available to a provider process by
 
    ENV_RUNTIME_SESSION_ID
    AgentHost
-   AgentManager
+   Agent
    Authorization
    AppProtocol
    RuntimeLogHost
    RuntimeLogWriter
    RuntimeLogHandler
    WorkflowHost
-   WorkflowManager
+   Workflow
 
 .. autodata:: ENV_RUNTIME_SESSION_ID
 
@@ -765,7 +765,7 @@ These clients connect to host services made available to a provider process by
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
 
-.. autoclass:: AgentManager
+.. autoclass:: Agent
    :members:
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
@@ -794,7 +794,7 @@ These clients connect to host services made available to a provider process by
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
 
-.. autoclass:: WorkflowManager
+.. autoclass:: Workflow
    :members:
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__

@@ -2,7 +2,7 @@ package gestalt
 
 import proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 
-type WorkflowManagerStartRun struct {
+type WorkflowStartRun struct {
 	ProviderName   string
 	Target         *BoundWorkflowTarget
 	IdempotencyKey string
@@ -10,12 +10,12 @@ type WorkflowManagerStartRun struct {
 	DefinitionID   string
 }
 
-type WorkflowManagerSignalRun struct {
+type WorkflowSignalRun struct {
 	RunID  string
 	Signal *WorkflowSignal
 }
 
-type WorkflowManagerSignalOrStartRun struct {
+type WorkflowSignalOrStartRun struct {
 	ProviderName   string
 	WorkflowKey    string
 	Target         *BoundWorkflowTarget
@@ -24,27 +24,27 @@ type WorkflowManagerSignalOrStartRun struct {
 	DefinitionID   string
 }
 
-type WorkflowManagerCreateDefinition struct {
+type WorkflowCreateDefinition struct {
 	ProviderName   string
 	Target         *BoundWorkflowTarget
 	IdempotencyKey string
 }
 
-type WorkflowManagerGetDefinition struct {
+type WorkflowGetDefinition struct {
 	DefinitionID string
 }
 
-type WorkflowManagerUpdateDefinition struct {
+type WorkflowUpdateDefinition struct {
 	DefinitionID string
 	ProviderName string
 	Target       *BoundWorkflowTarget
 }
 
-type WorkflowManagerDeleteDefinition struct {
+type WorkflowDeleteDefinition struct {
 	DefinitionID string
 }
 
-type WorkflowManagerCreateSchedule struct {
+type WorkflowCreateSchedule struct {
 	ProviderName   string
 	Cron           string
 	Timezone       string
@@ -54,11 +54,11 @@ type WorkflowManagerCreateSchedule struct {
 	DefinitionID   string
 }
 
-type WorkflowManagerGetSchedule struct {
+type WorkflowGetSchedule struct {
 	ScheduleID string
 }
 
-type WorkflowManagerUpdateSchedule struct {
+type WorkflowUpdateSchedule struct {
 	ScheduleID   string
 	ProviderName string
 	Cron         string
@@ -68,19 +68,19 @@ type WorkflowManagerUpdateSchedule struct {
 	DefinitionID string
 }
 
-type WorkflowManagerDeleteSchedule struct {
+type WorkflowDeleteSchedule struct {
 	ScheduleID string
 }
 
-type WorkflowManagerPauseSchedule struct {
+type WorkflowPauseSchedule struct {
 	ScheduleID string
 }
 
-type WorkflowManagerResumeSchedule struct {
+type WorkflowResumeSchedule struct {
 	ScheduleID string
 }
 
-type WorkflowManagerCreateEventTrigger struct {
+type WorkflowCreateEventTrigger struct {
 	ProviderName   string
 	Match          *WorkflowEventMatch
 	Target         *BoundWorkflowTarget
@@ -89,11 +89,11 @@ type WorkflowManagerCreateEventTrigger struct {
 	DefinitionID   string
 }
 
-type WorkflowManagerGetEventTrigger struct {
+type WorkflowGetEventTrigger struct {
 	TriggerID string
 }
 
-type WorkflowManagerUpdateEventTrigger struct {
+type WorkflowUpdateEventTrigger struct {
 	TriggerID    string
 	ProviderName string
 	Match        *WorkflowEventMatch
@@ -102,29 +102,29 @@ type WorkflowManagerUpdateEventTrigger struct {
 	DefinitionID string
 }
 
-type WorkflowManagerDeleteEventTrigger struct {
+type WorkflowDeleteEventTrigger struct {
 	TriggerID string
 }
 
-type WorkflowManagerPauseEventTrigger struct {
+type WorkflowPauseEventTrigger struct {
 	TriggerID string
 }
 
-type WorkflowManagerResumeEventTrigger struct {
+type WorkflowResumeEventTrigger struct {
 	TriggerID string
 }
 
-type WorkflowManagerPublishEvent struct {
+type WorkflowPublishEvent struct {
 	ProviderName string
 	Event        *WorkflowEvent
 }
 
-type WorkflowManagerRun struct {
+type WorkflowRun struct {
 	ProviderName string
 	Run          *BoundWorkflowRun
 }
 
-type WorkflowManagerRunSignal struct {
+type WorkflowRunSignal struct {
 	ProviderName string
 	Run          *BoundWorkflowRun
 	Signal       *WorkflowSignal
@@ -132,22 +132,22 @@ type WorkflowManagerRunSignal struct {
 	WorkflowKey  string
 }
 
-type WorkflowManagerDefinition struct {
+type WorkflowDefinition struct {
 	ProviderName string
 	Definition   *BoundWorkflowDefinition
 }
 
-type WorkflowManagerSchedule struct {
+type WorkflowSchedule struct {
 	ProviderName string
 	Schedule     *BoundWorkflowSchedule
 }
 
-type WorkflowManagerEventTrigger struct {
+type WorkflowEventTrigger struct {
 	ProviderName string
 	Trigger      *BoundWorkflowEventTrigger
 }
 
-func newWorkflowManagerStartRunRequest(input WorkflowManagerStartRun) (*proto.StartWorkflowProviderRunRequest, error) {
+func newWorkflowStartRunRequest(input WorkflowStartRun) (*proto.StartWorkflowProviderRunRequest, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
 		return nil, err
@@ -161,7 +161,7 @@ func newWorkflowManagerStartRunRequest(input WorkflowManagerStartRun) (*proto.St
 	}, nil
 }
 
-func newWorkflowManagerSignalRunRequest(input WorkflowManagerSignalRun) (*proto.SignalWorkflowProviderRunRequest, error) {
+func newWorkflowSignalRunRequest(input WorkflowSignalRun) (*proto.SignalWorkflowProviderRunRequest, error) {
 	signal, err := newOptionalWorkflowSignal(input.Signal)
 	if err != nil {
 		return nil, err
@@ -172,7 +172,7 @@ func newWorkflowManagerSignalRunRequest(input WorkflowManagerSignalRun) (*proto.
 	}, nil
 }
 
-func newWorkflowManagerSignalOrStartRunRequest(input WorkflowManagerSignalOrStartRun) (*proto.SignalOrStartWorkflowProviderRunRequest, error) {
+func newWorkflowSignalOrStartRunRequest(input WorkflowSignalOrStartRun) (*proto.SignalOrStartWorkflowProviderRunRequest, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func newWorkflowManagerSignalOrStartRunRequest(input WorkflowManagerSignalOrStar
 	}, nil
 }
 
-func newWorkflowManagerCreateDefinitionRequest(input WorkflowManagerCreateDefinition) (*proto.CreateWorkflowProviderDefinitionRequest, error) {
+func newWorkflowCreateDefinitionRequest(input WorkflowCreateDefinition) (*proto.CreateWorkflowProviderDefinitionRequest, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
 		return nil, err
@@ -203,11 +203,11 @@ func newWorkflowManagerCreateDefinitionRequest(input WorkflowManagerCreateDefini
 	}, nil
 }
 
-func newWorkflowManagerGetDefinitionRequest(input WorkflowManagerGetDefinition) *proto.GetWorkflowProviderDefinitionRequest {
+func newWorkflowGetDefinitionRequest(input WorkflowGetDefinition) *proto.GetWorkflowProviderDefinitionRequest {
 	return &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: input.DefinitionID}
 }
 
-func newWorkflowManagerUpdateDefinitionRequest(input WorkflowManagerUpdateDefinition) (*proto.UpdateWorkflowProviderDefinitionRequest, error) {
+func newWorkflowUpdateDefinitionRequest(input WorkflowUpdateDefinition) (*proto.UpdateWorkflowProviderDefinitionRequest, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
 		return nil, err
@@ -219,11 +219,11 @@ func newWorkflowManagerUpdateDefinitionRequest(input WorkflowManagerUpdateDefini
 	}, nil
 }
 
-func newWorkflowManagerDeleteDefinitionRequest(input WorkflowManagerDeleteDefinition) *proto.DeleteWorkflowProviderDefinitionRequest {
+func newWorkflowDeleteDefinitionRequest(input WorkflowDeleteDefinition) *proto.DeleteWorkflowProviderDefinitionRequest {
 	return &proto.DeleteWorkflowProviderDefinitionRequest{DefinitionId: input.DefinitionID}
 }
 
-func newWorkflowManagerCreateScheduleRequest(input WorkflowManagerCreateSchedule) (*proto.UpsertWorkflowProviderScheduleRequest, error) {
+func newWorkflowCreateScheduleRequest(input WorkflowCreateSchedule) (*proto.UpsertWorkflowProviderScheduleRequest, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
 		return nil, err
@@ -239,11 +239,11 @@ func newWorkflowManagerCreateScheduleRequest(input WorkflowManagerCreateSchedule
 	}, nil
 }
 
-func newWorkflowManagerGetScheduleRequest(input WorkflowManagerGetSchedule) *proto.GetWorkflowProviderScheduleRequest {
+func newWorkflowGetScheduleRequest(input WorkflowGetSchedule) *proto.GetWorkflowProviderScheduleRequest {
 	return &proto.GetWorkflowProviderScheduleRequest{ScheduleId: input.ScheduleID}
 }
 
-func newWorkflowManagerUpdateScheduleRequest(input WorkflowManagerUpdateSchedule) (*proto.UpsertWorkflowProviderScheduleRequest, error) {
+func newWorkflowUpdateScheduleRequest(input WorkflowUpdateSchedule) (*proto.UpsertWorkflowProviderScheduleRequest, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
 		return nil, err
@@ -259,19 +259,19 @@ func newWorkflowManagerUpdateScheduleRequest(input WorkflowManagerUpdateSchedule
 	}, nil
 }
 
-func newWorkflowManagerDeleteScheduleRequest(input WorkflowManagerDeleteSchedule) *proto.DeleteWorkflowProviderScheduleRequest {
+func newWorkflowDeleteScheduleRequest(input WorkflowDeleteSchedule) *proto.DeleteWorkflowProviderScheduleRequest {
 	return &proto.DeleteWorkflowProviderScheduleRequest{ScheduleId: input.ScheduleID}
 }
 
-func newWorkflowManagerPauseScheduleRequest(input WorkflowManagerPauseSchedule) *proto.PauseWorkflowProviderScheduleRequest {
+func newWorkflowPauseScheduleRequest(input WorkflowPauseSchedule) *proto.PauseWorkflowProviderScheduleRequest {
 	return &proto.PauseWorkflowProviderScheduleRequest{ScheduleId: input.ScheduleID}
 }
 
-func newWorkflowManagerResumeScheduleRequest(input WorkflowManagerResumeSchedule) *proto.ResumeWorkflowProviderScheduleRequest {
+func newWorkflowResumeScheduleRequest(input WorkflowResumeSchedule) *proto.ResumeWorkflowProviderScheduleRequest {
 	return &proto.ResumeWorkflowProviderScheduleRequest{ScheduleId: input.ScheduleID}
 }
 
-func newWorkflowManagerCreateEventTriggerRequest(input WorkflowManagerCreateEventTrigger) (*proto.UpsertWorkflowProviderEventTriggerRequest, error) {
+func newWorkflowCreateEventTriggerRequest(input WorkflowCreateEventTrigger) (*proto.UpsertWorkflowProviderEventTriggerRequest, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
 		return nil, err
@@ -286,11 +286,11 @@ func newWorkflowManagerCreateEventTriggerRequest(input WorkflowManagerCreateEven
 	}, nil
 }
 
-func newWorkflowManagerGetEventTriggerRequest(input WorkflowManagerGetEventTrigger) *proto.GetWorkflowProviderEventTriggerRequest {
+func newWorkflowGetEventTriggerRequest(input WorkflowGetEventTrigger) *proto.GetWorkflowProviderEventTriggerRequest {
 	return &proto.GetWorkflowProviderEventTriggerRequest{TriggerId: input.TriggerID}
 }
 
-func newWorkflowManagerUpdateEventTriggerRequest(input WorkflowManagerUpdateEventTrigger) (*proto.UpsertWorkflowProviderEventTriggerRequest, error) {
+func newWorkflowUpdateEventTriggerRequest(input WorkflowUpdateEventTrigger) (*proto.UpsertWorkflowProviderEventTriggerRequest, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
 		return nil, err
@@ -305,19 +305,19 @@ func newWorkflowManagerUpdateEventTriggerRequest(input WorkflowManagerUpdateEven
 	}, nil
 }
 
-func newWorkflowManagerDeleteEventTriggerRequest(input WorkflowManagerDeleteEventTrigger) *proto.DeleteWorkflowProviderEventTriggerRequest {
+func newWorkflowDeleteEventTriggerRequest(input WorkflowDeleteEventTrigger) *proto.DeleteWorkflowProviderEventTriggerRequest {
 	return &proto.DeleteWorkflowProviderEventTriggerRequest{TriggerId: input.TriggerID}
 }
 
-func newWorkflowManagerPauseEventTriggerRequest(input WorkflowManagerPauseEventTrigger) *proto.PauseWorkflowProviderEventTriggerRequest {
+func newWorkflowPauseEventTriggerRequest(input WorkflowPauseEventTrigger) *proto.PauseWorkflowProviderEventTriggerRequest {
 	return &proto.PauseWorkflowProviderEventTriggerRequest{TriggerId: input.TriggerID}
 }
 
-func newWorkflowManagerResumeEventTriggerRequest(input WorkflowManagerResumeEventTrigger) *proto.ResumeWorkflowProviderEventTriggerRequest {
+func newWorkflowResumeEventTriggerRequest(input WorkflowResumeEventTrigger) *proto.ResumeWorkflowProviderEventTriggerRequest {
 	return &proto.ResumeWorkflowProviderEventTriggerRequest{TriggerId: input.TriggerID}
 }
 
-func newWorkflowManagerPublishEventRequest(input WorkflowManagerPublishEvent) (*proto.PublishWorkflowProviderEventRequest, error) {
+func newWorkflowPublishEventRequest(input WorkflowPublishEvent) (*proto.PublishWorkflowProviderEventRequest, error) {
 	event, err := newOptionalWorkflowEvent(input.Event)
 	if err != nil {
 		return nil, err
@@ -342,7 +342,7 @@ func newOptionalWorkflowEvent(input *WorkflowEvent) (*proto.WorkflowEvent, error
 	return workflowEventToProto(*input)
 }
 
-func workflowManagerRunFromProto(value *proto.BoundWorkflowRun) (*WorkflowManagerRun, error) {
+func workflowRunFromProto(value *proto.BoundWorkflowRun) (*WorkflowRun, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -350,10 +350,10 @@ func workflowManagerRunFromProto(value *proto.BoundWorkflowRun) (*WorkflowManage
 	if err != nil {
 		return nil, err
 	}
-	return &WorkflowManagerRun{ProviderName: value.GetProviderName(), Run: &run}, nil
+	return &WorkflowRun{ProviderName: value.GetProviderName(), Run: &run}, nil
 }
 
-func workflowManagerRunSignalFromProto(value *proto.SignalWorkflowRunResponse) (*WorkflowManagerRunSignal, error) {
+func workflowRunSignalFromProto(value *proto.SignalWorkflowRunResponse) (*WorkflowRunSignal, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -370,7 +370,7 @@ func workflowManagerRunSignalFromProto(value *proto.SignalWorkflowRunResponse) (
 		input := workflowSignalFromProto(value.GetSignal())
 		signal = &input
 	}
-	return &WorkflowManagerRunSignal{
+	return &WorkflowRunSignal{
 		ProviderName: value.GetRun().GetProviderName(),
 		Run:          run,
 		Signal:       signal,
@@ -379,7 +379,7 @@ func workflowManagerRunSignalFromProto(value *proto.SignalWorkflowRunResponse) (
 	}, nil
 }
 
-func workflowManagerDefinitionFromProto(value *proto.BoundWorkflowDefinition) (*WorkflowManagerDefinition, error) {
+func workflowDefinitionFromProto(value *proto.BoundWorkflowDefinition) (*WorkflowDefinition, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -387,13 +387,13 @@ func workflowManagerDefinitionFromProto(value *proto.BoundWorkflowDefinition) (*
 	if err != nil {
 		return nil, err
 	}
-	return &WorkflowManagerDefinition{
+	return &WorkflowDefinition{
 		ProviderName: value.GetProviderName(),
 		Definition:   &definition,
 	}, nil
 }
 
-func workflowManagerScheduleFromProto(value *proto.BoundWorkflowSchedule) (*WorkflowManagerSchedule, error) {
+func workflowScheduleFromProto(value *proto.BoundWorkflowSchedule) (*WorkflowSchedule, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -401,10 +401,10 @@ func workflowManagerScheduleFromProto(value *proto.BoundWorkflowSchedule) (*Work
 	if err != nil {
 		return nil, err
 	}
-	return &WorkflowManagerSchedule{ProviderName: value.GetProviderName(), Schedule: &schedule}, nil
+	return &WorkflowSchedule{ProviderName: value.GetProviderName(), Schedule: &schedule}, nil
 }
 
-func workflowManagerEventTriggerFromProto(value *proto.BoundWorkflowEventTrigger) (*WorkflowManagerEventTrigger, error) {
+func workflowEventTriggerFromProto(value *proto.BoundWorkflowEventTrigger) (*WorkflowEventTrigger, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -412,7 +412,7 @@ func workflowManagerEventTriggerFromProto(value *proto.BoundWorkflowEventTrigger
 	if err != nil {
 		return nil, err
 	}
-	return &WorkflowManagerEventTrigger{
+	return &WorkflowEventTrigger{
 		ProviderName: value.GetProviderName(),
 		Trigger:      &trigger,
 	}, nil

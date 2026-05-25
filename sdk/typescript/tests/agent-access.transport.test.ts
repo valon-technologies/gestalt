@@ -25,16 +25,16 @@ import {
   AgentTurnSchema,
 } from "../src/internal/gen/v1/agent_pb.ts";
 import {
-  AgentManager,
+  Agent,
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
   request,
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
 
-test("AgentManager forwards invocation tokens across session, turn, and interaction calls", async () => {
-  const tempDir = mkdtempSync(join(tmpdir(), "gts-agent-manager-"));
-  const socketPath = join(tempDir, "agent-manager.sock");
+test("Agent forwards invocation tokens across session, turn, and interaction calls", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "gts-agent-"));
+  const socketPath = join(tempDir, "agent.sock");
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const calls: Array<{
     method: string;
@@ -258,7 +258,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
 
     process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
 
-    const fromHandle = new AgentManager("invocation-token-123");
+    const fromHandle = new Agent("invocation-token-123");
     const session = await fromHandle.createSession({
       providerName: "basic",
       model: "gpt-test",
@@ -272,7 +272,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
     expect(session.id).toBe("session-1");
     expect(session.state).toBe(AgentSessionState.ACTIVE);
 
-    const fromRequest = new AgentManager(
+    const fromRequest = new Agent(
       request("tok", {}, {}, {}, {}, {}, "invocation-token-456"),
     );
     const fetchedSession = await fromRequest.getSession({ sessionId: "session-1" });
@@ -410,13 +410,13 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
   }
 });
 
-test("AgentManager prioritizes invocation-token validation over socket configuration", () => {
+test("Agent prioritizes invocation-token validation over socket configuration", () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
 
   try {
     delete process.env[ENV_HOST_SERVICE_SOCKET];
-    expect(() => new AgentManager("   ")).toThrow(
-      "agent manager: invocation token is not available",
+    expect(() => new Agent("   ")).toThrow(
+      "agent: invocation token is not available",
     );
   } finally {
     if (previousSocket === undefined) {
@@ -450,7 +450,7 @@ async function reserveTCPAddress(): Promise<string> {
   });
 }
 
-test("AgentManager honors tcp target env and relay token env", async () => {
+test("Agent honors tcp target env and relay token env", async () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
   const seenTokens: string[] = [];
@@ -493,7 +493,7 @@ test("AgentManager honors tcp target env and relay token env", async () => {
     process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
     process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
-    const manager = new AgentManager("invoke-token");
+    const manager = new Agent("invoke-token");
     const session = await manager.createSession({
       providerName: "basic",
       model: "gpt-test",
