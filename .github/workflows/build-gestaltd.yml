@@ -4,7 +4,21 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '.dockerignore'
+      - '.github/workflows/build-gestaltd.yml'
+      - 'docs/**'
+      - 'gestaltd/**'
+      - 'sdk/go/**'
+      - 'sdk/proto/**'
   pull_request:
+    paths:
+      - '.dockerignore'
+      - '.github/workflows/build-gestaltd.yml'
+      - 'docs/**'
+      - 'gestaltd/**'
+      - 'sdk/go/**'
+      - 'sdk/proto/**'
 
   workflow_dispatch:
     inputs:
