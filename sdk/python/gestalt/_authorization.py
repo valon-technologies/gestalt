@@ -588,8 +588,75 @@ def _datetime_to_proto_json(value: _dt.datetime) -> str:
     return value.astimezone(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-class AuthorizationClient:
+class AuthorizationProtocol(Protocol):
+    """Fakeable client contract for host authorization calls."""
+
+    def evaluate(self, request: AccessEvaluationRequest) -> AccessDecision:
+        """Evaluate one authorization request."""
+
+    def evaluate_many(
+        self, request: AccessEvaluationsRequest
+    ) -> AccessEvaluationsResponse:
+        """Evaluate multiple authorization requests."""
+
+    def search_resources(
+        self, request: ResourceSearchRequest
+    ) -> ResourceSearchResponse:
+        """Search resources visible to a subject for an action."""
+
+    def search_subjects(self, request: SubjectSearchRequest) -> SubjectSearchResponse:
+        """Search subjects related to a resource and action."""
+
+    def effective_search_resources(
+        self, request: ResourceSearchRequest
+    ) -> ResourceSearchResponse:
+        """Search effective resources through inherited relationships."""
+
+    def effective_search_subjects(
+        self, request: EffectiveSubjectSearchRequest
+    ) -> EffectiveSubjectSearchResponse:
+        """Search effective subjects or subject sets."""
+
+    def search_actions(self, request: ActionSearchRequest) -> ActionSearchResponse:
+        """Search actions available between a subject and resource."""
+
+    def expand(self, request: ExpandRequest) -> ExpandResponse:
+        """Expand one resource relation."""
+
+    def read_relationships(
+        self, request: ReadRelationshipsRequest
+    ) -> ReadRelationshipsResponse:
+        """Read authorization relationships."""
+
+    def write_relationships(self, request: WriteRelationshipsRequest) -> None:
+        """Write and delete authorization relationships."""
+
+    def get_metadata(self) -> AuthorizationMetadata:
+        """Return host authorization metadata."""
+
+    def get_active_model(self) -> GetActiveModelResponse:
+        """Return the active authorization model."""
+
+    def list_models(self, request: ListModelsRequest) -> ListModelsResponse:
+        """List authorization model references."""
+
+    def write_model(self, request: WriteModelRequest) -> AuthorizationModelRef:
+        """Write an authorization model."""
+
+
+class Authorization:
     """Transport client for the host authorization provider."""
+
+    def __new__(
+        cls,
+        socket_target: str | None = None,
+        relay_token: str | None = None,
+        *,
+        _shared: bool = False,
+    ) -> Authorization:
+        if not _shared and socket_target is None and relay_token is None:
+            return _shared_authorization_client()
+        return super().__new__(cls)
 
     def __init__(
         self,
@@ -598,6 +665,8 @@ class AuthorizationClient:
         *,
         _shared: bool = False,
     ) -> None:
+        if getattr(self, "_authorization_initialized", False):
+            return
         target = _resolve_authorization_socket_target(socket_target)
         token = (
             relay_token
@@ -608,6 +677,7 @@ class AuthorizationClient:
         self._stub = authorization_pb2_grpc.AuthorizationProviderStub(self._channel)
         self._closed = False
         self._shared = _shared
+        self._authorization_initialized = True
 
     def close(self) -> None:
         """Close the underlying gRPC channel."""
@@ -752,14 +822,14 @@ class AuthorizationClient:
             )
         ))
 
-    def __enter__(self) -> AuthorizationClient:
+    def __enter__(self) -> Authorization:
         return self
 
     def __exit__(self, *args: Any) -> None:
         self.close()
 
 
-def Authorization() -> AuthorizationClient:
+def _shared_authorization_client() -> Authorization:
     """Return a cached client for the host authorization provider."""
 
     target = _resolve_authorization_socket_target()
@@ -774,7 +844,7 @@ def Authorization() -> AuthorizationClient:
         ):
             return client
 
-        client = AuthorizationClient(target, token, _shared=True)
+        client = Authorization(target, token, _shared=True)
         stale = shared.get("client")
         shared["target"] = target
         shared["token"] = token
@@ -782,7 +852,6 @@ def Authorization() -> AuthorizationClient:
         if stale is not None:
             stale._close_channel()
         return client
-
 
 def _resolve_authorization_socket_target(
     socket_target: str | None = None,

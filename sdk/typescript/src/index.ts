@@ -30,7 +30,6 @@
  */
 export {
   Authorization,
-  AuthorizationClient,
   AuthorizationProvider,
   AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
   authorizationAction,

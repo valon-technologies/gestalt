@@ -377,7 +377,7 @@ export interface AuthorizationWriteModelInput {
 const sharedAuthorizationTransport: {
   target: string;
   token: string;
-  client: AuthorizationClient | undefined;
+  client: HostAuthorization | undefined;
 } = {
   target: "",
   token: "",
@@ -385,12 +385,52 @@ const sharedAuthorizationTransport: {
 };
 
 /**
+ * Fakeable client contract for host authorization calls.
+ */
+export interface Authorization {
+  evaluate(request: AuthorizationEvaluateInput): Promise<AuthorizationDecision>;
+  evaluateMany(
+    request: AuthorizationEvaluateManyInput,
+  ): Promise<AuthorizationEvaluationsResponse>;
+  searchResources(
+    request: AuthorizationSearchResourcesInput,
+  ): Promise<AuthorizationResourceSearch>;
+  searchSubjects(
+    request: AuthorizationSearchSubjectsInput,
+  ): Promise<AuthorizationSubjectSearch>;
+  effectiveSearchResources(
+    request: AuthorizationSearchResourcesInput,
+  ): Promise<AuthorizationResourceSearch>;
+  effectiveSearchSubjects(
+    request: AuthorizationEffectiveSearchSubjectsInput,
+  ): Promise<AuthorizationEffectiveSubjectSearch>;
+  searchActions(
+    request: AuthorizationSearchActionsInput,
+  ): Promise<AuthorizationActionSearch>;
+  expand(request: AuthorizationExpandInput): Promise<AuthorizationExpand>;
+  readRelationships(
+    request: AuthorizationReadRelationshipsInput,
+  ): Promise<AuthorizationReadRelationships>;
+  writeRelationships(
+    request: AuthorizationWriteRelationshipsInput,
+  ): Promise<void>;
+  getMetadata(): Promise<AuthorizationMetadata>;
+  getActiveModel(): Promise<AuthorizationGetActiveModel>;
+  listModels(
+    request?: AuthorizationListModelsInput,
+  ): Promise<AuthorizationListModels>;
+  writeModel(
+    request: AuthorizationWriteModelInput,
+  ): Promise<AuthorizationModelRef>;
+}
+
+/**
  * Client for the host-configured authorization provider.
  *
  * The client accepts plain SDK request objects and keeps transport message
  * construction inside the SDK.
  */
-export class AuthorizationClient {
+class HostAuthorization implements Authorization {
   private readonly client: Client<typeof AuthorizationProviderService>;
 
   constructor(
@@ -811,7 +851,7 @@ function requiredAuthorizationResponse<T>(
 /**
  * Returns a shared host authorization client for authored providers.
  */
-export function Authorization(): AuthorizationClient {
+export function Authorization(): Authorization {
   const target = resolveAuthorizationSocketTarget();
   const token = process.env[ENV_HOST_SERVICE_TOKEN]?.trim() ?? "";
   if (
@@ -822,7 +862,7 @@ export function Authorization(): AuthorizationClient {
     return sharedAuthorizationTransport.client;
   }
 
-  const client = new AuthorizationClient(target, token);
+  const client = new HostAuthorization(target, token);
   sharedAuthorizationTransport.target = target;
   sharedAuthorizationTransport.token = token;
   sharedAuthorizationTransport.client = client;

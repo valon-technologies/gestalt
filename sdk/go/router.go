@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	sdkauthorization "github.com/valon-technologies/gestalt/sdk/go/authorization"
 )
 
 // Request carries execution-scoped metadata into typed handlers.
@@ -58,7 +60,7 @@ func (r Request) AgentManager() (*AgentManagerClient, error) {
 	return AgentManager(r.invocationToken)
 }
 
-func (r Request) Authorization() (*AuthorizationClient, error) {
+func (r Request) Authorization() (sdkauthorization.Authorization, error) {
 	return Authorization()
 }
 

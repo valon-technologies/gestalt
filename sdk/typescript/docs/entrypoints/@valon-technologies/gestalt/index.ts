@@ -29,7 +29,6 @@
  */
 export {
   Authorization,
-  AuthorizationClient,
   AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
   authorizationAction,
   authorizationRelationship,
