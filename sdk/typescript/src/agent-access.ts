@@ -167,7 +167,7 @@ export interface Agent {
  * The constructor accepts either a Gestalt request or an invocation token. Each
  * agent call forwards that token to the agent-provider facade.
  */
-class HostAgent implements Agent {
+class AgentImpl implements Agent {
   private readonly client: Client<typeof AgentProviderService>;
   private readonly invocationToken: string;
 
@@ -364,7 +364,7 @@ function workspaceToProto(workspace?: AgentWorkspace | undefined) {
   };
 }
 
-export const Agent = HostAgent;
+export const Agent = AgentImpl;
 
 function agentSessionFromProto(session: ProtoAgentSession): AgentSession {
   return {

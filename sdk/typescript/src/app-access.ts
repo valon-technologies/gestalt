@@ -62,7 +62,7 @@ export interface App {
  * The constructor accepts either a Gestalt request or an invocation token. The
  * token is attached to every operation, GraphQL, and token-exchange request.
  */
-class RemoteApp implements App {
+class AppImpl implements App {
   private readonly client: Client<typeof AppService>;
   private readonly invocationToken: string;
 
@@ -156,7 +156,7 @@ class RemoteApp implements App {
   }
 }
 
-export const App = RemoteApp;
+export const App = AppImpl;
 
 function normalizeInvocationToken(requestOrToken: Request | string): string {
   const invocationToken =

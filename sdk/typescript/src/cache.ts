@@ -26,7 +26,7 @@ export interface CacheSetOptions {
 }
 
 /**
- * Fakeable cache client contract shared by host clients and tests.
+ * Fakeable cache contract shared by SDK callers and tests.
  */
 export interface Cache {
   get(key: string): Promise<Uint8Array | undefined>;
@@ -76,7 +76,7 @@ export interface CacheProviderOptions extends ProviderBaseOptions {
  * await cache.set("session", new TextEncoder().encode("hello"));
  * ```
  */
-class RemoteCache implements Cache {
+class CacheImpl implements Cache {
   private readonly client: ConnectClient<typeof CacheService>;
 
   constructor(name?: string) {
@@ -160,7 +160,7 @@ class RemoteCache implements Cache {
   }
 }
 
-export const Cache = RemoteCache;
+export const Cache = CacheImpl;
 
 /**
  * Cache provider implementation consumed by the Gestalt runtime.

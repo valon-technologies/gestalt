@@ -210,7 +210,7 @@ export interface Cursor {
 /**
  * Streaming cursor over an object store or secondary index.
  */
-class RemoteCursor implements Cursor {
+class CursorImpl implements Cursor {
   private sendQueue: AsyncQueue<any>;
   private responseIterator: AsyncIterator<any>;
   private _key: unknown = undefined;
@@ -265,7 +265,7 @@ class RemoteCursor implements Cursor {
     const responseIterator = responses[Symbol.asyncIterator]();
 
     const isIndex = !!options?.index;
-    const cursor = new RemoteCursor(sendQueue, responseIterator, isIndex);
+    const cursor = new CursorImpl(sendQueue, responseIterator, isIndex);
     // Read the open ack to surface creation errors synchronously.
     await cursor.recvOpenAck();
     return cursor;
@@ -900,7 +900,7 @@ function compareBytes(left: Uint8Array, right: Uint8Array): number {
  * const todos = db.objectStore("todos");
  * ```
  */
-class RemoteIndexedDB implements IndexedDB {
+class IndexedDBImpl implements IndexedDB {
   private client: Client<typeof IndexedDBService>;
 
   constructor(name?: string) {
@@ -956,7 +956,7 @@ class RemoteIndexedDB implements IndexedDB {
    * Returns a client bound to a single object store.
    */
   objectStore(name: string): ObjectStore {
-    return new RemoteObjectStore(this.client, name);
+    return new ObjectStoreImpl(this.client, name);
   }
 
   /**
@@ -967,14 +967,14 @@ class RemoteIndexedDB implements IndexedDB {
     mode: TransactionMode = "readonly",
     options?: TransactionOptions,
   ): Promise<Transaction> {
-    return RemoteTransaction.open(this.client, stores, mode, options);
+    return TransactionImpl.open(this.client, stores, mode, options);
   }
 }
 
 /**
  * Explicit transaction over one or more object stores.
  */
-class RemoteTransaction implements Transaction {
+class TransactionImpl implements Transaction {
   private sendQueue: AsyncQueue<any>;
   private responseIterator: AsyncIterator<any>;
   private closed = false;
@@ -1013,7 +1013,7 @@ class RemoteTransaction implements Transaction {
     });
     const responses = client.transaction(sendQueue);
     const responseIterator = responses[Symbol.asyncIterator]();
-    const tx = new RemoteTransaction(sendQueue, responseIterator);
+    const tx = new TransactionImpl(sendQueue, responseIterator);
     try {
       const { value: resp, done } = await responseIterator.next();
       if (done || !resp) {
@@ -1035,7 +1035,7 @@ class RemoteTransaction implements Transaction {
    * Returns a transaction-scoped object store.
    */
   objectStore(name: string): TransactionObjectStore {
-    return new RemoteTransactionObjectStore(this, name);
+    return new TransactionObjectStoreImpl(this, name);
   }
 
   /**
@@ -1160,12 +1160,12 @@ class RemoteTransaction implements Transaction {
 /**
  * Transaction-scoped object-store client.
  */
-class RemoteTransactionObjectStore implements TransactionObjectStore {
+class TransactionObjectStoreImpl implements TransactionObjectStore {
   /**
    * @internal
    */
   constructor(
-    private tx: RemoteTransaction,
+    private tx: TransactionImpl,
     private store: string,
   ) {}
 
@@ -1288,19 +1288,19 @@ class RemoteTransactionObjectStore implements TransactionObjectStore {
    * Returns a transaction-scoped secondary index.
    */
   index(name: string): TransactionIndex {
-    return new RemoteTransactionIndex(this.tx, this.store, name);
+    return new TransactionIndexImpl(this.tx, this.store, name);
   }
 }
 
 /**
  * Transaction-scoped secondary-index client.
  */
-class RemoteTransactionIndex implements TransactionIndex {
+class TransactionIndexImpl implements TransactionIndex {
   /**
    * @internal
    */
   constructor(
-    private tx: RemoteTransaction,
+    private tx: TransactionImpl,
     private store: string,
     private indexName: string,
   ) {}
@@ -1398,7 +1398,7 @@ class RemoteTransactionIndex implements TransactionIndex {
 /**
  * Object store client used for primary-key operations.
  */
-class RemoteObjectStore implements ObjectStore {
+class ObjectStoreImpl implements ObjectStore {
   /**
    * @internal
    */
@@ -1503,14 +1503,14 @@ class RemoteObjectStore implements ObjectStore {
    * Opens a cursor over the object store.
    */
   async openCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
-    return RemoteCursor.open(this.client, this.store, options);
+    return CursorImpl.open(this.client, this.store, options);
   }
 
   /**
    * Opens a key-only cursor over the object store.
    */
   async openKeyCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
-    return RemoteCursor.open(this.client, this.store, {
+    return CursorImpl.open(this.client, this.store, {
       ...options,
       keysOnly: true,
     });
@@ -1520,14 +1520,14 @@ class RemoteObjectStore implements ObjectStore {
    * Returns a client bound to a secondary index.
    */
   index(name: string): Index {
-    return new RemoteIndex(this.client, this.store, name);
+    return new IndexImpl(this.client, this.store, name);
   }
 }
 
 /**
  * Secondary-index client used for lookup and cursor operations.
  */
-class RemoteIndex implements Index {
+class IndexImpl implements Index {
   /**
    * @internal
    */
@@ -1639,7 +1639,7 @@ class RemoteIndex implements Index {
     options?: OpenCursorOptions,
     ...values: unknown[]
   ): Promise<Cursor | null> {
-    return RemoteCursor.open(this.client, this.store, {
+    return CursorImpl.open(this.client, this.store, {
       ...options,
       index: this.indexName,
       indexValues: values,
@@ -1653,7 +1653,7 @@ class RemoteIndex implements Index {
     options?: OpenCursorOptions,
     ...values: unknown[]
   ): Promise<Cursor | null> {
-    return RemoteCursor.open(this.client, this.store, {
+    return CursorImpl.open(this.client, this.store, {
       ...options,
       keysOnly: true,
       index: this.indexName,
@@ -1895,4 +1895,4 @@ function mapTransactionTransportError(err: any): never {
   throw err;
 }
 
-export const IndexedDB = RemoteIndexedDB;
+export const IndexedDB = IndexedDBImpl;

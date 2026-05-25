@@ -1655,7 +1655,7 @@ export function isWorkflowProvider(value: unknown): value is WorkflowProvider {
 }
 
 /** Client for invoking operations from workflow provider code. */
-class HostWorkflowHost implements WorkflowHost {
+class WorkflowHostImpl implements WorkflowHost {
   private readonly client: Client<typeof WorkflowHostService>;
 
   constructor() {
@@ -3023,7 +3023,7 @@ function listRunsResult(
   return "runs" in value ? value : { runs: value };
 }
 
-export const WorkflowHost = HostWorkflowHost;
+export const WorkflowHost = WorkflowHostImpl;
 
 async function invokeWorkflowProvider<T>(
   action: string,
