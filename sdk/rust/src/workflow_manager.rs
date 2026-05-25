@@ -1,6 +1,7 @@
 use hyper_util::rt::TokioIo;
 use tokio::net::UnixStream;
 use tonic::Request;
+use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
@@ -181,6 +182,91 @@ pub struct WorkflowManagerResumeEventTrigger {
 pub struct WorkflowManagerPublishEvent {
     pub provider_name: String,
     pub event: Option<WorkflowEvent>,
+}
+
+#[async_trait]
+/// Fakeable client contract for workflow manager calls.
+pub trait WorkflowManagerApi: Send {
+    async fn start_run(
+        &mut self,
+        input: WorkflowManagerStartRun,
+    ) -> std::result::Result<WorkflowManagerRun, WorkflowManagerError>;
+    async fn signal_run(
+        &mut self,
+        input: WorkflowManagerSignalRun,
+    ) -> std::result::Result<WorkflowManagerRunSignal, WorkflowManagerError>;
+    async fn signal_or_start_run(
+        &mut self,
+        input: WorkflowManagerSignalOrStartRun,
+    ) -> std::result::Result<WorkflowManagerRunSignal, WorkflowManagerError>;
+    async fn create_definition(
+        &mut self,
+        input: WorkflowManagerCreateDefinition,
+    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError>;
+    async fn get_definition(
+        &mut self,
+        input: WorkflowManagerGetDefinition,
+    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError>;
+    async fn update_definition(
+        &mut self,
+        input: WorkflowManagerUpdateDefinition,
+    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError>;
+    async fn delete_definition(
+        &mut self,
+        input: WorkflowManagerDeleteDefinition,
+    ) -> std::result::Result<(), WorkflowManagerError>;
+    async fn create_schedule(
+        &mut self,
+        input: WorkflowManagerCreateSchedule,
+    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError>;
+    async fn get_schedule(
+        &mut self,
+        input: WorkflowManagerGetSchedule,
+    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError>;
+    async fn update_schedule(
+        &mut self,
+        input: WorkflowManagerUpdateSchedule,
+    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError>;
+    async fn delete_schedule(
+        &mut self,
+        input: WorkflowManagerDeleteSchedule,
+    ) -> std::result::Result<(), WorkflowManagerError>;
+    async fn pause_schedule(
+        &mut self,
+        input: WorkflowManagerPauseSchedule,
+    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError>;
+    async fn resume_schedule(
+        &mut self,
+        input: WorkflowManagerResumeSchedule,
+    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError>;
+    async fn create_trigger(
+        &mut self,
+        input: WorkflowManagerCreateEventTrigger,
+    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError>;
+    async fn get_trigger(
+        &mut self,
+        input: WorkflowManagerGetEventTrigger,
+    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError>;
+    async fn update_trigger(
+        &mut self,
+        input: WorkflowManagerUpdateEventTrigger,
+    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError>;
+    async fn delete_trigger(
+        &mut self,
+        input: WorkflowManagerDeleteEventTrigger,
+    ) -> std::result::Result<(), WorkflowManagerError>;
+    async fn pause_trigger(
+        &mut self,
+        input: WorkflowManagerPauseEventTrigger,
+    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError>;
+    async fn resume_trigger(
+        &mut self,
+        input: WorkflowManagerResumeEventTrigger,
+    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError>;
+    async fn publish_event(
+        &mut self,
+        input: WorkflowManagerPublishEvent,
+    ) -> std::result::Result<WorkflowEvent, WorkflowManagerError>;
 }
 
 pub(crate) fn new_workflow_manager_start_run_request(
@@ -789,6 +875,149 @@ impl WorkflowManager {
         Ok(crate::workflow::workflow_event_from_proto(
             self.client.publish_event(request).await?.into_inner(),
         )?)
+    }
+}
+
+#[async_trait]
+impl WorkflowManagerApi for WorkflowManager {
+    async fn start_run(
+        &mut self,
+        input: WorkflowManagerStartRun,
+    ) -> std::result::Result<WorkflowManagerRun, WorkflowManagerError> {
+        WorkflowManager::start_run(self, input).await
+    }
+
+    async fn signal_run(
+        &mut self,
+        input: WorkflowManagerSignalRun,
+    ) -> std::result::Result<WorkflowManagerRunSignal, WorkflowManagerError> {
+        WorkflowManager::signal_run(self, input).await
+    }
+
+    async fn signal_or_start_run(
+        &mut self,
+        input: WorkflowManagerSignalOrStartRun,
+    ) -> std::result::Result<WorkflowManagerRunSignal, WorkflowManagerError> {
+        WorkflowManager::signal_or_start_run(self, input).await
+    }
+
+    async fn create_definition(
+        &mut self,
+        input: WorkflowManagerCreateDefinition,
+    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError> {
+        WorkflowManager::create_definition(self, input).await
+    }
+
+    async fn get_definition(
+        &mut self,
+        input: WorkflowManagerGetDefinition,
+    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError> {
+        WorkflowManager::get_definition(self, input).await
+    }
+
+    async fn update_definition(
+        &mut self,
+        input: WorkflowManagerUpdateDefinition,
+    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError> {
+        WorkflowManager::update_definition(self, input).await
+    }
+
+    async fn delete_definition(
+        &mut self,
+        input: WorkflowManagerDeleteDefinition,
+    ) -> std::result::Result<(), WorkflowManagerError> {
+        WorkflowManager::delete_definition(self, input).await
+    }
+
+    async fn create_schedule(
+        &mut self,
+        input: WorkflowManagerCreateSchedule,
+    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
+        WorkflowManager::create_schedule(self, input).await
+    }
+
+    async fn get_schedule(
+        &mut self,
+        input: WorkflowManagerGetSchedule,
+    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
+        WorkflowManager::get_schedule(self, input).await
+    }
+
+    async fn update_schedule(
+        &mut self,
+        input: WorkflowManagerUpdateSchedule,
+    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
+        WorkflowManager::update_schedule(self, input).await
+    }
+
+    async fn delete_schedule(
+        &mut self,
+        input: WorkflowManagerDeleteSchedule,
+    ) -> std::result::Result<(), WorkflowManagerError> {
+        WorkflowManager::delete_schedule(self, input).await
+    }
+
+    async fn pause_schedule(
+        &mut self,
+        input: WorkflowManagerPauseSchedule,
+    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
+        WorkflowManager::pause_schedule(self, input).await
+    }
+
+    async fn resume_schedule(
+        &mut self,
+        input: WorkflowManagerResumeSchedule,
+    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
+        WorkflowManager::resume_schedule(self, input).await
+    }
+
+    async fn create_trigger(
+        &mut self,
+        input: WorkflowManagerCreateEventTrigger,
+    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
+        WorkflowManager::create_trigger(self, input).await
+    }
+
+    async fn get_trigger(
+        &mut self,
+        input: WorkflowManagerGetEventTrigger,
+    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
+        WorkflowManager::get_trigger(self, input).await
+    }
+
+    async fn update_trigger(
+        &mut self,
+        input: WorkflowManagerUpdateEventTrigger,
+    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
+        WorkflowManager::update_trigger(self, input).await
+    }
+
+    async fn delete_trigger(
+        &mut self,
+        input: WorkflowManagerDeleteEventTrigger,
+    ) -> std::result::Result<(), WorkflowManagerError> {
+        WorkflowManager::delete_trigger(self, input).await
+    }
+
+    async fn pause_trigger(
+        &mut self,
+        input: WorkflowManagerPauseEventTrigger,
+    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
+        WorkflowManager::pause_trigger(self, input).await
+    }
+
+    async fn resume_trigger(
+        &mut self,
+        input: WorkflowManagerResumeEventTrigger,
+    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
+        WorkflowManager::resume_trigger(self, input).await
+    }
+
+    async fn publish_event(
+        &mut self,
+        input: WorkflowManagerPublishEvent,
+    ) -> std::result::Result<WorkflowEvent, WorkflowManagerError> {
+        WorkflowManager::publish_event(self, input).await
     }
 }
 

@@ -4,7 +4,7 @@ import datetime as _dt
 import os
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, TypeAlias
+from typing import Any, Protocol, TypeAlias
 
 import grpc
 
@@ -1751,6 +1751,78 @@ def agent_messages_from_dicts(messages: Iterable[Mapping[str, Any]]) -> list[Any
     return [agent_message_from_dict(message) for message in messages]
 
 
+class AgentHostProtocol(Protocol):
+    """Fakeable contract for agent host tool calls."""
+
+    def close(self) -> None:
+        """Close the client."""
+
+    def execute_tool(
+        self,
+        request: ExecuteAgentToolRequest | Mapping[str, Any],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> ExecuteAgentToolResponse:
+        """Execute a host tool."""
+
+    def execute_tool_for_turn(
+        self,
+        session_id: str,
+        turn_id: str,
+        *,
+        tool_call_id: str,
+        tool_id: str,
+        arguments: Mapping[str, Any] | None = None,
+        run_grant: str = "",
+        idempotency_key: str = "",
+        timeout_seconds: float | None = None,
+    ) -> ExecuteAgentToolResponse:
+        """Execute a host tool for one turn."""
+
+    def list_tools(
+        self,
+        request: ListAgentToolsRequest | Mapping[str, Any] | None = None,
+        *,
+        timeout_seconds: float | None = None,
+        **kwargs: Any,
+    ) -> ListAgentToolsResponse:
+        """List host tools."""
+
+    def list_tools_for_turn(
+        self,
+        session_id: str,
+        turn_id: str,
+        *,
+        run_grant: str = "",
+        page_size: int = 0,
+        page_token: str = "",
+        query: str = "",
+        timeout_seconds: float | None = None,
+    ) -> ListAgentToolsResponse:
+        """List host tools for one turn."""
+
+    def resolve_connection(
+        self,
+        request: ResolveAgentConnectionRequest | Mapping[str, Any] | None = None,
+        *,
+        timeout_seconds: float | None = None,
+        **kwargs: Any,
+    ) -> ResolvedAgentConnection:
+        """Resolve an agent connection."""
+
+    def resolve_connection_for_turn(
+        self,
+        session_id: str,
+        turn_id: str,
+        *,
+        connection: str,
+        instance: str = "",
+        run_grant: str = "",
+        timeout_seconds: float | None = None,
+    ) -> ResolvedAgentConnection:
+        """Resolve an agent connection for one turn."""
+
+
 class AgentHost:
     """Client for the agent host service available inside agent providers.
 
@@ -2079,6 +2151,56 @@ def _agent_manager_resolve_interaction_request(
     if data.get("resolution") is not None:
         request.resolution.CopyFrom(struct_from_dict(data["resolution"]))
     return request
+
+
+class AgentManagerProtocol(Protocol):
+    """Fakeable contract for agent management calls."""
+
+    def close(self) -> None:
+        """Close the client."""
+
+    def create_session(self, request: Any | None = None, **kwargs: Any) -> AgentSession:
+        """Create an agent session."""
+
+    def get_session(self, request: Any | None = None, **kwargs: Any) -> AgentSession:
+        """Fetch one agent session."""
+
+    def list_sessions(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> ListAgentManagerSessionsResponse:
+        """List agent sessions."""
+
+    def update_session(self, request: Any | None = None, **kwargs: Any) -> AgentSession:
+        """Update an agent session."""
+
+    def create_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
+        """Create an agent turn."""
+
+    def get_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
+        """Fetch one agent turn."""
+
+    def list_turns(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> ListAgentManagerTurnsResponse:
+        """List agent turns."""
+
+    def cancel_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
+        """Cancel an agent turn."""
+
+    def list_turn_events(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> ListAgentManagerTurnEventsResponse:
+        """List agent turn events."""
+
+    def list_interactions(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> ListAgentManagerInteractionsResponse:
+        """List agent interactions."""
+
+    def resolve_interaction(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> AgentInteraction:
+        """Resolve an agent interaction."""
 
 
 class AgentManager:

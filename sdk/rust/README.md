@@ -24,7 +24,7 @@ provider code imports from the crate root after renaming `gestalt-sdk` to
 | Catalog metadata | [`Catalog`], [`CatalogOperation`], [`Router::register`] | Schema-derived operation catalogs from `serde` and `schemars` types. |
 | Provider runtimes | [`AuthenticationProvider`], [`CacheProvider`], [`S3Provider`], [`SecretsProvider`], [`WorkflowProvider`], [`AgentProvider`], [`RuntimeProvider`] | Host-service backends implemented as Rust providers. |
 | Workflow and agent models | [`new_bound_workflow_target`], [`new_workflow_signal`], [`new_bound_workflow_run`], [`new_workflow_execution_reference`], [`new_agent_message`], [`new_agent_tool_ref`] | Native workflow values, agent messages, tool refs, and copy helpers. |
-| Host-service clients | [`Cache`], [`S3`], [`WorkflowHost`], [`WorkflowManager`], [`AgentHost`], [`AgentManager`], [`AppInvoker`] | Calling sibling services exposed to a provider process by `gestaltd`. |
+| Host-service clients | [`Cache`], [`S3`], [`WorkflowHost`], [`WorkflowManager`], [`AgentHost`], [`AgentManager`], [`App`] | Calling sibling services exposed to a provider process by `gestaltd`. |
 | Runtime and telemetry | [`runtime`], [`telemetry`], [`RuntimeMetadata`] | Provider process entrypoints and provider-authored GenAI spans and metrics. |
 
 ## Quick start
@@ -91,7 +91,7 @@ a host-service backend.
 
 The crate also exposes clients for sibling host services, including `Cache`,
 `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`, `AgentManager`, and
-`AppInvoker`.
+`App`.
 
 `AgentProvider` implementations receive and return native structs such as
 `CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
@@ -120,7 +120,7 @@ The crate exposes higher-level authoring APIs:
   `WorkflowProvider`, `AgentProvider`, and `RuntimeProvider` model
   executable provider runtimes.
 - `Cache`, `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`,
-  `AgentManager`, and `AppInvoker` call sibling host services.
+  `AgentManager`, and `App` call sibling host services.
 - `RuntimeMetadata` lets provider runtimes describe their display metadata and
   version.
 - Workflow builder inputs such as `BoundWorkflowTarget`, `WorkflowStep`,

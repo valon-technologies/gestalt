@@ -30,7 +30,6 @@
  */
 export {
   Authorization,
-  AuthorizationClient,
   AuthorizationProvider,
   AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
   authorizationAction,
@@ -137,11 +136,11 @@ export {
   parseBuildArgs,
 } from "./build.ts";
 export {
-  AppInvoker,
+  App,
   type AppGraphQLInvokeOptions,
   type AppInvocationGrant,
   type AppInvokeOptions,
-} from "./invoker.ts";
+} from "./host-app.ts";
 export {
   AgentManager,
   type AgentManagerCancelTurn,

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	cachesdk "github.com/valon-technologies/gestalt/sdk/go/cache"
 	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
@@ -25,7 +26,7 @@ import (
 
 var (
 	testClient      gestalt.IndexedDBDatabase
-	testCacheClient *gestalt.CacheClient
+	testCacheClient cachesdk.Cache
 	testS3Client    s3sdk.S3
 	testIDBSocket   string
 	testCacheSocket string
@@ -69,7 +70,6 @@ func TestMain(m *testing.M) {
 	s3Client, err := gestalt.S3(context.Background())
 	if err != nil {
 		_ = client.Close()
-		_ = cacheClient.Close()
 		_ = idbCmd.Process.Kill()
 		_ = cacheCmd.Process.Kill()
 		_ = s3Cmd.Process.Kill()
@@ -80,7 +80,6 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	_ = client.Close()
-	_ = cacheClient.Close()
 	_ = s3Client.Close()
 	_ = idbCmd.Process.Kill()
 	_ = cacheCmd.Process.Kill()

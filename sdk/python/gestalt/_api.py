@@ -26,8 +26,8 @@ else:
 
 if TYPE_CHECKING:
     from ._agent import AgentManager, AgentToolRef
-    from ._authorization import AuthorizationClient
-    from ._invoker import AppInvoker
+    from ._authorization import Authorization
+    from ._host_app import AppProtocol
     from ._workflow import WorkflowManager
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
@@ -111,10 +111,10 @@ class Request:
 
         return self.connection_params.get(name)
 
-    def invoker(self) -> "AppInvoker":
-        from ._invoker import AppInvoker
+    def app(self) -> "AppProtocol":
+        from ._host_app import _HostApp
 
-        return AppInvoker(self.invocation_token)
+        return _HostApp(self.invocation_token)
 
     def agent_manager(self) -> "AgentManager":
         from ._agent import AgentManager
@@ -129,10 +129,10 @@ class Request:
             idempotency_key=self.idempotency_key,
         )
 
-    def authorization(self) -> "AuthorizationClient":
-        from ._authorization import Authorization
+    def authorization(self) -> "Authorization":
+        from ._authorization import _shared_authorization_client
 
-        return Authorization()
+        return _shared_authorization_client()
 
 
 @dataclasses.dataclass(slots=True)

@@ -28,24 +28,30 @@ type InvocationGrant struct {
 	Operations []string
 	// Surfaces are the surface names allowed by the child token.
 	Surfaces []string
-	// AllOperations allows every operation on Plugin.
+	// AllOperations allows every operation on App.
 	AllOperations bool
 }
 
-// InvokerClient invokes sibling app operations through the host.
-type InvokerClient struct {
+type hostApp struct {
 	client          proto.AppInvokerClient
 	invocationToken string
 }
 
-var sharedInvokerTransport sharedManagerTransport[proto.AppInvokerClient]
+// AppAPI is the fakeable contract for app invocation calls.
+type AppAPI interface {
+	Invoke(ctx context.Context, app string, operation string, params any, opts *InvokeOptions) (*OperationResult, error)
+	InvokeGraphQL(ctx context.Context, app string, document string, variables any, opts *InvokeOptions) (*OperationResult, error)
+	ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error)
+}
 
-// Invoker returns a client that attaches invocationToken to every request.
-func Invoker(invocationToken string) (*InvokerClient, error) {
+var sharedAppTransport sharedManagerTransport[proto.AppInvokerClient]
+
+// App returns a capability that attaches invocationToken to every request.
+func App(invocationToken string) (AppAPI, error) {
 	if strings.TrimSpace(invocationToken) == "" {
-		return nil, fmt.Errorf("app invoker: invocation token is not available")
+		return nil, fmt.Errorf("app: invocation token is not available")
 	}
-	target, token, err := hostServiceTarget("app invoker")
+	target, token, err := hostServiceTarget("app")
 	if err != nil {
 		return nil, err
 	}
@@ -53,38 +59,38 @@ func Invoker(invocationToken string) (*InvokerClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "app invoker", target, token, &sharedInvokerTransport, proto.NewAppInvokerClient)
+	client, err := managerTransportClient(ctx, "app", target, token, &sharedAppTransport, proto.NewAppInvokerClient)
 	if err != nil {
 		return nil, err
 	}
 
-	return &InvokerClient{
+	return &hostApp{
 		client:          client,
 		invocationToken: strings.TrimSpace(invocationToken),
 	}, nil
 }
 
-// InvokerFromContext returns an Invoker using the context invocation token.
-func InvokerFromContext(ctx context.Context) (*InvokerClient, error) {
-	return Invoker(InvocationTokenFromContext(ctx))
+// AppFromContext returns an App using the context invocation token.
+func AppFromContext(ctx context.Context) (AppAPI, error) {
+	return App(InvocationTokenFromContext(ctx))
 }
 
-// Close is a no-op compatibility method because this client uses shared transport.
-func (c *InvokerClient) Close() error {
+// Close is a no-op because this capability uses shared transport.
+func (c *hostApp) Close() error {
 	return nil
 }
 
 // Invoke calls one operation on another app.
-func (c *InvokerClient) Invoke(ctx context.Context, app, operation string, params any, opts *InvokeOptions) (*OperationResult, error) {
+func (c *hostApp) Invoke(ctx context.Context, app, operation string, params any, opts *InvokeOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
-		return nil, fmt.Errorf("app invoker: client is not initialized")
+		return nil, fmt.Errorf("app: client is not initialized")
 	}
 	if params == nil {
 		params = map[string]any{}
 	}
 	msg, err := structFromAny(params)
 	if err != nil {
-		return nil, fmt.Errorf("app invoker: encode params: %w", err)
+		return nil, fmt.Errorf("app: encode params: %w", err)
 	}
 	if msg == nil {
 		msg = &structpb.Struct{}
@@ -113,13 +119,13 @@ func (c *InvokerClient) Invoke(ctx context.Context, app, operation string, param
 }
 
 // InvokeGraphQL calls another plugin's GraphQL surface.
-func (c *InvokerClient) InvokeGraphQL(ctx context.Context, app, document string, variables any, opts *InvokeOptions) (*OperationResult, error) {
+func (c *hostApp) InvokeGraphQL(ctx context.Context, app, document string, variables any, opts *InvokeOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
-		return nil, fmt.Errorf("app invoker: client is not initialized")
+		return nil, fmt.Errorf("app: client is not initialized")
 	}
 	document = strings.TrimSpace(document)
 	if document == "" {
-		return nil, fmt.Errorf("app invoker: graphql document is required")
+		return nil, fmt.Errorf("app: graphql document is required")
 	}
 
 	var msg *structpb.Struct
@@ -127,7 +133,7 @@ func (c *InvokerClient) InvokeGraphQL(ctx context.Context, app, document string,
 	if variables != nil {
 		msg, err = structFromAny(variables)
 		if err != nil {
-			return nil, fmt.Errorf("app invoker: encode variables: %w", err)
+			return nil, fmt.Errorf("app: encode variables: %w", err)
 		}
 		if msg != nil && len(msg.GetFields()) == 0 {
 			msg = nil
@@ -157,9 +163,9 @@ func (c *InvokerClient) InvokeGraphQL(ctx context.Context, app, document string,
 }
 
 // ExchangeInvocationToken exchanges this invocation token for a narrower child token.
-func (c *InvokerClient) ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error) {
+func (c *hostApp) ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error) {
 	if c == nil || c.client == nil {
-		return "", fmt.Errorf("app invoker: client is not initialized")
+		return "", fmt.Errorf("app: client is not initialized")
 	}
 
 	req := &proto.ExchangeInvocationTokenRequest{

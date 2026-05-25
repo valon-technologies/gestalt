@@ -179,6 +179,60 @@ export interface WorkflowManagerPublishEvent {
   providerName?: string | undefined;
 }
 
+/** Fakeable client contract for workflow manager calls. */
+export interface WorkflowManager {
+  startRun(request: WorkflowManagerStartRun): Promise<WorkflowManagerRun>;
+  signalRun(
+    request: WorkflowManagerSignalRun,
+  ): Promise<WorkflowManagerRunSignal>;
+  signalOrStartRun(
+    request: WorkflowManagerSignalOrStartRun,
+  ): Promise<WorkflowManagerRunSignal>;
+  createDefinition(
+    request: WorkflowManagerCreateDefinition,
+  ): Promise<WorkflowManagerDefinition>;
+  getDefinition(
+    request: WorkflowManagerGetDefinition,
+  ): Promise<WorkflowManagerDefinition>;
+  updateDefinition(
+    request: WorkflowManagerUpdateDefinition,
+  ): Promise<WorkflowManagerDefinition>;
+  deleteDefinition(request: WorkflowManagerDeleteDefinition): Promise<void>;
+  createSchedule(
+    request: WorkflowManagerCreateSchedule,
+  ): Promise<WorkflowManagerSchedule>;
+  getSchedule(
+    request: WorkflowManagerGetSchedule,
+  ): Promise<WorkflowManagerSchedule>;
+  updateSchedule(
+    request: WorkflowManagerUpdateSchedule,
+  ): Promise<WorkflowManagerSchedule>;
+  deleteSchedule(request: WorkflowManagerDeleteSchedule): Promise<void>;
+  pauseSchedule(
+    request: WorkflowManagerPauseSchedule,
+  ): Promise<WorkflowManagerSchedule>;
+  resumeSchedule(
+    request: WorkflowManagerResumeSchedule,
+  ): Promise<WorkflowManagerSchedule>;
+  createTrigger(
+    request: WorkflowManagerCreateTrigger,
+  ): Promise<WorkflowManagerEventTrigger>;
+  getTrigger(
+    request: WorkflowManagerGetTrigger,
+  ): Promise<WorkflowManagerEventTrigger>;
+  updateTrigger(
+    request: WorkflowManagerUpdateTrigger,
+  ): Promise<WorkflowManagerEventTrigger>;
+  deleteTrigger(request: WorkflowManagerDeleteTrigger): Promise<void>;
+  pauseTrigger(
+    request: WorkflowManagerPauseTrigger,
+  ): Promise<WorkflowManagerEventTrigger>;
+  resumeTrigger(
+    request: WorkflowManagerResumeTrigger,
+  ): Promise<WorkflowManagerEventTrigger>;
+  publishEvent(request: WorkflowManagerPublishEvent): Promise<WorkflowEvent>;
+}
+
 /**
  * Client for creating and controlling workflow schedules and event triggers.
  *
@@ -187,7 +241,7 @@ export interface WorkflowManagerPublishEvent {
  * constructed from a request, create operations reuse the request idempotency
  * key unless the call provides one explicitly.
  */
-export class WorkflowManager {
+class HostWorkflowManager implements WorkflowManager {
   private readonly client: Client<typeof WorkflowProviderService>;
   private readonly invocationToken: string;
   private readonly idempotencyKey: string;
@@ -489,6 +543,8 @@ export class WorkflowManager {
     return event;
   }
 }
+
+export const WorkflowManager = HostWorkflowManager;
 
 function normalizeInvocationToken(requestOrToken: Request | string): string {
   const invocationToken =

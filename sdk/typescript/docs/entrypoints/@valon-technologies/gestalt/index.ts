@@ -29,7 +29,6 @@
  */
 export {
   Authorization,
-  AuthorizationClient,
   AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
   authorizationAction,
   authorizationRelationship,
@@ -104,11 +103,11 @@ export {
   type OperationAnnotations,
 } from "../../../../src/catalog.ts";
 export {
-  AppInvoker,
+  App,
   type AppGraphQLInvokeOptions,
   type AppInvocationGrant,
   type AppInvokeOptions,
-} from "../../../../src/invoker.ts";
+} from "../../../../src/host-app.ts";
 export {
   AgentManager,
   type AgentManagerCancelTurn,

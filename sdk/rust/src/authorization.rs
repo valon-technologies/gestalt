@@ -671,6 +671,78 @@ pub struct ExpandResponse {
     pub model_id: String,
 }
 
+#[async_trait]
+/// Fakeable client contract for host authorization calls.
+pub trait AuthorizationApi: Send {
+    async fn evaluate(
+        &mut self,
+        request: AccessEvaluationRequest,
+    ) -> std::result::Result<AccessDecision, AuthorizationError>;
+
+    async fn evaluate_many(
+        &mut self,
+        request: AccessEvaluationsRequest,
+    ) -> std::result::Result<AccessEvaluationsResponse, AuthorizationError>;
+
+    async fn search_resources(
+        &mut self,
+        request: ResourceSearchRequest,
+    ) -> std::result::Result<ResourceSearchResponse, AuthorizationError>;
+
+    async fn search_subjects(
+        &mut self,
+        request: SubjectSearchRequest,
+    ) -> std::result::Result<SubjectSearchResponse, AuthorizationError>;
+
+    async fn effective_search_resources(
+        &mut self,
+        request: ResourceSearchRequest,
+    ) -> std::result::Result<ResourceSearchResponse, AuthorizationError>;
+
+    async fn effective_search_subjects(
+        &mut self,
+        request: EffectiveSubjectSearchRequest,
+    ) -> std::result::Result<EffectiveSubjectSearchResponse, AuthorizationError>;
+
+    async fn search_actions(
+        &mut self,
+        request: ActionSearchRequest,
+    ) -> std::result::Result<ActionSearchResponse, AuthorizationError>;
+
+    async fn expand(
+        &mut self,
+        request: ExpandRequest,
+    ) -> std::result::Result<ExpandResponse, AuthorizationError>;
+
+    async fn read_relationships(
+        &mut self,
+        request: ReadRelationshipsRequest,
+    ) -> std::result::Result<ReadRelationshipsResponse, AuthorizationError>;
+
+    async fn write_relationships(
+        &mut self,
+        request: WriteRelationshipsRequest,
+    ) -> std::result::Result<(), AuthorizationError>;
+
+    async fn get_metadata(
+        &mut self,
+    ) -> std::result::Result<AuthorizationMetadata, AuthorizationError>;
+
+    async fn get_active_model(
+        &mut self,
+    ) -> std::result::Result<GetActiveModelResponse, AuthorizationError>;
+
+    async fn list_models(
+        &mut self,
+        request: ListModelsRequest,
+    ) -> std::result::Result<ListModelsResponse, AuthorizationError>;
+
+    async fn write_model(
+        &mut self,
+        request: WriteModelRequest,
+    ) -> std::result::Result<AuthorizationModelRef, AuthorizationError>;
+}
+
 /// Client for the host-configured authorization provider.
 ///
 /// The client exposes typed SDK values and keeps transport conversion inside
@@ -895,6 +967,105 @@ impl Authorization {
             .await?
             .into_inner()
             .into())
+    }
+}
+
+#[async_trait]
+impl AuthorizationApi for Authorization {
+    async fn evaluate(
+        &mut self,
+        request: AccessEvaluationRequest,
+    ) -> std::result::Result<AccessDecision, AuthorizationError> {
+        Authorization::evaluate(self, request).await
+    }
+
+    async fn evaluate_many(
+        &mut self,
+        request: AccessEvaluationsRequest,
+    ) -> std::result::Result<AccessEvaluationsResponse, AuthorizationError> {
+        Authorization::evaluate_many(self, request).await
+    }
+
+    async fn search_resources(
+        &mut self,
+        request: ResourceSearchRequest,
+    ) -> std::result::Result<ResourceSearchResponse, AuthorizationError> {
+        Authorization::search_resources(self, request).await
+    }
+
+    async fn search_subjects(
+        &mut self,
+        request: SubjectSearchRequest,
+    ) -> std::result::Result<SubjectSearchResponse, AuthorizationError> {
+        Authorization::search_subjects(self, request).await
+    }
+
+    async fn effective_search_resources(
+        &mut self,
+        request: ResourceSearchRequest,
+    ) -> std::result::Result<ResourceSearchResponse, AuthorizationError> {
+        Authorization::effective_search_resources(self, request).await
+    }
+
+    async fn effective_search_subjects(
+        &mut self,
+        request: EffectiveSubjectSearchRequest,
+    ) -> std::result::Result<EffectiveSubjectSearchResponse, AuthorizationError> {
+        Authorization::effective_search_subjects(self, request).await
+    }
+
+    async fn search_actions(
+        &mut self,
+        request: ActionSearchRequest,
+    ) -> std::result::Result<ActionSearchResponse, AuthorizationError> {
+        Authorization::search_actions(self, request).await
+    }
+
+    async fn expand(
+        &mut self,
+        request: ExpandRequest,
+    ) -> std::result::Result<ExpandResponse, AuthorizationError> {
+        Authorization::expand(self, request).await
+    }
+
+    async fn read_relationships(
+        &mut self,
+        request: ReadRelationshipsRequest,
+    ) -> std::result::Result<ReadRelationshipsResponse, AuthorizationError> {
+        Authorization::read_relationships(self, request).await
+    }
+
+    async fn write_relationships(
+        &mut self,
+        request: WriteRelationshipsRequest,
+    ) -> std::result::Result<(), AuthorizationError> {
+        Authorization::write_relationships(self, request).await
+    }
+
+    async fn get_metadata(
+        &mut self,
+    ) -> std::result::Result<AuthorizationMetadata, AuthorizationError> {
+        Authorization::get_metadata(self).await
+    }
+
+    async fn get_active_model(
+        &mut self,
+    ) -> std::result::Result<GetActiveModelResponse, AuthorizationError> {
+        Authorization::get_active_model(self).await
+    }
+
+    async fn list_models(
+        &mut self,
+        request: ListModelsRequest,
+    ) -> std::result::Result<ListModelsResponse, AuthorizationError> {
+        Authorization::list_models(self, request).await
+    }
+
+    async fn write_model(
+        &mut self,
+        request: WriteModelRequest,
+    ) -> std::result::Result<AuthorizationModelRef, AuthorizationError> {
+        Authorization::write_model(self, request).await
     }
 }
 

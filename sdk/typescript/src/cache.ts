@@ -1,4 +1,4 @@
-import { createClient, type Client } from "@connectrpc/connect";
+import { createClient, type Client as ConnectClient } from "@connectrpc/connect";
 
 import { Cache as CacheService } from "./internal/gen/v1/cache_pb.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
@@ -23,6 +23,26 @@ export interface CacheEntry {
  */
 export interface CacheSetOptions {
   ttlMs?: number;
+}
+
+/**
+ * Fakeable cache client contract shared by host clients and tests.
+ */
+export interface Cache {
+  get(key: string): Promise<Uint8Array | undefined>;
+  getMany(keys: string[]): Promise<Record<string, Uint8Array>>;
+  set(
+    key: string,
+    value: Uint8Array,
+    options?: CacheSetOptions,
+  ): Promise<void>;
+  setMany(
+    entries: Iterable<CacheEntry>,
+    options?: CacheSetOptions,
+  ): Promise<void>;
+  delete(key: string): Promise<boolean>;
+  deleteMany(keys: string[]): Promise<number | bigint>;
+  touch(key: string, ttlMs: number): Promise<boolean>;
 }
 
 /**
@@ -56,8 +76,8 @@ export interface CacheProviderOptions extends ProviderBaseOptions {
  * await cache.set("session", new TextEncoder().encode("hello"));
  * ```
  */
-export class Cache {
-  private readonly client: Client<typeof CacheService>;
+class HostCache implements Cache {
+  private readonly client: ConnectClient<typeof CacheService>;
 
   constructor(name?: string) {
     const { target, token } = requireHostServiceTarget("cache");
@@ -140,10 +160,12 @@ export class Cache {
   }
 }
 
+export const Cache = HostCache;
+
 /**
  * Cache provider implementation consumed by the Gestalt runtime.
  */
-export class CacheProvider extends ProviderBase {
+export class CacheProvider extends ProviderBase implements Cache {
   readonly kind = "cache" as const;
 
   private readonly getHandler: CacheProviderOptions["get"];

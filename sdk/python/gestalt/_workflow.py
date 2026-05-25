@@ -4,7 +4,7 @@ import dataclasses as _dataclasses
 import datetime as _dt
 import os
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Protocol
 
 import grpc
 from google.protobuf import message as _message
@@ -2407,6 +2407,18 @@ def workflow_run_status_name(status: int) -> str:
         return str(status)
 
 
+class WorkflowHostProtocol(Protocol):
+    """Fakeable contract for workflow host calls."""
+
+    def close(self) -> None:
+        """Close the client."""
+
+    def invoke_operation(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> InvokeWorkflowOperationResponse:
+        """Invoke an operation through the workflow host."""
+
+
 class WorkflowHost:
     """Client for the workflow host service available inside workflow code.
 
@@ -2451,6 +2463,109 @@ class WorkflowHost:
         """Close the client at the end of a context manager block."""
 
         self.close()
+
+
+class WorkflowManagerProtocol(Protocol):
+    """Fakeable contract for workflow manager calls."""
+
+    def close(self) -> None:
+        """Close the client."""
+
+    def start_run(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerRun:
+        """Start a workflow run."""
+
+    def signal_run(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerRunSignal:
+        """Signal an existing workflow run."""
+
+    def signal_or_start_run(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerRunSignal:
+        """Signal a run, or start it when no matching run exists."""
+
+    def create_definition(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerDefinition:
+        """Create a reusable workflow definition."""
+
+    def get_definition(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerDefinition:
+        """Fetch one workflow definition."""
+
+    def update_definition(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerDefinition:
+        """Update a workflow definition."""
+
+    def delete_definition(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> None:
+        """Delete a workflow definition."""
+
+    def create_schedule(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerSchedule:
+        """Create a workflow schedule."""
+
+    def get_schedule(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerSchedule:
+        """Fetch one workflow schedule."""
+
+    def update_schedule(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerSchedule:
+        """Update a workflow schedule."""
+
+    def delete_schedule(self, request: Any | None = None, **kwargs: Any) -> None:
+        """Delete a workflow schedule."""
+
+    def pause_schedule(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerSchedule:
+        """Pause a workflow schedule."""
+
+    def resume_schedule(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerSchedule:
+        """Resume a workflow schedule."""
+
+    def create_trigger(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerEventTrigger:
+        """Create an event trigger."""
+
+    def get_trigger(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerEventTrigger:
+        """Fetch one event trigger."""
+
+    def update_trigger(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerEventTrigger:
+        """Update an event trigger."""
+
+    def delete_trigger(self, request: Any | None = None, **kwargs: Any) -> None:
+        """Delete an event trigger."""
+
+    def pause_trigger(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerEventTrigger:
+        """Pause an event trigger."""
+
+    def resume_trigger(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerEventTrigger:
+        """Resume an event trigger."""
+
+    def publish_event(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowEvent | None:
+        """Publish an event into the workflow manager."""
 
 
 class WorkflowManager:
