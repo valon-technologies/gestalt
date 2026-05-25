@@ -64,6 +64,19 @@ pub struct InvokeOptions {
     pub instance: String,
     /// Idempotency key forwarded to the target operation.
     pub idempotency_key: String,
+    /// Credential mode requested for the target operation.
+    pub credential_mode: String,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Options that select the target connection for an app GraphQL surface invocation.
+pub struct InvokeGraphQLOptions {
+    /// Connected account id or name to invoke against.
+    pub connection: String,
+    /// Provider instance id or name to invoke against.
+    pub instance: String,
+    /// Idempotency key forwarded to the target operation.
+    pub idempotency_key: String,
 }
 
 #[async_trait]
@@ -81,7 +94,7 @@ pub trait AppContract: Send {
         plugin: String,
         document: String,
         variables: Option<serde_json::Value>,
-        options: Option<InvokeOptions>,
+        options: Option<InvokeGraphQLOptions>,
     ) -> std::result::Result<OperationResult, AppError>;
     async fn exchange_invocation_token(
         &mut self,
@@ -169,6 +182,10 @@ impl App {
                     .as_ref()
                     .map(|opts| opts.idempotency_key.trim().to_string())
                     .unwrap_or_default(),
+                credential_mode: options
+                    .as_ref()
+                    .map(|opts| opts.credential_mode.trim().to_string())
+                    .unwrap_or_default(),
             })
             .await?
             .into_inner();
@@ -189,7 +206,7 @@ impl App {
         plugin: &str,
         document: &str,
         variables: Option<V>,
-        options: Option<InvokeOptions>,
+        options: Option<InvokeGraphQLOptions>,
     ) -> std::result::Result<OperationResult, AppError>
     where
         V: Serialize,
@@ -278,7 +295,7 @@ impl AppContract for App {
         plugin: String,
         document: String,
         variables: Option<serde_json::Value>,
-        options: Option<InvokeOptions>,
+        options: Option<InvokeGraphQLOptions>,
     ) -> std::result::Result<OperationResult, AppError> {
         App::invoke_graphql(self, &plugin, &document, variables, options).await
     }

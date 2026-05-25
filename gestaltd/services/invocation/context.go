@@ -221,6 +221,38 @@ func WorkflowContextFromContext(ctx context.Context) map[string]any {
 	return workflow
 }
 
+func CloneWorkflowContext(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(src))
+	for key, value := range src {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			out[key] = cloneWorkflowContextValue(value)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func cloneWorkflowContextValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return CloneWorkflowContext(typed)
+	case []any:
+		out := make([]any, len(typed))
+		for i := range typed {
+			out[i] = cloneWorkflowContextValue(typed[i])
+		}
+		return out
+	default:
+		return typed
+	}
+}
+
 func WithToolRefsContext(ctx context.Context, refs []coreagent.ToolRef) context.Context {
 	return context.WithValue(ctx, toolRefsCtxKey{}, ToolRefsContext{
 		Set:  true,

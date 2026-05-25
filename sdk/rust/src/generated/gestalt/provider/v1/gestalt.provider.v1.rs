@@ -172,6 +172,8 @@ pub struct AppInvokeRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "8")]
     pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub credential_mode: ::prost::alloc::string::String,
 }
 /// AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
 /// through Gestalt.

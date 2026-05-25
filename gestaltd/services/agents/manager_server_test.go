@@ -189,6 +189,42 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 	}
 }
 
+func TestManagerServerCreateTurnFallsBackToPluginCallerApp(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-empty-caller-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "user-1",
+		Kind:      principal.KindUser,
+	})
+	token, err := tokens.MintRootToken(ctx, "", nil)
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+	server := NewProviderServer("agent-host", &recordingManagerService{
+		createTurn: func(_ context.Context, _ *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+			if req.CallerAppName != "agent-host" {
+				t.Fatalf("caller app = %q, want agent-host", req.CallerAppName)
+			}
+			return &coreagent.Turn{
+				ID:        "turn-1",
+				SessionID: req.SessionID,
+				Status:    coreagent.ExecutionStatusRunning,
+			}, nil
+		},
+	}, tokens)
+
+	if _, err := server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
+		SessionId:       "session-1",
+		InvocationToken: token,
+	}); err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+}
+
 func TestManagerServerMapsStructuredOutputUnsupportedToFailedPrecondition(t *testing.T) {
 	t.Parallel()
 

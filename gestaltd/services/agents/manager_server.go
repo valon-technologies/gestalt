@@ -169,7 +169,7 @@ func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentP
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
 	turn, err := s.manager.CreateTurn(appaccessservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerCreateTurnRequest{
-		CallerAppName:     strings.TrimSpace(s.pluginName),
+		CallerAppName:     s.callerAppName(tokenCtx),
 		IdempotencyKey:    strings.TrimSpace(req.GetIdempotencyKey()),
 		Model:             strings.TrimSpace(req.GetModel()),
 		SessionID:         sessionID,
@@ -343,11 +343,21 @@ func (s *ProviderServer) tokenContext(token string) (appaccessservice.TokenConte
 	if token == "" {
 		return appaccessservice.TokenContext{}, status.Error(codes.FailedPrecondition, "invocation token is required")
 	}
-	tokenCtx, err := s.tokens.ResolveToken(token, s.pluginName)
+	tokenCtx, err := s.tokens.ResolveToken(token, "")
 	if err != nil {
 		return appaccessservice.TokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	return tokenCtx, nil
+}
+
+func (s *ProviderServer) callerAppName(tokenCtx appaccessservice.TokenContext) string {
+	if caller := tokenCtx.CallerApp(); caller != "" {
+		return caller
+	}
+	if s == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.pluginName)
 }
 
 func agentManagerStatusError(err error) error {

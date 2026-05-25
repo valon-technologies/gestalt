@@ -2,6 +2,7 @@ import { createClient, type Client } from "@connectrpc/connect";
 
 import { App as AppService } from "./internal/gen/v1/app_pb.ts";
 import type { OperationResult, Request } from "./api.ts";
+import type { ConnectionMode } from "./app.ts";
 import { structFromObject, type JsonObjectInput } from "./protocol.ts";
 import {
   createHostServiceGrpcTransport,
@@ -18,6 +19,8 @@ export interface AppInvokeOptions {
   instance?: string;
   /** Idempotency key forwarded to the target operation. */
   idempotencyKey?: string;
+  /** Credential mode requested for the target operation. */
+  credentialMode?: ConnectionMode;
 }
 /** Grant included when exchanging an invocation token for a child token. */
 export interface AppInvocationGrant {
@@ -32,7 +35,8 @@ export interface AppInvocationGrant {
 }
 
 /** Options for invoking an app GraphQL surface. */
-export interface AppGraphQLInvokeOptions extends AppInvokeOptions {
+export interface AppGraphQLInvokeOptions
+  extends Pick<AppInvokeOptions, "connection" | "instance" | "idempotencyKey"> {
   /** GraphQL variables encoded as a JSON object. */
   variables?: JsonObjectInput;
 }
@@ -94,6 +98,7 @@ class AppImpl implements App {
       connection: options?.connection ?? "",
       instance: options?.instance ?? "",
       idempotencyKey: options?.idempotencyKey?.trim() ?? "",
+      credentialMode: options?.credentialMode?.trim() ?? "",
     });
     return {
       status: response.status,

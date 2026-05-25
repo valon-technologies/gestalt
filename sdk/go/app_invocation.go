@@ -18,6 +18,18 @@ type InvokeOptions struct {
 	Instance string
 	// IdempotencyKey is forwarded to the target operation.
 	IdempotencyKey string
+	// CredentialMode selects the credential mode for this operation when the caller declared one.
+	CredentialMode string
+}
+
+// InvokeGraphQLOptions selects a target connection for a GraphQL surface invocation.
+type InvokeGraphQLOptions struct {
+	// Connection is the connected account id or name to invoke against.
+	Connection string
+	// Instance is the provider instance id or name to invoke against.
+	Instance string
+	// IdempotencyKey is forwarded to the target operation.
+	IdempotencyKey string
 }
 
 // InvocationGrant describes access granted to an exchanged invocation token.
@@ -40,7 +52,7 @@ type appClient struct {
 // App is the fakeable contract for app invocation calls.
 type App interface {
 	Invoke(ctx context.Context, app string, operation string, params any, opts *InvokeOptions) (*OperationResult, error)
-	InvokeGraphQL(ctx context.Context, app string, document string, variables any, opts *InvokeOptions) (*OperationResult, error)
+	InvokeGraphQL(ctx context.Context, app string, document string, variables any, opts *InvokeGraphQLOptions) (*OperationResult, error)
 	ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error)
 }
 
@@ -106,6 +118,7 @@ func (c *appClient) Invoke(ctx context.Context, app, operation string, params an
 		req.Connection = opts.Connection
 		req.Instance = opts.Instance
 		req.IdempotencyKey = strings.TrimSpace(opts.IdempotencyKey)
+		req.CredentialMode = strings.TrimSpace(opts.CredentialMode)
 	}
 
 	resp, err := c.client.Invoke(ctx, req)
@@ -119,7 +132,7 @@ func (c *appClient) Invoke(ctx context.Context, app, operation string, params an
 }
 
 // InvokeGraphQL calls another plugin's GraphQL surface.
-func (c *appClient) InvokeGraphQL(ctx context.Context, app, document string, variables any, opts *InvokeOptions) (*OperationResult, error) {
+func (c *appClient) InvokeGraphQL(ctx context.Context, app, document string, variables any, opts *InvokeGraphQLOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("app: client is not initialized")
 	}
