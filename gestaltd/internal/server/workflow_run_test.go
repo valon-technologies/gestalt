@@ -57,147 +57,6 @@ func workflowAppStepTargetWithRouting(appName, operation, connection, instance s
 	}
 }
 
-func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) {
-	t.Parallel()
-
-	services := testutil.NewStubServices(t)
-	user := seedUser(t, services, "ada@example.test")
-	other := seedUser(t, services, "grace@example.test")
-	provider := newMemoryWorkflowProvider()
-
-	now := time.Now().UTC().Truncate(time.Second)
-	older := now.Add(-2 * time.Hour)
-	revokedAt := now.Add(-1 * time.Hour)
-	provider.runs["run-new"] = &coreworkflow.Run{
-		ID:           "run-new",
-		Status:       coreworkflow.RunStatusRunning,
-		Target:       workflowAppStepTarget("roadmap", "sync"),
-		Trigger:      coreworkflow.RunTrigger{Schedule: &coreworkflow.ScheduleTrigger{ScheduleID: "sched-new"}},
-		ExecutionRef: "workflow_schedule:sched-new:ref-active",
-		CreatedAt:    &now,
-	}
-	provider.runs["run-old"] = &coreworkflow.Run{
-		ID:            "run-old",
-		Status:        coreworkflow.RunStatusSucceeded,
-		Target:        workflowAppStepTarget("roadmap", "sync"),
-		Trigger:       coreworkflow.RunTrigger{Schedule: &coreworkflow.ScheduleTrigger{ScheduleID: "sched-old"}},
-		ExecutionRef:  "workflow_schedule:sched-old:ref-revoked",
-		CreatedAt:     &older,
-		CompletedAt:   &now,
-		StatusMessage: "done",
-		ResultBody:    `{"ok":true}`,
-	}
-	provider.runs["run-other"] = &coreworkflow.Run{
-		ID:           "run-other",
-		Status:       coreworkflow.RunStatusSucceeded,
-		Target:       workflowAppStepTarget("roadmap", "sync"),
-		ExecutionRef: "workflow_schedule:sched-other:ref-other",
-		CreatedAt:    &now,
-	}
-
-	for _, ref := range []*coreworkflow.ExecutionReference{
-		{
-			ID:           "workflow_schedule:sched-new:ref-active",
-			ProviderName: "basic",
-			Target:       provider.runs["run-new"].Target,
-			SubjectID:    principal.UserSubjectID(user.ID),
-		},
-		{
-			ID:           "workflow_schedule:sched-old:ref-revoked",
-			ProviderName: "basic",
-			Target:       provider.runs["run-old"].Target,
-			SubjectID:    principal.UserSubjectID(user.ID),
-			RevokedAt:    &revokedAt,
-		},
-		{
-			ID:           "workflow_schedule:sched-other:ref-other",
-			ProviderName: "basic",
-			Target:       provider.runs["run-other"].Target,
-			SubjectID:    principal.UserSubjectID(other.ID),
-		},
-	} {
-		if _, err := provider.PutExecutionReference(context.Background(), ref); err != nil {
-			t.Fatalf("Put execution ref %q: %v", ref.ID, err)
-		}
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
-			},
-		}
-		cfg.Services = services
-		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "roadmap",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{
-				Name: "roadmap",
-				Operations: []catalog.CatalogOperation{
-					{ID: "sync", Method: http.MethodPost},
-				},
-			},
-		})
-		cfg.Workflow = &stubWorkflowControl{
-			defaultProviderName: "basic",
-			provider:            provider,
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/runs/", nil)
-	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	listResp, err := http.DefaultClient.Do(listReq)
-	if err != nil {
-		t.Fatalf("list request: %v", err)
-	}
-	defer func() { _ = listResp.Body.Close() }()
-	if listResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", listResp.StatusCode)
-	}
-	var listedResp workflowRunListResponse
-	if err := json.NewDecoder(listResp.Body).Decode(&listedResp); err != nil {
-		t.Fatalf("decode list response: %v", err)
-	}
-	listed := listedResp.Runs
-	if len(listed) != 2 {
-		t.Fatalf("listed runs = %#v, want 2 items", listed)
-	}
-	byID := map[string]workflowRunResponse{}
-	for _, run := range listed {
-		byID[run.ID] = run
-	}
-	if _, ok := byID["run-new"]; !ok {
-		t.Fatalf("listed runs = %#v, missing run-new", listed)
-	}
-	old := byID["run-old"]
-	if old.Trigger.Kind != "schedule" || old.Trigger.ScheduleID != "sched-old" {
-		t.Fatalf("historical trigger = %#v", old.Trigger)
-	}
-
-	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/runs/run-old", nil)
-	getReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	getResp, err := http.DefaultClient.Do(getReq)
-	if err != nil {
-		t.Fatalf("get request: %v", err)
-	}
-	defer func() { _ = getResp.Body.Close() }()
-	if getResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", getResp.StatusCode)
-	}
-	var got workflowRunResponse
-	if err := json.NewDecoder(getResp.Body).Decode(&got); err != nil {
-		t.Fatalf("decode get response: %v", err)
-	}
-	if got.ID != "run-old" || got.Status != string(coreworkflow.RunStatusSucceeded) {
-		t.Fatalf("run = %#v", got)
-	}
-}
-
 func TestGlobalWorkflowRunListPassesPaginationAndFilters(t *testing.T) {
 	t.Parallel()
 
@@ -208,19 +67,11 @@ func TestGlobalWorkflowRunListPassesPaginationAndFilters(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.runs["run-page"] = &coreworkflow.Run{
-		ID:           "run-page",
-		Status:       coreworkflow.RunStatusRunning,
-		Target:       workflowAppStepTarget("roadmap", "sync"),
-		ExecutionRef: "workflow_run:page:ref",
-		CreatedAt:    &now,
-	}
-	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_run:page:ref",
-		ProviderName: "basic",
-		Target:       provider.runs["run-page"].Target,
-		SubjectID:    principal.UserSubjectID(user.ID),
-	}); err != nil {
-		t.Fatalf("Put execution ref: %v", err)
+		ID:        "run-page",
+		Status:    coreworkflow.RunStatusRunning,
+		Target:    workflowAppStepTarget("roadmap", "sync"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedAt: &now,
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -319,36 +170,18 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 	provider := newMemoryWorkflowProvider()
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.runs["run-sync"] = &coreworkflow.Run{
-		ID:           "run-sync",
-		Status:       coreworkflow.RunStatusSucceeded,
-		Target:       workflowAppStepTarget("roadmap", "sync"),
-		ExecutionRef: "workflow_schedule:sched-sync:ref-sync",
-		CreatedAt:    &now,
+		ID:        "run-sync",
+		Status:    coreworkflow.RunStatusSucceeded,
+		Target:    workflowAppStepTarget("roadmap", "sync"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedAt: &now,
 	}
 	provider.runs["run-export"] = &coreworkflow.Run{
-		ID:           "run-export",
-		Status:       coreworkflow.RunStatusFailed,
-		Target:       workflowAppStepTarget("roadmap", "export"),
-		ExecutionRef: "workflow_schedule:sched-export:ref-export",
-		CreatedAt:    &now,
-	}
-	for _, ref := range []*coreworkflow.ExecutionReference{
-		{
-			ID:           "workflow_schedule:sched-sync:ref-sync",
-			ProviderName: "basic",
-			Target:       provider.runs["run-sync"].Target,
-			SubjectID:    principal.UserSubjectID(user.ID),
-		},
-		{
-			ID:           "workflow_schedule:sched-export:ref-export",
-			ProviderName: "basic",
-			Target:       provider.runs["run-export"].Target,
-			SubjectID:    principal.UserSubjectID(user.ID),
-		},
-	} {
-		if _, err := provider.PutExecutionReference(context.Background(), ref); err != nil {
-			t.Fatalf("Put execution ref %q: %v", ref.ID, err)
-		}
+		ID:        "run-export",
+		Status:    coreworkflow.RunStatusFailed,
+		Target:    workflowAppStepTarget("roadmap", "export"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedAt: &now,
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -417,22 +250,14 @@ func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	run := &coreworkflow.Run{
-		ID:           "run-cancel",
-		Status:       coreworkflow.RunStatusRunning,
-		Target:       workflowAppStepTarget("roadmap", "sync"),
-		ExecutionRef: "workflow_schedule:sched-cancel:ref-active",
-		CreatedAt:    &now,
-		StartedAt:    &now,
+		ID:        "run-cancel",
+		Status:    coreworkflow.RunStatusRunning,
+		Target:    workflowAppStepTarget("roadmap", "sync"),
+		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedAt: &now,
+		StartedAt: &now,
 	}
 	provider.runs[run.ID] = run
-	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           run.ExecutionRef,
-		ProviderName: "basic",
-		Target:       run.Target,
-		SubjectID:    principal.UserSubjectID(user.ID),
-	}); err != nil {
-		t.Fatalf("Put execution ref: %v", err)
-	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{

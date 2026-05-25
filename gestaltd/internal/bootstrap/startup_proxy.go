@@ -365,16 +365,13 @@ type startupWorkflowProviderProxy struct {
 	mu       sync.RWMutex
 	provider coreworkflow.Provider
 	err      error
-
-	pendingExecutionRefs map[string]*coreworkflow.ExecutionReference
 }
 
 func newStartupWorkflowProviderProxy(providerName string, tracker *startupWaitTracker) *startupWorkflowProviderProxy {
 	return &startupWorkflowProviderProxy{
-		providerName:         providerName,
-		tracker:              tracker,
-		ready:                make(chan struct{}),
-		pendingExecutionRefs: map[string]*coreworkflow.ExecutionReference{},
+		providerName: providerName,
+		tracker:      tracker,
+		ready:        make(chan struct{}),
 	}
 }
 
@@ -414,6 +411,38 @@ func (p *startupWorkflowProviderProxy) await(ctx context.Context) (coreworkflow.
 		return nil, fmt.Errorf("workflow provider is not available")
 	}
 	return p.provider, nil
+}
+
+func (p *startupWorkflowProviderProxy) CreateDefinition(ctx context.Context, req coreworkflow.CreateDefinitionRequest) (*coreworkflow.Definition, error) {
+	provider, err := p.awaitForApp(ctx, startupWorkflowTargetAppName(req.Target))
+	if err != nil {
+		return nil, err
+	}
+	return provider.CreateDefinition(ctx, req)
+}
+
+func (p *startupWorkflowProviderProxy) GetDefinition(ctx context.Context, req coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
+	provider, err := p.awaitForContextApp(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.GetDefinition(ctx, req)
+}
+
+func (p *startupWorkflowProviderProxy) UpdateDefinition(ctx context.Context, req coreworkflow.UpdateDefinitionRequest) (*coreworkflow.Definition, error) {
+	provider, err := p.awaitForApp(ctx, startupWorkflowTargetAppName(req.Target))
+	if err != nil {
+		return nil, err
+	}
+	return provider.UpdateDefinition(ctx, req)
+}
+
+func (p *startupWorkflowProviderProxy) DeleteDefinition(ctx context.Context, req coreworkflow.DeleteDefinitionRequest) error {
+	provider, err := p.awaitForContextApp(ctx)
+	if err != nil {
+		return err
+	}
+	return provider.DeleteDefinition(ctx, req)
 }
 
 func (p *startupWorkflowProviderProxy) StartRun(ctx context.Context, req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
@@ -568,98 +597,6 @@ func (p *startupWorkflowProviderProxy) PublishEvent(ctx context.Context, req cor
 	return provider.PublishEvent(ctx, req)
 }
 
-func (p *startupWorkflowProviderProxy) PutExecutionReference(ctx context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
-	appName := ""
-	if ref != nil {
-		appName = startupWorkflowTargetAppName(ref.Target)
-	}
-	select {
-	case <-p.ready:
-	default:
-		stored := cloneStartupWorkflowExecutionRef(ref)
-		if stored == nil || strings.TrimSpace(stored.ID) == "" {
-			return nil, fmt.Errorf("workflow execution reference id is required")
-		}
-		p.mu.Lock()
-		p.pendingExecutionRefs[stored.ID] = stored
-		p.mu.Unlock()
-		return cloneStartupWorkflowExecutionRef(stored), nil
-	}
-	provider, err := p.awaitForApp(ctx, appName)
-	if err != nil {
-		return nil, err
-	}
-	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
-	if !ok {
-		return nil, fmt.Errorf("workflow provider %q does not support execution references", p.providerName)
-	}
-	return store.PutExecutionReference(ctx, ref)
-}
-
-func (p *startupWorkflowProviderProxy) GetExecutionReference(ctx context.Context, id string) (*coreworkflow.ExecutionReference, error) {
-	id = strings.TrimSpace(id)
-	p.mu.RLock()
-	if ref := p.pendingExecutionRefs[id]; ref != nil {
-		p.mu.RUnlock()
-		return cloneStartupWorkflowExecutionRef(ref), nil
-	}
-	p.mu.RUnlock()
-
-	provider, err := p.await(ctx)
-	if err != nil {
-		return nil, err
-	}
-	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
-	if !ok {
-		return nil, fmt.Errorf("workflow provider %q does not support execution references", p.providerName)
-	}
-	return store.GetExecutionReference(ctx, id)
-}
-
-func (p *startupWorkflowProviderProxy) ListExecutionReferences(ctx context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
-	pending := p.pendingExecutionRefsForSubject(subjectID)
-	select {
-	case <-p.ready:
-	default:
-		return pending, nil
-	}
-	provider, err := p.await(ctx)
-	if err != nil {
-		return nil, err
-	}
-	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
-	if !ok {
-		if len(pending) > 0 {
-			return pending, nil
-		}
-		return nil, fmt.Errorf("workflow provider %q does not support execution references", p.providerName)
-	}
-	refs, err := store.ListExecutionReferences(ctx, subjectID)
-	if err != nil {
-		return nil, err
-	}
-	if len(pending) == 0 {
-		return refs, nil
-	}
-	merged := make([]*coreworkflow.ExecutionReference, 0, len(pending)+len(refs))
-	seen := make(map[string]bool, len(pending)+len(refs))
-	for _, ref := range pending {
-		if ref == nil || seen[ref.ID] {
-			continue
-		}
-		seen[ref.ID] = true
-		merged = append(merged, ref)
-	}
-	for _, ref := range refs {
-		if ref == nil || seen[ref.ID] {
-			continue
-		}
-		seen[ref.ID] = true
-		merged = append(merged, ref)
-	}
-	return merged, nil
-}
-
 func (p *startupWorkflowProviderProxy) Ping(ctx context.Context) error {
 	provider, err := p.await(ctx)
 	if err != nil {
@@ -713,90 +650,4 @@ func (p *startupWorkflowProviderProxy) beginAppWait(appName string) (func(), err
 		return func() {}, nil
 	}
 	return p.tracker.beginAppWait(appName, p.providerName)
-}
-
-func (p *startupWorkflowProviderProxy) pendingExecutionRefsForSubject(subjectID string) []*coreworkflow.ExecutionReference {
-	subjectID = strings.TrimSpace(subjectID)
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	out := make([]*coreworkflow.ExecutionReference, 0, len(p.pendingExecutionRefs))
-	for _, ref := range p.pendingExecutionRefs {
-		if ref == nil {
-			continue
-		}
-		if subjectID != "" && strings.TrimSpace(ref.SubjectID) != subjectID {
-			continue
-		}
-		out = append(out, cloneStartupWorkflowExecutionRef(ref))
-	}
-	return out
-}
-
-func cloneStartupWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *coreworkflow.ExecutionReference {
-	if ref == nil {
-		return nil
-	}
-	clone := *ref
-	clone.Target = cloneStartupWorkflowTarget(ref.Target)
-	if ref.RunAs != nil {
-		runAs := *core.NormalizeRunAsSubject(ref.RunAs)
-		clone.RunAs = &runAs
-	}
-	clone.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
-	for i := range clone.Permissions {
-		clone.Permissions[i].Operations = append([]string(nil), clone.Permissions[i].Operations...)
-		clone.Permissions[i].Actions = append([]string(nil), clone.Permissions[i].Actions...)
-	}
-	if ref.CreatedAt != nil {
-		createdAt := ref.CreatedAt.UTC()
-		clone.CreatedAt = &createdAt
-	}
-	if ref.RevokedAt != nil {
-		revokedAt := ref.RevokedAt.UTC()
-		clone.RevokedAt = &revokedAt
-	}
-	return &clone
-}
-
-func cloneStartupWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
-	clone := coreworkflow.Target{Steps: slices.Clone(target.Steps)}
-	for i := range clone.Steps {
-		step := &clone.Steps[i]
-		step.Inputs = cloneStartupWorkflowValues(step.Inputs)
-		if step.App != nil {
-			app := *step.App
-			app.Input = cloneStartupWorkflowValue(app.Input)
-			step.App = &app
-		}
-		if step.Agent != nil {
-			agent := *step.Agent
-			agent.Messages = slices.Clone(agent.Messages)
-			agent.ToolRefs = slices.Clone(agent.ToolRefs)
-			agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
-			agent.ModelOptions = maps.Clone(agent.ModelOptions)
-			step.Agent = &agent
-		}
-		if step.When != nil {
-			when := *step.When
-			when.Value = cloneStartupWorkflowValue(when.Value)
-			step.When = &when
-		}
-		step.Metadata = maps.Clone(step.Metadata)
-	}
-	return clone
-}
-
-func cloneStartupWorkflowValues(values map[string]coreworkflow.Value) map[string]coreworkflow.Value {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]coreworkflow.Value, len(values))
-	for key := range values {
-		out[key] = cloneStartupWorkflowValue(values[key])
-	}
-	return out
-}
-
-func cloneStartupWorkflowValue(value coreworkflow.Value) coreworkflow.Value {
-	return coreworkflow.CloneValue(value)
 }

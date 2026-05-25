@@ -9,9 +9,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/google/uuid"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
@@ -22,7 +22,7 @@ type desiredWorkflowConfigEventTrigger struct {
 	trigger      config.WorkflowEventTriggerConfig
 }
 
-func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, includeProvider workflowConfigProviderFilter) error {
+func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, tokens *appaccessservice.InvocationTokenManager, includeProvider workflowConfigProviderFilter) error {
 	if cfg == nil || runtime == nil {
 		return nil
 	}
@@ -39,11 +39,10 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		trigger := desiredEntry.trigger
 		target := workflowConfigTarget(trigger.Target)
 		appName := workflowConfigTargetLabel(target)
-		providerName, provider, err := runtime.ResolveProviderSelection(trigger.Provider)
+		_, provider, err := runtime.ResolveProviderSelection(trigger.Provider)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
-		existingExecutionRef := ""
 		providerCtx := invocation.WithWorkflowContextString(ctx, "app", appName)
 		existing, err := provider.GetEventTrigger(providerCtx, coreworkflow.GetEventTriggerRequest{
 			TriggerID: desiredEntry.TriggerID,
@@ -53,7 +52,6 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 			if !isWorkflowConfigOwnedEventTrigger(existing, appName, desiredEntry.TriggerID) {
 				return fmt.Errorf("bootstrap: workflow event trigger %q for app %q conflicts with existing unmanaged trigger id %q", desiredEntry.TriggerKey, appName, desiredEntry.TriggerID)
 			}
-			existingExecutionRef = strings.TrimSpace(existing.ExecutionRef)
 		case isWorkflowObjectNotFound(err):
 		default:
 			return fmt.Errorf("bootstrap: get workflow event trigger %q for app %q: %w", desiredEntry.TriggerID, appName, err)
@@ -66,44 +64,22 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
-		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target, runAs, permissions)
-		if err != nil {
+		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs, permissions); err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
-		executionRefs, err := workflowExecutionReferenceStore(providerName, provider)
+		executionPermissions := workflowConfigExecutionPermissionsForTarget(target, permissions)
+		providerCtx, err = workflowConfigInvocationContext(providerCtx, tokens, runAs, executionPermissions)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
-		}
-		executionRefID, createdExecutionRef, replacedUnreadableExecutionRef, replacedUnreadableExecutionRefErr, err := workflowEnsureConfigExecutionRef(
-			ctx,
-			executionRefs,
-			desiredExecutionRef,
-			workflowConfigEventTriggerExecutionRefID(desiredEntry.TriggerID),
-			existingExecutionRef,
-		)
-		if err != nil {
-			return fmt.Errorf("bootstrap: store workflow execution ref for event trigger %q on app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
 		if _, err := provider.UpsertEventTrigger(providerCtx, coreworkflow.UpsertEventTriggerRequest{
-			TriggerID:    desiredEntry.TriggerID,
-			Match:        workflowConfigEventTriggerMatch(trigger),
-			Target:       target,
-			Paused:       trigger.Paused,
-			RequestedBy:  workflowConfigActor(),
-			ExecutionRef: executionRefID,
+			TriggerID:   desiredEntry.TriggerID,
+			Match:       workflowConfigEventTriggerMatch(trigger),
+			Target:      target,
+			Paused:      trigger.Paused,
+			RequestedBy: workflowConfigActor(),
 		}); err != nil {
-			if createdExecutionRef {
-				_ = workflowRevokeExecutionRefByID(ctx, executionRefs, executionRefID)
-			}
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
-		}
-		if replacedUnreadableExecutionRef != "" {
-			workflowLogReplacedUnreadableExecutionRef(ctx, "event_trigger", desiredEntry.TriggerKey, desiredEntry.TriggerID, providerName, appName, replacedUnreadableExecutionRef, executionRefID, replacedUnreadableExecutionRefErr)
-		}
-		if existingExecutionRef != executionRefID && replacedUnreadableExecutionRef == "" {
-			if err := workflowRevokeExecutionRefByID(ctx, executionRefs, existingExecutionRef); err != nil {
-				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for event trigger %q on app %q: %w", existingExecutionRef, desiredEntry.TriggerID, appName, err)
-			}
 		}
 	}
 
@@ -157,7 +133,6 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 			workflowLogSkippedConfigWorkflowCleanup(ctx, "event_triggers", providerName, err)
 			continue
 		}
-		var executionRefs coreworkflow.ExecutionReferenceStore
 		for _, trigger := range triggers {
 			if trigger == nil || !isWorkflowConfigOwnedEventTrigger(trigger, workflowConfigTargetLabel(trigger.Target), trigger.ID) {
 				continue
@@ -169,15 +144,6 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 			providerCtx := invocation.WithWorkflowContextString(ctx, "app", appName)
 			if err := provider.DeleteEventTrigger(providerCtx, coreworkflow.DeleteEventTriggerRequest{TriggerID: trigger.ID}); err != nil && !isWorkflowObjectNotFound(err) {
 				return fmt.Errorf("bootstrap: delete workflow event trigger %q for app %q: %w", trigger.ID, appName, err)
-			}
-			if executionRefs == nil {
-				executionRefs, err = workflowExecutionReferenceStore(providerName, provider)
-				if err != nil {
-					return fmt.Errorf("bootstrap: cleanup workflow event triggers for provider %q: %w", providerName, err)
-				}
-			}
-			if err := workflowRevokeExecutionRefByID(ctx, executionRefs, trigger.ExecutionRef); err != nil {
-				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for event trigger %q on app %q: %w", trigger.ExecutionRef, trigger.ID, appName, err)
 			}
 		}
 	}
@@ -207,8 +173,4 @@ func workflowConfigEventTriggerMatch(trigger config.WorkflowEventTriggerConfig) 
 func workflowConfigEventTriggerID(triggerKey string) string {
 	sum := sha256.Sum256([]byte("event_trigger\x00" + strings.TrimSpace(triggerKey)))
 	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
-}
-
-func workflowConfigEventTriggerExecutionRefID(triggerID string) string {
-	return "workflow_event_trigger:" + strings.TrimSpace(triggerID) + ":" + uuid.NewString()
 }

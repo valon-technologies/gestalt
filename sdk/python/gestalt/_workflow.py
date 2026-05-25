@@ -251,9 +251,9 @@ class BoundWorkflowRun:
     status_message: str = ""
     result_body: str = ""
     created_by: Any | None = None
-    execution_ref: str = ""
     workflow_key: str = ""
     provider_name: str = ""
+    definition_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
@@ -280,8 +280,8 @@ class BoundWorkflowSchedule:
     updated_at: _dt.datetime | Any | None = None
     next_run_at: _dt.datetime | Any | None = None
     created_by: Any | None = None
-    execution_ref: str = ""
     provider_name: str = ""
+    definition_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
@@ -295,46 +295,8 @@ class BoundWorkflowEventTrigger:
     created_at: _dt.datetime | Any | None = None
     updated_at: _dt.datetime | Any | None = None
     created_by: Any | None = None
-    execution_ref: str = ""
     provider_name: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class WorkflowAccessPermission:
-    """Native data for an execution-reference permission."""
-
-    app: str = ""
-    operations: Sequence[str] | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class WorkflowRunAsSubject:
-    """Native data for a workflow run-as subject."""
-
-    subject_id: str = ""
-    subject_kind: str = ""
-    display_name: str = ""
-    auth_source: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class WorkflowExecutionReference:
-    """Native data for a workflow execution reference."""
-
-    id: str = ""
-    provider_name: str = ""
-    target: Any | None = None
-    subject_id: str = ""
-    credential_subject_id: str = ""
-    permissions: Sequence[Any] | None = None
-    created_at: _dt.datetime | Any | None = None
-    revoked_at: _dt.datetime | Any | None = None
-    subject_kind: str = ""
-    display_name: str = ""
-    auth_source: str = ""
-    caller_app_name: str = ""
-    run_as: Any | None = None
-    source_definition_id: str = ""
+    definition_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
@@ -625,58 +587,6 @@ def workflow_actor_input_from_actor(value: Any | None) -> WorkflowActor | None:
         subject_kind=value.subject_kind,
         display_name=value.display_name,
         auth_source=value.auth_source,
-    )
-
-
-def workflow_run_as_subject(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow run-as subject ."""
-
-    if isinstance(value, pb.WorkflowRunAsSubject):
-        return _copy(value)
-    data = _data(value, kwargs)
-    return pb.WorkflowRunAsSubject(
-        subject_id=data.get("subject_id", ""),
-        subject_kind=data.get("subject_kind", ""),
-        display_name=data.get("display_name", ""),
-        auth_source=data.get("auth_source", ""),
-    )
-
-
-def workflow_run_as_subject_input_from_subject(
-    value: Any | None,
-) -> WorkflowRunAsSubject | None:
-    """Return input copied from a workflow run-as subject."""
-
-    if value is None:
-        return None
-    return WorkflowRunAsSubject(
-        subject_id=value.subject_id,
-        subject_kind=value.subject_kind,
-        display_name=value.display_name,
-        auth_source=value.auth_source,
-    )
-
-
-def workflow_access_permission(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create an execution-reference permission ."""
-
-    if isinstance(value, pb.WorkflowAccessPermission):
-        return _copy(value)
-    data = _data(value, kwargs)
-    return pb.WorkflowAccessPermission(
-        app=data.get("app", ""),
-        operations=list(data.get("operations") or []),
-    )
-
-
-def workflow_access_permission_input_from_permission(
-    value: Any,
-) -> WorkflowAccessPermission:
-    """Return input copied from an execution-reference permission."""
-
-    return WorkflowAccessPermission(
-        app=value.app,
-        operations=list(value.operations),
     )
 
 
@@ -1483,9 +1393,9 @@ def bound_workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
         status_message=data.get("status_message", ""),
         result_body=data.get("result_body", ""),
         created_by=workflow_actor(created_by) if created_by is not None else None,
-        execution_ref=data.get("execution_ref", ""),
         workflow_key=data.get("workflow_key", ""),
         provider_name=data.get("provider_name", ""),
+        definition_id=data.get("definition_id", ""),
     )
 
 
@@ -1513,9 +1423,9 @@ def bound_workflow_run_input_from_run(
         created_by=workflow_actor_input_from_actor(value.created_by)
         if has_field(value, "created_by")
         else None,
-        execution_ref=value.execution_ref,
         workflow_key=value.workflow_key,
         provider_name=value.provider_name,
+        definition_id=value.definition_id,
     )
 
 
@@ -1588,8 +1498,8 @@ def bound_workflow_schedule(value: Any | None = None, **kwargs: Any) -> Any:
         updated_at=_optional_timestamp(data.get("updated_at")),
         next_run_at=_optional_timestamp(data.get("next_run_at")),
         created_by=workflow_actor(created_by) if created_by is not None else None,
-        execution_ref=data.get("execution_ref", ""),
         provider_name=data.get("provider_name", ""),
+        definition_id=data.get("definition_id", ""),
     )
 
 
@@ -1614,8 +1524,8 @@ def bound_workflow_schedule_input_from_schedule(
         created_by=workflow_actor_input_from_actor(value.created_by)
         if has_field(value, "created_by")
         else None,
-        execution_ref=value.execution_ref,
         provider_name=value.provider_name,
+        definition_id=value.definition_id,
     )
 
 
@@ -1643,8 +1553,8 @@ def bound_workflow_event_trigger(value: Any | None = None, **kwargs: Any) -> Any
         created_at=_optional_timestamp(data.get("created_at")),
         updated_at=_optional_timestamp(data.get("updated_at")),
         created_by=workflow_actor(created_by) if created_by is not None else None,
-        execution_ref=data.get("execution_ref", ""),
         provider_name=data.get("provider_name", ""),
+        definition_id=data.get("definition_id", ""),
     )
 
 
@@ -1669,8 +1579,8 @@ def bound_workflow_event_trigger_input_from_trigger(
         created_by=workflow_actor_input_from_actor(value.created_by)
         if has_field(value, "created_by")
         else None,
-        execution_ref=value.execution_ref,
         provider_name=value.provider_name,
+        definition_id=value.definition_id,
     )
 
 
@@ -1724,73 +1634,6 @@ def workflow_event_trigger_from_proto(
     )
 
 
-def workflow_execution_reference(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow execution reference ."""
-
-    if isinstance(value, pb.WorkflowExecutionReference):
-        return _copy(value)
-    data = _data(value, kwargs)
-    target = data.get("target")
-    run_as = data.get("run_as")
-    return pb.WorkflowExecutionReference(
-        id=data.get("id", ""),
-        provider_name=data.get("provider_name", ""),
-        target=bound_workflow_target(target) if target is not None else None,
-        subject_id=data.get("subject_id", ""),
-        credential_subject_id=data.get("credential_subject_id", ""),
-        permissions=[
-            workflow_access_permission(item) for item in (data.get("permissions") or [])
-        ],
-        created_at=_optional_timestamp(data.get("created_at")),
-        revoked_at=_optional_timestamp(data.get("revoked_at")),
-        subject_kind=data.get("subject_kind", ""),
-        display_name=data.get("display_name", ""),
-        auth_source=data.get("auth_source", ""),
-        caller_app_name=data.get("caller_app_name", ""),
-        run_as=workflow_run_as_subject(run_as) if run_as is not None else None,
-        source_definition_id=data.get("source_definition_id", ""),
-    )
-
-
-def workflow_execution_reference_input_from_reference(
-    value: Any | None,
-) -> WorkflowExecutionReference | None:
-    """Return input copied from a workflow execution reference."""
-
-    if value is None:
-        return None
-    return WorkflowExecutionReference(
-        id=value.id,
-        provider_name=value.provider_name,
-        target=bound_workflow_target_input_from_target(value.target)
-        if has_field(value, "target")
-        else None,
-        subject_id=value.subject_id,
-        credential_subject_id=value.credential_subject_id,
-        permissions=[
-            workflow_access_permission_input_from_permission(item)
-            for item in value.permissions
-        ],
-        created_at=_timestamp_to_datetime(value, "created_at"),
-        revoked_at=_timestamp_to_datetime(value, "revoked_at"),
-        subject_kind=value.subject_kind,
-        display_name=value.display_name,
-        auth_source=value.auth_source,
-        caller_app_name=value.caller_app_name,
-        run_as=workflow_run_as_subject_input_from_subject(value.run_as)
-        if has_field(value, "run_as")
-        else None,
-        source_definition_id=value.source_definition_id,
-    )
-
-
-def workflow_execution_reference_from_reference(value: Any | None) -> Any | None:
-    """Return a deep copy of a workflow execution reference."""
-
-    data = workflow_execution_reference_input_from_reference(value)
-    return workflow_execution_reference(data) if data is not None else None
-
-
 @_dataclasses.dataclass(slots=True)
 class StartWorkflowProviderRunRequest:
     """Start-run request passed to workflow providers."""
@@ -1798,7 +1641,6 @@ class StartWorkflowProviderRunRequest:
     target: Any | None = None
     idempotency_key: str = ""
     created_by: Any | None = None
-    execution_ref: str = ""
     workflow_key: str = ""
     definition_id: str = ""
 
@@ -1852,7 +1694,6 @@ class SignalOrStartWorkflowProviderRunRequest:
     target: Any | None = None
     idempotency_key: str = ""
     created_by: Any | None = None
-    execution_ref: str = ""
     signal: Any | None = None
     definition_id: str = ""
 
@@ -1873,6 +1714,7 @@ class CreateWorkflowProviderDefinitionRequest:
 
     target: Any | None = None
     idempotency_key: str = ""
+    created_by: Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
@@ -1888,6 +1730,7 @@ class UpdateWorkflowProviderDefinitionRequest:
 
     definition_id: str = ""
     target: Any | None = None
+    requested_by: Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
@@ -1907,7 +1750,6 @@ class UpsertWorkflowProviderScheduleRequest:
     target: Any | None = None
     paused: bool = False
     requested_by: Any | None = None
-    execution_ref: str = ""
     idempotency_key: str = ""
     definition_id: str = ""
 
@@ -1961,7 +1803,6 @@ class UpsertWorkflowProviderEventTriggerRequest:
     target: Any | None = None
     paused: bool = False
     requested_by: Any | None = None
-    execution_ref: str = ""
     idempotency_key: str = ""
     definition_id: str = ""
 
@@ -2007,34 +1848,6 @@ class ResumeWorkflowProviderEventTriggerRequest:
 
 
 @_dataclasses.dataclass(slots=True)
-class PutWorkflowExecutionReferenceRequest:
-    """Put-execution-reference request passed to workflow providers."""
-
-    reference: Any | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class GetWorkflowExecutionReferenceRequest:
-    """Get-execution-reference request passed to workflow providers."""
-
-    id: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class ListWorkflowExecutionReferencesRequest:
-    """List-execution-references request passed to workflow providers."""
-
-    subject_id: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class ListWorkflowExecutionReferencesResponse:
-    """Execution references returned by workflow providers."""
-
-    references: Sequence[Any] | None = None
-
-
-@_dataclasses.dataclass(slots=True)
 class PublishWorkflowProviderEventRequest:
     """Publish-event request passed to workflow providers."""
 
@@ -2054,7 +1867,6 @@ def start_workflow_provider_run_request_from_proto(
         created_by=workflow_actor_input_from_actor(value.created_by)
         if has_field(value, "created_by")
         else None,
-        execution_ref=value.execution_ref,
         workflow_key=value.workflow_key,
         definition_id=value.definition_id,
     )
@@ -2120,7 +1932,6 @@ def signal_or_start_workflow_provider_run_request_from_proto(
         created_by=workflow_actor_input_from_actor(value.created_by)
         if has_field(value, "created_by")
         else None,
-        execution_ref=value.execution_ref,
         signal=workflow_signal_input_from_signal(value.signal)
         if has_field(value, "signal")
         else None,
@@ -2151,6 +1962,9 @@ def create_workflow_provider_definition_request_from_proto(
         if has_field(value, "target")
         else None,
         idempotency_key=value.idempotency_key,
+        created_by=workflow_actor_input_from_actor(value.created_by)
+        if has_field(value, "created_by")
+        else None,
     )
 
 
@@ -2167,6 +1981,9 @@ def update_workflow_provider_definition_request_from_proto(
         definition_id=value.definition_id,
         target=bound_workflow_target_input_from_target(value.target)
         if has_field(value, "target")
+        else None,
+        requested_by=workflow_actor_input_from_actor(value.requested_by)
+        if has_field(value, "requested_by")
         else None,
     )
 
@@ -2191,7 +2008,6 @@ def upsert_workflow_provider_schedule_request_from_proto(
         requested_by=workflow_actor_input_from_actor(value.requested_by)
         if has_field(value, "requested_by")
         else None,
-        execution_ref=value.execution_ref,
         idempotency_key=value.idempotency_key,
         definition_id=value.definition_id,
     )
@@ -2255,7 +2071,6 @@ def upsert_workflow_provider_event_trigger_request_from_proto(
         requested_by=workflow_actor_input_from_actor(value.requested_by)
         if has_field(value, "requested_by")
         else None,
-        execution_ref=value.execution_ref,
         idempotency_key=value.idempotency_key,
         definition_id=value.definition_id,
     )
@@ -2304,43 +2119,6 @@ def resume_workflow_provider_event_trigger_request_from_proto(
     value: Any,
 ) -> ResumeWorkflowProviderEventTriggerRequest:
     return ResumeWorkflowProviderEventTriggerRequest(trigger_id=value.trigger_id)
-
-
-def put_workflow_execution_reference_request_from_proto(
-    value: Any,
-) -> PutWorkflowExecutionReferenceRequest:
-    return PutWorkflowExecutionReferenceRequest(
-        reference=workflow_execution_reference_input_from_reference(value.reference)
-        if has_field(value, "reference")
-        else None,
-    )
-
-
-def get_workflow_execution_reference_request_from_proto(
-    value: Any,
-) -> GetWorkflowExecutionReferenceRequest:
-    return GetWorkflowExecutionReferenceRequest(id=value.id)
-
-
-def list_workflow_execution_references_request_from_proto(
-    value: Any,
-) -> ListWorkflowExecutionReferencesRequest:
-    return ListWorkflowExecutionReferencesRequest(subject_id=value.subject_id)
-
-
-def list_workflow_execution_references_response_to_proto(value: Any) -> Any:
-    if isinstance(value, pb.ListWorkflowExecutionReferencesResponse):
-        return _copy(value)
-    response = _coerce(
-        value,
-        ListWorkflowExecutionReferencesResponse,
-        "ListWorkflowExecutionReferencesResponse",
-    )
-    return pb.ListWorkflowExecutionReferencesResponse(
-        references=[
-            workflow_execution_reference(item) for item in (response.references or [])
-        ]
-    )
 
 
 def publish_workflow_provider_event_request_from_proto(
@@ -2763,7 +2541,6 @@ class WorkflowExecutionRequest:
     input: Mapping[str, Any] | None = None
     metadata: Mapping[str, Any] | None = None
     created_by: Any | None = None
-    execution_ref: str = ""
     invocation_token: str = ""
     signals: Sequence[WorkflowSignal] | None = None
 
@@ -2872,8 +2649,6 @@ def workflow_invocation_context(req: WorkflowExecutionRequest) -> dict[str, Any]
         out["input"] = dict(req.input)
     if req.metadata is not None:
         out["metadata"] = dict(req.metadata)
-    if req.execution_ref.strip():
-        out["executionRef"] = req.execution_ref.strip()
     signal_context = workflow_signals_context(req.signals)
     if signal_context:
         out["signals"] = signal_context

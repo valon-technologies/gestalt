@@ -87,8 +87,7 @@ func workflowRunEventInfoFromCore(event coreworkflow.Event) workflowRunEventInfo
 
 func (s *Server) writeWorkflowPublishEventError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured),
-		errors.Is(err, workflowmanager.ErrExecutionRefsNotConfigured):
+	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowSubjectRequired),
 		errors.Is(err, workflowmanager.ErrWorkflowScheduleSubject):

@@ -1,24 +1,22 @@
 package bootstrap
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -33,7 +31,7 @@ type desiredWorkflowConfigSchedule struct {
 
 type workflowConfigProviderFilter func(providerName string) bool
 
-func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, includeProvider workflowConfigProviderFilter) error {
+func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, tokens *appaccessservice.InvocationTokenManager, includeProvider workflowConfigProviderFilter) error {
 	if cfg == nil || runtime == nil {
 		return nil
 	}
@@ -50,11 +48,10 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		schedule := desiredEntry.schedule
 		target := workflowConfigTarget(schedule.Target)
 		appName := workflowConfigTargetLabel(target)
-		providerName, provider, err := runtime.ResolveProviderSelection(schedule.Provider)
+		_, provider, err := runtime.ResolveProviderSelection(schedule.Provider)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
-		existingExecutionRef := ""
 		providerCtx := invocation.WithWorkflowContextString(ctx, "app", appName)
 		existing, err := provider.GetSchedule(providerCtx, coreworkflow.GetScheduleRequest{
 			ScheduleID: desiredEntry.ScheduleID,
@@ -65,12 +62,8 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 				return fmt.Errorf("bootstrap: workflow schedule %q for app %q conflicts with existing unmanaged schedule id %q", desiredEntry.ScheduleKey, appName, desiredEntry.ScheduleID)
 			}
 		case isWorkflowObjectNotFound(err):
-			existing = nil
 		default:
 			return fmt.Errorf("bootstrap: get workflow schedule %q for app %q: %w", desiredEntry.ScheduleID, appName, err)
-		}
-		if existing != nil {
-			existingExecutionRef = strings.TrimSpace(existing.ExecutionRef)
 		}
 		runAs, err := workflowConfigRunAsSubject("workflows.schedules."+desiredEntry.ScheduleKey+".runAs", schedule.RunAs)
 		if err != nil {
@@ -80,48 +73,23 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
-		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target, runAs, permissions)
-		if err != nil {
+		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs, permissions); err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
-		executionRefs, err := workflowExecutionReferenceStore(providerName, provider)
+		executionPermissions := workflowConfigExecutionPermissionsForTarget(target, permissions)
+		providerCtx, err = workflowConfigInvocationContext(providerCtx, tokens, runAs, executionPermissions)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
-		}
-		executionRefID, createdExecutionRef, replacedUnreadableExecutionRef, replacedUnreadableExecutionRefErr, err := workflowEnsureConfigExecutionRef(
-			ctx,
-			executionRefs,
-			desiredExecutionRef,
-			workflowConfigScheduleExecutionRefID(desiredEntry.ScheduleID),
-			existingExecutionRef,
-		)
-		if err != nil {
-			if existingExecutionRef != "" && workflowConfigScheduleDefinitionMatches(existing, target, schedule) {
-				continue
-			}
-			return fmt.Errorf("bootstrap: store workflow execution ref for schedule %q on app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
 		if _, err := provider.UpsertSchedule(providerCtx, coreworkflow.UpsertScheduleRequest{
-			ScheduleID:   desiredEntry.ScheduleID,
-			Cron:         schedule.Cron,
-			Timezone:     schedule.Timezone,
-			Target:       target,
-			Paused:       schedule.Paused,
-			RequestedBy:  workflowConfigActor(),
-			ExecutionRef: executionRefID,
+			ScheduleID:  desiredEntry.ScheduleID,
+			Cron:        schedule.Cron,
+			Timezone:    schedule.Timezone,
+			Target:      target,
+			Paused:      schedule.Paused,
+			RequestedBy: workflowConfigActor(),
 		}); err != nil {
-			if createdExecutionRef {
-				_ = workflowRevokeExecutionRefByID(ctx, executionRefs, executionRefID)
-			}
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
-		}
-		if replacedUnreadableExecutionRef != "" {
-			workflowLogReplacedUnreadableExecutionRef(ctx, "schedule", desiredEntry.ScheduleKey, desiredEntry.ScheduleID, providerName, appName, replacedUnreadableExecutionRef, executionRefID, replacedUnreadableExecutionRefErr)
-		}
-		if existingExecutionRef != executionRefID && replacedUnreadableExecutionRef == "" {
-			if err := workflowRevokeExecutionRefByID(ctx, executionRefs, existingExecutionRef); err != nil {
-				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for schedule %q on app %q: %w", existingExecutionRef, desiredEntry.ScheduleID, appName, err)
-			}
 		}
 	}
 
@@ -136,16 +104,6 @@ func workflowConfigProviderIncluded(includeProvider workflowConfigProviderFilter
 		return true
 	}
 	return includeProvider(strings.TrimSpace(providerName))
-}
-
-func workflowConfigScheduleDefinitionMatches(existing *coreworkflow.Schedule, target coreworkflow.Target, schedule config.WorkflowScheduleConfig) bool {
-	if existing == nil {
-		return false
-	}
-	return strings.TrimSpace(existing.Cron) == strings.TrimSpace(schedule.Cron) &&
-		strings.TrimSpace(existing.Timezone) == strings.TrimSpace(schedule.Timezone) &&
-		existing.Paused == schedule.Paused &&
-		coreworkflow.TargetsEqual(existing.Target, target)
 }
 
 func desiredWorkflowConfigSchedules(cfg *config.Config) (map[string]desiredWorkflowConfigSchedule, error) {
@@ -196,7 +154,6 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 			workflowLogSkippedConfigWorkflowCleanup(ctx, "schedules", providerName, err)
 			continue
 		}
-		var executionRefs coreworkflow.ExecutionReferenceStore
 		for _, schedule := range schedules {
 			if schedule == nil || !isWorkflowConfigOwnedSchedule(schedule, workflowConfigTargetLabel(schedule.Target), schedule.ID) {
 				continue
@@ -208,15 +165,6 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 			providerCtx := invocation.WithWorkflowContextString(ctx, "app", appName)
 			if err := provider.DeleteSchedule(providerCtx, coreworkflow.DeleteScheduleRequest{ScheduleID: schedule.ID}); err != nil && !isWorkflowObjectNotFound(err) {
 				return fmt.Errorf("bootstrap: delete workflow schedule %q for app %q: %w", schedule.ID, appName, err)
-			}
-			if executionRefs == nil {
-				executionRefs, err = workflowExecutionReferenceStore(providerName, provider)
-				if err != nil {
-					return fmt.Errorf("bootstrap: cleanup workflow schedules for provider %q: %w", providerName, err)
-				}
-			}
-			if err := workflowRevokeExecutionRefByID(ctx, executionRefs, schedule.ExecutionRef); err != nil {
-				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for schedule %q on app %q: %w", schedule.ExecutionRef, schedule.ID, appName, err)
 			}
 		}
 	}
@@ -332,78 +280,7 @@ func workflowConfigExecutionPermissions(cfg *config.Config, path string, invokes
 	return out, nil
 }
 
-func workflowConfigActor() coreworkflow.Actor {
-	return coreworkflow.Actor{
-		SubjectID:   workflowConfigOwnerSubjectID(),
-		SubjectKind: "system",
-		DisplayName: "Workflow Config",
-		AuthSource:  "config",
-	}
-}
-
-func workflowConfigScheduleID(scheduleKey string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(scheduleKey)))
-	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
-}
-
-func workflowConfigScheduleExecutionRefID(scheduleID string) string {
-	return "workflow_schedule:" + scheduleID + ":" + uuid.NewString()
-}
-
-func workflowEnsureConfigExecutionRef(
-	ctx context.Context,
-	store coreworkflow.ExecutionReferenceStore,
-	desired *coreworkflow.ExecutionReference,
-	refID string,
-	candidateIDs ...string,
-) (string, bool, string, error, error) {
-	if store == nil {
-		return "", false, "", nil, fmt.Errorf("workflow execution refs are not configured")
-	}
-	refID = strings.TrimSpace(refID)
-	if refID == "" {
-		return "", false, "", nil, fmt.Errorf("workflow execution ref id is required")
-	}
-	replacedUnreadableCandidateID := ""
-	var replacedUnreadableCandidateErr error
-	for _, candidateID := range candidateIDs {
-		candidateID = strings.TrimSpace(candidateID)
-		if candidateID == "" {
-			continue
-		}
-		existing, err := store.GetExecutionReference(ctx, candidateID)
-		if err != nil {
-			if isWorkflowObjectNotFound(err) {
-				continue
-			}
-			if replacedUnreadableCandidateID == "" {
-				replacedUnreadableCandidateID = candidateID
-				replacedUnreadableCandidateErr = err
-			}
-			continue
-		}
-		if workflowConfigExecutionRefMatches(existing, desired) {
-			return candidateID, false, "", nil, nil
-		}
-	}
-	desired.ID = refID
-	stored, err := store.PutExecutionReference(ctx, desired)
-	if err != nil {
-		return "", false, "", nil, err
-	}
-	if desired.RunAs != nil && !workflowConfigExecutionRefMatches(stored, desired) {
-		verified, err := store.GetExecutionReference(ctx, refID)
-		if err != nil {
-			return "", false, "", nil, fmt.Errorf("workflow execution ref %q was written but could not be verified: %w", refID, err)
-		}
-		if !workflowConfigExecutionRefMatches(verified, desired) {
-			return "", false, "", nil, workflowConfigExecutionRefPersistenceError(refID, verified, desired)
-		}
-	}
-	return refID, true, replacedUnreadableCandidateID, replacedUnreadableCandidateErr, nil
-}
-
-func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explicit ...[]core.AccessPermission) []core.AccessPermission {
+func workflowConfigExecutionPermissionsForTarget(target coreworkflow.Target, explicit ...[]core.AccessPermission) []core.AccessPermission {
 	base := make([]core.AccessPermission, 0)
 	for i := range target.Steps {
 		step := target.Steps[i]
@@ -430,10 +307,10 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 			}
 		}
 	}
-	return workflowMergeExecutionRefPermissions(append([][]core.AccessPermission{base}, explicit...)...)
+	return workflowMergeExecutionPermissions(append([][]core.AccessPermission{base}, explicit...)...)
 }
 
-func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []core.AccessPermission {
+func workflowMergeExecutionPermissions(groups ...[]core.AccessPermission) []core.AccessPermission {
 	out := make([]core.AccessPermission, 0)
 	appIndexes := map[string]int{}
 	seenOperations := map[string]map[string]struct{}{}
@@ -481,25 +358,101 @@ func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []c
 	return out
 }
 
-func workflowConfigExecutionReference(cfg *config.Config, providerName string, target coreworkflow.Target, runAs *core.RunAsSubject, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
-	runAs = core.NormalizeRunAsSubject(runAs)
-	ref := &coreworkflow.ExecutionReference{
-		ProviderName:        providerName,
-		Target:              target,
-		SubjectID:           workflowConfigOwnerSubjectID(),
-		SubjectKind:         "system",
-		DisplayName:         "Gestalt config",
-		AuthSource:          "config",
-		CredentialSubjectID: workflowConfigOwnerSubjectID(),
-		RunAs:               runAs,
-		Permissions:         workflowExecutionRefPermissionsForTarget(target, permissions),
+func workflowConfigInvocationContext(ctx context.Context, tokens *appaccessservice.InvocationTokenManager, runAs *core.RunAsSubject, permissions []core.AccessPermission) (context.Context, error) {
+	if tokens == nil {
+		return ctx, nil
 	}
+	tokenCtx := principal.WithPrincipal(ctx, workflowConfigPrincipal(runAs, permissions))
+	token, err := tokens.MintRootToken(tokenCtx, workflowConfigOwnerSubjectID(), workflowConfigInvocationGrants(permissions))
+	if err != nil {
+		return nil, fmt.Errorf("workflow config invocation token: %w", err)
+	}
+	return appaccessservice.WithInvocationToken(ctx, token), nil
+}
+
+func workflowConfigPrincipal(runAs *core.RunAsSubject, permissions []core.AccessPermission) *principal.Principal {
+	actor := workflowConfigActor()
+	subjectID := strings.TrimSpace(actor.SubjectID)
+	subjectKind := strings.TrimSpace(actor.SubjectKind)
+	credentialSubjectID := subjectID
+	displayName := strings.TrimSpace(actor.DisplayName)
+	authSource := strings.TrimSpace(actor.AuthSource)
+	if runAs := core.NormalizeRunAsSubject(runAs); runAs != nil {
+		subjectID = strings.TrimSpace(runAs.SubjectID)
+		subjectKind = strings.TrimSpace(runAs.SubjectKind)
+		credentialSubjectID = strings.TrimSpace(runAs.CredentialSubjectID)
+		displayName = strings.TrimSpace(runAs.DisplayName)
+		authSource = strings.TrimSpace(runAs.AuthSource)
+	}
+	compiled := principal.CompilePermissions(permissions)
+	value := &principal.Principal{
+		SubjectID:           subjectID,
+		CredentialSubjectID: credentialSubjectID,
+		DisplayName:         displayName,
+		Kind:                principal.Kind(subjectKind),
+		Scopes:              principal.PermissionApps(compiled),
+		TokenPermissions:    compiled,
+	}
+	principal.SetAuthSource(value, authSource)
+	if value.CredentialSubjectID == "" && principal.IsSystemSubjectID(value.SubjectID) {
+		value.CredentialSubjectID = value.SubjectID
+	}
+	return principal.Canonicalize(value)
+}
+
+func workflowConfigInvocationGrants(permissions []core.AccessPermission) appaccessservice.InvocationGrants {
+	if len(permissions) == 0 {
+		return nil
+	}
+	grants := make(appaccessservice.InvocationGrants, len(permissions))
+	for _, permission := range permissions {
+		appName := strings.TrimSpace(permission.App)
+		if appName == "" {
+			continue
+		}
+		grant := grants[appName]
+		operations := make(map[string]core.ConnectionMode)
+		for _, operation := range permission.Operations {
+			operation = strings.TrimSpace(operation)
+			if operation != "" {
+				operations[operation] = ""
+			}
+		}
+		if len(operations) == 0 {
+			grant.AllOperations = true
+		} else {
+			grant.Operations = operations
+		}
+		grants[appName] = grant
+	}
+	if len(grants) == 0 {
+		return nil
+	}
+	return grants
+}
+
+func workflowConfigActor() coreworkflow.Actor {
+	return coreworkflow.Actor{
+		SubjectID:   workflowConfigOwnerSubjectID(),
+		SubjectKind: "system",
+		DisplayName: "Workflow Config",
+		AuthSource:  "config",
+	}
+}
+
+func workflowConfigScheduleID(scheduleKey string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(scheduleKey)))
+	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
+}
+
+func workflowConfigValidateExecutionTarget(cfg *config.Config, target coreworkflow.Target, runAs *core.RunAsSubject, _ []core.AccessPermission) error {
+	runAs = core.NormalizeRunAsSubject(runAs)
 	hasRunAs := runAs != nil
 	for i := range target.Steps {
 		step := target.Steps[i]
 		if step.App != nil {
 			if err := workflowConfigValidateNoUserCredentialTarget(cfg, *step.App, hasRunAs); err != nil {
-				return nil, err
+				return err
 			}
 		}
 		if step.Agent != nil {
@@ -514,12 +467,12 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 					Connection: strings.TrimSpace(tool.Connection),
 					Instance:   strings.TrimSpace(tool.Instance),
 				}, hasRunAs); err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
 	}
-	return ref, nil
+	return nil
 }
 
 func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target coreworkflow.AppCall, hasRunAs bool) error {
@@ -663,88 +616,4 @@ func workflowConfigConnectionModeForName(plan config.StaticConnectionPlan, appNa
 
 func workflowConfigOwnerSubjectID() string {
 	return "system:config"
-}
-
-func workflowConfigExecutionRefMatches(existing, desired *coreworkflow.ExecutionReference) bool {
-	if existing == nil || desired == nil {
-		return false
-	}
-	if existing.RevokedAt != nil && !existing.RevokedAt.IsZero() {
-		return false
-	}
-	if strings.TrimSpace(existing.ProviderName) != strings.TrimSpace(desired.ProviderName) {
-		return false
-	}
-	if strings.TrimSpace(existing.SubjectID) != strings.TrimSpace(desired.SubjectID) {
-		return false
-	}
-	if strings.TrimSpace(existing.SubjectKind) != strings.TrimSpace(desired.SubjectKind) {
-		return false
-	}
-	if strings.TrimSpace(existing.DisplayName) != strings.TrimSpace(desired.DisplayName) {
-		return false
-	}
-	if strings.TrimSpace(existing.AuthSource) != strings.TrimSpace(desired.AuthSource) {
-		return false
-	}
-	if strings.TrimSpace(existing.CredentialSubjectID) != strings.TrimSpace(desired.CredentialSubjectID) {
-		return false
-	}
-	if !core.RunAsSubjectsEqual(existing.RunAs, desired.RunAs) {
-		return false
-	}
-	if !coreworkflow.TargetsEqual(existing.Target, desired.Target) {
-		return false
-	}
-	existingJSON, existingErr := json.Marshal(existing.Permissions)
-	desiredJSON, desiredErr := json.Marshal(desired.Permissions)
-	return existingErr == nil && desiredErr == nil && bytes.Equal(existingJSON, desiredJSON)
-}
-
-func workflowConfigExecutionRefPersistenceError(refID string, stored, desired *coreworkflow.ExecutionReference) error {
-	if desired != nil && desired.RunAs != nil && (stored == nil || !core.RunAsSubjectsEqual(stored.RunAs, desired.RunAs)) {
-		return fmt.Errorf("workflow execution ref %q was written but provider did not preserve runAs subject %q", refID, strings.TrimSpace(desired.RunAs.SubjectID))
-	}
-	return fmt.Errorf("workflow execution ref %q was written but provider did not preserve config-managed execution reference metadata", refID)
-}
-
-func workflowExecutionReferenceStore(providerName string, provider coreworkflow.Provider) (coreworkflow.ExecutionReferenceStore, error) {
-	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
-	if !ok {
-		return nil, fmt.Errorf("workflow provider %q does not support execution refs", strings.TrimSpace(providerName))
-	}
-	return store, nil
-}
-
-func workflowLogReplacedUnreadableExecutionRef(ctx context.Context, objectType, objectKey, objectID, providerName, appName, oldExecutionRef, newExecutionRef string, lookupErr error) {
-	slog.WarnContext(ctx, "replaced unreadable workflow execution ref during config reconciliation",
-		"workflow_object_type", strings.TrimSpace(objectType),
-		"workflow_object_key", strings.TrimSpace(objectKey),
-		"workflow_object_id", strings.TrimSpace(objectID),
-		"workflow_provider", strings.TrimSpace(providerName),
-		"app", strings.TrimSpace(appName),
-		"old_execution_ref", strings.TrimSpace(oldExecutionRef),
-		"new_execution_ref", strings.TrimSpace(newExecutionRef),
-		"error", lookupErr,
-	)
-}
-
-func workflowRevokeExecutionRefByID(ctx context.Context, store coreworkflow.ExecutionReferenceStore, refID string) error {
-	if store == nil || strings.TrimSpace(refID) == "" {
-		return nil
-	}
-	ref, err := store.GetExecutionReference(ctx, refID)
-	if err != nil {
-		if isWorkflowObjectNotFound(err) {
-			return nil
-		}
-		return err
-	}
-	if ref == nil || ref.RevokedAt != nil {
-		return nil
-	}
-	now := time.Now()
-	ref.RevokedAt = &now
-	_, err = store.PutExecutionReference(ctx, ref)
-	return err
 }

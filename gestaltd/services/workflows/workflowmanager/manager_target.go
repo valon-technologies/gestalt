@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"strings"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
@@ -42,44 +41,29 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 		if err != nil {
 			return "", nil, coreworkflow.Target{}, err
 		}
+		if decision := m.checkResolvedAgentToolAuthorization(ctx, p, resolvedTarget, callerAppName); !decision.allowed {
+			return providerName, provider, coreworkflow.Target{}, workflowTargetAuthorizationError{failure: decision.failure}
+		}
 		return providerName, provider, resolvedTarget, nil
 	}
 	if workflowTargetIsSet(target) {
 		return "", nil, coreworkflow.Target{}, fmt.Errorf("%w: workflow request must set either target or definition_id, not both", invocation.ErrInvalidInvocation)
 	}
-	definition, err := m.requireOwnedDefinition(ctx, definitionID, p)
+	definition, err := m.requireOwnedDefinition(WithCallerAppName(ctx, callerAppName), p, definitionID, providerSelection)
 	if err != nil {
 		return "", nil, coreworkflow.Target{}, err
 	}
-	if strings.TrimSpace(providerSelection) != "" {
-		selectedProviderName, _, err := m.resolveProviderSelection(strings.TrimSpace(providerSelection))
-		if err != nil {
-			return "", nil, coreworkflow.Target{}, err
-		}
-		if selectedProviderName != definition.ProviderName {
-			return "", nil, coreworkflow.Target{}, fmt.Errorf("%w: workflow definition %s belongs to provider %q, not %q", invocation.ErrInvalidInvocation, definitionID, definition.ProviderName, selectedProviderName)
-		}
+	if definition == nil || definition.Definition == nil {
+		return "", nil, coreworkflow.Target{}, core.ErrNotFound
 	}
 	resolvedTarget, err := m.resolveTarget(ctx, p, definition.Definition.Target, callerAppName)
 	if err != nil {
 		return "", nil, coreworkflow.Target{}, err
 	}
+	if decision := m.checkResolvedAgentToolAuthorization(ctx, p, resolvedTarget, callerAppName); !decision.allowed {
+		return definition.ProviderName, definition.provider, coreworkflow.Target{}, workflowTargetAuthorizationError{failure: decision.failure}
+	}
 	return definition.ProviderName, definition.provider, resolvedTarget, nil
-}
-
-func (m *Manager) validateExistingProviderSelection(providerSelection, existingProviderName string) error {
-	providerSelection = strings.TrimSpace(providerSelection)
-	if providerSelection == "" {
-		return nil
-	}
-	selectedProviderName, _, err := m.resolveProviderSelection(providerSelection)
-	if err != nil {
-		return err
-	}
-	if selectedProviderName != strings.TrimSpace(existingProviderName) {
-		return fmt.Errorf("%w: workflow idempotency key reused with different provider", invocation.ErrInvalidInvocation)
-	}
-	return nil
 }
 
 func workflowTargetIsSet(target coreworkflow.Target) bool {
@@ -278,336 +262,6 @@ func (m *Manager) normalizeWorkflowAppStepCredentialMode(mode core.ConnectionMod
 	return mode, nil
 }
 
-func (m *Manager) requireOwnedDefinition(ctx context.Context, definitionID string, p *principal.Principal) (*ManagedDefinition, error) {
-	definitionID = strings.TrimSpace(definitionID)
-	if definitionID == "" || !strings.HasPrefix(definitionID, workflowDefinitionExecutionRefBasePrefix) {
-		return nil, core.ErrNotFound
-	}
-	refs, err := m.listOwnedExecutionRefs(ctx, p, true)
-	if err != nil {
-		return nil, err
-	}
-	var match *coreworkflow.ExecutionReference
-	for _, ref := range refs {
-		if ref == nil || strings.TrimSpace(ref.ID) != definitionID {
-			continue
-		}
-		if match != nil {
-			return nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, definitionID)
-		}
-		match = ref
-	}
-	if match == nil || !m.allowTarget(ctx, p, match.Target) {
-		return nil, core.ErrNotFound
-	}
-	provider, err := m.resolveProviderByName(strings.TrimSpace(match.ProviderName))
-	if err != nil {
-		return nil, err
-	}
-	return &ManagedDefinition{
-		ProviderName: strings.TrimSpace(match.ProviderName),
-		Definition:   match,
-		provider:     provider,
-	}, nil
-}
-
-func (m *Manager) findOwnedExecutionRef(ctx context.Context, scheduleID string, p *principal.Principal) (*coreworkflow.ExecutionReference, error) {
-	refs, err := m.listOwnedExecutionRefs(ctx, p, true)
-	if err != nil {
-		return nil, err
-	}
-	prefix := scheduleExecutionRefPrefix(scheduleID)
-	var match *coreworkflow.ExecutionReference
-	for _, ref := range refs {
-		if !strings.HasPrefix(strings.TrimSpace(ref.ID), prefix) {
-			continue
-		}
-		if match != nil {
-			return nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, scheduleID)
-		}
-		match = ref
-	}
-	if match == nil {
-		return nil, core.ErrNotFound
-	}
-	return match, nil
-}
-
-func (m *Manager) findOwnedEventTriggerExecutionRef(ctx context.Context, triggerID string, p *principal.Principal) (*coreworkflow.ExecutionReference, error) {
-	refs, err := m.listOwnedExecutionRefs(ctx, p, true)
-	if err != nil {
-		return nil, err
-	}
-	prefix := eventTriggerExecutionRefPrefix(triggerID)
-	var match *coreworkflow.ExecutionReference
-	for _, ref := range refs {
-		if !strings.HasPrefix(strings.TrimSpace(ref.ID), prefix) {
-			continue
-		}
-		if match != nil {
-			return nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, triggerID)
-		}
-		match = ref
-	}
-	if match == nil {
-		return nil, core.ErrNotFound
-	}
-	return match, nil
-}
-
-func (m *Manager) requireOwnedSchedule(ctx context.Context, scheduleID string, p *principal.Principal) (*ManagedSchedule, error) {
-	scheduleID = strings.TrimSpace(scheduleID)
-	if scheduleID == "" {
-		return nil, core.ErrNotFound
-	}
-	ref, err := m.findOwnedExecutionRef(ctx, scheduleID, p)
-	if err != nil {
-		return nil, err
-	}
-	if !m.allowTarget(ctx, p, ref.Target) {
-		return nil, core.ErrNotFound
-	}
-	provider, err := m.resolveProviderByName(strings.TrimSpace(ref.ProviderName))
-	if err != nil {
-		return nil, err
-	}
-	schedule, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{ScheduleID: scheduleID})
-	if err != nil {
-		return nil, err
-	}
-	if !scheduleMatchesExecutionRef(ref.ProviderName, schedule, ref) {
-		return nil, core.ErrNotFound
-	}
-	return &ManagedSchedule{
-		ProviderName: strings.TrimSpace(ref.ProviderName),
-		Schedule:     schedule,
-		ExecutionRef: ref,
-		provider:     provider,
-	}, nil
-}
-
-func (m *Manager) requireOwnedEventTrigger(ctx context.Context, triggerID string, p *principal.Principal) (*ManagedEventTrigger, error) {
-	triggerID = strings.TrimSpace(triggerID)
-	if triggerID == "" {
-		return nil, core.ErrNotFound
-	}
-	ref, err := m.findOwnedEventTriggerExecutionRef(ctx, triggerID, p)
-	if err != nil {
-		return nil, err
-	}
-	if !m.allowTarget(ctx, p, ref.Target) {
-		return nil, core.ErrNotFound
-	}
-	provider, err := m.resolveProviderByName(strings.TrimSpace(ref.ProviderName))
-	if err != nil {
-		return nil, err
-	}
-	trigger, err := provider.GetEventTrigger(ctx, coreworkflow.GetEventTriggerRequest{TriggerID: triggerID})
-	if err != nil {
-		return nil, err
-	}
-	if !eventTriggerMatchesExecutionRef(ref.ProviderName, trigger, ref) {
-		return nil, core.ErrNotFound
-	}
-	return &ManagedEventTrigger{
-		ProviderName: strings.TrimSpace(ref.ProviderName),
-		Trigger:      trigger,
-		ExecutionRef: ref,
-		provider:     provider,
-	}, nil
-}
-
-func (m *Manager) listOwnedExecutionRefs(ctx context.Context, p *principal.Principal, activeOnly bool) ([]*coreworkflow.ExecutionReference, error) {
-	if m == nil || m.workflow == nil {
-		return nil, ErrExecutionRefsNotConfigured
-	}
-	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	if subjectID == "" {
-		return nil, ErrWorkflowSubjectRequired
-	}
-	out := []*coreworkflow.ExecutionReference{}
-	for _, providerName := range m.workflow.ProviderNames() {
-		provider, err := m.resolveProviderByName(providerName)
-		if err != nil {
-			return nil, err
-		}
-		store, err := workflowExecutionReferenceStore(providerName, provider)
-		if err != nil {
-			return nil, err
-		}
-		refs, err := store.ListExecutionReferences(ctx, subjectID)
-		if err != nil {
-			return nil, err
-		}
-		for _, ref := range refs {
-			ref = workflowExecutionRefForProvider(ref, providerName)
-			if !executionRefOwnedBy(ref, p) || (activeOnly && !executionRefActive(ref)) {
-				continue
-			}
-			out = append(out, ref)
-		}
-	}
-	return out, nil
-}
-
-func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerAppName, sourceDefinitionID string) (*coreworkflow.ExecutionReference, error) {
-	return m.putExecutionRefWithPermissions(ctx, executionRefID, providerName, provider, target, p, callerAppName, sourceDefinitionID, nil)
-}
-
-func (m *Manager) putExecutionRefWithPermissions(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerAppName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
-	store, err := workflowExecutionReferenceStore(providerName, provider)
-	if err != nil {
-		return nil, err
-	}
-	p = principal.Canonicalized(p)
-	subjectID := strings.TrimSpace(principalSubjectID(p))
-	if subjectID == "" {
-		return nil, ErrWorkflowSubjectRequired
-	}
-	actor := workflowActorFromPrincipal(p)
-	return store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{
-		ID:                  executionRefID,
-		ProviderName:        strings.TrimSpace(providerName),
-		Target:              target,
-		CallerAppName:       strings.TrimSpace(callerAppName),
-		SourceDefinitionID:  strings.TrimSpace(sourceDefinitionID),
-		SubjectID:           subjectID,
-		SubjectKind:         actor.SubjectKind,
-		DisplayName:         actor.DisplayName,
-		AuthSource:          actor.AuthSource,
-		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-		Permissions:         m.executionRefPermissionsWithOverride(p, target, callerAppName, permissions),
-	})
-}
-
-func (m *Manager) putRunExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerAppName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, bool, error) {
-	store, err := workflowExecutionReferenceStore(providerName, provider)
-	if err != nil {
-		return nil, false, err
-	}
-	expectedPermissions := m.executionRefPermissionsWithOverride(p, target, callerAppName, permissions)
-	existing, err := store.GetExecutionReference(ctx, executionRefID)
-	if err == nil {
-		existing = workflowExecutionRefForProvider(existing, providerName)
-		if !runExecutionRefMatches(existing, executionRefID, providerName, target, p, callerAppName, sourceDefinitionID, expectedPermissions) {
-			return nil, false, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, executionRefID)
-		}
-		if executionRefActive(existing) {
-			return existing, false, nil
-		}
-	} else if !isWorkflowProviderNotFound(err) {
-		return nil, false, err
-	}
-	p = principal.Canonicalized(p)
-	subjectID := strings.TrimSpace(principalSubjectID(p))
-	if subjectID == "" {
-		return nil, false, ErrWorkflowSubjectRequired
-	}
-	actor := workflowActorFromPrincipal(p)
-	ref, err := store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{
-		ID:                  executionRefID,
-		ProviderName:        strings.TrimSpace(providerName),
-		Target:              target,
-		CallerAppName:       strings.TrimSpace(callerAppName),
-		SourceDefinitionID:  strings.TrimSpace(sourceDefinitionID),
-		SubjectID:           subjectID,
-		SubjectKind:         actor.SubjectKind,
-		DisplayName:         actor.DisplayName,
-		AuthSource:          actor.AuthSource,
-		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-		Permissions:         expectedPermissions,
-	})
-	if err != nil {
-		return nil, false, err
-	}
-	return ref, true, nil
-}
-
-func (m *Manager) executionRefPermissionsWithOverride(p *principal.Principal, target coreworkflow.Target, callerAppName string, override []core.AccessPermission) []core.AccessPermission {
-	if override == nil {
-		return m.executionRefPermissions(p, target, callerAppName)
-	}
-	out := principal.PermissionsToAccessPermissions(principal.CompilePermissions(override))
-	if len(out) == 0 {
-		return []core.AccessPermission{{App: workflowNoProviderPermissionsApp}}
-	}
-	return out
-}
-
-func (m *Manager) putSignalOrStartExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerAppName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
-	store, err := workflowExecutionReferenceStore(providerName, provider)
-	if err != nil {
-		return nil, err
-	}
-	existing, err := store.GetExecutionReference(ctx, executionRefID)
-	if err == nil {
-		existing = workflowExecutionRefForProvider(existing, providerName)
-		if !signalOrStartExecutionRefMatches(existing, executionRefID, providerName, target, p, callerAppName, permissions) {
-			return nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, executionRefID)
-		}
-		if executionRefActive(existing) {
-			return existing, nil
-		}
-	} else if !isWorkflowProviderNotFound(err) {
-		return nil, err
-	}
-
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, callerAppName, sourceDefinitionID)
-	if err != nil {
-		return nil, err
-	}
-	return ref, nil
-}
-
-func (m *Manager) executionRefPermissions(p *principal.Principal, target coreworkflow.Target, callerAppName string) []core.AccessPermission {
-	p = principal.Canonicalized(p)
-	if p == nil || p.TokenPermissions == nil {
-		return principal.PermissionsToAccessPermissions(nil)
-	}
-	permissions := principal.ClonePermissionSet(p.TokenPermissions)
-	for i := range target.Steps {
-		step := target.Steps[i]
-		if step.App != nil && m.callerAppDeclaresInvoke(callerAppName, step.App.Name, step.App.Operation) {
-			addWorkflowPermission(permissions, step.App.Name, step.App.Operation)
-		}
-		if step.Agent == nil {
-			continue
-		}
-		for j := range step.Agent.ToolRefs {
-			tool := step.Agent.ToolRefs[j]
-			appName := strings.TrimSpace(tool.App)
-			operation := strings.TrimSpace(tool.Operation)
-			if appName == "" || appName == "*" || operation == "" {
-				continue
-			}
-			if m.callerAppDeclaresInvoke(callerAppName, appName, operation) {
-				addWorkflowPermission(permissions, appName, operation)
-			}
-		}
-	}
-	out := principal.PermissionsToAccessPermissions(permissions)
-	if len(out) == 0 {
-		return []core.AccessPermission{{App: workflowNoProviderPermissionsApp}}
-	}
-	return out
-}
-
-func executionRefPrincipal(p *principal.Principal, permissions []core.AccessPermission) *principal.Principal {
-	p = principal.Canonicalized(p)
-	if p == nil {
-		return nil
-	}
-	compiled := principal.CompilePermissions(permissions)
-	if permissions != nil && compiled == nil {
-		compiled = principal.PermissionSet{}
-	}
-	next := *p
-	next.TokenPermissions = compiled
-	next.ActionPermissions = nil
-	next.Scopes = principal.PermissionApps(compiled)
-	return principal.Canonicalize(&next)
-}
-
 func (m *Manager) callerAppDeclaresInvoke(callerAppName, appName, operation string) bool {
 	callerAppName = strings.TrimSpace(callerAppName)
 	appName = strings.TrimSpace(appName)
@@ -624,91 +278,6 @@ func (m *Manager) callerAppDeclaresInvoke(callerAppName, appName, operation stri
 		}
 	}
 	return false
-}
-
-func addWorkflowPermission(permissions principal.PermissionSet, appName, operation string) {
-	appName = strings.TrimSpace(appName)
-	operation = strings.TrimSpace(operation)
-	if permissions == nil || appName == "" || operation == "" {
-		return
-	}
-	if operations, ok := permissions[appName]; ok && operations == nil {
-		return
-	}
-	operations := permissions[appName]
-	if operations == nil {
-		operations = map[string]struct{}{}
-		permissions[appName] = operations
-	}
-	operations[operation] = struct{}{}
-}
-
-func (m *Manager) revokeExecutionRef(ctx context.Context, ref *coreworkflow.ExecutionReference) {
-	_, _ = m.revokeExecutionRefWithError(ctx, ref)
-}
-
-func (m *Manager) revokeExecutionRefWithError(ctx context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
-	if m == nil || ref == nil || strings.TrimSpace(ref.ID) == "" {
-		return nil, nil
-	}
-	providerName := strings.TrimSpace(ref.ProviderName)
-	provider, err := m.resolveProviderByName(providerName)
-	if err != nil {
-		return nil, err
-	}
-	store, err := workflowExecutionReferenceStore(providerName, provider)
-	if err != nil {
-		return nil, err
-	}
-	cloned := *ref
-	now := m.now().UTC().Truncate(time.Second)
-	cloned.RevokedAt = &now
-	return store.PutExecutionReference(ctx, &cloned)
-}
-
-func (m *Manager) restoreExecutionRef(ctx context.Context, ref *coreworkflow.ExecutionReference) {
-	if m == nil || ref == nil || strings.TrimSpace(ref.ID) == "" {
-		return
-	}
-	providerName := strings.TrimSpace(ref.ProviderName)
-	provider, err := m.resolveProviderByName(providerName)
-	if err != nil {
-		return
-	}
-	store, err := workflowExecutionReferenceStore(providerName, provider)
-	if err != nil {
-		return
-	}
-	cloned := *ref
-	_, _ = store.PutExecutionReference(ctx, &cloned)
-}
-
-func workflowExecutionReferenceStore(providerName string, provider coreworkflow.Provider) (coreworkflow.ExecutionReferenceStore, error) {
-	if provider == nil {
-		return nil, fmt.Errorf("%w: workflow provider %q is not configured", ErrExecutionRefsNotConfigured, strings.TrimSpace(providerName))
-	}
-	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
-	if !ok {
-		return nil, fmt.Errorf("%w: workflow provider %q does not support execution references", ErrExecutionRefsNotConfigured, strings.TrimSpace(providerName))
-	}
-	return store, nil
-}
-
-func workflowExecutionRefForProvider(ref *coreworkflow.ExecutionReference, providerName string) *coreworkflow.ExecutionReference {
-	if ref == nil {
-		return nil
-	}
-	providerName = strings.TrimSpace(providerName)
-	refProviderName := strings.TrimSpace(ref.ProviderName)
-	if providerName == "" || refProviderName == providerName {
-		return ref
-	}
-	if refProviderName != "" {
-		return nil
-	}
-	cloned := *ref
-	cloned.ProviderName = providerName
-	return &cloned
 }
 
 func isWorkflowProviderNotFound(err error) bool {
@@ -769,18 +338,50 @@ type targetAuthorizationFailure struct {
 	toolRefIndex int
 }
 
-func (m *Manager) allowTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) bool {
-	return m.checkTargetAuthorization(ctx, p, target).allowed
+type workflowTargetAuthorizationError struct {
+	failure targetAuthorizationFailure
 }
 
-func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target) targetAuthorizationDecision {
+func (e workflowTargetAuthorizationError) Error() string { return core.ErrNotFound.Error() }
+func (e workflowTargetAuthorizationError) Unwrap() error { return core.ErrNotFound }
+
+func workflowTargetAuthorizationFailure(err error) (*targetAuthorizationFailure, bool) {
+	var targetErr workflowTargetAuthorizationError
+	if !errors.As(err, &targetErr) {
+		return nil, false
+	}
+	failure := targetErr.failure
+	return &failure, true
+}
+
+func (m *Manager) allowStoredTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) bool {
+	return m.checkTargetAuthorizationForCaller(ctx, p, target, callerAppNameFromContext(ctx)).allowed
+}
+
+func (m *Manager) checkResolvedAgentToolAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target, callerAppName string) targetAuthorizationDecision {
+	for stepIndex := range target.Steps {
+		step := target.Steps[stepIndex]
+		if step.Agent == nil {
+			continue
+		}
+		hasSystemTools := workflowAgentToolRefsContainSystem(step.Agent.ToolRefs)
+		for i := range step.Agent.ToolRefs {
+			if denied := m.checkWorkflowAgentToolAuthorizationForCaller(ctx, p, step.Agent.ToolRefs[i], hasSystemTools, i, callerAppName); !denied.allowed {
+				return denied
+			}
+		}
+	}
+	return targetAuthorizationAllowed()
+}
+
+func (m *Manager) checkTargetAuthorizationForCaller(ctx context.Context, p *principal.Principal, target coreworkflow.Target, callerAppName string) targetAuthorizationDecision {
 	if len(target.Steps) == 0 {
 		return targetAuthorizationDenied(targetAuthorizationComponentTarget, targetAuthorizationReasonMissingAppStep, "", "", -1)
 	}
 	for stepIndex := range target.Steps {
 		step := target.Steps[stepIndex]
 		if step.App != nil {
-			if denied := m.checkWorkflowStepAppAuthorization(ctx, p, step.App, targetAuthorizationComponentAppStep); !denied.allowed {
+			if denied := m.checkWorkflowStepAppAuthorizationForCaller(ctx, p, step.App, targetAuthorizationComponentAppStep, callerAppName); !denied.allowed {
 				return denied
 			}
 		}
@@ -797,7 +398,7 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 			}
 			hasSystemTools := workflowAgentToolRefsContainSystem(step.Agent.ToolRefs)
 			for i := range step.Agent.ToolRefs {
-				if denied := m.checkWorkflowAgentToolAuthorization(ctx, p, step.Agent.ToolRefs[i], hasSystemTools, i); !denied.allowed {
+				if denied := m.checkWorkflowAgentToolAuthorizationForCaller(ctx, p, step.Agent.ToolRefs[i], hasSystemTools, i, callerAppName); !denied.allowed {
 					return denied
 				}
 			}
@@ -805,6 +406,19 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 		_ = stepIndex
 	}
 	return targetAuthorizationAllowed()
+}
+
+func (m *Manager) checkWorkflowStepAppAuthorizationForCaller(ctx context.Context, p *principal.Principal, app *coreworkflow.AppCall, component string, callerAppName string) targetAuthorizationDecision {
+	decision := m.checkWorkflowStepAppAuthorization(ctx, p, app, component)
+	if decision.allowed {
+		return decision
+	}
+	failure := decision.failure
+	if failure.reason == targetAuthorizationReasonPrincipalOperationPermissionDenied &&
+		m.callerAppDeclaresInvoke(callerAppName, failure.provider, failure.operation) {
+		return targetAuthorizationAllowed()
+	}
+	return decision
 }
 
 func (m *Manager) checkWorkflowStepAppAuthorization(ctx context.Context, p *principal.Principal, app *coreworkflow.AppCall, component string) targetAuthorizationDecision {
@@ -859,6 +473,20 @@ func (m *Manager) checkWorkflowAgentToolAuthorization(ctx context.Context, p *pr
 		return targetAuthorizationAllowed()
 	}
 	return m.checkWorkflowStepAppAuthorization(ctx, p, &coreworkflow.AppCall{Name: appName, Operation: operation}, targetAuthorizationComponentAgentToolRef)
+}
+
+func (m *Manager) checkWorkflowAgentToolAuthorizationForCaller(ctx context.Context, p *principal.Principal, tool coreagent.ToolRef, hasSystemTools bool, index int, callerAppName string) targetAuthorizationDecision {
+	decision := m.checkWorkflowAgentToolAuthorization(ctx, p, tool, hasSystemTools, index)
+	if decision.allowed {
+		return decision
+	}
+	failure := decision.failure
+	if failure.component == targetAuthorizationComponentAgentToolRef &&
+		failure.reason == targetAuthorizationReasonPrincipalOperationPermissionDenied &&
+		m.callerAppDeclaresInvoke(callerAppName, failure.provider, failure.operation) {
+		return targetAuthorizationAllowed()
+	}
+	return decision
 }
 
 func targetAuthorizationAllowed() targetAuthorizationDecision {

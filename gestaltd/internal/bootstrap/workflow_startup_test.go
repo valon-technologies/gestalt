@@ -35,6 +35,22 @@ func (p *startableStartupTestWorkflowProvider) Start(context.Context) error {
 
 type noopTelemetryProvider struct{}
 
+func (p startupTestWorkflowProvider) CreateDefinition(context.Context, coreworkflow.CreateDefinitionRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
+}
+
+func (p startupTestWorkflowProvider) GetDefinition(context.Context, coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
+}
+
+func (p startupTestWorkflowProvider) UpdateDefinition(context.Context, coreworkflow.UpdateDefinitionRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
+}
+
+func (p startupTestWorkflowProvider) DeleteDefinition(context.Context, coreworkflow.DeleteDefinitionRequest) error {
+	return nil
+}
+
 func (p startupTestWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
 	return &coreworkflow.Run{}, nil
 }
@@ -239,13 +255,6 @@ func TestWorkflowCleanupWrappersForwardStart(t *testing.T) {
 				Provider: &startableStartupTestWorkflowProvider{},
 			},
 		},
-		{
-			name: "execution references cleanup",
-			provider: &workflowProviderWithExecutionReferencesAndCleanup{
-				Provider:                &startableStartupTestWorkflowProvider{},
-				ExecutionReferenceStore: newWorkflowRuntimeExecutionRefProvider(),
-			},
-		},
 	}
 
 	for _, tc := range cases {
@@ -260,8 +269,6 @@ func TestWorkflowCleanupWrappersForwardStart(t *testing.T) {
 			var inner *startableStartupTestWorkflowProvider
 			switch provider := tc.provider.(type) {
 			case *workflowProviderWithCleanup:
-				inner = provider.Provider.(*startableStartupTestWorkflowProvider)
-			case *workflowProviderWithExecutionReferencesAndCleanup:
 				inner = provider.Provider.(*startableStartupTestWorkflowProvider)
 			default:
 				t.Fatalf("unexpected provider type %T", provider)

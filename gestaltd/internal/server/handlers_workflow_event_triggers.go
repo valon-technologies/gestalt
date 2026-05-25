@@ -224,14 +224,13 @@ func workflowEventTriggerInfoFromCore(trigger *coreworkflow.EventTrigger, provid
 
 func (s *Server) writeWorkflowEventTriggerManagerError(w http.ResponseWriter, r *http.Request, appName, operation, triggerID string, err error) {
 	switch {
-	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured),
-		errors.Is(err, workflowmanager.ErrExecutionRefsNotConfigured):
+	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowScheduleSubject):
 		writeError(w, http.StatusUnauthorized, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowEventMatchRequired):
 		writeError(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, workflowmanager.ErrDuplicateExecutionRefs):
+	case errors.Is(err, workflowmanager.ErrDuplicateWorkflowObjects):
 		writeError(w, http.StatusInternalServerError, err.Error())
 	case errors.Is(err, invocation.ErrProviderNotFound),
 		errors.Is(err, invocation.ErrOperationNotFound),

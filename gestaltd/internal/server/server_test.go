@@ -750,7 +750,7 @@ func (p *relayTestWorkflowProvider) SignalOrStartRun(_ context.Context, req core
 			Status:       coreworkflow.RunStatusRunning,
 			WorkflowKey:  req.WorkflowKey,
 			Target:       req.Target,
-			ExecutionRef: req.ExecutionRef,
+			DefinitionID: req.DefinitionID,
 			CreatedAt:    &now,
 			StartedAt:    &now,
 		},

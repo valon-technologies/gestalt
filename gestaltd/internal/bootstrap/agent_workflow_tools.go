@@ -380,15 +380,15 @@ func (t *workflowSystemTools) executeUpdateDefinition(ctx context.Context, req a
 	if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 		return nil, err
 	}
-	permissions, err := workflowSystemToolScopedPermissions(req, target)
+	permissions := workflowSystemToolPermissionsForTarget(target, req.ProviderName)
+	scopedPrincipal, err := workflowSystemToolScopedPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
 	if err != nil {
 		return nil, err
 	}
-	definition, err := t.manager.UpdateDefinition(ctx, workflowSystemToolManagementPrincipal(req), definitionID, workflowmanager.DefinitionUpsert{
+	definition, err := t.manager.UpdateDefinition(ctx, scopedPrincipal, definitionID, workflowmanager.DefinitionUpsert{
 		ProviderName:  workflowSystemToolStringArg(args, "provider"),
 		Target:        target,
 		CallerAppName: workflowSystemToolCallerScope(req),
-		Permissions:   permissions,
 	})
 	if err != nil {
 		return nil, err
@@ -448,10 +448,7 @@ func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req age
 		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 			return nil, err
 		}
-		permissions := definition.Definition.Permissions
-		if permissions == nil {
-			permissions = workflowSystemToolPermissionsForTarget(target, req.ProviderName)
-		}
+		permissions := workflowSystemToolPermissionsForTarget(target, req.ProviderName)
 		scopedPrincipal, err = workflowSystemToolExactPermissionsPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
 		if err != nil {
 			return nil, err
@@ -510,7 +507,6 @@ func (t *workflowSystemTools) executeStartRun(ctx context.Context, req agentSyst
 	var target coreworkflow.Target
 	startTarget := coreworkflow.Target{}
 	var scopedPrincipal *principal.Principal
-	var permissions []core.AccessPermission
 	if definitionID != "" {
 		definitionPrincipal := workflowSystemToolPrincipalWithTrustedProvider(req.Principal, strings.TrimSpace(req.ProviderName))
 		definition, err := t.manager.GetDefinition(ctx, definitionPrincipal, definitionID)
@@ -524,10 +520,7 @@ func (t *workflowSystemTools) executeStartRun(ctx context.Context, req agentSyst
 		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 			return nil, err
 		}
-		permissions = definition.Definition.Permissions
-		if permissions == nil {
-			permissions = workflowSystemToolPermissionsForTarget(target, req.ProviderName)
-		}
+		permissions := workflowSystemToolPermissionsForTarget(target, req.ProviderName)
 		scopedPrincipal, err = workflowSystemToolExactPermissionsPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
 		if err != nil {
 			return nil, err
@@ -542,7 +535,7 @@ func (t *workflowSystemTools) executeStartRun(ctx context.Context, req agentSyst
 		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 			return nil, err
 		}
-		permissions = workflowSystemToolPermissionsForTarget(target, req.ProviderName)
+		permissions := workflowSystemToolPermissionsForTarget(target, req.ProviderName)
 		scopedPrincipal, err = workflowSystemToolScopedPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
 		if err != nil {
 			return nil, err
@@ -556,7 +549,6 @@ func (t *workflowSystemTools) executeStartRun(ctx context.Context, req agentSyst
 		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
 		WorkflowKey:    workflowSystemToolStringArg(args, "workflowKey"),
 		CallerAppName:  workflowSystemToolCallerScope(req),
-		Permissions:    permissions,
 	})
 	if err != nil {
 		return nil, err
@@ -612,8 +604,7 @@ func (t *workflowSystemTools) executeUpdateSchedule(ctx context.Context, req age
 
 	var target coreworkflow.Target
 	var upsertTarget coreworkflow.Target
-	var permissions []core.AccessPermission
-	sourceDefinitionID := ""
+	updatePrincipal := workflowSystemToolManagementPrincipal(req)
 	switch {
 	case definitionID != "":
 		definitionPrincipal := workflowSystemToolPrincipalWithTrustedProvider(req.Principal, strings.TrimSpace(req.ProviderName))
@@ -628,19 +619,12 @@ func (t *workflowSystemTools) executeUpdateSchedule(ctx context.Context, req age
 		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 			return nil, err
 		}
-		permissions = definition.Definition.Permissions
-		if permissions == nil {
-			permissions, err = workflowSystemToolScopedPermissions(req, target)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			scopedPrincipal, err := workflowSystemToolExactPermissionsPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
-			if err != nil {
-				return nil, err
-			}
-			permissions = workflowSystemToolPermissionsFromPrincipal(scopedPrincipal)
+		permissions := workflowSystemToolPermissionsForTarget(target, req.ProviderName)
+		scopedPrincipal, err := workflowSystemToolExactPermissionsPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
+		if err != nil {
+			return nil, err
 		}
+		updatePrincipal = scopedPrincipal
 	case hasTarget:
 		target, err = workflowSystemToolTargetFromValue(targetValue)
 		if err != nil {
@@ -650,42 +634,52 @@ func (t *workflowSystemTools) executeUpdateSchedule(ctx context.Context, req age
 		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 			return nil, err
 		}
-		permissions, err = workflowSystemToolScopedPermissions(req, target)
+		permissions := workflowSystemToolPermissionsForTarget(target, req.ProviderName)
+		scopedPrincipal, err := workflowSystemToolScopedPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
 		if err != nil {
 			return nil, err
 		}
+		updatePrincipal = scopedPrincipal
 		upsertTarget = target
 	default:
-		target = workflowSystemToolExistingScheduleTarget(existing)
-		if existing.ExecutionRef != nil {
-			sourceDefinitionID = strings.TrimSpace(existing.ExecutionRef.SourceDefinitionID)
+		definitionID = strings.TrimSpace(existing.Schedule.DefinitionID)
+		if definitionID != "" {
+			definitionPrincipal := workflowSystemToolPrincipalWithTrustedProvider(req.Principal, strings.TrimSpace(req.ProviderName))
+			definition, err := t.manager.GetDefinition(ctx, definitionPrincipal, definitionID)
+			if err != nil {
+				return nil, err
+			}
+			if definition == nil || definition.Definition == nil {
+				return nil, core.ErrNotFound
+			}
+			target = definition.Definition.Target
+		} else {
+			target = workflowSystemToolExistingScheduleTarget(existing)
+			upsertTarget = target
 		}
 		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 			return nil, err
 		}
-		if existing.ExecutionRef != nil && existing.ExecutionRef.Permissions != nil {
-			permissions = workflowSystemToolClonePermissions(existing.ExecutionRef.Permissions)
-		} else {
-			permissions, err = workflowSystemToolScopedPermissions(req, target)
-			if err != nil {
-				return nil, err
-			}
+		permissions := workflowSystemToolPermissionsForTarget(target, req.ProviderName)
+		scopedPrincipal, err := workflowSystemToolScopedPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
+		if err != nil {
+			return nil, err
 		}
-		upsertTarget = target
+		if definitionID == "" {
+			updatePrincipal = scopedPrincipal
+		}
 	}
 	if definitionID != "" {
 		upsertTarget = coreworkflow.Target{}
 	}
-	schedule, err := t.manager.UpdateSchedule(ctx, workflowSystemToolManagementPrincipal(req), scheduleID, workflowmanager.ScheduleUpsert{
-		ProviderName:       providerName,
-		Cron:               cron,
-		Timezone:           timezone,
-		Target:             upsertTarget,
-		DefinitionID:       definitionID,
-		SourceDefinitionID: sourceDefinitionID,
-		Paused:             paused,
-		CallerAppName:      workflowSystemToolCallerScope(req),
-		Permissions:        permissions,
+	schedule, err := t.manager.UpdateSchedule(ctx, updatePrincipal, scheduleID, workflowmanager.ScheduleUpsert{
+		ProviderName:  providerName,
+		Cron:          cron,
+		Timezone:      timezone,
+		Target:        upsertTarget,
+		DefinitionID:  definitionID,
+		Paused:        paused,
+		CallerAppName: workflowSystemToolCallerScope(req),
 	})
 	if err != nil {
 		return nil, err
@@ -743,8 +737,7 @@ func workflowSystemToolDefinitionLogAttrs(req agentSystemToolExecutionRequest, d
 	if definition.Definition != nil {
 		attrs = append(attrs,
 			"workflow_definition_id", strings.TrimSpace(definition.Definition.ID),
-			"workflow_target", workflowTargetContext(definition.Definition.Target),
-			"workflow_caller_app", strings.TrimSpace(definition.Definition.CallerAppName),
+			"workflow_target", workflowSystemToolTargetInfo(definition.Definition.Target),
 		)
 	}
 	return attrs
@@ -762,19 +755,12 @@ func workflowSystemToolScheduleLogAttrs(req agentSystemToolExecutionRequest, sch
 			"workflow_schedule_cron", strings.TrimSpace(schedule.Schedule.Cron),
 			"workflow_schedule_timezone", strings.TrimSpace(schedule.Schedule.Timezone),
 			"workflow_schedule_paused", schedule.Schedule.Paused,
-			"workflow_schedule_execution_ref", strings.TrimSpace(schedule.Schedule.ExecutionRef),
-			"workflow_target", workflowTargetContext(schedule.Schedule.Target),
+			"workflow_definition_id", strings.TrimSpace(schedule.Schedule.DefinitionID),
+			"workflow_target", workflowSystemToolTargetInfo(schedule.Schedule.Target),
 		)
 		if schedule.Schedule.NextRunAt != nil {
 			attrs = append(attrs, "workflow_schedule_next_run_at", schedule.Schedule.NextRunAt.UTC().Format(time.RFC3339Nano))
 		}
-	}
-	if schedule.ExecutionRef != nil {
-		attrs = append(attrs,
-			"workflow_execution_ref", strings.TrimSpace(schedule.ExecutionRef.ID),
-			"workflow_source_definition_id", strings.TrimSpace(schedule.ExecutionRef.SourceDefinitionID),
-			"workflow_caller_app", strings.TrimSpace(schedule.ExecutionRef.CallerAppName),
-		)
 	}
 	return attrs
 }
@@ -789,15 +775,8 @@ func workflowSystemToolRunLogAttrs(req agentSystemToolExecutionRequest, run *wor
 		attrs = append(attrs,
 			"workflow_run_id", strings.TrimSpace(run.Run.ID),
 			"workflow_run_status", strings.TrimSpace(string(run.Run.Status)),
-			"workflow_run_execution_ref", strings.TrimSpace(run.Run.ExecutionRef),
-			"workflow_target", workflowTargetContext(run.Run.Target),
-		)
-	}
-	if run.ExecutionRef != nil {
-		attrs = append(attrs,
-			"workflow_execution_ref", strings.TrimSpace(run.ExecutionRef.ID),
-			"workflow_source_definition_id", strings.TrimSpace(run.ExecutionRef.SourceDefinitionID),
-			"workflow_caller_app", strings.TrimSpace(run.ExecutionRef.CallerAppName),
+			"workflow_definition_id", strings.TrimSpace(run.Run.DefinitionID),
+			"workflow_target", workflowSystemToolTargetInfo(run.Run.Target),
 		)
 	}
 	return attrs
@@ -849,15 +828,13 @@ func workflowSystemToolScheduleInfo(schedule *workflowmanager.ManagedSchedule) m
 		value["cron"] = coreSchedule.Cron
 		value["timezone"] = coreSchedule.Timezone
 		value["paused"] = coreSchedule.Paused
+		if definitionID := strings.TrimSpace(coreSchedule.DefinitionID); definitionID != "" {
+			value["definitionId"] = definitionID
+		}
 		value["target"] = workflowSystemToolTargetInfo(coreSchedule.Target)
 		workflowSystemToolPutTime(value, "createdAt", coreSchedule.CreatedAt)
 		workflowSystemToolPutTime(value, "updatedAt", coreSchedule.UpdatedAt)
 		workflowSystemToolPutTime(value, "nextRunAt", coreSchedule.NextRunAt)
-	}
-	if schedule.ExecutionRef != nil {
-		if sourceDefinitionID := strings.TrimSpace(schedule.ExecutionRef.SourceDefinitionID); sourceDefinitionID != "" {
-			value["sourceDefinitionId"] = sourceDefinitionID
-		}
 	}
 	return value
 }
@@ -875,6 +852,9 @@ func workflowSystemRunInfo(run *workflowmanager.ManagedRun) map[string]any {
 		value["id"] = coreRun.ID
 		value["status"] = string(coreRun.Status)
 		value["workflowKey"] = coreRun.WorkflowKey
+		if definitionID := strings.TrimSpace(coreRun.DefinitionID); definitionID != "" {
+			value["definitionId"] = definitionID
+		}
 		value["target"] = workflowSystemToolTargetInfo(coreRun.Target)
 		if coreRun.StatusMessage != "" {
 			value["statusMessage"] = coreRun.StatusMessage

@@ -751,11 +751,12 @@ spec:
 
 ### Provider interface
 
-The workflow protocol is a state and dispatch surface. A provider stores
-workflow objects and reports their current state. When one of those objects
-should execute, the provider calls back into Gestalt through `WorkflowHost` so
-the host can execute the target steps under the right
-subject and authorization ceiling.
+The workflow protocol is a state and execution surface. A provider stores
+workflow definitions, runs, schedules, triggers, and signals, then executes
+ready `target.steps` plans with the workflow SDK helpers and the current
+invocation token. Gestalt mints the token with the creating subject and
+authorization ceiling; provider code persists normal workflow objects and uses
+the SDK to invoke app and agent steps when a run advances.
 
 The full protocol includes:
 
@@ -763,15 +764,15 @@ The full protocol includes:
 | --- | --- |
 | `StartRun` / `GetRun` / `ListRuns` / `CancelRun` | Manage workflow runs |
 | `SignalRun` / `SignalOrStartRun` | Attach signals to an existing run or create a keyed run before signaling it |
+| `CreateDefinition` / `GetDefinition` / `UpdateDefinition` / `DeleteDefinition` | Manage reusable workflow definitions |
 | `UpsertSchedule` / `GetSchedule` / `ListSchedules` / `DeleteSchedule` / `PauseSchedule` / `ResumeSchedule` | Manage schedules |
 | `UpsertEventTrigger` / `GetEventTrigger` / `ListEventTriggers` / `DeleteEventTrigger` / `PauseEventTrigger` / `ResumeEventTrigger` | Manage triggers |
-| `PutExecutionReference` / `GetExecutionReference` / `ListExecutionReferences` | Persist delayed-execution identity and permission records |
 | `PublishEvent` | Deliver an event into the provider |
 
 Go, Python, Rust, and TypeScript expose the workflow provider service through
 SDK-owned request and response types. The SDK runtime owns transport conversion;
 provider code should focus on durable run, schedule, trigger, signal, and
-execution-reference state.
+definition state plus step execution.
 
 The examples below show the authored shape with representative methods. A
 production provider should implement every method in the protocol table.
@@ -915,8 +916,9 @@ production provider should implement every method in the protocol table.
           target: request.target,
           statusMessage: "",
           resultBody: "",
-          executionRef: request.executionRef,
+          createdBy: request.createdBy,
           workflowKey: request.workflowKey,
+          definitionId: request.definitionId,
         };
       },
 
@@ -927,7 +929,8 @@ production provider should implement every method in the protocol table.
           timezone: request.timezone,
           target: request.target,
           paused: request.paused,
-          executionRef: request.executionRef,
+          createdBy: request.requestedBy,
+          definitionId: request.definitionId,
         };
       },
 
@@ -940,11 +943,12 @@ production provider should implement every method in the protocol table.
 </Tabs>
 
 Production workflow providers should persist returned IDs, timestamps, statuses,
-execution references, and signal sequence numbers exactly as stored. When a
-schedule or trigger is ready to run, the provider creates or updates run state
-and asks the host to invoke the target through the workflow host helper.
+created-by actors, definition IDs, and signal sequence numbers exactly as
+stored. When a schedule or trigger is ready to run, the provider creates or
+updates run state and executes the resolved target steps with the workflow SDK
+executor.
 
-### Signals and execution references
+### Signals and step execution
 
 Signals let a workflow caller deliver additional payloads into a run after it
 has started. `SignalRun` targets an existing `run_id`. `SignalOrStartRun`
@@ -953,114 +957,12 @@ the run, the stored signal, and `started_run: true` when it created the run.
 This is useful for workflows where many external events should coalesce into
 one active run.
 
-Execution references store the subject, credential subject, caller app, and
-allowed app operations that delayed execution may use later. Config-managed
-workflows and user-owned workflows both rely on this reference when a provider
-fires a run after the creating request has ended.
-
-### Workflow host
-
-Workflow providers call back into Gestalt through the workflow host SDK helper
-when delayed work is ready to execute a `target.steps` plan.
-The host owns authorization, credential resolution, and target dispatch; the
-provider owns durable workflow state and run status transitions.
-
-<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
-  <Tabs.Tab>
-    ```go
-    host, err := gestalt.WorkflowHost()
-    if err != nil {
-        return nil, err
-    }
-    defer host.Close()
-
-    resp, err := host.InvokeOperation(ctx, gestalt.InvokeWorkflowOperationInput{
-        Target: &gestalt.BoundWorkflowTarget{
-            Steps: []gestalt.WorkflowStep{{
-                ID: "sync_items",
-                App: &gestalt.WorkflowStepAppCall{
-                    Name:      "roadmap",
-                    Operation: "sync_items",
-                },
-            }},
-        },
-        RunID: "run-1",
-    })
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```python
-    from gestalt import (
-        BoundWorkflowTarget,
-        InvokeWorkflowOperationInput,
-        WorkflowHost,
-        WorkflowStep,
-        WorkflowStepAppCall,
-    )
-
-    with WorkflowHost() as host:
-        resp = host.invoke_operation(
-            InvokeWorkflowOperationInput(
-                target=BoundWorkflowTarget(
-                    steps=[
-                        WorkflowStep(
-                            id="sync_items",
-                            app=WorkflowStepAppCall(
-                                name="roadmap",
-                                operation="sync_items",
-                            ),
-                        )
-                    ],
-                ),
-                run_id="run-1",
-            )
-        )
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```rust
-    let mut host = gestalt::WorkflowHost::connect().await?;
-    let resp = host
-        .invoke_operation(gestalt::InvokeWorkflowOperationInput {
-            target: Some(gestalt::BoundWorkflowTarget {
-                steps: vec![gestalt::WorkflowStep {
-                    id: "sync_items".into(),
-                    action: gestalt::WorkflowStepAction::App(
-                        gestalt::WorkflowStepAppCall {
-                            name: "roadmap".into(),
-                            operation: "sync_items".into(),
-                            ..Default::default()
-                        },
-                    ),
-                    ..Default::default()
-                },
-            ]}),
-            run_id: "run-1".into(),
-            ..Default::default()
-        })
-        .await?;
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts
-    import { WorkflowHost } from "@valon-technologies/gestalt";
-
-    const host = new WorkflowHost();
-    const resp = await host.invokeOperation({
-      target: {
-        steps: [{
-          id: "sync_items",
-          app: {
-            name: "roadmap",
-            operation: "sync_items",
-          },
-        }],
-      },
-      runId: "run-1",
-    });
-    ```
-  </Tabs.Tab>
-</Tabs>
+The invocation token on provider requests carries the subject and authorization
+context needed for delayed work. Providers should persist the token with the run
+or provider-owned workflow object and pass it to the SDK executor when advancing
+steps. The executor evaluates workflow values, applies `when`/skip behavior,
+invokes app steps, polls agent turns, and returns the JSON step-result envelope
+that providers store on completed or failed runs.
 
 ### Deploying the provider
 

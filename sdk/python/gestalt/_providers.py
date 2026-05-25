@@ -113,13 +113,10 @@ if TYPE_CHECKING:
         DeleteWorkflowProviderDefinitionRequest,
         DeleteWorkflowProviderEventTriggerRequest,
         DeleteWorkflowProviderScheduleRequest,
-        GetWorkflowExecutionReferenceRequest,
         GetWorkflowProviderDefinitionRequest,
         GetWorkflowProviderEventTriggerRequest,
         GetWorkflowProviderRunRequest,
         GetWorkflowProviderScheduleRequest,
-        ListWorkflowExecutionReferencesRequest,
-        ListWorkflowExecutionReferencesResponse,
         ListWorkflowProviderEventTriggersRequest,
         ListWorkflowProviderEventTriggersResponse,
         ListWorkflowProviderRunsRequest,
@@ -129,7 +126,6 @@ if TYPE_CHECKING:
         PauseWorkflowProviderEventTriggerRequest,
         PauseWorkflowProviderScheduleRequest,
         PublishWorkflowProviderEventRequest,
-        PutWorkflowExecutionReferenceRequest,
         ResumeWorkflowProviderEventTriggerRequest,
         ResumeWorkflowProviderScheduleRequest,
         SignalOrStartWorkflowProviderRunRequest,
@@ -140,7 +136,6 @@ if TYPE_CHECKING:
         UpsertWorkflowProviderEventTriggerRequest,
         UpsertWorkflowProviderScheduleRequest,
         WorkflowEvent,
-        WorkflowExecutionReference,
     )
 
 else:
@@ -650,9 +645,7 @@ class WorkflowProvider(AppProvider):
 
     Subclasses implement snake_case handler methods such as
     ``start_run(request)``, ``signal_run(request)``, and
-    ``publish_event(request)``. Execution-reference hooks are exposed as
-    ``put_execution_reference(request)``, ``get_execution_reference(request)``,
-    and ``list_execution_references(request)``.
+    ``publish_event(request)``.
     """
 
     def create_definition(
@@ -780,24 +773,6 @@ class WorkflowProvider(AppProvider):
         request: ResumeWorkflowProviderEventTriggerRequest,
     ) -> BoundWorkflowEventTrigger:
         self._unimplemented("resume_event_trigger")
-
-    def put_execution_reference(
-        self,
-        request: PutWorkflowExecutionReferenceRequest,
-    ) -> WorkflowExecutionReference:
-        self._unimplemented("put_execution_reference")
-
-    def get_execution_reference(
-        self,
-        request: GetWorkflowExecutionReferenceRequest,
-    ) -> WorkflowExecutionReference:
-        self._unimplemented("get_execution_reference")
-
-    def list_execution_references(
-        self,
-        request: ListWorkflowExecutionReferencesRequest,
-    ) -> ListWorkflowExecutionReferencesResponse:
-        self._unimplemented("list_execution_references")
 
     def publish_event(
         self,

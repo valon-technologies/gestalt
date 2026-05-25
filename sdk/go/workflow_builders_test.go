@@ -336,50 +336,6 @@ func TestWorkflowRunFromRunDoesNotAliasNestedFields(t *testing.T) {
 	}
 }
 
-func TestWorkflowExecutionReferenceFromReferenceDoesNotAliasNestedFields(t *testing.T) {
-	ref, err := workflowExecutionReferenceToProto(WorkflowExecutionReference{
-		ID: "ref-1",
-		Target: &BoundWorkflowTarget{
-			Steps: []WorkflowStep{{
-				ID: "post",
-				App: &WorkflowStepAppCall{
-					Name:      "slack",
-					Operation: "chat.postMessage",
-					Input: WorkflowValue{Object: map[string]WorkflowValue{
-						"channel": {Literal: "C123", LiteralSet: true},
-					}},
-				},
-			}},
-		},
-		Permissions: []WorkflowAccessPermission{{App: "slack", Operations: []string{"chat.postMessage"}}},
-		RunAs:       &WorkflowRunAsSubject{SubjectID: "service_account:slack"},
-	})
-	if err != nil {
-		t.Fatalf("workflowExecutionReferenceToProto: %v", err)
-	}
-
-	copied, err := cloneWorkflowExecutionReferenceProto(ref)
-	if err != nil {
-		t.Fatalf("cloneWorkflowExecutionReferenceProto: %v", err)
-	}
-	ref.GetTarget().GetSteps()[0].GetApp().GetInput().GetObject().Fields["channel"], err = workflowValueToProto(WorkflowValue{Literal: "C999", LiteralSet: true})
-	if err != nil {
-		t.Fatalf("workflowValueToProto(channel): %v", err)
-	}
-	ref.GetPermissions()[0].Operations[0] = "changed"
-	ref.GetRunAs().SubjectId = "changed"
-
-	if got := copied.GetTarget().GetSteps()[0].GetApp().GetInput().GetObject().GetFields()["channel"].GetLiteral().AsInterface(); got != "C123" {
-		t.Fatalf("copied target channel = %#v, want C123", got)
-	}
-	if got := copied.GetPermissions()[0].GetOperations()[0]; got != "chat.postMessage" {
-		t.Fatalf("copied permission operation = %#v, want chat.postMessage", got)
-	}
-	if got := copied.GetRunAs().GetSubjectId(); got != "service_account:slack" {
-		t.Fatalf("copied run_as subject = %#v, want service_account:slack", got)
-	}
-}
-
 func TestNewAuthorizationModelRefUsesNativeTime(t *testing.T) {
 	createdAt := time.Date(2026, 5, 8, 15, 0, 0, 0, time.UTC)
 	ref := NewAuthorizationModelRef("model-1", "v1", createdAt)

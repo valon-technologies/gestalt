@@ -46,9 +46,11 @@ test("WorkflowProvider service converts transport messages to native callbacks",
   const provider = defineWorkflowProvider({
     displayName: "Workflow transport fixture",
     async createDefinition(request) {
+      calls.push({ method: "create-definition", detail: request.createdBy?.subjectId ?? "" });
       return {
         id: request.idempotencyKey,
         target: request.target,
+        createdBy: request.createdBy,
       };
     },
     async getDefinition(request) {
@@ -71,8 +73,9 @@ test("WorkflowProvider service converts transport messages to native callbacks",
         target: request.target,
         statusMessage: "",
         resultBody: "",
-        executionRef: request.executionRef,
+        createdBy: request.createdBy,
         workflowKey: request.workflowKey,
+        definitionId: request.definitionId,
       };
     },
     async getRun(request) {
@@ -81,7 +84,6 @@ test("WorkflowProvider service converts transport messages to native callbacks",
         status: WorkflowRunStatus.RUNNING,
         statusMessage: "",
         resultBody: "",
-        executionRef: "",
         workflowKey: "",
       };
     },
@@ -94,7 +96,6 @@ test("WorkflowProvider service converts transport messages to native callbacks",
         status: WorkflowRunStatus.CANCELED,
         statusMessage: request.reason,
         resultBody: "",
-        executionRef: "",
         workflowKey: "",
       };
     },
@@ -105,7 +106,6 @@ test("WorkflowProvider service converts transport messages to native callbacks",
           status: WorkflowRunStatus.RUNNING,
           statusMessage: "",
           resultBody: "",
-          executionRef: "",
           workflowKey: "",
         },
         signal: request.signal,
@@ -121,8 +121,9 @@ test("WorkflowProvider service converts transport messages to native callbacks",
           target: request.target,
           statusMessage: "",
           resultBody: "",
-          executionRef: request.executionRef,
+          createdBy: request.createdBy,
           workflowKey: request.workflowKey,
+          definitionId: request.definitionId,
         },
         signal: request.signal,
         startedRun: true,
@@ -134,43 +135,47 @@ test("WorkflowProvider service converts transport messages to native callbacks",
         id: request.scheduleId,
         cron: request.cron,
         timezone: request.timezone,
+        target: request.target,
         paused: request.paused,
-        executionRef: request.executionRef,
+        createdBy: request.requestedBy,
+        definitionId: request.definitionId,
       };
     },
     async getSchedule(request) {
-      return { id: request.scheduleId, cron: "", timezone: "", paused: false, executionRef: "" };
+      return { id: request.scheduleId, cron: "", timezone: "", paused: false };
     },
     async listSchedules() {
       return [];
     },
     async deleteSchedule() {},
     async pauseSchedule(request) {
-      return { id: request.scheduleId, cron: "", timezone: "", paused: true, executionRef: "" };
+      return { id: request.scheduleId, cron: "", timezone: "", paused: true };
     },
     async resumeSchedule(request) {
-      return { id: request.scheduleId, cron: "", timezone: "", paused: false, executionRef: "" };
+      return { id: request.scheduleId, cron: "", timezone: "", paused: false };
     },
     async upsertEventTrigger(request) {
       return {
         id: request.triggerId,
         match: request.match,
+        target: request.target,
         paused: request.paused,
-        executionRef: request.executionRef,
+        createdBy: request.requestedBy,
+        definitionId: request.definitionId,
       };
     },
     async getEventTrigger(request) {
-      return { id: request.triggerId, paused: false, executionRef: "" };
+      return { id: request.triggerId, paused: false };
     },
     async listEventTriggers() {
       return [];
     },
     async deleteEventTrigger() {},
     async pauseEventTrigger(request) {
-      return { id: request.triggerId, paused: true, executionRef: "" };
+      return { id: request.triggerId, paused: true };
     },
     async resumeEventTrigger(request) {
-      return { id: request.triggerId, paused: false, executionRef: "" };
+      return { id: request.triggerId, paused: false };
     },
     async publishEvent(request) {
       calls.push({ method: "publish-event", detail: request.event?.type ?? "" });
@@ -218,6 +223,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
 
     const definition = await client.createDefinition({
       idempotencyKey: "definition-native-ts",
+      createdBy: { subjectId: "user:ada" },
       target: {
         steps: [{
           id: "define",
@@ -229,6 +235,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
       },
     });
     expect(definition.id).toBe("definition-native-ts");
+    expect(definition.createdBy?.subjectId).toBe("user:ada");
 
     const published = await client.publishEvent(create(PublishWorkflowProviderEventRequestSchema, {
       appName: "demo",
@@ -237,6 +244,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     expect(published.id).toBe("published-ts");
     expect(calls).toEqual([
       { method: "start-run", detail: "sync" },
+      { method: "create-definition", detail: "user:ada" },
       { method: "publish-event", detail: "demo.synced" },
     ]);
   } finally {

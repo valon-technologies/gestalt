@@ -16,21 +16,18 @@ use generated::v1::{
     BoundWorkflowDefinition, BoundWorkflowEventTrigger, BoundWorkflowRun, BoundWorkflowSchedule,
     CancelWorkflowProviderRunRequest, CreateWorkflowProviderDefinitionRequest,
     DeleteWorkflowProviderDefinitionRequest, DeleteWorkflowProviderEventTriggerRequest,
-    DeleteWorkflowProviderScheduleRequest, GetWorkflowExecutionReferenceRequest,
-    GetWorkflowProviderDefinitionRequest, GetWorkflowProviderEventTriggerRequest,
-    GetWorkflowProviderRunRequest, GetWorkflowProviderScheduleRequest,
-    ListWorkflowExecutionReferencesRequest, ListWorkflowExecutionReferencesResponse,
-    ListWorkflowProviderEventTriggersRequest, ListWorkflowProviderEventTriggersResponse,
-    ListWorkflowProviderRunsRequest, ListWorkflowProviderRunsResponse,
-    ListWorkflowProviderSchedulesRequest, ListWorkflowProviderSchedulesResponse,
-    PauseWorkflowProviderEventTriggerRequest, PauseWorkflowProviderScheduleRequest,
-    PublishWorkflowProviderEventRequest, PutWorkflowExecutionReferenceRequest,
+    DeleteWorkflowProviderScheduleRequest, GetWorkflowProviderDefinitionRequest,
+    GetWorkflowProviderEventTriggerRequest, GetWorkflowProviderRunRequest,
+    GetWorkflowProviderScheduleRequest, ListWorkflowProviderEventTriggersRequest,
+    ListWorkflowProviderEventTriggersResponse, ListWorkflowProviderRunsRequest,
+    ListWorkflowProviderRunsResponse, ListWorkflowProviderSchedulesRequest,
+    ListWorkflowProviderSchedulesResponse, PauseWorkflowProviderEventTriggerRequest,
+    PauseWorkflowProviderScheduleRequest, PublishWorkflowProviderEventRequest,
     ResumeWorkflowProviderEventTriggerRequest, ResumeWorkflowProviderScheduleRequest,
     SignalOrStartWorkflowProviderRunRequest, SignalWorkflowProviderRunRequest,
     SignalWorkflowRunResponse, StartWorkflowProviderRunRequest,
     UpdateWorkflowProviderDefinitionRequest, UpsertWorkflowProviderEventTriggerRequest,
-    UpsertWorkflowProviderScheduleRequest, WorkflowEvent as ProtoWorkflowEvent,
-    WorkflowExecutionReference, workflow_step,
+    UpsertWorkflowProviderScheduleRequest, WorkflowEvent as ProtoWorkflowEvent, workflow_step,
 };
 use gestalt::{
     BoundWorkflowTarget, Request, Workflow, WorkflowAgentMessage, WorkflowCreateDefinition,
@@ -589,34 +586,6 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
             event.id = "evt-1".to_string();
         }
         Ok(GrpcResponse::new(event))
-    }
-
-    async fn put_execution_reference(
-        &self,
-        request: GrpcRequest<PutWorkflowExecutionReferenceRequest>,
-    ) -> std::result::Result<GrpcResponse<WorkflowExecutionReference>, Status> {
-        Ok(GrpcResponse::new(
-            request.into_inner().reference.unwrap_or_default(),
-        ))
-    }
-
-    async fn get_execution_reference(
-        &self,
-        request: GrpcRequest<GetWorkflowExecutionReferenceRequest>,
-    ) -> std::result::Result<GrpcResponse<WorkflowExecutionReference>, Status> {
-        Ok(GrpcResponse::new(WorkflowExecutionReference {
-            id: request.into_inner().id,
-            ..Default::default()
-        }))
-    }
-
-    async fn list_execution_references(
-        &self,
-        _request: GrpcRequest<ListWorkflowExecutionReferencesRequest>,
-    ) -> std::result::Result<GrpcResponse<ListWorkflowExecutionReferencesResponse>, Status> {
-        Ok(GrpcResponse::new(
-            ListWorkflowExecutionReferencesResponse::default(),
-        ))
     }
 }
 
