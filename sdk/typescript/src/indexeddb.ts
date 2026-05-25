@@ -210,7 +210,7 @@ export interface Cursor {
 /**
  * Streaming cursor over an object store or secondary index.
  */
-class HostCursor implements Cursor {
+class RemoteCursor implements Cursor {
   private sendQueue: AsyncQueue<any>;
   private responseIterator: AsyncIterator<any>;
   private _key: unknown = undefined;
@@ -265,7 +265,7 @@ class HostCursor implements Cursor {
     const responseIterator = responses[Symbol.asyncIterator]();
 
     const isIndex = !!options?.index;
-    const cursor = new Cursor(sendQueue, responseIterator, isIndex);
+    const cursor = new RemoteCursor(sendQueue, responseIterator, isIndex);
     // Read the open ack to surface creation errors synchronously.
     await cursor.recvOpenAck();
     return cursor;
@@ -900,7 +900,7 @@ function compareBytes(left: Uint8Array, right: Uint8Array): number {
  * const todos = db.objectStore("todos");
  * ```
  */
-class HostIndexedDB implements IndexedDB {
+class RemoteIndexedDB implements IndexedDB {
   private client: Client<typeof IndexedDBService>;
 
   constructor(name?: string) {
@@ -956,7 +956,7 @@ class HostIndexedDB implements IndexedDB {
    * Returns a client bound to a single object store.
    */
   objectStore(name: string): ObjectStore {
-    return new ObjectStore(this.client, name);
+    return new RemoteObjectStore(this.client, name);
   }
 
   /**
@@ -967,14 +967,14 @@ class HostIndexedDB implements IndexedDB {
     mode: TransactionMode = "readonly",
     options?: TransactionOptions,
   ): Promise<Transaction> {
-    return Transaction.open(this.client, stores, mode, options);
+    return RemoteTransaction.open(this.client, stores, mode, options);
   }
 }
 
 /**
  * Explicit transaction over one or more object stores.
  */
-class HostTransaction implements Transaction {
+class RemoteTransaction implements Transaction {
   private sendQueue: AsyncQueue<any>;
   private responseIterator: AsyncIterator<any>;
   private closed = false;
@@ -1013,7 +1013,7 @@ class HostTransaction implements Transaction {
     });
     const responses = client.transaction(sendQueue);
     const responseIterator = responses[Symbol.asyncIterator]();
-    const tx = new Transaction(sendQueue, responseIterator);
+    const tx = new RemoteTransaction(sendQueue, responseIterator);
     try {
       const { value: resp, done } = await responseIterator.next();
       if (done || !resp) {
@@ -1035,7 +1035,7 @@ class HostTransaction implements Transaction {
    * Returns a transaction-scoped object store.
    */
   objectStore(name: string): TransactionObjectStore {
-    return new TransactionObjectStore(this, name);
+    return new RemoteTransactionObjectStore(this, name);
   }
 
   /**
@@ -1160,12 +1160,12 @@ class HostTransaction implements Transaction {
 /**
  * Transaction-scoped object-store client.
  */
-class HostTransactionObjectStore implements TransactionObjectStore {
+class RemoteTransactionObjectStore implements TransactionObjectStore {
   /**
    * @internal
    */
   constructor(
-    private tx: HostTransaction,
+    private tx: RemoteTransaction,
     private store: string,
   ) {}
 
@@ -1288,19 +1288,19 @@ class HostTransactionObjectStore implements TransactionObjectStore {
    * Returns a transaction-scoped secondary index.
    */
   index(name: string): TransactionIndex {
-    return new TransactionIndex(this.tx, this.store, name);
+    return new RemoteTransactionIndex(this.tx, this.store, name);
   }
 }
 
 /**
  * Transaction-scoped secondary-index client.
  */
-class HostTransactionIndex implements TransactionIndex {
+class RemoteTransactionIndex implements TransactionIndex {
   /**
    * @internal
    */
   constructor(
-    private tx: HostTransaction,
+    private tx: RemoteTransaction,
     private store: string,
     private indexName: string,
   ) {}
@@ -1398,7 +1398,7 @@ class HostTransactionIndex implements TransactionIndex {
 /**
  * Object store client used for primary-key operations.
  */
-class HostObjectStore implements ObjectStore {
+class RemoteObjectStore implements ObjectStore {
   /**
    * @internal
    */
@@ -1503,28 +1503,31 @@ class HostObjectStore implements ObjectStore {
    * Opens a cursor over the object store.
    */
   async openCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
-    return Cursor.open(this.client, this.store, options);
+    return RemoteCursor.open(this.client, this.store, options);
   }
 
   /**
    * Opens a key-only cursor over the object store.
    */
   async openKeyCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
-    return Cursor.open(this.client, this.store, { ...options, keysOnly: true });
+    return RemoteCursor.open(this.client, this.store, {
+      ...options,
+      keysOnly: true,
+    });
   }
 
   /**
    * Returns a client bound to a secondary index.
    */
   index(name: string): Index {
-    return new Index(this.client, this.store, name);
+    return new RemoteIndex(this.client, this.store, name);
   }
 }
 
 /**
  * Secondary-index client used for lookup and cursor operations.
  */
-class HostIndex implements Index {
+class RemoteIndex implements Index {
   /**
    * @internal
    */
@@ -1636,7 +1639,7 @@ class HostIndex implements Index {
     options?: OpenCursorOptions,
     ...values: unknown[]
   ): Promise<Cursor | null> {
-    return Cursor.open(this.client, this.store, {
+    return RemoteCursor.open(this.client, this.store, {
       ...options,
       index: this.indexName,
       indexValues: values,
@@ -1650,7 +1653,7 @@ class HostIndex implements Index {
     options?: OpenCursorOptions,
     ...values: unknown[]
   ): Promise<Cursor | null> {
-    return Cursor.open(this.client, this.store, {
+    return RemoteCursor.open(this.client, this.store, {
       ...options,
       keysOnly: true,
       index: this.indexName,
@@ -1892,10 +1895,4 @@ function mapTransactionTransportError(err: any): never {
   throw err;
 }
 
-export const Cursor = HostCursor;
-export const IndexedDB = HostIndexedDB;
-export const Transaction = HostTransaction;
-export const TransactionObjectStore = HostTransactionObjectStore;
-export const TransactionIndex = HostTransactionIndex;
-export const ObjectStore = HostObjectStore;
-export const Index = HostIndex;
+export const IndexedDB = RemoteIndexedDB;

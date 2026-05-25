@@ -583,7 +583,7 @@ export function createS3Service(
  * await s3.object("example-bucket", "hello.json").writeJSON({ ok: true });
  * ```
  */
-class HostS3 implements S3 {
+class RemoteS3 implements S3 {
   private readonly transport: Transport;
   private readonly client: Client<typeof S3Service>;
   private objectAccessClient?: Client<typeof S3ObjectAccessService>;
@@ -603,12 +603,12 @@ class HostS3 implements S3 {
 
   /** Returns a convenience helper for the latest version of an object. */
   object(bucket: string, key: string): S3Object {
-    return new S3Object(this, { bucket, key });
+    return new RemoteS3Object(this, { bucket, key });
   }
 
   /** Returns a convenience helper pinned to a specific object version. */
   objectVersion(bucket: string, key: string, versionId: string): S3Object {
-    return new S3Object(this, { bucket, key, versionId });
+    return new RemoteS3Object(this, { bucket, key, versionId });
   }
 
   /** Fetches object metadata without reading the object body. */
@@ -791,7 +791,7 @@ class HostS3 implements S3 {
 /**
  * Convenience wrapper for working with a single S3 object reference.
  */
-class HostS3Object implements S3Object {
+class RemoteS3Object implements S3Object {
   constructor(
     private readonly client: S3,
     readonly ref: ObjectRef,
@@ -1388,5 +1388,4 @@ function messageFromError(error: unknown): string {
   return errorMessage(error);
 }
 
-export const S3 = HostS3;
-export const S3Object = HostS3Object;
+export const S3 = RemoteS3;
