@@ -3,17 +3,8 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
   Code,
   ConnectError,
-  createClient,
-  type Client,
   type ServiceImpl,
 } from "@connectrpc/connect";
-import {
-  createHostServiceGrpcTransport,
-  hostServiceMetadataInterceptors,
-  parseHostServiceTarget,
-  ENV_HOST_SERVICE_SOCKET,
-  ENV_HOST_SERVICE_TOKEN,
-} from "./host-service.ts";
 
 import {
   BoundWorkflowDefinitionSchema,
@@ -21,7 +12,6 @@ import {
   BoundWorkflowRunSchema,
   BoundWorkflowScheduleSchema,
   BoundWorkflowTargetSchema,
-  InvokeWorkflowOperationRequestSchema,
   ListWorkflowExecutionReferencesResponseSchema,
   ListWorkflowProviderEventTriggersResponseSchema,
   ListWorkflowProviderRunsResponseSchema,
@@ -33,7 +23,6 @@ import {
   WorkflowEventSchema,
   WorkflowEventTriggerInvocationSchema,
   WorkflowExecutionReferenceSchema,
-  WorkflowHost as WorkflowHostService,
   WorkflowManualTriggerSchema,
   WorkflowAgentMessageSchema,
   WorkflowArraySchema,
@@ -517,31 +506,6 @@ export interface PublishWorkflowProviderEventRequest {
   appName: string;
   event?: WorkflowEvent | undefined;
   publishedBy?: WorkflowActor | undefined;
-}
-
-/** Native input for invoking a workflow operation through the host service. */
-export interface InvokeWorkflowOperationInput {
-  target?: BoundWorkflowTarget | undefined;
-  runId?: string | undefined;
-  trigger?: WorkflowRunTrigger | undefined;
-  input?: JsonObjectInput | undefined;
-  metadata?: JsonObjectInput | undefined;
-  createdBy?: WorkflowActor | undefined;
-  executionRef?: string | undefined;
-  signals?: readonly WorkflowSignal[] | undefined;
-}
-
-/** Native response returned after invoking a workflow operation. */
-export interface InvokeWorkflowOperationResponse {
-  status: number;
-  body: string;
-}
-
-/** Fakeable client contract for workflow host calls. */
-export interface WorkflowHost {
-  invokeOperation(
-    input: InvokeWorkflowOperationInput,
-  ): Promise<InvokeWorkflowOperationResponse>;
 }
 
 export interface WorkflowSchedule {
@@ -1654,32 +1618,6 @@ export function isWorkflowProvider(value: unknown): value is WorkflowProvider {
   );
 }
 
-/** Client for invoking operations from workflow provider code. */
-class WorkflowHostImpl implements WorkflowHost {
-  private readonly client: Client<typeof WorkflowHostService>;
-
-  constructor() {
-    const target = process.env[ENV_HOST_SERVICE_SOCKET]?.trim();
-    if (!target) {
-      throw new Error(`workflow host: ${ENV_HOST_SERVICE_SOCKET} is not set`);
-    }
-    const relayToken = process.env[ENV_HOST_SERVICE_TOKEN]?.trim() ?? "";
-    const transport = createHostServiceGrpcTransport(
-      parseHostServiceTarget("workflow host", target),
-      hostServiceMetadataInterceptors(relayToken, ""),
-    );
-    this.client = createClient(WorkflowHostService, transport);
-  }
-
-  /** Invokes an operation through the workflow host service. */
-  async invokeOperation(
-    input: InvokeWorkflowOperationInput,
-  ): Promise<InvokeWorkflowOperationResponse> {
-    const response = await this.client.invokeOperation(invokeWorkflowOperationRequestToProto(input));
-    return { status: response.status, body: response.body };
-  }
-}
-
 /** Builds the Connect service implementation used by the TypeScript runtime. */
 export function createWorkflowProviderService(
   provider: WorkflowProvider,
@@ -2703,19 +2641,6 @@ export function workflowExecutionReferenceFromProto(
   };
 }
 
-function invokeWorkflowOperationRequestToProto(input: InvokeWorkflowOperationInput) {
-  return create(InvokeWorkflowOperationRequestSchema, {
-    target: boundWorkflowTargetToProto(input.target),
-    runId: input.runId ?? "",
-    trigger: workflowRunTriggerToProto(input.trigger),
-    input: optionalStruct(input.input),
-    metadata: optionalStruct(input.metadata),
-    createdBy: workflowActorToProto(input.createdBy),
-    executionRef: input.executionRef ?? "",
-    signals: input.signals?.map((signal) => workflowSignalToProto(signal)!) ?? [],
-  });
-}
-
 function startWorkflowProviderRunRequestFromProto(
   input: ProtoStartWorkflowProviderRunRequest,
 ): StartWorkflowProviderRunRequest {
@@ -3022,8 +2947,6 @@ function listRunsResult(
 ): ListWorkflowProviderRunsResponse {
   return "runs" in value ? value : { runs: value };
 }
-
-export const WorkflowHost = WorkflowHostImpl;
 
 async function invokeWorkflowProvider<T>(
   action: string,

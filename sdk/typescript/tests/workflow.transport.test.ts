@@ -2,21 +2,16 @@ import { createServer } from "node:http2";
 import { createServer as createNetServer } from "node:net";
 
 import { create } from "@bufbuild/protobuf";
-import { createClient, type ServiceImpl } from "@connectrpc/connect";
+import { createClient } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import { expect, test } from "bun:test";
 
 import {
-  InvokeWorkflowOperationResponseSchema,
   PublishWorkflowProviderEventRequestSchema,
   StartWorkflowProviderRunRequestSchema,
-  WorkflowHost as WorkflowHostService,
   WorkflowProvider as WorkflowProviderService,
 } from "../src/internal/gen/v1/workflow_pb.ts";
 import {
-  ENV_HOST_SERVICE_SOCKET,
-  ENV_HOST_SERVICE_TOKEN,
-  WorkflowHost,
   WorkflowRunStatus,
   createWorkflowProviderService,
   defineWorkflowProvider,
@@ -245,72 +240,6 @@ test("WorkflowProvider service converts transport messages to native callbacks",
       { method: "publish-event", detail: "demo.synced" },
     ]);
   } finally {
-    if (server.listening) {
-      await new Promise<void>((resolve) => {
-        server.close(() => resolve());
-      });
-    }
-  }
-});
-
-test("WorkflowHost honors tcp target env and relay token env", async () => {
-  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
-  const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
-  const seenTokens: string[] = [];
-  const address = await reserveTCPAddress();
-
-  const handler = connectNodeAdapter({
-    grpc: true,
-    grpcWeb: false,
-    connect: false,
-    routes(router) {
-      router.service(WorkflowHostService, {
-        async invokeOperation(input) {
-          return create(InvokeWorkflowOperationResponseSchema, {
-            status: 202,
-            body: input.runId,
-          });
-        },
-      } satisfies Partial<ServiceImpl<typeof WorkflowHostService>>);
-    },
-  });
-  const server = createServer((req, res) => {
-    const tokenHeader = req.headers["x-gestalt-host-service-relay-token"];
-    if (typeof tokenHeader === "string") {
-      seenTokens.push(tokenHeader);
-    }
-    handler(req, res);
-  });
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(Number(address.split(":").at(-1)), "127.0.0.1", () => {
-        server.off("error", reject);
-        resolve();
-      });
-    });
-
-    process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
-    process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
-
-    const host = new WorkflowHost();
-    const response = await host.invokeOperation({ runId: "run-123" });
-
-    expect(response.status).toBe(202);
-    expect(response.body).toBe("run-123");
-    expect(seenTokens).toEqual(["relay-token-typescript"]);
-  } finally {
-    if (previousSocket === undefined) {
-      delete process.env[ENV_HOST_SERVICE_SOCKET];
-    } else {
-      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
-    }
-    if (previousToken === undefined) {
-      delete process.env[ENV_HOST_SERVICE_TOKEN];
-    } else {
-      process.env[ENV_HOST_SERVICE_TOKEN] = previousToken;
-    }
     if (server.listening) {
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
