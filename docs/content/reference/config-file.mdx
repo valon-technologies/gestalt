@@ -1205,7 +1205,7 @@ Disables audit output explicitly. `providers.audit.<name>.config` is not allowed
 
 ## `apps`
 
-Each entry in the `apps` map is a named app backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API route paths still use "integrations" (e.g. `/api/v1/integrations`) as stable code surface, while the CLI uses the singular `app` command.
+Each entry in the `apps` map is a named app backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API exposes apps at `/api/v1/apps`, while the CLI uses the singular `app` command.
 
 ```yaml
 apps:
@@ -1252,7 +1252,7 @@ apps:
 | `ui` | Optional app-backed mounted UI binding. Use `ui.path` plus optional `ui.bundle`. `ui.bundle` names a `providers.ui` entry; omit it to mount the app manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#appssource) below. |
 | `source.auth` | Optional metadata-fetch auth for package repositories, `source.url`, `source.githubRelease`, `source.git`, or local `provider-release.yaml` metadata. |
-| `auth` | Optional app route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on app HTTP operation routes (`/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}`) and on app-backed mounted UIs, including browser-login flows whose `next` path resolves into that app's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
+| `auth` | Optional app route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on app HTTP operation routes (`/api/v1/apps/{name}/operations` and `/api/v1/{app}/{operation}`) and on app-backed mounted UIs, including browser-login flows whose `next` path resolves into that app's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `securitySchemes` | Optional hosted HTTP security scheme overrides merged over the app manifest's `spec.securitySchemes`. Use this for deployment-specific secrets or for deployment-local hosted HTTP bindings. |
 | `http` | Optional hosted HTTP binding overrides merged over the app manifest's `spec.http`. Use this only when a deployment intentionally changes the route path, request body, security scheme, target operation, or acknowledgment response. |
