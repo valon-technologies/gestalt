@@ -13,7 +13,7 @@ import (
 	gproto "google.golang.org/protobuf/proto"
 )
 
-type agentManagerTransportHarness struct {
+type agentTransportHarness struct {
 	proto.UnimplementedAgentProviderServer
 
 	mu              sync.Mutex
@@ -22,7 +22,7 @@ type agentManagerTransportHarness struct {
 	tokens          []string
 }
 
-func (h *agentManagerTransportHarness) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+func (h *agentTransportHarness) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
@@ -41,7 +41,7 @@ func (h *agentManagerTransportHarness) CreateSession(ctx context.Context, req *p
 	}, nil
 }
 
-func (h *agentManagerTransportHarness) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+func (h *agentTransportHarness) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
@@ -59,7 +59,7 @@ func (h *agentManagerTransportHarness) CreateTurn(ctx context.Context, req *prot
 	}, nil
 }
 
-func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
+func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -67,7 +67,7 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = lis.Close() })
 
-	harness := &agentManagerTransportHarness{}
+	harness := &agentTransportHarness{}
 	srv := grpc.NewServer()
 	proto.RegisterAgentProviderServer(srv, harness)
 	go func() {
@@ -78,13 +78,13 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.AgentManager("parent-token")
+	client, err := gestalt.NewAgent("parent-token")
 	if err != nil {
-		t.Fatalf("AgentManager: %v", err)
+		t.Fatalf("Agent: %v", err)
 	}
 	defer func() { _ = client.Close() }()
 
-	session, err := client.CreateSession(context.Background(), gestalt.AgentManagerCreateSession{
+	session, err := client.CreateSession(context.Background(), gestalt.AgentCreateSession{
 		ProviderName: "managed",
 		Model:        "gpt-test",
 		ClientRef:    "cli-session-1",
@@ -99,7 +99,7 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("session id = %q, want %q", session.ID, "session-1")
 	}
 
-	turn, err := client.CreateTurn(context.Background(), gestalt.AgentManagerCreateTurn{
+	turn, err := client.CreateTurn(context.Background(), gestalt.AgentCreateTurn{
 		SessionID: "session-1",
 		Model:     "gpt-test",
 	})
@@ -141,7 +141,7 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 	}
 }
 
-func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
+func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -149,7 +149,7 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = lis.Close() })
 
-	harness := &agentManagerTransportHarness{}
+	harness := &agentTransportHarness{}
 	srv := grpc.NewServer()
 	proto.RegisterAgentProviderServer(srv, harness)
 	go func() {
@@ -160,13 +160,13 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.AgentManager("parent-token")
+	client, err := gestalt.NewAgent("parent-token")
 	if err != nil {
-		t.Fatalf("AgentManager: %v", err)
+		t.Fatalf("Agent: %v", err)
 	}
 	defer func() { _ = client.Close() }()
 
-	turn, err := client.CreateTurn(context.Background(), gestalt.AgentManagerCreateTurn{
+	turn, err := client.CreateTurn(context.Background(), gestalt.AgentCreateTurn{
 		SessionID: "session-1",
 		Model:     "gpt-test",
 		Messages: []gestalt.AgentMessage{{

@@ -11,7 +11,7 @@ import (
 	gproto "google.golang.org/protobuf/proto"
 )
 
-type workflowManagerIdempotencyHarness struct {
+type workflowIdempotencyHarness struct {
 	proto.UnimplementedWorkflowProviderServer
 
 	mu      sync.Mutex
@@ -19,7 +19,7 @@ type workflowManagerIdempotencyHarness struct {
 	signals []*proto.SignalOrStartWorkflowProviderRunRequest
 }
 
-func (h *workflowManagerIdempotencyHarness) StartRun(_ context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+func (h *workflowIdempotencyHarness) StartRun(_ context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
 	h.mu.Lock()
 	h.starts = append(h.starts, gproto.Clone(req).(*proto.StartWorkflowProviderRunRequest))
 	h.mu.Unlock()
@@ -32,7 +32,7 @@ func (h *workflowManagerIdempotencyHarness) StartRun(_ context.Context, req *pro
 	}, nil
 }
 
-func (h *workflowManagerIdempotencyHarness) SignalOrStartRun(_ context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
+func (h *workflowIdempotencyHarness) SignalOrStartRun(_ context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
 	h.mu.Lock()
 	h.signals = append(h.signals, gproto.Clone(req).(*proto.SignalOrStartWorkflowProviderRunRequest))
 	h.mu.Unlock()
@@ -49,14 +49,14 @@ func (h *workflowManagerIdempotencyHarness) SignalOrStartRun(_ context.Context, 
 	}, nil
 }
 
-func TestWorkflowManagerFromContextDefaultsRunIdempotencyKey(t *testing.T) {
+func TestWorkflowFromContextDefaultsRunIdempotencyKey(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("net.Listen: %v", err)
 	}
 	t.Cleanup(func() { _ = lis.Close() })
 
-	harness := &workflowManagerIdempotencyHarness{}
+	harness := &workflowIdempotencyHarness{}
 	srv := grpc.NewServer()
 	proto.RegisterWorkflowProviderServer(srv, harness)
 	go func() {
@@ -68,20 +68,20 @@ func TestWorkflowManagerFromContextDefaultsRunIdempotencyKey(t *testing.T) {
 
 	ctx := WithIdempotencyKey(context.Background(), "request-key")
 	ctx = withInvocationToken(ctx, "parent-token")
-	client, err := WorkflowManagerFromContext(ctx)
+	client, err := WorkflowFromContext(ctx)
 	if err != nil {
-		t.Fatalf("WorkflowManagerFromContext: %v", err)
+		t.Fatalf("WorkflowFromContext: %v", err)
 	}
 	defer func() { _ = client.Close() }()
 
-	started, err := client.StartRun(context.Background(), WorkflowManagerStartRun{
+	started, err := client.StartRun(context.Background(), WorkflowStartRun{
 		ProviderName: "basic",
 		WorkflowKey:  "workflow-key-1",
 	})
 	if err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}
-	signaled, err := client.SignalOrStartRun(context.Background(), WorkflowManagerSignalOrStartRun{
+	signaled, err := client.SignalOrStartRun(context.Background(), WorkflowSignalOrStartRun{
 		ProviderName: "basic",
 		WorkflowKey:  "workflow-key-1",
 	})

@@ -13,25 +13,24 @@ use crate::generated::v1::{
     self as pb, workflow_provider_client::WorkflowProviderClient as ProtoWorkflowProviderClient,
 };
 use crate::workflow::{
-    BoundWorkflowTarget, WorkflowEvent, WorkflowEventMatch, WorkflowManagerDefinition,
-    WorkflowManagerEventTrigger, WorkflowManagerRun, WorkflowManagerRunSignal,
-    WorkflowManagerSchedule, WorkflowSignal, bound_workflow_target_to_proto,
-    new_bound_workflow_target, new_workflow_event, new_workflow_event_match, new_workflow_signal,
-    workflow_event_match_to_proto, workflow_event_to_proto, workflow_manager_definition_from_proto,
-    workflow_manager_event_trigger_from_proto, workflow_manager_run_from_proto,
-    workflow_manager_run_signal_from_proto, workflow_manager_schedule_from_proto,
+    BoundWorkflowTarget, WorkflowDefinition, WorkflowEvent, WorkflowEventMatch,
+    WorkflowEventTrigger, WorkflowRun, WorkflowRunSignal, WorkflowSchedule, WorkflowSignal,
+    bound_workflow_target_to_proto, new_bound_workflow_target, new_workflow_event,
+    new_workflow_event_match, new_workflow_signal, workflow_definition_from_proto,
+    workflow_event_match_to_proto, workflow_event_to_proto, workflow_event_trigger_from_proto,
+    workflow_run_from_proto, workflow_run_signal_from_proto, workflow_schedule_from_proto,
     workflow_signal_to_proto,
 };
 
-type WorkflowManagerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
+type WorkflowTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
-const WORKFLOW_MANAGER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
+const WORKFLOW_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
-/// Errors returned by [`WorkflowManager`].
-pub enum WorkflowManagerError {
+/// Errors returned by [`Workflow`].
+pub enum WorkflowError {
     /// The invocation token was empty.
-    #[error("workflow manager: invocation token is not available")]
+    #[error("workflow: invocation token is not available")]
     MissingInvocationToken,
     /// The host-service transport could not be created.
     #[error("{0}")]
@@ -48,7 +47,7 @@ pub enum WorkflowManagerError {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerStartRun {
+pub struct WorkflowStartRun {
     pub provider_name: String,
     pub target: Option<BoundWorkflowTarget>,
     pub idempotency_key: String,
@@ -57,13 +56,13 @@ pub struct WorkflowManagerStartRun {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerSignalRun {
+pub struct WorkflowSignalRun {
     pub run_id: String,
     pub signal: Option<WorkflowSignal>,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerSignalOrStartRun {
+pub struct WorkflowSignalOrStartRun {
     pub provider_name: String,
     pub workflow_key: String,
     pub target: Option<BoundWorkflowTarget>,
@@ -73,31 +72,31 @@ pub struct WorkflowManagerSignalOrStartRun {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerCreateDefinition {
+pub struct WorkflowCreateDefinition {
     pub provider_name: String,
     pub target: Option<BoundWorkflowTarget>,
     pub idempotency_key: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerGetDefinition {
+pub struct WorkflowGetDefinition {
     pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerUpdateDefinition {
+pub struct WorkflowUpdateDefinition {
     pub definition_id: String,
     pub provider_name: String,
     pub target: Option<BoundWorkflowTarget>,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerDeleteDefinition {
+pub struct WorkflowDeleteDefinition {
     pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerCreateSchedule {
+pub struct WorkflowCreateSchedule {
     pub provider_name: String,
     pub cron: String,
     pub timezone: String,
@@ -108,12 +107,12 @@ pub struct WorkflowManagerCreateSchedule {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerGetSchedule {
+pub struct WorkflowGetSchedule {
     pub schedule_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerUpdateSchedule {
+pub struct WorkflowUpdateSchedule {
     pub schedule_id: String,
     pub provider_name: String,
     pub cron: String,
@@ -124,22 +123,22 @@ pub struct WorkflowManagerUpdateSchedule {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerDeleteSchedule {
+pub struct WorkflowDeleteSchedule {
     pub schedule_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerPauseSchedule {
+pub struct WorkflowPauseSchedule {
     pub schedule_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerResumeSchedule {
+pub struct WorkflowResumeSchedule {
     pub schedule_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerCreateEventTrigger {
+pub struct WorkflowCreateEventTrigger {
     pub provider_name: String,
     pub event_match: Option<WorkflowEventMatch>,
     pub target: Option<BoundWorkflowTarget>,
@@ -149,12 +148,12 @@ pub struct WorkflowManagerCreateEventTrigger {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerGetEventTrigger {
+pub struct WorkflowGetEventTrigger {
     pub trigger_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerUpdateEventTrigger {
+pub struct WorkflowUpdateEventTrigger {
     pub trigger_id: String,
     pub provider_name: String,
     pub event_match: Option<WorkflowEventMatch>,
@@ -164,113 +163,113 @@ pub struct WorkflowManagerUpdateEventTrigger {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerDeleteEventTrigger {
+pub struct WorkflowDeleteEventTrigger {
     pub trigger_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerPauseEventTrigger {
+pub struct WorkflowPauseEventTrigger {
     pub trigger_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerResumeEventTrigger {
+pub struct WorkflowResumeEventTrigger {
     pub trigger_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerPublishEvent {
+pub struct WorkflowPublishEvent {
     pub provider_name: String,
     pub event: Option<WorkflowEvent>,
 }
 
 #[async_trait]
-/// Fakeable client contract for workflow manager calls.
-pub trait WorkflowManagerApi: Send {
+/// Fakeable client contract for workflow calls.
+pub trait WorkflowContract: Send {
     async fn start_run(
         &mut self,
-        input: WorkflowManagerStartRun,
-    ) -> std::result::Result<WorkflowManagerRun, WorkflowManagerError>;
+        input: WorkflowStartRun,
+    ) -> std::result::Result<WorkflowRun, WorkflowError>;
     async fn signal_run(
         &mut self,
-        input: WorkflowManagerSignalRun,
-    ) -> std::result::Result<WorkflowManagerRunSignal, WorkflowManagerError>;
+        input: WorkflowSignalRun,
+    ) -> std::result::Result<WorkflowRunSignal, WorkflowError>;
     async fn signal_or_start_run(
         &mut self,
-        input: WorkflowManagerSignalOrStartRun,
-    ) -> std::result::Result<WorkflowManagerRunSignal, WorkflowManagerError>;
+        input: WorkflowSignalOrStartRun,
+    ) -> std::result::Result<WorkflowRunSignal, WorkflowError>;
     async fn create_definition(
         &mut self,
-        input: WorkflowManagerCreateDefinition,
-    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError>;
+        input: WorkflowCreateDefinition,
+    ) -> std::result::Result<WorkflowDefinition, WorkflowError>;
     async fn get_definition(
         &mut self,
-        input: WorkflowManagerGetDefinition,
-    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError>;
+        input: WorkflowGetDefinition,
+    ) -> std::result::Result<WorkflowDefinition, WorkflowError>;
     async fn update_definition(
         &mut self,
-        input: WorkflowManagerUpdateDefinition,
-    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError>;
+        input: WorkflowUpdateDefinition,
+    ) -> std::result::Result<WorkflowDefinition, WorkflowError>;
     async fn delete_definition(
         &mut self,
-        input: WorkflowManagerDeleteDefinition,
-    ) -> std::result::Result<(), WorkflowManagerError>;
+        input: WorkflowDeleteDefinition,
+    ) -> std::result::Result<(), WorkflowError>;
     async fn create_schedule(
         &mut self,
-        input: WorkflowManagerCreateSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError>;
+        input: WorkflowCreateSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError>;
     async fn get_schedule(
         &mut self,
-        input: WorkflowManagerGetSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError>;
+        input: WorkflowGetSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError>;
     async fn update_schedule(
         &mut self,
-        input: WorkflowManagerUpdateSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError>;
+        input: WorkflowUpdateSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError>;
     async fn delete_schedule(
         &mut self,
-        input: WorkflowManagerDeleteSchedule,
-    ) -> std::result::Result<(), WorkflowManagerError>;
+        input: WorkflowDeleteSchedule,
+    ) -> std::result::Result<(), WorkflowError>;
     async fn pause_schedule(
         &mut self,
-        input: WorkflowManagerPauseSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError>;
+        input: WorkflowPauseSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError>;
     async fn resume_schedule(
         &mut self,
-        input: WorkflowManagerResumeSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError>;
+        input: WorkflowResumeSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError>;
     async fn create_trigger(
         &mut self,
-        input: WorkflowManagerCreateEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError>;
+        input: WorkflowCreateEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError>;
     async fn get_trigger(
         &mut self,
-        input: WorkflowManagerGetEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError>;
+        input: WorkflowGetEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError>;
     async fn update_trigger(
         &mut self,
-        input: WorkflowManagerUpdateEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError>;
+        input: WorkflowUpdateEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError>;
     async fn delete_trigger(
         &mut self,
-        input: WorkflowManagerDeleteEventTrigger,
-    ) -> std::result::Result<(), WorkflowManagerError>;
+        input: WorkflowDeleteEventTrigger,
+    ) -> std::result::Result<(), WorkflowError>;
     async fn pause_trigger(
         &mut self,
-        input: WorkflowManagerPauseEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError>;
+        input: WorkflowPauseEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError>;
     async fn resume_trigger(
         &mut self,
-        input: WorkflowManagerResumeEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError>;
+        input: WorkflowResumeEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError>;
     async fn publish_event(
         &mut self,
-        input: WorkflowManagerPublishEvent,
-    ) -> std::result::Result<WorkflowEvent, WorkflowManagerError>;
+        input: WorkflowPublishEvent,
+    ) -> std::result::Result<WorkflowEvent, WorkflowError>;
 }
 
-pub(crate) fn new_workflow_manager_start_run_request(
-    input: WorkflowManagerStartRun,
+pub(crate) fn new_workflow_start_run_request(
+    input: WorkflowStartRun,
 ) -> crate::Result<pb::StartWorkflowProviderRunRequest> {
     Ok(pb::StartWorkflowProviderRunRequest {
         provider_name: input.provider_name,
@@ -288,8 +287,8 @@ pub(crate) fn new_workflow_manager_start_run_request(
     })
 }
 
-pub(crate) fn new_workflow_manager_signal_run_request(
-    input: WorkflowManagerSignalRun,
+pub(crate) fn new_workflow_signal_run_request(
+    input: WorkflowSignalRun,
 ) -> crate::Result<pb::SignalWorkflowProviderRunRequest> {
     Ok(pb::SignalWorkflowProviderRunRequest {
         run_id: input.run_id,
@@ -303,8 +302,8 @@ pub(crate) fn new_workflow_manager_signal_run_request(
     })
 }
 
-pub(crate) fn new_workflow_manager_signal_or_start_run_request(
-    input: WorkflowManagerSignalOrStartRun,
+pub(crate) fn new_workflow_signal_or_start_run_request(
+    input: WorkflowSignalOrStartRun,
 ) -> crate::Result<pb::SignalOrStartWorkflowProviderRunRequest> {
     Ok(pb::SignalOrStartWorkflowProviderRunRequest {
         provider_name: input.provider_name,
@@ -328,8 +327,8 @@ pub(crate) fn new_workflow_manager_signal_or_start_run_request(
     })
 }
 
-pub(crate) fn new_workflow_manager_create_definition_request(
-    input: WorkflowManagerCreateDefinition,
+pub(crate) fn new_workflow_create_definition_request(
+    input: WorkflowCreateDefinition,
 ) -> crate::Result<pb::CreateWorkflowProviderDefinitionRequest> {
     Ok(pb::CreateWorkflowProviderDefinitionRequest {
         provider_name: input.provider_name,
@@ -344,8 +343,8 @@ pub(crate) fn new_workflow_manager_create_definition_request(
     })
 }
 
-pub(crate) fn new_workflow_manager_get_definition_request(
-    input: WorkflowManagerGetDefinition,
+pub(crate) fn new_workflow_get_definition_request(
+    input: WorkflowGetDefinition,
 ) -> pb::GetWorkflowProviderDefinitionRequest {
     pb::GetWorkflowProviderDefinitionRequest {
         definition_id: input.definition_id,
@@ -353,8 +352,8 @@ pub(crate) fn new_workflow_manager_get_definition_request(
     }
 }
 
-pub(crate) fn new_workflow_manager_update_definition_request(
-    input: WorkflowManagerUpdateDefinition,
+pub(crate) fn new_workflow_update_definition_request(
+    input: WorkflowUpdateDefinition,
 ) -> crate::Result<pb::UpdateWorkflowProviderDefinitionRequest> {
     Ok(pb::UpdateWorkflowProviderDefinitionRequest {
         definition_id: input.definition_id,
@@ -369,8 +368,8 @@ pub(crate) fn new_workflow_manager_update_definition_request(
     })
 }
 
-pub(crate) fn new_workflow_manager_delete_definition_request(
-    input: WorkflowManagerDeleteDefinition,
+pub(crate) fn new_workflow_delete_definition_request(
+    input: WorkflowDeleteDefinition,
 ) -> pb::DeleteWorkflowProviderDefinitionRequest {
     pb::DeleteWorkflowProviderDefinitionRequest {
         definition_id: input.definition_id,
@@ -378,8 +377,8 @@ pub(crate) fn new_workflow_manager_delete_definition_request(
     }
 }
 
-pub(crate) fn new_workflow_manager_create_schedule_request(
-    input: WorkflowManagerCreateSchedule,
+pub(crate) fn new_workflow_create_schedule_request(
+    input: WorkflowCreateSchedule,
 ) -> crate::Result<pb::UpsertWorkflowProviderScheduleRequest> {
     Ok(pb::UpsertWorkflowProviderScheduleRequest {
         provider_name: input.provider_name,
@@ -399,8 +398,8 @@ pub(crate) fn new_workflow_manager_create_schedule_request(
     })
 }
 
-pub(crate) fn new_workflow_manager_get_schedule_request(
-    input: WorkflowManagerGetSchedule,
+pub(crate) fn new_workflow_get_schedule_request(
+    input: WorkflowGetSchedule,
 ) -> pb::GetWorkflowProviderScheduleRequest {
     pb::GetWorkflowProviderScheduleRequest {
         schedule_id: input.schedule_id,
@@ -408,8 +407,8 @@ pub(crate) fn new_workflow_manager_get_schedule_request(
     }
 }
 
-pub(crate) fn new_workflow_manager_update_schedule_request(
-    input: WorkflowManagerUpdateSchedule,
+pub(crate) fn new_workflow_update_schedule_request(
+    input: WorkflowUpdateSchedule,
 ) -> crate::Result<pb::UpsertWorkflowProviderScheduleRequest> {
     Ok(pb::UpsertWorkflowProviderScheduleRequest {
         schedule_id: input.schedule_id,
@@ -429,8 +428,8 @@ pub(crate) fn new_workflow_manager_update_schedule_request(
     })
 }
 
-pub(crate) fn new_workflow_manager_delete_schedule_request(
-    input: WorkflowManagerDeleteSchedule,
+pub(crate) fn new_workflow_delete_schedule_request(
+    input: WorkflowDeleteSchedule,
 ) -> pb::DeleteWorkflowProviderScheduleRequest {
     pb::DeleteWorkflowProviderScheduleRequest {
         schedule_id: input.schedule_id,
@@ -438,8 +437,8 @@ pub(crate) fn new_workflow_manager_delete_schedule_request(
     }
 }
 
-pub(crate) fn new_workflow_manager_pause_schedule_request(
-    input: WorkflowManagerPauseSchedule,
+pub(crate) fn new_workflow_pause_schedule_request(
+    input: WorkflowPauseSchedule,
 ) -> pb::PauseWorkflowProviderScheduleRequest {
     pb::PauseWorkflowProviderScheduleRequest {
         schedule_id: input.schedule_id,
@@ -447,8 +446,8 @@ pub(crate) fn new_workflow_manager_pause_schedule_request(
     }
 }
 
-pub(crate) fn new_workflow_manager_resume_schedule_request(
-    input: WorkflowManagerResumeSchedule,
+pub(crate) fn new_workflow_resume_schedule_request(
+    input: WorkflowResumeSchedule,
 ) -> pb::ResumeWorkflowProviderScheduleRequest {
     pb::ResumeWorkflowProviderScheduleRequest {
         schedule_id: input.schedule_id,
@@ -456,8 +455,8 @@ pub(crate) fn new_workflow_manager_resume_schedule_request(
     }
 }
 
-pub(crate) fn new_workflow_manager_create_event_trigger_request(
-    input: WorkflowManagerCreateEventTrigger,
+pub(crate) fn new_workflow_create_event_trigger_request(
+    input: WorkflowCreateEventTrigger,
 ) -> crate::Result<pb::UpsertWorkflowProviderEventTriggerRequest> {
     Ok(pb::UpsertWorkflowProviderEventTriggerRequest {
         provider_name: input.provider_name,
@@ -479,8 +478,8 @@ pub(crate) fn new_workflow_manager_create_event_trigger_request(
     })
 }
 
-pub(crate) fn new_workflow_manager_get_event_trigger_request(
-    input: WorkflowManagerGetEventTrigger,
+pub(crate) fn new_workflow_get_event_trigger_request(
+    input: WorkflowGetEventTrigger,
 ) -> pb::GetWorkflowProviderEventTriggerRequest {
     pb::GetWorkflowProviderEventTriggerRequest {
         trigger_id: input.trigger_id,
@@ -488,8 +487,8 @@ pub(crate) fn new_workflow_manager_get_event_trigger_request(
     }
 }
 
-pub(crate) fn new_workflow_manager_update_event_trigger_request(
-    input: WorkflowManagerUpdateEventTrigger,
+pub(crate) fn new_workflow_update_event_trigger_request(
+    input: WorkflowUpdateEventTrigger,
 ) -> crate::Result<pb::UpsertWorkflowProviderEventTriggerRequest> {
     Ok(pb::UpsertWorkflowProviderEventTriggerRequest {
         trigger_id: input.trigger_id,
@@ -511,8 +510,8 @@ pub(crate) fn new_workflow_manager_update_event_trigger_request(
     })
 }
 
-pub(crate) fn new_workflow_manager_delete_event_trigger_request(
-    input: WorkflowManagerDeleteEventTrigger,
+pub(crate) fn new_workflow_delete_event_trigger_request(
+    input: WorkflowDeleteEventTrigger,
 ) -> pb::DeleteWorkflowProviderEventTriggerRequest {
     pb::DeleteWorkflowProviderEventTriggerRequest {
         trigger_id: input.trigger_id,
@@ -520,8 +519,8 @@ pub(crate) fn new_workflow_manager_delete_event_trigger_request(
     }
 }
 
-pub(crate) fn new_workflow_manager_pause_event_trigger_request(
-    input: WorkflowManagerPauseEventTrigger,
+pub(crate) fn new_workflow_pause_event_trigger_request(
+    input: WorkflowPauseEventTrigger,
 ) -> pb::PauseWorkflowProviderEventTriggerRequest {
     pb::PauseWorkflowProviderEventTriggerRequest {
         trigger_id: input.trigger_id,
@@ -529,8 +528,8 @@ pub(crate) fn new_workflow_manager_pause_event_trigger_request(
     }
 }
 
-pub(crate) fn new_workflow_manager_resume_event_trigger_request(
-    input: WorkflowManagerResumeEventTrigger,
+pub(crate) fn new_workflow_resume_event_trigger_request(
+    input: WorkflowResumeEventTrigger,
 ) -> pb::ResumeWorkflowProviderEventTriggerRequest {
     pb::ResumeWorkflowProviderEventTriggerRequest {
         trigger_id: input.trigger_id,
@@ -538,8 +537,8 @@ pub(crate) fn new_workflow_manager_resume_event_trigger_request(
     }
 }
 
-pub(crate) fn new_workflow_manager_publish_event_request(
-    input: WorkflowManagerPublishEvent,
+pub(crate) fn new_workflow_publish_event_request(
+    input: WorkflowPublishEvent,
 ) -> crate::Result<pb::PublishWorkflowProviderEventRequest> {
     Ok(pb::PublishWorkflowProviderEventRequest {
         app_name: String::new(),
@@ -556,17 +555,17 @@ pub(crate) fn new_workflow_manager_publish_event_request(
 }
 
 /// Client for creating workflow definitions, starting runs, and managing schedules or triggers.
-pub struct WorkflowManager {
-    client: ProtoWorkflowProviderClient<WorkflowManagerTransport>,
+pub struct Workflow {
+    client: ProtoWorkflowProviderClient<WorkflowTransport>,
     invocation_token: String,
     idempotency_key: String,
 }
 
-impl WorkflowManager {
-    /// Connects to the workflow manager with an invocation token from the host.
+impl Workflow {
+    /// Connects to the workflow with an invocation token from the host.
     pub async fn connect(
         invocation_token: impl AsRef<str>,
-    ) -> std::result::Result<Self, WorkflowManagerError> {
+    ) -> std::result::Result<Self, WorkflowError> {
         Self::connect_with_idempotency_key(invocation_token, "").await
     }
 
@@ -574,18 +573,17 @@ impl WorkflowManager {
     pub async fn connect_with_idempotency_key(
         invocation_token: impl AsRef<str>,
         idempotency_key: impl AsRef<str>,
-    ) -> std::result::Result<Self, WorkflowManagerError> {
+    ) -> std::result::Result<Self, WorkflowError> {
         let invocation_token = invocation_token.as_ref().trim().to_owned();
         if invocation_token.is_empty() {
-            return Err(WorkflowManagerError::MissingInvocationToken);
+            return Err(WorkflowError::MissingInvocationToken);
         }
 
-        let socket_path = std::env::var(ENV_HOST_SERVICE_SOCKET).map_err(|_| {
-            WorkflowManagerError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set"))
-        })?;
+        let socket_path = std::env::var(ENV_HOST_SERVICE_SOCKET)
+            .map_err(|_| WorkflowError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
         let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
-        let channel = match parse_workflow_manager_target(&socket_path)? {
-            WorkflowManagerTarget::Unix(path) => {
+        let channel = match parse_workflow_target(&socket_path)? {
+            WorkflowTarget::Unix(path) => {
                 Endpoint::try_from("http://[::]:50051")?
                     .connect_with_connector(service_fn(move |_: Uri| {
                         let path = path.clone();
@@ -593,12 +591,12 @@ impl WorkflowManager {
                     }))
                     .await?
             }
-            WorkflowManagerTarget::Tcp(address) => {
+            WorkflowTarget::Tcp(address) => {
                 Endpoint::from_shared(format!("http://{address}"))?
                     .connect()
                     .await?
             }
-            WorkflowManagerTarget::Tls(address) => {
+            WorkflowTarget::Tls(address) => {
                 Endpoint::from_shared(format!("https://{address}"))?
                     .tls_config(ClientTlsConfig::new().with_native_roots())?
                     .connect()
@@ -619,14 +617,14 @@ impl WorkflowManager {
     /// Creates a reusable workflow definition.
     pub async fn create_definition(
         &mut self,
-        input: WorkflowManagerCreateDefinition,
-    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError> {
-        let mut request = new_workflow_manager_create_definition_request(input)?;
+        input: WorkflowCreateDefinition,
+    ) -> std::result::Result<WorkflowDefinition, WorkflowError> {
+        let mut request = new_workflow_create_definition_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         if request.idempotency_key.trim().is_empty() {
             request.idempotency_key = self.idempotency_key.clone();
         }
-        Ok(workflow_manager_definition_from_proto(
+        Ok(workflow_definition_from_proto(
             self.client.create_definition(request).await?.into_inner(),
         )?)
     }
@@ -634,11 +632,11 @@ impl WorkflowManager {
     /// Fetches one workflow definition.
     pub async fn get_definition(
         &mut self,
-        input: WorkflowManagerGetDefinition,
-    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError> {
-        let mut request = new_workflow_manager_get_definition_request(input);
+        input: WorkflowGetDefinition,
+    ) -> std::result::Result<WorkflowDefinition, WorkflowError> {
+        let mut request = new_workflow_get_definition_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(workflow_manager_definition_from_proto(
+        Ok(workflow_definition_from_proto(
             self.client.get_definition(request).await?.into_inner(),
         )?)
     }
@@ -646,11 +644,11 @@ impl WorkflowManager {
     /// Updates a workflow definition.
     pub async fn update_definition(
         &mut self,
-        input: WorkflowManagerUpdateDefinition,
-    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError> {
-        let mut request = new_workflow_manager_update_definition_request(input)?;
+        input: WorkflowUpdateDefinition,
+    ) -> std::result::Result<WorkflowDefinition, WorkflowError> {
+        let mut request = new_workflow_update_definition_request(input)?;
         request.invocation_token = self.invocation_token.clone();
-        Ok(workflow_manager_definition_from_proto(
+        Ok(workflow_definition_from_proto(
             self.client.update_definition(request).await?.into_inner(),
         )?)
     }
@@ -658,9 +656,9 @@ impl WorkflowManager {
     /// Deletes a workflow definition.
     pub async fn delete_definition(
         &mut self,
-        input: WorkflowManagerDeleteDefinition,
-    ) -> std::result::Result<(), WorkflowManagerError> {
-        let mut request = new_workflow_manager_delete_definition_request(input);
+        input: WorkflowDeleteDefinition,
+    ) -> std::result::Result<(), WorkflowError> {
+        let mut request = new_workflow_delete_definition_request(input);
         request.invocation_token = self.invocation_token.clone();
         self.client.delete_definition(request).await?;
         Ok(())
@@ -669,14 +667,14 @@ impl WorkflowManager {
     /// Creates a workflow schedule.
     pub async fn create_schedule(
         &mut self,
-        input: WorkflowManagerCreateSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
-        let mut request = new_workflow_manager_create_schedule_request(input)?;
+        input: WorkflowCreateSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError> {
+        let mut request = new_workflow_create_schedule_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         if request.idempotency_key.trim().is_empty() {
             request.idempotency_key = self.idempotency_key.clone();
         }
-        Ok(workflow_manager_schedule_from_proto(
+        Ok(workflow_schedule_from_proto(
             self.client.upsert_schedule(request).await?.into_inner(),
         )?)
     }
@@ -684,14 +682,14 @@ impl WorkflowManager {
     /// Starts a workflow run.
     pub async fn start_run(
         &mut self,
-        input: WorkflowManagerStartRun,
-    ) -> std::result::Result<WorkflowManagerRun, WorkflowManagerError> {
-        let mut request = new_workflow_manager_start_run_request(input)?;
+        input: WorkflowStartRun,
+    ) -> std::result::Result<WorkflowRun, WorkflowError> {
+        let mut request = new_workflow_start_run_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         if request.idempotency_key.trim().is_empty() {
             request.idempotency_key = self.idempotency_key.clone();
         }
-        Ok(workflow_manager_run_from_proto(
+        Ok(workflow_run_from_proto(
             self.client.start_run(request).await?.into_inner(),
         )?)
     }
@@ -699,11 +697,11 @@ impl WorkflowManager {
     /// Signals an existing workflow run.
     pub async fn signal_run(
         &mut self,
-        input: WorkflowManagerSignalRun,
-    ) -> std::result::Result<WorkflowManagerRunSignal, WorkflowManagerError> {
-        let mut request = new_workflow_manager_signal_run_request(input)?;
+        input: WorkflowSignalRun,
+    ) -> std::result::Result<WorkflowRunSignal, WorkflowError> {
+        let mut request = new_workflow_signal_run_request(input)?;
         request.invocation_token = self.invocation_token.clone();
-        Ok(workflow_manager_run_signal_from_proto(
+        Ok(workflow_run_signal_from_proto(
             self.client.signal_run(request).await?.into_inner(),
         )?)
     }
@@ -711,14 +709,14 @@ impl WorkflowManager {
     /// Signals a run or starts it when no matching run exists.
     pub async fn signal_or_start_run(
         &mut self,
-        input: WorkflowManagerSignalOrStartRun,
-    ) -> std::result::Result<WorkflowManagerRunSignal, WorkflowManagerError> {
-        let mut request = new_workflow_manager_signal_or_start_run_request(input)?;
+        input: WorkflowSignalOrStartRun,
+    ) -> std::result::Result<WorkflowRunSignal, WorkflowError> {
+        let mut request = new_workflow_signal_or_start_run_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         if request.idempotency_key.trim().is_empty() {
             request.idempotency_key = self.idempotency_key.clone();
         }
-        Ok(workflow_manager_run_signal_from_proto(
+        Ok(workflow_run_signal_from_proto(
             self.client.signal_or_start_run(request).await?.into_inner(),
         )?)
     }
@@ -726,11 +724,11 @@ impl WorkflowManager {
     /// Fetches one workflow schedule.
     pub async fn get_schedule(
         &mut self,
-        input: WorkflowManagerGetSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
-        let mut request = new_workflow_manager_get_schedule_request(input);
+        input: WorkflowGetSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError> {
+        let mut request = new_workflow_get_schedule_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(workflow_manager_schedule_from_proto(
+        Ok(workflow_schedule_from_proto(
             self.client.get_schedule(request).await?.into_inner(),
         )?)
     }
@@ -738,11 +736,11 @@ impl WorkflowManager {
     /// Updates a workflow schedule.
     pub async fn update_schedule(
         &mut self,
-        input: WorkflowManagerUpdateSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
-        let mut request = new_workflow_manager_update_schedule_request(input)?;
+        input: WorkflowUpdateSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError> {
+        let mut request = new_workflow_update_schedule_request(input)?;
         request.invocation_token = self.invocation_token.clone();
-        Ok(workflow_manager_schedule_from_proto(
+        Ok(workflow_schedule_from_proto(
             self.client.upsert_schedule(request).await?.into_inner(),
         )?)
     }
@@ -750,9 +748,9 @@ impl WorkflowManager {
     /// Deletes a workflow schedule.
     pub async fn delete_schedule(
         &mut self,
-        input: WorkflowManagerDeleteSchedule,
-    ) -> std::result::Result<(), WorkflowManagerError> {
-        let mut request = new_workflow_manager_delete_schedule_request(input);
+        input: WorkflowDeleteSchedule,
+    ) -> std::result::Result<(), WorkflowError> {
+        let mut request = new_workflow_delete_schedule_request(input);
         request.invocation_token = self.invocation_token.clone();
         self.client.delete_schedule(request).await?;
         Ok(())
@@ -761,11 +759,11 @@ impl WorkflowManager {
     /// Pauses a workflow schedule.
     pub async fn pause_schedule(
         &mut self,
-        input: WorkflowManagerPauseSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
-        let mut request = new_workflow_manager_pause_schedule_request(input);
+        input: WorkflowPauseSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError> {
+        let mut request = new_workflow_pause_schedule_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(workflow_manager_schedule_from_proto(
+        Ok(workflow_schedule_from_proto(
             self.client.pause_schedule(request).await?.into_inner(),
         )?)
     }
@@ -773,11 +771,11 @@ impl WorkflowManager {
     /// Resumes a workflow schedule.
     pub async fn resume_schedule(
         &mut self,
-        input: WorkflowManagerResumeSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
-        let mut request = new_workflow_manager_resume_schedule_request(input);
+        input: WorkflowResumeSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError> {
+        let mut request = new_workflow_resume_schedule_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(workflow_manager_schedule_from_proto(
+        Ok(workflow_schedule_from_proto(
             self.client.resume_schedule(request).await?.into_inner(),
         )?)
     }
@@ -785,14 +783,14 @@ impl WorkflowManager {
     /// Creates an event trigger.
     pub async fn create_trigger(
         &mut self,
-        input: WorkflowManagerCreateEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
-        let mut request = new_workflow_manager_create_event_trigger_request(input)?;
+        input: WorkflowCreateEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError> {
+        let mut request = new_workflow_create_event_trigger_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         if request.idempotency_key.trim().is_empty() {
             request.idempotency_key = self.idempotency_key.clone();
         }
-        Ok(workflow_manager_event_trigger_from_proto(
+        Ok(workflow_event_trigger_from_proto(
             self.client
                 .upsert_event_trigger(request)
                 .await?
@@ -803,11 +801,11 @@ impl WorkflowManager {
     /// Fetches one event trigger.
     pub async fn get_trigger(
         &mut self,
-        input: WorkflowManagerGetEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
-        let mut request = new_workflow_manager_get_event_trigger_request(input);
+        input: WorkflowGetEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError> {
+        let mut request = new_workflow_get_event_trigger_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(workflow_manager_event_trigger_from_proto(
+        Ok(workflow_event_trigger_from_proto(
             self.client.get_event_trigger(request).await?.into_inner(),
         )?)
     }
@@ -815,11 +813,11 @@ impl WorkflowManager {
     /// Updates an event trigger.
     pub async fn update_trigger(
         &mut self,
-        input: WorkflowManagerUpdateEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
-        let mut request = new_workflow_manager_update_event_trigger_request(input)?;
+        input: WorkflowUpdateEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError> {
+        let mut request = new_workflow_update_event_trigger_request(input)?;
         request.invocation_token = self.invocation_token.clone();
-        Ok(workflow_manager_event_trigger_from_proto(
+        Ok(workflow_event_trigger_from_proto(
             self.client
                 .upsert_event_trigger(request)
                 .await?
@@ -830,9 +828,9 @@ impl WorkflowManager {
     /// Deletes an event trigger.
     pub async fn delete_trigger(
         &mut self,
-        input: WorkflowManagerDeleteEventTrigger,
-    ) -> std::result::Result<(), WorkflowManagerError> {
-        let mut request = new_workflow_manager_delete_event_trigger_request(input);
+        input: WorkflowDeleteEventTrigger,
+    ) -> std::result::Result<(), WorkflowError> {
+        let mut request = new_workflow_delete_event_trigger_request(input);
         request.invocation_token = self.invocation_token.clone();
         self.client.delete_event_trigger(request).await?;
         Ok(())
@@ -841,11 +839,11 @@ impl WorkflowManager {
     /// Pauses an event trigger.
     pub async fn pause_trigger(
         &mut self,
-        input: WorkflowManagerPauseEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
-        let mut request = new_workflow_manager_pause_event_trigger_request(input);
+        input: WorkflowPauseEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError> {
+        let mut request = new_workflow_pause_event_trigger_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(workflow_manager_event_trigger_from_proto(
+        Ok(workflow_event_trigger_from_proto(
             self.client.pause_event_trigger(request).await?.into_inner(),
         )?)
     }
@@ -853,11 +851,11 @@ impl WorkflowManager {
     /// Resumes an event trigger.
     pub async fn resume_trigger(
         &mut self,
-        input: WorkflowManagerResumeEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
-        let mut request = new_workflow_manager_resume_event_trigger_request(input);
+        input: WorkflowResumeEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError> {
+        let mut request = new_workflow_resume_event_trigger_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(workflow_manager_event_trigger_from_proto(
+        Ok(workflow_event_trigger_from_proto(
             self.client
                 .resume_event_trigger(request)
                 .await?
@@ -865,12 +863,12 @@ impl WorkflowManager {
         )?)
     }
 
-    /// Publishes an event into the workflow manager.
+    /// Publishes an event into the workflow.
     pub async fn publish_event(
         &mut self,
-        input: WorkflowManagerPublishEvent,
-    ) -> std::result::Result<WorkflowEvent, WorkflowManagerError> {
-        let mut request = new_workflow_manager_publish_event_request(input)?;
+        input: WorkflowPublishEvent,
+    ) -> std::result::Result<WorkflowEvent, WorkflowError> {
+        let mut request = new_workflow_publish_event_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         Ok(crate::workflow::workflow_event_from_proto(
             self.client.publish_event(request).await?.into_inner(),
@@ -879,145 +877,145 @@ impl WorkflowManager {
 }
 
 #[async_trait]
-impl WorkflowManagerApi for WorkflowManager {
+impl WorkflowContract for Workflow {
     async fn start_run(
         &mut self,
-        input: WorkflowManagerStartRun,
-    ) -> std::result::Result<WorkflowManagerRun, WorkflowManagerError> {
-        WorkflowManager::start_run(self, input).await
+        input: WorkflowStartRun,
+    ) -> std::result::Result<WorkflowRun, WorkflowError> {
+        Workflow::start_run(self, input).await
     }
 
     async fn signal_run(
         &mut self,
-        input: WorkflowManagerSignalRun,
-    ) -> std::result::Result<WorkflowManagerRunSignal, WorkflowManagerError> {
-        WorkflowManager::signal_run(self, input).await
+        input: WorkflowSignalRun,
+    ) -> std::result::Result<WorkflowRunSignal, WorkflowError> {
+        Workflow::signal_run(self, input).await
     }
 
     async fn signal_or_start_run(
         &mut self,
-        input: WorkflowManagerSignalOrStartRun,
-    ) -> std::result::Result<WorkflowManagerRunSignal, WorkflowManagerError> {
-        WorkflowManager::signal_or_start_run(self, input).await
+        input: WorkflowSignalOrStartRun,
+    ) -> std::result::Result<WorkflowRunSignal, WorkflowError> {
+        Workflow::signal_or_start_run(self, input).await
     }
 
     async fn create_definition(
         &mut self,
-        input: WorkflowManagerCreateDefinition,
-    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError> {
-        WorkflowManager::create_definition(self, input).await
+        input: WorkflowCreateDefinition,
+    ) -> std::result::Result<WorkflowDefinition, WorkflowError> {
+        Workflow::create_definition(self, input).await
     }
 
     async fn get_definition(
         &mut self,
-        input: WorkflowManagerGetDefinition,
-    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError> {
-        WorkflowManager::get_definition(self, input).await
+        input: WorkflowGetDefinition,
+    ) -> std::result::Result<WorkflowDefinition, WorkflowError> {
+        Workflow::get_definition(self, input).await
     }
 
     async fn update_definition(
         &mut self,
-        input: WorkflowManagerUpdateDefinition,
-    ) -> std::result::Result<WorkflowManagerDefinition, WorkflowManagerError> {
-        WorkflowManager::update_definition(self, input).await
+        input: WorkflowUpdateDefinition,
+    ) -> std::result::Result<WorkflowDefinition, WorkflowError> {
+        Workflow::update_definition(self, input).await
     }
 
     async fn delete_definition(
         &mut self,
-        input: WorkflowManagerDeleteDefinition,
-    ) -> std::result::Result<(), WorkflowManagerError> {
-        WorkflowManager::delete_definition(self, input).await
+        input: WorkflowDeleteDefinition,
+    ) -> std::result::Result<(), WorkflowError> {
+        Workflow::delete_definition(self, input).await
     }
 
     async fn create_schedule(
         &mut self,
-        input: WorkflowManagerCreateSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
-        WorkflowManager::create_schedule(self, input).await
+        input: WorkflowCreateSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError> {
+        Workflow::create_schedule(self, input).await
     }
 
     async fn get_schedule(
         &mut self,
-        input: WorkflowManagerGetSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
-        WorkflowManager::get_schedule(self, input).await
+        input: WorkflowGetSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError> {
+        Workflow::get_schedule(self, input).await
     }
 
     async fn update_schedule(
         &mut self,
-        input: WorkflowManagerUpdateSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
-        WorkflowManager::update_schedule(self, input).await
+        input: WorkflowUpdateSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError> {
+        Workflow::update_schedule(self, input).await
     }
 
     async fn delete_schedule(
         &mut self,
-        input: WorkflowManagerDeleteSchedule,
-    ) -> std::result::Result<(), WorkflowManagerError> {
-        WorkflowManager::delete_schedule(self, input).await
+        input: WorkflowDeleteSchedule,
+    ) -> std::result::Result<(), WorkflowError> {
+        Workflow::delete_schedule(self, input).await
     }
 
     async fn pause_schedule(
         &mut self,
-        input: WorkflowManagerPauseSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
-        WorkflowManager::pause_schedule(self, input).await
+        input: WorkflowPauseSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError> {
+        Workflow::pause_schedule(self, input).await
     }
 
     async fn resume_schedule(
         &mut self,
-        input: WorkflowManagerResumeSchedule,
-    ) -> std::result::Result<WorkflowManagerSchedule, WorkflowManagerError> {
-        WorkflowManager::resume_schedule(self, input).await
+        input: WorkflowResumeSchedule,
+    ) -> std::result::Result<WorkflowSchedule, WorkflowError> {
+        Workflow::resume_schedule(self, input).await
     }
 
     async fn create_trigger(
         &mut self,
-        input: WorkflowManagerCreateEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
-        WorkflowManager::create_trigger(self, input).await
+        input: WorkflowCreateEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError> {
+        Workflow::create_trigger(self, input).await
     }
 
     async fn get_trigger(
         &mut self,
-        input: WorkflowManagerGetEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
-        WorkflowManager::get_trigger(self, input).await
+        input: WorkflowGetEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError> {
+        Workflow::get_trigger(self, input).await
     }
 
     async fn update_trigger(
         &mut self,
-        input: WorkflowManagerUpdateEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
-        WorkflowManager::update_trigger(self, input).await
+        input: WorkflowUpdateEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError> {
+        Workflow::update_trigger(self, input).await
     }
 
     async fn delete_trigger(
         &mut self,
-        input: WorkflowManagerDeleteEventTrigger,
-    ) -> std::result::Result<(), WorkflowManagerError> {
-        WorkflowManager::delete_trigger(self, input).await
+        input: WorkflowDeleteEventTrigger,
+    ) -> std::result::Result<(), WorkflowError> {
+        Workflow::delete_trigger(self, input).await
     }
 
     async fn pause_trigger(
         &mut self,
-        input: WorkflowManagerPauseEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
-        WorkflowManager::pause_trigger(self, input).await
+        input: WorkflowPauseEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError> {
+        Workflow::pause_trigger(self, input).await
     }
 
     async fn resume_trigger(
         &mut self,
-        input: WorkflowManagerResumeEventTrigger,
-    ) -> std::result::Result<WorkflowManagerEventTrigger, WorkflowManagerError> {
-        WorkflowManager::resume_trigger(self, input).await
+        input: WorkflowResumeEventTrigger,
+    ) -> std::result::Result<WorkflowEventTrigger, WorkflowError> {
+        Workflow::resume_trigger(self, input).await
     }
 
     async fn publish_event(
         &mut self,
-        input: WorkflowManagerPublishEvent,
-    ) -> std::result::Result<WorkflowEvent, WorkflowManagerError> {
-        WorkflowManager::publish_event(self, input).await
+        input: WorkflowPublishEvent,
+    ) -> std::result::Result<WorkflowEvent, WorkflowError> {
+        Workflow::publish_event(self, input).await
     }
 }
 
@@ -1034,7 +1032,7 @@ impl Interceptor for RelayTokenInterceptor {
         if let Some(token) = self.token.clone() {
             request
                 .metadata_mut()
-                .insert(WORKFLOW_MANAGER_RELAY_TOKEN_HEADER, token);
+                .insert(WORKFLOW_RELAY_TOKEN_HEADER, token);
         }
         Ok(request)
     }
@@ -1042,66 +1040,62 @@ impl Interceptor for RelayTokenInterceptor {
 
 fn relay_token_interceptor(
     token: &str,
-) -> std::result::Result<RelayTokenInterceptor, WorkflowManagerError> {
+) -> std::result::Result<RelayTokenInterceptor, WorkflowError> {
     let trimmed = token.trim();
     let token = if trimmed.is_empty() {
         None
     } else {
         Some(MetadataValue::try_from(trimmed).map_err(|err| {
-            WorkflowManagerError::Env(format!(
-                "workflow manager: invalid relay token metadata: {err}"
-            ))
+            WorkflowError::Env(format!("workflow: invalid relay token metadata: {err}"))
         })?)
     };
     Ok(RelayTokenInterceptor { token })
 }
 
-enum WorkflowManagerTarget {
+enum WorkflowTarget {
     Unix(String),
     Tcp(String),
     Tls(String),
 }
 
-fn parse_workflow_manager_target(
-    raw: &str,
-) -> std::result::Result<WorkflowManagerTarget, WorkflowManagerError> {
+fn parse_workflow_target(raw: &str) -> std::result::Result<WorkflowTarget, WorkflowError> {
     let target = raw.trim();
     if target.is_empty() {
-        return Err(WorkflowManagerError::Env(
-            "workflow manager: transport target is required".to_string(),
+        return Err(WorkflowError::Env(
+            "workflow: transport target is required".to_string(),
         ));
     }
     if let Some(address) = target.strip_prefix("tcp://") {
         let address = address.trim();
         if address.is_empty() {
-            return Err(WorkflowManagerError::Env(format!(
-                "workflow manager: tcp target {raw:?} is missing host:port"
+            return Err(WorkflowError::Env(format!(
+                "workflow: tcp target {raw:?} is missing host:port"
             )));
         }
-        return Ok(WorkflowManagerTarget::Tcp(address.to_string()));
+        return Ok(WorkflowTarget::Tcp(address.to_string()));
     }
     if let Some(address) = target.strip_prefix("tls://") {
         let address = address.trim();
         if address.is_empty() {
-            return Err(WorkflowManagerError::Env(format!(
-                "workflow manager: tls target {raw:?} is missing host:port"
+            return Err(WorkflowError::Env(format!(
+                "workflow: tls target {raw:?} is missing host:port"
             )));
         }
-        return Ok(WorkflowManagerTarget::Tls(address.to_string()));
+        return Ok(WorkflowTarget::Tls(address.to_string()));
     }
     if let Some(path) = target.strip_prefix("unix://") {
         let path = path.trim();
         if path.is_empty() {
-            return Err(WorkflowManagerError::Env(format!(
-                "workflow manager: unix target {raw:?} is missing a socket path"
+            return Err(WorkflowError::Env(format!(
+                "workflow: unix target {raw:?} is missing a socket path"
             )));
         }
-        return Ok(WorkflowManagerTarget::Unix(path.to_string()));
+        return Ok(WorkflowTarget::Unix(path.to_string()));
     }
     if target.contains("://") {
-        return Err(WorkflowManagerError::Env(format!(
-            "workflow manager: unsupported target scheme in {raw:?}"
+        return Err(WorkflowError::Env(format!(
+            "workflow: unsupported target scheme in {raw:?}"
         )));
     }
-    Ok(WorkflowManagerTarget::Unix(target.to_string()))
+    Ok(WorkflowTarget::Unix(target.to_string()))
 }

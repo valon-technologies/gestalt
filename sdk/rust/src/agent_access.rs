@@ -21,19 +21,19 @@ use crate::{
     protocol,
 };
 
-type AgentManagerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
+type AgentTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
-/// Environment variable containing the agent-manager host-service target.
-pub const ENV_AGENT_MANAGER_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
-/// Environment variable containing the optional agent-manager relay token.
-pub const ENV_AGENT_MANAGER_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
-const AGENT_MANAGER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
+/// Environment variable containing the agent host-service target.
+pub const ENV_AGENT_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
+/// Environment variable containing the optional agent relay token.
+pub const ENV_AGENT_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
+const AGENT_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
-/// Errors returned by [`AgentManager`].
-pub enum AgentManagerError {
+/// Errors returned by [`Agent`].
+pub enum AgentError {
     /// The invocation token was empty.
-    #[error("agent manager: invocation token is not available")]
+    #[error("agent: invocation token is not available")]
     MissingInvocationToken,
     /// The host-service transport could not be created.
     #[error("{0}")]
@@ -51,7 +51,7 @@ pub enum AgentManagerError {
 
 /// Input for creating an agent session.
 #[derive(Clone, Debug, Default)]
-pub struct AgentManagerCreateSession {
+pub struct AgentCreateSession {
     pub provider_name: String,
     pub model: String,
     pub client_ref: String,
@@ -62,20 +62,20 @@ pub struct AgentManagerCreateSession {
 
 /// Input for fetching an agent session.
 #[derive(Clone, Debug, Default)]
-pub struct AgentManagerGetSession {
+pub struct AgentGetSession {
     pub session_id: String,
 }
 
 /// Input for listing agent sessions.
 #[derive(Clone, Debug)]
-pub struct AgentManagerListSessions {
+pub struct AgentListSessions {
     pub provider_name: String,
     pub state: AgentSessionState,
     pub limit: i32,
     pub summary_only: bool,
 }
 
-impl Default for AgentManagerListSessions {
+impl Default for AgentListSessions {
     fn default() -> Self {
         Self {
             provider_name: String::new(),
@@ -88,14 +88,14 @@ impl Default for AgentManagerListSessions {
 
 /// Input for updating an agent session.
 #[derive(Clone, Debug)]
-pub struct AgentManagerUpdateSession {
+pub struct AgentUpdateSession {
     pub session_id: String,
     pub client_ref: String,
     pub state: AgentSessionState,
     pub metadata: Option<serde_json::Value>,
 }
 
-impl Default for AgentManagerUpdateSession {
+impl Default for AgentUpdateSession {
     fn default() -> Self {
         Self {
             session_id: String::new(),
@@ -108,7 +108,7 @@ impl Default for AgentManagerUpdateSession {
 
 /// Input for creating an agent turn.
 #[derive(Clone, Debug)]
-pub struct AgentManagerCreateTurn {
+pub struct AgentCreateTurn {
     pub session_id: String,
     pub model: String,
     pub messages: Vec<AgentMessage>,
@@ -122,7 +122,7 @@ pub struct AgentManagerCreateTurn {
     pub timeout_seconds: i32,
 }
 
-impl Default for AgentManagerCreateTurn {
+impl Default for AgentCreateTurn {
     fn default() -> Self {
         Self {
             session_id: String::new(),
@@ -142,20 +142,20 @@ impl Default for AgentManagerCreateTurn {
 
 /// Input for fetching an agent turn.
 #[derive(Clone, Debug, Default)]
-pub struct AgentManagerGetTurn {
+pub struct AgentGetTurn {
     pub turn_id: String,
 }
 
 /// Input for listing agent turns.
 #[derive(Clone, Debug)]
-pub struct AgentManagerListTurns {
+pub struct AgentListTurns {
     pub session_id: String,
     pub status: AgentExecutionStatus,
     pub limit: i32,
     pub summary_only: bool,
 }
 
-impl Default for AgentManagerListTurns {
+impl Default for AgentListTurns {
     fn default() -> Self {
         Self {
             session_id: String::new(),
@@ -168,14 +168,14 @@ impl Default for AgentManagerListTurns {
 
 /// Input for canceling an agent turn.
 #[derive(Clone, Debug, Default)]
-pub struct AgentManagerCancelTurn {
+pub struct AgentCancelTurn {
     pub turn_id: String,
     pub reason: String,
 }
 
 /// Input for listing agent turn events.
 #[derive(Clone, Debug, Default)]
-pub struct AgentManagerListTurnEvents {
+pub struct AgentListTurnEvents {
     pub turn_id: String,
     pub after_seq: i64,
     pub limit: i32,
@@ -183,90 +183,88 @@ pub struct AgentManagerListTurnEvents {
 
 /// Input for listing agent interactions.
 #[derive(Clone, Debug, Default)]
-pub struct AgentManagerListInteractions {
+pub struct AgentListInteractions {
     pub turn_id: String,
 }
 
 /// Input for resolving an agent interaction.
 #[derive(Clone, Debug, Default)]
-pub struct AgentManagerResolveInteraction {
+pub struct AgentResolveInteraction {
     pub turn_id: String,
     pub interaction_id: String,
     pub resolution: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct AgentManagerListSessionsResponse {
+pub struct AgentListSessionsResponse {
     pub sessions: Vec<AgentSession>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct AgentManagerListTurnsResponse {
+pub struct AgentListTurnsResponse {
     pub turns: Vec<AgentTurn>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct AgentManagerListTurnEventsResponse {
+pub struct AgentListTurnEventsResponse {
     pub events: Vec<AgentTurnEvent>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct AgentManagerListInteractionsResponse {
+pub struct AgentListInteractionsResponse {
     pub interactions: Vec<AgentInteraction>,
 }
 
 #[async_trait]
 /// Fakeable client contract for managing agent sessions and turns.
-pub trait AgentManagerApi: Send {
+pub trait AgentContract: Send {
     async fn create_session(
         &mut self,
-        input: AgentManagerCreateSession,
-    ) -> std::result::Result<AgentSession, AgentManagerError>;
+        input: AgentCreateSession,
+    ) -> std::result::Result<AgentSession, AgentError>;
     async fn get_session(
         &mut self,
-        input: AgentManagerGetSession,
-    ) -> std::result::Result<AgentSession, AgentManagerError>;
+        input: AgentGetSession,
+    ) -> std::result::Result<AgentSession, AgentError>;
     async fn list_sessions(
         &mut self,
-        input: AgentManagerListSessions,
-    ) -> std::result::Result<AgentManagerListSessionsResponse, AgentManagerError>;
+        input: AgentListSessions,
+    ) -> std::result::Result<AgentListSessionsResponse, AgentError>;
     async fn update_session(
         &mut self,
-        input: AgentManagerUpdateSession,
-    ) -> std::result::Result<AgentSession, AgentManagerError>;
+        input: AgentUpdateSession,
+    ) -> std::result::Result<AgentSession, AgentError>;
     async fn create_turn(
         &mut self,
-        input: AgentManagerCreateTurn,
-    ) -> std::result::Result<AgentTurn, AgentManagerError>;
-    async fn get_turn(
-        &mut self,
-        input: AgentManagerGetTurn,
-    ) -> std::result::Result<AgentTurn, AgentManagerError>;
+        input: AgentCreateTurn,
+    ) -> std::result::Result<AgentTurn, AgentError>;
+    async fn get_turn(&mut self, input: AgentGetTurn)
+    -> std::result::Result<AgentTurn, AgentError>;
     async fn list_turns(
         &mut self,
-        input: AgentManagerListTurns,
-    ) -> std::result::Result<AgentManagerListTurnsResponse, AgentManagerError>;
+        input: AgentListTurns,
+    ) -> std::result::Result<AgentListTurnsResponse, AgentError>;
     async fn cancel_turn(
         &mut self,
-        input: AgentManagerCancelTurn,
-    ) -> std::result::Result<AgentTurn, AgentManagerError>;
+        input: AgentCancelTurn,
+    ) -> std::result::Result<AgentTurn, AgentError>;
     async fn list_turn_events(
         &mut self,
-        input: AgentManagerListTurnEvents,
-    ) -> std::result::Result<AgentManagerListTurnEventsResponse, AgentManagerError>;
+        input: AgentListTurnEvents,
+    ) -> std::result::Result<AgentListTurnEventsResponse, AgentError>;
     async fn list_interactions(
         &mut self,
-        input: AgentManagerListInteractions,
-    ) -> std::result::Result<AgentManagerListInteractionsResponse, AgentManagerError>;
+        input: AgentListInteractions,
+    ) -> std::result::Result<AgentListInteractionsResponse, AgentError>;
     async fn resolve_interaction(
         &mut self,
-        input: AgentManagerResolveInteraction,
-    ) -> std::result::Result<AgentInteraction, AgentManagerError>;
+        input: AgentResolveInteraction,
+    ) -> std::result::Result<AgentInteraction, AgentError>;
 }
 
 /// Creates a protocol create-session request.
-pub(crate) fn new_agent_manager_create_session_request(
-    input: AgentManagerCreateSession,
+pub(crate) fn new_agent_create_session_request(
+    input: AgentCreateSession,
 ) -> crate::Result<pb::CreateAgentProviderSessionRequest> {
     Ok(pb::CreateAgentProviderSessionRequest {
         provider_name: input.provider_name,
@@ -280,8 +278,8 @@ pub(crate) fn new_agent_manager_create_session_request(
     })
 }
 
-pub(crate) fn new_agent_manager_get_session_request(
-    input: AgentManagerGetSession,
+pub(crate) fn new_agent_get_session_request(
+    input: AgentGetSession,
 ) -> pb::GetAgentProviderSessionRequest {
     pb::GetAgentProviderSessionRequest {
         session_id: input.session_id,
@@ -290,8 +288,8 @@ pub(crate) fn new_agent_manager_get_session_request(
     }
 }
 
-pub(crate) fn new_agent_manager_list_sessions_request(
-    input: AgentManagerListSessions,
+pub(crate) fn new_agent_list_sessions_request(
+    input: AgentListSessions,
 ) -> pb::ListAgentProviderSessionsRequest {
     pb::ListAgentProviderSessionsRequest {
         provider_name: input.provider_name,
@@ -303,8 +301,8 @@ pub(crate) fn new_agent_manager_list_sessions_request(
     }
 }
 
-pub(crate) fn new_agent_manager_update_session_request(
-    input: AgentManagerUpdateSession,
+pub(crate) fn new_agent_update_session_request(
+    input: AgentUpdateSession,
 ) -> crate::Result<pb::UpdateAgentProviderSessionRequest> {
     Ok(pb::UpdateAgentProviderSessionRequest {
         session_id: input.session_id,
@@ -316,8 +314,8 @@ pub(crate) fn new_agent_manager_update_session_request(
     })
 }
 
-pub(crate) fn new_agent_manager_create_turn_request(
-    input: AgentManagerCreateTurn,
+pub(crate) fn new_agent_create_turn_request(
+    input: AgentCreateTurn,
 ) -> crate::Result<pb::CreateAgentProviderTurnRequest> {
     Ok(pb::CreateAgentProviderTurnRequest {
         session_id: input.session_id,
@@ -342,9 +340,7 @@ pub(crate) fn new_agent_manager_create_turn_request(
     })
 }
 
-pub(crate) fn new_agent_manager_get_turn_request(
-    input: AgentManagerGetTurn,
-) -> pb::GetAgentProviderTurnRequest {
+pub(crate) fn new_agent_get_turn_request(input: AgentGetTurn) -> pb::GetAgentProviderTurnRequest {
     pb::GetAgentProviderTurnRequest {
         turn_id: input.turn_id,
         invocation_token: String::new(),
@@ -352,8 +348,8 @@ pub(crate) fn new_agent_manager_get_turn_request(
     }
 }
 
-pub(crate) fn new_agent_manager_list_turns_request(
-    input: AgentManagerListTurns,
+pub(crate) fn new_agent_list_turns_request(
+    input: AgentListTurns,
 ) -> pb::ListAgentProviderTurnsRequest {
     pb::ListAgentProviderTurnsRequest {
         session_id: input.session_id,
@@ -365,8 +361,8 @@ pub(crate) fn new_agent_manager_list_turns_request(
     }
 }
 
-pub(crate) fn new_agent_manager_cancel_turn_request(
-    input: AgentManagerCancelTurn,
+pub(crate) fn new_agent_cancel_turn_request(
+    input: AgentCancelTurn,
 ) -> pb::CancelAgentProviderTurnRequest {
     pb::CancelAgentProviderTurnRequest {
         turn_id: input.turn_id,
@@ -376,8 +372,8 @@ pub(crate) fn new_agent_manager_cancel_turn_request(
     }
 }
 
-pub(crate) fn new_agent_manager_list_turn_events_request(
-    input: AgentManagerListTurnEvents,
+pub(crate) fn new_agent_list_turn_events_request(
+    input: AgentListTurnEvents,
 ) -> pb::ListAgentProviderTurnEventsRequest {
     pb::ListAgentProviderTurnEventsRequest {
         turn_id: input.turn_id,
@@ -388,8 +384,8 @@ pub(crate) fn new_agent_manager_list_turn_events_request(
     }
 }
 
-pub(crate) fn new_agent_manager_list_interactions_request(
-    input: AgentManagerListInteractions,
+pub(crate) fn new_agent_list_interactions_request(
+    input: AgentListInteractions,
 ) -> pb::ListAgentProviderInteractionsRequest {
     pb::ListAgentProviderInteractionsRequest {
         turn_id: input.turn_id,
@@ -398,8 +394,8 @@ pub(crate) fn new_agent_manager_list_interactions_request(
     }
 }
 
-pub(crate) fn new_agent_manager_resolve_interaction_request(
-    input: AgentManagerResolveInteraction,
+pub(crate) fn new_agent_resolve_interaction_request(
+    input: AgentResolveInteraction,
 ) -> crate::Result<pb::ResolveAgentProviderInteractionRequest> {
     Ok(pb::ResolveAgentProviderInteractionRequest {
         turn_id: input.turn_id,
@@ -414,27 +410,26 @@ pub(crate) fn new_agent_manager_resolve_interaction_request(
 }
 
 /// Client for managing agent sessions, turns, events, and interactions.
-pub struct AgentManager {
-    client: ProtoAgentProviderClient<AgentManagerTransport>,
+pub struct Agent {
+    client: ProtoAgentProviderClient<AgentTransport>,
     invocation_token: String,
 }
 
-impl AgentManager {
-    /// Connects to the agent manager with an invocation token from the host.
+impl Agent {
+    /// Connects to the agent with an invocation token from the host.
     pub async fn connect(
         invocation_token: impl AsRef<str>,
-    ) -> std::result::Result<Self, AgentManagerError> {
+    ) -> std::result::Result<Self, AgentError> {
         let invocation_token = invocation_token.as_ref().trim().to_owned();
         if invocation_token.is_empty() {
-            return Err(AgentManagerError::MissingInvocationToken);
+            return Err(AgentError::MissingInvocationToken);
         }
 
-        let socket_path = std::env::var(ENV_AGENT_MANAGER_SOCKET).map_err(|_| {
-            AgentManagerError::Env(format!("{ENV_AGENT_MANAGER_SOCKET} is not set"))
-        })?;
-        let relay_token = std::env::var(ENV_AGENT_MANAGER_SOCKET_TOKEN).unwrap_or_default();
-        let channel = match parse_agent_manager_target(&socket_path)? {
-            AgentManagerTarget::Unix(path) => {
+        let socket_path = std::env::var(ENV_AGENT_SOCKET)
+            .map_err(|_| AgentError::Env(format!("{ENV_AGENT_SOCKET} is not set")))?;
+        let relay_token = std::env::var(ENV_AGENT_SOCKET_TOKEN).unwrap_or_default();
+        let channel = match parse_agent_target(&socket_path)? {
+            AgentTarget::Unix(path) => {
                 Endpoint::try_from("http://[::]:50051")?
                     .connect_with_connector(service_fn(move |_: Uri| {
                         let path = path.clone();
@@ -442,12 +437,12 @@ impl AgentManager {
                     }))
                     .await?
             }
-            AgentManagerTarget::Tcp(address) => {
+            AgentTarget::Tcp(address) => {
                 Endpoint::from_shared(format!("http://{address}"))?
                     .connect()
                     .await?
             }
-            AgentManagerTarget::Tls(address) => {
+            AgentTarget::Tls(address) => {
                 Endpoint::from_shared(format!("https://{address}"))?
                     .tls_config(ClientTlsConfig::new().with_native_roots())?
                     .connect()
@@ -467,9 +462,9 @@ impl AgentManager {
     /// Creates an agent session.
     pub async fn create_session(
         &mut self,
-        input: AgentManagerCreateSession,
-    ) -> std::result::Result<AgentSession, AgentManagerError> {
-        let mut request = new_agent_manager_create_session_request(input)?;
+        input: AgentCreateSession,
+    ) -> std::result::Result<AgentSession, AgentError> {
+        let mut request = new_agent_create_session_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         Ok(session_from_proto(
             self.client.create_session(request).await?.into_inner(),
@@ -479,9 +474,9 @@ impl AgentManager {
     /// Fetches one agent session.
     pub async fn get_session(
         &mut self,
-        input: AgentManagerGetSession,
-    ) -> std::result::Result<AgentSession, AgentManagerError> {
-        let mut request = new_agent_manager_get_session_request(input);
+        input: AgentGetSession,
+    ) -> std::result::Result<AgentSession, AgentError> {
+        let mut request = new_agent_get_session_request(input);
         request.invocation_token = self.invocation_token.clone();
         Ok(session_from_proto(
             self.client.get_session(request).await?.into_inner(),
@@ -491,12 +486,12 @@ impl AgentManager {
     /// Lists agent sessions visible to the invocation token.
     pub async fn list_sessions(
         &mut self,
-        input: AgentManagerListSessions,
-    ) -> std::result::Result<AgentManagerListSessionsResponse, AgentManagerError> {
-        let mut request = new_agent_manager_list_sessions_request(input);
+        input: AgentListSessions,
+    ) -> std::result::Result<AgentListSessionsResponse, AgentError> {
+        let mut request = new_agent_list_sessions_request(input);
         request.invocation_token = self.invocation_token.clone();
         let response = self.client.list_sessions(request).await?.into_inner();
-        Ok(AgentManagerListSessionsResponse {
+        Ok(AgentListSessionsResponse {
             sessions: response
                 .sessions
                 .into_iter()
@@ -508,9 +503,9 @@ impl AgentManager {
     /// Updates mutable fields on an agent session.
     pub async fn update_session(
         &mut self,
-        input: AgentManagerUpdateSession,
-    ) -> std::result::Result<AgentSession, AgentManagerError> {
-        let mut request = new_agent_manager_update_session_request(input)?;
+        input: AgentUpdateSession,
+    ) -> std::result::Result<AgentSession, AgentError> {
+        let mut request = new_agent_update_session_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         Ok(session_from_proto(
             self.client.update_session(request).await?.into_inner(),
@@ -520,9 +515,9 @@ impl AgentManager {
     /// Creates an agent turn.
     pub async fn create_turn(
         &mut self,
-        input: AgentManagerCreateTurn,
-    ) -> std::result::Result<AgentTurn, AgentManagerError> {
-        let mut request = new_agent_manager_create_turn_request(input)?;
+        input: AgentCreateTurn,
+    ) -> std::result::Result<AgentTurn, AgentError> {
+        let mut request = new_agent_create_turn_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         Ok(turn_from_proto(
             self.client.create_turn(request).await?.into_inner(),
@@ -532,9 +527,9 @@ impl AgentManager {
     /// Fetches one agent turn.
     pub async fn get_turn(
         &mut self,
-        input: AgentManagerGetTurn,
-    ) -> std::result::Result<AgentTurn, AgentManagerError> {
-        let mut request = new_agent_manager_get_turn_request(input);
+        input: AgentGetTurn,
+    ) -> std::result::Result<AgentTurn, AgentError> {
+        let mut request = new_agent_get_turn_request(input);
         request.invocation_token = self.invocation_token.clone();
         Ok(turn_from_proto(
             self.client.get_turn(request).await?.into_inner(),
@@ -544,12 +539,12 @@ impl AgentManager {
     /// Lists turns for an agent session.
     pub async fn list_turns(
         &mut self,
-        input: AgentManagerListTurns,
-    ) -> std::result::Result<AgentManagerListTurnsResponse, AgentManagerError> {
-        let mut request = new_agent_manager_list_turns_request(input);
+        input: AgentListTurns,
+    ) -> std::result::Result<AgentListTurnsResponse, AgentError> {
+        let mut request = new_agent_list_turns_request(input);
         request.invocation_token = self.invocation_token.clone();
         let response = self.client.list_turns(request).await?.into_inner();
-        Ok(AgentManagerListTurnsResponse {
+        Ok(AgentListTurnsResponse {
             turns: response
                 .turns
                 .into_iter()
@@ -561,9 +556,9 @@ impl AgentManager {
     /// Cancels an in-progress agent turn.
     pub async fn cancel_turn(
         &mut self,
-        input: AgentManagerCancelTurn,
-    ) -> std::result::Result<AgentTurn, AgentManagerError> {
-        let mut request = new_agent_manager_cancel_turn_request(input);
+        input: AgentCancelTurn,
+    ) -> std::result::Result<AgentTurn, AgentError> {
+        let mut request = new_agent_cancel_turn_request(input);
         request.invocation_token = self.invocation_token.clone();
         Ok(turn_from_proto(
             self.client.cancel_turn(request).await?.into_inner(),
@@ -573,12 +568,12 @@ impl AgentManager {
     /// Lists events emitted for an agent turn.
     pub async fn list_turn_events(
         &mut self,
-        input: AgentManagerListTurnEvents,
-    ) -> std::result::Result<AgentManagerListTurnEventsResponse, AgentManagerError> {
-        let mut request = new_agent_manager_list_turn_events_request(input);
+        input: AgentListTurnEvents,
+    ) -> std::result::Result<AgentListTurnEventsResponse, AgentError> {
+        let mut request = new_agent_list_turn_events_request(input);
         request.invocation_token = self.invocation_token.clone();
         let response = self.client.list_turn_events(request).await?.into_inner();
-        Ok(AgentManagerListTurnEventsResponse {
+        Ok(AgentListTurnEventsResponse {
             events: response
                 .events
                 .into_iter()
@@ -590,12 +585,12 @@ impl AgentManager {
     /// Lists pending or completed agent interactions.
     pub async fn list_interactions(
         &mut self,
-        input: AgentManagerListInteractions,
-    ) -> std::result::Result<AgentManagerListInteractionsResponse, AgentManagerError> {
-        let mut request = new_agent_manager_list_interactions_request(input);
+        input: AgentListInteractions,
+    ) -> std::result::Result<AgentListInteractionsResponse, AgentError> {
+        let mut request = new_agent_list_interactions_request(input);
         request.invocation_token = self.invocation_token.clone();
         let response = self.client.list_interactions(request).await?.into_inner();
-        Ok(AgentManagerListInteractionsResponse {
+        Ok(AgentListInteractionsResponse {
             interactions: response
                 .interactions
                 .into_iter()
@@ -607,9 +602,9 @@ impl AgentManager {
     /// Resolves an agent interaction with a host response.
     pub async fn resolve_interaction(
         &mut self,
-        input: AgentManagerResolveInteraction,
-    ) -> std::result::Result<AgentInteraction, AgentManagerError> {
-        let mut request = new_agent_manager_resolve_interaction_request(input)?;
+        input: AgentResolveInteraction,
+    ) -> std::result::Result<AgentInteraction, AgentError> {
+        let mut request = new_agent_resolve_interaction_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         Ok(interaction_from_proto(
             self.client.resolve_interaction(request).await?.into_inner(),
@@ -618,82 +613,82 @@ impl AgentManager {
 }
 
 #[async_trait]
-impl AgentManagerApi for AgentManager {
+impl AgentContract for Agent {
     async fn create_session(
         &mut self,
-        input: AgentManagerCreateSession,
-    ) -> std::result::Result<AgentSession, AgentManagerError> {
-        AgentManager::create_session(self, input).await
+        input: AgentCreateSession,
+    ) -> std::result::Result<AgentSession, AgentError> {
+        Agent::create_session(self, input).await
     }
 
     async fn get_session(
         &mut self,
-        input: AgentManagerGetSession,
-    ) -> std::result::Result<AgentSession, AgentManagerError> {
-        AgentManager::get_session(self, input).await
+        input: AgentGetSession,
+    ) -> std::result::Result<AgentSession, AgentError> {
+        Agent::get_session(self, input).await
     }
 
     async fn list_sessions(
         &mut self,
-        input: AgentManagerListSessions,
-    ) -> std::result::Result<AgentManagerListSessionsResponse, AgentManagerError> {
-        AgentManager::list_sessions(self, input).await
+        input: AgentListSessions,
+    ) -> std::result::Result<AgentListSessionsResponse, AgentError> {
+        Agent::list_sessions(self, input).await
     }
 
     async fn update_session(
         &mut self,
-        input: AgentManagerUpdateSession,
-    ) -> std::result::Result<AgentSession, AgentManagerError> {
-        AgentManager::update_session(self, input).await
+        input: AgentUpdateSession,
+    ) -> std::result::Result<AgentSession, AgentError> {
+        Agent::update_session(self, input).await
     }
 
     async fn create_turn(
         &mut self,
-        input: AgentManagerCreateTurn,
-    ) -> std::result::Result<AgentTurn, AgentManagerError> {
-        AgentManager::create_turn(self, input).await
+        input: AgentCreateTurn,
+    ) -> std::result::Result<AgentTurn, AgentError> {
+        Agent::create_turn(self, input).await
     }
 
     async fn get_turn(
         &mut self,
-        input: AgentManagerGetTurn,
-    ) -> std::result::Result<AgentTurn, AgentManagerError> {
-        AgentManager::get_turn(self, input).await
+        input: AgentGetTurn,
+    ) -> std::result::Result<AgentTurn, AgentError> {
+        Agent::get_turn(self, input).await
     }
 
     async fn list_turns(
         &mut self,
-        input: AgentManagerListTurns,
-    ) -> std::result::Result<AgentManagerListTurnsResponse, AgentManagerError> {
-        AgentManager::list_turns(self, input).await
+        input: AgentListTurns,
+    ) -> std::result::Result<AgentListTurnsResponse, AgentError> {
+        Agent::list_turns(self, input).await
     }
 
     async fn cancel_turn(
         &mut self,
-        input: AgentManagerCancelTurn,
-    ) -> std::result::Result<AgentTurn, AgentManagerError> {
-        AgentManager::cancel_turn(self, input).await
+        input: AgentCancelTurn,
+    ) -> std::result::Result<AgentTurn, AgentError> {
+        Agent::cancel_turn(self, input).await
     }
 
     async fn list_turn_events(
         &mut self,
-        input: AgentManagerListTurnEvents,
-    ) -> std::result::Result<AgentManagerListTurnEventsResponse, AgentManagerError> {
-        AgentManager::list_turn_events(self, input).await
+        input: AgentListTurnEvents,
+    ) -> std::result::Result<AgentListTurnEventsResponse, AgentError> {
+        Agent::list_turn_events(self, input).await
     }
 
     async fn list_interactions(
         &mut self,
-        input: AgentManagerListInteractions,
-    ) -> std::result::Result<AgentManagerListInteractionsResponse, AgentManagerError> {
-        AgentManager::list_interactions(self, input).await
+        input: AgentListInteractions,
+    ) -> std::result::Result<AgentListInteractionsResponse, AgentError> {
+        Agent::list_interactions(self, input).await
     }
 
     async fn resolve_interaction(
         &mut self,
-        input: AgentManagerResolveInteraction,
-    ) -> std::result::Result<AgentInteraction, AgentManagerError> {
-        AgentManager::resolve_interaction(self, input).await
+        input: AgentResolveInteraction,
+    ) -> std::result::Result<AgentInteraction, AgentError> {
+        Agent::resolve_interaction(self, input).await
     }
 }
 
@@ -710,74 +705,68 @@ impl Interceptor for RelayTokenInterceptor {
         if let Some(token) = self.token.clone() {
             request
                 .metadata_mut()
-                .insert(AGENT_MANAGER_RELAY_TOKEN_HEADER, token);
+                .insert(AGENT_RELAY_TOKEN_HEADER, token);
         }
         Ok(request)
     }
 }
 
-fn relay_token_interceptor(
-    token: &str,
-) -> std::result::Result<RelayTokenInterceptor, AgentManagerError> {
+fn relay_token_interceptor(token: &str) -> std::result::Result<RelayTokenInterceptor, AgentError> {
     let trimmed = token.trim();
     let token = if trimmed.is_empty() {
         None
     } else {
         Some(MetadataValue::try_from(trimmed).map_err(|err| {
-            AgentManagerError::Env(format!(
-                "agent manager: invalid relay token metadata: {err}"
-            ))
+            AgentError::Env(format!("agent: invalid relay token metadata: {err}"))
         })?)
     };
     Ok(RelayTokenInterceptor { token })
 }
 
-enum AgentManagerTarget {
+enum AgentTarget {
     Unix(String),
     Tcp(String),
     Tls(String),
 }
 
-fn parse_agent_manager_target(
-    raw: &str,
-) -> std::result::Result<AgentManagerTarget, AgentManagerError> {
+fn parse_agent_target(raw: &str) -> std::result::Result<AgentTarget, AgentError> {
     let target = raw.trim();
     if target.is_empty() {
-        return Err(AgentManagerError::Env(
-            "agent manager: transport target is required".to_string(),
+        return Err(AgentError::Env(
+            "agent: transport target is required".to_string(),
         ));
     }
     if let Some(address) = target.strip_prefix("tcp://") {
         let address = address.trim();
         if address.is_empty() {
-            return Err(AgentManagerError::Env(format!(
-                "agent manager: tcp target {raw:?} is missing host:port"
+            return Err(AgentError::Env(format!(
+                "agent: tcp target {raw:?} is missing host:port"
             )));
         }
-        return Ok(AgentManagerTarget::Tcp(address.to_string()));
+        return Ok(AgentTarget::Tcp(address.to_string()));
     }
     if let Some(address) = target.strip_prefix("tls://") {
         let address = address.trim();
         if address.is_empty() {
-            return Err(AgentManagerError::Env(format!(
-                "agent manager: tls target {raw:?} is missing host:port"
+            return Err(AgentError::Env(format!(
+                "agent: tls target {raw:?} is missing host:port"
             )));
         }
-        return Ok(AgentManagerTarget::Tls(address.to_string()));
+        return Ok(AgentTarget::Tls(address.to_string()));
     }
     if let Some(path) = target.strip_prefix("unix://") {
         let path = path.trim();
         if path.is_empty() {
-            return Err(AgentManagerError::Env(format!(
-                "agent manager: unix target {raw:?} is missing a socket path"
+            return Err(AgentError::Env(format!(
+                "agent: unix target {raw:?} is missing a socket path"
             )));
         }
-        return Ok(AgentManagerTarget::Unix(path.to_string()));
+        return Ok(AgentTarget::Unix(path.to_string()));
     }
     if target.contains("://") {
-        return Err(AgentManagerError::Env(format!(
-            "agent manager: unsupported target scheme in {raw:?}"
+        return Err(AgentError::Env(format!(
+            "agent: unsupported target scheme in {raw:?}"
         )));
     }
-    Ok(AgentManagerTarget::Unix(target.to_string()))
+    Ok(AgentTarget::Unix(target.to_string()))
 }

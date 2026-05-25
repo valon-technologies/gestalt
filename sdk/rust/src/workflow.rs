@@ -365,31 +365,31 @@ pub struct ListWorkflowExecutionReferencesResponse {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct WorkflowManagerSchedule {
+pub struct WorkflowSchedule {
     pub provider_name: String,
     pub schedule: Option<BoundWorkflowSchedule>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct WorkflowManagerEventTrigger {
+pub struct WorkflowEventTrigger {
     pub provider_name: String,
     pub trigger: Option<BoundWorkflowEventTrigger>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct WorkflowManagerDefinition {
+pub struct WorkflowDefinition {
     pub provider_name: String,
     pub definition: Option<BoundWorkflowDefinition>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct WorkflowManagerRun {
+pub struct WorkflowRun {
     pub provider_name: String,
     pub run: Option<BoundWorkflowRun>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct WorkflowManagerRunSignal {
+pub struct WorkflowRunSignal {
     pub provider_name: String,
     pub run: Option<BoundWorkflowRun>,
     pub signal: Option<WorkflowSignal>,
@@ -2184,51 +2184,49 @@ fn list_execution_references_response_to_proto(
     })
 }
 
-pub(crate) fn workflow_manager_schedule_from_proto(
+pub(crate) fn workflow_schedule_from_proto(
     input: pb::BoundWorkflowSchedule,
-) -> ProviderResult<WorkflowManagerSchedule> {
-    Ok(WorkflowManagerSchedule {
+) -> ProviderResult<WorkflowSchedule> {
+    Ok(WorkflowSchedule {
         provider_name: input.provider_name.clone(),
         schedule: Some(bound_workflow_schedule_from_proto(input)?),
     })
 }
 
-pub(crate) fn workflow_manager_event_trigger_from_proto(
+pub(crate) fn workflow_event_trigger_from_proto(
     input: pb::BoundWorkflowEventTrigger,
-) -> ProviderResult<WorkflowManagerEventTrigger> {
-    Ok(WorkflowManagerEventTrigger {
+) -> ProviderResult<WorkflowEventTrigger> {
+    Ok(WorkflowEventTrigger {
         provider_name: input.provider_name.clone(),
         trigger: Some(bound_workflow_event_trigger_from_proto(input)?),
     })
 }
 
-pub(crate) fn workflow_manager_definition_from_proto(
+pub(crate) fn workflow_definition_from_proto(
     input: pb::BoundWorkflowDefinition,
-) -> ProviderResult<WorkflowManagerDefinition> {
-    Ok(WorkflowManagerDefinition {
+) -> ProviderResult<WorkflowDefinition> {
+    Ok(WorkflowDefinition {
         provider_name: input.provider_name.clone(),
         definition: Some(bound_workflow_definition_from_proto(input)?),
     })
 }
 
-pub(crate) fn workflow_manager_run_from_proto(
-    input: pb::BoundWorkflowRun,
-) -> ProviderResult<WorkflowManagerRun> {
-    Ok(WorkflowManagerRun {
+pub(crate) fn workflow_run_from_proto(input: pb::BoundWorkflowRun) -> ProviderResult<WorkflowRun> {
+    Ok(WorkflowRun {
         provider_name: input.provider_name.clone(),
         run: Some(bound_workflow_run_from_proto(input)?),
     })
 }
 
-pub(crate) fn workflow_manager_run_signal_from_proto(
+pub(crate) fn workflow_run_signal_from_proto(
     input: pb::SignalWorkflowRunResponse,
-) -> ProviderResult<WorkflowManagerRunSignal> {
+) -> ProviderResult<WorkflowRunSignal> {
     let provider_name = input
         .run
         .as_ref()
         .map(|run| run.provider_name.clone())
         .unwrap_or_default();
-    Ok(WorkflowManagerRunSignal {
+    Ok(WorkflowRunSignal {
         provider_name,
         run: input.run.map(bound_workflow_run_from_proto).transpose()?,
         signal: input.signal.map(workflow_signal_from_proto).transpose()?,

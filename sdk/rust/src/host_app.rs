@@ -70,7 +70,7 @@ pub struct InvokeOptions {
 
 #[async_trait]
 /// Fakeable contract for app invocation calls.
-pub trait AppApi: Send {
+pub trait AppContract: Send {
     async fn invoke(
         &mut self,
         plugin: String,
@@ -264,7 +264,7 @@ impl App {
 }
 
 #[async_trait]
-impl AppApi for App {
+impl AppContract for App {
     async fn invoke(
         &mut self,
         plugin: String,

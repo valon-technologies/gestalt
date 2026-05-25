@@ -4,7 +4,7 @@ import {
   RuntimeLogHost,
   WorkflowRunStatus,
   type AuthorizationEvaluateInput,
-  type AgentManagerWorkspace,
+  type AgentWorkspace,
   type RuntimeLogAppendResponse,
   type WorkflowEvent,
 } from "@valon-technologies/gestalt";
@@ -41,7 +41,7 @@ const evaluateInput: AuthorizationEvaluateInput = {
 };
 const appendResponse: RuntimeLogAppendResponse = { lastSeq: 1n };
 const event: WorkflowEvent = { id: "event-1", type: "fixture.event" };
-const workspace: AgentManagerWorkspace = {
+const workspace: AgentWorkspace = {
   cwd: "/workspace",
   checkouts: [{ url: "https://example.test/repo.git", ref: "main" }],
 };

@@ -493,11 +493,11 @@ func agentSessionsFromProto(values []*proto.AgentSession) []AgentSession {
 	return out
 }
 
-func listAgentManagerSessionsResponseFromProto(value *proto.ListAgentProviderSessionsResponse) *ListAgentManagerSessionsResponse {
+func listAgentSessionsResponseFromProto(value *proto.ListAgentProviderSessionsResponse) *ListAgentSessionsResponse {
 	if value == nil {
 		return nil
 	}
-	return &ListAgentManagerSessionsResponse{Sessions: agentSessionsFromProto(value.GetSessions())}
+	return &ListAgentSessionsResponse{Sessions: agentSessionsFromProto(value.GetSessions())}
 }
 
 func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSessionRequest) *CreateAgentProviderSessionRequest {
@@ -682,11 +682,11 @@ func agentTurnsFromProto(values []*proto.AgentTurn) []AgentTurn {
 	return out
 }
 
-func listAgentManagerTurnsResponseFromProto(value *proto.ListAgentProviderTurnsResponse) *ListAgentManagerTurnsResponse {
+func listAgentTurnsResponseFromProto(value *proto.ListAgentProviderTurnsResponse) *ListAgentTurnsResponse {
 	if value == nil {
 		return nil
 	}
-	return &ListAgentManagerTurnsResponse{Turns: agentTurnsFromProto(value.GetTurns())}
+	return &ListAgentTurnsResponse{Turns: agentTurnsFromProto(value.GetTurns())}
 }
 
 func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnRequest) *CreateAgentProviderTurnRequest {
@@ -848,11 +848,11 @@ func agentTurnEventsFromProto(values []*proto.AgentTurnEvent) []AgentTurnEvent {
 	return out
 }
 
-func listAgentManagerTurnEventsResponseFromProto(value *proto.ListAgentProviderTurnEventsResponse) *ListAgentManagerTurnEventsResponse {
+func listAgentTurnEventsResponseFromProto(value *proto.ListAgentProviderTurnEventsResponse) *ListAgentTurnEventsResponse {
 	if value == nil {
 		return nil
 	}
-	return &ListAgentManagerTurnEventsResponse{Events: agentTurnEventsFromProto(value.GetEvents())}
+	return &ListAgentTurnEventsResponse{Events: agentTurnEventsFromProto(value.GetEvents())}
 }
 
 func agentTurnDisplayToProto(value *AgentTurnDisplay) (*proto.AgentTurnDisplay, error) {
@@ -1006,11 +1006,11 @@ func agentInteractionsFromProto(values []*proto.AgentInteraction) []AgentInterac
 	return out
 }
 
-func listAgentManagerInteractionsResponseFromProto(value *proto.ListAgentProviderInteractionsResponse) *ListAgentManagerInteractionsResponse {
+func listAgentInteractionsResponseFromProto(value *proto.ListAgentProviderInteractionsResponse) *ListAgentInteractionsResponse {
 	if value == nil {
 		return nil
 	}
-	return &ListAgentManagerInteractionsResponse{Interactions: agentInteractionsFromProto(value.GetInteractions())}
+	return &ListAgentInteractionsResponse{Interactions: agentInteractionsFromProto(value.GetInteractions())}
 }
 
 func listAgentProviderInteractionsResponseToProto(value *ListAgentProviderInteractionsResponse) (*proto.ListAgentProviderInteractionsResponse, error) {

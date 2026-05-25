@@ -123,7 +123,7 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
 
-	client, err := gestalt.App("parent-token")
+	client, err := gestalt.NewApp("parent-token")
 	if err != nil {
 		t.Fatalf("App: %v", err)
 	}

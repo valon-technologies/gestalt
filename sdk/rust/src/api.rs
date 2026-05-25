@@ -149,22 +149,18 @@ impl Request {
         crate::App::connect(self.invocation_token()).await
     }
 
-    /// Creates a workflow manager using this request's invocation token.
-    pub async fn workflow_manager(
-        &self,
-    ) -> std::result::Result<crate::WorkflowManager, crate::WorkflowManagerError> {
-        crate::WorkflowManager::connect_with_idempotency_key(
+    /// Creates a workflow using this request's invocation token.
+    pub async fn workflow(&self) -> std::result::Result<crate::Workflow, crate::WorkflowError> {
+        crate::Workflow::connect_with_idempotency_key(
             self.invocation_token(),
             self.idempotency_key.trim(),
         )
         .await
     }
 
-    /// Creates an agent manager using this request's invocation token.
-    pub async fn agent_manager(
-        &self,
-    ) -> std::result::Result<crate::AgentManager, crate::AgentManagerError> {
-        crate::AgentManager::connect(self.invocation_token()).await
+    /// Creates an agent using this request's invocation token.
+    pub async fn agent(&self) -> std::result::Result<crate::Agent, crate::AgentError> {
+        crate::Agent::connect(self.invocation_token()).await
     }
 }
 

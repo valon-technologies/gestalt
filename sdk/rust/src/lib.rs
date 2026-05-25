@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 mod agent;
-mod agent_manager;
+mod agent_access;
 mod api;
 mod auth;
 mod auth_server;
@@ -32,7 +32,7 @@ mod secrets_server;
 /// OpenTelemetry helpers for provider-authored GenAI instrumentation.
 pub mod telemetry;
 mod workflow;
-mod workflow_manager;
+mod workflow_access;
 
 #[doc(hidden)]
 pub mod proto {
@@ -60,13 +60,11 @@ pub use agent::{
     UpdateAgentProviderSessionRequest, new_agent_image_ref, new_agent_message,
     new_agent_message_part, new_agent_tool_call, new_agent_tool_ref, new_agent_tool_result,
 };
-pub use agent_manager::{
-    AgentManager, AgentManagerApi, AgentManagerCancelTurn, AgentManagerCreateSession,
-    AgentManagerCreateTurn, AgentManagerError, AgentManagerGetSession, AgentManagerGetTurn,
-    AgentManagerListInteractions, AgentManagerListInteractionsResponse, AgentManagerListSessions,
-    AgentManagerListSessionsResponse, AgentManagerListTurnEvents,
-    AgentManagerListTurnEventsResponse, AgentManagerListTurns, AgentManagerListTurnsResponse,
-    AgentManagerResolveInteraction, AgentManagerUpdateSession,
+pub use agent_access::{
+    Agent, AgentCancelTurn, AgentContract, AgentCreateSession, AgentCreateTurn, AgentError,
+    AgentGetSession, AgentGetTurn, AgentListInteractions, AgentListInteractionsResponse,
+    AgentListSessions, AgentListSessionsResponse, AgentListTurnEvents, AgentListTurnEventsResponse,
+    AgentListTurns, AgentListTurnsResponse, AgentResolveInteraction, AgentUpdateSession,
 };
 pub use api::{
     Access, ConnectedToken, Credential, ExternalIdentity, HTTPSubjectRequest, Host, Provider,
@@ -98,7 +96,7 @@ pub use env::{
     CURRENT_PROTOCOL_VERSION, ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, ENV_PROVIDER_SOCKET,
 };
 pub use error::{Error, Result};
-pub use host_app::{App, AppApi, AppError, InvocationGrant, InvokeOptions};
+pub use host_app::{App, AppContract, AppError, InvocationGrant, InvokeOptions};
 pub use indexeddb::{
     Cursor, CursorDirection, IndexedDB, IndexedDBCursorSnapshot, IndexedDBCursorSnapshotEntry,
     IndexedDBError, IndexedDBOpenCursorRequest, Transaction, TransactionDurabilityHint,
@@ -140,14 +138,13 @@ pub use workflow::{
     SignalOrStartWorkflowProviderRunRequest, SignalWorkflowProviderRunRequest,
     SignalWorkflowRunResponse, StartWorkflowProviderRunRequest,
     UpsertWorkflowProviderEventTriggerRequest, UpsertWorkflowProviderScheduleRequest,
-    WorkflowAccessPermission, WorkflowActor, WorkflowAgentMessage, WorkflowEvent,
-    WorkflowEventMatch, WorkflowEventTriggerInvocation, WorkflowExecutionReference, WorkflowHost,
-    WorkflowHostApi, WorkflowHostError, WorkflowJson, WorkflowManagerDefinition,
-    WorkflowManagerEventTrigger, WorkflowManagerRun, WorkflowManagerRunSignal,
-    WorkflowManagerSchedule, WorkflowProvider, WorkflowRunAsSubject, WorkflowRunStatus,
-    WorkflowRunTrigger, WorkflowScheduleTrigger, WorkflowSignal, WorkflowStep, WorkflowStepAction,
-    WorkflowStepAgentTurn, WorkflowStepAppCall, WorkflowStepOutputSource, WorkflowStepWhen,
-    WorkflowText, WorkflowValue, bound_workflow_definition_input_from_definition,
+    WorkflowAccessPermission, WorkflowActor, WorkflowAgentMessage, WorkflowDefinition,
+    WorkflowEvent, WorkflowEventMatch, WorkflowEventTrigger, WorkflowEventTriggerInvocation,
+    WorkflowExecutionReference, WorkflowHost, WorkflowHostApi, WorkflowHostError, WorkflowJson,
+    WorkflowProvider, WorkflowRun, WorkflowRunAsSubject, WorkflowRunSignal, WorkflowRunStatus,
+    WorkflowRunTrigger, WorkflowSchedule, WorkflowScheduleTrigger, WorkflowSignal, WorkflowStep,
+    WorkflowStepAction, WorkflowStepAgentTurn, WorkflowStepAppCall, WorkflowStepOutputSource,
+    WorkflowStepWhen, WorkflowText, WorkflowValue, bound_workflow_definition_input_from_definition,
     bound_workflow_event_trigger_input_from_trigger, bound_workflow_run_input_from_run,
     bound_workflow_schedule_input_from_schedule, bound_workflow_target_input_from_target,
     new_bound_workflow_event_trigger, new_bound_workflow_event_trigger_from_trigger,
@@ -168,16 +165,14 @@ pub use workflow::{
     workflow_step_agent_turn_input_from_turn, workflow_step_app_call_input_from_call,
     workflow_step_input_from_step, workflow_value_input_from_value,
 };
-pub use workflow_manager::{
-    WorkflowManager, WorkflowManagerApi, WorkflowManagerCreateDefinition,
-    WorkflowManagerCreateEventTrigger, WorkflowManagerCreateSchedule,
-    WorkflowManagerDeleteDefinition, WorkflowManagerDeleteEventTrigger,
-    WorkflowManagerDeleteSchedule, WorkflowManagerError, WorkflowManagerGetDefinition,
-    WorkflowManagerGetEventTrigger, WorkflowManagerGetSchedule, WorkflowManagerPauseEventTrigger,
-    WorkflowManagerPauseSchedule, WorkflowManagerPublishEvent, WorkflowManagerResumeEventTrigger,
-    WorkflowManagerResumeSchedule, WorkflowManagerSignalOrStartRun, WorkflowManagerSignalRun,
-    WorkflowManagerStartRun, WorkflowManagerUpdateDefinition, WorkflowManagerUpdateEventTrigger,
-    WorkflowManagerUpdateSchedule,
+pub use workflow_access::{
+    Workflow, WorkflowContract, WorkflowCreateDefinition, WorkflowCreateEventTrigger,
+    WorkflowCreateSchedule, WorkflowDeleteDefinition, WorkflowDeleteEventTrigger,
+    WorkflowDeleteSchedule, WorkflowError, WorkflowGetDefinition, WorkflowGetEventTrigger,
+    WorkflowGetSchedule, WorkflowPauseEventTrigger, WorkflowPauseSchedule, WorkflowPublishEvent,
+    WorkflowResumeEventTrigger, WorkflowResumeSchedule, WorkflowSignalOrStartRun,
+    WorkflowSignalRun, WorkflowStartRun, WorkflowUpdateDefinition, WorkflowUpdateEventTrigger,
+    WorkflowUpdateSchedule,
 };
 
 #[doc(hidden)]

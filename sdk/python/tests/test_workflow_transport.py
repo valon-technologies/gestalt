@@ -18,10 +18,10 @@ from gestalt import (
     Request,
     WorkflowEvent,
     WorkflowHost,
-    WorkflowManager,
-    WorkflowManagerCreateDefinition,
-    WorkflowManagerCreateSchedule,
-    WorkflowManagerPublishEvent,
+    Workflow,
+    WorkflowCreateDefinition,
+    WorkflowCreateSchedule,
+    WorkflowPublishEvent,
     WorkflowStep,
     WorkflowStepAppCall,
 )
@@ -69,7 +69,7 @@ class _WorkflowHostServicer(workflow_pb2_grpc.WorkflowHostServicer):
         )
 
 
-class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowProviderServicer):
+class _WorkflowServicer(workflow_pb2_grpc.WorkflowProviderServicer):
     def CreateDefinition(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
         _manager_requests.append(
@@ -139,7 +139,7 @@ def setUpModule() -> None:
         tempfile.gettempdir(), f"py-workflow-test-{os.getpid()}.sock"
     )
     _manager_socket_path = os.path.join(
-        tempfile.gettempdir(), f"py-workflow-manager-test-{os.getpid()}.sock"
+        tempfile.gettempdir(), f"py-workflow-access-test-{os.getpid()}.sock"
     )
     if os.path.exists(_socket_path):
         os.remove(_socket_path)
@@ -151,14 +151,14 @@ def setUpModule() -> None:
         _WorkflowHostServicer(), _server
     )
     workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(
-        _WorkflowManagerServicer(), _server
+        _WorkflowServicer(), _server
     )
     _server.add_insecure_port(f"unix:{_socket_path}")
     _server.start()
 
     _manager_server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
     workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(
-        _WorkflowManagerServicer(), _manager_server
+        _WorkflowServicer(), _manager_server
     )
     _manager_server.add_insecure_port(f"unix:{_manager_socket_path}")
     _manager_server.start()
@@ -199,7 +199,7 @@ class WorkflowTransportTests(unittest.TestCase):
         self.assertEqual(response.status, 202)
         self.assertEqual(response.body, "run-42:sync")
 
-    def test_workflow_manager_publish_event_roundtrip(self) -> None:
+    def test_workflow_publish_event_roundtrip(self) -> None:
         event = workflow_pb2.WorkflowEvent(
             id="delivery-123",
             source="github",
@@ -209,7 +209,7 @@ class WorkflowTransportTests(unittest.TestCase):
         )
         event.data.update({"github_event": "pull_request", "github_action": "opened"})
 
-        with WorkflowManager("token-123") as manager:
+        with Workflow("token-123") as manager:
             published = manager.publish_event(
                 workflow_pb2.PublishWorkflowProviderEventRequest(
                     event=event,
@@ -236,15 +236,15 @@ class WorkflowTransportTests(unittest.TestCase):
             ],
         )
 
-    def test_request_workflow_manager_roundtrip(self) -> None:
+    def test_request_workflow_roundtrip(self) -> None:
         request = Request(
             invocation_token="token-embedded",
             idempotency_key="workflow-request-key-py",
         )
 
-        with request.workflow_manager() as manager:
+        with request.workflows() as manager:
             created_definition = manager.create_definition(
-                WorkflowManagerCreateDefinition(
+                WorkflowCreateDefinition(
                     provider_name="managed",
                     target=BoundWorkflowTarget(
                         steps=[
@@ -260,14 +260,14 @@ class WorkflowTransportTests(unittest.TestCase):
                 )
             )
             created = manager.create_schedule(
-                WorkflowManagerCreateSchedule(
+                WorkflowCreateSchedule(
                     provider_name="managed",
                     cron="*/5 * * * *",
                     timezone="UTC",
                 )
             )
             published = manager.publish_event(
-                WorkflowManagerPublishEvent(
+                WorkflowPublishEvent(
                     provider_name="managed",
                     event=WorkflowEvent(
                         source="github",

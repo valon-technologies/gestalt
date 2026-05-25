@@ -29,9 +29,9 @@ from gestalt import (
     ENV_HOST_SERVICE_TOKEN,
     AgentHost,
     AgentInteraction,
-    AgentManager,
-    AgentManagerCreateTurn,
-    AgentManagerResolveInteraction,
+    Agent,
+    AgentCreateTurn,
+    AgentResolveInteraction,
     AgentMessage,
     AgentMessagePart,
     AgentMessagePartImageRef,
@@ -366,7 +366,7 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
         )
 
 
-class _AgentManagerServicer(agent_pb2_grpc.AgentProviderServicer):
+class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
     def CreateSession(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
         _manager_requests.append(
@@ -663,7 +663,7 @@ def setUpModule() -> None:
     _provider = _AgentRuntimeProvider()
     _runtime_socket = _fresh_socket("py-agent-runtime")
     _host_socket = _fresh_socket("py-agent-host")
-    _manager_socket = _fresh_socket("py-agent-manager")
+    _manager_socket = _fresh_socket("py-agent")
 
     _runtime_server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
     adapter = _runtime._servable_target(_provider, runtime_kind=ProviderKind.AGENT)
@@ -674,7 +674,7 @@ def setUpModule() -> None:
     _host_server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
     agent_pb2_grpc.add_AgentHostServicer_to_server(_AgentHostServicer(), _host_server)
     agent_pb2_grpc.add_AgentProviderServicer_to_server(
-        _AgentManagerServicer(),
+        _AgentServicer(),
         _host_server,
     )
     _host_server.add_insecure_port(f"unix:{_host_socket}")
@@ -682,7 +682,7 @@ def setUpModule() -> None:
 
     _manager_server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
     agent_pb2_grpc.add_AgentProviderServicer_to_server(
-        _AgentManagerServicer(),
+        _AgentServicer(),
         _manager_server,
     )
     _manager_server.add_insecure_port(f"unix:{_manager_socket}")
@@ -1156,8 +1156,8 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(list_response.tools[0].id, "tool-large")
         self.assertEqual(len(list_response.tools[0].description), 5 * 1024 * 1024)
 
-    def test_agent_manager_roundtrip(self) -> None:
-        with AgentManager("token-123") as manager:
+    def test_agent_roundtrip(self) -> None:
+        with Agent("token-123") as manager:
             created_session = manager.create_session(
                 agent_pb2.CreateAgentProviderSessionRequest(
                     provider_name="openai",
@@ -1352,10 +1352,10 @@ class AgentTransportTests(unittest.TestCase):
             ],
         )
 
-    def test_request_agent_manager_roundtrip(self) -> None:
+    def test_request_agent_roundtrip(self) -> None:
         request = Request(invocation_token="token-embedded")
 
-        with request.agent_manager() as manager:
+        with request.agent() as manager:
             fetched = manager.get_session(
                 agent_pb2.GetAgentProviderSessionRequest(session_id="session-managed-1")
             )
@@ -1377,10 +1377,10 @@ class AgentTransportTests(unittest.TestCase):
             ],
         )
 
-    def test_agent_manager_accepts_native_inputs(self) -> None:
-        with AgentManager("token-123") as manager:
+    def test_agent_accepts_native_inputs(self) -> None:
+        with Agent("token-123") as manager:
             created_turn = manager.create_turn(
-                AgentManagerCreateTurn(
+                AgentCreateTurn(
                     session_id="session-managed-1",
                     model="gpt-5.1",
                     messages=[
@@ -1407,7 +1407,7 @@ class AgentTransportTests(unittest.TestCase):
                 )
             )
             resolved = manager.resolve_interaction(
-                AgentManagerResolveInteraction(
+                AgentResolveInteraction(
                     turn_id="turn-managed-1",
                     interaction_id="interaction-1",
                     resolution={"approved": True},

@@ -327,11 +327,11 @@ details. Those come from the deployment bindings.
         return gestalt.Response[NightlyReportOutput]{}, err
       }
 
-      workflows, err := req.WorkflowManager()
+      workflows, err := req.Workflow()
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
-      _, err = workflows.PublishEvent(ctx, gestalt.WorkflowManagerPublishEvent{
+      _, err = workflows.PublishEvent(ctx, gestalt.WorkflowPublishEvent{
         Event: &gestalt.WorkflowEvent{
           Type:            "workspace_review.report.generated",
           Source:          "workspace_review",
@@ -378,7 +378,7 @@ details. Those come from the deployment bindings.
         PresignOptions,
         PresignMethod,
         WorkflowEvent,
-        WorkflowManagerPublishEvent,
+        WorkflowPublishEvent,
     )
 
     app = App("workspace_review")
@@ -433,9 +433,9 @@ details. Those come from the deployment bindings.
             }
         )
 
-        with request.workflow_manager() as workflows:
+        with request.workflows() as workflows:
             workflows.publish_event(
-                WorkflowManagerPublishEvent(
+                WorkflowPublishEvent(
                     event=WorkflowEvent(
                         type="workspace_review.report.generated",
                         source="workspace_review",
@@ -457,7 +457,7 @@ details. Those come from the deployment bindings.
 
     use gestalt::{
         IndexedDB, PresignMethod, PresignOptions, S3, WorkflowEvent,
-        WorkflowManagerPublishEvent,
+        WorkflowPublishEvent,
     };
     use serde::{Deserialize, Serialize};
     use serde_json::json;
@@ -537,9 +537,9 @@ details. Those come from the deployment bindings.
             ]))
             .await?;
 
-        let mut workflows = request.workflow_manager().await?;
+        let mut workflows = request.workflows().await?;
         workflows
-            .publish_event(WorkflowManagerPublishEvent {
+            .publish_event(WorkflowPublishEvent {
                 event: Some(WorkflowEvent {
                     event_type: "workspace_review.report.generated".to_string(),
                     source: "workspace_review".to_string(),
@@ -564,7 +564,7 @@ details. Those come from the deployment bindings.
       IndexedDB,
       PresignMethod,
       S3,
-      WorkflowManager,
+      Workflow,
       defineApp,
       ok,
       operation,
@@ -624,7 +624,7 @@ details. Those come from the deployment bindings.
               createdAt: new Date().toISOString(),
             });
 
-            const workflows = new WorkflowManager(request);
+            const workflows = new Workflow(request);
             await workflows.publishEvent({
               event: workflowEvent({
                 type: "workspace_review.report.generated",

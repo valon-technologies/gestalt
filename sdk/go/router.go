@@ -43,12 +43,12 @@ func (r Request) InvocationToken() string {
 	return r.invocationToken
 }
 
-func (r Request) App() (AppAPI, error) {
-	return App(r.invocationToken)
+func (r Request) App() (App, error) {
+	return NewApp(r.invocationToken)
 }
 
-func (r Request) WorkflowManager() (WorkflowManagerAPI, error) {
-	client, err := newWorkflowManager(r.invocationToken)
+func (r Request) Workflow() (Workflow, error) {
+	client, err := newWorkflow(r.invocationToken)
 	if err != nil {
 		return nil, err
 	}
@@ -56,8 +56,8 @@ func (r Request) WorkflowManager() (WorkflowManagerAPI, error) {
 	return client, nil
 }
 
-func (r Request) AgentManager() (AgentManagerAPI, error) {
-	return AgentManager(r.invocationToken)
+func (r Request) Agent() (Agent, error) {
+	return NewAgent(r.invocationToken)
 }
 
 func (r Request) Authorization() (sdkauthorization.Authorization, error) {

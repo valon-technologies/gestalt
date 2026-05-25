@@ -868,7 +868,7 @@ pub fn new_agent_tool_ref(input: AgentToolRef) -> AgentToolRef {
     }
 }
 
-/// Creates an agent workspace request payload for the manager host service.
+/// Creates an agent workspace request payload for the agent host service.
 pub(crate) fn new_agent_workspace(input: AgentWorkspace) -> pb::AgentWorkspace {
     pb::AgentWorkspace {
         checkouts: input

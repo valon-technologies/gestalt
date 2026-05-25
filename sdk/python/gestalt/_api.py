@@ -25,10 +25,10 @@ else:
 
 
 if TYPE_CHECKING:
-    from ._agent import AgentManager, AgentToolRef
+    from ._agent import Agent, AgentToolRef
     from ._authorization import Authorization
     from ._host_app import AppProtocol
-    from ._workflow import WorkflowManager
+    from ._workflow import Workflow
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
 FIELD_REQUIRED_KEY: Final[str] = "required"
@@ -116,15 +116,15 @@ class Request:
 
         return _HostApp(self.invocation_token)
 
-    def agent_manager(self) -> "AgentManager":
-        from ._agent import AgentManager
+    def agent(self) -> "Agent":
+        from ._agent import Agent
 
-        return AgentManager(self.invocation_token)
+        return Agent(self.invocation_token)
 
-    def workflow_manager(self) -> "WorkflowManager":
-        from ._workflow import WorkflowManager
+    def workflows(self) -> "Workflow":
+        from ._workflow import Workflow
 
-        return WorkflowManager(
+        return Workflow(
             self.invocation_token,
             idempotency_key=self.idempotency_key,
         )
