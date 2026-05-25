@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"strings"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
@@ -22,6 +23,7 @@ type workflowProviderServer struct {
 }
 
 func (s workflowProviderServer) CreateDefinition(ctx context.Context, req *proto.CreateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	definition, err := s.provider.CreateDefinition(ctx, createWorkflowProviderDefinitionRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("workflow create definition", err)
@@ -31,6 +33,7 @@ func (s workflowProviderServer) CreateDefinition(ctx context.Context, req *proto
 }
 
 func (s workflowProviderServer) GetDefinition(ctx context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	definition, err := s.provider.GetDefinition(ctx, &GetWorkflowProviderDefinitionRequest{DefinitionID: req.GetDefinitionId()})
 	if err != nil {
 		return nil, providerRPCError("workflow get definition", err)
@@ -40,6 +43,7 @@ func (s workflowProviderServer) GetDefinition(ctx context.Context, req *proto.Ge
 }
 
 func (s workflowProviderServer) UpdateDefinition(ctx context.Context, req *proto.UpdateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	definition, err := s.provider.UpdateDefinition(ctx, updateWorkflowProviderDefinitionRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("workflow update definition", err)
@@ -49,10 +53,12 @@ func (s workflowProviderServer) UpdateDefinition(ctx context.Context, req *proto
 }
 
 func (s workflowProviderServer) DeleteDefinition(ctx context.Context, req *proto.DeleteWorkflowProviderDefinitionRequest) (*emptypb.Empty, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	return &emptypb.Empty{}, providerRPCError("workflow delete definition", s.provider.DeleteDefinition(ctx, &DeleteWorkflowProviderDefinitionRequest{DefinitionID: req.GetDefinitionId()}))
 }
 
 func (s workflowProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	run, err := s.provider.StartRun(ctx, startWorkflowProviderRunRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("workflow start run", err)
@@ -62,6 +68,7 @@ func (s workflowProviderServer) StartRun(ctx context.Context, req *proto.StartWo
 }
 
 func (s workflowProviderServer) GetRun(ctx context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	run, err := s.provider.GetRun(ctx, &GetWorkflowProviderRunRequest{RunID: req.GetRunId()})
 	if err != nil {
 		return nil, providerRPCError("workflow get run", err)
@@ -71,10 +78,11 @@ func (s workflowProviderServer) GetRun(ctx context.Context, req *proto.GetWorkfl
 }
 
 func (s workflowProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	resp, err := s.provider.ListRuns(ctx, &ListWorkflowProviderRunsRequest{
-		PageSize:     int(req.GetPageSize()),
-		PageToken:    req.GetPageToken(),
-		Status:       WorkflowRunStatus(req.GetStatus()),
+		PageSize:  int(req.GetPageSize()),
+		PageToken: req.GetPageToken(),
+		Status:    WorkflowRunStatus(req.GetStatus()),
 		TargetApp: req.GetTargetApp(),
 	})
 	if err != nil {
@@ -91,6 +99,7 @@ func (s workflowProviderServer) ListRuns(ctx context.Context, req *proto.ListWor
 }
 
 func (s workflowProviderServer) CancelRun(ctx context.Context, req *proto.CancelWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	run, err := s.provider.CancelRun(ctx, &CancelWorkflowProviderRunRequest{RunID: req.GetRunId(), Reason: req.GetReason()})
 	if err != nil {
 		return nil, providerRPCError("workflow cancel run", err)
@@ -100,6 +109,7 @@ func (s workflowProviderServer) CancelRun(ctx context.Context, req *proto.Cancel
 }
 
 func (s workflowProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	resp, err := s.provider.SignalRun(ctx, signalWorkflowProviderRunRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("workflow signal run", err)
@@ -109,6 +119,7 @@ func (s workflowProviderServer) SignalRun(ctx context.Context, req *proto.Signal
 }
 
 func (s workflowProviderServer) SignalOrStartRun(ctx context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	resp, err := s.provider.SignalOrStartRun(ctx, signalOrStartWorkflowProviderRunRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("workflow signal or start run", err)
@@ -118,6 +129,7 @@ func (s workflowProviderServer) SignalOrStartRun(ctx context.Context, req *proto
 }
 
 func (s workflowProviderServer) UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	schedule, err := s.provider.UpsertSchedule(ctx, upsertWorkflowProviderScheduleRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("workflow upsert schedule", err)
@@ -127,6 +139,7 @@ func (s workflowProviderServer) UpsertSchedule(ctx context.Context, req *proto.U
 }
 
 func (s workflowProviderServer) GetSchedule(ctx context.Context, req *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	schedule, err := s.provider.GetSchedule(ctx, &GetWorkflowProviderScheduleRequest{ScheduleID: req.GetScheduleId()})
 	if err != nil {
 		return nil, providerRPCError("workflow get schedule", err)
@@ -136,6 +149,7 @@ func (s workflowProviderServer) GetSchedule(ctx context.Context, req *proto.GetW
 }
 
 func (s workflowProviderServer) ListSchedules(ctx context.Context, req *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	resp, err := s.provider.ListSchedules(ctx, &ListWorkflowProviderSchedulesRequest{})
 	if err != nil {
 		return nil, providerRPCError("workflow list schedules", err)
@@ -148,10 +162,12 @@ func (s workflowProviderServer) ListSchedules(ctx context.Context, req *proto.Li
 }
 
 func (s workflowProviderServer) DeleteSchedule(ctx context.Context, req *proto.DeleteWorkflowProviderScheduleRequest) (*emptypb.Empty, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	return &emptypb.Empty{}, providerRPCError("workflow delete schedule", s.provider.DeleteSchedule(ctx, &DeleteWorkflowProviderScheduleRequest{ScheduleID: req.GetScheduleId()}))
 }
 
 func (s workflowProviderServer) PauseSchedule(ctx context.Context, req *proto.PauseWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	schedule, err := s.provider.PauseSchedule(ctx, &PauseWorkflowProviderScheduleRequest{ScheduleID: req.GetScheduleId()})
 	if err != nil {
 		return nil, providerRPCError("workflow pause schedule", err)
@@ -161,6 +177,7 @@ func (s workflowProviderServer) PauseSchedule(ctx context.Context, req *proto.Pa
 }
 
 func (s workflowProviderServer) ResumeSchedule(ctx context.Context, req *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	schedule, err := s.provider.ResumeSchedule(ctx, &ResumeWorkflowProviderScheduleRequest{ScheduleID: req.GetScheduleId()})
 	if err != nil {
 		return nil, providerRPCError("workflow resume schedule", err)
@@ -170,6 +187,7 @@ func (s workflowProviderServer) ResumeSchedule(ctx context.Context, req *proto.R
 }
 
 func (s workflowProviderServer) UpsertEventTrigger(ctx context.Context, req *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	trigger, err := s.provider.UpsertEventTrigger(ctx, upsertWorkflowProviderEventTriggerRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("workflow upsert event trigger", err)
@@ -179,6 +197,7 @@ func (s workflowProviderServer) UpsertEventTrigger(ctx context.Context, req *pro
 }
 
 func (s workflowProviderServer) GetEventTrigger(ctx context.Context, req *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	trigger, err := s.provider.GetEventTrigger(ctx, &GetWorkflowProviderEventTriggerRequest{TriggerID: req.GetTriggerId()})
 	if err != nil {
 		return nil, providerRPCError("workflow get event trigger", err)
@@ -188,6 +207,7 @@ func (s workflowProviderServer) GetEventTrigger(ctx context.Context, req *proto.
 }
 
 func (s workflowProviderServer) ListEventTriggers(ctx context.Context, req *proto.ListWorkflowProviderEventTriggersRequest) (*proto.ListWorkflowProviderEventTriggersResponse, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	resp, err := s.provider.ListEventTriggers(ctx, &ListWorkflowProviderEventTriggersRequest{})
 	if err != nil {
 		return nil, providerRPCError("workflow list event triggers", err)
@@ -200,10 +220,12 @@ func (s workflowProviderServer) ListEventTriggers(ctx context.Context, req *prot
 }
 
 func (s workflowProviderServer) DeleteEventTrigger(ctx context.Context, req *proto.DeleteWorkflowProviderEventTriggerRequest) (*emptypb.Empty, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	return &emptypb.Empty{}, providerRPCError("workflow delete event trigger", s.provider.DeleteEventTrigger(ctx, &DeleteWorkflowProviderEventTriggerRequest{TriggerID: req.GetTriggerId()}))
 }
 
 func (s workflowProviderServer) PauseEventTrigger(ctx context.Context, req *proto.PauseWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	trigger, err := s.provider.PauseEventTrigger(ctx, &PauseWorkflowProviderEventTriggerRequest{TriggerID: req.GetTriggerId()})
 	if err != nil {
 		return nil, providerRPCError("workflow pause event trigger", err)
@@ -213,6 +235,7 @@ func (s workflowProviderServer) PauseEventTrigger(ctx context.Context, req *prot
 }
 
 func (s workflowProviderServer) ResumeEventTrigger(ctx context.Context, req *proto.ResumeWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	trigger, err := s.provider.ResumeEventTrigger(ctx, &ResumeWorkflowProviderEventTriggerRequest{TriggerID: req.GetTriggerId()})
 	if err != nil {
 		return nil, providerRPCError("workflow resume event trigger", err)
@@ -256,6 +279,7 @@ func (s workflowProviderServer) ListExecutionReferences(ctx context.Context, req
 }
 
 func (s workflowProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
+	ctx = workflowProviderInvocationContext(ctx, req.GetInvocationToken())
 	input := publishWorkflowProviderEventRequestFromProto(req)
 	eventInput, err := s.provider.PublishEvent(ctx, input)
 	if err != nil {
@@ -269,6 +293,13 @@ func (s workflowProviderServer) PublishEvent(ctx context.Context, req *proto.Pub
 	}
 	event, err := workflowEventToProto(*eventInput)
 	return event, providerRPCError("workflow publish event", err)
+}
+
+func workflowProviderInvocationContext(ctx context.Context, token string) context.Context {
+	if strings.TrimSpace(token) == "" {
+		return ctx
+	}
+	return withInvocationToken(ctx, token)
 }
 
 func createWorkflowProviderDefinitionRequestFromProto(req *proto.CreateWorkflowProviderDefinitionRequest) *CreateWorkflowProviderDefinitionRequest {
@@ -383,7 +414,7 @@ func publishWorkflowProviderEventRequestFromProto(req *proto.PublishWorkflowProv
 		event = &input
 	}
 	return &PublishWorkflowProviderEventRequest{
-		AppName:  req.GetAppName(),
+		AppName:     req.GetAppName(),
 		Event:       event,
 		PublishedBy: workflowActorInputPtrFromActor(req.GetPublishedBy()),
 	}

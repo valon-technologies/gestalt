@@ -14,8 +14,11 @@ import (
 type fullWorkflowProvider struct {
 	gestalt.UnimplementedWorkflowProvider
 	closeTracker
-	configuredName  string
-	publishedEvents []string
+	configuredName          string
+	startRunInvocationToken string
+	definitionToken         string
+	publishEventToken       string
+	publishedEvents         []string
 }
 
 func (p *fullWorkflowProvider) Configure(_ context.Context, name string, _ map[string]any) error {
@@ -32,7 +35,8 @@ func (p *fullWorkflowProvider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *fullWorkflowProvider) StartRun(_ context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
+func (p *fullWorkflowProvider) StartRun(ctx context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
+	p.startRunInvocationToken = gestalt.InvocationTokenFromContext(ctx)
 	return &gestalt.BoundWorkflowRun{
 		ID:     req.IdempotencyKey,
 		Status: gestalt.WorkflowRunStatusValuePending,
@@ -40,14 +44,16 @@ func (p *fullWorkflowProvider) StartRun(_ context.Context, req *gestalt.StartWor
 	}, nil
 }
 
-func (p *fullWorkflowProvider) CreateDefinition(_ context.Context, req *gestalt.CreateWorkflowProviderDefinitionRequest) (*gestalt.BoundWorkflowDefinition, error) {
+func (p *fullWorkflowProvider) CreateDefinition(ctx context.Context, req *gestalt.CreateWorkflowProviderDefinitionRequest) (*gestalt.BoundWorkflowDefinition, error) {
+	p.definitionToken = gestalt.InvocationTokenFromContext(ctx)
 	return &gestalt.BoundWorkflowDefinition{
 		ID:     req.IdempotencyKey,
 		Target: req.Target,
 	}, nil
 }
 
-func (p *fullWorkflowProvider) PublishEvent(_ context.Context, req *gestalt.PublishWorkflowProviderEventRequest) (*gestalt.WorkflowEvent, error) {
+func (p *fullWorkflowProvider) PublishEvent(ctx context.Context, req *gestalt.PublishWorkflowProviderEventRequest) (*gestalt.WorkflowEvent, error) {
+	p.publishEventToken = gestalt.InvocationTokenFromContext(ctx)
 	if req.Event != nil {
 		p.publishedEvents = append(p.publishedEvents, req.Event.Type)
 		return &gestalt.WorkflowEvent{ID: "published-go", Type: req.Event.Type}, nil
@@ -90,7 +96,8 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 
 	run, err := workflowClient.StartRun(rpcCtx, &proto.StartWorkflowProviderRunRequest{
-		IdempotencyKey: "run-1",
+		IdempotencyKey:  "run-1",
+		InvocationToken: "workflow-run-token",
 		Target: &proto.BoundWorkflowTarget{
 			Steps: []*proto.WorkflowStep{{
 				Id: "create_issue",
@@ -107,9 +114,13 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	if run.GetId() != "run-1" || run.GetStatus() != proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING {
 		t.Fatalf("StartRun = %+v, want pending run", run)
 	}
+	if provider.startRunInvocationToken != "workflow-run-token" {
+		t.Fatalf("StartRun invocation token = %q, want workflow-run-token", provider.startRunInvocationToken)
+	}
 
 	definition, err := workflowClient.CreateDefinition(rpcCtx, &proto.CreateWorkflowProviderDefinitionRequest{
-		IdempotencyKey: "definition-1",
+		IdempotencyKey:  "definition-1",
+		InvocationToken: "workflow-definition-token",
 		Target: &proto.BoundWorkflowTarget{
 			Steps: []*proto.WorkflowStep{{
 				Id: "search_issues",
@@ -126,9 +137,13 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	if definition.GetId() != "definition-1" {
 		t.Fatalf("CreateDefinition id = %q, want definition-1", definition.GetId())
 	}
+	if provider.definitionToken != "workflow-definition-token" {
+		t.Fatalf("CreateDefinition invocation token = %q, want workflow-definition-token", provider.definitionToken)
+	}
 
 	published, err := workflowClient.PublishEvent(rpcCtx, &proto.PublishWorkflowProviderEventRequest{
-		Event: &proto.WorkflowEvent{Type: "issue.created"},
+		Event:           &proto.WorkflowEvent{Type: "issue.created"},
+		InvocationToken: "workflow-event-token",
 	})
 	if err != nil {
 		t.Fatalf("PublishEvent: %v", err)
@@ -138,5 +153,8 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 	if len(provider.publishedEvents) != 1 || provider.publishedEvents[0] != "issue.created" {
 		t.Fatalf("published events = %v, want [issue.created]", provider.publishedEvents)
+	}
+	if provider.publishEventToken != "workflow-event-token" {
+		t.Fatalf("PublishEvent invocation token = %q, want workflow-event-token", provider.publishEventToken)
 	}
 }
