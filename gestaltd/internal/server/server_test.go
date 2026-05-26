@@ -6128,7 +6128,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		}},
 		Properties: mustStruct(t, map[string]any{"source": "provider"}),
 	})
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/fragments/"+url.PathEscape("app/sample_plugin"), nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/grants/"+url.PathEscape("app/sample_plugin"), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -6151,6 +6151,25 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	}
 	if pluginFragmentResp.Relationships[0].Properties["source"] != "provider" {
 		t.Fatalf("plugin fragment properties = %#v, want provider source", pluginFragmentResp.Relationships[0].Properties)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/grants", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET grants: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("grants status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+	var grantsResp []coredata.AuthorizationDynamicFragment
+	if err := json.NewDecoder(resp.Body).Decode(&grantsResp); err != nil {
+		t.Fatalf("decoding grants response: %v", err)
+	}
+	if len(grantsResp) != 1 || grantsResp[0].ID != "app/sample_plugin" {
+		t.Fatalf("grants response = %#v, want dynamic app grant source only", grantsResp)
 	}
 
 	dynamicUser := seedUser(t, svc, "dynamic@example.test")
@@ -6326,7 +6345,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal fragment PUT body: %v", err)
 	}
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/fragments/"+url.PathEscape("app/sample_plugin"), bytes.NewReader(fragmentPutBody))
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/grants/"+url.PathEscape("app/sample_plugin"), bytes.NewReader(fragmentPutBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
@@ -6370,7 +6389,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("expected 3 provider relationships after fragment PUT, got %d", len(relationshipsResp.Relationships))
 	}
 
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/fragments/"+url.PathEscape("app/sample_plugin"), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/grants/"+url.PathEscape("app/sample_plugin"), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {

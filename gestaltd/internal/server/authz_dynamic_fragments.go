@@ -22,31 +22,31 @@ type putAuthorizationDynamicFragmentRequest struct {
 	ExpectedVersion *int64                                              `json:"expectedVersion"`
 }
 
-func (s *Server) listAdminAuthorizationFragments(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listAdminAuthorizationGrants(w http.ResponseWriter, r *http.Request) {
 	if !s.ensureAuthorizationDynamicFragmentStore(w) {
 		return
 	}
 	if err := s.ensureAuthorizationDynamicFragmentsBackfilled(r.Context()); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to backfill authorization fragments")
+		writeError(w, http.StatusInternalServerError, "failed to backfill authorization grants")
 		return
 	}
-	fragments, err := s.authzFragments.ListFragments(r.Context())
+	grants, err := s.authzFragments.ListFragments(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list authorization fragments")
+		writeError(w, http.StatusInternalServerError, "failed to list authorization grants")
 		return
 	}
-	writeJSON(w, http.StatusOK, fragments)
+	writeJSON(w, http.StatusOK, grants)
 }
 
-func (s *Server) getAdminAuthorizationFragment(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getAdminAuthorizationGrant(w http.ResponseWriter, r *http.Request) {
 	if !s.ensureAuthorizationDynamicFragmentStore(w) {
 		return
 	}
 	if err := s.ensureAuthorizationDynamicFragmentsBackfilled(r.Context()); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to backfill authorization fragments")
+		writeError(w, http.StatusInternalServerError, "failed to backfill authorization grants")
 		return
 	}
-	id, err := decodedURLParam(r, "fragmentID")
+	id, err := decodedURLParam(r, "grantID")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -54,24 +54,24 @@ func (s *Server) getAdminAuthorizationFragment(w http.ResponseWriter, r *http.Re
 	fragment, err := s.authzFragments.GetFragment(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "authorization fragment not found")
+			writeError(w, http.StatusNotFound, "authorization grant not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to read authorization fragment")
+		writeError(w, http.StatusInternalServerError, "failed to read authorization grant")
 		return
 	}
 	writeJSON(w, http.StatusOK, fragment)
 }
 
-func (s *Server) putAdminAuthorizationFragment(w http.ResponseWriter, r *http.Request) {
+func (s *Server) putAdminAuthorizationGrant(w http.ResponseWriter, r *http.Request) {
 	if !s.ensureAuthorizationDynamicFragmentStore(w) {
 		return
 	}
 	if err := s.ensureAuthorizationDynamicFragmentsBackfilled(r.Context()); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to backfill authorization fragments")
+		writeError(w, http.StatusInternalServerError, "failed to backfill authorization grants")
 		return
 	}
-	id, err := decodedURLParam(r, "fragmentID")
+	id, err := decodedURLParam(r, "grantID")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -124,15 +124,15 @@ func (s *Server) putAdminAuthorizationFragment(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, fragment)
 }
 
-func (s *Server) deleteAdminAuthorizationFragment(w http.ResponseWriter, r *http.Request) {
+func (s *Server) deleteAdminAuthorizationGrant(w http.ResponseWriter, r *http.Request) {
 	if !s.ensureAuthorizationDynamicFragmentStore(w) {
 		return
 	}
 	if err := s.ensureAuthorizationDynamicFragmentsBackfilled(r.Context()); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to backfill authorization fragments")
+		writeError(w, http.StatusInternalServerError, "failed to backfill authorization grants")
 		return
 	}
-	id, err := decodedURLParam(r, "fragmentID")
+	id, err := decodedURLParam(r, "grantID")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -144,14 +144,14 @@ func (s *Server) deleteAdminAuthorizationFragment(w http.ResponseWriter, r *http
 	fragment, getErr := s.authzFragments.GetFragment(r.Context(), id)
 	if getErr != nil {
 		if errors.Is(getErr, core.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "authorization fragment not found")
+			writeError(w, http.StatusNotFound, "authorization grant not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to read authorization fragment")
+		writeError(w, http.StatusInternalServerError, "failed to read authorization grant")
 		return
 	}
 	if err := s.authzFragments.DeleteFragment(r.Context(), id); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to delete authorization fragment")
+		writeError(w, http.StatusInternalServerError, "failed to delete authorization grant")
 		return
 	}
 	s.auditAuthorizationFragmentMutation(r.Context(), "authorization.fragment.delete", fragment, nil)
@@ -184,13 +184,13 @@ func (s *Server) ensureAuthorizationFragmentWriteAccess(w http.ResponseWriter, r
 			return true
 		}
 	}
-	writeError(w, http.StatusForbidden, "authorization fragment changes require admin access or app admin access")
+	writeError(w, http.StatusForbidden, "authorization grant changes require admin access or app admin access")
 	return false
 }
 
 func (s *Server) ensureAuthorizationDynamicFragmentStore(w http.ResponseWriter) bool {
 	if s.authzFragments == nil {
-		writeError(w, http.StatusServiceUnavailable, "dynamic authorization fragments require indexeddb source state")
+		writeError(w, http.StatusServiceUnavailable, "dynamic authorization grants require indexeddb source state")
 		return false
 	}
 	return true

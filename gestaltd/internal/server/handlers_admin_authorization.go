@@ -54,10 +54,10 @@ func (s *Server) mountAdminAuthorizationRoutes(r chi.Router) {
 	r.Get("/authorization/provider", s.getAdminAuthorizationProvider)
 	r.Get("/authorization/models", s.listAdminAuthorizationModels)
 	r.Get("/authorization/relationships", s.listAdminAuthorizationRelationships)
-	r.Get("/authorization/fragments", s.listAdminAuthorizationFragments)
-	r.Get("/authorization/fragments/{fragmentID}", s.getAdminAuthorizationFragment)
-	r.Put("/authorization/fragments/{fragmentID}", s.putAdminAuthorizationFragment)
-	r.Delete("/authorization/fragments/{fragmentID}", s.deleteAdminAuthorizationFragment)
+	r.Get("/authorization/grants", s.listAdminAuthorizationGrants)
+	r.Get("/authorization/grants/{grantID}", s.getAdminAuthorizationGrant)
+	r.Put("/authorization/grants/{grantID}", s.putAdminAuthorizationGrant)
+	r.Delete("/authorization/grants/{grantID}", s.deleteAdminAuthorizationGrant)
 	r.Get("/authorization/admins/members", s.listAdminAuthorizationAdminMembers)
 	r.Put("/authorization/admins/members", s.putAdminAuthorizationAdminMember)
 	r.Delete("/authorization/admins/members/{subjectID}", s.deleteAdminAuthorizationAdminMember)
@@ -124,7 +124,7 @@ func appScopedAdminAuthorizationRoutePlugin(r *http.Request) (string, bool) {
 		return "", false
 	}
 	path := adminAuthorizationRoutePath(r)
-	if plugin, ok := adminAuthorizationFragmentRoutePlugin(path); ok {
+	if plugin, ok := adminAuthorizationGrantRoutePlugin(path); ok {
 		return plugin, true
 	}
 	var rest string
@@ -157,13 +157,13 @@ func appScopedAdminAuthorizationRoutePlugin(r *http.Request) (string, bool) {
 	return app, true
 }
 
-func adminAuthorizationFragmentRoutePlugin(path string) (string, bool) {
+func adminAuthorizationGrantRoutePlugin(path string) (string, bool) {
 	var rest string
 	switch {
-	case strings.HasPrefix(path, "/authorization/fragments/"):
-		rest = strings.TrimPrefix(path, "/authorization/fragments/")
-	case strings.HasPrefix(path, "/admin/api/v1/authorization/fragments/"):
-		rest = strings.TrimPrefix(path, "/admin/api/v1/authorization/fragments/")
+	case strings.HasPrefix(path, "/authorization/grants/"):
+		rest = strings.TrimPrefix(path, "/authorization/grants/")
+	case strings.HasPrefix(path, "/admin/api/v1/authorization/grants/"):
+		rest = strings.TrimPrefix(path, "/admin/api/v1/authorization/grants/")
 	default:
 		return "", false
 	}
