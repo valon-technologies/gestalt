@@ -1378,15 +1378,16 @@
           authMembers.forEach(function (row) {
             const tr = document.createElement("tr");
             const sourceClass = row.source === "static" ? "source-static" : "source-dynamic";
+            const rowMutable = row.source === "dynamic";
             const stateClass = row.effective ? "state-effective" : "state-shadowed";
             const stateLabel = row.effective ? "Effective" : "Shadowed";
-            const mutableLabel = row.mutable ? "Mutable" : "Locked";
+            const mutableLabel = rowMutable ? "Mutable" : "Locked";
             const subjectID = rowSubjectID(row);
-            const actionDisabled = !row.mutable || !subjectID || authDeletingSubjectID === subjectID;
+            const actionDisabled = !rowMutable || !subjectID || authDeletingSubjectID === subjectID;
             tr.innerHTML =
               '<td><div class="principal-value"></div><div class="principal-meta"></div></td>' +
               '<td><code></code></td>' +
-              '<td><div class="pill-row"><span class="pill ' + sourceClass + '"></span><span class="pill ' + (row.mutable ? "" : "locked") + '"></span></div></td>' +
+              '<td><div class="pill-row"><span class="pill ' + sourceClass + '"></span><span class="pill ' + (rowMutable ? "" : "locked") + '"></span></div></td>' +
               '<td><div class="pill-row"><span class="pill ' + stateClass + '"></span></div><div class="principal-meta state-copy"></div></td>' +
               '<td><button class="danger-btn" type="button">Remove</button></td>';
             tr.querySelector(".principal-value").textContent = principalLabel(row);
@@ -1403,10 +1404,10 @@
             if (actionDisabled) {
               button.disabled = true;
             }
-            if (row.mutable && subjectID) {
+            if (rowMutable && subjectID) {
               button.dataset.subjectId = subjectID;
             }
-            if (!row.mutable) {
+            if (!rowMutable) {
               button.textContent = "Static";
             } else if (authDeletingSubjectID === subjectID) {
               button.textContent = "Removing...";
@@ -1554,12 +1555,13 @@
           adminMembers.forEach(function (row) {
             const tr = document.createElement("tr");
             const sourceClass = row.source === "static" ? "source-static" : "source-dynamic";
+            const rowMutable = row.source === "dynamic";
             const stateClass = row.effective ? "state-effective" : "state-shadowed";
             const stateLabel = row.effective ? "Effective" : "Shadowed";
-            const mutableLabel = row.mutable ? "Mutable" : "Locked";
+            const mutableLabel = rowMutable ? "Mutable" : "Locked";
             const subjectID = rowSubjectID(row);
             const actionDisabled =
-              !row.mutable ||
+              !rowMutable ||
               !subjectID ||
               adminDeletingSubjectID === subjectID ||
               !adminCanWrite ||
@@ -1568,7 +1570,7 @@
             tr.innerHTML =
               '<td><div class="principal-value"></div><div class="principal-meta"></div></td>' +
               '<td><code></code></td>' +
-              '<td><div class="pill-row"><span class="pill ' + sourceClass + '"></span><span class="pill ' + (row.mutable ? "" : "locked") + '"></span></div></td>' +
+              '<td><div class="pill-row"><span class="pill ' + sourceClass + '"></span><span class="pill ' + (rowMutable ? "" : "locked") + '"></span></div></td>' +
               '<td><div class="pill-row"><span class="pill ' + stateClass + '"></span></div><div class="principal-meta state-copy"></div></td>' +
               '<td><button class="danger-btn" type="button">Remove</button></td>';
             tr.querySelector(".principal-value").textContent = principalLabel(row);
@@ -1585,10 +1587,10 @@
             if (actionDisabled) {
               button.disabled = true;
             }
-            if (row.mutable && subjectID) {
+            if (rowMutable && subjectID) {
               button.dataset.subjectId = subjectID;
             }
-            if (!row.mutable) {
+            if (!rowMutable) {
               button.textContent = "Static";
             } else if (adminDeletingSubjectID === subjectID) {
               button.textContent = "Removing...";

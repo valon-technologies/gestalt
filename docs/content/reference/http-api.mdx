@@ -217,7 +217,7 @@ For the conceptual model and setup flow, see
 | `GET` | `/admin/api/v1/authorization/models` | List authorization provider models. Supports `pageSize` and `pageToken`. |
 | `GET` | `/admin/api/v1/authorization/relationships` | List authorization provider relationships for debugging. Supports `modelId`, subject, relation, resource, `pageSize`, and `pageToken` filters. |
 | `GET` | `/admin/api/v1/authorization/apps` | List apps that declare `authorizationPolicy`, including the bound policy name. |
-| `GET` | `/admin/api/v1/authorization/apps/{app}/members` | List merged static and dynamic subject membership rows for one app. Rows include `source`, `effective`, `mutable`, and selector metadata. |
+| `GET` | `/admin/api/v1/authorization/apps/{app}/members` | List merged static and dynamic subject membership rows for one app. Rows include `source`, `effective`, and selector metadata. |
 | `PUT` | `/admin/api/v1/authorization/apps/{app}/members` | Upsert one dynamic subject membership row for a app by canonical `subjectId` or by user-only `email` alias and role. Rejects subjects who already have static authorization on that app. |
 | `DELETE` | `/admin/api/v1/authorization/apps/{app}/members/{subjectID}` | Remove one dynamic subject membership row for a app. Static rows are read-only and cannot be deleted through the API. |
 | `GET` | `/admin/api/v1/authorization/admins/members` | List merged static and dynamic built-in admin membership rows. |

@@ -5357,6 +5357,9 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	foundDynamicPluginMember := false
 	foundDynamicServiceAccountMember := false
 	for _, member := range members {
+		if _, ok := member["mutable"]; ok {
+			t.Fatalf("member unexpectedly included mutable: %+v", member)
+		}
 		if member["source"] != "dynamic" {
 			continue
 		}

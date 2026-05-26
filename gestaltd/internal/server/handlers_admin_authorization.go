@@ -30,7 +30,6 @@ type adminAuthorizationMemberRow struct {
 	Role          string `json:"role"`
 	Source        string `json:"source"`
 	Effective     bool   `json:"effective"`
-	Mutable       bool   `json:"mutable"`
 	SelectorKind  string `json:"selectorKind"`
 	SelectorValue string `json:"selectorValue"`
 	Email         string `json:"email,omitempty"`
@@ -276,7 +275,6 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		Role:          membership.Role,
 		Source:        "dynamic",
 		Effective:     true,
-		Mutable:       true,
 		SelectorKind:  "subject_id",
 		SelectorValue: strings.TrimSpace(membership.SubjectID),
 		Email:         adminAuthorizationSubjectEmail(subject),
@@ -395,7 +393,6 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		Role:          membership.Role,
 		Source:        "dynamic",
 		Effective:     true,
-		Mutable:       true,
 		SelectorKind:  "subject_id",
 		SelectorValue: strings.TrimSpace(membership.SubjectID),
 		Email:         adminAuthorizationSubjectEmail(subject),
@@ -536,7 +533,6 @@ func (s *Server) adminAuthorizationRowsFromStaticMembers(ctx context.Context, ap
 			Role:          member.Role,
 			Source:        "static",
 			Effective:     true,
-			Mutable:       false,
 			SelectorKind:  "subject_id",
 			SelectorValue: member.SubjectID,
 			Email:         s.adminAuthorizationEmailForSubjectID(ctx, member.SubjectID),

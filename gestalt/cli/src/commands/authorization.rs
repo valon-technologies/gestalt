@@ -544,7 +544,7 @@ pub fn list_app_members(client: &ApiClient, app: &str, format: Format) -> Result
     print_array_response(
         &resp,
         format,
-        &["Subject", "Role", "Source", "Effective", "Mutable"],
+        &["Subject", "Role", "Source", "Effective"],
         admin_member_row,
     )
 }
@@ -595,7 +595,7 @@ pub fn list_admin_members(client: &ApiClient, format: Format) -> Result<()> {
     print_array_response(
         &resp,
         format,
-        &["Subject", "Role", "Source", "Effective", "Mutable"],
+        &["Subject", "Role", "Source", "Effective"],
         admin_member_row,
     )
 }
@@ -956,7 +956,7 @@ fn print_admin_write_response(resp: &Value, format: Format) -> Result<()> {
                 print_single_response(
                     membership,
                     Format::Table,
-                    &["Subject", "Role", "Source", "Effective", "Mutable"],
+                    &["Subject", "Role", "Source", "Effective"],
                     admin_member_row,
                 )?;
             } else {
@@ -1124,7 +1124,6 @@ fn admin_member_row(item: &Value) -> Vec<String> {
         string_cell(item, "role"),
         string_cell(item, "source"),
         bool_cell(item, "effective"),
-        bool_cell(item, "mutable"),
     ]
 }
 
