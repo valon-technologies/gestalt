@@ -644,7 +644,7 @@
           Inspect live Prometheus telemetry, manage app-scoped human
           authorization, and maintain built-in Gestalt admins from the same
           protected surface. Static policy members remain authoritative;
-          dynamic grants only extend access where the plugin or admin surface
+          dynamic grants only extend access where the app or admin surface
           already declares an authorization policy.
         </p>
       </section>
@@ -752,7 +752,7 @@
         <section class="card controls animate-fade-in-up" style="animation-delay:80ms">
           <div class="control-cluster">
             <label class="control-group" for="authorization-app-select">
-              <span class="label-text">Plugin</span>
+              <span class="label-text">App</span>
               <select class="control-select" id="authorization-app-select"></select>
             </label>
 
@@ -763,7 +763,7 @@
             Dynamic grants are app-scoped and evaluated only after static
             policy members. Writes accept a user email, resolve it to a
             canonical user subject ID, and are blocked when that subject
-            already has static authorization on the selected plugin.
+            already has static authorization on the selected app.
           </p>
         </section>
 
@@ -781,7 +781,7 @@
           <article class="card summary-card">
             <span class="label-text">Dynamic rows</span>
             <div class="metric-value" id="authorization-dynamic-count">--</div>
-            <p class="metric-note">Persisted plugin grants from the admin API.</p>
+            <p class="metric-note">Persisted app grants from the admin API.</p>
           </article>
           <article class="card summary-card">
             <span class="label-text">Shadowed grants</span>
@@ -796,7 +796,7 @@
             <h2>Add or update a dynamic member</h2>
             <p class="metric-note auth-form-copy">
               Roles are stored as opaque strings and checked against the
-              plugin's existing <code>allowedRoles</code> rules.
+              app's existing <code>allowedRoles</code> rules.
             </p>
 
             <form id="authorization-form" class="auth-form">
@@ -820,7 +820,7 @@
 
           <article class="card panel-card">
             <span class="label-text">Effective access</span>
-            <h2>Plugin members</h2>
+            <h2>App members</h2>
             <div class="member-table-wrap">
               <table class="member-table">
                 <thead>
@@ -1052,7 +1052,7 @@
               : "overview";
         }
 
-        function normalizePluginName(value) {
+        function normalizeAppName(value) {
           return typeof value === "string" ? value.trim() : "";
         }
 
@@ -1101,7 +1101,7 @@
             }
           });
           if (activeTabKey === "authorization" && !authLoaded && !authLoading) {
-            loadAuthorizationPlugins();
+            loadAuthorizationApps();
           }
           if (activeTabKey === "admins" && !adminLoaded && !adminLoading) {
             loadAdminMembers();
@@ -1431,25 +1431,25 @@
           const roleInput = byId("authorization-role-input");
           const submitButton = byId("authorization-submit-button");
           const formNote = byId("authorization-form-note");
-          const pluginSelect = byId("authorization-app-select");
-          const hasPlugin = !!selectedAppName;
-          pluginSelect.disabled = authLoading || authSaving;
-          emailInput.disabled = !hasPlugin || authLoading || authSaving;
-          roleInput.disabled = !hasPlugin || authLoading || authSaving;
+          const appSelect = byId("authorization-app-select");
+          const hasApp = !!selectedAppName;
+          appSelect.disabled = authLoading || authSaving;
+          emailInput.disabled = !hasApp || authLoading || authSaving;
+          roleInput.disabled = !hasApp || authLoading || authSaving;
 
           const email = normalizeEmailInput(emailInput.value);
           const role = String(roleInput.value || "").trim();
-          submitButton.disabled = !hasPlugin || !email || !role || authLoading || authSaving;
+          submitButton.disabled = !hasApp || !email || !role || authLoading || authSaving;
           submitButton.textContent = authSaving ? "Saving..." : "Save dynamic grant";
 
-          if (!hasPlugin) {
+          if (!hasApp) {
             formNote.textContent = "Pick an app with an authorization policy to manage members.";
           } else {
             formNote.textContent = "Enter a user email. The server resolves it to a canonical user subject ID before writing the dynamic grant.";
           }
         }
 
-        function renderAuthorizationPluginSelect() {
+        function renderAuthorizationAppSelect() {
           const select = byId("authorization-app-select");
           select.textContent = "";
           if (authApps.length === 0) {
@@ -1475,7 +1475,7 @@
         }
 
         function renderAuthorization() {
-          renderAuthorizationPluginSelect();
+          renderAuthorizationAppSelect();
           renderAuthorizationSummary();
           renderAuthorizationMembers();
           updateAuthorizationFormState();
@@ -1659,13 +1659,13 @@
           const appName = selectedAppName;
           try {
             const result = await fetchJSON("/admin/api/v1/authorization/apps/" + encodeURIComponent(appName) + "/members");
-            if (requestToken !== authMembersRequestToken || plugin !== selectedAppName) return;
+            if (requestToken !== authMembersRequestToken || appName !== selectedAppName) return;
             authMembers = Array.isArray(result.payload) ? result.payload : [];
-            setAuthStatus("Loaded " + authMembers.length + " rows for " + plugin + ".", "ok");
+            setAuthStatus("Loaded " + authMembers.length + " rows for " + appName + ".", "ok");
           } catch (error) {
-            if (requestToken !== authMembersRequestToken || plugin !== selectedAppName) return;
+            if (requestToken !== authMembersRequestToken || appName !== selectedAppName) return;
             authMembers = [];
-            setAuthStatus(error instanceof Error ? error.message : "Failed to load plugin members.", "error");
+            setAuthStatus(error instanceof Error ? error.message : "Failed to load app members.", "error");
           } finally {
             if (requestToken === authMembersRequestToken) {
               authLoading = false;
@@ -1674,15 +1674,15 @@
           }
         }
 
-        async function loadAuthorizationPlugins() {
+        async function loadAuthorizationApps() {
           authLoading = true;
           renderAuthorization();
           setAuthStatus("Loading authorization apps...", "");
           try {
-            const result = await fetchJSON("/admin/api/v1/authorization/plugins");
+            const result = await fetchJSON("/admin/api/v1/authorization/apps");
             authApps = Array.isArray(result.payload) ? result.payload : [];
             authLoaded = true;
-            renderAuthorizationPluginSelect();
+            renderAuthorizationAppSelect();
             updateURLState();
             if (authApps.length === 0) {
               authMembers = [];
@@ -1742,7 +1742,7 @@
             const target = event.target;
             if (!target || typeof target.value !== "string") return;
             clearAuthPendingReload();
-            selectedAppName = normalizePluginName(target.value);
+            selectedAppName = normalizeAppName(target.value);
             updateURLState();
             loadAuthorizationMembers();
           });
@@ -1750,7 +1750,7 @@
           byId("authorization-refresh-button").addEventListener("click", function () {
             if (authLoading || authSaving) return;
             clearAuthPendingReload();
-            loadAuthorizationPlugins();
+            loadAuthorizationApps();
           });
 
           byId("authorization-email-input").addEventListener("input", updateAuthorizationFormState);

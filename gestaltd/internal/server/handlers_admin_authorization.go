@@ -263,11 +263,11 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		return
 	}
 	if access, ok := s.authorizer.StaticRoleForProviderIdentity(plugin, subject.SubjectID); ok && access.Role != "" {
-		writeError(w, http.StatusConflict, "subject already has static authorization for this plugin")
+		writeError(w, http.StatusConflict, "subject already has static authorization for this app")
 		return
 	}
 
-	membership, err := s.upsertProviderPluginAuthorization(r.Context(), subject, plugin, req.Role)
+	membership, err := s.upsertSourceAppAuthorization(r.Context(), subject, plugin, req.Role)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to persist authorization member")
 		return
@@ -320,7 +320,7 @@ func (s *Server) deleteAdminAuthorizationPluginMember(w http.ResponseWriter, r *
 		return
 	}
 
-	deleteErr := s.deleteProviderPluginAuthorization(r.Context(), plugin, subjectID)
+	deleteErr := s.deleteSourceAppAuthorization(r.Context(), plugin, subjectID)
 	if deleteErr != nil {
 		if errors.Is(deleteErr, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "authorization member not found")
@@ -387,7 +387,7 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		return
 	}
 
-	membership, err := s.upsertProviderAdminAuthorization(r.Context(), subject, req.Role)
+	membership, err := s.upsertSourceAdminAuthorization(r.Context(), subject, req.Role)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to persist admin member")
 		return
@@ -437,7 +437,7 @@ func (s *Server) deleteAdminAuthorizationAdminMember(w http.ResponseWriter, r *h
 		return
 	}
 
-	deleteErr := s.deleteProviderAdminAuthorization(r.Context(), subjectID)
+	deleteErr := s.deleteSourceAdminAuthorization(r.Context(), subjectID)
 	if deleteErr != nil {
 		if errors.Is(deleteErr, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "admin member not found")
@@ -482,11 +482,11 @@ func (s *Server) writeAdminAuthorizationPluginError(w http.ResponseWriter, err e
 	case errAdminAuthorizationAppMissing:
 		writeError(w, http.StatusBadRequest, "app is required")
 	case errAdminAuthorizationPluginUnknown:
-		writeError(w, http.StatusNotFound, "plugin not found")
+		writeError(w, http.StatusNotFound, "app not found")
 	case errAdminAuthorizationPluginUnbound:
-		writeError(w, http.StatusBadRequest, "plugin does not declare authorizationPolicy")
+		writeError(w, http.StatusBadRequest, "app does not declare authorizationPolicy")
 	default:
-		writeError(w, http.StatusInternalServerError, "plugin authorization failed")
+		writeError(w, http.StatusInternalServerError, "app authorization failed")
 	}
 }
 
@@ -687,14 +687,18 @@ func adminAuthorizationValidSubjectID(subjectID string) bool {
 
 var (
 	errAdminAuthorizationAppMissing    = errors.New("app is required")
-	errAdminAuthorizationPluginUnknown = errors.New("plugin not found")
-	errAdminAuthorizationPluginUnbound = errors.New("plugin does not declare authorizationPolicy")
+	errAdminAuthorizationPluginUnknown = errors.New("app not found")
+	errAdminAuthorizationPluginUnbound = errors.New("app does not declare authorizationPolicy")
 	errAdminAuthorizationUnavailable   = errors.New("dynamic authorization is unavailable")
 )
 
 func (s *Server) ensureAdminDynamicAuthorizationAvailable(w http.ResponseWriter) bool {
 	if s.authorizer == nil || s.authorizationProvider == nil {
 		writeError(w, http.StatusServiceUnavailable, "dynamic authorization requires an authorization provider")
+		return false
+	}
+	if s.authzFragments == nil {
+		writeError(w, http.StatusServiceUnavailable, "dynamic authorization requires indexeddb source state")
 		return false
 	}
 	return true
@@ -711,6 +715,10 @@ func (s *Server) ensureAdminDynamicAdminAvailable(w http.ResponseWriter) bool {
 	}
 	if s.authorizationProvider == nil {
 		writeError(w, http.StatusServiceUnavailable, "dynamic admin authorization requires an authorization provider")
+		return false
+	}
+	if s.authzFragments == nil {
+		writeError(w, http.StatusServiceUnavailable, "dynamic admin authorization requires indexeddb source state")
 		return false
 	}
 	members, ok := s.authorizer.StaticMembersForPolicy(s.adminRoute.AuthorizationPolicy)
