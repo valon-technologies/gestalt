@@ -161,6 +161,56 @@ _AUTHENTICATION_AUTHORED_EXPORTS = (
     "CompleteLoginRequest",
 )
 
+_PROTOCOL_TYPE_EXPORTS = (
+    "JsonObject",
+    "JsonValue",
+)
+
+_AUTHORIZATION_AUTHORED_EXPORTS = (
+    "AccessDecision",
+    "AccessEvaluationRequest",
+    "AccessEvaluationsRequest",
+    "AccessEvaluationsResponse",
+    "ActionSearchRequest",
+    "ActionSearchResponse",
+    "AuthorizationAction",
+    "AuthorizationMetadata",
+    "AuthorizationModel",
+    "AuthorizationModelAction",
+    "AuthorizationModelAllowedTarget",
+    "AuthorizationModelComputedUserset",
+    "AuthorizationModelRef",
+    "AuthorizationModelRelation",
+    "AuthorizationModelResourceType",
+    "AuthorizationModelRewrite",
+    "AuthorizationModelRewriteThis",
+    "AuthorizationModelRewriteUnion",
+    "AuthorizationModelSubjectSetTarget",
+    "AuthorizationModelTupleToUserset",
+    "AuthorizationRelationshipTarget",
+    "AuthorizationResource",
+    "AuthorizationSubject",
+    "AuthorizationSubjectSet",
+    "EffectiveSubjectSearchRequest",
+    "EffectiveSubjectSearchResponse",
+    "ExpandNode",
+    "ExpandRequest",
+    "ExpandResponse",
+    "GetActiveModelResponse",
+    "ListModelsRequest",
+    "ListModelsResponse",
+    "ReadRelationshipsRequest",
+    "ReadRelationshipsResponse",
+    "Relationship",
+    "RelationshipKey",
+    "ResourceSearchRequest",
+    "ResourceSearchResponse",
+    "SubjectSearchRequest",
+    "SubjectSearchResponse",
+    "WriteModelRequest",
+    "WriteRelationshipsRequest",
+)
+
 _AUTHORIZATION_HELPER_EXPORTS = ("AUTHORIZATION_SUBJECT_TYPE_SUBJECT",)
 
 _RUNTIME_PROVIDER_AUTHORED_EXPORTS = (
@@ -457,6 +507,10 @@ _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_HELPER_EXPORTS}
 _LAZY_EXPORTS.update(
     {name: ("._authentication", name) for name in _AUTHENTICATION_AUTHORED_EXPORTS}
 )
+_LAZY_EXPORTS.update({name: ("._protocol", name) for name in _PROTOCOL_TYPE_EXPORTS})
+_LAZY_EXPORTS.update(
+    {name: ("._authorization", name) for name in _AUTHORIZATION_AUTHORED_EXPORTS}
+)
 _LAZY_EXPORTS.update(
     {name: ("._authorization", name) for name in _AUTHORIZATION_HELPER_EXPORTS}
 )
@@ -495,6 +549,8 @@ __all__ = [
     *_AGENT_PROTOCOL_EXPORTS,
     *_AGENT_HELPER_EXPORTS,
     *_AUTHENTICATION_AUTHORED_EXPORTS,
+    *_PROTOCOL_TYPE_EXPORTS,
+    *_AUTHORIZATION_AUTHORED_EXPORTS,
     *_AUTHORIZATION_HELPER_EXPORTS,
     *_RUNTIME_PROVIDER_AUTHORED_EXPORTS,
     *_WORKFLOW_AUTHORED_EXPORTS,

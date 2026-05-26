@@ -7,6 +7,8 @@ from dataclasses import MISSING
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar
 
+from ._protocol import JsonObject
+
 if TYPE_CHECKING:
     from typing_extensions import dataclass_transform
 else:
@@ -93,7 +95,7 @@ class Request:
     invocation_token: str = ""
     # Workflow callback metadata uses a JSON-style lowerCamelCase object such
     # as runId, target.steps, trigger.scheduleId, and trigger.event.specVersion.
-    workflow: dict[str, Any] = dataclasses.field(default_factory=dict)
+    workflow: JsonObject = dataclasses.field(default_factory=dict)
     tool_refs: list[AgentToolRef] = dataclasses.field(default_factory=list)
     tool_refs_set: bool = False
     idempotency_key: str = ""

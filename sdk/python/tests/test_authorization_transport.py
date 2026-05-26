@@ -10,11 +10,8 @@ from typing import Any
 import grpc
 from google.protobuf import empty_pb2 as _empty_pb2
 
-from gestalt import (
-    Authorization,
-    AuthorizationProvider,
-    _runtime,
-)
+import gestalt
+from gestalt import _runtime
 from gestalt._gen.v1 import (
     authorization_pb2,
     authorization_pb2_grpc,
@@ -23,28 +20,6 @@ from gestalt._gen.v1 import (
 )
 
 empty_pb2: Any = _empty_pb2
-AccessDecision = authorization_pb2.AccessDecision
-AccessEvaluationRequest = authorization_pb2.AccessEvaluationRequest
-AccessEvaluationsResponse = authorization_pb2.AccessEvaluationsResponse
-ActionSearchResponse = authorization_pb2.ActionSearchResponse
-AuthorizationAction = authorization_pb2.Action
-AuthorizationMetadata = authorization_pb2.AuthorizationMetadata
-AuthorizationModel = authorization_pb2.AuthorizationModel
-AuthorizationModelRef = authorization_pb2.AuthorizationModelRef
-AuthorizationRelationshipTarget = authorization_pb2.RelationshipTarget
-AuthorizationResource = authorization_pb2.Resource
-AuthorizationSubject = authorization_pb2.Subject
-AuthorizationSubjectSet = authorization_pb2.SubjectSet
-EffectiveSubjectSearchRequest = authorization_pb2.EffectiveSubjectSearchRequest
-ExpandRequest = authorization_pb2.ExpandRequest
-GetActiveModelResponse = authorization_pb2.GetActiveModelResponse
-ListModelsResponse = authorization_pb2.ListModelsResponse
-ReadRelationshipsResponse = authorization_pb2.ReadRelationshipsResponse
-Relationship = authorization_pb2.Relationship
-ResourceSearchRequest = authorization_pb2.ResourceSearchRequest
-ResourceSearchResponse = authorization_pb2.ResourceSearchResponse
-SubjectSearchResponse = authorization_pb2.SubjectSearchResponse
-WriteRelationshipsRequest = authorization_pb2.WriteRelationshipsRequest
 
 
 class _AuthorizationProvider(authorization_pb2_grpc.AuthorizationProviderServicer):
@@ -99,25 +74,38 @@ class _AuthorizationProvider(authorization_pb2_grpc.AuthorizationProviderService
         return empty_pb2.Empty()
 
 
-class _SDKAuthorizationProvider(AuthorizationProvider):
+class _SDKAuthorizationProvider(gestalt.AuthorizationProvider):
     def __init__(self) -> None:
+        self.requests: dict[str, Any] = {}
         self.writes: list[Any] = []
 
-    def evaluate(self, request: Any) -> Any:
-        return AccessDecision(
-            allowed=request.subject.id == "user:1",
+    def evaluate(
+        self,
+        request: gestalt.AccessEvaluationRequest,
+    ) -> gestalt.AccessDecision:
+        self.requests["evaluate"] = request
+        return gestalt.AccessDecision(
+            allowed=request.subject is not None and request.subject.id == "user:1",
             model_id="model-1",
         )
 
-    def evaluate_many(self, request: Any) -> Any:
-        return AccessEvaluationsResponse(
+    def evaluate_many(
+        self,
+        request: gestalt.AccessEvaluationsRequest,
+    ) -> gestalt.AccessEvaluationsResponse:
+        self.requests["evaluate_many"] = request
+        return gestalt.AccessEvaluationsResponse(
             decisions=[self.evaluate(item) for item in request.requests],
         )
 
-    def search_resources(self, request: Any) -> Any:
-        return ResourceSearchResponse(
+    def search_resources(
+        self,
+        request: gestalt.ResourceSearchRequest,
+    ) -> gestalt.ResourceSearchResponse:
+        self.requests["search_resources"] = request
+        return gestalt.ResourceSearchResponse(
             resources=[
-                AuthorizationResource(
+                gestalt.AuthorizationResource(
                     type=request.resource_type,
                     id="doc-1",
                 )
@@ -125,10 +113,14 @@ class _SDKAuthorizationProvider(AuthorizationProvider):
             model_id="model-1",
         )
 
-    def search_subjects(self, request: Any) -> Any:
-        return SubjectSearchResponse(
+    def search_subjects(
+        self,
+        request: gestalt.SubjectSearchRequest,
+    ) -> gestalt.SubjectSearchResponse:
+        self.requests["search_subjects"] = request
+        return gestalt.SubjectSearchResponse(
             subjects=[
-                AuthorizationSubject(
+                gestalt.AuthorizationSubject(
                     type=request.subject_type,
                     id="user:1",
                 )
@@ -136,38 +128,55 @@ class _SDKAuthorizationProvider(AuthorizationProvider):
             model_id="model-1",
         )
 
-    def search_actions(self, request: Any) -> Any:
-        return ActionSearchResponse(
-            actions=[AuthorizationAction(name="view")],
+    def search_actions(
+        self,
+        request: gestalt.ActionSearchRequest,
+    ) -> gestalt.ActionSearchResponse:
+        self.requests["search_actions"] = request
+        return gestalt.ActionSearchResponse(
+            actions=[gestalt.AuthorizationAction(name="view")],
             model_id="model-1",
         )
 
-    def get_metadata(self) -> Any:
-        return AuthorizationMetadata(
+    def get_metadata(self) -> gestalt.AuthorizationMetadata:
+        return gestalt.AuthorizationMetadata(
             capabilities=["evaluate"],
             active_model_id="model-1",
         )
 
-    def read_relationships(self, request: Any) -> Any:
-        return ReadRelationshipsResponse(model_id="model-1")
+    def read_relationships(
+        self,
+        request: gestalt.ReadRelationshipsRequest,
+    ) -> gestalt.ReadRelationshipsResponse:
+        self.requests["read_relationships"] = request
+        return gestalt.ReadRelationshipsResponse(model_id="model-1")
 
-    def write_relationships(self, request: Any) -> None:
+    def write_relationships(self, request: gestalt.WriteRelationshipsRequest) -> None:
+        self.requests["write_relationships"] = request
         self.writes.append(request)
 
-    def get_active_model(self) -> Any:
-        return GetActiveModelResponse(
-            model=AuthorizationModelRef(id="model-1", version="1"),
+    def get_active_model(self) -> gestalt.GetActiveModelResponse:
+        return gestalt.GetActiveModelResponse(
+            model=gestalt.AuthorizationModelRef(id="model-1", version="1"),
         )
 
-    def list_models(self, request: Any) -> Any:
-        return ListModelsResponse(
-            models=[AuthorizationModelRef(id="model-1", version="1")],
+    def list_models(
+        self,
+        request: gestalt.ListModelsRequest,
+    ) -> gestalt.ListModelsResponse:
+        self.requests["list_models"] = request
+        return gestalt.ListModelsResponse(
+            models=[gestalt.AuthorizationModelRef(id="model-1", version="1")],
         )
 
-    def write_model(self, request: Any) -> Any:
-        return AuthorizationModelRef(
+    def write_model(
+        self,
+        request: gestalt.WriteModelRequest,
+    ) -> gestalt.AuthorizationModelRef:
+        self.requests["write_model"] = request
+        return gestalt.AuthorizationModelRef(
             id="model-2",
-            version=str(request.model.version),
+            version=str(request.model.version if request.model is not None else 0),
         )
 
 
@@ -184,37 +193,43 @@ class AuthorizationTransportTest(unittest.TestCase):
             server.add_insecure_port(f"unix:{socket_path}")
             server.start()
             try:
-                client = Authorization(f"unix://{socket_path}")
+                client = gestalt.Authorization(f"unix://{socket_path}")
                 resource_response = client.effective_search_resources(
-                    ResourceSearchRequest(
-                        subject=AuthorizationSubject(
+                    gestalt.ResourceSearchRequest(
+                        subject=gestalt.AuthorizationSubject(
                             type="subject",
                             id="user:shared",
                         ),
-                        action=AuthorizationAction(name="edit"),
+                        action=gestalt.AuthorizationAction(name="edit"),
                         resource_type="agent_session",
                     )
                 )
                 self.assertEqual(resource_response.resources[0].id, "session-1")
 
                 subject_response = client.effective_search_subjects(
-                    EffectiveSubjectSearchRequest(
-                        resource=AuthorizationResource(
+                    gestalt.EffectiveSubjectSearchRequest(
+                        resource=gestalt.AuthorizationResource(
                             type="agent_session",
                             id="session-1",
                         ),
-                        action=AuthorizationAction(name="edit"),
+                        action=gestalt.AuthorizationAction(name="edit"),
                     )
                 )
                 self.assertTrue(subject_response.truncated)
                 self.assertEqual(
-                    subject_response.targets[0].subject_set.relation,
-                    "member",
+                    subject_response.targets[0].subject_set,
+                    gestalt.AuthorizationSubjectSet(
+                        resource=gestalt.AuthorizationResource(
+                            type="slack_channel",
+                            id="C123",
+                        ),
+                        relation="member",
+                    ),
                 )
 
                 expand_response = client.expand(
-                    ExpandRequest(
-                        resource=AuthorizationResource(
+                    gestalt.ExpandRequest(
+                        resource=gestalt.AuthorizationResource(
                             type="agent_session",
                             id="session-1",
                         ),
@@ -223,15 +238,19 @@ class AuthorizationTransportTest(unittest.TestCase):
                     )
                 )
                 self.assertTrue(expand_response.max_depth_reached)
-                self.assertEqual(expand_response.root.target.resource.id, "session-1")
+                root = expand_response.root
+                self.assertIsNotNone(root)
+                self.assertIsNotNone(root.target)
+                self.assertIsNotNone(root.target.resource)
+                self.assertEqual(root.target.resource.id, "session-1")
 
                 client.write_relationships(
-                    WriteRelationshipsRequest(
+                    gestalt.WriteRelationshipsRequest(
                         writes=[
-                            Relationship(
-                                target=AuthorizationRelationshipTarget(
-                                    subject_set=AuthorizationSubjectSet(
-                                        resource=AuthorizationResource(
+                            gestalt.Relationship(
+                                target=gestalt.AuthorizationRelationshipTarget(
+                                    subject_set=gestalt.AuthorizationSubjectSet(
+                                        resource=gestalt.AuthorizationResource(
                                             type="slack_channel",
                                             id="C123",
                                         ),
@@ -239,7 +258,7 @@ class AuthorizationTransportTest(unittest.TestCase):
                                     )
                                 ),
                                 relation="editor",
-                                resource=AuthorizationResource(
+                                resource=gestalt.AuthorizationResource(
                                     type="agent_session",
                                     id="session-1",
                                 ),
@@ -291,25 +310,35 @@ class AuthorizationTransportTest(unittest.TestCase):
 
                 stub = authorization_pb2_grpc.AuthorizationProviderStub(channel)
                 decision = stub.Evaluate(
-                    AccessEvaluationRequest(
-                        subject=AuthorizationSubject(type="subject", id="user:1"),
-                        action=AuthorizationAction(name="view"),
-                        resource=AuthorizationResource(type="doc", id="doc-1"),
+                    authorization_pb2.AccessEvaluationRequest(
+                        subject=authorization_pb2.Subject(
+                            type="subject",
+                            id="user:1",
+                        ),
+                        action=authorization_pb2.Action(name="view"),
+                        resource=authorization_pb2.Resource(
+                            type="doc",
+                            id="doc-1",
+                        ),
                     ),
                     timeout=5,
                 )
                 self.assertTrue(decision.allowed)
+                self.assertIsInstance(
+                    provider.requests["evaluate"],
+                    gestalt.AccessEvaluationRequest,
+                )
 
                 batch = stub.EvaluateMany(
                     authorization_pb2.AccessEvaluationsRequest(
                         requests=[
-                            AccessEvaluationRequest(
-                                subject=AuthorizationSubject(
+                            authorization_pb2.AccessEvaluationRequest(
+                                subject=authorization_pb2.Subject(
                                     type="subject",
                                     id="user:1",
                                 ),
-                                action=AuthorizationAction(name="view"),
-                                resource=AuthorizationResource(
+                                action=authorization_pb2.Action(name="view"),
+                                resource=authorization_pb2.Resource(
                                     type="doc",
                                     id="doc-1",
                                 ),
@@ -319,20 +348,63 @@ class AuthorizationTransportTest(unittest.TestCase):
                     timeout=5,
                 )
                 self.assertTrue(batch.decisions[0].allowed)
+                self.assertIsInstance(
+                    provider.requests["evaluate_many"],
+                    gestalt.AccessEvaluationsRequest,
+                )
+
+                empty_batch = stub.EvaluateMany(
+                    authorization_pb2.AccessEvaluationsRequest(),
+                    timeout=5,
+                )
+                self.assertEqual(list(empty_batch.decisions), [])
+                self.assertEqual(
+                    provider.requests["evaluate_many"].requests,
+                    (),
+                )
 
                 metadata = stub.GetMetadata(empty_pb2.Empty(), timeout=5)
                 self.assertEqual(list(metadata.capabilities), ["evaluate"])
 
+                subjects = stub.SearchSubjects(
+                    authorization_pb2.SubjectSearchRequest(
+                        resource=authorization_pb2.Resource(
+                            type="doc",
+                            id="doc-1",
+                        ),
+                        action=authorization_pb2.Action(name="view"),
+                        subject_type="subject",
+                    ),
+                    timeout=5,
+                )
+                self.assertEqual(subjects.subjects[0].id, "user:1")
+                self.assertIsInstance(
+                    provider.requests["search_subjects"],
+                    gestalt.SubjectSearchRequest,
+                )
+
                 model_ref = stub.WriteModel(
                     authorization_pb2.WriteModelRequest(
-                        model=AuthorizationModel(version=2),
+                        model=authorization_pb2.AuthorizationModel(version=2),
                     ),
                     timeout=5,
                 )
                 self.assertEqual(model_ref.version, "2")
+                self.assertIsInstance(
+                    provider.requests["write_model"],
+                    gestalt.WriteModelRequest,
+                )
+
+                stub.WriteRelationships(
+                    authorization_pb2.WriteRelationshipsRequest(),
+                    timeout=5,
+                )
+                write_request = provider.requests["write_relationships"]
+                self.assertEqual(write_request.writes, ())
+                self.assertEqual(write_request.deletes, ())
 
                 with self.assertRaises(grpc.RpcError) as failure:
-                    stub.Expand(ExpandRequest(), timeout=5)
+                    stub.Expand(authorization_pb2.ExpandRequest(), timeout=5)
                 rpc_error: Any = failure.exception
                 self.assertEqual(
                     rpc_error.code(),
@@ -342,7 +414,7 @@ class AuthorizationTransportTest(unittest.TestCase):
                 server.stop(grace=0)
 
     def test_sdk_authorization_provider_write_relationships_unimplemented(self) -> None:
-        provider = AuthorizationProvider()
+        provider = gestalt.AuthorizationProvider()
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
         _runtime._register_authorization_services(server, provider)
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -354,7 +426,10 @@ class AuthorizationTransportTest(unittest.TestCase):
                 stub = authorization_pb2_grpc.AuthorizationProviderStub(channel)
 
                 with self.assertRaises(grpc.RpcError) as failure:
-                    stub.WriteRelationships(WriteRelationshipsRequest(), timeout=5)
+                    stub.WriteRelationships(
+                        authorization_pb2.WriteRelationshipsRequest(),
+                        timeout=5,
+                    )
                 rpc_error: Any = failure.exception
                 self.assertEqual(
                     rpc_error.code(),
