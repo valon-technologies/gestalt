@@ -106,7 +106,6 @@ type Config struct {
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
-	AppInvokes        map[string][]invocation.AppInvocationDependency
 	Now               func() time.Time
 }
 
@@ -120,7 +119,6 @@ type Manager struct {
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
 	catalogConnection map[string]string
-	appInvokes        map[string][]invocation.AppInvocationDependency
 	now               func() time.Time
 }
 
@@ -266,7 +264,6 @@ func New(cfg Config) *Manager {
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
-		appInvokes:        invocation.CloneAppInvocationDependencyMap(cfg.AppInvokes),
 		now:               now,
 	}
 }

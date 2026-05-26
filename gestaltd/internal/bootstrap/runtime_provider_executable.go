@@ -28,6 +28,10 @@ func buildExecutableRuntime(ctx context.Context, name string, entry *config.Runt
 	if deps.Services != nil {
 		sessionLogs = deps.Services.RuntimeSessionLogs
 	}
+	hostServices, err := buildRuntimeProviderHostServices(name, deps)
+	if err != nil {
+		return nil, err
+	}
 
 	return runtimeprovider.NewExecutableProvider(ctx, runtimeprovider.ExecutableConfig{
 		Name:         name,
@@ -37,23 +41,28 @@ func buildExecutableRuntime(ctx context.Context, name string, entry *config.Runt
 		Config:       runtimeConfig,
 		Egress:       deps.Egress.Policy(entry.EffectiveAllowedHosts()),
 		HostBinary:   entry.HostBinary,
-		HostServices: buildRuntimeProviderHostServices(name, deps),
+		HostServices: hostServices,
 		Telemetry:    deps.Telemetry,
 		SessionLogs:  sessionLogs,
 	})
 }
 
-func buildRuntimeProviderHostServices(name string, deps Deps) []runtimehost.HostService {
-	if deps.Services == nil || deps.Services.RuntimeSessionLogs == nil {
-		return nil
+func buildRuntimeProviderHostServices(name string, deps Deps) ([]runtimehost.HostService, error) {
+	hostServices, _, _, err := buildProviderHostServices(name, deps)
+	if err != nil {
+		return nil, err
 	}
-	return []runtimehost.HostService{{
+	if deps.Services == nil || deps.Services.RuntimeSessionLogs == nil {
+		return hostServices, nil
+	}
+	hostServices = append(hostServices, runtimehost.HostService{
 		Name:           "runtime_log_host",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.RuntimeLogHost_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			runtimehost.RegisterRuntimeLogHostServer(srv, name, deps.Services.RuntimeSessionLogs.AppendSessionLogs)
 		},
-	}}
+	})
+	return hostServices, nil
 }
 
 func runtimeProviderConfigMap(name string, entry *config.RuntimeProviderEntry) (map[string]any, error) {

@@ -13,8 +13,9 @@ import (
 type RuntimeHostServiceAccess string
 
 const (
-	RuntimeHostServiceAccessNone  RuntimeHostServiceAccess = "none"
-	RuntimeHostServiceAccessRelay RuntimeHostServiceAccess = "relay"
+	RuntimeHostServiceAccessNone   RuntimeHostServiceAccess = "none"
+	RuntimeHostServiceAccessDirect RuntimeHostServiceAccess = "direct"
+	RuntimeHostServiceAccessRelay  RuntimeHostServiceAccess = "relay"
 )
 
 type RuntimeEgressMode string
@@ -45,8 +46,8 @@ type RuntimePlacementPlan struct {
 	HostnameEgressDelivery    RuntimeHostnameEgressDelivery
 }
 
-func buildRuntimePlacementPlan(support runtimeprovider.Support, deps Deps, requiresHostServiceAccess, requiresHostnameEgress bool) RuntimePlacementPlan {
-	resolved := runtimeResolvedBehavior(runtimeAdvertisedBehavior(support), deps)
+func buildRuntimePlacementPlan(support runtimeprovider.Support, runtimeProvider runtimeprovider.Provider, deps Deps, requiresHostServiceAccess, requiresHostnameEgress bool) RuntimePlacementPlan {
+	resolved := runtimeResolvedBehavior(runtimeAdvertisedBehavior(support), runtimeHostServiceAccess(runtimeProvider, deps), deps)
 	return RuntimePlacementPlan{
 		Resolved:                  resolved,
 		RequiresHostServiceAccess: requiresHostServiceAccess,
@@ -55,12 +56,12 @@ func buildRuntimePlacementPlan(support runtimeprovider.Support, deps Deps, requi
 	}
 }
 
-func buildRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, support runtimeprovider.Support) (RuntimePlacementPlan, error) {
+func buildRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, support runtimeprovider.Support, runtimeProvider runtimeprovider.Provider) (RuntimePlacementPlan, error) {
 	requiresHostServiceAccess, requiresHostnameEgress, err := runtimeRequirementsForApp(pluginName, entry, deps)
 	if err != nil {
 		return RuntimePlacementPlan{}, err
 	}
-	return buildRuntimePlacementPlan(support, deps, requiresHostServiceAccess, requiresHostnameEgress), nil
+	return buildRuntimePlacementPlan(support, runtimeProvider, deps, requiresHostServiceAccess, requiresHostnameEgress), nil
 }
 
 func runtimeAdvertisedBehavior(support runtimeprovider.Support) RuntimeBehavior {
@@ -71,17 +72,28 @@ func runtimeAdvertisedBehavior(support runtimeprovider.Support) RuntimeBehavior 
 	}
 }
 
-func runtimeResolvedBehavior(advertised RuntimeBehavior, deps Deps) RuntimeBehavior {
+func runtimeResolvedBehavior(advertised RuntimeBehavior, hostServiceAccess RuntimeHostServiceAccess, deps Deps) RuntimeBehavior {
 	resolved := advertised
-	if hostCanRelayRuntimeHostServices(deps) {
-		resolved.HostServiceAccess = RuntimeHostServiceAccessRelay
-	} else {
-		resolved.HostServiceAccess = RuntimeHostServiceAccessNone
-	}
-	if resolved.EgressMode == RuntimeEgressModeHostname && !hostCanProvideHostedHostnameEgress(deps) {
+	resolved.HostServiceAccess = hostServiceAccess
+	if resolved.EgressMode == RuntimeEgressModeHostname && resolved.HostServiceAccess != RuntimeHostServiceAccessDirect && !hostCanProvideHostedHostnameEgress(deps) {
 		resolved.EgressMode = RuntimeEgressModeNone
 	}
 	return resolved
+}
+
+func runtimeHostServiceAccess(runtimeProvider runtimeprovider.Provider, deps Deps) RuntimeHostServiceAccess {
+	if runtimeSupportsDirectHostServices(runtimeProvider) {
+		return RuntimeHostServiceAccessDirect
+	}
+	if hostCanRelayRuntimeHostServices(deps) {
+		return RuntimeHostServiceAccessRelay
+	}
+	return RuntimeHostServiceAccessNone
+}
+
+func runtimeSupportsDirectHostServices(runtimeProvider runtimeprovider.Provider) bool {
+	direct, ok := runtimeProvider.(runtimeprovider.DirectHostServiceSupport)
+	return ok && direct.SupportsDirectHostServices()
 }
 
 func runtimeHostnameEgressDelivery(required bool, resolved RuntimeBehavior) RuntimeHostnameEgressDelivery {
@@ -114,42 +126,16 @@ func hostedRuntimeRelayBaseURL(deps Deps) (string, bool) {
 	return strings.TrimSpace(deps.BaseURL), false
 }
 
-func runtimeRequirementsForApp(name string, entry *config.ProviderEntry, deps Deps) (bool, bool, error) {
+func runtimeRequirementsForApp(_ string, entry *config.ProviderEntry, deps Deps) (bool, bool, error) {
 	if entry == nil {
 		return false, false, nil
 	}
-	requiresHostServiceAccess := false
-	effectiveIndexedDB, err := config.ResolveEffectiveAppIndexedDB(name, entry, deps.SelectedIndexedDBName, deps.IndexedDBDefs)
-	if err != nil {
-		return false, false, err
-	}
-	if effectiveIndexedDB.Enabled {
-		requiresHostServiceAccess = true
-	}
-	if len(entry.Cache) > 0 {
-		requiresHostServiceAccess = true
-	}
-	if len(entry.S3) > 0 {
-		requiresHostServiceAccess = true
-	}
-	if deps.WorkflowManager != nil || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders()) {
-		requiresHostServiceAccess = true
-	}
-	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
-		requiresHostServiceAccess = true
-	}
-	if len(entry.Invokes) > 0 {
-		requiresHostServiceAccess = true
-	}
-	return requiresHostServiceAccess, deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement(), nil
+	return true, deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement(), nil
 }
 
-func agentRuntimeRequirementsForProvider(name string, entry *config.ProviderEntry, deps Deps) (bool, bool, error) {
+func agentRuntimeRequirementsForProvider(_ string, entry *config.ProviderEntry, deps Deps) (bool, bool, error) {
 	if entry == nil {
 		return false, false, nil
-	}
-	if _, err := config.ResolveEffectiveAgentIndexedDB(name, entry, deps.IndexedDBDefs); err != nil {
-		return false, false, err
 	}
 	return true, deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement(), nil
 }

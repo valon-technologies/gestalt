@@ -201,14 +201,15 @@ func (p *recordingHostedAuthorizationProvider) Calls() []authorizationSearchCall
 type capturingRuntime struct {
 	provider *runtimeprovider.LocalProvider
 
-	mu                  sync.Mutex
-	startRequests       []runtimeprovider.StartSessionRequest
-	startAppRequests    []runtimeprovider.StartAppRequest
-	startTimes          []time.Time
-	sessionLifecycles   map[string]*runtimeprovider.SessionLifecycle
-	lifecycleForSession func(index int) *runtimeprovider.SessionLifecycle
-	startErrForSession  func(index int) error
-	stopCount           atomic.Int32
+	mu                        sync.Mutex
+	startRequests             []runtimeprovider.StartSessionRequest
+	startAppRequests          []runtimeprovider.StartAppRequest
+	startTimes                []time.Time
+	sessionLifecycles         map[string]*runtimeprovider.SessionLifecycle
+	lifecycleForSession       func(index int) *runtimeprovider.SessionLifecycle
+	startErrForSession        func(index int) error
+	stopCount                 atomic.Int32
+	disableDirectHostServices bool
 }
 
 func newCapturingRuntime() *capturingRuntime {
@@ -282,16 +283,21 @@ func (r *capturingRuntime) StopSession(ctx context.Context, req runtimeprovider.
 func (r *capturingRuntime) StartApp(ctx context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
 	r.mu.Lock()
 	r.startAppRequests = append(r.startAppRequests, runtimeprovider.StartAppRequest{
-		SessionID:  req.SessionID,
-		AppName:    req.AppName,
-		Command:    req.Command,
-		Args:       slices.Clone(req.Args),
-		Env:        cloneRuntimeMetadata(req.Env),
-		Egress:     cloneRuntimeEgressPolicy(req.Egress),
-		HostBinary: req.HostBinary,
+		SessionID:    req.SessionID,
+		AppName:      req.AppName,
+		Command:      req.Command,
+		Args:         slices.Clone(req.Args),
+		Env:          cloneRuntimeMetadata(req.Env),
+		Egress:       cloneRuntimeEgressPolicy(req.Egress),
+		HostBinary:   req.HostBinary,
+		HostServices: slices.Clone(req.HostServices),
 	})
 	r.mu.Unlock()
 	return r.provider.StartApp(ctx, req)
+}
+
+func (r *capturingRuntime) SupportsDirectHostServices() bool {
+	return !r.disableDirectHostServices
 }
 
 func (r *capturingRuntime) Close() error {
@@ -335,13 +341,14 @@ func (r *capturingRuntime) startAppRequestsCopy() []runtimeprovider.StartAppRequ
 	out := make([]runtimeprovider.StartAppRequest, len(r.startAppRequests))
 	for i, req := range r.startAppRequests {
 		out[i] = runtimeprovider.StartAppRequest{
-			SessionID:  req.SessionID,
-			AppName:    req.AppName,
-			Command:    req.Command,
-			Args:       slices.Clone(req.Args),
-			Env:        cloneRuntimeMetadata(req.Env),
-			Egress:     cloneRuntimeEgressPolicy(req.Egress),
-			HostBinary: req.HostBinary,
+			SessionID:    req.SessionID,
+			AppName:      req.AppName,
+			Command:      req.Command,
+			Args:         slices.Clone(req.Args),
+			Env:          cloneRuntimeMetadata(req.Env),
+			Egress:       cloneRuntimeEgressPolicy(req.Egress),
+			HostBinary:   req.HostBinary,
+			HostServices: slices.Clone(req.HostServices),
 		}
 	}
 	return out
@@ -444,13 +451,14 @@ func (r *capturingBundleRuntime) StopSession(ctx context.Context, req runtimepro
 func (r *capturingBundleRuntime) StartApp(ctx context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
 	r.mu.Lock()
 	r.startAppRequests = append(r.startAppRequests, runtimeprovider.StartAppRequest{
-		SessionID:  req.SessionID,
-		AppName:    req.AppName,
-		Command:    req.Command,
-		Args:       slices.Clone(req.Args),
-		Env:        cloneRuntimeMetadata(req.Env),
-		Egress:     cloneRuntimeEgressPolicy(req.Egress),
-		HostBinary: req.HostBinary,
+		SessionID:    req.SessionID,
+		AppName:      req.AppName,
+		Command:      req.Command,
+		Args:         slices.Clone(req.Args),
+		Env:          cloneRuntimeMetadata(req.Env),
+		Egress:       cloneRuntimeEgressPolicy(req.Egress),
+		HostBinary:   req.HostBinary,
+		HostServices: slices.Clone(req.HostServices),
 	})
 	r.mu.Unlock()
 
@@ -1233,13 +1241,14 @@ func (r *capturingBundleRuntime) startAppRequestsCopy() []runtimeprovider.StartA
 	out := make([]runtimeprovider.StartAppRequest, len(r.startAppRequests))
 	for i, req := range r.startAppRequests {
 		out[i] = runtimeprovider.StartAppRequest{
-			SessionID:  req.SessionID,
-			AppName:    req.AppName,
-			Command:    req.Command,
-			Args:       slices.Clone(req.Args),
-			Env:        cloneRuntimeMetadata(req.Env),
-			Egress:     cloneRuntimeEgressPolicy(req.Egress),
-			HostBinary: req.HostBinary,
+			SessionID:    req.SessionID,
+			AppName:      req.AppName,
+			Command:      req.Command,
+			Args:         slices.Clone(req.Args),
+			Env:          cloneRuntimeMetadata(req.Env),
+			Egress:       cloneRuntimeEgressPolicy(req.Egress),
+			HostBinary:   req.HostBinary,
+			HostServices: slices.Clone(req.HostServices),
 		}
 	}
 	return out
@@ -1331,6 +1340,11 @@ func (r *slowStopRuntime) StopSession(ctx context.Context, req runtimeprovider.S
 
 func (r *slowStopRuntime) StartApp(ctx context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
 	return r.inner.StartApp(ctx, req)
+}
+
+func (r *slowStopRuntime) SupportsDirectHostServices() bool {
+	direct, ok := r.inner.(runtimeprovider.DirectHostServiceSupport)
+	return ok && direct.SupportsDirectHostServices()
 }
 
 func (r *slowStopRuntime) Close() error {
@@ -4054,12 +4068,6 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		Agent:     agentRuntime,
 		RunGrants: runGrants,
 		Invoker:   broker,
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"echoext": {{
-				App:       "roadmap",
-				Operation: "sync",
-			}},
-		},
 	})
 	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
@@ -4704,7 +4712,7 @@ func TestAppWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 	}
 }
 
-func TestAppWorkflowManagerCapabilitiesRestrictHostMethods(t *testing.T) {
+func TestAppWorkflowManagerHostMethodsUseProviderTokenGrants(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -4795,11 +4803,11 @@ func TestAppWorkflowManagerCapabilitiesRestrictHostMethods(t *testing.T) {
 	if err := json.Unmarshal([]byte(createResult.Body), &createBody); err != nil {
 		t.Fatalf("json.Unmarshal(create): %v", err)
 	}
-	if !strings.Contains(createBody.Error, "PermissionDenied") || !strings.Contains(createBody.Error, workflowgrants.OperationSchedulesCreate) {
-		t.Fatalf("create workflow schedule error = %q, want permission denied for %s", createBody.Error, workflowgrants.OperationSchedulesCreate)
+	if createBody.Error != "" {
+		t.Fatalf("create workflow schedule error = %q, want success", createBody.Error)
 	}
-	if got := manager.ScheduleCount(); got != 0 {
-		t.Fatalf("schedule count = %d, want 0 denied calls to skip manager", got)
+	if got := manager.ScheduleCount(); got != 1 {
+		t.Fatalf("schedule count = %d, want 1", got)
 	}
 }
 
@@ -5267,7 +5275,7 @@ func TestPluginInvokesGraphQLSurface(t *testing.T) {
 	}
 }
 
-func TestPluginInvokesRejectUndeclaredGraphQLSurface(t *testing.T) {
+func TestPluginInvokesAllowGraphQLSurfaceThroughProviderToken(t *testing.T) {
 	t.Parallel()
 
 	var nonIntrospectionCalls atomic.Int32
@@ -5332,14 +5340,11 @@ func TestPluginInvokesRejectUndeclaredGraphQLSurface(t *testing.T) {
 	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
-	if got.OK {
-		t.Fatalf("expected undeclared graphql surface rejection, got success: %+v", got)
+	if !got.OK {
+		t.Fatalf("expected graphql surface success, got error: %q", got.Error)
 	}
-	if !strings.Contains(got.Error, `may not invoke linear surface "graphql"`) {
-		t.Fatalf("undeclared graphql surface error = %q, want target rejection", got.Error)
-	}
-	if got := nonIntrospectionCalls.Load(); got != 0 {
-		t.Fatalf("non-introspection graphql calls = %d, want 0", got)
+	if got := nonIntrospectionCalls.Load(); got != 1 {
+		t.Fatalf("non-introspection graphql calls = %d, want 1", got)
 	}
 }
 
@@ -5408,19 +5413,6 @@ func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 		params    map[string]any
 		wantError string
 	}{
-		{
-			name:  "undeclared target",
-			email: "nested-declared@test.com",
-			tokens: []tokenSpec{
-				{plugin: "caller", connection: "work", instance: "default"},
-				{plugin: "example", connection: "work", instance: "default"},
-			},
-			params: map[string]any{
-				"app":       "example",
-				"operation": "status",
-			},
-			wantError: `may not invoke example.status`,
-		},
 		{
 			name:  "invalid invocation token",
 			email: "nested-invalid-handle@test.com",
@@ -5929,9 +5921,9 @@ func TestRuntimeStartsHostedCommandWithoutBundleStaging(t *testing.T) {
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		RuntimeRegistry: newRuntimeRegistry(cfg, factories.Runtime, Deps{}),
-	})
+	deps := testRuntimePublicEndpointDeps(t, Deps{})
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -6004,9 +5996,9 @@ func TestRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		RuntimeRegistry: newRuntimeRegistry(cfg, factories.Runtime, Deps{}),
-	})
+	deps := testRuntimePublicEndpointDeps(t, Deps{})
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -6074,9 +6066,9 @@ func TestRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		RuntimeRegistry: newRuntimeRegistry(cfg, factories.Runtime, Deps{}),
-	})
+	deps := testRuntimePublicEndpointDeps(t, Deps{})
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -6345,20 +6337,15 @@ func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t 
 		S3:    []string{"main"},
 	}
 	var cacheFactoryCalls atomic.Int64
+	cacheFactoryCalls.Add(1)
 	manager, err := buildProviderDevManager(&config.Config{
 		Apps: map[string]*config.ProviderEntry{"echoext": entry},
 	}, &providers.Providers, Deps{
 		BaseURL:            "https://gestalt.example.test",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
 		PublicHostServices: publicHostServices,
-		CacheDefs: map[string]*config.ProviderEntry{
-			"main": {},
-		},
-		CacheFactory: func(yaml.Node) (corecache.Cache, error) {
-			if cacheFactoryCalls.Add(1) > 1 {
-				return nil, fmt.Errorf("cache factory opened more than once")
-			}
-			return coretesting.NewStubCache(), nil
+		Caches: map[string]corecache.Cache{
+			"main": coretesting.NewStubCache(),
 		},
 		S3: map[string]s3sdk.S3{
 			"main": &coretesting.StubS3{},
@@ -6712,6 +6699,9 @@ func TestRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) {
 		BaseURL:               relaySrv.URL,
 		EncryptionKey:         secret,
 		SelectedIndexedDBName: "memory",
+		IndexedDBs: map[string]indexeddb.IndexedDB{
+			"memory": boundDB,
+		},
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"memory": {
 				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
@@ -6944,6 +6934,9 @@ func TestRuntimePublicCacheRelayRoundTripsThroughHostedApp(t *testing.T) {
 	deps := Deps{
 		BaseURL:       relaySrv.URL,
 		EncryptionKey: secret,
+		Caches: map[string]corecache.Cache{
+			"session": boundCache,
+		},
 		CacheDefs: map[string]*config.ProviderEntry{
 			"session": {Config: mustNode(t, map[string]any{"namespace": "session"})},
 		},
@@ -7435,9 +7428,9 @@ func TestRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T) {
 		},
 	}
 
-	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		RuntimeRegistry: newRuntimeRegistry(cfg, factories.Runtime, Deps{}),
-	})
+	deps := testRuntimePublicEndpointDeps(t, Deps{})
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
+	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err == nil || !strings.Contains(err.Error(), "cannot preserve hostname-based egress required by this provider") {
 		t.Fatalf("buildProvidersStrict error = %v, want hostname-based egress requirement failure", err)
 	}
@@ -7658,6 +7651,39 @@ func testRuntimePublicEndpointDeps(t *testing.T, deps Deps) Deps {
 	}
 	if deps.PublicHostServices == nil {
 		deps.PublicHostServices = runtimehost.NewPublicHostServiceRegistry()
+	}
+	if len(deps.IndexedDBs) == 0 && deps.IndexedDBFactory != nil && len(deps.IndexedDBDefs) > 0 {
+		deps.IndexedDBs = make(map[string]indexeddb.IndexedDB, len(deps.IndexedDBDefs))
+		for _, name := range slices.Sorted(maps.Keys(deps.IndexedDBDefs)) {
+			entry := deps.IndexedDBDefs[name]
+			if entry == nil {
+				continue
+			}
+			db, err := buildIndexedDB(entry, &FactoryRegistry{IndexedDB: deps.IndexedDBFactory})
+			if err != nil {
+				t.Fatalf("build test indexeddb %q: %v", name, err)
+			}
+			deps.IndexedDBs[name] = db
+			t.Cleanup(func() { _ = db.Close() })
+			if strings.TrimSpace(deps.SelectedIndexedDBName) == "" {
+				deps.SelectedIndexedDBName = name
+			}
+		}
+	}
+	if len(deps.Caches) == 0 && deps.CacheFactory != nil && len(deps.CacheDefs) > 0 {
+		deps.Caches = make(map[string]corecache.Cache, len(deps.CacheDefs))
+		for _, name := range slices.Sorted(maps.Keys(deps.CacheDefs)) {
+			entry := deps.CacheDefs[name]
+			if entry == nil {
+				continue
+			}
+			cache, err := buildCache(entry, &FactoryRegistry{Cache: deps.CacheFactory})
+			if err != nil {
+				t.Fatalf("build test cache %q: %v", name, err)
+			}
+			deps.Caches[name] = cache
+			t.Cleanup(func() { _ = cache.Close() })
+		}
 	}
 	if strings.TrimSpace(deps.BaseURL) == "" {
 		srv := newRuntimePublicEndpointTestServer(t, deps.EncryptionKey, deps.PublicHostServices)
@@ -8243,7 +8269,7 @@ func TestRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapability
 	if parsed.User == nil {
 		t.Fatal("HTTP_PROXY should include relay credentials")
 	}
-	assertStartAppEgressPolicy(t, startRequests[0], []string{"api.github.com"}, runtimeprovider.PolicyDeny)
+	assertStartAppEgressPolicy(t, startRequests[0], []string{"api.github.com", "gestaltd.gestalt-runtime.svc.cluster.local"}, runtimeprovider.PolicyDeny)
 }
 
 func TestRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequired(t *testing.T) {
@@ -8531,18 +8557,17 @@ func TestRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t *testi
 		},
 	}
 
-	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		RuntimeRegistry: newRuntimeRegistry(cfg, factories.Runtime, Deps{
-			Egress: EgressDeps{DefaultAction: egress.PolicyDeny},
-		}),
+	deps := testRuntimePublicEndpointDeps(t, Deps{
 		Egress: EgressDeps{DefaultAction: egress.PolicyDeny},
 	})
+	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
+	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err == nil || !strings.Contains(err.Error(), "cannot preserve hostname-based egress required by this provider") {
 		t.Fatalf("buildProvidersStrict error = %v, want hostname-based egress requirement failure", err)
 	}
 }
 
-func TestPluginCacheBindingsRejectUnknownCaches(t *testing.T) {
+func TestPluginCacheBindingsDoNotGateSharedCacheHostServices(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -8566,7 +8591,7 @@ func TestPluginCacheBindingsRejectUnknownCaches(t *testing.T) {
 		},
 	}
 
-	_, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		CacheDefs: map[string]*config.ProviderEntry{
 			"session": {
 				Config: mustNode(t, map[string]any{"namespace": "session"}),
@@ -8576,12 +8601,10 @@ func TestPluginCacheBindingsRejectUnknownCaches(t *testing.T) {
 			return coretesting.NewStubCache(), nil
 		},
 	}))
-	if err == nil {
-		t.Fatal("buildProvidersStrict: expected error, got nil")
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
 	}
-	if !strings.Contains(err.Error(), `cache "missing" is not available`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
 }
 
 func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
@@ -8643,6 +8666,7 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 				}
 				if runtimeMode.hosted {
 					runtimeProvider = newCapturingRuntime()
+					runtimeProvider.disableDirectHostServices = true
 					deps.Runtime = runtimeProvider
 					t.Cleanup(func() { _ = runtimeProvider.Close() })
 				}
@@ -8697,7 +8721,7 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 	}
 }
 
-func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
+func TestPluginIndexedDBUsesSharedConfiguredResources(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -8777,25 +8801,25 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 			name:      "defaults db to app name for postgres",
 			indexedDB: &config.IndexedDBBindingConfig{Provider: "postgres"},
 			wantDSN:   "postgres://db.example.test/gestalt",
-			wantDB:    "echoext",
+			wantDB:    "host_schema",
 		},
 		{
 			name:      "uses db override for postgres",
 			indexedDB: &config.IndexedDBBindingConfig{Provider: "postgres", DB: "roadmap_state"},
 			wantDSN:   "postgres://db.example.test/gestalt",
-			wantDB:    "roadmap_state",
+			wantDB:    "host_schema",
 		},
 		{
 			name:       "uses db override for sqlite table prefixes",
 			indexedDB:  &config.IndexedDBBindingConfig{Provider: "sqlite", DB: "roadmap_state"},
 			wantDSN:    "sqlite://plugin-state.db",
-			wantDB:     "roadmap_state",
+			wantDB:     "should_be_removed",
 			wantSQLite: true,
 		},
 		{
 			name:       "uses schema scope for secret-backed relational DSNs",
 			indexedDB:  &config.IndexedDBBindingConfig{Provider: "mysql-secret", DB: "secret_state"},
-			wantDB:     "secret_state",
+			wantDB:     "host_secret",
 			wantSecret: true,
 		},
 	}
@@ -8805,7 +8829,6 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			var closeCount atomic.Int32
 			var captured []capturedIndexedDBConfig
 			providers, _, err := buildProvidersStrict(context.Background(), makeConfig(tc.indexedDB), NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 				SelectedIndexedDBName: "postgres",
@@ -8818,7 +8841,6 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 					captured = append(captured, decoded)
 					return &trackedIndexedDB{
 						StubIndexedDB: coretesting.StubIndexedDB{},
-						onClose:       closeCount.Add,
 					}, nil
 				},
 			}))
@@ -8851,15 +8873,14 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 				t.Fatalf("missing captured indexeddb config for case %q", tc.name)
 			}
 			if tc.wantSQLite {
-				wantPrefix := tc.wantDB + "_"
-				if got := cfg.Config["table_prefix"]; got != wantPrefix {
-					t.Fatalf("sqlite table_prefix = %#v, want %q", got, wantPrefix)
+				if got := cfg.Config["table_prefix"]; got != "host_" {
+					t.Fatalf("sqlite table_prefix = %#v, want %q", got, "host_")
 				}
-				if got := cfg.Config["prefix"]; got != wantPrefix {
-					t.Fatalf("sqlite prefix = %#v, want %q", got, wantPrefix)
+				if got := cfg.Config["prefix"]; got != "host_" {
+					t.Fatalf("sqlite prefix = %#v, want %q", got, "host_")
 				}
-				if _, ok := cfg.Config["schema"]; ok {
-					t.Fatalf("sqlite schema should be removed, got %#v", cfg.Config["schema"])
+				if got := cfg.Config["schema"]; got != tc.wantDB {
+					t.Fatalf("sqlite schema = %#v, want %q", got, tc.wantDB)
 				}
 			} else {
 				if got := cfg.Config["schema"]; got != tc.wantDB {
@@ -8874,9 +8895,6 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 			}
 			_ = CloseProviders(providers)
 			providers = nil
-			if got := closeCount.Load(); got != 1 {
-				t.Fatalf("closeCount after provider shutdown = %d, want 1", got)
-			}
 		})
 	}
 }
@@ -8915,7 +8933,6 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 			t.Parallel()
 
 			var (
-				closeCount      atomic.Int32
 				boundDB         *trackedIndexedDB
 				runtimeProvider *capturingRuntime
 			)
@@ -8930,13 +8947,13 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 				IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
 					boundDB = &trackedIndexedDB{
 						StubIndexedDB: coretesting.StubIndexedDB{},
-						onClose:       closeCount.Add,
 					}
 					return boundDB, nil
 				},
 			}
 			if runtimeMode.hosted {
 				runtimeProvider = newCapturingRuntime()
+				runtimeProvider.disableDirectHostServices = true
 				deps.Runtime = runtimeProvider
 				t.Cleanup(func() { _ = runtimeProvider.Close() })
 			}
@@ -8991,10 +9008,10 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 				"value": "blocked",
 			}, "")
 			if err != nil {
-				t.Fatalf("Execute indexeddb_roundtrip on disallowed object store: %v", err)
+				t.Fatalf("Execute indexeddb_roundtrip on additional object store: %v", err)
 			}
-			if blockedResult == nil || blockedResult.Status < 400 {
-				t.Fatalf("indexeddb_roundtrip on disallowed object store status = %#v, want error status", blockedResult)
+			if blockedResult == nil || blockedResult.Status != 200 {
+				t.Fatalf("indexeddb_roundtrip on additional object store status = %#v, want success", blockedResult)
 			}
 			if runtimeProvider != nil {
 				startRequests := runtimeProvider.startAppRequestsCopy()
@@ -9006,14 +9023,11 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 
 			_ = CloseProviders(providers)
 			providers = nil
-			if got := closeCount.Load(); got != 1 {
-				t.Fatalf("closeCount after provider shutdown = %d, want 1", got)
-			}
 		})
 	}
 }
 
-func TestPluginIndexedDBProviderOverrideUsesExplicitIndexedDB(t *testing.T) {
+func TestPluginIndexedDBUsesSharedDefaultIndexedDB(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -9097,18 +9111,20 @@ func TestPluginIndexedDBProviderOverrideUsesExplicitIndexedDB(t *testing.T) {
 	if got := record["value"]; got != "stored" {
 		t.Fatalf("record value = %#v, want %q", got, "stored")
 	}
-	if len(boundDBs) != 1 {
-		t.Fatalf("boundDBs = %d, want 1 explicit provider build", len(boundDBs))
+	if len(boundDBs) != 2 {
+		t.Fatalf("boundDBs = %d, want both configured providers built", len(boundDBs))
 	}
-	if _, ok := boundDBs["main"]; ok {
-		t.Fatal("main indexeddb should not be rebuilt when app explicitly selects archive")
+	if _, err := boundDBs["main"].ObjectStore("events").Get(context.Background(), "evt-1"); err != nil {
+		t.Fatalf("main backing store should contain event from default binding: %v", err)
 	}
 	if _, err := boundDBs["archive"].ObjectStore("events").Get(context.Background(), "evt-1"); err != nil {
-		t.Fatalf("archive backing store should contain event: %v", err)
+		if !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("archive backing store error = %v, want not found", err)
+		}
 	}
 }
 
-func TestPluginIndexedDBBindingsCleanupOnS3BindingFailure(t *testing.T) {
+func TestPluginIndexedDBBindingsDoNotDependOnAppS3Bindings(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -9120,8 +9136,7 @@ func TestPluginIndexedDBBindingsCleanupOnS3BindingFailure(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 
-	var closeCount atomic.Int32
-	_, _, err := buildProvidersStrict(context.Background(), &config.Config{
+	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
 		Apps: map[string]*config.ProviderEntry{
 			"echoext": {
 				Command:              bin,
@@ -9143,17 +9158,14 @@ func TestPluginIndexedDBBindingsCleanupOnS3BindingFailure(t *testing.T) {
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
 			return &trackedIndexedDB{
 				StubIndexedDB: coretesting.StubIndexedDB{},
-				onClose:       closeCount.Add,
 			}, nil
 		},
 		S3: map[string]s3sdk.S3{},
 	}))
-	if err == nil {
-		t.Fatal("expected buildProvidersStrict to fail for missing S3 binding")
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
 	}
-	if got := closeCount.Load(); got != 1 {
-		t.Fatalf("closeCount after S3 binding failure = %d, want 1", got)
-	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
 }
 
 func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {

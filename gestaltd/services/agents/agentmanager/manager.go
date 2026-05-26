@@ -119,7 +119,6 @@ type Config struct {
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
-	AppInvokes        map[string][]invocation.AppInvocationDependency
 	AgentConnections  map[string][]string
 	SessionStart      map[string]*coreagent.SessionStartConfig
 	// DefaultToolNarrowingThreshold controls when implicit default wildcard
@@ -138,7 +137,6 @@ type Manager struct {
 	authorizer                    authorization.RuntimeAuthorizer
 	defaultConnection             map[string]string
 	catalogConnection             map[string]string
-	appInvokes                    map[string][]invocation.AppInvocationDependency
 	agentConnections              map[string][]string
 	sessionStart                  map[string]*coreagent.SessionStartConfig
 	defaultToolNarrowingThreshold int
@@ -154,7 +152,6 @@ func New(cfg Config) *Manager {
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
-		appInvokes:        invocation.CloneAppInvocationDependencyMap(cfg.AppInvokes),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
 		sessionStart:      cloneSessionStartConfigMap(cfg.SessionStart),
 		defaultToolNarrowingThreshold: effectiveAgentToolNarrowingThreshold(
@@ -254,10 +251,6 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 		return nil, fmt.Errorf("%w: toolRefs are not supported with agent tool source %q", invocation.ErrInvalidInvocation, toolSource)
 	}
 	refs, err := normalizeToolRefs(req.ToolRefs)
-	if err != nil {
-		return nil, err
-	}
-	refs, err = m.applyCallerInvokePolicies(req.CallerAppName, refs)
 	if err != nil {
 		return nil, err
 	}
@@ -510,10 +503,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ownedSession.providerName))
 	toolRefs, err := normalizeToolRefs(req.ToolRefs)
-	if err != nil {
-		return nil, err
-	}
-	toolRefs, err = m.applyCallerInvokePolicies(req.CallerAppName, toolRefs)
 	if err != nil {
 		return nil, err
 	}
@@ -3394,127 +3383,12 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d] global search ref cannot include operation, connection, instance, credential mode, runAs, runAs external identity, title, or description", invocation.ErrProviderNotFound, idx)
 			}
 		}
-		if ref.RunAsExternalIdentity != nil && ref.RunAs == nil {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires runAs.subject", invocation.ErrInvalidInvocation, idx)
+		if ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d] runAs delegation is not supported for provider tool refs", invocation.ErrAuthorizationDenied, idx)
 		}
 		out = append(out, ref)
 	}
 	return out, nil
-}
-
-func (m *Manager) applyCallerInvokePolicies(callerAppName string, refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
-	callerAppName = strings.TrimSpace(callerAppName)
-	if len(refs) == 0 || m == nil {
-		return refs, nil
-	}
-	modes := make(map[string]core.ConnectionMode)
-	runAsSubjects := make(map[string]*core.RunAsSubject)
-	runAsExternalIdentities := make(map[string]*core.ExternalIdentityRef)
-	runAsExplicitOnly := make(map[string]bool)
-	if callerAppName != "" {
-		for _, invoke := range m.appInvokes[callerAppName] {
-			if strings.TrimSpace(invoke.Surface) != "" {
-				continue
-			}
-			appName := strings.TrimSpace(invoke.App)
-			operation := strings.TrimSpace(invoke.Operation)
-			if appName == "" || operation == "" {
-				continue
-			}
-			mode, err := normalizeAgentToolCredentialMode(invoke.CredentialMode)
-			if err != nil {
-				return nil, err
-			}
-			if mode != "" {
-				modes[agentToolInvokeKey(appName, operation)] = mode
-			}
-			if runAs := core.NormalizeRunAsSubject(invoke.RunAs); runAs != nil {
-				key := agentToolInvokeKey(appName, operation)
-				runAsSubjects[key] = runAs
-				runAsExplicitOnly[key] = invoke.RunAsExplicitOnly
-				if identity := core.NormalizeExternalIdentityRef(invoke.RunAsExternalIdentity); identity != nil {
-					runAsExternalIdentities[key] = identity
-				}
-			}
-		}
-	}
-	out := append([]coreagent.ToolRef(nil), refs...)
-	for i := range out {
-		operation := strings.TrimSpace(out[i].Operation)
-		if out[i].CredentialMode != "" && callerAppName == "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a caller app declaration", invocation.ErrAuthorizationDenied, i)
-		}
-		if out[i].RunAs != nil && callerAppName == "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a caller app declaration", invocation.ErrAuthorizationDenied, i)
-		}
-		if out[i].RunAsExternalIdentity != nil && callerAppName == "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires a caller app declaration", invocation.ErrAuthorizationDenied, i)
-		}
-		if operation == "" {
-			if out[i].CredentialMode != "" {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires an exact operation", invocation.ErrAuthorizationDenied, i)
-			}
-			if out[i].RunAs != nil {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires an exact operation", invocation.ErrAuthorizationDenied, i)
-			}
-			if out[i].RunAsExternalIdentity != nil {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires an exact operation", invocation.ErrAuthorizationDenied, i)
-			}
-			continue
-		}
-		key := agentToolInvokeKey(out[i].App, operation)
-		mode, hasMode := modes[key]
-		runAs, hasRunAs := runAsSubjects[key]
-		externalIdentity, hasExternalIdentity := runAsExternalIdentities[key]
-		explicitOnly := runAsExplicitOnly[key]
-		requestedRunAs := out[i].RunAs != nil
-		requestedExternalIdentity := out[i].RunAsExternalIdentity != nil
-		requestedDelegation := requestedRunAs || requestedExternalIdentity
-		if !hasMode && !hasRunAs && !hasExternalIdentity {
-			if out[i].CredentialMode != "" {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
-			}
-			if out[i].RunAs != nil {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
-			}
-			if out[i].RunAsExternalIdentity != nil {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
-			}
-			continue
-		}
-		if hasMode && out[i].CredentialMode != "" && out[i].CredentialMode != mode {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode %q exceeds declared invoke mode %q", invocation.ErrAuthorizationDenied, i, out[i].CredentialMode, mode)
-		}
-		if !hasMode && out[i].CredentialMode != "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
-		}
-		if hasRunAs && out[i].RunAs != nil && !core.RunAsSubjectsMatchIdentity(out[i].RunAs, runAs) {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs exceeds declared invoke delegation", invocation.ErrAuthorizationDenied, i)
-		}
-		if !hasRunAs && out[i].RunAs != nil {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
-		}
-		if hasExternalIdentity && out[i].RunAsExternalIdentity != nil && !core.ExternalIdentityRefsEqual(out[i].RunAsExternalIdentity, externalIdentity) {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity exceeds declared invoke delegation", invocation.ErrAuthorizationDenied, i)
-		}
-		if !hasExternalIdentity && out[i].RunAsExternalIdentity != nil {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
-		}
-		if hasMode {
-			out[i].CredentialMode = mode
-		}
-		if hasRunAs && (!explicitOnly || requestedDelegation) {
-			out[i].RunAs = runAs
-		}
-		if hasExternalIdentity && (!explicitOnly || requestedDelegation) {
-			out[i].RunAsExternalIdentity = externalIdentity
-		}
-	}
-	return out, nil
-}
-
-func agentToolInvokeKey(appName, operation string) string {
-	return strings.TrimSpace(appName) + "\x00" + strings.TrimSpace(operation)
 }
 
 func agentToolRunAsKey(subject *core.RunAsSubject) core.RunAsSubject {

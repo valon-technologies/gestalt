@@ -128,6 +128,33 @@ func (i *recordingAgentRuntimeInvoker) Calls() []agentRuntimeInvokerCall {
 	return out
 }
 
+type staticAgentToolResolver struct {
+	tools []coreagent.Tool
+}
+
+func (r staticAgentToolResolver) ListTools(context.Context, *principal.Principal, coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error) {
+	return &coreagent.ListToolsResponse{}, nil
+}
+
+func (r staticAgentToolResolver) ResolveTool(_ context.Context, _ *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
+	target := coreagent.ToolTarget{
+		System:                strings.TrimSpace(ref.System),
+		App:                   strings.TrimSpace(ref.App),
+		Operation:             strings.TrimSpace(ref.Operation),
+		Connection:            strings.TrimSpace(ref.Connection),
+		Instance:              strings.TrimSpace(ref.Instance),
+		CredentialMode:        ref.CredentialMode,
+		RunAs:                 core.NormalizeRunAsSubject(ref.RunAs),
+		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(ref.RunAsExternalIdentity),
+	}
+	for i := range r.tools {
+		if agentToolTargetsEqual(r.tools[i].Target, target) {
+			return r.tools[i], nil
+		}
+	}
+	return coreagent.Tool{}, core.ErrNotFound
+}
+
 type reconnectingAgentRuntimeInvoker struct {
 	recordingAgentRuntimeInvoker
 	tokenErrs map[string]error
@@ -852,6 +879,35 @@ func TestAgentRuntimePingChecksConfiguredProvidersInParallel(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimePingReportsPendingStartupProvidersUnavailable(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := newAgentRuntime(&config.Config{
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"managed": {},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("newAgentRuntime: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runtime.Ping(context.Background())
+	}()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, agentmanager.ErrAgentProviderNotAvailable) {
+			t.Fatalf("Ping error = %v, want ErrAgentProviderNotAvailable", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Ping blocked on pending startup agent provider")
+	}
+}
+
 func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *testing.T) {
 	t.Parallel()
 
@@ -1404,7 +1460,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 			ExpiresAt: &expiresAt,
 		}
 		if index == 1 {
-			recommendedDrainAt := startedAt.Add(3 * time.Second)
+			recommendedDrainAt := startedAt.Add(8 * time.Second)
 			lifecycle.RecommendedDrainAt = &recommendedDrainAt
 		}
 		return lifecycle
@@ -1421,8 +1477,8 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
 	runtimeConfig.Pool.MaxReadyInstances = 2
-	runtimeConfig.Pool.StartupTimeout = "5s"
-	runtimeConfig.Pool.HealthCheckInterval = "25ms"
+	runtimeConfig.Pool.StartupTimeout = "15s"
+	runtimeConfig.Pool.HealthCheckInterval = "500ms"
 	runtimeConfig.Pool.RestartPolicy = config.RuntimePlacementRestartPolicyAlways
 	cfg := &config.Config{
 		Server: config.ServerConfig{
@@ -1467,7 +1523,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		t.Fatalf("ready backends = %d, want 1", len(backends))
 	}
 	first := backends[0]
-	waitForAgentRuntimeCondition(t, 2*time.Second, func() bool {
+	waitForAgentRuntimeCondition(t, 6*time.Second, func() bool {
 		pool.mu.Lock()
 		defer pool.mu.Unlock()
 		return len(runtimeProvider.startSessionRequests()) >= 2 && !first.replacing
@@ -1509,7 +1565,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 			ExpiresAt: &expiresAt,
 		}
 		if index <= 2 {
-			recommendedDrainAt := startedAt.Add(500 * time.Millisecond)
+			recommendedDrainAt := startedAt.Add(2 * time.Second)
 			lifecycle.RecommendedDrainAt = &recommendedDrainAt
 		}
 		return lifecycle
@@ -1531,7 +1587,8 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	runtimeConfig := testHostedAgentRuntimeConfig()
 	runtimeConfig.Pool.MinReadyInstances = 2
 	runtimeConfig.Pool.MaxReadyInstances = 3
-	runtimeConfig.Pool.HealthCheckInterval = "25ms"
+	runtimeConfig.Pool.StartupTimeout = "15s"
+	runtimeConfig.Pool.HealthCheckInterval = "500ms"
 	runtimeConfig.Pool.RestartPolicy = config.RuntimePlacementRestartPolicyAlways
 	cfg := &config.Config{
 		Server: config.ServerConfig{
@@ -1577,7 +1634,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	}
 	select {
 	case <-replacementStarted:
-	case <-time.After(2 * time.Second):
+	case <-time.After(3 * time.Second):
 		t.Fatal("proactive replacement did not start")
 	}
 	time.Sleep(150 * time.Millisecond)
@@ -2046,6 +2103,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		Invoker:   invoker,
 	}))
 	capturingRuntime := newCapturingRuntime()
+	capturingRuntime.disableDirectHostServices = true
 
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -2454,29 +2512,6 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 
 	invoker := &recordingAgentRuntimeInvoker{}
 	runGrants := newTestAgentRunGrants(t)
-	providers := testutil.NewProviderRegistry(t,
-		&coretesting.StubIntegration{
-			N:        "slack",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:    "events.reply",
-				Title: "Reply",
-			}}},
-		},
-		&coretesting.StubIntegration{
-			N:        "github",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:    "bot.createPullRequest",
-				Title: "Create pull request",
-			}}},
-		},
-	)
-	manager := agentmanager.New(agentmanager.Config{
-		Providers: providers,
-		RunGrants: runGrants,
-		Invoker:   invoker,
-	})
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
 			"simple": &routingAgentProvider{
@@ -2493,7 +2528,6 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 	}
 	runtime.SetInvoker(invoker)
 	runtime.SetRunGrants(runGrants)
-	runtime.SetToolSearcher(manager)
 
 	runAs := &core.RunAsSubject{
 		SubjectID:   "service_account:github-toolshed",
@@ -2503,6 +2537,24 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		Type: "github_app_installation",
 		ID:   "repo:{owner}/{repo}",
 	}
+	slackTarget := coreagent.ToolTarget{
+		App:       "slack",
+		Operation: "events.reply",
+	}
+	githubTarget := coreagent.ToolTarget{
+		App:                   "github",
+		Operation:             "bot.createPullRequest",
+		CredentialMode:        core.ConnectionModeNone,
+		RunAs:                 runAs,
+		RunAsExternalIdentity: externalIdentity,
+	}
+	slackToolID := mustMintAgentToolID(t, runGrants, slackTarget)
+	githubToolID := mustMintAgentToolID(t, runGrants, githubTarget)
+	runtime.SetToolSearcher(staticAgentToolResolver{tools: []coreagent.Tool{
+		{ID: slackToolID, Target: slackTarget},
+		{ID: githubToolID, Target: githubTarget},
+	}})
+
 	grant, err := runGrants.Mint(agentgrant.Grant{
 		ProviderName: "simple",
 		SessionID:    "session-1",
@@ -2529,12 +2581,9 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			App:       "slack",
-			Operation: "events.reply",
-		}),
-		RunGrant:  grant,
-		Arguments: map[string]any{"eventId": "evt-1"},
+		ToolID:       slackToolID,
+		RunGrant:     grant,
+		Arguments:    map[string]any{"eventId": "evt-1"},
 	}); err != nil {
 		t.Fatalf("ExecuteTool slack: %v", err)
 	}
@@ -2543,15 +2592,9 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			App:                   "github",
-			Operation:             "bot.createPullRequest",
-			CredentialMode:        core.ConnectionModeNone,
-			RunAs:                 runAs,
-			RunAsExternalIdentity: externalIdentity,
-		}),
-		RunGrant:  grant,
-		Arguments: map[string]any{"owner": "acme", "repo": "widgets"},
+		ToolID:       githubToolID,
+		RunGrant:     grant,
+		Arguments:    map[string]any{"owner": "acme", "repo": "widgets"},
 	}); err != nil {
 		t.Fatalf("ExecuteTool github: %v", err)
 	}

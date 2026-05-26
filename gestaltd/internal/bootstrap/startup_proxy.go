@@ -10,71 +10,129 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 type startupWaitTracker struct {
-	mu            sync.Mutex
-	appWaits      map[[2]string]int
-	workflowWaits map[[2]string]int
+	mu    sync.Mutex
+	waits map[startupProviderNode]map[startupProviderNode]int
 }
 
 func newStartupWaitTracker() *startupWaitTracker {
 	return &startupWaitTracker{
-		appWaits:      make(map[[2]string]int),
-		workflowWaits: make(map[[2]string]int),
+		waits: make(map[startupProviderNode]map[startupProviderNode]int),
 	}
 }
 
-func (t *startupWaitTracker) beginAppWait(appName, providerName string) (func(), error) {
-	if t == nil || appName == "" || providerName == "" {
+type startupProviderNode struct {
+	kind invocation.ProviderKind
+	name string
+}
+
+func newStartupProviderNode(kind invocation.ProviderKind, name string) startupProviderNode {
+	return startupProviderNode{kind: kind, name: strings.TrimSpace(name)}
+}
+
+func (n startupProviderNode) valid() bool {
+	return n.kind != "" && strings.TrimSpace(n.name) != ""
+}
+
+func (n startupProviderNode) String() string {
+	return fmt.Sprintf("%s %q", n.kind, n.name)
+}
+
+func startupProviderNodeFromContext(ctx context.Context) (startupProviderNode, bool) {
+	caller := invocation.CallerProviderFromContext(ctx)
+	if caller.Kind == "" || strings.TrimSpace(caller.Name) == "" {
+		return startupProviderNode{}, false
+	}
+	return newStartupProviderNode(caller.Kind, caller.Name), true
+}
+
+func (t *startupWaitTracker) beginWait(waiting, target startupProviderNode) (func(), error) {
+	waiting.name = strings.TrimSpace(waiting.name)
+	target.name = strings.TrimSpace(target.name)
+	if t == nil || !waiting.valid() || !target.valid() {
 		return func() {}, nil
 	}
-	appKey := [2]string{appName, providerName}
-	workflowKey := [2]string{providerName, appName}
+	if waiting == target {
+		return nil, fmt.Errorf("startup dependency cycle: %s -> %s", waiting, target)
+	}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.workflowWaits[workflowKey] > 0 {
-		return nil, fmt.Errorf("workflow startup dependency cycle between app %q and workflow provider %q", appName, providerName)
+	if path := t.waitPathLocked(target, waiting, nil); len(path) > 0 {
+		return nil, fmt.Errorf("startup dependency cycle: %s", formatStartupWaitPath(append([]startupProviderNode{waiting}, path...)))
 	}
-	t.appWaits[appKey]++
+	if t.waits[waiting] == nil {
+		t.waits[waiting] = make(map[startupProviderNode]int)
+	}
+	t.waits[waiting][target]++
 	return func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		if remaining := t.appWaits[appKey] - 1; remaining > 0 {
-			t.appWaits[appKey] = remaining
+		if remaining := t.waits[waiting][target] - 1; remaining > 0 {
+			t.waits[waiting][target] = remaining
 		} else {
-			delete(t.appWaits, appKey)
+			delete(t.waits[waiting], target)
+			if len(t.waits[waiting]) == 0 {
+				delete(t.waits, waiting)
+			}
 		}
 	}, nil
 }
 
-func (t *startupWaitTracker) beginWorkflowWait(providerName, appName string) (func(), error) {
-	if t == nil || appName == "" || providerName == "" {
-		return func() {}, nil
+func (t *startupWaitTracker) beginCallerProviderWait(ctx context.Context, target startupProviderNode) (func(), bool, error) {
+	if t == nil {
+		return func() {}, false, nil
 	}
-	appKey := [2]string{appName, providerName}
-	workflowKey := [2]string{providerName, appName}
+	source, ok := startupProviderNodeFromContext(ctx)
+	if !ok {
+		return func() {}, false, nil
+	}
+	done, err := t.beginWait(source, target)
+	if err != nil {
+		return nil, true, err
+	}
+	return done, true, nil
+}
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.appWaits[appKey] > 0 {
-		return nil, fmt.Errorf("workflow startup dependency cycle between app %q and workflow provider %q", appName, providerName)
+func (t *startupWaitTracker) waitPathLocked(from, to startupProviderNode, seen map[startupProviderNode]bool) []startupProviderNode {
+	if from == to {
+		return []startupProviderNode{from}
 	}
-	t.workflowWaits[workflowKey]++
-	return func() {
-		t.mu.Lock()
-		defer t.mu.Unlock()
-		if remaining := t.workflowWaits[workflowKey] - 1; remaining > 0 {
-			t.workflowWaits[workflowKey] = remaining
-		} else {
-			delete(t.workflowWaits, workflowKey)
+	if seen == nil {
+		seen = make(map[startupProviderNode]bool)
+	}
+	if seen[from] {
+		return nil
+	}
+	seen[from] = true
+	for next, count := range t.waits[from] {
+		if count <= 0 {
+			continue
 		}
-	}, nil
+		if path := t.waitPathLocked(next, to, seen); len(path) > 0 {
+			return append([]startupProviderNode{from}, path...)
+		}
+	}
+	return nil
+}
+
+func formatStartupWaitPath(path []startupProviderNode) string {
+	if len(path) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(path))
+	for _, node := range path {
+		parts = append(parts, node.String())
+	}
+	return strings.Join(parts, " -> ")
 }
 
 type startupProviderProxy struct {
@@ -184,7 +242,7 @@ func (p *startupProviderProxy) Catalog() *catalog.Catalog {
 }
 
 func (p *startupProviderProxy) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
-	done, err := p.beginWorkflowWait(ctx)
+	done, err := p.beginCallerWait(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +256,7 @@ func (p *startupProviderProxy) Execute(ctx context.Context, operation string, pa
 }
 
 func (p *startupProviderProxy) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
-	done, err := p.beginWorkflowWait(ctx)
+	done, err := p.beginCallerWait(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +271,7 @@ func (p *startupProviderProxy) ResolveHTTPSubject(ctx context.Context, req *core
 }
 
 func (p *startupProviderProxy) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	done, err := p.beginWorkflowWait(ctx)
+	done, err := p.beginCallerWait(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +289,7 @@ func (p *startupProviderProxy) PostConnect(ctx context.Context, token *core.Exte
 }
 
 func (p *startupProviderProxy) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
-	done, err := p.beginWorkflowWait(ctx)
+	done, err := p.beginCallerWait(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +309,7 @@ func (p *startupProviderProxy) CallTool(ctx context.Context, name string, args m
 }
 
 func (p *startupProviderProxy) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	done, err := p.beginWorkflowWait(ctx)
+	done, err := p.beginCallerWait(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -346,13 +404,19 @@ func (p *startupProviderProxy) Close() error {
 	return closer.Close()
 }
 
-func (p *startupProviderProxy) beginWorkflowWait(ctx context.Context) (func(), error) {
+func (p *startupProviderProxy) beginCallerWait(ctx context.Context) (func(), error) {
 	if p == nil || p.tracker == nil {
 		return func() {}, nil
 	}
+	target := newStartupProviderNode(invocation.ProviderKindApp, p.spec.Name)
 	workflow := invocation.WorkflowContextFromContext(ctx)
-	providerName, _ := workflow["provider"].(string)
-	return p.tracker.beginWorkflowWait(providerName, p.spec.Name)
+	if providerName, _ := workflow["provider"].(string); strings.TrimSpace(providerName) != "" {
+		return p.tracker.beginWait(newStartupProviderNode(invocation.ProviderKindWorkflow, providerName), target)
+	}
+	if done, ok, err := p.tracker.beginCallerProviderWait(ctx, target); ok || err != nil {
+		return done, err
+	}
+	return func() {}, nil
 }
 
 type startupWorkflowProviderProxy struct {
@@ -598,7 +662,7 @@ func (p *startupWorkflowProviderProxy) PublishEvent(ctx context.Context, req cor
 }
 
 func (p *startupWorkflowProviderProxy) Ping(ctx context.Context) error {
-	provider, err := p.await(ctx)
+	provider, err := p.awaitForApp(ctx, "")
 	if err != nil {
 		return err
 	}
@@ -620,7 +684,7 @@ func (p *startupWorkflowProviderProxy) Close() error {
 }
 
 func (p *startupWorkflowProviderProxy) awaitForApp(ctx context.Context, appName string) (coreworkflow.Provider, error) {
-	done, err := p.beginAppWait(appName)
+	done, err := p.beginCallerWait(ctx, appName)
 	if err != nil {
 		return nil, err
 	}
@@ -630,9 +694,6 @@ func (p *startupWorkflowProviderProxy) awaitForApp(ctx context.Context, appName 
 
 func (p *startupWorkflowProviderProxy) awaitForContextApp(ctx context.Context) (coreworkflow.Provider, error) {
 	appName := strings.TrimSpace(invocation.WorkflowContextString(invocation.WorkflowContextFromContext(ctx), "app"))
-	if appName == "" {
-		return p.await(ctx)
-	}
 	return p.awaitForApp(ctx, appName)
 }
 
@@ -645,9 +706,246 @@ func startupWorkflowTargetAppName(target coreworkflow.Target) string {
 	return ""
 }
 
-func (p *startupWorkflowProviderProxy) beginAppWait(appName string) (func(), error) {
+func (p *startupWorkflowProviderProxy) beginCallerWait(ctx context.Context, appName string) (func(), error) {
 	if p == nil || p.tracker == nil {
 		return func() {}, nil
 	}
-	return p.tracker.beginAppWait(appName, p.providerName)
+	target := newStartupProviderNode(invocation.ProviderKindWorkflow, p.providerName)
+	if done, ok, err := p.tracker.beginCallerProviderWait(ctx, target); ok || err != nil {
+		return done, err
+	}
+	return p.tracker.beginWait(
+		newStartupProviderNode(invocation.ProviderKindApp, appName),
+		target,
+	)
+}
+
+type startupAgentProviderProxy struct {
+	providerName string
+	tracker      *startupWaitTracker
+
+	ready chan struct{}
+	once  sync.Once
+
+	mu       sync.RWMutex
+	provider coreagent.Provider
+	err      error
+}
+
+func newStartupAgentProviderProxy(providerName string, tracker *startupWaitTracker) *startupAgentProviderProxy {
+	return &startupAgentProviderProxy{
+		providerName: providerName,
+		tracker:      tracker,
+		ready:        make(chan struct{}),
+	}
+}
+
+func (p *startupAgentProviderProxy) publish(provider coreagent.Provider) {
+	p.finish(provider, nil)
+}
+
+func (p *startupAgentProviderProxy) fail(err error) {
+	p.finish(nil, err)
+}
+
+func (p *startupAgentProviderProxy) finish(provider coreagent.Provider, err error) {
+	if err == nil && provider == nil {
+		err = fmt.Errorf("agent provider %q is not available", p.providerName)
+	}
+	p.once.Do(func() {
+		p.mu.Lock()
+		p.provider = provider
+		p.err = err
+		p.mu.Unlock()
+		close(p.ready)
+	})
+}
+
+func (p *startupAgentProviderProxy) await(ctx context.Context) (coreagent.Provider, error) {
+	select {
+	case <-p.ready:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.err != nil {
+		return nil, p.err
+	}
+	if p.provider == nil {
+		return nil, fmt.Errorf("agent provider %q is not available", p.providerName)
+	}
+	return p.provider, nil
+}
+
+func (p *startupAgentProviderProxy) awaitForCaller(ctx context.Context) (coreagent.Provider, error) {
+	done, err := p.beginCallerWait(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	return p.await(ctx)
+}
+
+func (p *startupAgentProviderProxy) beginCallerWait(ctx context.Context) (func(), error) {
+	if p == nil || p.tracker == nil {
+		return func() {}, nil
+	}
+	done, _, err := p.tracker.beginCallerProviderWait(ctx, newStartupProviderNode(invocation.ProviderKindAgent, p.providerName))
+	return done, err
+}
+
+func (p *startupAgentProviderProxy) SupportsWorkspaceRequests() bool {
+	select {
+	case <-p.ready:
+	default:
+		return true
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	workspaceProvider, ok := p.provider.(coreagent.WorkspaceProvider)
+	return ok && workspaceProvider.SupportsWorkspaceRequests()
+}
+
+func (p *startupAgentProviderProxy) CreateSession(ctx context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Workspace != nil {
+		workspaceProvider, ok := provider.(coreagent.WorkspaceProvider)
+		if !ok || !workspaceProvider.SupportsWorkspaceRequests() {
+			return nil, fmt.Errorf("%w: provider %q", agentmanager.ErrAgentWorkspaceUnsupported, p.providerName)
+		}
+	}
+	return provider.CreateSession(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) GetSession(ctx context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.GetSession(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) ListSessions(ctx context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.ListSessions(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) UpdateSession(ctx context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.UpdateSession(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) CreateTurn(ctx context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.CreateTurn(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) GetTurn(ctx context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.GetTurn(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) ListTurns(ctx context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.ListTurns(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) CancelTurn(ctx context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.CancelTurn(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) ListTurnEvents(ctx context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.ListTurnEvents(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) GetInteraction(ctx context.Context, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.GetInteraction(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) ListInteractions(ctx context.Context, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.ListInteractions(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) ResolveInteraction(ctx context.Context, req coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.ResolveInteraction(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) GetCapabilities(ctx context.Context, req coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	provider, err := p.awaitForCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.GetCapabilities(ctx, req)
+}
+
+func (p *startupAgentProviderProxy) Ping(ctx context.Context) error {
+	select {
+	case <-p.ready:
+	default:
+		return agentmanager.NewAgentProviderNotAvailableError(p.providerName)
+	}
+	p.mu.RLock()
+	provider := p.provider
+	err := p.err
+	p.mu.RUnlock()
+	if err != nil {
+		return err
+	}
+	if provider == nil {
+		return agentmanager.NewAgentProviderNotAvailableError(p.providerName)
+	}
+	return provider.Ping(ctx)
+}
+
+func (p *startupAgentProviderProxy) Close() error {
+	select {
+	case <-p.ready:
+	default:
+		return nil
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.provider == nil {
+		return nil
+	}
+	return p.provider.Close()
 }

@@ -211,7 +211,7 @@ func registerProviderDevPublicHostServices(cfg *config.Config, manager *provider
 		if entry == nil || !entry.HasResolvedManifest() {
 			continue
 		}
-		hostServices, _, cleanup, err := buildRuntimeHostServices(name, entry, deps)
+		hostServices, _, cleanup, err := buildProviderHostServices(name, deps)
 		if err != nil {
 			if cleanup != nil {
 				cleanup()

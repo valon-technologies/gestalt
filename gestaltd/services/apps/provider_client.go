@@ -184,7 +184,8 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 	}
 	requestToken := ""
 	if p != nil && p.invTokens != nil && p.callerApp != "" {
-		requestToken, err = p.invTokens.MintRootTokenWithWorkflowGrants(ctx, p.callerApp, p.invokeGrants, p.workflowGrants)
+		mintCtx := invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, p.callerApp)
+		requestToken, err = p.invTokens.MintRootTokenWithWorkflowGrants(mintCtx, p.callerApp, p.invokeGrants, p.workflowGrants)
 		if err != nil {
 			return nil, err
 		}

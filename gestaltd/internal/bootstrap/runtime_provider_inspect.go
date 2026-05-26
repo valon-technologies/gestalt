@@ -90,7 +90,7 @@ func (r *runtimeRegistry) SnapshotRuntimes(ctx context.Context) ([]RuntimeProvid
 			}
 			snapshot.SupportLoaded = true
 			snapshot.Advertised = runtimeAdvertisedBehavior(support)
-			snapshot.Effective = runtimeResolvedBehavior(snapshot.Advertised, r.deps)
+			snapshot.Effective = runtimeResolvedBehavior(snapshot.Advertised, runtimeHostServiceAccess(item.provider, r.deps), r.deps)
 		}
 		out = append(out, snapshot)
 	}

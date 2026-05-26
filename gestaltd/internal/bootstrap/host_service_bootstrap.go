@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"net/url"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -15,7 +13,6 @@ import (
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -23,7 +20,6 @@ import (
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
-	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -37,75 +33,35 @@ const (
 	hostServiceTLSCAPEMEnv          = "GESTALT_HOST_SERVICE_TLS_CA_PEM"
 )
 
-func buildRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, *appaccessservice.InvocationTokenManager, func(), error) {
-	var (
-		hostServices []runtimehost.HostService
-		cleanup      func()
-		invTokens    *appaccessservice.InvocationTokenManager
-	)
-	fail := func(err error) ([]runtimehost.HostService, *appaccessservice.InvocationTokenManager, func(), error) {
-		if cleanup != nil {
-			cleanup()
-			cleanup = nil
-		}
+func buildProviderHostServices(name string, deps Deps, extraHostServices ...runtimehost.HostService) ([]runtimehost.HostService, *appaccessservice.InvocationTokenManager, func(), error) {
+	invTokens, err := appaccessservice.NewInvocationTokenManager(deps.EncryptionKey)
+	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	effectiveIndexedDB, err := config.ResolveEffectiveAppIndexedDB(name, entry, deps.SelectedIndexedDBName, deps.IndexedDBDefs)
-	if err != nil {
-		return fail(err)
+	var hostServices []runtimehost.HostService
+	hostServices = append(hostServices, indexedDBServicesFromDeps(deps, indexeddbservice.ServerOptions{}, name)...)
+	if cacheHostService, ok := cacheServiceFromDeps(name, deps); ok {
+		hostServices = append(hostServices, cacheHostService)
 	}
-	if effectiveIndexedDB.Enabled {
-		services, indexedDBCleanup, err := buildIndexedDBServices(name, effectiveIndexedDB.ProviderName, effectiveIndexedDB, deps)
-		if err != nil {
-			return fail(err)
-		}
-		hostServices = append(hostServices, services...)
-		cleanup = chainCleanup(cleanup, indexedDBCleanup)
+	if s3HostService, ok, err := s3ServiceFromDeps(name, deps); err != nil {
+		return nil, nil, nil, err
+	} else if ok {
+		hostServices = append(hostServices, s3HostService)
 	}
-	if len(entry.Cache) > 0 {
-		services, cacheCleanup, err := buildPluginCacheServices(name, entry, deps)
-		if err != nil {
-			return fail(err)
-		}
-		hostServices = append(hostServices, services...)
-		cleanup = chainCleanup(cleanup, cacheCleanup)
-	}
-	if len(entry.S3) > 0 {
-		services, err := buildPluginS3Services(name, entry, deps)
-		if err != nil {
-			return fail(err)
-		}
-		hostServices = append(hostServices, services...)
-	}
-	includeWorkflowProvider := deps.WorkflowManager != nil || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders())
-	includeAgentProvider := deps.AgentManager != nil || deps.AgentRuntime != nil
-	needInvocationTokens := len(entry.Invokes) > 0
-	if includeWorkflowProvider || includeAgentProvider {
-		needInvocationTokens = true
-	}
-	if needInvocationTokens {
-		invTokens, err = appaccessservice.NewInvocationTokenManager(deps.EncryptionKey)
-		if err != nil {
-			return fail(err)
-		}
-	}
-	if includeWorkflowProvider {
-		hostServices = append(hostServices, buildWorkflowProviderHostService(name, deps, invTokens))
-	}
-	if includeAgentProvider {
-		hostServices = append(hostServices, buildPluginAgentProviderHostService(name, deps, invTokens))
-	}
+	hostServices = append(hostServices,
+		buildAppInvocationHostService(deps, invTokens),
+		buildWorkflowProviderHostService(name, deps, invTokens),
+		buildPluginAgentProviderHostService(name, deps, invTokens),
+	)
 	if deps.Services != nil && !core.ExternalCredentialProviderMissing(deps.Services.ExternalCredentials) {
 		hostServices = append(hostServices, buildPluginExternalCredentialsHostService(deps.Services.ExternalCredentials))
 	}
-	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
+	if deps.AuthorizationProvider != nil {
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
 	}
-	if len(entry.Invokes) > 0 {
-		hostServices = append(hostServices, buildAppInvocationHostService(name, entry, deps, invTokens))
-	}
-	return hostServices, invTokens, cleanup, nil
+	hostServices = append(hostServices, extraHostServices...)
+	return hostServices, invTokens, nil, nil
 }
 
 func appendRuntimeLogHostService(hostServices []runtimehost.HostService, runtimeConfig config.EffectiveRuntimePlacement, deps Deps, runtimePlan RuntimePlacementPlan) []runtimehost.HostService {
@@ -183,6 +139,13 @@ func hostServiceBindingDescriptorsFromConfigured(hostServices []runtimehost.Host
 		out = append(out, hostServiceBindingDescriptorFromConfigured(hostService))
 	}
 	return out
+}
+
+func runtimeStartHostServices(runtimePlan RuntimePlacementPlan, hostServices []runtimehost.HostService) []runtimehost.HostService {
+	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessDirect {
+		return nil
+	}
+	return append([]runtimehost.HostService(nil), hostServices...)
 }
 
 func mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostServices []hostServiceBindingDescriptor, deps Deps) (map[string]string, string, error) {
@@ -328,27 +291,6 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, de
 		runtimehost.DefaultHostServiceTokenEnv: token,
 	}, relayHost, true, nil
 }
-func buildIndexedDBServices(serverLabel, metricsName string, effective config.EffectiveIndexedDBBinding, deps Deps) ([]runtimehost.HostService, func(), error) {
-	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
-		return nil, nil, fmt.Errorf("indexeddb services are not available")
-	}
-
-	ds, err := buildScopedIndexedDB(scopedIndexedDBBuildOptions{
-		MetricsName:  metricsName,
-		ProviderName: effective.ProviderName,
-		DB:           effective.DB,
-	}, deps)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return []runtimehost.HostService{
-			indexedDBService(serverLabel, map[string]indexeddb.IndexedDB{serverLabel: ds}, indexeddbservice.ServerOptions{AllowedStores: effective.ObjectStores}, serverLabel),
-		}, func() {
-			_ = closeIndexedDBs(ds)
-		}, nil
-}
-
 func indexedDBBindingsFromInstances(instances map[string]indexeddb.IndexedDB) map[string]indexeddb.IndexedDB {
 	bindings := make(map[string]indexeddb.IndexedDB, len(instances))
 	for _, name := range slices.Sorted(maps.Keys(instances)) {
@@ -383,57 +325,29 @@ func indexedDBServicesFromDeps(deps Deps, opts indexeddbservice.ServerOptions, p
 	return []runtimehost.HostService{indexedDBService(deps.SelectedIndexedDBName, bindings, opts, pluginName)}
 }
 
-func buildExternalCredentialsHostServices(name string, deps Deps) ([]runtimehost.HostService, error) {
-	if deps.SelectedIndexedDBName == "" || len(deps.IndexedDBs) == 0 {
-		return nil, fmt.Errorf("indexeddb services are not available")
-	}
-	services := indexedDBServicesFromDeps(deps, indexeddbservice.ServerOptions{AllowedStores: []string{"external_credentials"}}, name)
-	if len(services) == 0 {
-		return nil, fmt.Errorf("indexeddb %q is not available", deps.SelectedIndexedDBName)
-	}
-	return services, nil
-}
-
-func buildPluginCacheServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, func(), error) {
-	if deps.CacheFactory == nil || len(deps.CacheDefs) == 0 {
-		return nil, nil, fmt.Errorf("cache services are not available")
-	}
-
-	bindings := make(map[string]corecache.Cache, len(entry.Cache))
-	boundCaches := make([]corecache.Cache, 0, len(entry.Cache))
-	for _, bindingName := range entry.Cache {
-		def, ok := deps.CacheDefs[bindingName]
-		if !ok || def == nil {
-			_ = closeCaches(boundCaches...)
-			return nil, nil, fmt.Errorf("cache %q is not available", bindingName)
-		}
-		value, err := buildCache(def, &FactoryRegistry{Cache: deps.CacheFactory})
-		if err != nil {
-			_ = closeCaches(boundCaches...)
-			return nil, nil, fmt.Errorf("cache %q: %w", bindingName, err)
-		}
-		boundCaches = append(boundCaches, value)
-		bindings[bindingName] = value
+func cacheServiceFromDeps(pluginName string, deps Deps) (runtimehost.HostService, bool) {
+	if len(deps.Caches) == 0 {
+		return runtimehost.HostService{}, false
 	}
 	defaultBinding := ""
-	if len(boundCaches) == 1 {
-		defaultBinding = entry.Cache[0]
+	if len(deps.Caches) == 1 {
+		for name := range deps.Caches {
+			defaultBinding = name
+		}
 	}
-	hostServices := []runtimehost.HostService{{
+	bindings := maps.Clone(deps.Caches)
+	return runtimehost.HostService{
 		Name:           "cache",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.Cache_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, registerCacheServer(bindings, defaultBinding, pluginName))
 		},
-	}}
-	return hostServices, func() {
-		_ = closeCaches(boundCaches...)
-	}, nil
+	}, true
 }
 
-func buildPluginS3Services(pluginName string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, error) {
+func s3ServiceFromDeps(pluginName string, deps Deps) (runtimehost.HostService, bool, error) {
 	if len(deps.S3) == 0 {
-		return nil, fmt.Errorf("s3 services are not available")
+		return runtimehost.HostService{}, false, nil
 	}
 
 	var accessURLs *s3.ObjectAccessURLManager
@@ -441,23 +355,18 @@ func buildPluginS3Services(pluginName string, entry *config.ProviderEntry, deps 
 		var err error
 		accessURLs, err = s3.NewObjectAccessURLManager(deps.EncryptionKey, deps.BaseURL)
 		if err != nil {
-			return nil, fmt.Errorf("s3 object access URLs: %w", err)
+			return runtimehost.HostService{}, false, fmt.Errorf("s3 object access URLs: %w", err)
 		}
 	}
 
-	bindings := make(map[string]s3sdk.S3, len(entry.S3))
-	for _, binding := range entry.S3 {
-		client, ok := deps.S3[binding]
-		if !ok || client == nil {
-			return nil, fmt.Errorf("s3 %q is not available", binding)
-		}
-		bindings[binding] = client
-	}
 	defaultBinding := ""
-	if len(entry.S3) == 1 {
-		defaultBinding = entry.S3[0]
+	if len(deps.S3) == 1 {
+		for name := range deps.S3 {
+			defaultBinding = name
+		}
 	}
-	hostServices := []runtimehost.HostService{{
+	bindings := maps.Clone(deps.S3)
+	return runtimehost.HostService{
 		Name: "s3",
 		MethodPrefixes: []string{
 			grpcMethodPrefix(proto.S3_ServiceDesc.ServiceName),
@@ -468,8 +377,7 @@ func buildPluginS3Services(pluginName string, entry *config.ProviderEntry, deps 
 			proto.RegisterS3Server(srv, s3Server)
 			proto.RegisterS3ObjectAccessServer(srv, objectAccessServer)
 		},
-	}}
-	return hostServices, nil
+	}, true, nil
 }
 
 func registerIndexedDBServer(bindings map[string]indexeddb.IndexedDB, defaultBinding, pluginName string, opts indexeddbservice.ServerOptions) proto.IndexedDBServer {
@@ -547,7 +455,7 @@ func buildPluginExternalCredentialsHostService(provider core.ExternalCredentialP
 	}
 }
 
-func buildAppInvocationHostService(pluginName string, entry *config.ProviderEntry, deps Deps, tokens *appaccessservice.InvocationTokenManager) runtimehost.HostService {
+func buildAppInvocationHostService(deps Deps, tokens *appaccessservice.InvocationTokenManager) runtimehost.HostService {
 	invoker := deps.AppInvocation
 	if invoker == nil {
 		invoker = unavailableAppInvocation{}
@@ -557,124 +465,9 @@ func buildAppInvocationHostService(pluginName string, entry *config.ProviderEntr
 		MethodPrefixes: []string{grpcMethodPrefix(proto.App_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAppServer(srv, appaccessservice.NewServer(
-				pluginName,
-				invocationconfig.AppInvocationDependencies(entry.Invokes),
 				invoker,
 				tokens,
 			))
 		},
-	}
-}
-
-type scopedIndexedDBBuildOptions struct {
-	MetricsName  string
-	ProviderName string
-	DB           string
-}
-
-func buildScopedIndexedDB(opts scopedIndexedDBBuildOptions, deps Deps) (indexeddb.IndexedDB, error) {
-	def, ok := deps.IndexedDBDefs[opts.ProviderName]
-	if !ok || def == nil {
-		return nil, fmt.Errorf("indexeddb %q is not available", opts.ProviderName)
-	}
-	scopedDef, err := newScopedIndexedDBDef(def, scopedIndexedDBDefOptions{
-		DB: opts.DB,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("indexeddb %q: %w", opts.ProviderName, err)
-	}
-	ds, err := buildIndexedDB(scopedDef, &FactoryRegistry{IndexedDB: deps.IndexedDBFactory})
-	if err != nil {
-		return nil, fmt.Errorf("indexeddb %q: %w", opts.ProviderName, err)
-	}
-	return metricutil.InstrumentIndexedDB(ds, opts.MetricsName), nil
-}
-
-type scopedIndexedDBDefOptions struct {
-	DB string
-}
-
-func newScopedIndexedDBDef(entry *config.ProviderEntry, opts scopedIndexedDBDefOptions) (*config.ProviderEntry, error) {
-	if entry == nil {
-		return nil, fmt.Errorf("datastore provider is required")
-	}
-	cfg, err := config.NodeToMap(entry.Config)
-	if err != nil {
-		return nil, fmt.Errorf("decode config: %w", err)
-	}
-	if cfg == nil {
-		cfg = make(map[string]any)
-	}
-
-	switch {
-	case isIndexedDBProviderEntry(entry, "relationaldb"):
-		if isSQLiteIndexedDBConfig(cfg) {
-			delete(cfg, "schema")
-			cfg["table_prefix"] = opts.DB + "_"
-			cfg["prefix"] = opts.DB + "_"
-		} else {
-			delete(cfg, "table_prefix")
-			delete(cfg, "prefix")
-			cfg["schema"] = opts.DB
-		}
-	case isIndexedDBProviderEntry(entry, "mongodb"):
-		cfg["database"] = opts.DB
-	case isIndexedDBProviderEntry(entry, "dynamodb"):
-		cfg["table"] = opts.DB
-	default:
-		return nil, fmt.Errorf("scoped indexeddb bindings require a provider with config-level namespace support")
-	}
-
-	configNode, err := mapToYAMLNode(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("encode config: %w", err)
-	}
-
-	cloned := *entry
-	cloned.Config = configNode
-	return &cloned, nil
-}
-
-func isIndexedDBProviderEntry(entry *config.ProviderEntry, providerName string) bool {
-	if entry == nil {
-		return false
-	}
-	providerPath := "/indexeddb/" + providerName
-	if entry.ResolvedManifest != nil {
-		source := strings.TrimSpace(filepath.ToSlash(entry.ResolvedManifest.Source))
-		return strings.HasSuffix(source, providerPath)
-	}
-	if metadataURL := strings.TrimSpace(entry.SourceMetadataURL()); metadataURL != "" {
-		parsed, err := url.Parse(metadataURL)
-		if err == nil {
-			path := filepath.ToSlash(parsed.Path)
-			return strings.Contains(path, providerPath+"/") && strings.HasSuffix(path, "/provider-release.yaml")
-		}
-	}
-	if path := strings.TrimSpace(entry.SourcePath()); path != "" {
-		path = filepath.ToSlash(path)
-		return strings.HasSuffix(path, providerPath) ||
-			strings.HasSuffix(path, "/"+providerName) ||
-			strings.HasSuffix(path, providerPath+"/manifest.yaml") ||
-			strings.HasSuffix(path, "/"+providerName+"/manifest.yaml")
-	}
-	return false
-}
-
-func isSQLiteIndexedDBConfig(cfg map[string]any) bool {
-	dsn, _ := cfg["dsn"].(string)
-	dsn = strings.TrimSpace(dsn)
-	if dsn == "" {
-		return false
-	}
-	switch {
-	case strings.HasPrefix(dsn, "postgres://"), strings.HasPrefix(dsn, "postgresql://"):
-		return false
-	case strings.HasPrefix(dsn, "mysql://"), strings.Contains(dsn, "@tcp("), strings.Contains(dsn, "@unix("):
-		return false
-	case strings.HasPrefix(dsn, "sqlserver://"):
-		return false
-	default:
-		return true
 	}
 }

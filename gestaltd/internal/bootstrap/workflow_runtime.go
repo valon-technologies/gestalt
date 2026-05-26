@@ -41,7 +41,8 @@ func (r *workflowRuntime) InitProviderPlaceholders(defs map[string]*config.Provi
 		r.providers = map[string]coreworkflow.Provider{}
 	}
 	for name, entry := range defs {
-		if entry == nil {
+		name = strings.TrimSpace(name)
+		if name == "" || entry == nil {
 			continue
 		}
 		if _, exists := r.providers[name]; exists {

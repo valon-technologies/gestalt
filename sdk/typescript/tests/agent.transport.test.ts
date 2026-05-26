@@ -12,6 +12,8 @@ import { expect, test } from "bun:test";
 import {
   AgentTurnEventSchema,
   AgentHost as AgentHostService,
+  CreateAgentProviderSessionRequestSchema,
+  CreateAgentProviderTurnRequestSchema,
   ExecuteAgentToolRequestSchema,
   ExecuteAgentToolResponseSchema,
   ListAgentToolsResponseSchema,
@@ -92,6 +94,47 @@ test("AgentProvider accepts JSON display payloads for turn events", async () => 
       error: "none",
     },
   });
+});
+
+test("AgentProvider forwards invocation tokens to handlers", async () => {
+  const seenTokens: string[] = [];
+  const provider = defineAgentProvider({
+    displayName: "Agent token fixture",
+    createSession(request) {
+      seenTokens.push(request.invocationToken);
+      return {
+        id: request.sessionId,
+        model: request.model,
+      };
+    },
+    createTurn(request) {
+      seenTokens.push(request.invocationToken);
+      return {
+        id: request.turnId,
+        sessionId: request.sessionId,
+        model: request.model,
+      };
+    },
+  });
+  const service = createAgentProviderService(provider);
+
+  await (service.createSession as any)(
+    create(CreateAgentProviderSessionRequestSchema, {
+      sessionId: "session-1",
+      model: "gpt-test",
+      invocationToken: "session-token",
+    }),
+  );
+  await (service.createTurn as any)(
+    create(CreateAgentProviderTurnRequestSchema, {
+      turnId: "turn-1",
+      sessionId: "session-1",
+      model: "gpt-test",
+      invocationToken: "turn-token",
+    }),
+  );
+
+  expect(seenTokens).toEqual(["session-token", "turn-token"]);
 });
 
 async function reserveTCPAddress(): Promise<string> {

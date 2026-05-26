@@ -22,7 +22,6 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
@@ -33,7 +32,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
-	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -164,6 +162,7 @@ type Deps struct {
 	IndexedDBs            map[string]indexeddb.IndexedDB
 	IndexedDBDefs         map[string]*config.ProviderEntry
 	IndexedDBFactory      IndexedDBFactory
+	Caches                map[string]corecache.Cache
 	CacheDefs             map[string]*config.ProviderEntry
 	CacheFactory          CacheFactory
 	S3                    map[string]s3sdk.S3
@@ -227,6 +226,7 @@ type Result struct {
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
+	ExtraCaches           []corecache.Cache
 	S3                    map[string]s3sdk.S3
 	ExtraS3s              []s3sdk.S3
 	ExtraWorkflows        []coreworkflow.Provider
@@ -384,6 +384,7 @@ func (r *Result) Close(ctx context.Context) error {
 		CloseProviders(r.Providers),
 		r.Services.Close(),
 		closeIndexedDBs(r.ExtraIndexedDBs...),
+		closeCaches(r.ExtraCaches...),
 		closeS3s(r.ExtraS3s...),
 		closeWorkflows(r.ExtraWorkflows...),
 		closeAgents(r.ExtraAgents...),
@@ -698,10 +699,15 @@ type preparedCore struct {
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
+	ExtraCaches           []corecache.Cache
 	ExtraS3s              []s3sdk.S3
 	SecretManager         core.SecretManager
 	Telemetry             core.TelemetryProvider
 	Deps                  Deps
+	AppInvocation         *lazyInvoker
+	WorkflowManager       *lazyWorkflowManager
+	AgentManager          *lazyAgentManager
+	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 
 	runtimeRegistry *runtimeRegistry
 }
@@ -876,13 +882,22 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
+	pluginInvoker := newLazyInvoker()
+	workflowManager := newLazyWorkflowManager()
+	agentManager := newLazyAgentManager()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	deps.AppInvocation = pluginInvoker
+	deps.WorkflowManager = workflowManager
+	deps.AgentManager = agentManager
+	deps.PublicHostServices = publicHostServices
+
 	workflowRuntime, err := newWorkflowRuntime(cfg)
 	if err != nil {
 		return nil, err
 	}
 	workflowRuntime.InitProviderPlaceholders(cfg.Providers.Workflow)
 	deps.WorkflowRuntime = workflowRuntime
-	agentRuntime, err := newAgentRuntime(cfg)
+	agentRuntime, err := newAgentRuntime(cfg, workflowRuntime.StartupWaitTracker())
 	if err != nil {
 		return nil, err
 	}
@@ -946,6 +961,27 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		}
 	}()
 
+	hostCaches := make(map[string]corecache.Cache, len(cfg.Providers.Cache))
+	var extraCaches []corecache.Cache
+	for name, entry := range cfg.Providers.Cache {
+		if entry == nil {
+			continue
+		}
+		value, err := buildCache(entry, factories)
+		if err != nil {
+			_ = closeCaches(extraCaches...)
+			return nil, fmt.Errorf("bootstrap: cache from resource %q: %w", name, err)
+		}
+		hostCaches[name] = value
+		extraCaches = append(extraCaches, value)
+	}
+	closeExtraCaches := true
+	defer func() {
+		if closeExtraCaches {
+			_ = closeCaches(extraCaches...)
+		}
+	}()
+
 	hostS3s := make(map[string]s3sdk.S3, len(cfg.Providers.S3))
 	var extraS3s []s3sdk.S3
 	for name, entry := range cfg.Providers.S3 {
@@ -971,10 +1007,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.Services = svc
 	deps.IndexedDBs = indexedDBs
 	deps.SelectedIndexedDBName = selectedIndexedDBName
-	deps.IndexedDBDefs = cfg.Providers.IndexedDB
-	deps.IndexedDBFactory = factories.IndexedDB
-	deps.CacheDefs = cfg.Providers.Cache
-	deps.CacheFactory = factories.Cache
+	deps.Caches = hostCaches
 	deps.S3 = hostS3s
 	closeExternalCredentialsOnError := true
 	defer func() {
@@ -1002,6 +1035,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	shutdownTelemetry = false
 	closeSvc = false
 	closeExtraStores = false
+	closeExtraCaches = false
 	closeExtraS3s = false
 	closeExternalCredentialsOnError = false
 	closeAuthorizationOnError = false
@@ -1012,10 +1046,15 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		AuthorizationProvider: authzProvider,
 		Services:              svc,
 		ExtraIndexedDBs:       extraIndexedDBs,
+		ExtraCaches:           extraCaches,
 		ExtraS3s:              extraS3s,
 		SecretManager:         sm,
 		Telemetry:             tp,
 		Deps:                  deps,
+		AppInvocation:         pluginInvoker,
+		WorkflowManager:       workflowManager,
+		AgentManager:          agentManager,
+		PublicHostServices:    publicHostServices,
 		runtimeRegistry:       runtimeRegistry,
 	}, nil
 }
@@ -1055,6 +1094,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		externalCredentialsCloseErr,
 		p.Services.Close(),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
+		closeCaches(p.ExtraCaches...),
 		closeS3s(p.ExtraS3s...),
 		closeSecretManager(p.SecretManager),
 		closeRuntimeRegistry(p.runtimeRegistry),
@@ -1077,24 +1117,28 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 
-	pluginInvoker := newLazyInvoker()
-	workflowManager := newLazyWorkflowManager()
-	agentManager := newLazyAgentManager()
+	pluginInvoker := prepared.AppInvocation
+	workflowManager := prepared.WorkflowManager
+	agentManager := prepared.AgentManager
 	workflowTools := newWorkflowSystemTools(workflowManager, prepared.Deps.WorkflowRuntime)
-	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	prepared.Deps.AppInvocation = pluginInvoker
-	prepared.Deps.WorkflowManager = workflowManager
-	prepared.Deps.AgentManager = agentManager
-	prepared.Deps.PublicHostServices = publicHostServices
+	publicHostServices := prepared.PublicHostServices
 
-	providers, providersReady, connAuthResolver, manualConnAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
+	providerBuilds, err := prepareProviderBuilds(cfg, factories, prepared.Deps)
 	if err != nil {
 		return nil, err
 	}
+	providers := providerBuilds.providers
+	var (
+		providersReady         <-chan struct{}
+		connAuthResolver       func() map[string]map[string]OAuthHandler
+		manualConnAuthResolver func() map[string]map[string]ManualTokenExchanger
+	)
 	closeProviders := true
 	defer func() {
 		if closeProviders {
-			<-providersReady
+			if providersReady != nil {
+				<-providersReady
+			}
 			_ = CloseProviders(providers)
 		}
 	}()
@@ -1102,20 +1146,24 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	connMaps, err := BuildConnectionMaps(cfg)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		prepared.Deps.AgentRuntime.FailPendingProviders(err)
 		return nil, err
 	}
 	connRuntime, err := BuildConnectionRuntime(cfg)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		prepared.Deps.AgentRuntime.FailPendingProviders(err)
 		return nil, err
 	}
 	if err := ValidateConnectionRuntimeCredentials(ctx, prepared.Services.ExternalCredentials, connRuntime); err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		prepared.Deps.AgentRuntime.FailPendingProviders(err)
 		return nil, err
 	}
 	baseAuthz, err := authorization.New(config.AuthorizationStaticConfig(cfg.Authorization, cfg.Apps))
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		prepared.Deps.AgentRuntime.FailPendingProviders(err)
 		return nil, err
 	}
 	closeAuthz := true
@@ -1131,12 +1179,14 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		)
 		if err != nil {
 			prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+			prepared.Deps.AgentRuntime.FailPendingProviders(err)
 			return nil, err
 		}
 	}
 	providerDevSessions, err := buildProviderDevManager(cfg, providers, prepared.Deps)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		prepared.Deps.AgentRuntime.FailPendingProviders(err)
 		return nil, err
 	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
@@ -1168,7 +1218,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
-		AppInvokes:        agentPluginInvokes(cfg),
 	}))
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:                     providers,
@@ -1179,14 +1228,16 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Authorizer:                    authz,
 		DefaultConnection:             connMaps.DefaultConnection,
 		CatalogConnection:             connMaps.APIConnection,
-		AppInvokes:                    agentPluginInvokes(cfg),
 		AgentConnections:              agentConnectionBindings(cfg),
 		SessionStart:                  agentSessionStartConfigs(cfg),
 		DefaultToolNarrowingThreshold: cfg.Server.Agent.DefaultToolNarrowingThreshold,
 	}))
 	prepared.Deps.AgentRuntime.SetToolSearcher(agentManager)
+	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
+	providersReady, connAuthResolver, manualConnAuthResolver, _ = providerBuilds.Start(ctx, prepared.Deps, buildProvider)
 	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
+		prepared.Deps.AgentRuntime.FailPendingProviders(err)
 		return nil, err
 	}
 	closeWorkflowsOnError := true
@@ -1205,7 +1256,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			_ = closeAgents(extraAgents...)
 		}
 	}()
-	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
 	workflowConfigTokens, err := appaccessservice.NewInvocationTokenManager(prepared.Deps.EncryptionKey)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: workflow config invocation tokens: %w", err)
@@ -1247,6 +1297,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AuthorizationProvider:        prepared.AuthorizationProvider,
 		Services:                     prepared.Services,
 		ExtraIndexedDBs:              prepared.ExtraIndexedDBs,
+		ExtraCaches:                  prepared.ExtraCaches,
 		S3:                           prepared.Deps.S3,
 		ExtraS3s:                     prepared.ExtraS3s,
 		ExtraWorkflows:               extraWorkflows,
@@ -1361,7 +1412,8 @@ func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		value, err := buildAgent(ctx, name, entry, factories, deps)
 		if err != nil {
 			if deps.AgentRuntime != nil {
-				deps.AgentRuntime.FailProvider(name)
+				deps.AgentRuntime.FailProvider(name, err)
+				deps.AgentRuntime.FailPendingProviders(err)
 			}
 			_ = closeAgents(extraAgents...)
 			return nil, fmt.Errorf("bootstrap: agent from resource %q: %w", name, err)
@@ -1372,20 +1424,6 @@ func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		extraAgents = append(extraAgents, value)
 	}
 	return extraAgents, nil
-}
-
-func agentPluginInvokes(cfg *config.Config) map[string][]invocation.AppInvocationDependency {
-	if cfg == nil || len(cfg.Apps) == 0 {
-		return nil
-	}
-	out := make(map[string][]invocation.AppInvocationDependency, len(cfg.Apps))
-	for pluginName, entry := range cfg.Apps {
-		if entry == nil || len(entry.Invokes) == 0 {
-			continue
-		}
-		out[pluginName] = invocationconfig.AppInvocationDependencies(entry.Invokes)
-	}
-	return out
 }
 
 func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.TelemetryProvider, error) {
@@ -1539,7 +1577,7 @@ func buildNamedExternalCredentialsProvider(ctx context.Context, cfg *config.Conf
 			return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 		}
 	}
-	hostServices, err := buildExternalCredentialsHostServices(logicalName, deps)
+	hostServices, _, _, err := buildProviderHostServices(logicalName, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 	}
@@ -1714,7 +1752,11 @@ func buildAuthorization(cfg *config.Config, factories *FactoryRegistry, deps Dep
 			return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 		}
 	}
-	provider, err := factories.Authorization(node, indexedDBServicesFromDeps(deps, indexeddbservice.ServerOptions{}, ""), deps)
+	hostServices, _, _, err := buildProviderHostServices("authorization", deps)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
+	}
+	provider, err := factories.Authorization(node, hostServices, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 	}
@@ -1788,6 +1830,7 @@ func buildS3(name string, entry *config.ProviderEntry, factories *FactoryRegistr
 }
 
 func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (coreworkflow.Provider, error) {
+	ctx = invocation.WithCallerProvider(ctx, invocation.ProviderKindWorkflow, name)
 	if entry == nil {
 		return nil, fmt.Errorf("workflow provider is required")
 	}
@@ -1799,28 +1842,15 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 			return nil, fmt.Errorf("workflow provider: %w", err)
 		}
 	}
-	var hostServices []runtimehost.HostService
-	if deps.AuthorizationProvider != nil {
-		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
+	hostServices, _, cleanup, err := buildProviderHostServices(name, deps)
+	if err != nil {
+		return nil, fmt.Errorf("workflow provider: %w", err)
 	}
-	var cleanup func()
 	defer func() {
 		if cleanup != nil {
 			cleanup()
 		}
 	}()
-	effectiveIndexedDB, err := config.ResolveEffectiveWorkflowIndexedDB(name, entry, deps.IndexedDBDefs)
-	if err != nil {
-		return nil, fmt.Errorf("workflow provider: %w", err)
-	}
-	if effectiveIndexedDB.Enabled {
-		indexedDBServices, indexedDBCleanup, err := buildIndexedDBServices(name, name, effectiveIndexedDB, deps)
-		if err != nil {
-			return nil, fmt.Errorf("workflow provider: %w", err)
-		}
-		hostServices = append(hostServices, indexedDBServices...)
-		cleanup = chainCleanup(cleanup, indexedDBCleanup)
-	}
 	if !entry.UsesRuntimePlacement() {
 		publicWorkflowProviderHostServicesCleanup, err := registerPublicWorkflowProviderHostServices(name, hostServices, deps)
 		if err != nil {
@@ -1854,6 +1884,7 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 }
 
 func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (coreagent.Provider, error) {
+	ctx = invocation.WithCallerProvider(ctx, invocation.ProviderKindAgent, name)
 	if entry == nil {
 		return nil, fmt.Errorf("agent provider is required")
 	}
@@ -1865,31 +1896,22 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 			return nil, fmt.Errorf("agent provider: %w", err)
 		}
 	}
-	hostServices := []runtimehost.HostService{{
+	agentHostService := runtimehost.HostService{
 		Name:           "agent_host",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.AgentHost_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAgentHostServer(srv, agentservice.NewHostServerWithConnections(name, deps.AgentRuntime.ListTools, deps.AgentRuntime.ExecuteTool, deps.AgentRuntime.ResolveConnection))
 		},
-	}}
-	var cleanup func()
+	}
+	hostServices, _, cleanup, err := buildProviderHostServices(name, deps, agentHostService)
+	if err != nil {
+		return nil, fmt.Errorf("agent provider: %w", err)
+	}
 	defer func() {
 		if cleanup != nil {
 			cleanup()
 		}
 	}()
-	effectiveIndexedDB, err := config.ResolveEffectiveAgentIndexedDB(name, entry, deps.IndexedDBDefs)
-	if err != nil {
-		return nil, fmt.Errorf("agent provider: %w", err)
-	}
-	if effectiveIndexedDB.Enabled {
-		indexedDBServices, indexedDBCleanup, err := buildIndexedDBServices(name, name, effectiveIndexedDB, deps)
-		if err != nil {
-			return nil, fmt.Errorf("agent provider: %w", err)
-		}
-		hostServices = append(hostServices, indexedDBServices...)
-		cleanup = chainCleanup(cleanup, indexedDBCleanup)
-	}
 	var (
 		provider    coreagent.Provider
 		providerErr error

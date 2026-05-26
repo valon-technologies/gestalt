@@ -849,14 +849,6 @@ func TestSignalOrStartRunResolvesDeclaredAppCredentialModes(t *testing.T) {
 		Workflow:     testWorkflowControl{provider: provider},
 		Agent:        testAgentControl{},
 		AgentManager: testAgentManager{},
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"github": {
-				{App: "github", Operation: "bot.commitFiles"},
-				{App: "github", Operation: "bot.commentFinal", CredentialMode: core.ConnectionModeNone},
-				{App: "github", Operation: "bot.commentStarted", CredentialMode: core.ConnectionModeNone},
-				{App: "github", Operation: "bot.openPullRequest"},
-			},
-		},
 	})
 	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
 		App:        "github",
@@ -1197,11 +1189,6 @@ func TestSignalOrStartRunAppStepCredentialModeUsesDeclaredInvoke(t *testing.T) {
 		}),
 		Workflow: testWorkflowControl{provider: provider},
 		Invoker:  invoker,
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"github": {
-				{App: "github", Operation: "reviewPullRequest", CredentialMode: core.ConnectionModeNone},
-			},
-		},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
 		App:        "github",
@@ -1251,11 +1238,6 @@ func TestSignalOrStartRunAppStepCredentialModeKeepsBlankModeBlank(t *testing.T) 
 		}),
 		Workflow: testWorkflowControl{provider: provider},
 		Invoker:  invoker,
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"github": {
-				{App: "github", Operation: "reviewPullRequest", CredentialMode: core.ConnectionModeNone},
-			},
-		},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
 		App:        "github",
@@ -1305,7 +1287,7 @@ func TestSignalOrStartRunAppStepCredentialModeKeepsBlankModeBlank(t *testing.T) 
 	}
 }
 
-func TestCreateScheduleRejectsAppStepCredentialModeWithoutCaller(t *testing.T) {
+func TestCreateScheduleAcceptsExplicitAppStepCredentialMode(t *testing.T) {
 	t.Parallel()
 
 	provider := newTestWorkflowProvider()
@@ -1329,13 +1311,16 @@ func TestCreateScheduleRejectsAppStepCredentialModeWithoutCaller(t *testing.T) {
 		Scopes:           principal.PermissionApps(permissions),
 	})
 
-	_, err := manager.CreateSchedule(context.Background(), caller, ScheduleUpsert{
+	managed, err := manager.CreateSchedule(context.Background(), caller, ScheduleUpsert{
 		ProviderName: "local",
 		Cron:         "*/5 * * * *",
 		Target:       testWorkflowAppStepTarget("github", "reviewPullRequest", nil, core.ConnectionModeNone),
 	})
-	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("CreateSchedule error = %v, want authorization denied", err)
+	if err != nil {
+		t.Fatalf("CreateSchedule: %v", err)
+	}
+	if got := requireWorkflowAppStep(t, managed.Schedule.Target, 0).CredentialMode; got != core.ConnectionModeNone {
+		t.Fatalf("stored credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
 }
 
@@ -1378,6 +1363,82 @@ func TestSignalOrStartRunRejectsDeniedTargetPermissionsBeforeEnqueue(t *testing.
 	}
 	if provider.signalOrStartCalls != 1 {
 		t.Fatalf("SignalOrStartRun provider calls = %d, want 1", provider.signalOrStartCalls)
+	}
+}
+
+func TestSignalOrStartRunRejectsAgentToolRunAsDelegationBeforeEnqueue(t *testing.T) {
+	t.Parallel()
+
+	runAs := &core.RunAsSubject{
+		SubjectID:           "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectKind:         "service_account",
+		CredentialSubjectID: "service_account:github_app_installation:99:repo:acme/widgets",
+	}
+	externalIdentity := &core.ExternalIdentityRef{
+		Type: "github_app_installation",
+		ID:   "repo:acme/widgets",
+	}
+	for _, tc := range []struct {
+		name string
+		ref  coreagent.ToolRef
+	}{
+		{
+			name: "runAs",
+			ref: coreagent.ToolRef{
+				App:       "github",
+				Operation: "bot.openPullRequest",
+				RunAs:     runAs,
+			},
+		},
+		{
+			name: "external identity",
+			ref: coreagent.ToolRef{
+				App:                   "github",
+				Operation:             "bot.openPullRequest",
+				RunAs:                 runAs,
+				RunAsExternalIdentity: externalIdentity,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := newTestWorkflowProvider()
+			manager := New(Config{
+				Workflow:     testWorkflowControl{provider: provider},
+				Agent:        testAgentControl{},
+				AgentManager: testAgentManager{},
+			})
+			callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
+				App:        "github",
+				Operations: []string{"events.handle", "bot.openPullRequest"},
+			}, {
+				App: "simple",
+			}})
+			caller := principal.Canonicalize(&principal.Principal{
+				SubjectID:        "system:http_binding:github:event",
+				TokenPermissions: callerPermissions,
+				Scopes:           principal.PermissionApps(callerPermissions),
+			})
+
+			_, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+				ProviderName:  "local",
+				WorkflowKey:   "github:99:acme/widgets:7",
+				CallerAppName: "github",
+				Target: testWorkflowAgentStepTarget(coreworkflow.AgentTurn{
+					ProviderName: "simple",
+					Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+					ToolRefs:     []coreagent.ToolRef{tc.ref},
+				}),
+				Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+			})
+			if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+				t.Fatalf("SignalOrStartRun error = %v, want authorization denied", err)
+			}
+			if provider.signalOrStartCalls != 0 {
+				t.Fatalf("SignalOrStartRun provider calls = %d, want 0", provider.signalOrStartCalls)
+			}
+		})
 	}
 }
 

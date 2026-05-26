@@ -91,22 +91,6 @@ func mustStruct(t *testing.T, fields map[string]any) *structpb.Struct {
 	return out
 }
 
-func configAppInvocationDependencies(deps []invocation.AppInvocationDependency) []config.AppInvocationDependency {
-	if len(deps) == 0 {
-		return nil
-	}
-	out := make([]config.AppInvocationDependency, 0, len(deps))
-	for _, dep := range deps {
-		out = append(out, config.AppInvocationDependency{
-			App:            dep.App,
-			Operation:      dep.Operation,
-			Surface:        dep.Surface,
-			CredentialMode: providermanifestv1.ConnectionMode(dep.CredentialMode),
-		})
-	}
-	return out
-}
-
 func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server {
 	t.Helper()
 	return newTestHTTPServer(t, httptest.NewServer, opts...)
@@ -1157,11 +1141,6 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	invoker := &relayTestInvoker{}
-	invokes := []invocation.AppInvocationDependency{{
-		App:            "slack",
-		Operation:      "events.reply",
-		CredentialMode: core.ConnectionModeNone,
-	}}
 	invocationTokens, err := appaccessservice.NewInvocationTokenManager(secret)
 	if err != nil {
 		t.Fatalf("NewInvocationTokenManager: %v", err)
@@ -1172,7 +1151,7 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 		Name:           "app",
 		MethodPrefixes: []string{"/" + proto.App_ServiceDesc.ServiceName + "/"},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAppServer(srv, appaccessservice.NewServer("support", invokes, invoker, invocationTokens))
+			proto.RegisterAppServer(srv, appaccessservice.NewServer(invoker, invocationTokens))
 		},
 	})
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
@@ -1204,7 +1183,7 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 		Kind:      principal.KindUser,
 		Source:    principal.SourceSession,
 	})
-	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "support", appaccessservice.InvocationDependencyGrants(invokes))
+	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "support", appaccessservice.AllInvocationGrants())
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
 	}
@@ -1399,17 +1378,17 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	invoker := &relayTestInvoker{}
-	invokes := []invocation.AppInvocationDependency{{
+	invokes := []config.AppInvocationDependency{{
 		App:            "slack",
 		Operation:      "events.reply",
-		CredentialMode: core.ConnectionModeNone,
+		CredentialMode: providermanifestv1.ConnectionModeNone,
 	}}
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
 		cfg.StateSecret = secret
 		cfg.Invoker = invoker
 		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"support": {Invokes: configAppInvocationDependencies(invokes)},
+			"support": {Invokes: invokes},
 		}
 	}))
 	ts.EnableHTTP2 = true

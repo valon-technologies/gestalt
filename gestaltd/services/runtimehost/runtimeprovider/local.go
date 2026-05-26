@@ -85,6 +85,10 @@ func (p *LocalProvider) Support(context.Context) (Support, error) {
 	}, nil
 }
 
+func (p *LocalProvider) SupportsDirectHostServices() bool {
+	return true
+}
+
 func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest) (*Session, error) {
 	if p == nil {
 		return nil, fmt.Errorf("runtime provider is not configured")
@@ -331,6 +335,7 @@ func (p *LocalProvider) StartApp(ctx context.Context, req StartAppRequest) (*Hos
 			DefaultAction: egress.PolicyAction(req.Egress.DefaultAction),
 		},
 		HostBinary:   req.HostBinary,
+		HostServices: req.HostServices,
 		SocketDir:    rootDir,
 		ProviderName: req.AppName,
 		Telemetry:    p.telemetry,

@@ -132,7 +132,7 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 	if operation == "" {
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: workflow target operation is required", invocation.ErrInvalidInvocation)
 	}
-	credentialMode, err := m.normalizeWorkflowAppStepCredentialMode(target.CredentialMode, callerAppName, appName, operation)
+	credentialMode, err := normalizeWorkflowAppStepCredentialMode(target.CredentialMode)
 	if err != nil {
 		return coreworkflow.AppCall{}, err
 	}
@@ -174,7 +174,7 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 	if err != nil {
 		return coreworkflow.AppCall{}, err
 	}
-	if !principal.AllowsOperationPermission(p, appName, opMeta.ID) && !m.callerAppDeclaresInvoke(callerAppName, appName, opMeta.ID) {
+	if !principal.AllowsOperationPermission(p, appName, opMeta.ID) && !callerAppCanInvoke(callerAppName, appName, opMeta.ID) {
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
 	}
 	if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, appName, opMeta) {
@@ -237,7 +237,7 @@ func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Pri
 	return target, nil
 }
 
-func (m *Manager) normalizeWorkflowAppStepCredentialMode(mode core.ConnectionMode, callerAppName, appName, operation string) (core.ConnectionMode, error) {
+func normalizeWorkflowAppStepCredentialMode(mode core.ConnectionMode) (core.ConnectionMode, error) {
 	mode = core.NormalizeOptionalConnectionMode(mode)
 	switch mode {
 	case "":
@@ -246,38 +246,11 @@ func (m *Manager) normalizeWorkflowAppStepCredentialMode(mode core.ConnectionMod
 	default:
 		return "", fmt.Errorf("%w: workflow target credential_mode %q is not supported", invocation.ErrInvalidInvocation, mode)
 	}
-	if strings.TrimSpace(callerAppName) == "" {
-		return "", fmt.Errorf("%w: workflow target credential_mode requires a caller app declaration", invocation.ErrAuthorizationDenied)
-	}
-	declared, ok, err := m.callerAppInvokeCredentialMode(callerAppName, appName, operation)
-	if err != nil {
-		return "", err
-	}
-	if !ok {
-		return "", fmt.Errorf("%w: workflow target credential_mode requires a declared invoke mode", invocation.ErrAuthorizationDenied)
-	}
-	if mode != declared {
-		return "", fmt.Errorf("%w: workflow target credential_mode %q exceeds declared invoke mode %q", invocation.ErrAuthorizationDenied, mode, declared)
-	}
 	return mode, nil
 }
 
-func (m *Manager) callerAppDeclaresInvoke(callerAppName, appName, operation string) bool {
-	callerAppName = strings.TrimSpace(callerAppName)
-	appName = strings.TrimSpace(appName)
-	operation = strings.TrimSpace(operation)
-	if callerAppName == "" || appName == "" || operation == "" || m == nil {
-		return false
-	}
-	for _, invoke := range m.appInvokes[callerAppName] {
-		if strings.TrimSpace(invoke.Surface) != "" {
-			continue
-		}
-		if strings.TrimSpace(invoke.App) == appName && strings.TrimSpace(invoke.Operation) == operation {
-			return true
-		}
-	}
-	return false
+func callerAppCanInvoke(callerAppName, appName, operation string) bool {
+	return strings.TrimSpace(callerAppName) != "" && strings.TrimSpace(appName) != "" && strings.TrimSpace(operation) != ""
 }
 
 func isWorkflowProviderNotFound(err error) bool {
@@ -415,7 +388,7 @@ func (m *Manager) checkWorkflowStepAppAuthorizationForCaller(ctx context.Context
 	}
 	failure := decision.failure
 	if failure.reason == targetAuthorizationReasonPrincipalOperationPermissionDenied &&
-		m.callerAppDeclaresInvoke(callerAppName, failure.provider, failure.operation) {
+		callerAppCanInvoke(callerAppName, failure.provider, failure.operation) {
 		return targetAuthorizationAllowed()
 	}
 	return decision
@@ -483,7 +456,7 @@ func (m *Manager) checkWorkflowAgentToolAuthorizationForCaller(ctx context.Conte
 	failure := decision.failure
 	if failure.component == targetAuthorizationComponentAgentToolRef &&
 		failure.reason == targetAuthorizationReasonPrincipalOperationPermissionDenied &&
-		m.callerAppDeclaresInvoke(callerAppName, failure.provider, failure.operation) {
+		callerAppCanInvoke(callerAppName, failure.provider, failure.operation) {
 		return targetAuthorizationAllowed()
 	}
 	return decision
@@ -523,6 +496,9 @@ func validateWorkflowAgentToolRefs(refs []coreagent.ToolRef) error {
 		operation := strings.TrimSpace(ref.Operation)
 		connection := strings.TrimSpace(ref.Connection)
 		instance := strings.TrimSpace(ref.Instance)
+		if ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+			return fmt.Errorf("%w: workflow agent tool_refs[%d] runAs delegation is not supported", invocation.ErrAuthorizationDenied, i)
+		}
 		if systemName != "" {
 			if appName != "" {
 				return fmt.Errorf("%w: workflow agent tool_refs[%d] must set exactly one of app or system", invocation.ErrInvalidInvocation, i)
@@ -546,31 +522,4 @@ func validateWorkflowAgentToolRefs(refs []coreagent.ToolRef) error {
 		}
 	}
 	return nil
-}
-
-func (m *Manager) callerAppInvokeCredentialMode(callerAppName, appName, operation string) (core.ConnectionMode, bool, error) {
-	callerAppName = strings.TrimSpace(callerAppName)
-	appName = strings.TrimSpace(appName)
-	operation = strings.TrimSpace(operation)
-	if callerAppName == "" || appName == "" || operation == "" || m == nil {
-		return "", false, nil
-	}
-	for _, invoke := range m.appInvokes[callerAppName] {
-		if strings.TrimSpace(invoke.Surface) != "" {
-			continue
-		}
-		if strings.TrimSpace(invoke.App) != appName || strings.TrimSpace(invoke.Operation) != operation {
-			continue
-		}
-		mode := core.NormalizeOptionalConnectionMode(invoke.CredentialMode)
-		switch mode {
-		case "":
-			return "", false, nil
-		case core.ConnectionModeNone, core.ConnectionModeUser:
-			return mode, true, nil
-		default:
-			return "", false, fmt.Errorf("%w: caller app invoke credentialMode %q is not supported", invocation.ErrInvalidInvocation, invoke.CredentialMode)
-		}
-	}
-	return "", false, nil
 }

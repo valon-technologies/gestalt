@@ -141,8 +141,12 @@ func TestBuildWorkflowRegistersIndexedDBPublicRelay(t *testing.T) {
 		return startupTestWorkflowProvider{}, nil
 	}
 	deps := Deps{
-		BaseURL:       "https://gestalt.example.test",
-		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		BaseURL:               "https://gestalt.example.test",
+		EncryptionKey:         []byte("0123456789abcdef0123456789abcdef"),
+		SelectedIndexedDBName: "main",
+		IndexedDBs: map[string]indexeddb.IndexedDB{
+			"main": &coretesting.StubIndexedDB{},
+		},
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"main": {
 				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),

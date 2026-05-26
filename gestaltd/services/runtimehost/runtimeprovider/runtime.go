@@ -11,6 +11,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
 type SessionState string
@@ -45,6 +46,10 @@ type Support struct {
 	CanHostApps              bool
 	EgressMode               EgressMode
 	SupportsPrepareWorkspace bool
+}
+
+type DirectHostServiceSupport interface {
+	SupportsDirectHostServices() bool
 }
 
 type Session struct {
@@ -144,14 +149,15 @@ type RemoveWorkspaceRequest struct {
 // provider listener endpoint and must return a host-reachable dial target in
 // HostedApp.DialTarget.
 type StartAppRequest struct {
-	SessionID  string
-	AppName    string
-	Command    string
-	Args       []string
-	Workdir    string
-	Env        map[string]string
-	Egress     RuntimeEgressPolicy
-	HostBinary string
+	SessionID    string
+	AppName      string
+	Command      string
+	Args         []string
+	Workdir      string
+	Env          map[string]string
+	Egress       RuntimeEgressPolicy
+	HostBinary   string
+	HostServices []runtimehost.HostService
 }
 
 type RuntimeEgressPolicy struct {

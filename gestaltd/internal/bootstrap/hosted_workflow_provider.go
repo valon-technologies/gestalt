@@ -97,7 +97,7 @@ func prepareHostedWorkflowProviderLaunch(ctx context.Context, name string, entry
 		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
 	requiresHostnameEgress := deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement()
-	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, true, requiresHostnameEgress)
+	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, runtimeProvider, deps, true, requiresHostnameEgress)
 	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig)); err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -208,15 +208,19 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 		workflowAllowedHosts = append([]string(nil), launch.allowedHosts...)
 	}
 	allowedHosts := hostedWorkflowAllowedHosts(workflowAllowedHosts, launch.runtimePlan)
-	bindingEnv, relayHost, err := mergeHostedRuntimeHostServiceRelayEnv(name, sessionID, hostServiceBindingDescriptorsFromConfigured(hostServices), deps)
-	if err != nil {
-		return nil, err
-	}
-	if len(bindingEnv) > 0 {
-		if startEnv == nil {
-			startEnv = make(map[string]string, len(bindingEnv))
+	relayHost := ""
+	if launch.runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessRelay {
+		bindingEnv, resolvedRelayHost, err := mergeHostedRuntimeHostServiceRelayEnv(name, sessionID, hostServiceBindingDescriptorsFromConfigured(hostServices), deps)
+		if err != nil {
+			return nil, err
 		}
-		maps.Copy(startEnv, bindingEnv)
+		relayHost = resolvedRelayHost
+		if len(bindingEnv) > 0 {
+			if startEnv == nil {
+				startEnv = make(map[string]string, len(bindingEnv))
+			}
+			maps.Copy(startEnv, bindingEnv)
+		}
 	}
 	if launch.runtimePlan.RequiresHostnameEgress {
 		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
@@ -243,7 +247,8 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
 			DefaultAction: runtimeprovider.PolicyAction(deps.Egress.DefaultAction),
 		},
-		HostBinary: launch.cfg.HostBinary,
+		HostBinary:   launch.cfg.HostBinary,
+		HostServices: runtimeStartHostServices(launch.runtimePlan, hostServices),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start hosted workflow provider: %w", err)

@@ -26,6 +26,7 @@ import (
 	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -1580,7 +1581,7 @@ func assertWorkflowConfigTokenAllowsAppInvoke(t *testing.T, encryptionKey []byte
 		t.Fatalf("NewInvocationTokenManager: %v", err)
 	}
 	invoker := &recordingWorkflowConfigAppInvoker{}
-	appServer := appaccessservice.NewAppServer("temporal", nil, invoker, tokens)
+	appServer := appaccessservice.NewAppServer(invoker, tokens)
 	if _, err := appServer.Invoke(context.Background(), &proto.AppInvokeRequest{
 		InvocationToken: token,
 		App:             appName,
@@ -1650,6 +1651,18 @@ func (t *trackedIndexedDB) Close() error {
 	return nil
 }
 
+type trackedCache struct {
+	*coretesting.StubCache
+	closed *atomic.Int32
+}
+
+func (c *trackedCache) Close() error {
+	if c.closed != nil {
+		c.closed.Add(1)
+	}
+	return nil
+}
+
 func validConfig() *config.Config {
 	return &config.Config{
 		Apps: map[string]*config.ProviderEntry{},
@@ -1708,19 +1721,36 @@ func validFactories() *bootstrap.FactoryRegistry {
 	return f
 }
 
+func requireHostService(t *testing.T, hostServices []runtimehost.HostService, name string) runtimehost.HostService {
+	t.Helper()
+	for _, hostService := range hostServices {
+		if hostService.Name == name {
+			return hostService
+		}
+	}
+	t.Fatalf("host services = %v, want %q", hostServiceNames(hostServices), name)
+	return runtimehost.HostService{}
+}
+
+func hostServiceNames(hostServices []runtimehost.HostService) []string {
+	names := make([]string, 0, len(hostServices))
+	for _, hostService := range hostServices {
+		names = append(names, hostService.Name)
+	}
+	return names
+}
+
 func invokeAgentHostCallback(t *testing.T, hostServices []runtimehost.HostService, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
 	t.Helper()
 
-	if len(hostServices) != 1 {
-		t.Fatalf("agent host services = %d, want 1", len(hostServices))
-	}
-	if hostServices[0].Register == nil {
+	hostService := requireHostService(t, hostServices, "agent_host")
+	if hostService.Register == nil {
 		t.Fatal("agent host register func is nil")
 	}
 
 	lis := bufconn.Listen(1024 * 1024)
 	srv := grpc.NewServer()
-	hostServices[0].Register(srv)
+	hostService.Register(srv)
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -1746,16 +1776,14 @@ func invokeAgentHostCallback(t *testing.T, hostServices []runtimehost.HostServic
 func invokeAgentHostListTools(t *testing.T, hostServices []runtimehost.HostService, req *proto.ListAgentToolsRequest) *proto.ListAgentToolsResponse {
 	t.Helper()
 
-	if len(hostServices) != 1 {
-		t.Fatalf("agent host services = %d, want 1", len(hostServices))
-	}
-	if hostServices[0].Register == nil {
+	hostService := requireHostService(t, hostServices, "agent_host")
+	if hostService.Register == nil {
 		t.Fatal("agent host register func is nil")
 	}
 
 	lis := bufconn.Listen(1024 * 1024)
 	srv := grpc.NewServer()
-	hostServices[0].Register(srv)
+	hostService.Register(srv)
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -2303,6 +2331,44 @@ func TestBootstrap(t *testing.T) {
 	})
 }
 
+func TestBootstrapResultClosesExtraCaches(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Cache = map[string]*config.ProviderEntry{
+		"primary": {
+			Source: config.NewMetadataSource("https://example.invalid/cache/primary/v0.0.1/provider-release.yaml"),
+		},
+		"archive": {
+			Source: config.NewMetadataSource("https://example.invalid/cache/archive/v0.0.1/provider-release.yaml"),
+		},
+	}
+
+	factories := validFactories()
+	var closeCount atomic.Int32
+	factories.Cache = func(yaml.Node) (corecache.Cache, error) {
+		return &trackedCache{
+			StubCache: coretesting.NewStubCache(),
+			closed:    &closeCount,
+		}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	<-result.ProvidersReady
+	if got := len(result.ExtraCaches); got != 2 {
+		t.Fatalf("ExtraCaches = %d, want 2", got)
+	}
+	if err := result.Close(context.Background()); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if got := closeCount.Load(); got != 2 {
+		t.Fatalf("cache close count = %d, want 2", got)
+	}
+}
+
 func TestBootstrapReturnsAuthorizationProvider(t *testing.T) {
 	t.Parallel()
 
@@ -2388,8 +2454,8 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 			return nil, err
 		}
 		seen[runtime.Name] = struct{}{}
-		if len(hostServices) != 0 {
-			return nil, fmt.Errorf("workflow provider host services = %d, want none", len(hostServices))
+		if requireHostService(t, hostServices, "agent_provider").Register == nil {
+			return nil, fmt.Errorf("workflow provider missing agent_provider host service")
 		}
 		return &stubWorkflowProvider{}, nil
 	}
@@ -2434,10 +2500,7 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 			return nil, err
 		}
 		seen[runtime.Name] = struct{}{}
-		if len(hostServices) != 1 {
-			return nil, fmt.Errorf("agent host services = %d, want 1", len(hostServices))
-		}
-		hostSockets[name] = hostServices[0].Name
+		hostSockets[name] = requireHostService(t, hostServices, "agent_host").Name
 		return newRecordingAgentProvider(), nil
 	}
 
@@ -4233,11 +4296,10 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	<-result.ProvidersReady
 
 	got := hostEnvs["basic"]
-	if len(got) != 1 {
-		t.Fatalf("workflow provider host services = %v, want 1 entry", got)
-	}
-	if got[0] != "indexeddb" {
-		t.Fatalf("workflow indexeddb env = %q, want %q", got[0], "indexeddb")
+	for _, want := range []string{"agent_provider", "indexeddb", "app", "workflow_provider"} {
+		if !slices.Contains(got, want) {
+			t.Fatalf("workflow provider host services = %v, want %q", got, want)
+		}
 	}
 }
 
@@ -4288,18 +4350,12 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	if len(hostServices) != 2 {
-		t.Fatalf("agent host services = %d, want 2", len(hostServices))
-	}
-	if hostServices[0].Name != "agent_host" {
-		t.Fatalf("agent host env = %q, want %q", hostServices[0].Name, "agent_host")
-	}
-	if hostServices[1].Name != "indexeddb" {
-		t.Fatalf("agent indexeddb env = %q, want %q", hostServices[1].Name, "indexeddb")
-	}
+	requireHostService(t, hostServices, "agent_host")
+	indexedDBService := requireHostService(t, hostServices, "indexeddb")
 
-	withIndexedDBHostClient(t, hostServices[1], func(client proto.IndexedDBClient) {
-		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
+	withIndexedDBHostClient(t, indexedDBService, func(client proto.IndexedDBClient) {
+		agentStateCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(runtimehost.HostServiceBindingHeader, "agent_state"))
+		if _, err := client.CreateObjectStore(agentStateCtx, &proto.CreateObjectStoreRequest{
 			Name:   "runs",
 			Schema: &proto.ObjectStoreSchema{},
 		}); err != nil {
@@ -4309,13 +4365,13 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 		if err != nil {
 			t.Fatalf("RecordToProto: %v", err)
 		}
-		if _, err := client.Put(context.Background(), &proto.RecordRequest{
+		if _, err := client.Put(agentStateCtx, &proto.RecordRequest{
 			Store:  "runs",
 			Record: record,
 		}); err != nil {
 			t.Fatalf("Put(runs): %v", err)
 		}
-		resp, err := client.Get(context.Background(), &proto.ObjectStoreRequest{
+		resp, err := client.Get(agentStateCtx, &proto.ObjectStoreRequest{
 			Store: "runs",
 			Id:    "run-1",
 		})
@@ -4330,11 +4386,11 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 			t.Fatalf("status = %#v, want %q", got["status"], "running")
 		}
 
-		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
+		if _, err := client.CreateObjectStore(agentStateCtx, &proto.CreateObjectStoreRequest{
 			Name:   "sessions",
 			Schema: &proto.ObjectStoreSchema{},
-		}); err == nil {
-			t.Fatal("CreateObjectStore(sessions) succeeded, want allowlist failure")
+		}); err != nil {
+			t.Fatalf("CreateObjectStore(sessions): %v", err)
 		}
 	})
 
@@ -4372,12 +4428,10 @@ func TestBootstrapPassesIndexedDBHostSocketsToAuthorizationProviders(t *testing.
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	if len(hostServices) != 1 {
-		t.Fatalf("authorization host services = %d, want 1", len(hostServices))
-	}
-	if hostServices[0].Name != "indexeddb" {
-		t.Fatalf("authorization default indexeddb env = %q, want %q", hostServices[0].Name, "indexeddb")
-	}
+	requireHostService(t, hostServices, "indexeddb")
+	requireHostService(t, hostServices, "app")
+	requireHostService(t, hostServices, "workflow_provider")
+	requireHostService(t, hostServices, "agent_provider")
 }
 
 func TestBootstrapClosesWorkflowIndexedDBAndAppliesScopedConfig(t *testing.T) {
@@ -4417,7 +4471,7 @@ func TestBootstrapClosesWorkflowIndexedDBAndAppliesScopedConfig(t *testing.T) {
 			return nil, err
 		}
 		counter := (*atomic.Int32)(nil)
-		if decoded.Config["table_prefix"] == "workflow_" && decoded.Config["prefix"] == "workflow_" {
+		if decoded.Config["dsn"] == "sqlite://workflow.db" {
 			counter = &workflowCloseCount
 			captured = decoded.Config
 		}
@@ -4436,14 +4490,14 @@ func TestBootstrapClosesWorkflowIndexedDBAndAppliesScopedConfig(t *testing.T) {
 	}
 	<-result.ProvidersReady
 
-	if got := captured["table_prefix"]; got != "workflow_" {
-		t.Fatalf("table_prefix = %#v, want %q", got, "workflow_")
+	if got := captured["table_prefix"]; got != "host_" {
+		t.Fatalf("table_prefix = %#v, want %q", got, "host_")
 	}
-	if got := captured["prefix"]; got != "workflow_" {
-		t.Fatalf("prefix = %#v, want %q", got, "workflow_")
+	if got := captured["prefix"]; got != "host_" {
+		t.Fatalf("prefix = %#v, want %q", got, "host_")
 	}
-	if _, ok := captured["schema"]; ok {
-		t.Fatalf("schema should be removed, got %#v", captured["schema"])
+	if got := captured["schema"]; got != "should_be_removed" {
+		t.Fatalf("schema = %#v, want %q", got, "should_be_removed")
 	}
 	if err := result.Close(context.Background()); err != nil {
 		t.Fatalf("result.Close: %v", err)
@@ -4488,14 +4542,9 @@ func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	if len(hostServices) != 1 {
-		t.Fatalf("external credentials host services = %d, want 1", len(hostServices))
-	}
-	if hostServices[0].Name != "indexeddb" {
-		t.Fatalf("external credentials default indexeddb env = %q, want %q", hostServices[0].Name, "indexeddb")
-	}
+	indexedDBService := requireHostService(t, hostServices, "indexeddb")
 
-	withIndexedDBHostClient(t, hostServices[0], func(client proto.IndexedDBClient) {
+	withIndexedDBHostClient(t, indexedDBService, func(client proto.IndexedDBClient) {
 		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
 			Name:   "external_credentials",
 			Schema: &proto.ObjectStoreSchema{},
@@ -4505,8 +4554,8 @@ func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
 		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
 			Name:   "app_credentials",
 			Schema: &proto.ObjectStoreSchema{},
-		}); err == nil {
-			t.Fatal("CreateObjectStore(app_credentials) succeeded, want allowlist failure")
+		}); err != nil {
+			t.Fatalf("CreateObjectStore(app_credentials): %v", err)
 		}
 		archiveCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(runtimehost.HostServiceBindingHeader, "archive"))
 		if _, err := client.CreateObjectStore(archiveCtx, &proto.CreateObjectStoreRequest{
@@ -4543,12 +4592,21 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		boundDB    *trackedIndexedDB
 		hostEnv    []runtimehost.HostService
 	)
-	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) {
-		boundDB = &trackedIndexedDB{
+	factories.IndexedDB = func(node yaml.Node) (indexeddb.IndexedDB, error) {
+		var decoded struct {
+			Config map[string]any `yaml:"config"`
+		}
+		if err := node.Decode(&decoded); err != nil {
+			return nil, err
+		}
+		db := &trackedIndexedDB{
 			StubIndexedDB: &coretesting.StubIndexedDB{},
 			closed:        &closeCount,
 		}
-		return boundDB, nil
+		if decoded.Config["bucket"] == "workflow-state" {
+			boundDB = db
+		}
+		return db, nil
 	}
 	workflowProvider := &recordingWorkflowProvider{}
 	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
@@ -4563,23 +4621,11 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	if len(hostEnv) != 1 {
-		t.Fatalf("workflow provider host services = %d, want 1", len(hostEnv))
-	}
-
-	var indexedDBService runtimehost.HostService
-	for _, hostService := range hostEnv {
-		if hostService.Name == "indexeddb" {
-			indexedDBService = hostService
-			break
-		}
-	}
-	if indexedDBService.Name == "" {
-		t.Fatal("missing workflow indexeddb host service")
-	}
+	indexedDBService := requireHostService(t, hostEnv, "indexeddb")
 
 	withIndexedDBHostClient(t, indexedDBService, func(client proto.IndexedDBClient) {
-		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
+		workflowStateCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(runtimehost.HostServiceBindingHeader, "workflow_state"))
+		if _, err := client.CreateObjectStore(workflowStateCtx, &proto.CreateObjectStoreRequest{
 			Name:   "workflow_runs",
 			Schema: &proto.ObjectStoreSchema{},
 		}); err != nil {
@@ -4589,13 +4635,13 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		if err != nil {
 			t.Fatalf("RecordToProto: %v", err)
 		}
-		if _, err := client.Put(context.Background(), &proto.RecordRequest{
+		if _, err := client.Put(workflowStateCtx, &proto.RecordRequest{
 			Store:  "workflow_runs",
 			Record: record,
 		}); err != nil {
 			t.Fatalf("Put(workflow_runs): %v", err)
 		}
-		resp, err := client.Get(context.Background(), &proto.ObjectStoreRequest{
+		resp, err := client.Get(workflowStateCtx, &proto.ObjectStoreRequest{
 			Store: "workflow_runs",
 			Id:    "run-1",
 		})
@@ -4610,11 +4656,11 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 			t.Fatalf("status = %#v, want %q", got["status"], "pending")
 		}
 
-		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
+		if _, err := client.CreateObjectStore(workflowStateCtx, &proto.CreateObjectStoreRequest{
 			Name:   "workflow_schedules",
 			Schema: &proto.ObjectStoreSchema{},
-		}); err == nil {
-			t.Fatal("CreateObjectStore(workflow_schedules) succeeded, want allowlist failure")
+		}); err != nil {
+			t.Fatalf("CreateObjectStore(workflow_schedules): %v", err)
 		}
 	})
 

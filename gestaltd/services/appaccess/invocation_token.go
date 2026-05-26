@@ -37,6 +37,7 @@ type invocationTokenClaims struct {
 	jwt.RegisteredClaims
 	DelegationExpiresAt *jwt.NumericDate                 `json:"delegation_expires_at,omitempty"`
 	CallerApp           string                           `json:"caller_app,omitempty"`
+	CallerProviderKind  string                           `json:"caller_provider_kind,omitempty"`
 	SubjectKind         string                           `json:"subject_kind,omitempty"`
 	Email               string                           `json:"email,omitempty"`
 	DisplayName         string                           `json:"display_name,omitempty"`
@@ -80,6 +81,7 @@ type workflowGrantClaims struct {
 type invocationTokenContext struct {
 	token                  string
 	callerApp              string
+	callerProviderKind     invocation.ProviderKind
 	principal              *principal.Principal
 	requestMeta            invocation.RequestMeta
 	credential             invocation.CredentialContext
@@ -122,16 +124,13 @@ func (m *InvocationTokenManager) MintRootTokenWithWorkflowGrants(ctx context.Con
 	return m.signClaims(claimsFromContext(ctx, appName, grants, workflowGrants, now, expiresAt, m.delegationExpiry(expiresAt, now)))
 }
 
-func (m *InvocationTokenManager) ExchangeToken(parentToken, appName string, grants InvocationGrants, ttl time.Duration) (string, error) {
+func (m *InvocationTokenManager) ExchangeToken(parentToken string, grants InvocationGrants, ttl time.Duration) (string, error) {
 	if m == nil {
 		return "", fmt.Errorf("invocation tokens are not available")
 	}
 	claims, err := m.parseClaims(parentToken)
 	if err != nil {
 		return "", err
-	}
-	if strings.TrimSpace(claims.CallerApp) != strings.TrimSpace(appName) {
-		return "", fmt.Errorf("app invocation token is not valid for %q", appName)
 	}
 	parentGrants := decodeInvocationGrantClaims(claims.Grants)
 	switch {
@@ -171,6 +170,9 @@ func (m *InvocationTokenManager) resolveToken(token, appName string) (invocation
 	return invocationTokenContext{
 		token:     strings.TrimSpace(token),
 		callerApp: strings.TrimSpace(claims.CallerApp),
+		callerProviderKind: invocation.ProviderKind(
+			strings.TrimSpace(claims.CallerProviderKind),
+		),
 		principal: principalFromInvocationClaims(claims),
 		requestMeta: invocation.RequestMeta{
 			ClientIP:   claims.RequestMeta.ClientIP,
@@ -294,6 +296,7 @@ func claimsFromContext(ctx context.Context, appName string, grants InvocationGra
 	}
 	cred := invocation.CredentialContextFromContext(ctx)
 	reqMeta := invocation.RequestMetaFromContext(ctx)
+	callerKind := callerProviderKindForClaims(ctx, appName)
 	return &invocationTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.NewString(),
@@ -306,6 +309,7 @@ func claimsFromContext(ctx context.Context, appName string, grants InvocationGra
 		},
 		DelegationExpiresAt: jwt.NewNumericDate(delegationExpiresAt),
 		CallerApp:           strings.TrimSpace(appName),
+		CallerProviderKind:  string(callerKind),
 		SubjectKind:         string(subjectKindForInvocationClaims(p)),
 		Email:               emailForInvocationClaims(p),
 		DisplayName:         displayNameForInvocationClaims(p),
@@ -337,6 +341,15 @@ func claimsFromContext(ctx context.Context, appName string, grants InvocationGra
 	}
 }
 
+func callerProviderKindForClaims(ctx context.Context, appName string) invocation.ProviderKind {
+	appName = strings.TrimSpace(appName)
+	caller := invocation.CallerProviderFromContext(ctx)
+	if caller.Name == appName && caller.Kind != "" {
+		return caller.Kind
+	}
+	return ""
+}
+
 func encodeWorkflowGrantClaims(src workflowgrants.Grants) *workflowGrantClaims {
 	if src == nil {
 		return nil
@@ -361,6 +374,9 @@ func restoreInvocationTokenContext(ctx context.Context, tokenCtx invocationToken
 	}
 	if tokenCtx.principal != nil {
 		ctx = principal.WithPrincipal(ctx, principal.Canonicalized(tokenCtx.principal))
+	}
+	if callerApp := strings.TrimSpace(tokenCtx.callerApp); callerApp != "" && tokenCtx.callerProviderKind != "" {
+		ctx = invocation.WithCallerProvider(ctx, tokenCtx.callerProviderKind, callerApp)
 	}
 	if tokenCtx.invocation != nil {
 		ctx = invocation.ContextWithMeta(ctx, &invocation.InvocationMeta{

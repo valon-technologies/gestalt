@@ -21,7 +21,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -44,6 +43,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"gopkg.in/yaml.v3"
 )
@@ -58,48 +58,50 @@ func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
 	return nil
 }
 
-func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.ProviderMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, func() map[string]map[string]ManualTokenExchanger, error) {
-	providers, ready, connAuthResolver, manualConnAuthResolver, _, err := buildProvidersAsync(ctx, cfg, factories, deps, buildProvider)
-	return providers, ready, connAuthResolver, manualConnAuthResolver, err
+type pendingProviderBuild struct {
+	name  string
+	entry *config.ProviderEntry
+	proxy *startupProviderProxy
 }
 
-func buildProvidersAsync(
-	ctx context.Context,
+type preparedProviderBuilds struct {
+	providers      *registry.ProviderMap[core.Provider]
+	pending        []pendingProviderBuild
+	connAuth       map[string]map[string]OAuthHandler
+	manualConnAuth map[string]map[string]ManualTokenExchanger
+	errs           []error
+}
+
+func prepareProviderBuilds(
 	cfg *config.Config,
 	factories *FactoryRegistry,
 	deps Deps,
-	builder func(context.Context, string, *config.ProviderEntry, Deps) (*ProviderBuildResult, error),
-) (*registry.ProviderMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, func() map[string]map[string]ManualTokenExchanger, func() []error, error) {
+) (*preparedProviderBuilds, error) {
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
 	manualConnAuth := make(map[string]map[string]ManualTokenExchanger)
-	var buildErrs []error
-	var connMu sync.Mutex
 
 	for _, builtin := range factories.Builtins {
 		if err := validateProviderConnectionMode(builtin.Name(), builtin.ConnectionMode()); err != nil {
-			return nil, nil, nil, nil, nil, fmt.Errorf("bootstrap: builtin provider %q: %w", builtin.Name(), err)
+			return nil, fmt.Errorf("bootstrap: builtin provider %q: %w", builtin.Name(), err)
 		}
 		if err := reg.Providers.Register(builtin.Name(), builtin); errors.Is(err, core.ErrAlreadyRegistered) {
 			continue
 		} else if err != nil {
-			return nil, nil, nil, nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
+			return nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
 		}
 		slog.Info("loaded builtin provider", "provider", builtin.Name(), "operations", catalogOperationCount(builtin.Catalog()))
 	}
 
-	ready := make(chan struct{})
+	builds := &preparedProviderBuilds{
+		providers:      &reg.Providers,
+		connAuth:       connAuth,
+		manualConnAuth: manualConnAuth,
+	}
 	if len(cfg.Apps) == 0 {
-		close(ready)
-		return &reg.Providers, ready,
-			func() map[string]map[string]OAuthHandler { return connAuth },
-			func() map[string]map[string]ManualTokenExchanger { return manualConnAuth },
-			func() []error { return nil },
-			nil
+		return builds, nil
 	}
 
-	var wg sync.WaitGroup
-	var errMu sync.Mutex
 	for name := range cfg.Apps {
 		intgDef := cfg.Apps[name]
 		var proxy *startupProviderProxy
@@ -110,75 +112,114 @@ func buildProvidersAsync(
 			} else {
 				proxy = newStartupProviderProxy(spec, operationRouting, deps.WorkflowRuntime.StartupWaitTracker())
 				if err := reg.Providers.Register(name, proxy); err != nil {
-					errMu.Lock()
-					buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", name, err))
-					errMu.Unlock()
+					builds.errs = append(builds.errs, fmt.Errorf("integration %q: %w", name, err))
 					slog.Warn("registering startup provider proxy failed", "provider", name, "error", err)
 					proxy = nil
 				}
 			}
 		}
+		builds.pending = append(builds.pending, pendingProviderBuild{name: name, entry: intgDef, proxy: proxy})
+	}
+	return builds, nil
+}
+
+func (b *preparedProviderBuilds) Start(
+	ctx context.Context,
+	deps Deps,
+	builder func(context.Context, string, *config.ProviderEntry, Deps) (*ProviderBuildResult, error),
+) (<-chan struct{}, func() map[string]map[string]OAuthHandler, func() map[string]map[string]ManualTokenExchanger, func() []error) {
+	ready := make(chan struct{})
+	if b == nil || b.providers == nil || len(b.pending) == 0 {
+		close(ready)
+		return ready,
+			func() map[string]map[string]OAuthHandler {
+				if b == nil {
+					return nil
+				}
+				return b.connAuth
+			},
+			func() map[string]map[string]ManualTokenExchanger {
+				if b == nil {
+					return nil
+				}
+				return b.manualConnAuth
+			},
+			func() []error {
+				if b == nil {
+					return nil
+				}
+				return append([]error(nil), b.errs...)
+			}
+	}
+
+	buildErrs := append([]error(nil), b.errs...)
+	var connMu sync.Mutex
+	var errMu sync.Mutex
+	var wg sync.WaitGroup
+
+	for _, pending := range b.pending {
 		wg.Add(1)
-		go func(name string, intgDef *config.ProviderEntry, proxy *startupProviderProxy) {
+		go func(pending pendingProviderBuild) {
 			defer wg.Done()
-			result, err := builder(ctx, name, intgDef, deps)
+			buildCtx := invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, pending.name)
+			result, err := builder(buildCtx, pending.name, pending.entry, deps)
 			if err != nil {
 				errMu.Lock()
-				buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", name, err))
+				buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, err))
 				errMu.Unlock()
-				if proxy != nil {
-					proxy.fail(err)
-					reg.Providers.Remove(name)
+				if pending.proxy != nil {
+					pending.proxy.fail(err)
+					b.providers.Remove(pending.name)
 				}
-				slog.Warn("skipping provider", "provider", name, "error", err)
+				slog.Warn("skipping provider", "provider", pending.name, "error", err)
 				return
 			}
-			if err := validateProviderConnectionMode(name, result.Provider.ConnectionMode()); err != nil {
+			if err := validateProviderConnectionMode(pending.name, result.Provider.ConnectionMode()); err != nil {
 				errMu.Lock()
-				buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", name, err))
+				buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, err))
 				errMu.Unlock()
-				if proxy != nil {
-					proxy.fail(err)
-					reg.Providers.Remove(name)
+				if pending.proxy != nil {
+					pending.proxy.fail(err)
+					b.providers.Remove(pending.name)
 				}
 				closeIfPossible(result.Provider)
-				slog.Warn("skipping provider", "provider", name, "error", err)
+				slog.Warn("skipping provider", "provider", pending.name, "error", err)
 				return
 			}
-			if proxy != nil {
-				if err := reg.Providers.Replace(name, result.Provider); err != nil {
+			if pending.proxy != nil {
+				if err := b.providers.Replace(pending.name, result.Provider); err != nil {
 					errMu.Lock()
-					buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", name, err))
+					buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, err))
 					errMu.Unlock()
-					proxy.fail(err)
-					reg.Providers.Remove(name)
+					pending.proxy.fail(err)
+					b.providers.Remove(pending.name)
 					closeIfPossible(result.Provider)
-					slog.Warn("replacing startup provider proxy failed", "provider", name, "error", err)
+					slog.Warn("replacing startup provider proxy failed", "provider", pending.name, "error", err)
 					return
 				}
-				proxy.publish(result.Provider)
+				pending.proxy.publish(result.Provider)
 			} else {
-				if err := reg.Providers.Register(name, result.Provider); err != nil {
+				if err := b.providers.Register(pending.name, result.Provider); err != nil {
 					errMu.Lock()
-					buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", name, err))
+					buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", pending.name, err))
 					errMu.Unlock()
 					closeIfPossible(result.Provider)
-					slog.Warn("registering provider failed", "provider", name, "error", err)
+					slog.Warn("registering provider failed", "provider", pending.name, "error", err)
 					return
 				}
 			}
 			if len(result.ConnectionAuth) > 0 {
 				connMu.Lock()
-				connAuth[name] = result.ConnectionAuth
+				b.connAuth[pending.name] = result.ConnectionAuth
 				connMu.Unlock()
 			}
 			if len(result.ManualConnectionAuth) > 0 {
 				connMu.Lock()
-				manualConnAuth[name] = result.ManualConnectionAuth
+				b.manualConnAuth[pending.name] = result.ManualConnectionAuth
 				connMu.Unlock()
 			}
-			slog.Info("loaded provider", "provider", name, "operations", catalogOperationCount(result.Provider.Catalog()))
-		}(name, intgDef, proxy)
+			slog.Info("loaded provider", "provider", pending.name, "operations", catalogOperationCount(result.Provider.Catalog()))
+		}(pending)
 	}
 
 	go func() {
@@ -188,11 +229,11 @@ func buildProvidersAsync(
 
 	resolver := func() map[string]map[string]OAuthHandler {
 		<-ready
-		return connAuth
+		return b.connAuth
 	}
 	manualResolver := func() map[string]map[string]ManualTokenExchanger {
 		<-ready
-		return manualConnAuth
+		return b.manualConnAuth
 	}
 	errResolver := func() []error {
 		<-ready
@@ -200,7 +241,7 @@ func buildProvidersAsync(
 		defer errMu.Unlock()
 		return append([]error(nil), buildErrs...)
 	}
-	return &reg.Providers, ready, resolver, manualResolver, errResolver, nil
+	return ready, resolver, manualResolver, errResolver
 }
 
 func validateProviderConnectionMode(provider string, mode core.ConnectionMode) error {
@@ -329,6 +370,7 @@ func explicitPluginConnection(plan config.StaticConnectionPlan) bool {
 }
 
 func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (*ProviderBuildResult, error) {
+	ctx = invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, name)
 	if entry == nil {
 		return nil, fmt.Errorf("integration %q has no app defined", name)
 	}
@@ -975,7 +1017,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		}
 		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
-	runtimePlan, err := buildRuntimePlan(name, entry, deps, runtimeSupport)
+	runtimePlan, err := buildRuntimePlan(name, entry, deps, runtimeSupport, runtimeProvider)
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -1045,7 +1087,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		return nil, fmt.Errorf("wait for runtime session %q ready: %w", sessionID, err)
 	}
 
-	hostServices, invTokens, runtimeCleanup, err := buildRuntimeHostServices(name, entry, deps)
+	hostServices, invTokens, runtimeCleanup, err := buildProviderHostServices(name, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -1061,16 +1103,20 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	startEnv = withHostServiceTLSCAEnv(startEnv, deps)
 	egressPolicy := deps.Egress.ProviderPolicy(entry)
 	allowedHosts := entry.EffectiveAllowedHosts()
-	bindingTargets := hostServiceBindingDescriptorsFromConfigured(hostServices)
-	bindingEnv, relayHost, err := mergeHostedRuntimeHostServiceRelayEnv(name, sessionID, bindingTargets, deps)
-	if err != nil {
-		return nil, err
-	}
-	if len(bindingEnv) > 0 {
-		if startEnv == nil {
-			startEnv = make(map[string]string, len(bindingEnv))
+	relayHost := ""
+	if runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessRelay {
+		bindingTargets := hostServiceBindingDescriptorsFromConfigured(hostServices)
+		bindingEnv, resolvedRelayHost, err := mergeHostedRuntimeHostServiceRelayEnv(name, sessionID, bindingTargets, deps)
+		if err != nil {
+			return nil, err
 		}
-		maps.Copy(startEnv, bindingEnv)
+		relayHost = resolvedRelayHost
+		if len(bindingEnv) > 0 {
+			if startEnv == nil {
+				startEnv = make(map[string]string, len(bindingEnv))
+			}
+			maps.Copy(startEnv, bindingEnv)
+		}
 	}
 	if runtimePlan.RequiresHostnameEgress {
 		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
@@ -1097,7 +1143,8 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
 			DefaultAction: runtimeprovider.PolicyAction(deps.Egress.DefaultAction),
 		},
-		HostBinary: entry.HostBinary,
+		HostBinary:   entry.HostBinary,
+		HostServices: runtimeStartHostServices(runtimePlan, hostServices),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start hosted app: %w", err)
@@ -1122,15 +1169,8 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	if invTokens != nil {
 		opts = append(opts,
 			appservice.WithInvocationTokens(invTokens),
-			appservice.WithInvocationTokenSubject(
-				name,
-				appaccessservice.InvocationDependencyGrants(
-					invocationconfig.AppInvocationDependencies(entry.Invokes),
-				),
-			),
-			appservice.WithWorkflowManagerGrants(
-				invocationconfig.AppWorkflowManagerGrants(entry.Capabilities),
-			),
+			appservice.WithInvocationTokenSubject(name, appaccessservice.AllInvocationGrants()),
+			appservice.WithWorkflowManagerGrants(workflowgrants.All()),
 		)
 	}
 	prov, err := appservice.NewRemote(ctx, conn.Integration(), spec, pluginConfig, opts...)
@@ -1222,7 +1262,7 @@ func prepareHostedAgentProviderLaunch(ctx context.Context, name string, entry *c
 		}
 		return nil, err
 	}
-	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, requiresHostServiceAccess, requiresHostnameEgress)
+	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, runtimeProvider, deps, requiresHostServiceAccess, requiresHostnameEgress)
 	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig)); err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -1339,17 +1379,21 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	}
 	allowedHosts := hostedAgentAllowedHosts(agentAllowedHosts, runtimePlan)
 	phaseStarted = time.Now()
-	bindingTargets := hostServiceBindingDescriptorsFromConfigured(hostServices)
-	bindingEnv, relayHost, err := mergeHostedRuntimeHostServiceRelayEnv(name, sessionID, bindingTargets, deps)
-	if err != nil {
-		recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_relay", phaseStarted, err)
-		return nil, err
-	}
-	if len(bindingEnv) > 0 {
-		if startEnv == nil {
-			startEnv = make(map[string]string, len(bindingEnv))
+	relayHost := ""
+	if runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessRelay {
+		bindingTargets := hostServiceBindingDescriptorsFromConfigured(hostServices)
+		bindingEnv, resolvedRelayHost, err := mergeHostedRuntimeHostServiceRelayEnv(name, sessionID, bindingTargets, deps)
+		if err != nil {
+			recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_relay", phaseStarted, err)
+			return nil, err
 		}
-		maps.Copy(startEnv, bindingEnv)
+		relayHost = resolvedRelayHost
+		if len(bindingEnv) > 0 {
+			if startEnv == nil {
+				startEnv = make(map[string]string, len(bindingEnv))
+			}
+			maps.Copy(startEnv, bindingEnv)
+		}
 	}
 	if runtimePlan.RequiresHostnameEgress {
 		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
@@ -1382,7 +1426,8 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
 			DefaultAction: runtimeprovider.PolicyAction(deps.Egress.DefaultAction),
 		},
-		HostBinary: cfg.HostBinary,
+		HostBinary:   cfg.HostBinary,
+		HostServices: runtimeStartHostServices(runtimePlan, hostServices),
 	})
 	recordHostedAgentRuntimeStartPhase(ctx, name, "plugin_start", phaseStarted, err)
 	if err != nil {

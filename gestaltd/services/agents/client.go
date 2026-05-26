@@ -7,6 +7,7 @@ import (
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -104,6 +105,7 @@ func (r *remoteAgent) CreateSession(ctx context.Context, req coreagent.CreateSes
 		Subject:           subjectToProto(req.Subject),
 		SessionStart:      sessionStartConfigToProto(req.SessionStart),
 		PreparedWorkspace: preparedAgentWorkspaceToProto(req.PreparedWorkspace),
+		InvocationToken:   appaccess.InvocationTokenFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -115,8 +117,9 @@ func (r *remoteAgent) GetSession(ctx context.Context, req coreagent.GetSessionRe
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
-		SessionId: req.SessionID,
-		Subject:   subjectToProto(req.Subject),
+		SessionId:       req.SessionID,
+		Subject:         subjectToProto(req.Subject),
+		InvocationToken: appaccess.InvocationTokenFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -128,11 +131,12 @@ func (r *remoteAgent) ListSessions(ctx context.Context, req coreagent.ListSessio
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListSessions(ctx, &proto.ListAgentProviderSessionsRequest{
-		Subject:     subjectToProto(req.Subject),
-		SessionIds:  append([]string(nil), req.SessionIDs...),
-		State:       agentSessionStateToProto(req.State),
-		Limit:       int32(req.Limit),
-		SummaryOnly: req.SummaryOnly,
+		Subject:         subjectToProto(req.Subject),
+		SessionIds:      append([]string(nil), req.SessionIDs...),
+		State:           agentSessionStateToProto(req.State),
+		Limit:           int32(req.Limit),
+		SummaryOnly:     req.SummaryOnly,
+		InvocationToken: appaccess.InvocationTokenFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -156,11 +160,12 @@ func (r *remoteAgent) UpdateSession(ctx context.Context, req coreagent.UpdateSes
 		return nil, err
 	}
 	resp, err := r.client.UpdateSession(ctx, &proto.UpdateAgentProviderSessionRequest{
-		SessionId: req.SessionID,
-		ClientRef: req.ClientRef,
-		State:     agentSessionStateToProto(req.State),
-		Metadata:  metadata,
-		Subject:   subjectToProto(req.Subject),
+		SessionId:       req.SessionID,
+		ClientRef:       req.ClientRef,
+		State:           agentSessionStateToProto(req.State),
+		Metadata:        metadata,
+		Subject:         subjectToProto(req.Subject),
+		InvocationToken: appaccess.InvocationTokenFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -195,22 +200,23 @@ func (r *remoteAgent) CreateTurn(ctx context.Context, req coreagent.CreateTurnRe
 		return nil, err
 	}
 	resp, err := r.client.CreateTurn(ctx, &proto.CreateAgentProviderTurnRequest{
-		TurnId:         req.TurnID,
-		SessionId:      req.SessionID,
-		IdempotencyKey: req.IdempotencyKey,
-		Model:          req.Model,
-		Messages:       messages,
-		Tools:          tools,
-		ResponseSchema: responseSchema,
-		Metadata:       metadata,
-		ModelOptions:   modelOptions,
-		CreatedBy:      agentActorToProto(req.CreatedBy),
-		ExecutionRef:   req.ExecutionRef,
-		ToolRefs:       agentToolRefsToProto(req.ToolRefs),
-		ToolSource:     agentToolSourceModeToProto(req.ToolSource),
-		Subject:        subjectToProto(req.Subject),
-		RunGrant:       req.RunGrant,
-		TimeoutSeconds: int32(req.TimeoutSeconds),
+		TurnId:          req.TurnID,
+		SessionId:       req.SessionID,
+		IdempotencyKey:  req.IdempotencyKey,
+		Model:           req.Model,
+		Messages:        messages,
+		Tools:           tools,
+		ResponseSchema:  responseSchema,
+		Metadata:        metadata,
+		ModelOptions:    modelOptions,
+		CreatedBy:       agentActorToProto(req.CreatedBy),
+		ExecutionRef:    req.ExecutionRef,
+		ToolRefs:        agentToolRefsToProto(req.ToolRefs),
+		ToolSource:      agentToolSourceModeToProto(req.ToolSource),
+		Subject:         subjectToProto(req.Subject),
+		RunGrant:        req.RunGrant,
+		TimeoutSeconds:  int32(req.TimeoutSeconds),
+		InvocationToken: appaccess.InvocationTokenFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -222,8 +228,9 @@ func (r *remoteAgent) GetTurn(ctx context.Context, req coreagent.GetTurnRequest)
 	ctx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
-		TurnId:  req.TurnID,
-		Subject: subjectToProto(req.Subject),
+		TurnId:          req.TurnID,
+		Subject:         subjectToProto(req.Subject),
+		InvocationToken: appaccess.InvocationTokenFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -235,12 +242,13 @@ func (r *remoteAgent) ListTurns(ctx context.Context, req coreagent.ListTurnsRequ
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListTurns(ctx, &proto.ListAgentProviderTurnsRequest{
-		SessionId:   req.SessionID,
-		Subject:     subjectToProto(req.Subject),
-		TurnIds:     append([]string(nil), req.TurnIDs...),
-		Status:      agentExecutionStatusToProto(req.Status),
-		Limit:       int32(req.Limit),
-		SummaryOnly: req.SummaryOnly,
+		SessionId:       req.SessionID,
+		Subject:         subjectToProto(req.Subject),
+		TurnIds:         append([]string(nil), req.TurnIDs...),
+		Status:          agentExecutionStatusToProto(req.Status),
+		Limit:           int32(req.Limit),
+		SummaryOnly:     req.SummaryOnly,
+		InvocationToken: appaccess.InvocationTokenFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -260,9 +268,10 @@ func (r *remoteAgent) CancelTurn(ctx context.Context, req coreagent.CancelTurnRe
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.CancelTurn(ctx, &proto.CancelAgentProviderTurnRequest{
-		TurnId:  req.TurnID,
-		Reason:  req.Reason,
-		Subject: subjectToProto(req.Subject),
+		TurnId:          req.TurnID,
+		Reason:          req.Reason,
+		Subject:         subjectToProto(req.Subject),
+		InvocationToken: appaccess.InvocationTokenFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -274,10 +283,11 @@ func (r *remoteAgent) ListTurnEvents(ctx context.Context, req coreagent.ListTurn
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListTurnEvents(ctx, &proto.ListAgentProviderTurnEventsRequest{
-		TurnId:   req.TurnID,
-		AfterSeq: req.AfterSeq,
-		Limit:    int32(req.Limit),
-		Subject:  subjectToProto(req.Subject),
+		TurnId:          req.TurnID,
+		AfterSeq:        req.AfterSeq,
+		Limit:           int32(req.Limit),
+		Subject:         subjectToProto(req.Subject),
+		InvocationToken: appaccess.InvocationTokenFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -289,8 +299,9 @@ func (r *remoteAgent) GetInteraction(ctx context.Context, req coreagent.GetInter
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.GetInteraction(ctx, &proto.GetAgentProviderInteractionRequest{
-		InteractionId: req.InteractionID,
-		Subject:       subjectToProto(req.Subject),
+		InteractionId:   req.InteractionID,
+		Subject:         subjectToProto(req.Subject),
+		InvocationToken: appaccess.InvocationTokenFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -302,8 +313,9 @@ func (r *remoteAgent) ListInteractions(ctx context.Context, req coreagent.ListIn
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListInteractions(ctx, &proto.ListAgentProviderInteractionsRequest{
-		TurnId:  req.TurnID,
-		Subject: subjectToProto(req.Subject),
+		TurnId:          req.TurnID,
+		Subject:         subjectToProto(req.Subject),
+		InvocationToken: appaccess.InvocationTokenFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -319,9 +331,10 @@ func (r *remoteAgent) ResolveInteraction(ctx context.Context, req coreagent.Reso
 		return nil, err
 	}
 	resp, err := r.client.ResolveInteraction(ctx, &proto.ResolveAgentProviderInteractionRequest{
-		InteractionId: req.InteractionID,
-		Resolution:    resolution,
-		Subject:       subjectToProto(req.Subject),
+		InteractionId:   req.InteractionID,
+		Resolution:      resolution,
+		Subject:         subjectToProto(req.Subject),
+		InvocationToken: appaccess.InvocationTokenFromContext(ctx),
 	})
 	if err != nil {
 		return nil, err

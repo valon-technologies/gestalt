@@ -29,6 +29,7 @@ type agentRuntime struct {
 	defaultProviderName string
 	configuredProviders map[string]struct{}
 	providers           map[string]coreagent.Provider
+	startupWaits        *startupWaitTracker
 	invoker             invocation.Invoker
 	systemTools         agentSystemToolExecutor
 	runGrants           *agentgrant.Manager
@@ -60,10 +61,12 @@ type agentToolResolver interface {
 	ResolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error)
 }
 
-func newAgentRuntime(cfg *config.Config) (*agentRuntime, error) {
+func newAgentRuntime(cfg *config.Config, trackers ...*startupWaitTracker) (*agentRuntime, error) {
+	startupWaits := firstStartupWaitTracker(trackers...)
 	runtime := &agentRuntime{
 		configuredProviders: map[string]struct{}{},
 		providers:           map[string]coreagent.Provider{},
+		startupWaits:        startupWaits,
 	}
 	if cfg != nil {
 		selectedProviderName, _, err := cfg.SelectedAgentProvider()
@@ -76,9 +79,19 @@ func newAgentRuntime(cfg *config.Config) (*agentRuntime, error) {
 				continue
 			}
 			runtime.configuredProviders[name] = struct{}{}
+			runtime.providers[name] = newStartupAgentProviderProxy(name, startupWaits)
 		}
 	}
 	return runtime, nil
+}
+
+func firstStartupWaitTracker(trackers ...*startupWaitTracker) *startupWaitTracker {
+	for _, tracker := range trackers {
+		if tracker != nil {
+			return tracker
+		}
+	}
+	return newStartupWaitTracker()
 }
 
 func agentSessionStartConfigs(cfg *config.Config) map[string]*coreagent.SessionStartConfig {
@@ -125,16 +138,38 @@ func (r *agentRuntime) PublishProvider(name string, provider coreagent.Provider)
 	if r.providers == nil {
 		r.providers = map[string]coreagent.Provider{}
 	}
+	if proxy, ok := r.providers[name].(*startupAgentProviderProxy); ok {
+		proxy.publish(provider)
+	}
 	r.providers[name] = provider
 }
 
-func (r *agentRuntime) FailProvider(name string) {
+func (r *agentRuntime) FailProvider(name string, err ...error) {
 	if r == nil || strings.TrimSpace(name) == "" {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if proxy, ok := r.providers[name].(*startupAgentProviderProxy); ok {
+		proxy.fail(errors.Join(err...))
+	}
 	delete(r.providers, name)
+}
+
+func (r *agentRuntime) FailPendingProviders(err error) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for name, provider := range r.providers {
+		proxy, ok := provider.(*startupAgentProviderProxy)
+		if !ok {
+			continue
+		}
+		proxy.fail(err)
+		delete(r.providers, name)
+	}
 }
 
 func (r *agentRuntime) HasConfiguredProviders() bool {
