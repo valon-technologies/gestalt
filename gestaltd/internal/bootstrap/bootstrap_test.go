@@ -1667,7 +1667,7 @@ func validConfig() *config.Config {
 				"default": {Source: config.ProviderSource{Builtin: "test-telemetry"}},
 			},
 			IndexedDB: map[string]*config.ProviderEntry{
-				"test": {Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml")},
+				"test": {Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml")},
 			},
 		},
 		Server: config.ServerConfig{
@@ -4192,7 +4192,7 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 
 	cfg := validConfig()
 	cfg.Providers.IndexedDB["workflow_state"] = &config.ProviderEntry{
-		Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+		Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 	}
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"basic": {
@@ -4246,7 +4246,7 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 
 	cfg := validConfig()
 	cfg.Providers.IndexedDB["agent_state"] = &config.ProviderEntry{
-		Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+		Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 		Config: mustYAMLNode(t, map[string]any{
 			"dsn": map[string]any{
 				"secret": map[string]any{
@@ -4385,7 +4385,7 @@ func TestBootstrapClosesWorkflowIndexedDBAndAppliesScopedConfig(t *testing.T) {
 
 	cfg := validConfig()
 	cfg.Providers.IndexedDB["workflow_state"] = &config.ProviderEntry{
-		Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+		Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 		Config: mustYAMLNode(t, map[string]any{
 			"dsn":          "sqlite://workflow.db",
 			"table_prefix": "host_",
@@ -4523,7 +4523,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 
 	cfg := validConfig()
 	cfg.Providers.IndexedDB["workflow_state"] = &config.ProviderEntry{
-		Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+		Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 		Config: mustYAMLNode(t, map[string]any{"bucket": "workflow-state"}),
 	}
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{

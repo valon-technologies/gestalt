@@ -145,7 +145,7 @@ func TestBuildWorkflowRegistersIndexedDBPublicRelay(t *testing.T) {
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"main": {
-				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{"bucket": "workflow-state"}),
 			},
 		},

@@ -52,7 +52,7 @@ func TestPrepareCoreLoadsHostServiceTLSCAFileForHostedRuntimeEnv(t *testing.T) {
 				"default": {Source: config.ProviderSource{Builtin: "noop"}},
 			},
 			IndexedDB: map[string]*config.ProviderEntry{
-				"main": {Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml")},
+				"main": {Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml")},
 			},
 		},
 		Server: config.ServerConfig{
