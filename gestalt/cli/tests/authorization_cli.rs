@@ -263,7 +263,7 @@ fn test_cli_authorization_apps_members_set_uses_management_api() {
         r#"{"role":"triage","subjectId":"service_account:release-bot"}"#.to_string(),
     ))
     .with_body(
-        r#"{"status":"ok","persisted":true,"reloaded":true,"membership":{"role":"triage","source":"dynamic","effective":true,"mutable":true,"selectorKind":"subject_id","selectorValue":"service_account:release-bot"}}"#,
+        r#"{"status":"ok","persisted":true,"reloaded":true,"membership":{"role":"triage","source":"dynamic","effective":true,"selectorKind":"subject_id","selectorValue":"service_account:release-bot"}}"#,
     )
     .create();
 

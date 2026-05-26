@@ -223,7 +223,6 @@ func (s *Server) adminAuthorizationDynamicRowFromProviderRelationship(ctx contex
 		Role:      strings.TrimSpace(rel.GetRelation()),
 		Source:    "dynamic",
 		Effective: true,
-		Mutable:   true,
 	}
 	if row.Role == "" {
 		return adminAuthorizationMemberRow{}, false, nil
