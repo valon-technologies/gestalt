@@ -135,17 +135,61 @@ func formatStartupWaitPath(path []startupProviderNode) string {
 	return strings.Join(parts, " -> ")
 }
 
+type startupGate[T any] struct {
+	ready chan struct{}
+	once  sync.Once
+
+	mu    sync.RWMutex
+	value T
+	err   error
+}
+
+func newStartupGate[T any]() startupGate[T] {
+	return startupGate[T]{ready: make(chan struct{})}
+}
+
+func (g *startupGate[T]) finish(value T, err error) {
+	g.once.Do(func() {
+		g.mu.Lock()
+		g.value = value
+		g.err = err
+		g.mu.Unlock()
+		close(g.ready)
+	})
+}
+
+func (g *startupGate[T]) await(ctx context.Context) (T, error) {
+	var zero T
+	select {
+	case <-g.ready:
+	case <-ctx.Done():
+		return zero, ctx.Err()
+	}
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	if g.err != nil {
+		return zero, g.err
+	}
+	return g.value, nil
+}
+
+func (g *startupGate[T]) resolved() (T, bool, error) {
+	var zero T
+	select {
+	case <-g.ready:
+	default:
+		return zero, false, nil
+	}
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.value, true, g.err
+}
+
 type startupProviderProxy struct {
 	spec             appservice.StaticProviderSpec
 	operationRouting startupOperationRouting
 	tracker          *startupWaitTracker
-
-	ready chan struct{}
-	once  sync.Once
-
-	mu       sync.RWMutex
-	provider core.Provider
-	err      error
+	gate             startupGate[core.Provider]
 }
 
 func newStartupProviderProxy(spec appservice.StaticProviderSpec, operationRouting startupOperationRouting, tracker *startupWaitTracker) *startupProviderProxy {
@@ -154,7 +198,7 @@ func newStartupProviderProxy(spec appservice.StaticProviderSpec, operationRoutin
 		spec:             spec,
 		operationRouting: operationRouting,
 		tracker:          tracker,
-		ready:            make(chan struct{}),
+		gate:             newStartupGate[core.Provider](),
 	}
 }
 
@@ -170,41 +214,23 @@ func (p *startupProviderProxy) finish(provider core.Provider, err error) {
 	if err == nil && provider == nil {
 		err = fmt.Errorf("provider %q is not available", p.spec.Name)
 	}
-	p.once.Do(func() {
-		p.mu.Lock()
-		p.provider = provider
-		p.err = err
-		p.mu.Unlock()
-		close(p.ready)
-	})
+	p.gate.finish(provider, err)
 }
 
 func (p *startupProviderProxy) await(ctx context.Context) (core.Provider, error) {
-	select {
-	case <-p.ready:
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	provider, err := p.gate.await(ctx)
+	if err != nil {
+		return nil, err
 	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if p.err != nil {
-		return nil, p.err
-	}
-	if p.provider == nil {
+	if provider == nil {
 		return nil, fmt.Errorf("provider %q is not available", p.spec.Name)
 	}
-	return p.provider, nil
+	return provider, nil
 }
 
 func (p *startupProviderProxy) resolved() core.Provider {
-	select {
-	case <-p.ready:
-		p.mu.RLock()
-		defer p.mu.RUnlock()
-		return p.provider
-	default:
-		return nil
-	}
+	provider, _, _ := p.gate.resolved()
+	return provider
 }
 
 func (p *startupProviderProxy) Name() string        { return p.spec.Name }
@@ -422,20 +448,14 @@ func (p *startupProviderProxy) beginCallerWait(ctx context.Context) (func(), err
 type startupWorkflowProviderProxy struct {
 	providerName string
 	tracker      *startupWaitTracker
-
-	ready chan struct{}
-	once  sync.Once
-
-	mu       sync.RWMutex
-	provider coreworkflow.Provider
-	err      error
+	gate         startupGate[coreworkflow.Provider]
 }
 
 func newStartupWorkflowProviderProxy(providerName string, tracker *startupWaitTracker) *startupWorkflowProviderProxy {
 	return &startupWorkflowProviderProxy{
 		providerName: providerName,
 		tracker:      tracker,
-		ready:        make(chan struct{}),
+		gate:         newStartupGate[coreworkflow.Provider](),
 	}
 }
 
@@ -451,30 +471,18 @@ func (p *startupWorkflowProviderProxy) finish(provider coreworkflow.Provider, er
 	if err == nil && provider == nil {
 		err = fmt.Errorf("workflow provider is not available")
 	}
-	p.once.Do(func() {
-		p.mu.Lock()
-		p.provider = provider
-		p.err = err
-		p.mu.Unlock()
-		close(p.ready)
-	})
+	p.gate.finish(provider, err)
 }
 
 func (p *startupWorkflowProviderProxy) await(ctx context.Context) (coreworkflow.Provider, error) {
-	select {
-	case <-p.ready:
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	provider, err := p.gate.await(ctx)
+	if err != nil {
+		return nil, err
 	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if p.err != nil {
-		return nil, p.err
-	}
-	if p.provider == nil {
+	if provider == nil {
 		return nil, fmt.Errorf("workflow provider is not available")
 	}
-	return p.provider, nil
+	return provider, nil
 }
 
 func (p *startupWorkflowProviderProxy) CreateDefinition(ctx context.Context, req coreworkflow.CreateDefinitionRequest) (*coreworkflow.Definition, error) {
@@ -670,17 +678,11 @@ func (p *startupWorkflowProviderProxy) Ping(ctx context.Context) error {
 }
 
 func (p *startupWorkflowProviderProxy) Close() error {
-	select {
-	case <-p.ready:
-	default:
+	provider, ready, _ := p.gate.resolved()
+	if !ready || provider == nil {
 		return nil
 	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if p.provider == nil {
-		return nil
-	}
-	return p.provider.Close()
+	return provider.Close()
 }
 
 func (p *startupWorkflowProviderProxy) awaitForApp(ctx context.Context, appName string) (coreworkflow.Provider, error) {
@@ -723,20 +725,14 @@ func (p *startupWorkflowProviderProxy) beginCallerWait(ctx context.Context, appN
 type startupAgentProviderProxy struct {
 	providerName string
 	tracker      *startupWaitTracker
-
-	ready chan struct{}
-	once  sync.Once
-
-	mu       sync.RWMutex
-	provider coreagent.Provider
-	err      error
+	gate         startupGate[coreagent.Provider]
 }
 
 func newStartupAgentProviderProxy(providerName string, tracker *startupWaitTracker) *startupAgentProviderProxy {
 	return &startupAgentProviderProxy{
 		providerName: providerName,
 		tracker:      tracker,
-		ready:        make(chan struct{}),
+		gate:         newStartupGate[coreagent.Provider](),
 	}
 }
 
@@ -752,30 +748,18 @@ func (p *startupAgentProviderProxy) finish(provider coreagent.Provider, err erro
 	if err == nil && provider == nil {
 		err = fmt.Errorf("agent provider %q is not available", p.providerName)
 	}
-	p.once.Do(func() {
-		p.mu.Lock()
-		p.provider = provider
-		p.err = err
-		p.mu.Unlock()
-		close(p.ready)
-	})
+	p.gate.finish(provider, err)
 }
 
 func (p *startupAgentProviderProxy) await(ctx context.Context) (coreagent.Provider, error) {
-	select {
-	case <-p.ready:
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	provider, err := p.gate.await(ctx)
+	if err != nil {
+		return nil, err
 	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if p.err != nil {
-		return nil, p.err
-	}
-	if p.provider == nil {
+	if provider == nil {
 		return nil, fmt.Errorf("agent provider %q is not available", p.providerName)
 	}
-	return p.provider, nil
+	return provider, nil
 }
 
 func (p *startupAgentProviderProxy) awaitForCaller(ctx context.Context) (coreagent.Provider, error) {
@@ -796,14 +780,11 @@ func (p *startupAgentProviderProxy) beginCallerWait(ctx context.Context) (func()
 }
 
 func (p *startupAgentProviderProxy) SupportsWorkspaceRequests() bool {
-	select {
-	case <-p.ready:
-	default:
+	provider, ready, _ := p.gate.resolved()
+	if !ready {
 		return true
 	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	workspaceProvider, ok := p.provider.(coreagent.WorkspaceProvider)
+	workspaceProvider, ok := provider.(coreagent.WorkspaceProvider)
 	return ok && workspaceProvider.SupportsWorkspaceRequests()
 }
 
@@ -918,15 +899,10 @@ func (p *startupAgentProviderProxy) GetCapabilities(ctx context.Context, req cor
 }
 
 func (p *startupAgentProviderProxy) Ping(ctx context.Context) error {
-	select {
-	case <-p.ready:
-	default:
+	provider, ready, err := p.gate.resolved()
+	if !ready {
 		return agentmanager.NewAgentProviderNotAvailableError(p.providerName)
 	}
-	p.mu.RLock()
-	provider := p.provider
-	err := p.err
-	p.mu.RUnlock()
 	if err != nil {
 		return err
 	}
@@ -937,15 +913,9 @@ func (p *startupAgentProviderProxy) Ping(ctx context.Context) error {
 }
 
 func (p *startupAgentProviderProxy) Close() error {
-	select {
-	case <-p.ready:
-	default:
+	provider, ready, _ := p.gate.resolved()
+	if !ready || provider == nil {
 		return nil
 	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if p.provider == nil {
-		return nil
-	}
-	return p.provider.Close()
+	return provider.Close()
 }

@@ -12,23 +12,12 @@ func ServeAgentProvider(ctx context.Context, provider AgentProvider) error {
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindAgent, provider))
 		proto.RegisterAgentProviderServer(srv, agentProviderServer{provider: provider})
-	}, grpc.UnaryInterceptor(agentProviderInvocationUnaryInterceptor))
+	}, grpc.UnaryInterceptor(providerInvocationUnaryInterceptor))
 }
 
 type agentProviderServer struct {
 	proto.UnimplementedAgentProviderServer
 	provider AgentProvider
-}
-
-type agentProviderInvocationTokenRequest interface {
-	GetInvocationToken() string
-}
-
-func agentProviderInvocationUnaryInterceptor(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	if tokenReq, ok := req.(agentProviderInvocationTokenRequest); ok {
-		ctx = withInvocationToken(ctx, tokenReq.GetInvocationToken())
-	}
-	return handler(ctx, req)
 }
 
 func (s agentProviderServer) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
