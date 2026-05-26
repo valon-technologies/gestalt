@@ -1,14 +1,8 @@
-import dataclasses
 import datetime as dt
 import unittest
+from collections.abc import Mapping
 
 import gestalt
-
-
-@dataclasses.dataclass
-class Payload:
-    ok: bool
-    count: int
 
 
 class WorkflowHelperTests(unittest.TestCase):
@@ -22,14 +16,16 @@ class WorkflowHelperTests(unittest.TestCase):
                     app=gestalt.WorkflowStepAppCall(
                         name="app",
                         operation="run",
-                        input=gestalt.WorkflowValue(literal=Payload(ok=False, count=0)),
+                        input=gestalt.WorkflowValue(
+                            literal={"ok": False, "count": 0}
+                        ),
                     ),
                 )
             ]
         )
         signal = gestalt.workflow_signal(
             name="ready",
-            payload=Payload(ok=True, count=1),
+            payload={"ok": True, "count": 1},
             created_at=created_at,
             sequence=0,
         )
@@ -209,6 +205,33 @@ class WorkflowHelperTests(unittest.TestCase):
         quoted, ok = gestalt.path_value({"quote'key": {"value": 42}}, "['quote\\'key'].value")
         self.assertTrue(ok)
         self.assertEqual(quoted, 42)
+
+    def test_workflow_types_expose_direct_agent_path(self) -> None:
+        target = gestalt.BoundWorkflowTarget(
+            steps=[
+                gestalt.WorkflowStep(
+                    id="agent",
+                    agent=gestalt.WorkflowStepAgentTurn(
+                        provider="openai",
+                        model="gpt-5.5",
+                        model_options={"temperature": 0},
+                    ),
+                )
+            ]
+        )
+        request = gestalt.WorkflowSignalOrStartRun(
+            provider_name="slack",
+            target=target,
+        )
+
+        assert request.target is not None
+        step = request.target.steps[0]
+        assert step.agent is not None
+        provider: str = step.agent.provider
+        model_options: Mapping[str, object] | None = step.agent.model_options
+
+        self.assertEqual(provider, "openai")
+        self.assertEqual(model_options, {"temperature": 0})
 
     def test_workflow_invocation_context_matches_runtime_shape(self) -> None:
         created_at = dt.datetime(2026, 5, 8, 12, 0, tzinfo=dt.timezone.utc)
