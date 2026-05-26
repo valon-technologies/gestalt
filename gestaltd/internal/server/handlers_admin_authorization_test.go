@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-func TestAppScopedAdminAuthorizationRoutePluginAllowsEncodedPluginFragmentID(t *testing.T) {
+func TestAppScopedAdminAuthorizationRoutePluginAllowsEncodedAppGrantID(t *testing.T) {
 	t.Parallel()
 
 	req := &http.Request{URL: &url.URL{
-		Path:    "/admin/api/v1/authorization/fragments/app/github",
-		RawPath: "/admin/api/v1/authorization/fragments/app%2Fgithub",
+		Path:    "/admin/api/v1/authorization/grants/app/github",
+		RawPath: "/admin/api/v1/authorization/grants/app%2Fgithub",
 	}}
 
 	appName, ok := appScopedAdminAuthorizationRoutePlugin(req)
