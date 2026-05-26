@@ -193,10 +193,7 @@ func validateAPIVersion(cfg *Config) error {
 	// Config values may omit it and use current source normalization.
 	apiVersion := strings.TrimSpace(cfg.APIVersion)
 	switch apiVersion {
-	case "", ConfigAPIVersion, LegacyConfigAPIVersion:
-		if apiVersion == LegacyConfigAPIVersion {
-			cfg.APIVersion = ConfigAPIVersion
-		}
+	case "", ConfigAPIVersion:
 		return nil
 	default:
 		return fmt.Errorf("config validation: unsupported apiVersion %q", apiVersion)
