@@ -87,6 +87,59 @@ func TestExecutorInvokesAppStep(t *testing.T) {
 	}
 }
 
+func TestExecutorRendersSignalPayloadIntoAgentTurnMessages(t *testing.T) {
+	t.Parallel()
+
+	agent := &recordingAgentClient{}
+	var agentToken string
+	executor := New(Config{
+		NewAgent: func(token string) (AgentClient, error) {
+			agentToken = token
+			return agent, nil
+		},
+	})
+	resp, err := executor.Execute(context.Background(), Request{
+		ProviderName:    "workflow",
+		RunID:           "run-1",
+		InvocationToken: "token",
+		Signals: []gestalt.WorkflowSignal{{
+			ID:      "sig-1",
+			Payload: map[string]any{"user_prompt": "please triage this Slack request"},
+		}},
+		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
+			ID: "agent",
+			Agent: &gestalt.WorkflowStepAgentTurn{
+				Provider: "managed",
+				Model:    "deep",
+				Messages: []gestalt.WorkflowAgentMessage{{
+					Role: "system",
+					Text: gestalt.WorkflowText{Template: "Handle the request from ${signalPayload.user_prompt}"},
+				}},
+				Prompt: gestalt.WorkflowText{Template: "Current request:\n${signalPayload.user_prompt}"},
+			},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if resp.Status != 200 {
+		t.Fatalf("status = %d, want 200", resp.Status)
+	}
+	if agentToken != "token" {
+		t.Fatalf("agent token = %q, want token", agentToken)
+	}
+	if got := agent.turn.Messages; len(got) != 2 {
+		t.Fatalf("turn messages = %#v, want 2 messages", got)
+	} else {
+		if got[0].Role != "system" || got[0].Text != "Handle the request from please triage this Slack request" {
+			t.Fatalf("system message = %#v", got[0])
+		}
+		if got[1].Role != "user" || got[1].Text != "Current request:\nplease triage this Slack request" {
+			t.Fatalf("user message = %#v", got[1])
+		}
+	}
+}
+
 type recordingAppInvoker struct {
 	call AppInvocation
 }
@@ -94,4 +147,33 @@ type recordingAppInvoker struct {
 func (i *recordingAppInvoker) InvokeWorkflowApp(_ context.Context, call AppInvocation) (*AppResult, error) {
 	i.call = call
 	return &AppResult{Status: 200, Body: `{"ok":true}`}, nil
+}
+
+type recordingAgentClient struct {
+	session gestalt.AgentCreateSession
+	turn    gestalt.AgentCreateTurn
+}
+
+func (c *recordingAgentClient) CreateSession(_ context.Context, req gestalt.AgentCreateSession) (*gestalt.AgentSession, error) {
+	c.session = req
+	return &gestalt.AgentSession{ID: "session-1", ProviderName: req.ProviderName, Model: req.Model}, nil
+}
+
+func (c *recordingAgentClient) CreateTurn(_ context.Context, req gestalt.AgentCreateTurn) (*gestalt.AgentTurn, error) {
+	c.turn = req
+	return &gestalt.AgentTurn{
+		ID:         "turn-1",
+		SessionID:  req.SessionID,
+		Model:      req.Model,
+		Status:     gestalt.AgentExecutionStatusSucceeded,
+		OutputText: "done",
+	}, nil
+}
+
+func (c *recordingAgentClient) GetTurn(_ context.Context, req gestalt.AgentGetTurn) (*gestalt.AgentTurn, error) {
+	return &gestalt.AgentTurn{ID: req.TurnID, Status: gestalt.AgentExecutionStatusSucceeded}, nil
+}
+
+func (c *recordingAgentClient) CancelTurn(_ context.Context, req gestalt.AgentCancelTurn) (*gestalt.AgentTurn, error) {
+	return &gestalt.AgentTurn{ID: req.TurnID, Status: gestalt.AgentExecutionStatusCanceled}, nil
 }
