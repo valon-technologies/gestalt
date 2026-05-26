@@ -66,7 +66,7 @@ func WorkflowStepIdempotencyKey(req Request, invocationScope, stepID, suffix str
 	return strings.Join(parts, ":")
 }
 
-func WorkflowInvocationContext(req Request) map[string]any {
+func WorkflowRunContext(req Request) map[string]any {
 	ctxValue := map[string]any{}
 	if runID := strings.TrimSpace(req.RunID); runID != "" {
 		ctxValue["runId"] = runID

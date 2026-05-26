@@ -87,7 +87,7 @@ import {
   agentToolRefFromProto,
   agentToolRefToProto,
 } from "./agent-conversions.ts";
-import { errorMessage, type MaybePromise } from "./api.ts";
+import { errorMessage, type MaybePromise, type Request } from "./api.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import {
   dateFromTimestamp,
@@ -2652,6 +2652,44 @@ export interface WorkflowExecutionRequest {
   signals?: readonly WorkflowSignal[] | undefined;
 }
 
+export interface WorkflowRunContextActor {
+  subjectId: string;
+  subjectKind: string;
+  displayName: string;
+  authSource: string;
+}
+
+export interface WorkflowRunContextTrigger {
+  kind: string;
+  scheduleId: string;
+  scheduledFor: string;
+  triggerId: string;
+  event?: Record<string, JsonInput> | undefined;
+}
+
+export interface WorkflowRunContextSignal {
+  id: string;
+  name: string;
+  payload: Record<string, JsonInput>;
+  metadata: Record<string, JsonInput>;
+  createdBy?: WorkflowRunContextActor | undefined;
+  createdAt: string;
+  idempotencyKey: string;
+  sequence?: number | undefined;
+}
+
+export interface WorkflowRunContext {
+  provider: string;
+  runId: string;
+  target?: Record<string, JsonInput> | undefined;
+  trigger: WorkflowRunContextTrigger;
+  input: Record<string, JsonInput>;
+  metadata: Record<string, JsonInput>;
+  signals: readonly WorkflowRunContextSignal[];
+  createdBy?: WorkflowRunContextActor | undefined;
+  latestSignal?: WorkflowRunContextSignal | undefined;
+}
+
 export interface WorkflowEvalContext {
   request: WorkflowExecutionRequest;
   outputs?: Record<string, unknown> | undefined;
@@ -2772,7 +2810,7 @@ export function renderWorkflowTemplate(
   return out;
 }
 
-export function workflowInvocationContext(
+export function workflowRunContext(
   req: WorkflowExecutionRequest,
 ): Record<string, JsonInput> {
   const out: Record<string, JsonInput> = {};
@@ -2805,6 +2843,120 @@ export function workflowInvocationContext(
     out.createdBy = createdBy;
   }
   return out;
+}
+
+export function parseWorkflowRunContext(
+  value?: Request | Record<string, unknown> | null | undefined,
+): WorkflowRunContext {
+  const data = workflowRunContextData(value);
+  const target = workflowContextOptionalObject(data.target);
+  const signals = Array.isArray(data.signals)
+    ? data.signals
+      .map(workflowRunContextSignal)
+      .filter((signal): signal is WorkflowRunContextSignal => signal !== undefined)
+    : [];
+  const createdBy = workflowRunContextActor(data.createdBy);
+  const latestSignal = signals.at(-1);
+  const context: WorkflowRunContext = {
+    provider: workflowContextString(data.provider),
+    runId: workflowContextString(data.runId),
+    trigger: workflowRunContextTrigger(data.trigger),
+    input: workflowContextObject(data.input),
+    metadata: workflowContextObject(data.metadata),
+    signals,
+  };
+  if (target !== undefined) {
+    context.target = target;
+  }
+  if (createdBy !== undefined) {
+    context.createdBy = createdBy;
+  }
+  if (latestSignal !== undefined) {
+    context.latestSignal = latestSignal;
+  }
+  return context;
+}
+
+function workflowRunContextData(
+  value?: Request | Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!isWorkflowContextRecord(value)) {
+    return {};
+  }
+  return isWorkflowContextRecord(value.workflow) ? value.workflow : value;
+}
+
+function workflowRunContextTrigger(value: unknown): WorkflowRunContextTrigger {
+  const data = isWorkflowContextRecord(value) ? value : {};
+  const event = workflowContextOptionalObject(data.event);
+  const trigger: WorkflowRunContextTrigger = {
+    kind: workflowContextString(data.kind),
+    scheduleId: workflowContextString(data.scheduleId),
+    scheduledFor: workflowContextString(data.scheduledFor),
+    triggerId: workflowContextString(data.triggerId),
+  };
+  if (event !== undefined) {
+    trigger.event = event;
+  }
+  return trigger;
+}
+
+function workflowRunContextSignal(value: unknown): WorkflowRunContextSignal | undefined {
+  if (!isWorkflowContextRecord(value)) {
+    return undefined;
+  }
+  const signal: WorkflowRunContextSignal = {
+    id: workflowContextString(value.id),
+    name: workflowContextString(value.name),
+    payload: workflowContextObject(value.payload),
+    metadata: workflowContextObject(value.metadata),
+    createdAt: workflowContextString(value.createdAt),
+    idempotencyKey: workflowContextString(value.idempotencyKey),
+  };
+  const createdBy = workflowRunContextActor(value.createdBy);
+  if (createdBy !== undefined) {
+    signal.createdBy = createdBy;
+  }
+  const sequence = workflowContextNumber(value.sequence);
+  if (sequence !== undefined) {
+    signal.sequence = sequence;
+  }
+  return signal;
+}
+
+function workflowRunContextActor(value: unknown): WorkflowRunContextActor | undefined {
+  if (!isWorkflowContextRecord(value)) {
+    return undefined;
+  }
+  const actor: WorkflowRunContextActor = {
+    subjectId: workflowContextString(value.subjectId),
+    subjectKind: workflowContextString(value.subjectKind),
+    displayName: workflowContextString(value.displayName),
+    authSource: workflowContextString(value.authSource),
+  };
+  return actor.subjectId || actor.subjectKind || actor.displayName || actor.authSource
+    ? actor
+    : undefined;
+}
+
+function workflowContextString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function workflowContextNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function workflowContextObject(value: unknown): Record<string, JsonInput> {
+  return isWorkflowContextRecord(value) ? { ...(value as Record<string, JsonInput>) } : {};
+}
+
+function workflowContextOptionalObject(value: unknown): Record<string, JsonInput> | undefined {
+  return isWorkflowContextRecord(value) ? { ...(value as Record<string, JsonInput>) } : undefined;
+}
+
+function isWorkflowContextRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function workflowTargetContext(

@@ -563,12 +563,17 @@ export {
   evaluateWorkflowValue,
   latestWorkflowSignal,
   mapPathValue,
+  parseWorkflowRunContext,
   pathValue,
   renderWorkflowTemplate,
-  workflowInvocationContext,
+  workflowRunContext,
   workflowSignalsContext,
   type WorkflowEvalContext,
   type WorkflowExecutionRequest,
+  type WorkflowRunContextActor,
+  type WorkflowRunContext,
+  type WorkflowRunContextSignal,
+  type WorkflowRunContextTrigger,
 } from "./workflow.ts";
 export {
   GENAI_OPERATION_CHAT,

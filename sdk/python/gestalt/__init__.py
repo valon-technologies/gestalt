@@ -371,14 +371,19 @@ _WORKFLOW_AUTHORED_EXPORTS = (
 _WORKFLOW_HELPER_EXPORTS = (
     "WorkflowEvalContext",
     "WorkflowExecutionRequest",
+    "WorkflowRunContextActor",
+    "WorkflowRunContext",
+    "WorkflowRunContextSignal",
+    "WorkflowRunContextTrigger",
     "WorkflowValueError",
     "evaluate_workflow_step_inputs",
     "evaluate_workflow_value",
     "latest_workflow_signal",
     "map_path_value",
+    "parse_workflow_run_context",
     "path_value",
     "render_workflow_template",
-    "workflow_invocation_context",
+    "workflow_run_context",
     "workflow_signals_context",
 )
 
@@ -554,6 +559,7 @@ __all__ = [
     *_AUTHORIZATION_HELPER_EXPORTS,
     *_RUNTIME_PROVIDER_AUTHORED_EXPORTS,
     *_WORKFLOW_AUTHORED_EXPORTS,
+    *_WORKFLOW_HELPER_EXPORTS,
     "AgentHost",
     "Agent",
     "AgentProvider",

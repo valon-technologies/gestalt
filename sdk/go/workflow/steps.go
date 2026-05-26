@@ -79,7 +79,7 @@ func (e *Executor) invokeAppStep(ctx context.Context, req Request, token string,
 		Instance:        strings.TrimSpace(app.Instance),
 		CredentialMode:  strings.TrimSpace(app.CredentialMode),
 		IdempotencyKey:  WorkflowStepIdempotencyKey(req, invocationScope, stepID, "step"),
-		WorkflowContext: WorkflowInvocationContext(req),
+		WorkflowContext: WorkflowRunContext(req),
 	})
 	if err != nil {
 		return nil, err
@@ -119,7 +119,7 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, token strin
 			ProviderName: providerName,
 			Model:        model,
 			Metadata: map[string]any{
-				"workflow":       WorkflowInvocationContext(req),
+				"workflow":       WorkflowRunContext(req),
 				"workflowStepId": stepID,
 			},
 			IdempotencyKey: WorkflowStepIdempotencyKey(req, invocationScope, stepID, "agent-session:"+sessionKey),
