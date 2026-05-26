@@ -575,12 +575,7 @@ pub fn put_authorization_grant(
             &body,
         )
         .context("failed to put authorization grant")?;
-    print_single_response(
-        &resp,
-        format,
-        &["ID", "Owner", "Version", "Relationships"],
-        authorization_grant_source_row,
-    )
+    print_authorization_grant_write_response(&resp, format)
 }
 
 pub fn delete_authorization_grant(
@@ -1068,6 +1063,35 @@ fn print_grant_write_response(resp: &Value, format: Format) -> Result<()> {
                     Format::Table,
                     &["App", "Role", "Source", "Mutable"],
                     grant_row,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn print_authorization_grant_write_response(resp: &Value, format: Format) -> Result<()> {
+    match format {
+        Format::Json => output::print_json(resp),
+        Format::Table => {
+            if resp["reloaded"].as_bool() == Some(false) {
+                output::print_warning(
+                    "Grant persisted, but the local authorization snapshot has not reloaded yet.",
+                );
+            }
+            if let Some(fragment) = resp.get("fragment") {
+                print_single_response(
+                    fragment,
+                    Format::Table,
+                    &["ID", "Owner", "Version", "Relationships"],
+                    authorization_grant_source_row,
+                )?;
+            } else {
+                print_single_response(
+                    resp,
+                    Format::Table,
+                    &["ID", "Owner", "Version", "Relationships"],
+                    authorization_grant_source_row,
                 )?;
             }
         }

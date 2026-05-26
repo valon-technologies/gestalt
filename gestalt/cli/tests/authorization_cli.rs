@@ -314,6 +314,50 @@ fn test_cli_authorization_grants_put_reads_json_file() {
 }
 
 #[test]
+fn test_cli_authorization_grants_put_surfaces_pending_reload_fragment() {
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::PUT,
+        "/api/v1/authorization/grants/app%2Fgithub",
+        StatusCode::ACCEPTED
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"id":"app/github","owner":{"kind":"app","app":"github"},"version":4,"resourceTypes":{},"relationships":[]}"#.to_string(),
+    ))
+    .with_body(
+        r#"{"status":"persisted_pending_reload","persisted":true,"reloaded":false,"fragment":{"id":"app/github","owner":{"kind":"app","app":"github"},"version":4,"relationships":[],"resourceTypes":{}}}"#,
+    )
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    let grant_file = home.path().join("grant.json");
+    std::fs::write(
+        &grant_file,
+        r#"{"id":"app/github","owner":{"kind":"app","app":"github"},"version":4,"resourceTypes":{},"relationships":[]}"#,
+    )
+    .unwrap();
+
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "authz",
+            "grants",
+            "put",
+            "app/github",
+            "--file",
+            grant_file.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("app/github"))
+        .stdout(predicate::str::contains("app:github"))
+        .stderr(predicate::str::contains("snapshot has not reloaded"));
+
+    mock.assert();
+}
+
+#[test]
 fn test_cli_authorization_grants_delete_encodes_grant_id() {
     let mut server = Server::new();
     let mock = authed_json_mock!(
