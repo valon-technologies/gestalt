@@ -164,6 +164,69 @@ func TestExecutableProviderForwardsStartAppWorkdir(t *testing.T) {
 	}
 }
 
+func TestExecutableProviderStartsDirectHostServicesForHostedApp(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	runtimeBin := buildRuntimeLogProviderBinary(t)
+	runtimeProvider, err := NewExecutableProvider(ctx, ExecutableConfig{
+		Name:    "modal",
+		Command: runtimeBin,
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableProvider: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeProvider.Close()
+	})
+	direct, ok := runtimeProvider.(DirectHostServiceSupport)
+	if !ok || !direct.SupportsDirectHostServices() {
+		t.Fatal("executable runtime provider does not support direct host services")
+	}
+
+	session, err := runtimeProvider.StartSession(ctx, StartSessionRequest{
+		AppName: "agent",
+	})
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	env := map[string]string{"EXISTING": "value"}
+	hosted, err := runtimeProvider.StartApp(ctx, StartAppRequest{
+		SessionID: session.ID,
+		AppName:   "host-services",
+		Command:   "/bin/plugin",
+		Env:       env,
+		HostServices: []runtimehost.HostService{{
+			Name: "test_host_service",
+			Register: func(*grpc.Server) {
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("StartApp: %v", err)
+	}
+	const dialPrefix = "host-service://"
+	if !strings.HasPrefix(hosted.DialTarget, dialPrefix) {
+		t.Fatalf("DialTarget = %q, want host-service socket", hosted.DialTarget)
+	}
+	socketPath := strings.TrimPrefix(hosted.DialTarget, dialPrefix)
+	if _, err := os.Stat(socketPath); err != nil {
+		t.Fatalf("host service socket %q: %v", socketPath, err)
+	}
+	if _, ok := env[runtimehost.DefaultHostServiceSocketEnv]; ok {
+		t.Fatal("StartApp mutated caller env with host service socket")
+	}
+	if err := runtimeProvider.StopSession(ctx, StopSessionRequest{SessionID: session.ID}); err != nil {
+		t.Fatalf("StopSession: %v", err)
+	}
+	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
+		t.Fatalf("host service socket after StopSession stat err = %v, want not exist", err)
+	}
+}
+
 func buildRuntimeLogProviderBinary(t *testing.T) string {
 	t.Helper()
 
@@ -293,11 +356,23 @@ func (p *runtimeProvider) StopSession(_ context.Context, sessionID string) error
 }
 
 func (p *runtimeProvider) StartApp(ctx context.Context, req gestalt.StartHostedAppRequest) (gestalt.HostedApp, error) {
+	if req.AppName == "host-services" {
+		socket := strings.TrimSpace(req.Env[gestalt.EnvHostServiceSocket])
+		if socket == "" {
+			return gestalt.HostedApp{}, status.Error(codes.FailedPrecondition, "host service socket missing")
+		}
+		return gestalt.HostedApp{
+			ID:         "hosted-" + req.AppName,
+			SessionID:  req.SessionID,
+			AppName:    req.AppName,
+			DialTarget: "host-service://" + socket,
+		}, nil
+	}
 	if req.Workdir != "" {
 		return gestalt.HostedApp{
 			ID:         "hosted-" + req.AppName,
 			SessionID:  req.SessionID,
-			AppName: req.AppName,
+			AppName:    req.AppName,
 			DialTarget: "workdir://" + req.Workdir,
 		}, nil
 	}

@@ -2,6 +2,7 @@ package runtimeprovider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -35,11 +36,12 @@ type executableProvider struct {
 	runtime   proto.RuntimeProviderClient
 	lifecycle proto.ProviderLifecycleClient
 
-	name        string
-	telemetry   metricutil.TelemetryProviders
-	sessionLogs runtimelogs.Store
-	mu          sync.Mutex
-	sessions    map[string]*Session
+	name         string
+	telemetry    metricutil.TelemetryProviders
+	sessionLogs  runtimelogs.Store
+	mu           sync.Mutex
+	sessions     map[string]*Session
+	hostServices map[string]*runtimehost.StartedHostServices
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider, error) {
@@ -64,13 +66,14 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 	}
 
 	return &executableProvider{
-		proc:        proc,
-		runtime:     proto.NewRuntimeProviderClient(proc.Conn()),
-		lifecycle:   lifecycle,
-		name:        cfg.Name,
-		telemetry:   cfg.Telemetry,
-		sessionLogs: cfg.SessionLogs,
-		sessions:    make(map[string]*Session),
+		proc:         proc,
+		runtime:      proto.NewRuntimeProviderClient(proc.Conn()),
+		lifecycle:    lifecycle,
+		name:         cfg.Name,
+		telemetry:    cfg.Telemetry,
+		sessionLogs:  cfg.SessionLogs,
+		sessions:     make(map[string]*Session),
+		hostServices: make(map[string]*runtimehost.StartedHostServices),
 	}, nil
 }
 
@@ -87,6 +90,10 @@ func (p *executableProvider) Support(ctx context.Context) (Support, error) {
 		return Support{}, fmt.Errorf("get runtime support: %w", err)
 	}
 	return supportFromProto(resp), nil
+}
+
+func (p *executableProvider) SupportsDirectHostServices() bool {
+	return true
 }
 
 func (p *executableProvider) StartSession(ctx context.Context, req StartSessionRequest) (*Session, error) {
@@ -173,16 +180,17 @@ func (p *executableProvider) StopSession(ctx context.Context, req StopSessionReq
 	_, err := p.runtime.StopSession(ctx, &proto.StopRuntimeSessionRequest{
 		SessionId: req.SessionID,
 	})
-	if err != nil {
-		return fmt.Errorf("stop runtime session: %w", err)
-	}
+	hostServices := p.detachHostServices(req.SessionID)
 	p.mu.Lock()
 	delete(p.sessions, req.SessionID)
 	p.mu.Unlock()
 	if p.sessionLogs != nil {
 		_ = p.sessionLogs.MarkSessionStopped(ctx, p.name, req.SessionID, time.Now().UTC())
 	}
-	return nil
+	if err != nil {
+		return errors.Join(fmt.Errorf("stop runtime session: %w", err), closeStartedHostServices(hostServices))
+	}
+	return closeStartedHostServices(hostServices)
 }
 
 func (p *executableProvider) PrepareWorkspace(ctx context.Context, req PrepareWorkspaceRequest) (*PreparedWorkspace, error) {
@@ -209,25 +217,56 @@ func (p *executableProvider) RemoveWorkspace(ctx context.Context, req RemoveWork
 }
 
 func (p *executableProvider) StartApp(ctx context.Context, req StartAppRequest) (*HostedApp, error) {
+	startEnv := cloneStringMap(req.Env)
+	hostServices, err := runtimehost.StartHostServices(req.HostServices,
+		runtimehost.WithHostServicesProviderName(req.AppName),
+		runtimehost.WithHostServicesTelemetry(p.telemetry),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("start direct host services: %w", err)
+	}
+	if hostServices != nil {
+		if binding := hostServices.SocketBinding(); strings.TrimSpace(binding.SocketPath) != "" {
+			if startEnv == nil {
+				startEnv = map[string]string{}
+			}
+			startEnv[binding.EnvVar] = binding.SocketPath
+		}
+	}
+
 	resp, err := p.runtime.StartApp(ctx, &proto.StartHostedAppRequest{
 		SessionId:     req.SessionID,
 		AppName:       req.AppName,
 		Command:       req.Command,
 		Args:          append([]string(nil), req.Args...),
-		Env:           cloneStringMap(req.Env),
+		Env:           startEnv,
 		AllowedHosts:  append([]string(nil), req.Egress.AllowedHosts...),
 		DefaultAction: string(req.Egress.DefaultAction),
 		HostBinary:    req.HostBinary,
 		Workdir:       req.Workdir,
 	})
 	if err != nil {
+		if closeErr := closeStartedHostServices(hostServices); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close direct host services: %w", closeErr))
+		}
 		return nil, fmt.Errorf("start hosted app: %w", p.enrichStartAppError(req.SessionID, err))
 	}
+	var previousHostServices *runtimehost.StartedHostServices
 	p.mu.Lock()
 	if session, ok := p.sessions[req.SessionID]; ok && session != nil {
 		session.State = SessionStateRunning
 	}
+	if hostServices != nil {
+		if p.hostServices == nil {
+			p.hostServices = make(map[string]*runtimehost.StartedHostServices)
+		}
+		previousHostServices = p.hostServices[req.SessionID]
+		p.hostServices[req.SessionID] = hostServices
+	}
 	p.mu.Unlock()
+	if previousHostServices != nil && previousHostServices != hostServices {
+		_ = previousHostServices.Close()
+	}
 	return &HostedApp{
 		ID:         resp.GetId(),
 		SessionID:  resp.GetSessionId(),
@@ -270,9 +309,36 @@ func (p *executableProvider) Close() error {
 		return nil
 	}
 	p.mu.Lock()
+	hostServices := p.hostServices
+	p.hostServices = nil
 	p.sessions = nil
 	p.mu.Unlock()
-	return p.proc.Close()
+	errs := []error{p.proc.Close()}
+	for _, started := range hostServices {
+		errs = append(errs, closeStartedHostServices(started))
+	}
+	return errors.Join(errs...)
+}
+
+func (p *executableProvider) detachHostServices(sessionID string) *runtimehost.StartedHostServices {
+	if p == nil || strings.TrimSpace(sessionID) == "" {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.hostServices == nil {
+		return nil
+	}
+	hostServices := p.hostServices[sessionID]
+	delete(p.hostServices, sessionID)
+	return hostServices
+}
+
+func closeStartedHostServices(hostServices *runtimehost.StartedHostServices) error {
+	if hostServices == nil {
+		return nil
+	}
+	return hostServices.Close()
 }
 
 func supportFromProto(src *proto.RuntimeSupport) Support {
