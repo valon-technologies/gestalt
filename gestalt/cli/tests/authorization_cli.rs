@@ -224,6 +224,125 @@ fn test_cli_authorization_subjects_grants_set_surfaces_pending_reload() {
 }
 
 #[test]
+fn test_cli_authorization_grants_list_uses_public_api() {
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/authorization/grants",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[{"id":"app/github","owner":{"kind":"app","app":"github"},"version":3,"relationships":[],"resourceTypes":{}}]"#,
+    )
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["authz", "grants", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("app/github"));
+
+    mock.assert();
+}
+
+#[test]
+fn test_cli_authorization_grants_get_encodes_grant_id() {
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/authorization/grants/app%2Fgithub",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"{"id":"app/github","owner":{"kind":"app","app":"github"},"version":3,"relationships":[],"resourceTypes":{}}"#,
+    )
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["authz", "grants", "get", "app/github"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("app/github"));
+
+    mock.assert();
+}
+
+#[test]
+fn test_cli_authorization_grants_put_reads_json_file() {
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::PUT,
+        "/api/v1/authorization/grants/app%2Fgithub",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"id":"app/github","owner":{"kind":"app","app":"github"},"version":4,"resourceTypes":{},"relationships":[]}"#.to_string(),
+    ))
+    .with_body(
+        r#"{"id":"app/github","owner":{"kind":"app","app":"github"},"version":4,"relationships":[],"resourceTypes":{}}"#,
+    )
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    let grant_file = home.path().join("grant.json");
+    std::fs::write(
+        &grant_file,
+        r#"{"id":"app/github","owner":{"kind":"app","app":"github"},"version":4,"resourceTypes":{},"relationships":[]}"#,
+    )
+    .unwrap();
+
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "authz",
+            "grants",
+            "put",
+            "app/github",
+            "--file",
+            grant_file.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("app/github"));
+
+    mock.assert();
+}
+
+#[test]
+fn test_cli_authorization_grants_delete_encodes_grant_id() {
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::DELETE,
+        "/api/v1/authorization/grants/app%2Fgithub",
+        StatusCode::OK
+    )
+    .with_body(r#"{"status":"deleted","persisted":true,"reloaded":true}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "--format",
+            "json",
+            "authz",
+            "grants",
+            "delete",
+            "app/github",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("deleted"));
+
+    mock.assert();
+}
+
+#[test]
 fn test_cli_authorization_subjects_tokens_list_table_shows_permissions() {
     let mut server = Server::new();
     let mock = authed_json_mock!(
@@ -255,7 +374,7 @@ fn test_cli_authorization_apps_members_set_uses_management_api() {
     let mock = authed_json_mock!(
         server,
         Method::PUT,
-        "/admin/api/v1/authorization/apps/github/members",
+        "/api/v1/authorization/apps/github/members",
         StatusCode::OK
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -295,7 +414,7 @@ fn test_cli_authorization_relationships_list_maps_debug_filters() {
     let mock = authed_json_mock!(
         server,
         Method::GET,
-        "/admin/api/v1/authorization/relationships?pageSize=10&pageToken=next&subjectType=subject&subjectId=user%3Aalice&relation=viewer&resourceType=app_dynamic&resourceId=github&modelId=model-1",
+        "/api/v1/authorization/relationships?pageSize=10&pageToken=next&subjectType=subject&subjectId=user%3Aalice&relation=viewer&resourceType=app_dynamic&resourceId=github&modelId=model-1",
         StatusCode::OK
     )
     .with_body(
