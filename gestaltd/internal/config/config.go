@@ -35,7 +35,7 @@ const (
 	DefaultProviderRepo = "github.com/valon-technologies/gestalt-providers"
 
 	DefaultIndexedDBProvider           = DefaultProviderRepo + "/indexeddb/relationaldb"
-	DefaultIndexedDBVersion            = "0.0.1-alpha.4"
+	DefaultIndexedDBVersion            = "0.0.1-alpha.1"
 	DefaultExternalCredentialsProvider = DefaultProviderRepo + "/externalcredentials/default"
 	DefaultExternalCredentialsVersion  = "0.0.1-alpha.1"
 	DefaultUIProvider                  = DefaultProviderRepo + "/ui/default"
@@ -46,6 +46,7 @@ const (
 const AppConnectionName = core.AppConnectionName
 const AppConnectionAlias = core.AppConnectionAlias
 const ConfigAPIVersion = "gestaltd.config/v6"
+const LegacyConfigAPIVersion = "gestaltd.config/v5"
 
 type Config struct {
 	APIVersion                   string                                      `yaml:"apiVersion,omitempty"`
@@ -2969,6 +2970,53 @@ func normalizeConfigRoot(root *yaml.Node) error {
 	return nil
 }
 
+func migrateLegacyConfigRoot(root *yaml.Node) error {
+	doc := documentValueNode(root)
+	if doc == nil || doc.Kind == 0 {
+		return nil
+	}
+	if doc.Kind != yaml.MappingNode {
+		return fmt.Errorf("parsing config YAML: expected mapping document")
+	}
+
+	if apiVersion := mappingValueNode(doc, "apiVersion"); apiVersion != nil {
+		if strings.TrimSpace(apiVersion.Value) == LegacyConfigAPIVersion {
+			apiVersion.Value = ConfigAPIVersion
+		}
+	}
+
+	hasPlugins := mappingValueNode(doc, "plugins") != nil
+	hasApps := mappingValueNode(doc, "apps") != nil
+	switch {
+	case hasPlugins && hasApps:
+		return fmt.Errorf("config validation: cannot specify both top-level plugins and apps; use apps only")
+	case hasPlugins:
+		renameMappingKey(doc, "plugins", "apps")
+	}
+	return nil
+}
+
+func renameMappingKey(node *yaml.Node, oldKey, newKey string) {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == oldKey {
+			node.Content[i].Value = newKey
+			return
+		}
+	}
+}
+
+func normalizeLegacyConfigAPIVersion(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	if strings.TrimSpace(cfg.APIVersion) == LegacyConfigAPIVersion {
+		cfg.APIVersion = ConfigAPIVersion
+	}
+}
+
 func loadWithLookupPaths(paths []string, lookup func(string) (string, bool), allowMissing bool) (*Config, error) {
 	return loadWithLookupPathsValidation(paths, lookup, allowMissing, true)
 }
@@ -3023,6 +3071,7 @@ func loadConfigFromRoot(paths []string, root yaml.Node, canonicalize bool, valid
 	if err := dec.Decode(&cfg); err != nil && err != io.EOF {
 		return nil, fmt.Errorf("parsing config YAML: %w", err)
 	}
+	normalizeLegacyConfigAPIVersion(&cfg)
 
 	if canonicalize {
 		if err := CanonicalizeStructure(&cfg); err != nil {
@@ -3160,6 +3209,9 @@ func loadValidatedConfigRoot(path string, lookup func(string) (string, bool), mo
 		return yaml.Node{}, fmt.Errorf("parsing config YAML: %w", err)
 	}
 	if err := normalizeConfigRoot(&root); err != nil {
+		return yaml.Node{}, err
+	}
+	if err := migrateLegacyConfigRoot(&root); err != nil {
 		return yaml.Node{}, err
 	}
 	if err := validateConfigRootAPIVersion(root); err != nil {
