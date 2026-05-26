@@ -64,8 +64,52 @@ func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, 
 	return s.deleteProviderDynamicFragmentMembership(ctx, coredata.AuthorizationAppFragmentOwner(plugin), resource, subjectID, "app_member_delete")
 }
 
-func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, subject *adminAuthorizationWriteSubject, role string) (*providerAdminAuthorizationMembership, error) {
-	if s.authorizationProvider == nil {
+func (s *Server) upsertSourceAppAuthorization(ctx context.Context, subject *adminAuthorizationWriteSubject, app, role string) (*providerPluginAuthorizationMembership, error) {
+	if s.authzFragments == nil {
+		return nil, errAdminAuthorizationUnavailable
+	}
+	if subject == nil || strings.TrimSpace(subject.SubjectID) == "" {
+		return nil, fmt.Errorf("subject is required")
+	}
+	resource := &core.ResourceRef{
+		Type: authorization.ProviderResourceTypeAppDynamic,
+		Id:   strings.TrimSpace(app),
+	}
+	fragmentRel := coredata.AuthorizationDynamicFragmentRelationship{
+		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: authorization.ProviderSubjectTypeSubject, ID: strings.TrimSpace(subject.SubjectID)},
+		Relation: strings.TrimSpace(role),
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: resource.GetType(), ID: resource.GetId()},
+	}
+	if _, err := s.upsertAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationAppFragmentOwner(app), fragmentRel, "app_member_upsert"); err != nil {
+		return nil, err
+	}
+	return &providerPluginAuthorizationMembership{
+		App:       app,
+		SubjectID: strings.TrimSpace(subject.SubjectID),
+		Role:      strings.TrimSpace(role),
+	}, nil
+}
+
+func (s *Server) deleteSourceAppAuthorization(ctx context.Context, app, subjectID string) error {
+	if s.authzFragments == nil {
+		return errAdminAuthorizationUnavailable
+	}
+	resource := &core.ResourceRef{
+		Type: authorization.ProviderResourceTypeAppDynamic,
+		Id:   strings.TrimSpace(app),
+	}
+	deleted, _, err := s.deleteDynamicFragmentMembership(ctx, coredata.AuthorizationAppFragmentOwner(app), resource, subjectID, "app_member_delete")
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		return core.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Server) upsertSourceAdminAuthorization(ctx context.Context, subject *adminAuthorizationWriteSubject, role string) (*providerAdminAuthorizationMembership, error) {
+	if s.authzFragments == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
 	if subject == nil || strings.TrimSpace(subject.SubjectID) == "" {
@@ -80,28 +124,31 @@ func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, subject *
 		Relation: strings.TrimSpace(role),
 		Resource: coredata.AuthorizationDynamicFragmentResource{Type: resource.GetType(), ID: resource.GetId()},
 	}
-	_, _, err := s.replaceProviderDynamicMembership(ctx, resource, subject.SubjectID, strings.TrimSpace(role))
-	if err != nil {
-		return nil, err
-	}
 	if _, err := s.upsertAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationGlobalFragmentOwner(), fragmentRel, "admin_member_upsert"); err != nil {
 		return nil, err
 	}
 	return &providerAdminAuthorizationMembership{
 		SubjectID: strings.TrimSpace(subject.SubjectID),
-		Role:      role,
+		Role:      strings.TrimSpace(role),
 	}, nil
 }
 
-func (s *Server) deleteProviderAdminAuthorization(ctx context.Context, subjectID string) error {
-	if s.authorizationProvider == nil {
+func (s *Server) deleteSourceAdminAuthorization(ctx context.Context, subjectID string) error {
+	if s.authzFragments == nil {
 		return errAdminAuthorizationUnavailable
 	}
 	resource := &core.ResourceRef{
 		Type: authorization.ProviderResourceTypeAdminDynamic,
 		Id:   authorization.ProviderResourceIDAdminDynamicGlobal,
 	}
-	return s.deleteProviderDynamicFragmentMembership(ctx, coredata.AuthorizationGlobalFragmentOwner(), resource, subjectID, "admin_member_delete")
+	deleted, _, err := s.deleteDynamicFragmentMembership(ctx, coredata.AuthorizationGlobalFragmentOwner(), resource, subjectID, "admin_member_delete")
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		return core.ErrNotFound
+	}
+	return nil
 }
 
 func (s *Server) deleteProviderDynamicFragmentMembership(ctx context.Context, owner coredata.AuthorizationFragmentOwner, resource *core.ResourceRef, subjectID, reason string) error {

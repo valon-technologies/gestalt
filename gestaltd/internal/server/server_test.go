@@ -2630,9 +2630,9 @@ func newTestAuthorizer(cfg config.AuthorizationConfig, pluginDefs map[string]*co
 	return authorization.New(config.AuthorizationStaticConfig(cfg, pluginDefs))
 }
 
-func mustProviderBackedAuthorizer(t *testing.T, base *authorization.Authorizer, provider *memoryAuthorizationProvider) *authorization.ProviderBackedAuthorizer {
+func mustProviderBackedAuthorizer(t *testing.T, base *authorization.Authorizer, provider *memoryAuthorizationProvider, opts ...authorization.ProviderBackedOption) *authorization.ProviderBackedAuthorizer {
 	t.Helper()
-	authz, err := authorization.NewProviderBacked(base, provider)
+	authz, err := authorization.NewProviderBacked(base, provider, opts...)
 	if err != nil {
 		t.Fatalf("NewProviderBacked: %v", err)
 	}
@@ -2709,6 +2709,9 @@ func seedProviderDynamicAdminMembership(t *testing.T, svc *coredata.Services, au
 		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
 		Relation: role,
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
+		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{
+			Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
+		}},
 	})
 	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
 		t.Fatalf("seedProviderDynamicAdminMembership authorization state reload after write: %v", err)
@@ -2731,6 +2734,9 @@ func seedProviderPluginAuthorization(t *testing.T, svc *coredata.Services, authz
 		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
 		Relation: role,
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: plugin},
+		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{
+			Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
+		}},
 	})
 	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
 		t.Fatalf("seedProviderPluginAuthorization authorization state reload after write: %v", err)
@@ -5220,7 +5226,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("authorization.New: %v", err)
 	}
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Services = svc
@@ -6066,13 +6072,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	authz, err := authorization.NewProviderBacked(baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
-	if err != nil {
-		t.Fatalf("NewProviderBacked: %v", err)
-	}
-	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
-		t.Fatalf("ReloadAuthorizationState: %v", err)
-	}
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -6418,7 +6418,7 @@ func TestAdminAPI_AuthorizationProviderDebugRequiresAdminPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Services = svc
@@ -6470,7 +6470,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	}, nil)
 
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -6686,7 +6686,7 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 		},
 	}, nil)
 
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -6751,7 +6751,7 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	}
 }
 
-func TestAdminAPI_ProviderBackedWritesUseAuthorizationProvider(t *testing.T) {
+func TestAdminAPI_ProviderBackedWritesUseDynamicFragmentSource(t *testing.T) {
 	t.Parallel()
 
 	t.Run("plugin members", func(t *testing.T) {
@@ -6775,7 +6775,7 @@ func TestAdminAPI_ProviderBackedWritesUseAuthorizationProvider(t *testing.T) {
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Auth = &coretesting.StubAuthProvider{
@@ -6836,7 +6836,7 @@ func TestAdminAPI_ProviderBackedWritesUseAuthorizationProvider(t *testing.T) {
 			},
 		}, nil)
 
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Auth = &coretesting.StubAuthProvider{
@@ -6897,7 +6897,7 @@ func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 		},
 	}, nil)
 
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -7163,7 +7163,7 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 
 }
 
-func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) {
+func TestAdminAPI_PluginAuthorizationReloadFailureReturnsAccepted(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
@@ -7179,7 +7179,7 @@ func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) 
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
 	provider.writeErr = fmt.Errorf("provider write failed")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -7204,13 +7204,20 @@ func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) 
 		t.Fatalf("PUT dynamic member: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusInternalServerError {
+	if resp.StatusCode != http.StatusAccepted {
 		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put dynamic member status = %d, want 500: %s", resp.StatusCode, respBody)
+		t.Fatalf("put dynamic member status = %d, want 202: %s", resp.StatusCode, respBody)
+	}
+	fragment, err := svc.AuthzFragments.GetFragmentByOwner(context.Background(), coredata.AuthorizationAppFragmentOwner("sample_plugin"))
+	if err != nil {
+		t.Fatalf("GetFragmentByOwner plugin after accepted reload failure: %v", err)
+	}
+	if len(fragment.Relationships) != 1 || fragment.Relationships[0].Subject.ID != principal.UserSubjectID(dynamicUser.ID) {
+		t.Fatalf("plugin fragment relationships = %#v, want persisted source-layer member", fragment.Relationships)
 	}
 }
 
-func TestAdminAPI_AdminAuthorizationPutFailureReturnsServerError(t *testing.T) {
+func TestAdminAPI_AdminAuthorizationReloadFailureReturnsAccepted(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
@@ -7227,7 +7234,7 @@ func TestAdminAPI_AdminAuthorizationPutFailureReturnsServerError(t *testing.T) {
 		},
 	}, nil)
 
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
 	provider.writeErr = fmt.Errorf("provider write failed")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -7263,9 +7270,16 @@ func TestAdminAPI_AdminAuthorizationPutFailureReturnsServerError(t *testing.T) {
 		t.Fatalf("PUT admin member: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusInternalServerError {
+	if resp.StatusCode != http.StatusAccepted {
 		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put admin member status = %d, want 500: %s", resp.StatusCode, respBody)
+		t.Fatalf("put admin member status = %d, want 202: %s", resp.StatusCode, respBody)
+	}
+	fragment, err := svc.AuthzFragments.GetFragmentByOwner(context.Background(), coredata.AuthorizationGlobalFragmentOwner())
+	if err != nil {
+		t.Fatalf("GetFragmentByOwner global after accepted reload failure: %v", err)
+	}
+	if len(fragment.Relationships) != 1 || fragment.Relationships[0].Subject.ID != principal.UserSubjectID(dynamicAdmin.ID) {
+		t.Fatalf("admin fragment relationships = %#v, want persisted source-layer member", fragment.Relationships)
 	}
 }
 
