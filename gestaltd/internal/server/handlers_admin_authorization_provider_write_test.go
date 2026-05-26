@@ -113,7 +113,7 @@ func TestAdminAPI_DeletePluginMemberRemovesPersistedDynamicFragmentAcrossReload(
 	assertSubjectStatus("before grant", http.StatusForbidden)
 
 	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, subjectID))
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err := http.DefaultClient.Do(req)
@@ -135,7 +135,7 @@ func TestAdminAPI_DeletePluginMemberRemovesPersistedDynamicFragmentAcrossReload(
 		t.Fatalf("fragment after grant = %#v, want one dynamic candidate relationship", fragment.Relationships)
 	}
 
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(subjectID), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(subjectID), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {

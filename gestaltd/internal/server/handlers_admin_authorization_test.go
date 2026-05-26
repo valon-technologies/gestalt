@@ -10,8 +10,8 @@ func TestAppScopedAdminAuthorizationRoutePluginAllowsEncodedAppGrantID(t *testin
 	t.Parallel()
 
 	req := &http.Request{URL: &url.URL{
-		Path:    "/admin/api/v1/authorization/grants/app/github",
-		RawPath: "/admin/api/v1/authorization/grants/app%2Fgithub",
+		Path:    "/api/v1/authorization/grants/app/github",
+		RawPath: "/api/v1/authorization/grants/app%2Fgithub",
 	}}
 
 	appName, ok := appScopedAdminAuthorizationRoutePlugin(req)
