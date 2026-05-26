@@ -5,6 +5,8 @@ import {
   WorkflowRunStatus,
   type AuthorizationEvaluateInput,
   type AgentWorkspace,
+  type JsonObject,
+  type JsonValue,
   type RuntimeLogAppendResponse,
   type WorkflowEvent,
 } from "@valon-technologies/gestalt";
@@ -45,6 +47,8 @@ const workspace: AgentWorkspace = {
   cwd: "/workspace",
   checkouts: [{ url: "https://example.test/repo.git", ref: "main" }],
 };
+const jsonObject: JsonObject = { ok: true };
+const jsonValue: JsonValue = { nested: ["value"] };
 const egressMode: RuntimeEgressMode = RuntimeEgressMode.NONE;
 
 void Authorization;
@@ -54,6 +58,8 @@ void evaluateInput;
 void appendResponse;
 void event;
 void workspace;
+void jsonObject;
+void jsonValue;
 void egressMode;
 void (undefined as unknown as ProtocolStruct);
 void (undefined as unknown as ProtocolRequest);

@@ -368,6 +368,12 @@ class MainEntrypointTests(unittest.TestCase):
 
         @app.operation
         def whoami(request: Request) -> dict[str, Any]:
+            workflow_trigger = request.workflow.get("trigger")
+            workflow_trigger_kind = (
+                workflow_trigger.get("kind", "")
+                if isinstance(workflow_trigger, dict)
+                else ""
+            )
             return {
                 "token": request.token,
                 "subject_id": request.subject.id,
@@ -387,9 +393,7 @@ class MainEntrypointTests(unittest.TestCase):
                 "idempotency_key": request.idempotency_key,
                 "invocation_token": request.invocation_token,
                 "workflow_run_id": str(request.workflow.get("runId", "")),
-                "workflow_trigger_kind": str(
-                    request.workflow.get("trigger", {}).get("kind", "")
-                ),
+                "workflow_trigger_kind": str(workflow_trigger_kind),
                 "workflow": request.workflow,
                 "tool_refs_set": request.tool_refs_set,
                 "tool_ref_app": request.tool_refs[0].app if request.tool_refs else "",

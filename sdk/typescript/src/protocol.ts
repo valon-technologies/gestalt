@@ -14,6 +14,8 @@ import {
   type Value,
 } from "@bufbuild/protobuf/wkt";
 
+export type { JsonObject, JsonValue };
+
 const MIN_TIMESTAMP_SECONDS = -62_135_596_800n;
 const MAX_TIMESTAMP_SECONDS = 253_402_300_799n;
 const MIN_TIMESTAMP_SECONDS_NUMBER = Number(MIN_TIMESTAMP_SECONDS);

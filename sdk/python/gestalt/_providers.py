@@ -19,6 +19,32 @@ from typing import (
     runtime_checkable,
 )
 
+from ._authorization import (
+    AccessDecision,
+    AccessEvaluationRequest,
+    AccessEvaluationsRequest,
+    AccessEvaluationsResponse,
+    ActionSearchRequest,
+    ActionSearchResponse,
+    AuthorizationMetadata,
+    AuthorizationModelRef,
+    EffectiveSubjectSearchRequest,
+    EffectiveSubjectSearchResponse,
+    ExpandRequest,
+    ExpandResponse,
+    GetActiveModelResponse,
+    ListModelsRequest,
+    ListModelsResponse,
+    ReadRelationshipsRequest,
+    ReadRelationshipsResponse,
+    ResourceSearchRequest,
+    ResourceSearchResponse,
+    SubjectSearchRequest,
+    SubjectSearchResponse,
+    WriteModelRequest,
+    WriteRelationshipsRequest,
+)
+
 if TYPE_CHECKING:
     from ._agent import (
         AgentInteraction,
@@ -51,31 +77,6 @@ if TYPE_CHECKING:
         CompleteLoginRequest,
     )
     from ._cache import CacheEntry
-    from ._gen.v1.authorization_pb2 import (
-        AccessDecision,
-        AccessEvaluationRequest,
-        AccessEvaluationsRequest,
-        AccessEvaluationsResponse,
-        ActionSearchRequest,
-        ActionSearchResponse,
-        AuthorizationMetadata,
-        AuthorizationModelRef,
-        EffectiveSubjectSearchRequest,
-        EffectiveSubjectSearchResponse,
-        ExpandRequest,
-        ExpandResponse,
-        GetActiveModelResponse,
-        ListModelsRequest,
-        ListModelsResponse,
-        ReadRelationshipsRequest,
-        ReadRelationshipsResponse,
-        ResourceSearchRequest,
-        ResourceSearchResponse,
-        SubjectSearchRequest,
-        SubjectSearchResponse,
-        WriteModelRequest,
-        WriteRelationshipsRequest,
-    )
     from ._runtime_provider import (
         GetRuntimeSessionRequest,
         GetRuntimeSupportRequest,

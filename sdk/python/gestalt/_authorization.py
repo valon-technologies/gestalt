@@ -23,6 +23,7 @@ from ._grpc_transport import (
     internal_channel_target,
     secure_internal_channel,
 )
+from ._protocol import JsonObject
 from ._protocol import dataclass_mapping as _dataclass_mapping
 
 empty_pb2: Any = _empty_pb2
@@ -44,106 +45,114 @@ _shared_authorization_lock = threading.Lock()
 class AuthorizationSubject:
     type: str = ""
     id: str = ""
-    properties: Mapping[str, Any] | None = None
+    properties: JsonObject | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class AuthorizationResource:
     type: str = ""
     id: str = ""
-    properties: Mapping[str, Any] | None = None
+    properties: JsonObject | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class AuthorizationSubjectSet:
-    resource: Any | None = None
+    resource: AuthorizationResource | None = None
     relation: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class AuthorizationRelationshipTarget:
-    subject: Any | None = None
-    resource: Any | None = None
-    subject_set: Any | None = None
+    subject: AuthorizationSubject | None = None
+    resource: AuthorizationResource | None = None
+    subject_set: AuthorizationSubjectSet | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class AuthorizationAction:
     name: str = ""
-    properties: Mapping[str, Any] | None = None
+    properties: JsonObject | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class AccessEvaluationRequest:
-    subject: Any | None = None
-    action: Any | None = None
-    resource: Any | None = None
-    context: Mapping[str, Any] | None = None
+    subject: AuthorizationSubject | None = None
+    action: AuthorizationAction | None = None
+    resource: AuthorizationResource | None = None
+    context: JsonObject | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class AccessDecision:
     allowed: bool = False
-    context: Mapping[str, Any] | None = None
+    context: JsonObject | None = None
     model_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class AccessEvaluationsRequest:
-    requests: Sequence[Any] | None = None
+    requests: Sequence[AccessEvaluationRequest] = _dataclasses.field(
+        default_factory=tuple
+    )
 
 
 @_dataclasses.dataclass(slots=True)
 class AccessEvaluationsResponse:
-    decisions: Sequence[Any] | None = None
+    decisions: Sequence[AccessDecision] = _dataclasses.field(default_factory=tuple)
 
 
 @_dataclasses.dataclass(slots=True)
 class ResourceSearchRequest:
-    subject: Any | None = None
-    action: Any | None = None
+    subject: AuthorizationSubject | None = None
+    action: AuthorizationAction | None = None
     resource_type: str = ""
-    context: Mapping[str, Any] | None = None
+    context: JsonObject | None = None
     page_size: int = 0
     page_token: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class ResourceSearchResponse:
-    resources: Sequence[Any] | None = None
+    resources: Sequence[AuthorizationResource] = _dataclasses.field(
+        default_factory=tuple
+    )
     next_page_token: str = ""
     model_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class SubjectSearchRequest:
-    resource: Any | None = None
-    action: Any | None = None
+    resource: AuthorizationResource | None = None
+    action: AuthorizationAction | None = None
     subject_type: str = ""
-    context: Mapping[str, Any] | None = None
+    context: JsonObject | None = None
     page_size: int = 0
     page_token: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class SubjectSearchResponse:
-    subjects: Sequence[Any] | None = None
+    subjects: Sequence[AuthorizationSubject] = _dataclasses.field(
+        default_factory=tuple
+    )
     next_page_token: str = ""
     model_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class EffectiveSubjectSearchRequest:
-    resource: Any | None = None
-    action: Any | None = None
-    context: Mapping[str, Any] | None = None
+    resource: AuthorizationResource | None = None
+    action: AuthorizationAction | None = None
+    context: JsonObject | None = None
     page_size: int = 0
     page_token: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class EffectiveSubjectSearchResponse:
-    targets: Sequence[Any] | None = None
+    targets: Sequence[AuthorizationRelationshipTarget] = _dataclasses.field(
+        default_factory=tuple
+    )
     next_page_token: str = ""
     model_id: str = ""
     truncated: bool = False
@@ -151,101 +160,109 @@ class EffectiveSubjectSearchResponse:
 
 @_dataclasses.dataclass(slots=True)
 class ActionSearchRequest:
-    subject: Any | None = None
-    resource: Any | None = None
-    context: Mapping[str, Any] | None = None
+    subject: AuthorizationSubject | None = None
+    resource: AuthorizationResource | None = None
+    context: JsonObject | None = None
     page_size: int = 0
     page_token: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class ActionSearchResponse:
-    actions: Sequence[Any] | None = None
+    actions: Sequence[AuthorizationAction] = _dataclasses.field(default_factory=tuple)
     next_page_token: str = ""
     model_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class AuthorizationMetadata:
-    capabilities: Sequence[str] | None = None
+    capabilities: Sequence[str] = _dataclasses.field(default_factory=tuple)
     active_model_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class Relationship:
-    subject: Any | None = None
+    subject: AuthorizationSubject | None = None
     relation: str = ""
-    resource: Any | None = None
-    properties: Mapping[str, Any] | None = None
-    target: Any | None = None
+    resource: AuthorizationResource | None = None
+    properties: JsonObject | None = None
+    target: AuthorizationRelationshipTarget | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class RelationshipKey:
-    subject: Any | None = None
+    subject: AuthorizationSubject | None = None
     relation: str = ""
-    resource: Any | None = None
-    target: Any | None = None
+    resource: AuthorizationResource | None = None
+    target: AuthorizationRelationshipTarget | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class ReadRelationshipsRequest:
-    subject: Any | None = None
+    subject: AuthorizationSubject | None = None
     relation: str = ""
-    resource: Any | None = None
+    resource: AuthorizationResource | None = None
     page_size: int = 0
     page_token: str = ""
     model_id: str = ""
-    target: Any | None = None
+    target: AuthorizationRelationshipTarget | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class ReadRelationshipsResponse:
-    relationships: Sequence[Any] | None = None
+    relationships: Sequence[Relationship] = _dataclasses.field(default_factory=tuple)
     next_page_token: str = ""
     model_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class WriteRelationshipsRequest:
-    writes: Sequence[Any] | None = None
-    deletes: Sequence[Any] | None = None
+    writes: Sequence[Relationship] = _dataclasses.field(default_factory=tuple)
+    deletes: Sequence[RelationshipKey] = _dataclasses.field(default_factory=tuple)
     model_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class AuthorizationModel:
     version: int = 0
-    resource_types: Sequence[Any] | None = None
+    resource_types: Sequence[AuthorizationModelResourceType] = _dataclasses.field(
+        default_factory=tuple
+    )
 
 
 @_dataclasses.dataclass(slots=True)
 class AuthorizationModelResourceType:
     name: str = ""
-    relations: Sequence[Any] | None = None
-    actions: Sequence[Any] | None = None
+    relations: Sequence[AuthorizationModelRelation] = _dataclasses.field(
+        default_factory=tuple
+    )
+    actions: Sequence[AuthorizationModelAction] = _dataclasses.field(
+        default_factory=tuple
+    )
 
 
 @_dataclasses.dataclass(slots=True)
 class AuthorizationModelRelation:
     name: str = ""
-    subject_types: Sequence[str] | None = None
-    allowed_targets: Sequence[Any] | None = None
-    rewrite: Any | None = None
+    subject_types: Sequence[str] = _dataclasses.field(default_factory=tuple)
+    allowed_targets: Sequence[AuthorizationModelAllowedTarget] = _dataclasses.field(
+        default_factory=tuple
+    )
+    rewrite: AuthorizationModelRewrite | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class AuthorizationModelAction:
     name: str = ""
-    relations: Sequence[str] | None = None
-    rewrite: Any | None = None
+    relations: Sequence[str] = _dataclasses.field(default_factory=tuple)
+    rewrite: AuthorizationModelRewrite | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class AuthorizationModelAllowedTarget:
     subject_type: str = ""
     resource_type: str = ""
-    subject_set: Any | None = None
+    subject_set: AuthorizationModelSubjectSetTarget | None = None
 
 
 @_dataclasses.dataclass(slots=True)
@@ -256,10 +273,10 @@ class AuthorizationModelSubjectSetTarget:
 
 @_dataclasses.dataclass(slots=True)
 class AuthorizationModelRewrite:
-    this: Any | None = None
-    computed_userset: Any | None = None
-    tuple_to_userset: Any | None = None
-    union: Any | None = None
+    this: AuthorizationModelRewriteThis | None = None
+    computed_userset: AuthorizationModelComputedUserset | None = None
+    tuple_to_userset: AuthorizationModelTupleToUserset | None = None
+    union: AuthorizationModelRewriteUnion | None = None
 
 
 @_dataclasses.dataclass(slots=True)
@@ -280,7 +297,9 @@ class AuthorizationModelTupleToUserset:
 
 @_dataclasses.dataclass(slots=True)
 class AuthorizationModelRewriteUnion:
-    children: Sequence[Any] | None = None
+    children: Sequence[AuthorizationModelRewrite] = _dataclasses.field(
+        default_factory=tuple
+    )
 
 
 @_dataclasses.dataclass(slots=True)
@@ -296,7 +315,7 @@ class AuthorizationModelRef:
 
 @_dataclasses.dataclass(slots=True)
 class GetActiveModelResponse:
-    model: Any | None = None
+    model: AuthorizationModelRef | None = None
 
 
 @_dataclasses.dataclass(slots=True)
@@ -307,34 +326,34 @@ class ListModelsRequest:
 
 @_dataclasses.dataclass(slots=True)
 class ListModelsResponse:
-    models: Sequence[Any] | None = None
+    models: Sequence[AuthorizationModelRef] = _dataclasses.field(default_factory=tuple)
     next_page_token: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class WriteModelRequest:
-    model: Any | None = None
+    model: AuthorizationModel | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class ExpandRequest:
-    resource: Any | None = None
+    resource: AuthorizationResource | None = None
     relation: str = ""
-    context: Mapping[str, Any] | None = None
+    context: JsonObject | None = None
     max_depth: int = 0
     model_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class ExpandNode:
-    target: Any | None = None
+    target: AuthorizationRelationshipTarget | None = None
     relation: str = ""
-    children: Sequence[Any] | None = None
+    children: Sequence[ExpandNode] = _dataclasses.field(default_factory=tuple)
 
 
 @_dataclasses.dataclass(slots=True)
 class ExpandResponse:
-    root: Any | None = None
+    root: ExpandNode | None = None
     truncated: bool = False
     cycle_detected: bool = False
     max_depth_reached: bool = False
@@ -692,97 +711,169 @@ class Authorization:
         self._closed = True
         self._channel.close()
 
-    def evaluate(self, request: Any) -> Any:
+    def evaluate(
+        self,
+        request: AccessEvaluationRequest,
+    ) -> AccessDecision:
         """Evaluate one authorization request."""
 
-        return _authorization_from_message(self._stub.Evaluate(
-            _authorization_message(
-                request,
-                authorization_pb2.AccessEvaluationRequest,
-            )
-        ))
+        return cast(
+            AccessDecision,
+            _authorization_from_message(
+                self._stub.Evaluate(
+                    _authorization_message(
+                        request,
+                        authorization_pb2.AccessEvaluationRequest,
+                    )
+                )
+            ),
+        )
 
-    def evaluate_many(self, request: Any) -> Any:
+    def evaluate_many(
+        self,
+        request: AccessEvaluationsRequest,
+    ) -> AccessEvaluationsResponse:
         """Evaluate multiple authorization requests."""
 
-        return _authorization_from_message(self._stub.EvaluateMany(
-            _authorization_message(
-                request,
-                authorization_pb2.AccessEvaluationsRequest,
-            )
-        ))
+        return cast(
+            AccessEvaluationsResponse,
+            _authorization_from_message(
+                self._stub.EvaluateMany(
+                    _authorization_message(
+                        request,
+                        authorization_pb2.AccessEvaluationsRequest,
+                    )
+                )
+            ),
+        )
 
-    def search_resources(self, request: Any) -> Any:
+    def search_resources(
+        self,
+        request: ResourceSearchRequest,
+    ) -> ResourceSearchResponse:
         """Search resources visible to a subject for an action."""
 
-        return _authorization_from_message(self._stub.SearchResources(
-            _authorization_message(
-                request,
-                authorization_pb2.ResourceSearchRequest,
-            )
-        ))
+        return cast(
+            ResourceSearchResponse,
+            _authorization_from_message(
+                self._stub.SearchResources(
+                    _authorization_message(
+                        request,
+                        authorization_pb2.ResourceSearchRequest,
+                    )
+                )
+            ),
+        )
 
-    def search_subjects(self, request: Any) -> Any:
+    def search_subjects(
+        self,
+        request: SubjectSearchRequest,
+    ) -> SubjectSearchResponse:
         """Search subjects related to a resource and action."""
 
-        return _authorization_from_message(self._stub.SearchSubjects(
-            _authorization_message(
-                request,
-                authorization_pb2.SubjectSearchRequest,
-            )
-        ))
+        return cast(
+            SubjectSearchResponse,
+            _authorization_from_message(
+                self._stub.SearchSubjects(
+                    _authorization_message(
+                        request,
+                        authorization_pb2.SubjectSearchRequest,
+                    )
+                )
+            ),
+        )
 
-    def effective_search_resources(self, request: Any) -> Any:
+    def effective_search_resources(
+        self,
+        request: ResourceSearchRequest,
+    ) -> ResourceSearchResponse:
         """Search effective resources visible through inherited relationships."""
 
-        return _authorization_from_message(self._stub.EffectiveSearchResources(
-            _authorization_message(
-                request,
-                authorization_pb2.ResourceSearchRequest,
-            )
-        ))
+        return cast(
+            ResourceSearchResponse,
+            _authorization_from_message(
+                self._stub.EffectiveSearchResources(
+                    _authorization_message(
+                        request,
+                        authorization_pb2.ResourceSearchRequest,
+                    )
+                )
+            ),
+        )
 
-    def effective_search_subjects(self, request: Any) -> Any:
+    def effective_search_subjects(
+        self,
+        request: EffectiveSubjectSearchRequest,
+    ) -> EffectiveSubjectSearchResponse:
         """Search effective subjects or subject sets for a resource and action."""
 
-        return _authorization_from_message(self._stub.EffectiveSearchSubjects(
-            _authorization_message(
-                request,
-                authorization_pb2.EffectiveSubjectSearchRequest,
-            )
-        ))
+        return cast(
+            EffectiveSubjectSearchResponse,
+            _authorization_from_message(
+                self._stub.EffectiveSearchSubjects(
+                    _authorization_message(
+                        request,
+                        authorization_pb2.EffectiveSubjectSearchRequest,
+                    )
+                )
+            ),
+        )
 
-    def search_actions(self, request: Any) -> Any:
+    def search_actions(
+        self,
+        request: ActionSearchRequest,
+    ) -> ActionSearchResponse:
         """Search actions available between a subject and resource."""
 
-        return _authorization_from_message(self._stub.SearchActions(
-            _authorization_message(
-                request,
-                authorization_pb2.ActionSearchRequest,
-            )
-        ))
+        return cast(
+            ActionSearchResponse,
+            _authorization_from_message(
+                self._stub.SearchActions(
+                    _authorization_message(
+                        request,
+                        authorization_pb2.ActionSearchRequest,
+                    )
+                )
+            ),
+        )
 
-    def expand(self, request: Any) -> Any:
+    def expand(self, request: ExpandRequest) -> ExpandResponse:
         """Expand one resource relation into contributing relationship targets."""
 
-        return _authorization_from_message(self._stub.Expand(
-            _authorization_message(
-                request,
-                authorization_pb2.ExpandRequest,
-            )
-        ))
+        return cast(
+            ExpandResponse,
+            _authorization_from_message(
+                self._stub.Expand(
+                    _authorization_message(
+                        request,
+                        authorization_pb2.ExpandRequest,
+                    )
+                )
+            ),
+        )
 
-    def read_relationships(self, request: Any) -> Any:
+    def read_relationships(
+        self,
+        request: ReadRelationshipsRequest,
+    ) -> ReadRelationshipsResponse:
         """Read authorization relationships matching a request."""
 
-        return _authorization_from_message(self._stub.ReadRelationships(
-            _authorization_message(
-                request,
-                authorization_pb2.ReadRelationshipsRequest,
-            )
-        ))
+        return cast(
+            ReadRelationshipsResponse,
+            _authorization_from_message(
+                self._stub.ReadRelationships(
+                    _authorization_message(
+                        request,
+                        authorization_pb2.ReadRelationshipsRequest,
+                    )
+                )
+            ),
+        )
 
-    def write_relationships(self, request: Any) -> None:
+    def write_relationships(
+        self,
+        request: WriteRelationshipsRequest,
+    ) -> None:
         """Write authorization relationships."""
 
         self._stub.WriteRelationships(
@@ -792,35 +883,57 @@ class Authorization:
             )
         )
 
-    def get_metadata(self) -> Any:
+    def get_metadata(self) -> AuthorizationMetadata:
         """Return host authorization provider metadata."""
 
-        return _authorization_from_message(self._stub.GetMetadata(empty_pb2.Empty()))
+        return cast(
+            AuthorizationMetadata,
+            _authorization_from_message(self._stub.GetMetadata(empty_pb2.Empty())),
+        )
 
-    def get_active_model(self) -> Any:
+    def get_active_model(self) -> GetActiveModelResponse:
         """Return the active authorization model."""
 
-        return _authorization_from_message(self._stub.GetActiveModel(empty_pb2.Empty()))
+        return cast(
+            GetActiveModelResponse,
+            _authorization_from_message(self._stub.GetActiveModel(empty_pb2.Empty())),
+        )
 
-    def list_models(self, request: Any) -> Any:
+    def list_models(
+        self,
+        request: ListModelsRequest,
+    ) -> ListModelsResponse:
         """List authorization model references."""
 
-        return _authorization_from_message(self._stub.ListModels(
-            _authorization_message(
-                request,
-                authorization_pb2.ListModelsRequest,
-            )
-        ))
+        return cast(
+            ListModelsResponse,
+            _authorization_from_message(
+                self._stub.ListModels(
+                    _authorization_message(
+                        request,
+                        authorization_pb2.ListModelsRequest,
+                    )
+                )
+            ),
+        )
 
-    def write_model(self, request: Any) -> Any:
+    def write_model(
+        self,
+        request: WriteModelRequest,
+    ) -> AuthorizationModelRef:
         """Write an authorization model."""
 
-        return _authorization_from_message(self._stub.WriteModel(
-            _authorization_message(
-                request,
-                authorization_pb2.WriteModelRequest,
-            )
-        ))
+        return cast(
+            AuthorizationModelRef,
+            _authorization_from_message(
+                self._stub.WriteModel(
+                    _authorization_message(
+                        request,
+                        authorization_pb2.WriteModelRequest,
+                    )
+                )
+            ),
+        )
 
     def __enter__(self) -> Authorization:
         return self
