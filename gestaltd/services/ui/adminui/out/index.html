@@ -1660,7 +1660,7 @@
           setAuthStatus("Loading app members...", "");
           const appName = selectedAppName;
           try {
-            const result = await fetchJSON("/admin/api/v1/authorization/apps/" + encodeURIComponent(appName) + "/members");
+            const result = await fetchJSON("/api/v1/authorization/apps/" + encodeURIComponent(appName) + "/members");
             if (requestToken !== authMembersRequestToken || appName !== selectedAppName) return;
             authMembers = Array.isArray(result.payload) ? result.payload : [];
             setAuthStatus("Loaded " + authMembers.length + " rows for " + appName + ".", "ok");
@@ -1681,7 +1681,7 @@
           renderAuthorization();
           setAuthStatus("Loading authorization apps...", "");
           try {
-            const result = await fetchJSON("/admin/api/v1/authorization/apps");
+            const result = await fetchJSON("/api/v1/authorization/apps");
             authApps = Array.isArray(result.payload) ? result.payload : [];
             authLoaded = true;
             renderAuthorizationAppSelect();
@@ -1712,7 +1712,7 @@
           renderAdminMembersWorkspace();
           setAdminMembersStatus("Loading Gestalt admins...", "");
           try {
-            const result = await fetchJSON("/admin/api/v1/authorization/admins/members");
+            const result = await fetchJSON("/api/v1/authorization/admins/members");
             if (requestToken !== adminMembersRequestToken) return;
             adminMembers = Array.isArray(result.payload) ? result.payload : [];
             adminAvailable = true;
@@ -1776,7 +1776,7 @@
             setAuthStatus("Saving dynamic grant...", "");
             try {
               const result = await fetchJSON(
-                "/admin/api/v1/authorization/apps/" + encodeURIComponent(selectedAppName) + "/members",
+                "/api/v1/authorization/apps/" + encodeURIComponent(selectedAppName) + "/members",
                 {
                   method: "PUT",
                   headers: {
@@ -1816,7 +1816,7 @@
             setAuthStatus("Removing dynamic grant...", "");
             try {
               const result = await fetchJSON(
-                "/admin/api/v1/authorization/apps/" + encodeURIComponent(selectedAppName) + "/members/" + encodeURIComponent(subjectID),
+                "/api/v1/authorization/apps/" + encodeURIComponent(selectedAppName) + "/members/" + encodeURIComponent(subjectID),
                 {
                   method: "DELETE",
                 },
@@ -1864,7 +1864,7 @@
             updateAdminMembersFormState();
             setAdminMembersStatus("Saving built-in admin grant...", "");
             try {
-              const result = await fetchJSON("/admin/api/v1/authorization/admins/members", {
+              const result = await fetchJSON("/api/v1/authorization/admins/members", {
                 method: "PUT",
                 headers: {
                   Accept: "application/json",
@@ -1904,7 +1904,7 @@
             setAdminMembersStatus("Removing built-in admin grant...", "");
             try {
               const result = await fetchJSON(
-                "/admin/api/v1/authorization/admins/members/" + encodeURIComponent(subjectID),
+                "/api/v1/authorization/admins/members/" + encodeURIComponent(subjectID),
                 {
                   method: "DELETE",
                 },

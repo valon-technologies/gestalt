@@ -4082,8 +4082,8 @@ func TestBuiltInAdminRoute_EmbeddedAdminUIIncludesAuthorizationWorkspace(t *test
 		`data-tab-panel="authorization"`,
 		`data-tab="admins"`,
 		`data-tab-panel="admins"`,
-		"/admin/api/v1/authorization/apps",
-		"/admin/api/v1/authorization/admins/members",
+		"/api/v1/authorization/apps",
+		"/api/v1/authorization/admins/members",
 		`window.__gestaltAdminShell.loginBase = "/api/v1/auth/login"`,
 		"Save dynamic grant",
 		"Save admin grant",
@@ -4387,7 +4387,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET admin api without auth: %v", err)
@@ -4397,7 +4397,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		t.Fatalf("unauthenticated admin api status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -4408,7 +4408,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		t.Fatalf("viewer admin api status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "dynamic-admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -4423,7 +4423,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		t.Fatalf("dynamic admin can-write header = %q, want true", got)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -4443,7 +4443,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		t.Fatalf("apps = %+v, want double escaped, escaped, slash, other_plugin, and sample_plugin", apps)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -4456,7 +4456,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	}
 
 	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
 	resp, err = http.DefaultClient.Do(req)
@@ -4469,7 +4469,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		t.Fatalf("plugin admin put app member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -4481,7 +4481,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		t.Fatalf("plugin admin delete app member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps/a%252Fb/members", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps/a%252Fb/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "escaped-plugin-admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -4498,11 +4498,11 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		session string
 		path    string
 	}{
-		{name: "plugin admin cannot manage other plugin", session: "plugin-admin-session", path: "/admin/api/v1/authorization/apps/other_plugin/members"},
-		{name: "plugin viewer cannot manage plugin", session: "plugin-viewer-session", path: "/admin/api/v1/authorization/apps/sample_plugin/members"},
-		{name: "escaped slash path does not authorize slash plugin", session: "slash-plugin-admin-session", path: "/admin/api/v1/authorization/apps/a%2Fb/members"},
-		{name: "double escaped app admin cannot manage escaped plugin", session: "double-escaped-plugin-admin-session", path: "/admin/api/v1/authorization/apps/a%252Fb/members"},
-		{name: "plugin admin cannot manage gestaltd admins", session: "plugin-admin-session", path: "/admin/api/v1/authorization/admins/members"},
+		{name: "plugin admin cannot manage other plugin", session: "plugin-admin-session", path: "/api/v1/authorization/apps/other_plugin/members"},
+		{name: "plugin viewer cannot manage plugin", session: "plugin-viewer-session", path: "/api/v1/authorization/apps/sample_plugin/members"},
+		{name: "escaped slash path does not authorize slash plugin", session: "slash-plugin-admin-session", path: "/api/v1/authorization/apps/a%2Fb/members"},
+		{name: "double escaped app admin cannot manage escaped plugin", session: "double-escaped-plugin-admin-session", path: "/api/v1/authorization/apps/a%252Fb/members"},
+		{name: "plugin admin cannot manage gestaltd admins", session: "plugin-admin-session", path: "/api/v1/authorization/admins/members"},
 	} {
 		req, _ = http.NewRequest(http.MethodGet, ts.URL+tc.path, nil)
 		req.AddCookie(&http.Cookie{Name: "session_token", Value: tc.session})
@@ -4529,7 +4529,7 @@ func TestAdminAPI_RoutesMountedWithoutAdminUI(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/admin/api/v1/authorization/apps")
+	resp, err := http.Get(ts.URL + "/api/v1/authorization/apps")
 	if err != nil {
 		t.Fatalf("GET admin api without admin ui: %v", err)
 	}
@@ -5095,7 +5095,7 @@ func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "dynamic-admin-session"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -5107,7 +5107,7 @@ func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {
 		t.Fatalf("management dynamic admin api status = %d, want 200: %s", resp.StatusCode, body)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -5168,7 +5168,7 @@ func TestAdminAPI_HumanAuthorization_UserResolutionFailure(t *testing.T) {
 	stubDB.Err = fmt.Errorf("database unavailable")
 	defer func() { stubDB.Err = nil }()
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -5181,7 +5181,7 @@ func TestAdminAPI_HumanAuthorization_UserResolutionFailure(t *testing.T) {
 	}
 }
 
-func TestAdminAPIRoutes_HiddenOnPublicProfile(t *testing.T) {
+func TestAdminAPIRoutes_OldAdminPrefixHiddenOnPublicProfile(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -5197,11 +5197,11 @@ func TestAdminAPIRoutes_HiddenOnPublicProfile(t *testing.T) {
 
 	resp, err := http.Get(ts.URL + "/admin/api/v1/authorization/apps")
 	if err != nil {
-		t.Fatalf("GET public admin api: %v", err)
+		t.Fatalf("GET old public admin api: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("public admin api status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+		t.Fatalf("old public admin api status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
 }
 
@@ -5241,7 +5241,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/admin/api/v1/authorization/apps")
+	resp, err := http.Get(ts.URL + "/api/v1/authorization/apps")
 	if err != nil {
 		t.Fatalf("GET apps: %v", err)
 	}
@@ -5268,7 +5268,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 
 	dynamicEmail := "dynamic@example.test"
 	body := bytes.NewBufferString(fmt.Sprintf(`{"email":%q,"role":"viewer"}`, dynamicEmail))
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -5306,7 +5306,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 
 	serviceAccountSubjectID := "service_account:reporting-bot"
 	body = bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, serviceAccountSubjectID))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -5338,7 +5338,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("service account membership email = %q, want empty", putServiceAccountMembershipResp.Membership.Email)
 	}
 
-	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/apps/sample_plugin/members")
+	resp, err = http.Get(ts.URL + "/api/v1/authorization/apps/sample_plugin/members")
 	if err != nil {
 		t.Fatalf("GET members: %v", err)
 	}
@@ -5390,7 +5390,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	}
 
 	body = bytes.NewBufferString(`{"email":"static@example.test","role":"viewer"}`)
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -5402,7 +5402,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("put static-conflict status = %d, want 409: %s", resp.StatusCode, respBody)
 	}
 
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE dynamic member: %v", err)
@@ -5413,7 +5413,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("delete dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(serviceAccountSubjectID), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(serviceAccountSubjectID), nil)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE service account member: %v", err)
@@ -5424,7 +5424,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("delete service account member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/apps/sample_plugin/members")
+	resp, err = http.Get(ts.URL + "/api/v1/authorization/apps/sample_plugin/members")
 	if err != nil {
 		t.Fatalf("GET members after delete: %v", err)
 	}
@@ -6128,7 +6128,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		}},
 		Properties: mustStruct(t, map[string]any{"source": "provider"}),
 	})
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/grants/"+url.PathEscape("app/sample_plugin"), nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/grants/"+url.PathEscape("app/sample_plugin"), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -6153,7 +6153,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("plugin fragment properties = %#v, want provider source", pluginFragmentResp.Relationships[0].Properties)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/grants", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/grants", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6174,7 +6174,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 
 	dynamicUser := seedUser(t, svc, "dynamic@example.test")
 	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
@@ -6208,7 +6208,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("ReloadAuthorizationState after provider-backed app write: %v", err)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6237,7 +6237,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("members = %+v, want target-only direct subject %q", members, rawSubjectID)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/provider", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/provider", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6262,7 +6262,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatal("expected active model id")
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/models", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/models", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6295,7 +6295,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("models response = %+v, want active model %q to be listed", modelsResp.Models, providerSummary.ActiveModelID)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/relationships?resourceType=app_dynamic&resourceId=sample_plugin", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/relationships?resourceType=app_dynamic&resourceId=sample_plugin", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6345,7 +6345,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal fragment PUT body: %v", err)
 	}
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/grants/"+url.PathEscape("app/sample_plugin"), bytes.NewReader(fragmentPutBody))
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/grants/"+url.PathEscape("app/sample_plugin"), bytes.NewReader(fragmentPutBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
@@ -6365,7 +6365,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("plugin fragment PUT response has %d relationships, want 3", len(fragmentPutResp.Relationships))
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/relationships?resourceType=app_dynamic&resourceId=sample_plugin", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/relationships?resourceType=app_dynamic&resourceId=sample_plugin", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6389,7 +6389,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("expected 3 provider relationships after fragment PUT, got %d", len(relationshipsResp.Relationships))
 	}
 
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/grants/"+url.PathEscape("app/sample_plugin"), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/grants/"+url.PathEscape("app/sample_plugin"), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6410,7 +6410,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatal("plugin fragment DELETE response reloaded = false, want true")
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/relationships?resourceType=app_dynamic&resourceId=sample_plugin", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/relationships?resourceType=app_dynamic&resourceId=sample_plugin", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6472,9 +6472,9 @@ func TestAdminAPI_AuthorizationProviderDebugRequiresAdminPolicy(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	paths := []string{
-		"/admin/api/v1/authorization/provider",
-		"/admin/api/v1/authorization/models",
-		"/admin/api/v1/authorization/relationships",
+		"/api/v1/authorization/provider",
+		"/api/v1/authorization/models",
+		"/api/v1/authorization/relationships",
 	}
 	for _, path := range paths {
 		resp, err := http.Get(ts.URL + path)
@@ -6533,7 +6533,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -6555,7 +6555,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 
 	dynamicAdminEmail := "dynamic-admin@example.test"
 	body := bytes.NewBufferString(fmt.Sprintf(`{"email":%q,"role":"owner"}`, dynamicAdminEmail))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
@@ -6602,7 +6602,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("admin fragment role = %q, want owner", got)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6640,7 +6640,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	}
 
 	body = bytes.NewBufferString(`{"email":"static-admin@example.test","role":"owner"}`)
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
@@ -6654,7 +6654,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	}
 
 	body = bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"operator"}`, principal.UserSubjectID(dynamicAdmin.ID)))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
@@ -6674,7 +6674,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("admin fragment after role change = %#v, want single operator relationship", adminFragment.Relationships)
 	}
 
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/admins/members/"+url.PathEscape(principal.UserSubjectID(dynamicAdmin.ID)), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/admins/members/"+url.PathEscape(principal.UserSubjectID(dynamicAdmin.ID)), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6686,7 +6686,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("delete admin member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6751,7 +6751,7 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 
 	dynamicAdmin := seedUser(t, svc, "dynamic-admin@example.test")
 	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"owner"}`, principal.UserSubjectID(dynamicAdmin.ID)))
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err := http.DefaultClient.Do(req)
@@ -6768,7 +6768,7 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 		t.Fatalf("ReloadAuthorizationState after provider-backed admin write: %v", err)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -6843,7 +6843,7 @@ func TestAdminAPI_ProviderBackedWritesUseDynamicFragmentSource(t *testing.T) {
 
 		dynamicUser := seedUser(t, svc, "dynamic@example.test")
 		body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
+		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
 		req.Header.Set("Content-Type", "application/json")
 		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 		resp, err := http.DefaultClient.Do(req)
@@ -6901,7 +6901,7 @@ func TestAdminAPI_ProviderBackedWritesUseDynamicFragmentSource(t *testing.T) {
 
 		dynamicAdmin := seedUser(t, svc, "dynamic-admin@example.test")
 		body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"operator"}`, principal.UserSubjectID(dynamicAdmin.ID)))
-		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
 		req.Header.Set("Content-Type", "application/json")
 		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 		resp, err := http.DefaultClient.Do(req)
@@ -6964,7 +6964,7 @@ func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ops-admin-session"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -6981,7 +6981,7 @@ func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 
 	viewer := seedUser(t, svc, "viewer@example.test")
 	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"ops-admin"}`, principal.UserSubjectID(viewer.ID)))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ops-admin-session"})
 	resp, err = http.DefaultClient.Do(req)
@@ -6994,7 +6994,7 @@ func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 		t.Fatalf("ops-admin put admin member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/admins/members/"+url.PathEscape(principal.UserSubjectID(viewer.ID)), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/admins/members/"+url.PathEscape(principal.UserSubjectID(viewer.ID)), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ops-admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -7060,9 +7060,9 @@ func TestAdminAPI_PluginAuthorizationUnavailable(t *testing.T) {
 		path   string
 		body   string
 	}{
-		{name: "list", method: http.MethodGet, path: "/admin/api/v1/authorization/apps/sample_plugin/members"},
-		{name: "put", method: http.MethodPut, path: "/admin/api/v1/authorization/apps/sample_plugin/members", body: fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID))},
-		{name: "delete", method: http.MethodDelete, path: "/admin/api/v1/authorization/apps/sample_plugin/members/" + url.PathEscape(principal.UserSubjectID(dynamicUser.ID))},
+		{name: "list", method: http.MethodGet, path: "/api/v1/authorization/apps/sample_plugin/members"},
+		{name: "put", method: http.MethodPut, path: "/api/v1/authorization/apps/sample_plugin/members", body: fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID))},
+		{name: "delete", method: http.MethodDelete, path: "/api/v1/authorization/apps/sample_plugin/members/" + url.PathEscape(principal.UserSubjectID(dynamicUser.ID))},
 	} {
 		reqBody := io.Reader(nil)
 		if tc.body != "" {
@@ -7137,9 +7137,9 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 			path   string
 			body   string
 		}{
-			{name: "list", method: http.MethodGet, path: "/admin/api/v1/authorization/admins/members"},
-			{name: "put", method: http.MethodPut, path: "/admin/api/v1/authorization/admins/members", body: fmt.Sprintf(`{"subjectId":%q,"role":"operator"}`, principal.UserSubjectID(user.ID))},
-			{name: "delete", method: http.MethodDelete, path: "/admin/api/v1/authorization/admins/members/" + url.PathEscape(principal.UserSubjectID(user.ID))},
+			{name: "list", method: http.MethodGet, path: "/api/v1/authorization/admins/members"},
+			{name: "put", method: http.MethodPut, path: "/api/v1/authorization/admins/members", body: fmt.Sprintf(`{"subjectId":%q,"role":"operator"}`, principal.UserSubjectID(user.ID))},
+			{name: "delete", method: http.MethodDelete, path: "/api/v1/authorization/admins/members/" + url.PathEscape(principal.UserSubjectID(user.ID))},
 		} {
 			reqBody := io.Reader(nil)
 			if tc.body != "" {
@@ -7186,7 +7186,7 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
 		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -7235,7 +7235,7 @@ func TestAdminAPI_PluginAuthorizationReloadFailureReturnsAccepted(t *testing.T) 
 
 	dynamicUser := seedUser(t, svc, "dynamic@example.test")
 	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/apps/sample_plugin/members", body)
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -7300,7 +7300,7 @@ func TestAdminAPI_AdminAuthorizationReloadFailureReturnsAccepted(t *testing.T) {
 
 	dynamicAdmin := seedUser(t, svc, "dynamic-admin@example.test")
 	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"admin"}`, principal.UserSubjectID(dynamicAdmin.ID)))
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err := http.DefaultClient.Do(req)

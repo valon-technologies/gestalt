@@ -131,8 +131,8 @@ func appScopedAdminAuthorizationRoutePlugin(r *http.Request) (string, bool) {
 	switch {
 	case strings.HasPrefix(path, "/authorization/apps/"):
 		rest = strings.TrimPrefix(path, "/authorization/apps/")
-	case strings.HasPrefix(path, "/admin/api/v1/authorization/apps/"):
-		rest = strings.TrimPrefix(path, "/admin/api/v1/authorization/apps/")
+	case strings.HasPrefix(path, "/api/v1/authorization/apps/"):
+		rest = strings.TrimPrefix(path, "/api/v1/authorization/apps/")
 	default:
 		return "", false
 	}
@@ -162,8 +162,8 @@ func adminAuthorizationGrantRoutePlugin(path string) (string, bool) {
 	switch {
 	case strings.HasPrefix(path, "/authorization/grants/"):
 		rest = strings.TrimPrefix(path, "/authorization/grants/")
-	case strings.HasPrefix(path, "/admin/api/v1/authorization/grants/"):
-		rest = strings.TrimPrefix(path, "/admin/api/v1/authorization/grants/")
+	case strings.HasPrefix(path, "/api/v1/authorization/grants/"):
+		rest = strings.TrimPrefix(path, "/api/v1/authorization/grants/")
 	default:
 		return "", false
 	}
