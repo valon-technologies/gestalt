@@ -112,6 +112,15 @@ func (s *Server) putAdminAuthorizationFragment(w http.ResponseWriter, r *http.Re
 		return
 	}
 	s.auditAuthorizationFragmentMutation(r.Context(), "authorization.fragment.put", fragment, nil)
+	if err := s.reloadAuthorizationState(r.Context()); err != nil {
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"status":    "persisted_pending_reload",
+			"persisted": true,
+			"reloaded":  false,
+			"fragment":  fragment,
+		})
+		return
+	}
 	writeJSON(w, http.StatusOK, fragment)
 }
 
@@ -146,7 +155,19 @@ func (s *Server) deleteAdminAuthorizationFragment(w http.ResponseWriter, r *http
 		return
 	}
 	s.auditAuthorizationFragmentMutation(r.Context(), "authorization.fragment.delete", fragment, nil)
-	writeJSON(w, http.StatusOK, map[string]any{"status": "deleted"})
+	if err := s.reloadAuthorizationState(r.Context()); err != nil {
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"status":    "deleted_pending_reload",
+			"persisted": true,
+			"reloaded":  false,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":    "deleted",
+		"persisted": true,
+		"reloaded":  true,
+	})
 }
 
 func (s *Server) ensureAuthorizationFragmentWriteAccess(w http.ResponseWriter, r *http.Request, owner coredata.AuthorizationFragmentOwner) bool {

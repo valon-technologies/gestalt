@@ -6066,7 +6066,13 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+	authz, err := authorization.NewProviderBacked(baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
+	if err != nil {
+		t.Fatalf("NewProviderBacked: %v", err)
+	}
+	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
+		t.Fatalf("ReloadAuthorizationState: %v", err)
+	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -6281,6 +6287,113 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		if !rel.Managed {
 			t.Fatalf("expected managed relationship rows, got %+v", relationshipsResp.Relationships)
 		}
+	}
+
+	fragmentOnlySubjectID := principal.UserSubjectID("fragment-only")
+	fragmentPutBody, err := json.Marshal(map[string]any{
+		"owner": coredata.AuthorizationAppFragmentOwner("sample_plugin"),
+		"relationships": append(pluginFragment.Relationships, coredata.AuthorizationDynamicFragmentRelationship{
+			Subject: coredata.AuthorizationDynamicFragmentSubject{
+				Type: authorization.ProviderSubjectTypeSubject,
+				ID:   fragmentOnlySubjectID,
+			},
+			Relation: "viewer",
+			Resource: coredata.AuthorizationDynamicFragmentResource{
+				Type: authorization.ProviderResourceTypeAppDynamic,
+				ID:   "sample_plugin",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("marshal fragment PUT body: %v", err)
+	}
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/fragments/"+url.PathEscape("app/sample_plugin"), bytes.NewReader(fragmentPutBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT plugin fragment: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("put plugin fragment status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+	var fragmentPutResp coredata.AuthorizationDynamicFragment
+	if err := json.NewDecoder(resp.Body).Decode(&fragmentPutResp); err != nil {
+		t.Fatalf("decoding plugin fragment PUT response: %v", err)
+	}
+	if len(fragmentPutResp.Relationships) != 3 {
+		t.Fatalf("plugin fragment PUT response has %d relationships, want 3", len(fragmentPutResp.Relationships))
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/relationships?resourceType=app_dynamic&resourceId=sample_plugin", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET relationships after fragment PUT: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("relationships after fragment PUT status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+	relationshipsResp = struct {
+		ModelID       string `json:"modelId"`
+		Relationships []struct {
+			Managed bool `json:"managed"`
+		} `json:"relationships"`
+	}{}
+	if err := json.NewDecoder(resp.Body).Decode(&relationshipsResp); err != nil {
+		t.Fatalf("decoding relationships after fragment PUT response: %v", err)
+	}
+	if len(relationshipsResp.Relationships) != 3 {
+		t.Fatalf("expected 3 provider relationships after fragment PUT, got %d", len(relationshipsResp.Relationships))
+	}
+
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/fragments/"+url.PathEscape("app/sample_plugin"), nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE plugin fragment: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("delete plugin fragment status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+	var fragmentDeleteResp struct {
+		Reloaded bool `json:"reloaded"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&fragmentDeleteResp); err != nil {
+		t.Fatalf("decoding plugin fragment DELETE response: %v", err)
+	}
+	if !fragmentDeleteResp.Reloaded {
+		t.Fatal("plugin fragment DELETE response reloaded = false, want true")
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/relationships?resourceType=app_dynamic&resourceId=sample_plugin", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET relationships after fragment DELETE: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("relationships after fragment DELETE status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+	relationshipsResp = struct {
+		ModelID       string `json:"modelId"`
+		Relationships []struct {
+			Managed bool `json:"managed"`
+		} `json:"relationships"`
+	}{}
+	if err := json.NewDecoder(resp.Body).Decode(&relationshipsResp); err != nil {
+		t.Fatalf("decoding relationships after fragment DELETE response: %v", err)
+	}
+	if len(relationshipsResp.Relationships) != 0 {
+		t.Fatalf("expected no provider relationships after fragment DELETE, got %d", len(relationshipsResp.Relationships))
 	}
 }
 
