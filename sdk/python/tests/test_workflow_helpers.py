@@ -2,6 +2,8 @@ import datetime as dt
 import unittest
 from collections.abc import Mapping
 
+from google.protobuf import json_format, struct_pb2
+
 import gestalt
 
 
@@ -233,7 +235,7 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(provider, "openai")
         self.assertEqual(model_options, {"temperature": 0})
 
-    def test_workflow_invocation_context_matches_runtime_shape(self) -> None:
+    def test_workflow_run_context_matches_runtime_shape(self) -> None:
         created_at = dt.datetime(2026, 5, 8, 12, 0, tzinfo=dt.timezone.utc)
         req = gestalt.WorkflowExecutionRequest(
             provider_name="indexeddb",
@@ -266,7 +268,7 @@ class WorkflowHelperTests(unittest.TestCase):
             ],
         )
 
-        ctx = gestalt.workflow_invocation_context(req)
+        ctx = gestalt.workflow_run_context(req)
 
         self.assertEqual(
             ctx["target"],
@@ -300,6 +302,123 @@ class WorkflowHelperTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_parse_workflow_run_context_from_request(self) -> None:
+        req = gestalt.Request(
+            workflow={
+                "provider": "github",
+                "runId": "run-1",
+                "target": {"kind": "steps", "steps": [{"id": "review"}]},
+                "trigger": {
+                    "kind": "schedule",
+                    "scheduleId": "sched-1",
+                    "scheduledFor": "2026-05-08T12:00:00Z",
+                },
+                "input": {"repository": "valon/app"},
+                "metadata": {"definitionId": "def-1"},
+                "createdBy": {"subjectId": "user-1", "subjectKind": "user"},
+                "signals": [
+                    "ignored",
+                    {"id": "sig-1", "name": "queued", "payload": {"state": "queued"}},
+                    {
+                        "id": "sig-2",
+                        "name": "github",
+                        "payload": {
+                            "github_event": "pull_request",
+                            "delivery_id": "delivery-1",
+                            "payloadOmitted": True,
+                        },
+                        "metadata": {"source": "webhook"},
+                        "createdBy": {"subjectId": "bot-1", "displayName": "GitHub"},
+                        "createdAt": "2026-05-08T12:01:00Z",
+                        "idempotencyKey": "idem-1",
+                        "sequence": 2,
+                    },
+                ],
+            }
+        )
+
+        ctx = req.workflow_run_context()
+
+        self.assertEqual(ctx.provider, "github")
+        self.assertEqual(ctx.run_id, "run-1")
+        self.assertEqual(ctx.target, {"kind": "steps", "steps": [{"id": "review"}]})
+        self.assertEqual(ctx.trigger.kind, "schedule")
+        self.assertEqual(ctx.trigger.schedule_id, "sched-1")
+        self.assertEqual(ctx.trigger.scheduled_for, "2026-05-08T12:00:00Z")
+        self.assertEqual(ctx.input, {"repository": "valon/app"})
+        self.assertEqual(ctx.metadata, {"definitionId": "def-1"})
+        assert ctx.created_by is not None
+        self.assertEqual(ctx.created_by.subject_id, "user-1")
+        self.assertEqual(len(ctx.signals), 2)
+        latest_signal = ctx.latest_signal
+        assert latest_signal is not None
+        self.assertEqual(latest_signal.id, "sig-2")
+        self.assertEqual(latest_signal.payload["github_event"], "pull_request")
+        self.assertEqual(latest_signal.metadata, {"source": "webhook"})
+        assert latest_signal.created_by is not None
+        self.assertEqual(latest_signal.created_by.display_name, "GitHub")
+        self.assertEqual(latest_signal.sequence, 2)
+
+    def test_parse_workflow_run_context_preserves_struct_sequence(self) -> None:
+        workflow = getattr(struct_pb2, "Struct")()
+        json_format.ParseDict({"signals": [{"sequence": 2}]}, workflow)
+        workflow_dict = json_format.MessageToDict(
+            workflow,
+            preserving_proto_field_name=True,
+        )
+
+        ctx = gestalt.parse_workflow_run_context(workflow_dict)
+
+        latest_signal = ctx.latest_signal
+        assert latest_signal is not None
+        self.assertEqual(latest_signal.sequence, 2)
+
+    def test_parse_workflow_run_context_tolerates_malformed_values(self) -> None:
+        ctx = gestalt.parse_workflow_run_context(
+            {
+                "provider": 123,
+                "runId": None,
+                "target": [],
+                "trigger": {
+                    "kind": "event",
+                    "triggerId": "trigger-1",
+                    "event": {
+                        "type": "github.pull_request",
+                        "specVersion": "1.0",
+                    },
+                },
+                "input": "bad",
+                "metadata": ["bad"],
+                "createdBy": {},
+                "signals": [
+                    {"sequence": True, "payload": "bad", "metadata": {"ok": True}},
+                    None,
+                ],
+            }
+        )
+
+        self.assertEqual(ctx.provider, "")
+        self.assertEqual(ctx.run_id, "")
+        self.assertIsNone(ctx.target)
+        self.assertEqual(ctx.trigger.kind, "event")
+        self.assertEqual(ctx.trigger.trigger_id, "trigger-1")
+        self.assertEqual(
+            ctx.trigger.event,
+            {"type": "github.pull_request", "specVersion": "1.0"},
+        )
+        self.assertEqual(ctx.input, {})
+        self.assertEqual(ctx.metadata, {})
+        self.assertIsNone(ctx.created_by)
+        self.assertEqual(len(ctx.signals), 1)
+        self.assertEqual(ctx.signals[0].payload, {})
+        self.assertEqual(ctx.signals[0].metadata, {"ok": True})
+        self.assertIsNone(ctx.signals[0].sequence)
+
+    def test_workflow_run_context_exports_public_helpers(self) -> None:
+        self.assertIn("WorkflowRunContext", gestalt.__all__)
+        self.assertIn("parse_workflow_run_context", gestalt.__all__)
+
 
 if __name__ == "__main__":
     unittest.main()

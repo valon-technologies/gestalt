@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from ._agent import Agent, AgentToolRef
     from ._app_access import AppProtocol
     from ._authorization import Authorization
-    from ._workflow import Workflow
+    from ._workflow import Workflow, WorkflowRunContext
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
 FIELD_REQUIRED_KEY: Final[str] = "required"
@@ -130,6 +130,11 @@ class Request:
             self.invocation_token,
             idempotency_key=self.idempotency_key,
         )
+
+    def workflow_run_context(self) -> "WorkflowRunContext":
+        from ._workflow import parse_workflow_run_context
+
+        return parse_workflow_run_context(self.workflow)
 
     def authorization(self) -> "Authorization":
         from ._authorization import _shared_authorization_client

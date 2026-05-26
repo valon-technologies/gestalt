@@ -4,6 +4,7 @@ import ast
 import dataclasses as _dataclasses
 import datetime as _dt
 import json
+import math
 import os
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol, TypeAlias, cast
@@ -2642,6 +2643,55 @@ class WorkflowExecutionRequest:
 
 
 @_dataclasses.dataclass(slots=True)
+class WorkflowRunContextActor:
+    subject_id: str = ""
+    subject_kind: str = ""
+    display_name: str = ""
+    auth_source: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowRunContextTrigger:
+    kind: str = ""
+    schedule_id: str = ""
+    scheduled_for: str = ""
+    trigger_id: str = ""
+    event: WorkflowJsonObject | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowRunContextSignal:
+    id: str = ""
+    name: str = ""
+    payload: WorkflowJsonObject = _dataclasses.field(default_factory=dict)
+    metadata: WorkflowJsonObject = _dataclasses.field(default_factory=dict)
+    created_by: WorkflowRunContextActor | None = None
+    created_at: str = ""
+    idempotency_key: str = ""
+    sequence: int | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowRunContext:
+    provider: str = ""
+    run_id: str = ""
+    target: WorkflowJsonObject | None = None
+    trigger: WorkflowRunContextTrigger = _dataclasses.field(
+        default_factory=WorkflowRunContextTrigger
+    )
+    input: WorkflowJsonObject = _dataclasses.field(default_factory=dict)
+    metadata: WorkflowJsonObject = _dataclasses.field(default_factory=dict)
+    signals: Sequence[WorkflowRunContextSignal] = _dataclasses.field(
+        default_factory=list
+    )
+    created_by: WorkflowRunContextActor | None = None
+
+    @property
+    def latest_signal(self) -> WorkflowRunContextSignal | None:
+        return self.signals[-1] if self.signals else None
+
+
+@_dataclasses.dataclass(slots=True)
 class WorkflowEvalContext:
     request: WorkflowExecutionRequest
     outputs: Mapping[str, Any] | None = None
@@ -2733,7 +2783,7 @@ def render_workflow_template(ctx: WorkflowEvalContext, template: str) -> str:
     return "".join(out)
 
 
-def workflow_invocation_context(req: WorkflowExecutionRequest) -> dict[str, Any]:
+def workflow_run_context(req: WorkflowExecutionRequest) -> dict[str, Any]:
     out: dict[str, Any] = {}
     if req.run_id.strip():
         out["runId"] = req.run_id.strip()
@@ -2756,6 +2806,102 @@ def workflow_invocation_context(req: WorkflowExecutionRequest) -> dict[str, Any]
     if created_by:
         out["createdBy"] = created_by
     return out
+
+
+def parse_workflow_run_context(
+    workflow: Mapping[str, Any] | None = None,
+) -> WorkflowRunContext:
+    data = workflow if isinstance(workflow, Mapping) else {}
+    return WorkflowRunContext(
+        provider=_workflow_context_str(data.get("provider")),
+        run_id=_workflow_context_str(data.get("runId")),
+        target=_workflow_context_optional_object(data.get("target")),
+        trigger=_workflow_run_trigger(data.get("trigger")),
+        input=_workflow_context_object(data.get("input")),
+        metadata=_workflow_context_object(data.get("metadata")),
+        signals=_workflow_run_signals(data.get("signals")),
+        created_by=_workflow_run_actor(data.get("createdBy")),
+    )
+
+
+def _workflow_run_trigger(value: Any) -> WorkflowRunContextTrigger:
+    data = value if isinstance(value, Mapping) else {}
+    return WorkflowRunContextTrigger(
+        kind=_workflow_context_str(data.get("kind")),
+        schedule_id=_workflow_context_str(data.get("scheduleId")),
+        scheduled_for=_workflow_context_str(data.get("scheduledFor")),
+        trigger_id=_workflow_context_str(data.get("triggerId")),
+        event=_workflow_context_optional_object(data.get("event")),
+    )
+
+
+def _workflow_run_signals(value: Any) -> list[WorkflowRunContextSignal]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+    signals: list[WorkflowRunContextSignal] = []
+    for item in value:
+        signal = _workflow_run_signal(item)
+        if signal is not None:
+            signals.append(signal)
+    return signals
+
+
+def _workflow_run_signal(value: Any) -> WorkflowRunContextSignal | None:
+    if not isinstance(value, Mapping):
+        return None
+    return WorkflowRunContextSignal(
+        id=_workflow_context_str(value.get("id")),
+        name=_workflow_context_str(value.get("name")),
+        payload=_workflow_context_object(value.get("payload")),
+        metadata=_workflow_context_object(value.get("metadata")),
+        created_by=_workflow_run_actor(value.get("createdBy")),
+        created_at=_workflow_context_str(value.get("createdAt")),
+        idempotency_key=_workflow_context_str(value.get("idempotencyKey")),
+        sequence=_workflow_context_int(value.get("sequence")),
+    )
+
+
+def _workflow_run_actor(value: Any) -> WorkflowRunContextActor | None:
+    if not isinstance(value, Mapping):
+        return None
+    actor = WorkflowRunContextActor(
+        subject_id=_workflow_context_str(value.get("subjectId")),
+        subject_kind=_workflow_context_str(value.get("subjectKind")),
+        display_name=_workflow_context_str(value.get("displayName")),
+        auth_source=_workflow_context_str(value.get("authSource")),
+    )
+    if (
+        actor.subject_id
+        or actor.subject_kind
+        or actor.display_name
+        or actor.auth_source
+    ):
+        return actor
+    return None
+
+
+def _workflow_context_str(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _workflow_context_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        return int(value)
+    return value if isinstance(value, int) else None
+
+
+def _workflow_context_object(value: Any) -> WorkflowJsonObject:
+    if not isinstance(value, Mapping):
+        return {}
+    return cast(WorkflowJsonObject, dict(value))
+
+
+def _workflow_context_optional_object(value: Any) -> WorkflowJsonObject | None:
+    if not isinstance(value, Mapping):
+        return None
+    return cast(WorkflowJsonObject, dict(value))
 
 
 def _workflow_target_context(target: BoundWorkflowTarget | Any | None) -> dict[str, Any]:
