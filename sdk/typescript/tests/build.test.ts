@@ -815,7 +815,6 @@ test("buildProviderBinary compiles a runnable s3 provider executable", async () 
             case: "open",
             value: {
               ref: {
-                bucket: "build-bucket",
                 key: "hello.txt",
               },
               contentType: "text/plain",
@@ -834,7 +833,6 @@ test("buildProviderBinary compiles a runnable s3 provider executable", async () 
 
     const headed = await s3.headObject({
       ref: {
-        bucket: "build-bucket",
         key: "hello.txt",
       },
     });

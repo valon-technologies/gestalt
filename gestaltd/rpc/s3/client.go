@@ -25,13 +25,13 @@ type rpcClient struct {
 func (c *rpcClient) Close() error { return nil }
 
 // Object returns a convenience handle for one object key.
-func (c *rpcClient) Object(bucket, key string) *s3.ObjectHandleRef {
-	return s3.NewObject(c, s3.ObjectRef{Bucket: bucket, Key: key})
+func (c *rpcClient) Object(key string) *s3.ObjectHandleRef {
+	return s3.NewObject(c, s3.ObjectRef{Key: key})
 }
 
 // ObjectVersion returns a convenience handle for one object version.
-func (c *rpcClient) ObjectVersion(bucket, key, versionID string) *s3.ObjectHandleRef {
-	return s3.NewObject(c, s3.ObjectRef{Bucket: bucket, Key: key, VersionID: versionID})
+func (c *rpcClient) ObjectVersion(key, versionID string) *s3.ObjectHandleRef {
+	return s3.NewObject(c, s3.ObjectRef{Key: key, VersionID: versionID})
 }
 
 // HeadObject fetches metadata for one object.
@@ -171,7 +171,6 @@ func (c *rpcClient) ListObjects(ctx context.Context, req s3.ListRequest) (s3.Lis
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
 	resp, err := c.grpc.ListObjects(ctx, &proto.ListObjectsRequest{
-		Bucket:            req.Bucket,
 		Prefix:            req.Prefix,
 		Delimiter:         req.Delimiter,
 		ContinuationToken: req.ContinuationToken,
@@ -317,7 +316,6 @@ func (r *s3ReadCloser) Close() error {
 
 func objectRefToProto(ref s3.ObjectRef) *proto.S3ObjectRef {
 	return &proto.S3ObjectRef{
-		Bucket:    ref.Bucket,
 		Key:       ref.Key,
 		VersionId: ref.VersionID,
 	}
@@ -328,7 +326,6 @@ func objectRefFromProto(ref *proto.S3ObjectRef) s3.ObjectRef {
 		return s3.ObjectRef{}
 	}
 	return s3.ObjectRef{
-		Bucket:    ref.GetBucket(),
 		Key:       ref.GetKey(),
 		VersionID: ref.GetVersionId(),
 	}
@@ -355,7 +352,6 @@ func objectMetaFromProto(meta *proto.S3ObjectMeta) s3.ObjectMeta {
 	}
 	out := s3.ObjectMeta{
 		Ref: s3.ObjectRef{
-			Bucket:    meta.GetRef().GetBucket(),
 			Key:       meta.GetRef().GetKey(),
 			VersionID: meta.GetRef().GetVersionId(),
 		},

@@ -7,7 +7,8 @@ import "google/protobuf/timestamp.proto";
 
 // S3ObjectRef identifies one object or object version.
 message S3ObjectRef {
-  string bucket = 1;
+  reserved 1;
+  reserved "bucket";
   string key = 2;
   string version_id = 3;
 }
@@ -89,9 +90,10 @@ message DeleteObjectRequest {
   S3ObjectRef ref = 1;
 }
 
-// ListObjectsRequest lists objects in a bucket.
+// ListObjectsRequest lists objects in the provider's configured bucket.
 message ListObjectsRequest {
-  string bucket = 1;
+  reserved 1;
+  reserved "bucket";
   string prefix = 2;
   string delimiter = 3;
   string continuation_token = 4;

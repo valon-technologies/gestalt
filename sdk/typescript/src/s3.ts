@@ -71,7 +71,6 @@ export class S3InvalidRangeError extends Error {
  * Identifies a concrete object or object version.
  */
 export interface ObjectRef {
-  bucket: string;
   key: string;
   versionId?: string;
 }
@@ -126,7 +125,6 @@ export interface WriteOptions {
  * Listing options for object pagination and prefix filtering.
  */
 export interface ListOptions {
-  bucket: string;
   prefix?: string;
   delimiter?: string;
   continuationToken?: string;
@@ -220,8 +218,8 @@ export interface ReadResult {
  */
 export interface S3 {
   close(): void;
-  object(bucket: string, key: string): S3Object;
-  objectVersion(bucket: string, key: string, versionId: string): S3Object;
+  object(key: string): S3Object;
+  objectVersion(key: string, versionId: string): S3Object;
   headObject(ref: ObjectRef): Promise<ObjectMeta>;
   readObject(ref: ObjectRef, options?: ReadOptions): Promise<ReadResult>;
   writeObject(
@@ -492,9 +490,7 @@ export function createS3Service(
       return create(EmptySchema, {});
     },
     async listObjects(request) {
-      const options: ListOptions = {
-        bucket: request.bucket,
-      };
+      const options: ListOptions = {};
       if (request.prefix) {
         options.prefix = request.prefix;
       }
@@ -580,7 +576,7 @@ export function createS3Service(
  * import { S3 } from "@valon-technologies/gestalt";
  *
  * const s3 = new S3();
- * await s3.object("example-bucket", "hello.json").writeJSON({ ok: true });
+ * await s3.object("hello.json").writeJSON({ ok: true });
  * ```
  */
 class S3Impl implements S3 {
@@ -602,13 +598,13 @@ class S3Impl implements S3 {
   close(): void {}
 
   /** Returns a convenience helper for the latest version of an object. */
-  object(bucket: string, key: string): S3Object {
-    return new S3ObjectImpl(this, { bucket, key });
+  object(key: string): S3Object {
+    return new S3ObjectImpl(this, { key });
   }
 
   /** Returns a convenience helper pinned to a specific object version. */
-  objectVersion(bucket: string, key: string, versionId: string): S3Object {
-    return new S3ObjectImpl(this, { bucket, key, versionId });
+  objectVersion(key: string, versionId: string): S3Object {
+    return new S3ObjectImpl(this, { key, versionId });
   }
 
   /** Fetches object metadata without reading the object body. */
@@ -661,11 +657,10 @@ class S3Impl implements S3 {
     );
   }
 
-  /** Lists objects within a bucket. */
+  /** Lists objects within the provider's configured bucket. */
   async listObjects(options: ListOptions): Promise<ListPage> {
     const response = await s3Rpc(() =>
       this.client.listObjects({
-        bucket: options.bucket,
         prefix: options.prefix ?? "",
         delimiter: options.delimiter ?? "",
         continuationToken: options.continuationToken ?? "",
@@ -1137,7 +1132,6 @@ function isReadableStream(value: unknown): value is ReadableStream<Uint8Array> {
 
 function toProtoObjectRef(ref: ObjectRef) {
   return {
-    bucket: ref.bucket,
     key: ref.key,
     versionId: ref.versionId ?? "",
   };
@@ -1145,7 +1139,6 @@ function toProtoObjectRef(ref: ObjectRef) {
 
 function fromProtoObjectRef(ref: ProtoS3ObjectRef | undefined): ObjectRef {
   const value: ObjectRef = {
-    bucket: ref?.bucket ?? "",
     key: ref?.key ?? "",
   };
   if (ref?.versionId) {

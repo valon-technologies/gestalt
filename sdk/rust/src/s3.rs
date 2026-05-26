@@ -121,8 +121,6 @@ pub enum S3Error {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 /// Identifies one object or object version.
 pub struct ObjectRef {
-    /// Bucket name.
-    pub bucket: String,
     /// Object key.
     pub key: String,
     /// Optional object version id.
@@ -196,8 +194,6 @@ pub struct WriteOptions {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 /// Configures list-objects requests.
 pub struct ListOptions {
-    /// Bucket to list.
-    pub bucket: String,
     /// Prefix filter.
     pub prefix: String,
     /// Delimiter for grouping common prefixes.
@@ -312,9 +308,8 @@ pub struct DeleteObjectRequest {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-/// Lists objects in a bucket.
+/// Lists objects in the provider's configured bucket.
 pub struct ListObjectsRequest {
-    pub bucket: String,
     pub prefix: String,
     pub delimiter: String,
     pub continuation_token: String,
@@ -377,10 +372,10 @@ pub trait S3Api: Send {
     type Object: S3ObjectApi;
 
     /// Returns a convenience handle for one object key.
-    fn object(&self, bucket: &str, key: &str) -> Self::Object;
+    fn object(&self, key: &str) -> Self::Object;
 
     /// Returns a convenience handle for one object version.
-    fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> Self::Object;
+    fn object_version(&self, key: &str, version_id: &str) -> Self::Object;
 
     /// Fetches metadata for one object.
     async fn head_object(
@@ -406,7 +401,7 @@ pub trait S3Api: Send {
     /// Deletes one object.
     async fn delete_object(&mut self, reference: ObjectRef) -> std::result::Result<(), S3Error>;
 
-    /// Lists objects in a bucket.
+    /// Lists objects in the provider's configured bucket.
     async fn list_objects(
         &mut self,
         options: ListOptions,
@@ -588,7 +583,7 @@ pub trait S3Provider: Send + Sync + 'static {
         ))
     }
 
-    /// Lists objects in a bucket using S3-style pagination and delimiters.
+    /// Lists objects in the provider's configured bucket using S3-style pagination and delimiters.
     async fn list_objects(
         &self,
         _request: ListObjectsRequest,
@@ -792,12 +787,11 @@ impl S3 {
     }
 
     /// Returns a convenience handle for one object key.
-    pub fn object(&self, bucket: &str, key: &str) -> S3Object {
+    pub fn object(&self, key: &str) -> S3Object {
         S3Object {
             client: self.client.clone(),
             object_access_client: self.object_access_client.clone(),
             reference: ObjectRef {
-                bucket: bucket.to_string(),
                 key: key.to_string(),
                 version_id: String::new(),
             },
@@ -805,12 +799,11 @@ impl S3 {
     }
 
     /// Returns a convenience handle for one object version.
-    pub fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> S3Object {
+    pub fn object_version(&self, key: &str, version_id: &str) -> S3Object {
         S3Object {
             client: self.client.clone(),
             object_access_client: self.object_access_client.clone(),
             reference: ObjectRef {
-                bucket: bucket.to_string(),
                 key: key.to_string(),
                 version_id: version_id.to_string(),
             },
@@ -983,12 +976,11 @@ impl S3 {
         Ok(())
     }
 
-    /// Lists objects in a bucket.
+    /// Lists objects in the provider's configured bucket.
     pub async fn list_objects(&mut self, options: ListOptions) -> ClientResult<ListPage> {
         let response = self
             .client
             .list_objects(pb::ListObjectsRequest {
-                bucket: options.bucket,
                 prefix: options.prefix,
                 delimiter: options.delimiter,
                 continuation_token: options.continuation_token,
@@ -1084,12 +1076,12 @@ impl S3 {
 impl S3Api for S3 {
     type Object = S3Object;
 
-    fn object(&self, bucket: &str, key: &str) -> S3Object {
-        S3::object(self, bucket, key)
+    fn object(&self, key: &str) -> S3Object {
+        S3::object(self, key)
     }
 
-    fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> S3Object {
-        S3::object_version(self, bucket, key, version_id)
+    fn object_version(&self, key: &str, version_id: &str) -> S3Object {
+        S3::object_version(self, key, version_id)
     }
 
     async fn head_object(
@@ -1592,7 +1584,6 @@ fn map_status(err: tonic::Status) -> S3Error {
 
 fn object_ref_to_proto(reference: ObjectRef) -> pb::S3ObjectRef {
     pb::S3ObjectRef {
-        bucket: reference.bucket,
         key: reference.key,
         version_id: reference.version_id,
     }
@@ -1600,7 +1591,6 @@ fn object_ref_to_proto(reference: ObjectRef) -> pb::S3ObjectRef {
 
 fn object_ref_from_proto(reference: pb::S3ObjectRef) -> ObjectRef {
     ObjectRef {
-        bucket: reference.bucket,
         key: reference.key,
         version_id: reference.version_id,
     }
@@ -1748,7 +1738,6 @@ fn delete_object_request_from_proto(request: pb::DeleteObjectRequest) -> DeleteO
 
 fn list_objects_request_from_proto(request: pb::ListObjectsRequest) -> ListObjectsRequest {
     ListObjectsRequest {
-        bucket: request.bucket,
         prefix: request.prefix,
         delimiter: request.delimiter,
         continuation_token: request.continuation_token,

@@ -340,8 +340,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 		t.Fatalf("NewObjectAccessURLManager: %v", err)
 	}
 	targetRef := s3sdk.ObjectRef{
-		Bucket: "brain",
-		Key:    " workspaces/acme/tokens/token-1/content.bin ",
+		Key: " workspaces/acme/tokens/token-1/content.bin ",
 	}
 	putURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
 		AppName:     "brain",
@@ -373,8 +372,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 	}
 
 	prefixed := s3sdk.ObjectRef{
-		Bucket: targetRef.Bucket,
-		Key:    s3.AppObjectKey("brain", targetRef.Key),
+		Key: s3.AppObjectKey("brain", targetRef.Key),
 	}
 	if _, err := store.HeadObject(context.Background(), prefixed); err != nil {
 		t.Fatalf("HeadObject(prefixed): %v", err)

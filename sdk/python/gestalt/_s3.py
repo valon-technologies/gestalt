@@ -54,7 +54,6 @@ class S3InvalidRangeError(Exception):
 class ObjectRef:
     """Reference to an S3 object, optionally pinned to a version."""
 
-    bucket: str
     key: str
     version_id: str = ""
 
@@ -107,9 +106,8 @@ class WriteOptions:
 
 @dataclass
 class ListOptions:
-    """Query options for listing objects within a bucket."""
+    """Query options for listing objects within the provider's configured bucket."""
 
-    bucket: str
     prefix: str = ""
     delimiter: str = ""
     continuation_token: str = ""
@@ -180,12 +178,10 @@ ObjectAccessURL = PresignResult
 class S3Protocol(Protocol):
     """Fakeable S3-compatible client contract."""
 
-    def object(self, bucket: str, key: str) -> S3Object:
+    def object(self, key: str) -> S3Object:
         """Return an object helper for the latest version."""
 
-    def object_version(
-        self, bucket: str, key: str, version_id: str
-    ) -> S3Object:
+    def object_version(self, key: str, version_id: str) -> S3Object:
         """Return an object helper pinned to a specific version."""
 
     def head_object(self, ref: ObjectRef) -> ObjectMeta:
@@ -210,7 +206,7 @@ class S3Protocol(Protocol):
         """Delete an object."""
 
     def list_objects(self, opts: ListOptions) -> ListPage:
-        """List objects within a bucket."""
+        """List objects within the provider's configured bucket."""
 
     def copy_object(
         self,
@@ -409,15 +405,15 @@ class S3:
 
         self._channel.close()
 
-    def object(self, bucket: str, key: str) -> S3Object:
+    def object(self, key: str) -> S3Object:
         """Return an object helper for the latest version."""
 
-        return S3Object(self, ObjectRef(bucket=bucket, key=key))
+        return S3Object(self, ObjectRef(key=key))
 
-    def object_version(self, bucket: str, key: str, version_id: str) -> S3Object:
+    def object_version(self, key: str, version_id: str) -> S3Object:
         """Return an object helper pinned to a specific version."""
 
-        return S3Object(self, ObjectRef(bucket=bucket, key=key, version_id=version_id))
+        return S3Object(self, ObjectRef(key=key, version_id=version_id))
 
     def head_object(self, ref: ObjectRef) -> ObjectMeta:
         """Fetch metadata for an object without reading its body."""
@@ -486,12 +482,11 @@ class S3:
         _grpc_call(self._stub.DeleteObject, pb.DeleteObjectRequest(ref=_object_ref_to_proto(ref)))
 
     def list_objects(self, opts: ListOptions) -> ListPage:
-        """List objects within a bucket."""
+        """List objects within the provider's configured bucket."""
 
         resp = _grpc_call(
             self._stub.ListObjects,
             pb.ListObjectsRequest(
-                bucket=opts.bucket,
                 prefix=opts.prefix,
                 delimiter=opts.delimiter,
                 continuation_token=opts.continuation_token,
@@ -758,14 +753,13 @@ def _map_grpc_error(error: grpc.RpcError) -> Exception:
 
 
 def _object_ref_to_proto(ref: ObjectRef) -> Any:
-    return pb.S3ObjectRef(bucket=ref.bucket, key=ref.key, version_id=ref.version_id)
+    return pb.S3ObjectRef(key=ref.key, version_id=ref.version_id)
 
 
 def _object_ref_from_proto(ref: Any) -> ObjectRef:
     if ref is None:
-        return ObjectRef(bucket="", key="")
+        return ObjectRef(key="")
     return ObjectRef(
-        bucket=getattr(ref, "bucket", ""),
         key=getattr(ref, "key", ""),
         version_id=getattr(ref, "version_id", ""),
     )
@@ -777,7 +771,6 @@ def _object_meta_from_proto(meta: Any) -> ObjectMeta:
         last_modified = meta.last_modified.ToDatetime(tzinfo=_UTC)
     return ObjectMeta(
         ref=ObjectRef(
-            bucket=meta.ref.bucket,
             key=meta.ref.key,
             version_id=meta.ref.version_id,
         ),
@@ -883,7 +876,6 @@ def _list_page_to_proto(page: ListPage) -> Any:
 
 def _list_options_from_proto(req: Any) -> ListOptions:
     return ListOptions(
-        bucket=getattr(req, "bucket", ""),
         prefix=getattr(req, "prefix", ""),
         delimiter=getattr(req, "delimiter", ""),
         continuation_token=getattr(req, "continuation_token", ""),

@@ -12,15 +12,11 @@ const objects = new Map<string, {
   lastModified: Date;
 }>();
 
-function objectKey(bucket: string, key: string): string {
-  return `${bucket}/${key}`;
-}
-
 export const provider = defineS3Provider({
   displayName: "Fixture S3",
   description: "S3 fixture used by SDK tests",
   async headObject(ref) {
-    const stored = objects.get(objectKey(ref.bucket, ref.key));
+    const stored = objects.get(ref.key);
     if (!stored) {
       throw new S3NotFoundError();
     }
@@ -35,7 +31,7 @@ export const provider = defineS3Provider({
     };
   },
   async readObject(ref) {
-    const stored = objects.get(objectKey(ref.bucket, ref.key));
+    const stored = objects.get(ref.key);
     if (!stored) {
       throw new S3NotFoundError();
     }
@@ -57,7 +53,7 @@ export const provider = defineS3Provider({
       merged.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    const key = objectKey(ref.bucket, ref.key);
+    const key = ref.key;
     if (options?.ifNoneMatch === "*" && objects.has(key)) {
       throw new S3PreconditionFailedError();
     }
@@ -79,17 +75,14 @@ export const provider = defineS3Provider({
     };
   },
   async deleteObject(ref) {
-    objects.delete(objectKey(ref.bucket, ref.key));
+    objects.delete(ref.key);
   },
   async listObjects(options) {
-    const objectsForBucket = [...objects.entries()]
-      .filter(([key]) => key.startsWith(`${options.bucket}/`))
-      .map(([key]) => key.slice(options.bucket.length + 1))
+    const matchingObjects = [...objects.keys()]
       .filter((key) => key.startsWith(options.prefix ?? ""))
       .sort();
-    const listed = await Promise.all(objectsForBucket.map((key) =>
+    const listed = await Promise.all(matchingObjects.map((key) =>
       this.headObject({
-        bucket: options.bucket,
         key,
       })
     ));
@@ -101,11 +94,11 @@ export const provider = defineS3Provider({
     };
   },
   async copyObject(source, destination) {
-    const stored = objects.get(objectKey(source.bucket, source.key));
+    const stored = objects.get(source.key);
     if (!stored) {
       throw new S3NotFoundError();
     }
-    objects.set(objectKey(destination.bucket, destination.key), {
+    objects.set(destination.key, {
       body: new Uint8Array(stored.body),
       contentType: stored.contentType,
       metadata: { ...stored.metadata },
@@ -115,7 +108,7 @@ export const provider = defineS3Provider({
   },
   async presignObject(ref, options) {
     return {
-      url: `https://fixture.invalid/${ref.bucket}/${encodeURIComponent(ref.key)}?method=${options?.method ?? PresignMethod.Get}`,
+      url: `https://fixture.invalid/${encodeURIComponent(ref.key)}?method=${options?.method ?? PresignMethod.Get}`,
       method: options?.method ?? PresignMethod.Get,
       headers: { ...(options?.headers ?? {}) },
       expiresAt: new Date(Date.now() + 60_000),

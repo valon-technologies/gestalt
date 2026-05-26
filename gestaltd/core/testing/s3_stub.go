@@ -18,7 +18,7 @@ import (
 
 type StubS3 struct {
 	mu      sync.RWMutex
-	buckets map[string]map[string]*stubS3Object
+	objects map[string]*stubS3Object
 	Err     error
 	Now     func() time.Time
 }
@@ -92,8 +92,7 @@ func (s *StubS3) WriteObject(_ context.Context, req s3sdk.WriteRequest) (s3sdk.O
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	bucket := s.ensureBucket(req.Ref.Bucket)
-	bucket[req.Ref.Key] = &stubS3Object{
+	s.ensureObjects()[req.Ref.Key] = &stubS3Object{
 		meta: meta,
 		body: append([]byte(nil), body...),
 	}
@@ -106,11 +105,7 @@ func (s *StubS3) DeleteObject(_ context.Context, ref s3sdk.ObjectRef) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	bucket, ok := s.buckets[ref.Bucket]
-	if !ok {
-		return nil
-	}
-	delete(bucket, ref.Key)
+	delete(s.objects, ref.Key)
 	return nil
 }
 
@@ -119,7 +114,7 @@ func (s *StubS3) ListObjects(_ context.Context, req s3sdk.ListRequest) (s3sdk.Li
 		return s3sdk.ListPage{}, s.Err
 	}
 	s.mu.RLock()
-	keys := s.sortedKeys(req.Bucket)
+	keys := s.sortedKeys()
 	s.mu.RUnlock()
 
 	cursor := req.ContinuationToken
@@ -171,7 +166,7 @@ func (s *StubS3) ListObjects(_ context.Context, req s3sdk.ListRequest) (s3sdk.Li
 			page.NextContinuationToken = lastToken
 			return page, nil
 		}
-		meta, err := s.HeadObject(context.Background(), s3sdk.ObjectRef{Bucket: req.Bucket, Key: key})
+		meta, err := s.HeadObject(context.Background(), s3sdk.ObjectRef{Key: key})
 		if err != nil {
 			return s3sdk.ListPage{}, err
 		}
@@ -212,8 +207,7 @@ func (s *StubS3) CopyObject(_ context.Context, req s3sdk.CopyRequest) (s3sdk.Obj
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	bucket := s.ensureBucket(req.Destination.Bucket)
-	bucket[req.Destination.Key] = &stubS3Object{meta: meta, body: body}
+	s.ensureObjects()[req.Destination.Key] = &stubS3Object{meta: meta, body: body}
 	return cloneObjectMeta(meta), nil
 }
 
@@ -241,7 +235,7 @@ func (s *StubS3) PresignObject(_ context.Context, req s3sdk.PresignRequest) (s3s
 		values.Set("header."+key, value)
 	}
 	return s3sdk.PresignResult{
-		URL:       fmt.Sprintf("https://example.invalid/%s/%s?%s", req.Ref.Bucket, url.PathEscape(req.Ref.Key), values.Encode()),
+		URL:       fmt.Sprintf("https://example.invalid/%s?%s", url.PathEscape(req.Ref.Key), values.Encode()),
 		Method:    req.Method,
 		ExpiresAt: expiresAt,
 		Headers:   s3sdk.CloneStringMap(req.Headers),
@@ -252,36 +246,26 @@ func (s *StubS3) Ping(context.Context) error { return s.Err }
 func (s *StubS3) Close() error               { return nil }
 
 func (s *StubS3) lookup(ref s3sdk.ObjectRef) (*stubS3Object, bool) {
-	if s.buckets == nil {
+	if s.objects == nil {
 		return nil, false
 	}
-	bucket, ok := s.buckets[ref.Bucket]
-	if !ok {
-		return nil, false
-	}
-	obj, ok := bucket[ref.Key]
+	obj, ok := s.objects[ref.Key]
 	return obj, ok
 }
 
-func (s *StubS3) ensureBucket(name string) map[string]*stubS3Object {
-	if s.buckets == nil {
-		s.buckets = make(map[string]map[string]*stubS3Object)
+func (s *StubS3) ensureObjects() map[string]*stubS3Object {
+	if s.objects == nil {
+		s.objects = make(map[string]*stubS3Object)
 	}
-	bucket, ok := s.buckets[name]
-	if !ok {
-		bucket = make(map[string]*stubS3Object)
-		s.buckets[name] = bucket
-	}
-	return bucket
+	return s.objects
 }
 
-func (s *StubS3) sortedKeys(bucket string) []string {
-	if s.buckets == nil {
+func (s *StubS3) sortedKeys() []string {
+	if s.objects == nil {
 		return nil
 	}
-	objects := s.buckets[bucket]
-	keys := make([]string, 0, len(objects))
-	for key := range objects {
+	keys := make([]string, 0, len(s.objects))
+	for key := range s.objects {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)

@@ -1611,7 +1611,6 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
           case: "open",
           value: {
             ref: {
-              bucket: "runtime-bucket",
               key: "runtime.txt",
             },
             contentType: "text/plain",
@@ -1633,26 +1632,21 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
 
   const headed = await (s3.headObject as any)({
     ref: {
-      bucket: "runtime-bucket",
       key: "runtime.txt",
     },
   });
   expect(headed.meta?.size).toBe(7n);
 
-  const listed = await (s3.listObjects as any)({
-    bucket: "runtime-bucket",
-  });
+  const listed = await (s3.listObjects as any)({});
   expect(listed.objects.map((object: any) => object.ref?.key)).toEqual([
     "runtime.txt",
   ]);
 
   const copied = await (s3.copyObject as any)({
     source: {
-      bucket: "runtime-bucket",
       key: "runtime.txt",
     },
     destination: {
-      bucket: "runtime-bucket",
       key: "copy.txt",
     },
   });
@@ -1660,7 +1654,6 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
 
   const presigned = await (s3.presignObject as any)({
     ref: {
-      bucket: "runtime-bucket",
       key: "copy.txt",
     },
     method: 2,
@@ -2415,7 +2408,6 @@ test("s3 writeObject closes unread request frames when provider returns early", 
             case: "open",
             value: {
               ref: {
-                bucket: "runtime-bucket",
                 key: "runtime.txt",
               },
             },
@@ -2464,7 +2456,7 @@ test("s3 client writeObject cancels unread readable streams when upload ends ear
     client: {
       writeObject: (requests: AsyncIterable<unknown>) => Promise<{
         meta: {
-          ref: { bucket: string; key: string };
+          ref: { key: string };
           etag: string;
           size: bigint;
           contentType: string;
@@ -2484,7 +2476,7 @@ test("s3 client writeObject cancels unread readable streams when upload ends ear
       await iterator.return?.();
       return {
         meta: {
-          ref: { bucket: "runtime-bucket", key: "runtime.txt" },
+          ref: { key: "runtime.txt" },
           etag: "etag",
           size: BigInt(
             (firstChunk.value as { msg: { value: Uint8Array } }).msg.value
@@ -2500,7 +2492,7 @@ test("s3 client writeObject cancels unread readable streams when upload ends ear
 
   const meta = await S3.prototype.writeObject.call(
     s3,
-    { bucket: "runtime-bucket", key: "runtime.txt" },
+    { key: "runtime.txt" },
     body,
   );
 

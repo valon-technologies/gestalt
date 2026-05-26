@@ -136,7 +136,7 @@ async fn write_read_and_stat_round_trip() {
     let _harness = start_harness("s3-round-trip.sock", ENV_HOST_SERVICE_SOCKET).await;
 
     let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("bucket", "docs/hello.txt");
+    let mut object = s3.object("docs/hello.txt");
     let meta = object
         .write_bytes(
             b"hello",
@@ -149,7 +149,6 @@ async fn write_read_and_stat_round_trip() {
         .await
         .expect("write");
 
-    assert_eq!(meta.reference.bucket, "bucket");
     assert_eq!(meta.reference.key, "docs/hello.txt");
     assert_eq!(meta.size, 5);
     assert_eq!(meta.content_type, "text/plain");
@@ -168,7 +167,7 @@ async fn large_in_memory_write_bytes_round_trip() {
     let _harness = start_harness("s3-large-write.sock", ENV_HOST_SERVICE_SOCKET).await;
 
     let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("bucket", "docs/large.bin");
+    let mut object = s3.object("docs/large.bin");
     let payload = vec![b'x'; 5 * 1024 * 1024];
     let meta = object
         .write_bytes(payload.as_slice(), None)
@@ -190,7 +189,7 @@ async fn named_socket_json_and_preconditions() {
     let _harness = start_harness("s3-named.sock", env_name).await;
 
     let s3 = S3::connect_named("reports").await.expect("connect");
-    let mut object = s3.object("bucket", "reports/summary.json");
+    let mut object = s3.object("reports/summary.json");
     let meta = object
         .write_json(
             &serde_json::json!({ "ok": true, "count": 2 }),
@@ -230,7 +229,7 @@ async fn tcp_target_round_trip() {
     let _harness = start_tcp_harness(None, ENV_HOST_SERVICE_SOCKET).await;
 
     let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("bucket", "docs/tcp.txt");
+    let mut object = s3.object("docs/tcp.txt");
     object
         .write_string("tcp", None)
         .await
@@ -246,7 +245,7 @@ async fn tcp_target_with_token_round_trip() {
     let _token_env = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
     let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("bucket", "docs/tcp-token.txt");
+    let mut object = s3.object("docs/tcp-token.txt");
     object
         .write_string("tcp-token", None)
         .await
@@ -267,7 +266,7 @@ async fn named_tcp_target_uses_named_token_env() {
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "named-relay-token-rust");
 
     let s3 = S3::connect_named("reports").await.expect("connect");
-    let mut object = s3.object("bucket", "reports/named-tcp.txt");
+    let mut object = s3.object("reports/named-tcp.txt");
     object
         .write_string("named-tcp", None)
         .await
@@ -285,7 +284,7 @@ async fn chunked_write_range_read_and_error_mapping() {
     let _harness = start_harness("s3-range.sock", ENV_HOST_SERVICE_SOCKET).await;
 
     let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("bucket", "docs/chunked.txt");
+    let mut object = s3.object("docs/chunked.txt");
     object
         .write_chunks(
             vec![b"he".to_vec(), b"llo".to_vec()],
@@ -325,7 +324,7 @@ async fn chunked_write_range_read_and_error_mapping() {
         Err(error) => panic!("expected InvalidRange, got {error}"),
     }
 
-    let mut missing = s3.object("bucket", "missing.txt");
+    let mut missing = s3.object("missing.txt");
     match missing.stat().await {
         Err(S3Error::NotFound) => {}
         other => panic!("expected NotFound, got: {other:?}"),
@@ -338,7 +337,7 @@ async fn zero_byte_objects_round_trip() {
     let _harness = start_harness("s3-empty.sock", ENV_HOST_SERVICE_SOCKET).await;
 
     let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("bucket", "docs/empty.bin");
+    let mut object = s3.object("docs/empty.bin");
     let meta = object
         .write_bytes(Vec::<u8>::new(), None)
         .await
@@ -364,13 +363,12 @@ async fn list_copy_delete_and_exists() {
         ("docs/folder/c.txt", "C"),
         ("docs/folder/d.txt", "D"),
     ] {
-        let mut object = s3.object("bucket", key);
+        let mut object = s3.object(key);
         object.write_string(body, None).await.expect("write");
     }
 
     let listed = s3
         .list_objects(ListOptions {
-            bucket: "bucket".to_string(),
             prefix: "docs/".to_string(),
             delimiter: "/".to_string(),
             ..ListOptions::default()
@@ -387,7 +385,6 @@ async fn list_copy_delete_and_exists() {
 
     let page_one = s3
         .list_objects(ListOptions {
-            bucket: "bucket".to_string(),
             prefix: "docs/".to_string(),
             max_keys: 2,
             ..ListOptions::default()
@@ -406,7 +403,6 @@ async fn list_copy_delete_and_exists() {
 
     let page_two = s3
         .list_objects(ListOptions {
-            bucket: "bucket".to_string(),
             prefix: "docs/".to_string(),
             continuation_token: page_one.next_continuation_token,
             max_keys: 2,
@@ -426,12 +422,10 @@ async fn list_copy_delete_and_exists() {
     let copied = s3
         .copy_object(
             gestalt::s3::ObjectRef {
-                bucket: "bucket".to_string(),
                 key: "docs/a.txt".to_string(),
                 version_id: String::new(),
             },
             gestalt::s3::ObjectRef {
-                bucket: "bucket".to_string(),
                 key: "archive/a.txt".to_string(),
                 version_id: String::new(),
             },
@@ -441,7 +435,7 @@ async fn list_copy_delete_and_exists() {
         .expect("copy");
     assert_eq!(copied.reference.key, "archive/a.txt");
 
-    let mut archived = s3.object("bucket", "archive/a.txt");
+    let mut archived = s3.object("archive/a.txt");
     assert!(archived.exists().await.expect("exists after copy"));
     assert_eq!(archived.text(None).await.expect("archived text"), "A");
     archived.delete().await.expect("delete");
@@ -454,7 +448,7 @@ async fn presign_round_trip() {
     let _harness = start_harness("s3-presign.sock", ENV_HOST_SERVICE_SOCKET).await;
 
     let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("bucket", "docs/presign.txt");
+    let mut object = s3.object("docs/presign.txt");
     object
         .write_string("presign", None)
         .await
@@ -472,7 +466,7 @@ async fn presign_round_trip() {
         .expect("presign");
 
     assert_eq!(presigned.method, PresignMethod::Put);
-    assert!(presigned.url.contains("bucket/docs%2Fpresign.txt"));
+    assert!(presigned.url.contains("docs%2Fpresign.txt"));
     assert!(presigned.url.contains("method=PUT"));
     assert_eq!(presigned.headers.get("x-test"), Some(&"1".to_string()));
     assert!(presigned.expires_at.is_some());

@@ -26,13 +26,11 @@ PRESIGN_METHOD_HEAD: PresignMethod
 
 class S3ObjectRef(_message.Message):
     __slots__ = ()
-    BUCKET_FIELD_NUMBER: _ClassVar[int]
     KEY_FIELD_NUMBER: _ClassVar[int]
     VERSION_ID_FIELD_NUMBER: _ClassVar[int]
-    bucket: str
     key: str
     version_id: str
-    def __init__(self, bucket: _Optional[str] = ..., key: _Optional[str] = ..., version_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, key: _Optional[str] = ..., version_id: _Optional[str] = ...) -> None: ...
 
 class S3ObjectMeta(_message.Message):
     __slots__ = ()
@@ -154,19 +152,17 @@ class DeleteObjectRequest(_message.Message):
 
 class ListObjectsRequest(_message.Message):
     __slots__ = ()
-    BUCKET_FIELD_NUMBER: _ClassVar[int]
     PREFIX_FIELD_NUMBER: _ClassVar[int]
     DELIMITER_FIELD_NUMBER: _ClassVar[int]
     CONTINUATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     START_AFTER_FIELD_NUMBER: _ClassVar[int]
     MAX_KEYS_FIELD_NUMBER: _ClassVar[int]
-    bucket: str
     prefix: str
     delimiter: str
     continuation_token: str
     start_after: str
     max_keys: int
-    def __init__(self, bucket: _Optional[str] = ..., prefix: _Optional[str] = ..., delimiter: _Optional[str] = ..., continuation_token: _Optional[str] = ..., start_after: _Optional[str] = ..., max_keys: _Optional[int] = ...) -> None: ...
+    def __init__(self, prefix: _Optional[str] = ..., delimiter: _Optional[str] = ..., continuation_token: _Optional[str] = ..., start_after: _Optional[str] = ..., max_keys: _Optional[int] = ...) -> None: ...
 
 class ListObjectsResponse(_message.Message):
     __slots__ = ()

@@ -19,7 +19,7 @@ const (
 	ObjectAccessPathPrefix = "/api/v1/s3/object-access/"
 
 	s3ObjectAccessAudience   = "gestalt-s3-object-access"
-	s3ObjectAccessVersion    = 1
+	s3ObjectAccessVersion    = 2
 	defaultS3ObjectAccessTTL = 15 * time.Minute
 	maxS3ObjectAccessTTL     = 24 * time.Hour
 )
@@ -59,7 +59,6 @@ type s3ObjectAccessURLClaims struct {
 	Audience           string            `json:"aud"`
 	AppName            string            `json:"app"`
 	BindingName        string            `json:"binding"`
-	Bucket             string            `json:"bucket"`
 	Key                string            `json:"key"`
 	VersionID          string            `json:"version_id,omitempty"`
 	Method             string            `json:"method"`
@@ -102,7 +101,6 @@ func (m *ObjectAccessURLManager) MintURL(req ObjectAccessURLRequest) (s3sdk.Pres
 		Audience:           s3ObjectAccessAudience,
 		AppName:            target.AppName,
 		BindingName:        target.BindingName,
-		Bucket:             target.Ref.Bucket,
 		Key:                target.Ref.Key,
 		VersionID:          target.Ref.VersionID,
 		Method:             string(target.Method),
@@ -153,7 +151,7 @@ func (m *ObjectAccessURLManager) ResolveToken(token string) (ObjectAccessTarget,
 	return normalizeS3ObjectAccessRequest(ObjectAccessURLRequest{
 		AppName:            claims.AppName,
 		BindingName:        claims.BindingName,
-		Ref:                s3sdk.ObjectRef{Bucket: claims.Bucket, Key: claims.Key, VersionID: claims.VersionID},
+		Ref:                s3sdk.ObjectRef{Key: claims.Key, VersionID: claims.VersionID},
 		Method:             s3sdk.PresignMethod(claims.Method),
 		ContentType:        claims.ContentType,
 		ContentDisposition: claims.ContentDisposition,
@@ -185,10 +183,6 @@ func normalizeS3ObjectAccessRequest(req ObjectAccessURLRequest, expiresAt time.T
 		return ObjectAccessTarget{}, fmt.Errorf("s3 binding name is required")
 	}
 	ref := req.Ref
-	ref.Bucket = strings.TrimSpace(ref.Bucket)
-	if ref.Bucket == "" {
-		return ObjectAccessTarget{}, fmt.Errorf("s3 object bucket is required")
-	}
 	if ref.Key == "" {
 		return ObjectAccessTarget{}, fmt.Errorf("s3 object key is required")
 	}

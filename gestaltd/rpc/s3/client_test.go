@@ -36,14 +36,14 @@ func TestHeadObjectUsesUnaryTimeout(t *testing.T) {
 			}
 			return &proto.HeadObjectResponse{
 				Meta: &proto.S3ObjectMeta{
-					Ref: &proto.S3ObjectRef{Bucket: "b", Key: "k"},
+					Ref: &proto.S3ObjectRef{Key: "k"},
 				},
 			}, nil
 		},
 	}
 
 	rpc := NewClient(client, nil, Options{UnaryTimeout: testUnaryTimeout})
-	if _, err := rpc.HeadObject(context.Background(), s3sdk.ObjectRef{Bucket: "b", Key: "k"}); err != nil {
+	if _, err := rpc.HeadObject(context.Background(), s3sdk.ObjectRef{Key: "k"}); err != nil {
 		t.Fatalf("HeadObject: %v", err)
 	}
 }

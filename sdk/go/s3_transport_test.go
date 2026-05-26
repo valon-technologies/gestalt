@@ -26,7 +26,7 @@ func TestS3Transport_NamedSocketEnv(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
-	obj := s3sdk.Object(client, "named", "checks/ok.txt")
+	obj := s3sdk.Object(client, "checks/ok.txt")
 	if _, err := obj.WriteString(ctx, "ok", nil); err != nil {
 		t.Fatalf("WriteString: %v", err)
 	}
@@ -58,10 +58,10 @@ func TestS3TransportNamedBindingMetadata(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
-	if err := client.DeleteObject(ctx, gestalt.ObjectRef{Bucket: "docs", Key: "old.txt"}); err != nil {
+	if err := client.DeleteObject(ctx, gestalt.ObjectRef{Key: "old.txt"}); err != nil {
 		t.Fatalf("DeleteObject: %v", err)
 	}
-	if _, err := s3sdk.Object(client, "docs", "new.txt").WriteString(ctx, "body", nil); err != nil {
+	if _, err := s3sdk.Object(client, "new.txt").WriteString(ctx, "body", nil); err != nil {
 		t.Fatalf("WriteString: %v", err)
 	}
 	if got := <-harness.bindings; got != "archive" {
@@ -88,7 +88,7 @@ func (h *s3BindingMetadataHarness) WriteObject(stream proto.S3_WriteObjectServer
 		if _, err := stream.Recv(); errors.Is(err, io.EOF) {
 			return stream.SendAndClose(&proto.WriteObjectResponse{
 				Meta: &proto.S3ObjectMeta{
-					Ref:  &proto.S3ObjectRef{Bucket: "docs", Key: "new.txt"},
+					Ref:  &proto.S3ObjectRef{Key: "new.txt"},
 					Size: 4,
 				},
 			})
@@ -114,7 +114,7 @@ func TestS3Transport_TCPTargetEnv(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
-	obj := s3sdk.Object(client, "tcp", "checks/ok.txt")
+	obj := s3sdk.Object(client, "checks/ok.txt")
 	if _, err := obj.WriteString(ctx, "ok", nil); err != nil {
 		t.Fatalf("WriteString: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestS3Transport_TCPTargetTokenEnv(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
-	obj := s3sdk.Object(client, "tcp-token", "checks/token.txt")
+	obj := s3sdk.Object(client, "checks/token.txt")
 	if _, err := obj.WriteString(ctx, "relay", nil); err != nil {
 		t.Fatalf("WriteString: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestS3Transport_TCPTargetTokenEnv(t *testing.T) {
 
 func TestS3Transport_CreateObjectAccessURL(t *testing.T) {
 	ctx := context.Background()
-	url, err := s3sdk.Object(testS3Client, "fixtures", "access/"+t.Name()+".txt").CreateAccessURL(ctx, &gestalt.ObjectAccessURLOptions{
+	url, err := s3sdk.Object(testS3Client, "access/"+t.Name()+".txt").CreateAccessURL(ctx, &gestalt.ObjectAccessURLOptions{
 		Method:      gestalt.PresignMethodPut,
 		Expires:     time.Minute,
 		ContentType: "text/plain",
@@ -189,7 +189,7 @@ func TestS3Transport_CreateObjectAccessURL(t *testing.T) {
 func TestS3Transport_WriteReadAndStat(t *testing.T) {
 	ctx := context.Background()
 	key := "docs/" + t.Name() + ".json"
-	obj := s3sdk.Object(testS3Client, "fixtures", key)
+	obj := s3sdk.Object(testS3Client, key)
 
 	wrote, err := obj.WriteJSON(ctx, map[string]any{
 		"ok":   true,
@@ -238,7 +238,7 @@ func TestS3Transport_StreamedReadAndEmptyObject(t *testing.T) {
 	ctx := context.Background()
 	blobKey := "chunks/" + t.Name() + ".bin"
 	blob := strings.Repeat("abcdef0123456789", 8192)
-	obj := s3sdk.Object(testS3Client, "fixtures", blobKey)
+	obj := s3sdk.Object(testS3Client, blobKey)
 	if _, err := obj.WriteString(ctx, blob, &gestalt.WriteOptions{
 		ContentType: "application/octet-stream",
 	}); err != nil {
@@ -246,7 +246,7 @@ func TestS3Transport_StreamedReadAndEmptyObject(t *testing.T) {
 	}
 
 	readResult, err := testS3Client.ReadObject(ctx, gestalt.ReadRequest{
-		Ref: gestalt.ObjectRef{Bucket: "fixtures", Key: blobKey},
+		Ref: gestalt.ObjectRef{Key: blobKey},
 	})
 	if err != nil {
 		t.Fatalf("ReadObject: %v", err)
@@ -264,7 +264,7 @@ func TestS3Transport_StreamedReadAndEmptyObject(t *testing.T) {
 		t.Fatalf("ReadObject body mismatch: got %d bytes", len(data))
 	}
 
-	empty := s3sdk.Object(testS3Client, "fixtures", "empty/"+t.Name())
+	empty := s3sdk.Object(testS3Client, "empty/"+t.Name())
 	meta, err = empty.WriteBytes(ctx, nil, &gestalt.WriteOptions{
 		ContentType: "text/plain",
 	})
@@ -287,13 +287,13 @@ func TestS3Transport_EarlyCloseCancelsRead(t *testing.T) {
 	ctx := context.Background()
 	key := "streams/" + t.Name() + ".txt"
 	payload := strings.Repeat("abcdef0123456789", 4096)
-	obj := s3sdk.Object(testS3Client, "fixtures", key)
+	obj := s3sdk.Object(testS3Client, key)
 	if _, err := obj.WriteString(ctx, payload, nil); err != nil {
 		t.Fatalf("WriteString: %v", err)
 	}
 
 	readResult, err := testS3Client.ReadObject(ctx, gestalt.ReadRequest{
-		Ref: gestalt.ObjectRef{Bucket: "fixtures", Key: key},
+		Ref: gestalt.ObjectRef{Key: key},
 	})
 	if err != nil {
 		t.Fatalf("ReadObject: %v", err)
@@ -330,7 +330,7 @@ func TestS3Transport_EarlyCloseCancelsRead(t *testing.T) {
 
 func TestS3Transport_RangeRead(t *testing.T) {
 	ctx := context.Background()
-	obj := s3sdk.Object(testS3Client, "fixtures", "ranges/"+t.Name()+".txt")
+	obj := s3sdk.Object(testS3Client, "ranges/"+t.Name()+".txt")
 	if _, err := obj.WriteString(ctx, "0123456789", nil); err != nil {
 		t.Fatalf("WriteString: %v", err)
 	}
@@ -355,14 +355,13 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 		"list/" + t.Name() + "/nested/c.txt",
 		"list/" + t.Name() + "/z.txt",
 	} {
-		if _, err := s3sdk.Object(testS3Client, "fixtures", key).WriteString(ctx, key, nil); err != nil {
+		if _, err := s3sdk.Object(testS3Client, key).WriteString(ctx, key, nil); err != nil {
 			t.Fatalf("seed %s: %v", key, err)
 		}
 	}
 
 	basePrefix := "list/" + t.Name() + "/"
 	page, err := testS3Client.ListObjects(ctx, gestalt.ListOptions{
-		Bucket:    "fixtures",
 		Prefix:    basePrefix,
 		Delimiter: "/",
 	})
@@ -377,7 +376,6 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 	}
 
 	first, err := testS3Client.ListObjects(ctx, gestalt.ListOptions{
-		Bucket:  "fixtures",
 		Prefix:  basePrefix,
 		MaxKeys: 2,
 	})
@@ -391,7 +389,6 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 		t.Fatalf("first page len = %d, want 2", len(first.Objects))
 	}
 	second, err := testS3Client.ListObjects(ctx, gestalt.ListOptions{
-		Bucket:            "fixtures",
 		Prefix:            basePrefix,
 		MaxKeys:           2,
 		ContinuationToken: first.NextContinuationToken,
@@ -410,7 +407,6 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 	}
 
 	delimitedFirst, err := testS3Client.ListObjects(ctx, gestalt.ListOptions{
-		Bucket:    "fixtures",
 		Prefix:    basePrefix,
 		Delimiter: "/",
 		MaxKeys:   1,
@@ -428,7 +424,6 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 		t.Fatalf("delimited first page prefixes = %v, want none", delimitedFirst.CommonPrefixes)
 	}
 	delimitedSecond, err := testS3Client.ListObjects(ctx, gestalt.ListOptions{
-		Bucket:            "fixtures",
 		Prefix:            basePrefix,
 		Delimiter:         "/",
 		MaxKeys:           1,
@@ -444,7 +439,6 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 		t.Fatal("delimited second page HasMore = false, want true")
 	}
 	delimitedThird, err := testS3Client.ListObjects(ctx, gestalt.ListOptions{
-		Bucket:            "fixtures",
 		Prefix:            basePrefix,
 		Delimiter:         "/",
 		MaxKeys:           1,
@@ -465,7 +459,7 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 
 func TestS3Transport_CopyDeletePresignAndExists(t *testing.T) {
 	ctx := context.Background()
-	source := s3sdk.Object(testS3Client, "fixtures", "copy/"+t.Name()+"/source.txt")
+	source := s3sdk.Object(testS3Client, "copy/"+t.Name()+"/source.txt")
 	sourceMeta, err := source.WriteString(ctx, "copied", &gestalt.WriteOptions{
 		ContentType: "text/plain",
 		Metadata:    map[string]string{"copied": "true"},
@@ -474,9 +468,9 @@ func TestS3Transport_CopyDeletePresignAndExists(t *testing.T) {
 		t.Fatalf("WriteString(source): %v", err)
 	}
 
-	destRef := gestalt.ObjectRef{Bucket: "fixtures", Key: "copy/" + t.Name() + "/dest.txt"}
+	destRef := gestalt.ObjectRef{Key: "copy/" + t.Name() + "/dest.txt"}
 	meta, err := testS3Client.CopyObject(ctx, gestalt.CopyRequest{
-		Source:      gestalt.ObjectRef{Bucket: "fixtures", Key: "copy/" + t.Name() + "/source.txt"},
+		Source:      gestalt.ObjectRef{Key: "copy/" + t.Name() + "/source.txt"},
 		Destination: destRef,
 	})
 	if err != nil {
@@ -486,7 +480,7 @@ func TestS3Transport_CopyDeletePresignAndExists(t *testing.T) {
 		t.Fatalf("CopyObject key = %q, want %q", meta.Ref.Key, destRef.Key)
 	}
 
-	dest := s3sdk.Object(testS3Client, destRef.Bucket, destRef.Key)
+	dest := s3sdk.Object(testS3Client, destRef.Key)
 	exists, err := dest.Exists(ctx)
 	if err != nil {
 		t.Fatalf("Exists: %v", err)
@@ -503,9 +497,9 @@ func TestS3Transport_CopyDeletePresignAndExists(t *testing.T) {
 		t.Fatalf("Text(dest) = %q, want copied", got)
 	}
 
-	etagCopyRef := gestalt.ObjectRef{Bucket: "fixtures", Key: "copy/" + t.Name() + "/etag-copy.txt"}
+	etagCopyRef := gestalt.ObjectRef{Key: "copy/" + t.Name() + "/etag-copy.txt"}
 	etagMeta, err := testS3Client.CopyObject(ctx, gestalt.CopyRequest{
-		Source:      gestalt.ObjectRef{Bucket: "fixtures", Key: "copy/" + t.Name() + "/source.txt"},
+		Source:      gestalt.ObjectRef{Key: "copy/" + t.Name() + "/source.txt"},
 		Destination: etagCopyRef,
 		IfMatch:     sourceMeta.ETag,
 	})
@@ -549,14 +543,14 @@ func TestS3Transport_CopyDeletePresignAndExists(t *testing.T) {
 
 func TestS3Transport_ErrorMapping(t *testing.T) {
 	ctx := context.Background()
-	missing := s3sdk.Object(testS3Client, "fixtures", "missing/"+t.Name())
+	missing := s3sdk.Object(testS3Client, "missing/"+t.Name())
 
 	_, err := missing.Stat(ctx)
 	if !errors.Is(err, gestalt.ErrS3NotFound) {
 		t.Fatalf("Stat missing error = %v, want ErrS3NotFound", err)
 	}
 
-	existing := s3sdk.Object(testS3Client, "fixtures", "errors/"+t.Name()+".txt")
+	existing := s3sdk.Object(testS3Client, "errors/"+t.Name()+".txt")
 	meta, err := existing.WriteString(ctx, "abc", nil)
 	if err != nil {
 		t.Fatalf("WriteString(existing): %v", err)
@@ -578,8 +572,8 @@ func TestS3Transport_ErrorMapping(t *testing.T) {
 	}
 
 	_, err = testS3Client.CopyObject(ctx, gestalt.CopyRequest{
-		Source:      gestalt.ObjectRef{Bucket: "fixtures", Key: "errors/" + t.Name() + ".txt"},
-		Destination: gestalt.ObjectRef{Bucket: "fixtures", Key: "errors/" + t.Name() + "-copy.txt"},
+		Source:      gestalt.ObjectRef{Key: "errors/" + t.Name() + ".txt"},
+		Destination: gestalt.ObjectRef{Key: "errors/" + t.Name() + "-copy.txt"},
 		IfMatch:     "wrong-etag",
 	})
 	if !errors.Is(err, gestalt.ErrS3PreconditionFailed) {
@@ -587,8 +581,8 @@ func TestS3Transport_ErrorMapping(t *testing.T) {
 	}
 
 	_, err = testS3Client.CopyObject(ctx, gestalt.CopyRequest{
-		Source:      gestalt.ObjectRef{Bucket: "fixtures", Key: "errors/absent-" + t.Name()},
-		Destination: gestalt.ObjectRef{Bucket: "fixtures", Key: "errors/" + t.Name() + "-copy-2.txt"},
+		Source:      gestalt.ObjectRef{Key: "errors/absent-" + t.Name()},
+		Destination: gestalt.ObjectRef{Key: "errors/" + t.Name() + "-copy-2.txt"},
 	})
 	if !errors.Is(err, gestalt.ErrS3NotFound) {
 		t.Fatalf("CopyObject missing error = %v, want ErrS3NotFound", err)

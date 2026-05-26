@@ -520,7 +520,6 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req runtimeprovider.StartApp
 					Method: http.MethodPost,
 					Parameters: []catalog.CatalogParameter{
 						{Name: "binding", Type: "string"},
-						{Name: "bucket", Type: "string", Required: true},
 						{Name: "key", Type: "string", Required: true},
 						{Name: "value", Type: "string", Required: true},
 					},
@@ -595,11 +594,10 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req runtimeprovider.StartApp
 				}
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "s3_roundtrip":
-				bucket, _ := params["bucket"].(string)
 				key, _ := params["key"].(string)
 				value, _ := params["value"].(string)
 				binding, _ := params["binding"].(string)
-				record, err := fakeHostedS3RoundTrip(bucket, key, value, binding, env)
+				record, err := fakeHostedS3RoundTrip(key, value, binding, env)
 				if err != nil {
 					return nil, err
 				}
@@ -838,7 +836,7 @@ func fakeHostedMakeHTTPRequest(targetURL string, env map[string]string) (map[str
 	}, nil
 }
 
-func fakeHostedS3RoundTrip(bucket, key, value, binding string, env map[string]string) (map[string]any, error) {
+func fakeHostedS3RoundTrip(key, value, binding string, env map[string]string) (map[string]any, error) {
 	address, token, err := fakeHostedHostServiceRelay("s3", env)
 	if err != nil {
 		return nil, err
@@ -868,7 +866,7 @@ func fakeHostedS3RoundTrip(bucket, key, value, binding string, env map[string]st
 	if err := writeStream.Send(&proto.WriteObjectRequest{
 		Msg: &proto.WriteObjectRequest_Open{
 			Open: &proto.WriteObjectOpen{
-				Ref:         &proto.S3ObjectRef{Bucket: bucket, Key: key},
+				Ref:         &proto.S3ObjectRef{Key: key},
 				ContentType: "text/plain",
 			},
 		},
@@ -886,14 +884,14 @@ func fakeHostedS3RoundTrip(bucket, key, value, binding string, env map[string]st
 	}
 
 	headResp, err := client.HeadObject(ctx, &proto.HeadObjectRequest{
-		Ref: &proto.S3ObjectRef{Bucket: bucket, Key: key},
+		Ref: &proto.S3ObjectRef{Key: key},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("head s3 object: %w", err)
 	}
 
 	readStream, err := client.ReadObject(ctx, &proto.ReadObjectRequest{
-		Ref: &proto.S3ObjectRef{Bucket: bucket, Key: key},
+		Ref: &proto.S3ObjectRef{Key: key},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("open s3 read stream: %w", err)
@@ -920,7 +918,6 @@ func fakeHostedS3RoundTrip(bucket, key, value, binding string, env map[string]st
 	}
 
 	listResp, err := client.ListObjects(ctx, &proto.ListObjectsRequest{
-		Bucket: bucket,
 		Prefix: key,
 	})
 	if err != nil {
@@ -6313,7 +6310,7 @@ func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 	if got := env[runtimehost.DefaultHostServiceTokenEnv]; got == "" {
 		t.Fatalf("runtime env %s is empty, want relay token", runtimehost.DefaultHostServiceTokenEnv)
 	}
-	record, err := fakeHostedS3RoundTrip("assets", "plans/q3.txt", "ship-it", "main", env)
+	record, err := fakeHostedS3RoundTrip("plans/q3.txt", "ship-it", "main", env)
 	if err != nil {
 		t.Fatalf("S3 round trip via provider-dev relay: %v", err)
 	}
@@ -6327,7 +6324,7 @@ func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 	}, session.AttachID); err != nil {
 		t.Fatalf("CloseSession: %v", err)
 	}
-	if _, err := fakeHostedS3RoundTrip("assets", "plans/stale.txt", "stale", "main", env); err == nil {
+	if _, err := fakeHostedS3RoundTrip("plans/stale.txt", "stale", "main", env); err == nil {
 		t.Fatalf("S3 round trip after provider-dev session close succeeded, want stale relay failure")
 	}
 }
@@ -7023,7 +7020,6 @@ func TestRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 				ID:     "s3_roundtrip",
 				Method: http.MethodPost,
 				Parameters: []catalog.CatalogParameter{
-					{Name: "bucket", Type: "string", Required: true},
 					{Name: "key", Type: "string", Required: true},
 					{Name: "value", Type: "string", Required: true},
 				},
@@ -7084,9 +7080,8 @@ func TestRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 	}
 
 	result, err := prov.Execute(context.Background(), "s3_roundtrip", map[string]any{
-		"bucket": "assets",
-		"key":    "plans/q3.txt",
-		"value":  "ship-it",
+		"key":   "plans/q3.txt",
+		"value": "ship-it",
 	}, "")
 	if err != nil {
 		t.Fatalf("Execute s3_roundtrip: %v", err)
@@ -7123,8 +7118,7 @@ func TestRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 	}
 
 	if _, err := boundS3.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Bucket: "assets",
-		Key:    testPluginS3NamespacePrefix("echoext") + "plans/q3.txt",
+		Key: testPluginS3NamespacePrefix("echoext") + "plans/q3.txt",
 	}); err != nil {
 		t.Fatalf("expected namespaced backing key: %v", err)
 	}
@@ -9173,7 +9167,6 @@ func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
 				ID:     "s3_roundtrip",
 				Method: http.MethodPost,
 				Parameters: []catalog.CatalogParameter{
-					{Name: "bucket", Type: "string", Required: true},
 					{Name: "key", Type: "string", Required: true},
 					{Name: "value", Type: "string", Required: true},
 				},
@@ -9210,9 +9203,8 @@ func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
 	}
 
 	result, err := prov.Execute(context.Background(), "s3_roundtrip", map[string]any{
-		"bucket": "assets",
-		"key":    "plans/q1.txt",
-		"value":  "ship-it",
+		"key":   "plans/q1.txt",
+		"value": "ship-it",
 	}, "")
 	if err != nil {
 		t.Fatalf("Execute s3_roundtrip: %v", err)
@@ -9248,14 +9240,12 @@ func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
 	}
 
 	if _, err := stubS3.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Bucket: "assets",
-		Key:    testPluginS3NamespacePrefix("echoext") + "plans/q1.txt",
+		Key: testPluginS3NamespacePrefix("echoext") + "plans/q1.txt",
 	}); err != nil {
 		t.Fatalf("expected namespaced backing key: %v", err)
 	}
 	if _, err := stubS3.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Bucket: "assets",
-		Key:    "plans/q1.txt",
+		Key: "plans/q1.txt",
 	}); err == nil {
 		t.Fatal("unnamespaced backing key should remain empty")
 	}
@@ -9273,7 +9263,6 @@ func TestPluginS3BindingsRouteExplicitBinding(t *testing.T) {
 				Method: http.MethodPost,
 				Parameters: []catalog.CatalogParameter{
 					{Name: "binding", Type: "string"},
-					{Name: "bucket", Type: "string", Required: true},
 					{Name: "key", Type: "string", Required: true},
 					{Name: "value", Type: "string", Required: true},
 				},
@@ -9312,7 +9301,6 @@ func TestPluginS3BindingsRouteExplicitBinding(t *testing.T) {
 	}
 	if _, err := prov.Execute(context.Background(), "s3_roundtrip", map[string]any{
 		"binding": "archive",
-		"bucket":  "assets",
 		"key":     "plans/q2.txt",
 		"value":   "ship-archive",
 	}, ""); err != nil {
@@ -9320,14 +9308,12 @@ func TestPluginS3BindingsRouteExplicitBinding(t *testing.T) {
 	}
 
 	if _, err := archiveS3.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Bucket: "assets",
-		Key:    testPluginS3NamespacePrefix("echoext") + "plans/q2.txt",
+		Key: testPluginS3NamespacePrefix("echoext") + "plans/q2.txt",
 	}); err != nil {
 		t.Fatalf("archive binding should receive the write: %v", err)
 	}
 	if _, err := mainS3.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Bucket: "assets",
-		Key:    testPluginS3NamespacePrefix("echoext") + "plans/q2.txt",
+		Key: testPluginS3NamespacePrefix("echoext") + "plans/q2.txt",
 	}); err == nil {
 		t.Fatal("main binding should remain untouched when archive is selected explicitly")
 	}

@@ -61,7 +61,7 @@ class _BrokenBody:
 
 class _AuthoredS3Provider(S3Provider):
     def __init__(self) -> None:
-        self.objects: dict[tuple[str, str], tuple[bytes, str, dict[str, str]]] = {}
+        self.objects: dict[str, tuple[bytes, str, dict[str, str]]] = {}
         self.last_read_options: ReadOptions | None = None
         self.last_write_options: WriteOptions | None = None
         self.last_copy_options: CopyOptions | None = None
@@ -82,7 +82,7 @@ class _AuthoredS3Provider(S3Provider):
 
     def _get(self, ref: ObjectRef) -> tuple[bytes, str, dict[str, str]]:
         try:
-            return self.objects[(ref.bucket, ref.key)]
+            return self.objects[ref.key]
         except KeyError as error:
             raise S3NotFoundError("missing object") from error
 
@@ -127,14 +127,14 @@ class _AuthoredS3Provider(S3Provider):
         if opts and opts.if_none_match == "fail":
             raise S3PreconditionFailedError("write precondition failed")
         if ref.key == "ignore-body.txt":
-            self.objects[(ref.bucket, ref.key)] = (
+            self.objects[ref.key] = (
                 b"",
                 opts.content_type if opts else "",
                 {},
             )
             return self._meta(ref)
         data = b"".join(bytes(chunk) for chunk in body)
-        self.objects[(ref.bucket, ref.key)] = (
+        self.objects[ref.key] = (
             data,
             opts.content_type if opts else "",
             dict(opts.metadata) if opts else {},
@@ -142,13 +142,13 @@ class _AuthoredS3Provider(S3Provider):
         return self._meta(ref)
 
     def delete_object(self, ref: ObjectRef) -> None:
-        self.objects.pop((ref.bucket, ref.key), None)
+        self.objects.pop(ref.key, None)
 
     def list_objects(self, opts: ListOptions) -> ListPage:
         objects = [
-            self._meta(ObjectRef(bucket=bucket, key=key))
-            for bucket, key in sorted(self.objects)
-            if bucket == opts.bucket and key.startswith(opts.prefix)
+            self._meta(ObjectRef(key=key))
+            for key in sorted(self.objects)
+            if key.startswith(opts.prefix)
         ]
         if opts.max_keys:
             objects = objects[: opts.max_keys]
@@ -164,7 +164,7 @@ class _AuthoredS3Provider(S3Provider):
         if opts and opts.if_match == "fail":
             raise S3PreconditionFailedError("copy precondition failed")
         data, content_type, metadata = self._get(source)
-        self.objects[(destination.bucket, destination.key)] = (
+        self.objects[destination.key] = (
             data,
             content_type,
             dict(metadata),
@@ -178,7 +178,7 @@ class _AuthoredS3Provider(S3Provider):
     ) -> PresignResult:
         self.last_presign_options = opts
         return PresignResult(
-            url=f"https://example.invalid/{ref.bucket}/{ref.key}",
+            url=f"https://example.invalid/{ref.key}",
             method=opts.method if opts and opts.method else PresignMethod.GET,
             expires_at=dt.datetime(2026, 1, 2, 3, 9, 5, tzinfo=UTC),
             headers=dict(opts.headers) if opts else {},
@@ -265,7 +265,7 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
 
     def test_client_round_trips_against_authored_provider(self) -> None:
         client = S3()
-        obj = client.object("docs", "hello.txt")
+        obj = client.object("hello.txt")
         written = obj.write_text(
             "hello",
             WriteOptions(content_type="text/plain", metadata={"lang": "en"}),
@@ -279,18 +279,18 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
         self.assertEqual(obj.stat().content_type, "text/plain")
         self.assertEqual(obj.text(), "hello")
 
-        page = client.list_objects(ListOptions(bucket="docs", prefix="he"))
+        page = client.list_objects(ListOptions(prefix="he"))
         self.assertEqual([item.ref.key for item in page.objects], ["hello.txt"])
 
         copied = client.copy_object(
-            ObjectRef(bucket="docs", key="hello.txt"),
-            ObjectRef(bucket="docs", key="copy.txt"),
+            ObjectRef(key="hello.txt"),
+            ObjectRef(key="copy.txt"),
             CopyOptions(if_match="etag-5"),
         )
         self.assertEqual(copied.ref.key, "copy.txt")
         self.assertIsInstance(self.provider.last_copy_options, CopyOptions)
 
-        signed = client.object("docs", "copy.txt").presign(
+        signed = client.object("copy.txt").presign(
             PresignOptions(
                 method=PresignMethod.PUT,
                 expires=dt.timedelta(seconds=30),
@@ -301,18 +301,18 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
         self.assertEqual(signed.headers, {"x-test": "1"})
         self.assertIsInstance(self.provider.last_presign_options, PresignOptions)
 
-        default_signed = client.object("docs", "copy.txt").presign()
+        default_signed = client.object("copy.txt").presign()
         self.assertEqual(default_signed.method, PresignMethod.GET)
         self.assertIsInstance(self.provider.last_presign_options, PresignOptions)
         assert self.provider.last_presign_options is not None
         self.assertIsNone(self.provider.last_presign_options.expires)
 
-        client.object("docs", "copy.txt").delete()
-        self.assertFalse(client.object("docs", "copy.txt").exists())
+        client.object("copy.txt").delete()
+        self.assertFalse(client.object("copy.txt").exists())
         client.close()
 
     def test_read_options_preserve_zero_range_values(self) -> None:
-        self.provider.objects[("docs", "letters.txt")] = (
+        self.provider.objects["letters.txt"] = (
             b"abcdef",
             "text/plain",
             {},
@@ -321,7 +321,7 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
         frames = list(
             self.stub.ReadObject(
                 s3_pb2.ReadObjectRequest(
-                    ref=s3_pb2.S3ObjectRef(bucket="docs", key="letters.txt"),
+                    ref=s3_pb2.S3ObjectRef(key="letters.txt"),
                     range=s3_pb2.ByteRange(start=0, end=0),
                 )
             )
@@ -335,12 +335,12 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
         self.assertEqual(self.provider.last_read_options.range.end, 0)
 
     def test_read_object_closes_returned_body(self) -> None:
-        self.provider.objects[("docs", "closable.txt")] = (b"close me", "", {})
+        self.provider.objects["closable.txt"] = (b"close me", "", {})
 
         frames = list(
             self.stub.ReadObject(
                 s3_pb2.ReadObjectRequest(
-                    ref=s3_pb2.S3ObjectRef(bucket="docs", key="closable.txt")
+                    ref=s3_pb2.S3ObjectRef(key="closable.txt")
                 )
             )
         )
@@ -353,23 +353,23 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
     def test_s3_errors_map_through_grpc_statuses(self) -> None:
         client = S3()
         with self.assertRaises(S3NotFoundError):
-            client.object("docs", "missing.txt").stat()
+            client.object("missing.txt").stat()
 
         with self.assertRaises(S3PreconditionFailedError):
-            client.object("docs", "guarded.txt").write_text(
+            client.object("guarded.txt").write_text(
                 "body",
                 WriteOptions(if_none_match="fail"),
             )
 
-        self.provider.objects[("docs", "small.txt")] = (b"abc", "", {})
+        self.provider.objects["small.txt"] = (b"abc", "", {})
         with self.assertRaises(S3InvalidRangeError):
-            client.object("docs", "small.txt").bytes(
+            client.object("small.txt").bytes(
                 ReadOptions(range=ByteRange(start=10))
             )
 
-        self.provider.objects[("docs", "broken-body.txt")] = (b"ignored", "", {})
+        self.provider.objects["broken-body.txt"] = (b"ignored", "", {})
         with self.assertRaises(S3InvalidRangeError):
-            client.object("docs", "broken-body.txt").bytes()
+            client.object("broken-body.txt").bytes()
         client.close()
 
     def test_write_object_rejects_malformed_streams(self) -> None:
@@ -380,12 +380,12 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
                 [
                     s3_pb2.WriteObjectRequest(
                         open=s3_pb2.WriteObjectOpen(
-                            ref=s3_pb2.S3ObjectRef(bucket="docs", key="bad.txt")
+                            ref=s3_pb2.S3ObjectRef(key="bad.txt")
                         )
                     ),
                     s3_pb2.WriteObjectRequest(
                         open=s3_pb2.WriteObjectOpen(
-                            ref=s3_pb2.S3ObjectRef(bucket="docs", key="again.txt")
+                            ref=s3_pb2.S3ObjectRef(key="again.txt")
                         )
                     ),
                 ]
@@ -394,14 +394,12 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
                 [
                     s3_pb2.WriteObjectRequest(
                         open=s3_pb2.WriteObjectOpen(
-                            ref=s3_pb2.S3ObjectRef(
-                                bucket="docs", key="ignore-body.txt"
-                            )
+                            ref=s3_pb2.S3ObjectRef(key="ignore-body.txt")
                         )
                     ),
                     s3_pb2.WriteObjectRequest(
                         open=s3_pb2.WriteObjectOpen(
-                            ref=s3_pb2.S3ObjectRef(bucket="docs", key="again.txt")
+                            ref=s3_pb2.S3ObjectRef(key="again.txt")
                         )
                     ),
                 ]
@@ -453,12 +451,12 @@ class S3LegacyProviderRuntimeTests(unittest.TestCase):
 
         response = stub.HeadObject(
             s3_pb2.HeadObjectRequest(
-                ref=s3_pb2.S3ObjectRef(bucket="legacy", key="object.txt")
+                ref=s3_pb2.S3ObjectRef(key="object.txt")
             )
         )
 
         self.assertEqual(response.meta.etag, "legacy")
-        self.assertEqual(response.meta.ref.bucket, "legacy")
+        self.assertEqual(response.meta.ref.key, "object.txt")
 
     def test_raw_generated_streaming_method_fallback_still_serves_legacy_provider(
         self,
@@ -470,7 +468,7 @@ class S3LegacyProviderRuntimeTests(unittest.TestCase):
         read_frames = list(
             stub.ReadObject(
                 s3_pb2.ReadObjectRequest(
-                    ref=s3_pb2.S3ObjectRef(bucket="legacy", key="object.txt")
+                    ref=s3_pb2.S3ObjectRef(key="object.txt")
                 )
             )
         )
@@ -482,10 +480,7 @@ class S3LegacyProviderRuntimeTests(unittest.TestCase):
                 [
                     s3_pb2.WriteObjectRequest(
                         open=s3_pb2.WriteObjectOpen(
-                            ref=s3_pb2.S3ObjectRef(
-                                bucket="legacy",
-                                key="written.txt",
-                            ),
+                            ref=s3_pb2.S3ObjectRef(key="written.txt"),
                             content_type="text/plain",
                         )
                     ),

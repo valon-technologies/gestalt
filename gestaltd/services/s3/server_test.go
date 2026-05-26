@@ -29,7 +29,7 @@ func TestS3ServerPrefixesKeysPerPlugin(t *testing.T) {
 		{
 			Msg: &proto.WriteObjectRequest_Open{
 				Open: &proto.WriteObjectOpen{
-					Ref: &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q2.txt"},
+					Ref: &proto.S3ObjectRef{Key: "plans/q2.txt"},
 				},
 			},
 		},
@@ -46,15 +46,13 @@ func TestS3ServerPrefixesKeysPerPlugin(t *testing.T) {
 	}
 
 	_, err := store.HeadObject(ctx, s3sdk.ObjectRef{
-		Bucket: "docs",
-		Key:    s3NamespacePrefix("roadmap") + "plans/q2.txt",
+		Key: s3NamespacePrefix("roadmap") + "plans/q2.txt",
 	})
 	if err != nil {
 		t.Fatalf("HeadObject(prefixed): %v", err)
 	}
 	_, err = store.HeadObject(ctx, s3sdk.ObjectRef{
-		Bucket: "docs",
-		Key:    "plans/q2.txt",
+		Key: "plans/q2.txt",
 	})
 	if !errors.Is(err, s3sdk.ErrNotFound) {
 		t.Fatalf("HeadObject(unprefixed) error = %v, want ErrNotFound", err)
@@ -75,7 +73,7 @@ func TestRoutingS3ServerRoutesByHostBindingMetadata(t *testing.T) {
 		{
 			Msg: &proto.WriteObjectRequest_Open{
 				Open: &proto.WriteObjectOpen{
-					Ref: &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q2.txt"},
+					Ref: &proto.S3ObjectRef{Key: "plans/q2.txt"},
 				},
 			},
 		},
@@ -88,14 +86,12 @@ func TestRoutingS3ServerRoutesByHostBindingMetadata(t *testing.T) {
 		t.Fatalf("WriteObject: %v", err)
 	}
 	if _, err := archive.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Bucket: "docs",
-		Key:    s3NamespacePrefix("roadmap") + "plans/q2.txt",
+		Key: s3NamespacePrefix("roadmap") + "plans/q2.txt",
 	}); err != nil {
 		t.Fatalf("archive HeadObject: %v", err)
 	}
 	if _, err := main.HeadObject(context.Background(), s3sdk.ObjectRef{
-		Bucket: "docs",
-		Key:    s3NamespacePrefix("roadmap") + "plans/q2.txt",
+		Key: s3NamespacePrefix("roadmap") + "plans/q2.txt",
 	}); !errors.Is(err, s3sdk.ErrNotFound) {
 		t.Fatalf("main HeadObject error = %v, want ErrNotFound", err)
 	}
@@ -108,7 +104,6 @@ func TestS3ServerLeavesEmptyStartAfterUnset(t *testing.T) {
 	srv := NewServer(store, "roadmap").(*s3Server)
 
 	got, gotErr := srv.namespacedListRequest(&proto.ListObjectsRequest{
-		Bucket: "docs",
 		Prefix: "plans/",
 	})
 	if gotErr != nil {
@@ -135,7 +130,7 @@ func TestS3ServerListWrapsContinuationTokensForNamespacedPlugins(t *testing.T) {
 		s3NamespacePrefix("roadmap") + "plans/z.txt",
 	} {
 		if _, err := store.WriteObject(ctx, s3sdk.WriteRequest{
-			Ref:  s3sdk.ObjectRef{Bucket: "docs", Key: key},
+			Ref:  s3sdk.ObjectRef{Key: key},
 			Body: strings.NewReader(key),
 		}); err != nil {
 			t.Fatalf("seed %s: %v", key, err)
@@ -143,7 +138,6 @@ func TestS3ServerListWrapsContinuationTokensForNamespacedPlugins(t *testing.T) {
 	}
 
 	first, err := srv.ListObjects(ctx, &proto.ListObjectsRequest{
-		Bucket:    "docs",
 		Prefix:    "plans/",
 		Delimiter: "/",
 		MaxKeys:   1,
@@ -159,7 +153,6 @@ func TestS3ServerListWrapsContinuationTokensForNamespacedPlugins(t *testing.T) {
 	}
 
 	second, err := srv.ListObjects(ctx, &proto.ListObjectsRequest{
-		Bucket:            "docs",
 		Prefix:            "plans/",
 		Delimiter:         "/",
 		MaxKeys:           1,
@@ -173,7 +166,6 @@ func TestS3ServerListWrapsContinuationTokensForNamespacedPlugins(t *testing.T) {
 	}
 
 	third, err := srv.ListObjects(ctx, &proto.ListObjectsRequest{
-		Bucket:            "docs",
 		Prefix:            "plans/",
 		Delimiter:         "/",
 		MaxKeys:           1,
@@ -202,7 +194,6 @@ func TestS3ServerListRoundTripsOpaqueBackendContinuationTokens(t *testing.T) {
 	srv := NewServer(client, "roadmap")
 
 	first, err := srv.ListObjects(context.Background(), &proto.ListObjectsRequest{
-		Bucket:  "docs",
 		Prefix:  "plans/",
 		MaxKeys: 1,
 	})
@@ -220,7 +211,6 @@ func TestS3ServerListRoundTripsOpaqueBackendContinuationTokens(t *testing.T) {
 	}
 
 	_, err = srv.ListObjects(context.Background(), &proto.ListObjectsRequest{
-		Bucket:            "docs",
 		Prefix:            "plans/",
 		MaxKeys:           1,
 		ContinuationToken: first.GetNextContinuationToken(),
@@ -244,7 +234,7 @@ func TestS3ServerWriteObjectReturnsWhenProviderStopsReadingEarly(t *testing.T) {
 		{
 			Msg: &proto.WriteObjectRequest_Open{
 				Open: &proto.WriteObjectOpen{
-					Ref: &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q3.txt"},
+					Ref: &proto.S3ObjectRef{Key: "plans/q3.txt"},
 				},
 			},
 		},
@@ -279,7 +269,7 @@ func TestS3ServerWriteObjectPropagatesProviderErrorAfterStoppingReadEarly(t *tes
 		{
 			Msg: &proto.WriteObjectRequest_Open{
 				Open: &proto.WriteObjectOpen{
-					Ref:         &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q4.txt"},
+					Ref:         &proto.S3ObjectRef{Key: "plans/q4.txt"},
 					IfNoneMatch: "*",
 				},
 			},
@@ -319,7 +309,7 @@ func TestS3ServerWriteObjectPropagatesRecvErrorObservedDuringSendAndClose(t *tes
 				return &proto.WriteObjectRequest{
 					Msg: &proto.WriteObjectRequest_Open{
 						Open: &proto.WriteObjectOpen{
-							Ref: &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q4.txt"},
+							Ref: &proto.S3ObjectRef{Key: "plans/q4.txt"},
 						},
 					},
 				}, nil
@@ -352,8 +342,8 @@ func TestS3ServerListDropsKeysOutsideAppNamespace(t *testing.T) {
 	srv := NewServer(listResultS3Client{
 		page: s3sdk.ListPage{
 			Objects: []s3sdk.ObjectMeta{
-				{Ref: s3sdk.ObjectRef{Bucket: "docs", Key: s3NamespacePrefix("roadmap") + "plans/a.txt"}},
-				{Ref: s3sdk.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}},
+				{Ref: s3sdk.ObjectRef{Key: s3NamespacePrefix("roadmap") + "plans/a.txt"}},
+				{Ref: s3sdk.ObjectRef{Key: "plans/escape.txt"}},
 			},
 			CommonPrefixes: []string{
 				s3NamespacePrefix("roadmap") + "plans/nested/",
@@ -363,7 +353,6 @@ func TestS3ServerListDropsKeysOutsideAppNamespace(t *testing.T) {
 	}, "roadmap")
 
 	resp, err := srv.ListObjects(context.Background(), &proto.ListObjectsRequest{
-		Bucket:    "docs",
 		Prefix:    "plans/",
 		Delimiter: "/",
 	})
@@ -386,12 +375,12 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 
 		srv := NewServer(funcS3Client{
 			headObject: func(context.Context, s3sdk.ObjectRef) (s3sdk.ObjectMeta, error) {
-				return s3sdk.ObjectMeta{Ref: s3sdk.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}}, nil
+				return s3sdk.ObjectMeta{Ref: s3sdk.ObjectRef{Key: "plans/escape.txt"}}, nil
 			},
 		}, "roadmap")
 
 		_, err := srv.HeadObject(context.Background(), &proto.HeadObjectRequest{
-			Ref: &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q2.txt"},
+			Ref: &proto.S3ObjectRef{Key: "plans/q2.txt"},
 		})
 		if status.Code(err) != codes.Internal {
 			t.Fatalf("HeadObject error = %v, want codes.Internal", err)
@@ -404,7 +393,7 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 		srv := NewServer(funcS3Client{
 			readObject: func(context.Context, s3sdk.ReadRequest) (s3sdk.ReadResult, error) {
 				return s3sdk.ReadResult{
-					Meta: s3sdk.ObjectMeta{Ref: s3sdk.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}},
+					Meta: s3sdk.ObjectMeta{Ref: s3sdk.ObjectRef{Key: "plans/escape.txt"}},
 					Body: io.NopCloser(strings.NewReader("leak")),
 				}, nil
 			},
@@ -412,7 +401,7 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 		stream := &stubS3ReadObjectServer{ctx: context.Background()}
 
 		err := srv.ReadObject(&proto.ReadObjectRequest{
-			Ref: &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q2.txt"},
+			Ref: &proto.S3ObjectRef{Key: "plans/q2.txt"},
 		}, stream)
 		if status.Code(err) != codes.Internal {
 			t.Fatalf("ReadObject error = %v, want codes.Internal", err)
@@ -427,14 +416,14 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 
 		srv := NewServer(funcS3Client{
 			writeObject: func(_ context.Context, req s3sdk.WriteRequest) (s3sdk.ObjectMeta, error) {
-				return s3sdk.ObjectMeta{Ref: s3sdk.ObjectRef{Bucket: req.Ref.Bucket, Key: "plans/escape.txt"}}, nil
+				return s3sdk.ObjectMeta{Ref: s3sdk.ObjectRef{Key: "plans/escape.txt"}}, nil
 			},
 		}, "roadmap")
 		stream := newStubS3WriteObjectServer(context.Background(), []*proto.WriteObjectRequest{
 			{
 				Msg: &proto.WriteObjectRequest_Open{
 					Open: &proto.WriteObjectOpen{
-						Ref: &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q2.txt"},
+						Ref: &proto.S3ObjectRef{Key: "plans/q2.txt"},
 					},
 				},
 			},
@@ -452,13 +441,13 @@ func TestS3ServerRejectsForeignMetadataOutsideAppNamespace(t *testing.T) {
 
 		srv := NewServer(funcS3Client{
 			copyObject: func(context.Context, s3sdk.CopyRequest) (s3sdk.ObjectMeta, error) {
-				return s3sdk.ObjectMeta{Ref: s3sdk.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}}, nil
+				return s3sdk.ObjectMeta{Ref: s3sdk.ObjectRef{Key: "plans/escape.txt"}}, nil
 			},
 		}, "roadmap")
 
 		_, err := srv.CopyObject(context.Background(), &proto.CopyObjectRequest{
-			Source:      &proto.S3ObjectRef{Bucket: "docs", Key: "plans/source.txt"},
-			Destination: &proto.S3ObjectRef{Bucket: "docs", Key: "plans/dest.txt"},
+			Source:      &proto.S3ObjectRef{Key: "plans/source.txt"},
+			Destination: &proto.S3ObjectRef{Key: "plans/dest.txt"},
 		})
 		if status.Code(err) != codes.Internal {
 			t.Fatalf("CopyObject error = %v, want codes.Internal", err)
@@ -478,7 +467,7 @@ func TestS3ServerRejectsAppScopedPresign(t *testing.T) {
 	}, "roadmap")
 
 	_, err := srv.PresignObject(context.Background(), &proto.PresignObjectRequest{
-		Ref: &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q2.txt"},
+		Ref: &proto.S3ObjectRef{Key: "plans/q2.txt"},
 	})
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("PresignObject error = %v, want codes.FailedPrecondition", err)
@@ -504,7 +493,7 @@ func TestS3ServerAppScopedPresignReturnsHostedObjectAccessURL(t *testing.T) {
 	}, "roadmap", ServerOptions{BindingName: "docs", AccessURLs: manager})
 
 	resp, err := srv.PresignObject(context.Background(), &proto.PresignObjectRequest{
-		Ref:            &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q2.txt"},
+		Ref:            &proto.S3ObjectRef{Key: "plans/q2.txt"},
 		Method:         proto.PresignMethod_PRESIGN_METHOD_PUT,
 		ExpiresSeconds: 600,
 		ContentType:    "text/plain",
@@ -541,8 +530,8 @@ func TestS3ServerAppScopedPresignReturnsHostedObjectAccessURL(t *testing.T) {
 	if target.AppName != "roadmap" || target.BindingName != "docs" {
 		t.Fatalf("target scope = %s/%s, want roadmap/docs", target.AppName, target.BindingName)
 	}
-	if target.Ref != (s3sdk.ObjectRef{Bucket: "docs", Key: "plans/q2.txt"}) {
-		t.Fatalf("target ref = %#v, want docs/plans/q2.txt", target.Ref)
+	if target.Ref != (s3sdk.ObjectRef{Key: "plans/q2.txt"}) {
+		t.Fatalf("target ref = %#v, want plans/q2.txt", target.Ref)
 	}
 	if target.Method != s3sdk.PresignMethodPut {
 		t.Fatalf("target method = %q, want PUT", target.Method)
