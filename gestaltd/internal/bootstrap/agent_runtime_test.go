@@ -60,7 +60,7 @@ func testHostedAgentRuntimeConfig() *config.RuntimePlacementConfig {
 func testAgentRuntimeIndexedDBDefs() map[string]*config.ProviderEntry {
 	return map[string]*config.ProviderEntry{
 		"agent_state": {
-			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 		},
 	}
 }

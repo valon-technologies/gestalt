@@ -3784,11 +3784,11 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 
 	indexedDBDefs := map[string]*config.ProviderEntry{
 		"main": {
-			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 			Config: mustNode(t, map[string]any{"dsn": "postgres://main.example.test/gestalt"}),
 		},
 		"archive": {
-			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 			Config: mustNode(t, map[string]any{"dsn": "sqlite://archive.db"}),
 		},
 	}
@@ -6598,7 +6598,7 @@ func TestRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapability
 		SelectedIndexedDBName: "memory",
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"memory": {
-				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
 			},
 		},
@@ -6717,7 +6717,7 @@ func TestRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) {
 		SelectedIndexedDBName: "memory",
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"memory": {
-				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
 			},
 		},
@@ -8639,7 +8639,7 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 					SelectedIndexedDBName: "memory",
 					IndexedDBDefs: map[string]*config.ProviderEntry{
 						"memory": {
-							Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+							Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 							Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
 						},
 					},
@@ -8735,14 +8735,14 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 
 	indexedDBDefs := map[string]*config.ProviderEntry{
 		"postgres": {
-			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 			Config: mustNode(t, map[string]any{
 				"dsn":    "postgres://db.example.test/gestalt",
 				"schema": "host_schema",
 			}),
 		},
 		"sqlite": {
-			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 			Config: mustNode(t, map[string]any{
 				"dsn":          "sqlite://plugin-state.db",
 				"table_prefix": "host_",
@@ -8758,7 +8758,7 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 			}),
 		},
 		"mysql-secret": {
-			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 			Config: mustNode(t, map[string]any{
 				"dsn": map[string]any{
 					"secret": map[string]any{
@@ -8929,7 +8929,7 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 				SelectedIndexedDBName: "memory",
 				IndexedDBDefs: map[string]*config.ProviderEntry{
 					"memory": {
-						Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+						Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 						Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
 					},
 				},
@@ -9057,11 +9057,11 @@ func TestPluginIndexedDBProviderOverrideUsesExplicitIndexedDB(t *testing.T) {
 		SelectedIndexedDBName: "main",
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"main": {
-				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{"bucket": "main"}),
 			},
 			"archive": {
-				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{"bucket": "archive"}),
 			},
 		},
@@ -9142,7 +9142,7 @@ func TestPluginIndexedDBBindingsCleanupOnS3BindingFailure(t *testing.T) {
 		SelectedIndexedDBName: "main",
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"main": {
-				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{"bucket": "main"}),
 			},
 		},
