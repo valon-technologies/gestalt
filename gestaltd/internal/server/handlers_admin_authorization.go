@@ -23,7 +23,6 @@ import (
 type adminAuthorizationPluginInfo struct {
 	Name                string `json:"name"`
 	AuthorizationPolicy string `json:"authorizationPolicy"`
-	MountedUIPath       string `json:"mountedUiPath,omitempty"`
 }
 
 type adminAuthorizationMemberRow struct {
@@ -214,7 +213,6 @@ func (s *Server) listAdminAuthorizationPlugins(w http.ResponseWriter, r *http.Re
 		out = append(out, adminAuthorizationPluginInfo{
 			Name:                name,
 			AuthorizationPolicy: strings.TrimSpace(entry.AuthorizationPolicy),
-			MountedUIPath:       strings.TrimSpace(entry.MountPath),
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
