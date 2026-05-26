@@ -8,7 +8,6 @@ import (
 
 func objectRefToProto(ref s3sdk.ObjectRef) *proto.S3ObjectRef {
 	return &proto.S3ObjectRef{
-		Bucket:    ref.Bucket,
 		Key:       ref.Key,
 		VersionId: ref.VersionID,
 	}
@@ -19,7 +18,6 @@ func objectRefFromProto(ref *proto.S3ObjectRef) s3sdk.ObjectRef {
 		return s3sdk.ObjectRef{}
 	}
 	return s3sdk.ObjectRef{
-		Bucket:    ref.GetBucket(),
 		Key:       ref.GetKey(),
 		VersionID: ref.GetVersionId(),
 	}

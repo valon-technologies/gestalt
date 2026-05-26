@@ -119,7 +119,6 @@ func (s s3ProviderServer) DeleteObject(ctx context.Context, req *proto.DeleteObj
 
 func (s s3ProviderServer) ListObjects(ctx context.Context, req *proto.ListObjectsRequest) (*proto.ListObjectsResponse, error) {
 	page, err := s.provider.ListObjects(ctx, ListOptions{
-		Bucket:            req.GetBucket(),
 		Prefix:            req.GetPrefix(),
 		Delimiter:         req.GetDelimiter(),
 		ContinuationToken: req.GetContinuationToken(),

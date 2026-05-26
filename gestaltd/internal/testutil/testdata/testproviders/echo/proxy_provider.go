@@ -155,7 +155,6 @@ type indexedDBRoundtripInput struct {
 
 type s3RoundtripInput struct {
 	Binding string `json:"binding,omitempty"`
-	Bucket  string `json:"bucket" required:"true"`
 	Key     string `json:"key" required:"true"`
 	Value   string `json:"value" required:"true"`
 }
@@ -692,7 +691,6 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 
 	case "s3_roundtrip":
 		binding, _ := params["binding"].(string)
-		bucket, _ := params["bucket"].(string)
 		key, _ := params["key"].(string)
 		value, _ := params["value"].(string)
 
@@ -710,7 +708,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		}
 		defer func() { _ = client.Close() }()
 
-		obj := s3sdk.Object(client, bucket, key)
+		obj := s3sdk.Object(client, key)
 		if _, err := obj.WriteString(ctx, value, &gestalt.WriteOptions{ContentType: "text/plain"}); err != nil {
 			return nil, err
 		}
@@ -722,7 +720,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return nil, err
 		}
-		page, err := client.ListObjects(ctx, gestalt.ListOptions{Bucket: bucket, Prefix: key})
+		page, err := client.ListObjects(ctx, gestalt.ListOptions{Prefix: key})
 		if err != nil {
 			return nil, err
 		}

@@ -129,7 +129,7 @@ describe("S3 transport", () => {
 
   test("named socket env selects the requested binding", async () => {
     const named = new S3("named");
-    const object = named.object("named-bucket", "hello.txt");
+    const object = named.object("hello.txt");
 
     await object.writeString("named binding", {
       contentType: "text/plain",
@@ -144,7 +144,7 @@ describe("S3 transport", () => {
     const previousTarget = process.env[envName];
     process.env[envName] = target;
     try {
-      const object = new S3("tcp").object("tcp-bucket", "hello.txt");
+      const object = new S3("tcp").object("hello.txt");
       await object.writeString("tcp binding");
       expect(await object.text()).toBe("tcp binding");
     } finally {
@@ -167,7 +167,7 @@ describe("S3 transport", () => {
     process.env[envName] = target;
     process.env[tokenEnvName] = token;
     try {
-      const object = new S3("tcp-token").object("tcp-token-bucket", "hello.txt");
+      const object = new S3("tcp-token").object("hello.txt");
       await object.writeString("token binding");
       expect(await object.text()).toBe("token binding");
     } finally {
@@ -186,7 +186,7 @@ describe("S3 transport", () => {
   });
 
   test("createAccessUrl returns a hosted object access URL", async () => {
-    const access = await client().object("docs-bucket", "uploads/object.txt").createAccessUrl({
+    const access = await client().object("uploads/object.txt").createAccessUrl({
       method: PresignMethod.Put,
       expiresSeconds: 60,
       contentType: "text/plain",
@@ -203,7 +203,7 @@ describe("S3 transport", () => {
 
   test("write, stat, read, and json round-trip", async () => {
     const s3 = client();
-    const object = s3.object("docs-bucket", "payload.json");
+    const object = s3.object("payload.json");
 
     const written = await object.writeJSON(
       {
@@ -240,14 +240,14 @@ describe("S3 transport", () => {
   test("large in-memory uploads round-trip", async () => {
     const s3 = client();
     const largeText = "x".repeat(5 * 1024 * 1024);
-    const textObject = s3.object("docs-bucket", "large.txt");
+    const textObject = s3.object("large.txt");
     const textMeta = await textObject.writeString(largeText);
     expect(textMeta.size).toBe(BigInt(largeText.length));
     expect(await textObject.text()).toBe(largeText);
 
     const largeBytes = new Uint8Array(5 * 1024 * 1024);
     largeBytes.fill(121);
-    const bytesObject = s3.object("docs-bucket", "large.bin");
+    const bytesObject = s3.object("large.bin");
     const bytesMeta = await bytesObject.writeBytes(largeBytes);
     expect(bytesMeta.size).toBe(BigInt(largeBytes.byteLength));
     expect(await bytesObject.bytes()).toEqual(largeBytes);
@@ -258,7 +258,7 @@ describe("S3 transport", () => {
     const source = new Uint8Array(5 * 1024 * 1024);
     source.fill(120);
     const expected = source.slice();
-    const object = s3.object("docs-bucket", "snapshot.bin");
+    const object = s3.object("snapshot.bin");
 
     const pending = object.writeBytes(source);
     source.fill(121);
@@ -269,7 +269,7 @@ describe("S3 transport", () => {
 
   test("zero-byte objects round-trip without extra data frames", async () => {
     const s3 = client();
-    const object = s3.object("docs-bucket", "empty.bin");
+    const object = s3.object("empty.bin");
 
     const meta = await object.writeBytes(new Uint8Array());
     expect(meta.size).toBe(0n);
@@ -281,7 +281,7 @@ describe("S3 transport", () => {
 
   test("range reads return the requested subset", async () => {
     const s3 = client();
-    const object = s3.object("docs-bucket", "alphabet.txt");
+    const object = s3.object("alphabet.txt");
     await object.writeString("abcdef");
 
     expect(await object.text({ range: { start: 1, end: 3 } })).toBe("bcd");
@@ -289,7 +289,7 @@ describe("S3 transport", () => {
 
   test("write preconditions map to typed errors", async () => {
     const s3 = client();
-    const object = s3.object("docs-bucket", "create-once.txt");
+    const object = s3.object("create-once.txt");
 
     await object.writeString("first write", { ifNoneMatch: "*" });
     await expect(
@@ -299,16 +299,14 @@ describe("S3 transport", () => {
 
   test("listObjects supports pagination and delimiters", async () => {
     const s3 = client();
-    const bucket = "listing-bucket";
-    await s3.object(bucket, "list/a.txt").writeString("a");
-    await s3.object(bucket, "list/b.txt").writeString("b");
-    await s3.object(bucket, "list/c.txt").writeString("c");
-    await s3.object(bucket, "tree/root.txt").writeString("root");
-    await s3.object(bucket, "tree/nested/leaf.txt").writeString("leaf");
-    await s3.object(bucket, "tree/nested/branch.txt").writeString("branch");
+    await s3.object("list/a.txt").writeString("a");
+    await s3.object("list/b.txt").writeString("b");
+    await s3.object("list/c.txt").writeString("c");
+    await s3.object("tree/root.txt").writeString("root");
+    await s3.object("tree/nested/leaf.txt").writeString("leaf");
+    await s3.object("tree/nested/branch.txt").writeString("branch");
 
     const firstPage = await s3.listObjects({
-      bucket,
       prefix: "list/",
       maxKeys: 2,
     });
@@ -320,7 +318,6 @@ describe("S3 transport", () => {
     expect(firstPage.nextContinuationToken).toBe("list/b.txt");
 
     const secondPage = await s3.listObjects({
-      bucket,
       prefix: "list/",
       continuationToken: firstPage.nextContinuationToken,
       maxKeys: 2,
@@ -329,7 +326,6 @@ describe("S3 transport", () => {
     expect(secondPage.hasMore).toBe(false);
 
     const treePage = await s3.listObjects({
-      bucket,
       prefix: "tree/",
       delimiter: "/",
     });
@@ -340,14 +336,12 @@ describe("S3 transport", () => {
   test("copy, delete, exists, and presign round-trip", async () => {
     const s3 = client();
     const sourceRef = {
-      bucket: "copy-bucket",
       key: "source.txt",
     } as const;
     const destinationRef = {
-      bucket: "copy-bucket",
       key: "copied.txt",
     } as const;
-    const source = s3.object(sourceRef.bucket, sourceRef.key);
+    const source = s3.object(sourceRef.key);
 
     await source.writeString("copy me", {
       contentType: "text/plain",
@@ -357,11 +351,10 @@ describe("S3 transport", () => {
     });
 
     const copied = await s3.copyObject(sourceRef, destinationRef);
-    expect(copied.ref.bucket).toBe("copy-bucket");
     expect(copied.ref.key).toBe("copied.txt");
-    expect(await s3.object(destinationRef.bucket, destinationRef.key).text()).toBe("copy me");
+    expect(await s3.object(destinationRef.key).text()).toBe("copy me");
 
-    const presigned = await s3.object(destinationRef.bucket, destinationRef.key).presign({
+    const presigned = await s3.object(destinationRef.key).presign({
       method: PresignMethod.Put,
       expiresSeconds: 60,
       contentType: "text/plain",
@@ -370,12 +363,12 @@ describe("S3 transport", () => {
       },
     });
     expect(presigned.method).toBe(PresignMethod.Put);
-    expect(presigned.url).toContain("https://example.invalid/copy-bucket/copied.txt");
+    expect(presigned.url).toContain("https://example.invalid/copied.txt");
     expect(presigned.url).toContain("method=PUT");
     expect(presigned.headers).toEqual({ "x-test-header": "present" });
     expect(presigned.expiresAt).toBeInstanceOf(Date);
 
-    const destination = s3.object(destinationRef.bucket, destinationRef.key);
+    const destination = s3.object(destinationRef.key);
     expect(await destination.exists()).toBe(true);
     await destination.delete();
     expect(await destination.exists()).toBe(false);
@@ -384,7 +377,7 @@ describe("S3 transport", () => {
 
   test("partial stream consumption can be cancelled by the caller", async () => {
     const s3 = client();
-    const object = s3.object("stream-bucket", "large.txt");
+    const object = s3.object("large.txt");
     await object.writeString("x".repeat(128 * 1024));
 
     const stream = await object.stream();

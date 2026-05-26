@@ -6,7 +6,6 @@ import (
 )
 
 type ObjectRef struct {
-	Bucket    string
 	Key       string
 	VersionID string
 }
@@ -54,7 +53,6 @@ type WriteRequest struct {
 }
 
 type ListRequest struct {
-	Bucket            string
 	Prefix            string
 	Delimiter         string
 	ContinuationToken string

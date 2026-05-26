@@ -154,7 +154,7 @@ impl gestalt::S3Provider for TestS3Provider {
         let reference = request
             .reference
             .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
-        let key = object_key(&reference.bucket, &reference.key);
+        let key = reference.key.clone();
         let objects = self.objects.lock().expect("lock objects");
         let body = objects
             .get(&key)
@@ -175,7 +175,7 @@ impl gestalt::S3Provider for TestS3Provider {
         let reference = request
             .reference
             .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
-        let key = object_key(&reference.bucket, &reference.key);
+        let key = reference.key.clone();
         let objects = self.objects.lock().expect("lock objects");
         let body = objects
             .get(&key)
@@ -221,7 +221,7 @@ impl gestalt::S3Provider for TestS3Provider {
         self.objects
             .lock()
             .expect("lock objects")
-            .insert(object_key(&reference.bucket, &reference.key), body.clone());
+            .insert(reference.key.clone(), body.clone());
 
         Ok(WriteObjectResponse {
             meta: Some(object_meta(reference, body.len() as i64, &content_type)),
@@ -235,7 +235,7 @@ impl gestalt::S3Provider for TestS3Provider {
         self.objects
             .lock()
             .expect("lock objects")
-            .remove(&object_key(&reference.bucket, &reference.key));
+            .remove(&reference.key);
         Ok(())
     }
 
@@ -246,19 +246,12 @@ impl gestalt::S3Provider for TestS3Provider {
         let objects = self.objects.lock().expect("lock objects");
         let mut metas = Vec::new();
         for (key, body) in objects.iter() {
-            let Some((bucket, object_key)) = key.split_once('/') else {
-                continue;
-            };
-            if bucket != request.bucket {
-                continue;
-            }
-            if !request.prefix.is_empty() && !object_key.starts_with(&request.prefix) {
+            if !request.prefix.is_empty() && !key.starts_with(&request.prefix) {
                 continue;
             }
             metas.push(object_meta(
                 ObjectRef {
-                    bucket: bucket.to_string(),
-                    key: object_key.to_string(),
+                    key: key.to_string(),
                     version_id: String::new(),
                 },
                 body.len() as i64,
@@ -280,13 +273,10 @@ impl gestalt::S3Provider for TestS3Provider {
             .ok_or_else(|| gestalt::Error::bad_request("missing destination"))?;
         let mut objects = self.objects.lock().expect("lock objects");
         let body = objects
-            .get(&object_key(&source.bucket, &source.key))
+            .get(&source.key)
             .cloned()
             .ok_or_else(|| gestalt::Error::not_found("object not found"))?;
-        objects.insert(
-            object_key(&destination.bucket, &destination.key),
-            body.clone(),
-        );
+        objects.insert(destination.key.clone(), body.clone());
         Ok(CopyObjectResponse {
             meta: Some(object_meta(
                 destination,
@@ -304,10 +294,7 @@ impl gestalt::S3Provider for TestS3Provider {
             .reference
             .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
         Ok(PresignObjectResponse {
-            url: format!(
-                "https://example.invalid/{}/{}",
-                reference.bucket, reference.key
-            ),
+            url: format!("https://example.invalid/{}", reference.key),
             method: request.method,
             expires_at: None,
             headers: request.headers,
@@ -470,7 +457,6 @@ async fn serves_s3_provider_and_runtime_over_unix_socket() {
     );
 
     let reference = S3ObjectRef {
-        bucket: "bucket".to_string(),
         key: "docs/example.txt".to_string(),
         version_id: String::new(),
     };
@@ -503,7 +489,6 @@ async fn serves_s3_provider_and_runtime_over_unix_socket() {
 
     let listed = s3
         .list_objects(ProtoListObjectsRequest {
-            bucket: "bucket".to_string(),
             prefix: "docs/".to_string(),
             ..ProtoListObjectsRequest::default()
         })
@@ -551,10 +536,6 @@ async fn serves_s3_provider_and_runtime_over_unix_socket() {
 
     serve_task.abort();
     let _ = serve_task.await;
-}
-
-fn object_key(bucket: &str, key: &str) -> String {
-    format!("{bucket}/{key}")
 }
 
 fn object_meta(reference: ObjectRef, size: i64, content_type: &str) -> ObjectMeta {

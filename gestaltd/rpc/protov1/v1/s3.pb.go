@@ -82,7 +82,6 @@ func (PresignMethod) EnumDescriptor() ([]byte, []int) {
 // S3ObjectRef identifies one object or object version.
 type S3ObjectRef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
 	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	VersionId     string                 `protobuf:"bytes,3,opt,name=version_id,json=versionId,proto3" json:"version_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -117,13 +116,6 @@ func (x *S3ObjectRef) ProtoReflect() protoreflect.Message {
 // Deprecated: Use S3ObjectRef.ProtoReflect.Descriptor instead.
 func (*S3ObjectRef) Descriptor() ([]byte, []int) {
 	return file_v1_s3_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *S3ObjectRef) GetBucket() string {
-	if x != nil {
-		return x.Bucket
-	}
-	return ""
 }
 
 func (x *S3ObjectRef) GetKey() string {
@@ -827,10 +819,9 @@ func (x *DeleteObjectRequest) GetRef() *S3ObjectRef {
 	return nil
 }
 
-// ListObjectsRequest lists objects in a bucket.
+// ListObjectsRequest lists objects in the provider's configured bucket.
 type ListObjectsRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
-	Bucket            string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
 	Prefix            string                 `protobuf:"bytes,2,opt,name=prefix,proto3" json:"prefix,omitempty"`
 	Delimiter         string                 `protobuf:"bytes,3,opt,name=delimiter,proto3" json:"delimiter,omitempty"`
 	ContinuationToken string                 `protobuf:"bytes,4,opt,name=continuation_token,json=continuationToken,proto3" json:"continuation_token,omitempty"`
@@ -868,13 +859,6 @@ func (x *ListObjectsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListObjectsRequest.ProtoReflect.Descriptor instead.
 func (*ListObjectsRequest) Descriptor() ([]byte, []int) {
 	return file_v1_s3_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *ListObjectsRequest) GetBucket() string {
-	if x != nil {
-		return x.Bucket
-	}
-	return ""
 }
 
 func (x *ListObjectsRequest) GetPrefix() string {
@@ -1410,12 +1394,11 @@ var File_v1_s3_proto protoreflect.FileDescriptor
 
 const file_v1_s3_proto_rawDesc = "" +
 	"\n" +
-	"\vv1/s3.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"V\n" +
-	"\vS3ObjectRef\x12\x16\n" +
-	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12\x10\n" +
+	"\vv1/s3.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"L\n" +
+	"\vS3ObjectRef\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x1d\n" +
 	"\n" +
-	"version_id\x18\x03 \x01(\tR\tversionId\"\xfd\x02\n" +
+	"version_id\x18\x03 \x01(\tR\tversionIdJ\x04\b\x01\x10\x02R\x06bucket\"\xfd\x02\n" +
 	"\fS3ObjectMeta\x122\n" +
 	"\x03ref\x18\x01 \x01(\v2 .gestalt.provider.v1.S3ObjectRefR\x03ref\x12\x12\n" +
 	"\x04etag\x18\x02 \x01(\tR\x04etag\x12\x12\n" +
@@ -1468,15 +1451,14 @@ const file_v1_s3_proto_rawDesc = "" +
 	"\x13WriteObjectResponse\x125\n" +
 	"\x04meta\x18\x01 \x01(\v2!.gestalt.provider.v1.S3ObjectMetaR\x04meta\"I\n" +
 	"\x13DeleteObjectRequest\x122\n" +
-	"\x03ref\x18\x01 \x01(\v2 .gestalt.provider.v1.S3ObjectRefR\x03ref\"\xcd\x01\n" +
+	"\x03ref\x18\x01 \x01(\v2 .gestalt.provider.v1.S3ObjectRefR\x03ref\"\xc3\x01\n" +
 	"\x12ListObjectsRequest\x12\x16\n" +
-	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12\x16\n" +
 	"\x06prefix\x18\x02 \x01(\tR\x06prefix\x12\x1c\n" +
 	"\tdelimiter\x18\x03 \x01(\tR\tdelimiter\x12-\n" +
 	"\x12continuation_token\x18\x04 \x01(\tR\x11continuationToken\x12\x1f\n" +
 	"\vstart_after\x18\x05 \x01(\tR\n" +
 	"startAfter\x12\x19\n" +
-	"\bmax_keys\x18\x06 \x01(\x05R\amaxKeys\"\xce\x01\n" +
+	"\bmax_keys\x18\x06 \x01(\x05R\amaxKeysJ\x04\b\x01\x10\x02R\x06bucket\"\xce\x01\n" +
 	"\x13ListObjectsResponse\x12;\n" +
 	"\aobjects\x18\x01 \x03(\v2!.gestalt.provider.v1.S3ObjectMetaR\aobjects\x12'\n" +
 	"\x0fcommon_prefixes\x18\x02 \x03(\tR\x0ecommonPrefixes\x126\n" +

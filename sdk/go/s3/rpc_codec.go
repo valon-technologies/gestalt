@@ -10,7 +10,6 @@ import (
 
 func objectRefToProto(ref ObjectRef) *proto.S3ObjectRef {
 	return &proto.S3ObjectRef{
-		Bucket:    ref.Bucket,
 		Key:       ref.Key,
 		VersionId: ref.VersionID,
 	}
@@ -21,7 +20,6 @@ func objectRefFromProto(ref *proto.S3ObjectRef) ObjectRef {
 		return ObjectRef{}
 	}
 	return ObjectRef{
-		Bucket:    ref.GetBucket(),
 		Key:       ref.GetKey(),
 		VersionID: ref.GetVersionId(),
 	}
@@ -48,7 +46,6 @@ func objectMetaFromProto(meta *proto.S3ObjectMeta) ObjectMeta {
 	}
 	out := ObjectMeta{
 		Ref: ObjectRef{
-			Bucket:    meta.GetRef().GetBucket(),
 			Key:       meta.GetRef().GetKey(),
 			VersionID: meta.GetRef().GetVersionId(),
 		},

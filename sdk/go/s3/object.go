@@ -14,13 +14,13 @@ type objectAccessURLCreator interface {
 }
 
 // Object returns a convenience handle for one object key on client.
-func Object(client S3, bucket, key string) *ObjectHandleRef {
-	return NewObject(client, ObjectRef{Bucket: bucket, Key: key})
+func Object(client S3, key string) *ObjectHandleRef {
+	return NewObject(client, ObjectRef{Key: key})
 }
 
 // ObjectVersion returns a convenience handle for one object version on client.
-func ObjectVersion(client S3, bucket, key, versionID string) *ObjectHandleRef {
-	return NewObject(client, ObjectRef{Bucket: bucket, Key: key, VersionID: versionID})
+func ObjectVersion(client S3, key, versionID string) *ObjectHandleRef {
+	return NewObject(client, ObjectRef{Key: key, VersionID: versionID})
 }
 
 // NewObject returns a convenience handle for ref on client.

@@ -2789,8 +2789,6 @@ impl RuntimeLogStream {
 /// S3ObjectRef identifies one object or object version.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct S3ObjectRef {
-    #[prost(string, tag = "1")]
-    pub bucket: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub key: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
@@ -2923,11 +2921,9 @@ pub struct DeleteObjectRequest {
     #[prost(message, optional, tag = "1")]
     pub r#ref: ::core::option::Option<S3ObjectRef>,
 }
-/// ListObjectsRequest lists objects in a bucket.
+/// ListObjectsRequest lists objects in the provider's configured bucket.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListObjectsRequest {
-    #[prost(string, tag = "1")]
-    pub bucket: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub prefix: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]

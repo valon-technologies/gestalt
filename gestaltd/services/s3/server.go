@@ -406,7 +406,6 @@ func (s *s3Server) namespacedListRequest(req *proto.ListObjectsRequest) (s3sdk.L
 		startAfter = s.applyKeyNamespace(startAfter)
 	}
 	return s3sdk.ListRequest{
-		Bucket:            req.GetBucket(),
 		Prefix:            s.applyKeyNamespace(req.GetPrefix()),
 		Delimiter:         req.GetDelimiter(),
 		ContinuationToken: continuationToken,
