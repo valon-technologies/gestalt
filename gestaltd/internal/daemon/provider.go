@@ -27,6 +27,8 @@ func runProvider(args []string) error {
 		return runProviderList(args[1:])
 	case "package":
 		return runProviderPackage(args[1:])
+	case "publish":
+		return runProviderPublish(args[1:])
 	case "remove":
 		return runProviderRemove(args[1:])
 	case "repo":
@@ -54,6 +56,7 @@ func printProviderUsage(w io.Writer) {
 	writeUsageLine(w, "  info        Show provider package metadata from configured repositories")
 	writeUsageLine(w, "  list        List configured providers and lock status")
 	writeUsageLine(w, "  package     Build provider release archives")
+	writeUsageLine(w, "  publish     Publish provider release artifacts")
 	writeUsageLine(w, "  release     Finalize provider release metadata from archives")
 	writeUsageLine(w, "  remove      Remove a provider entry from config and update lock state")
 	writeUsageLine(w, "  repo        Manage provider package repositories")

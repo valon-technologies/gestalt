@@ -65,8 +65,20 @@ type ProviderRepositoryConfig struct {
 }
 
 type ProviderSnapshotRepositoryConfig struct {
-	URL        string `yaml:"url,omitempty"`
-	GestaltRef string `yaml:"gestaltRef,omitempty"`
+	URL        string                                  `yaml:"url,omitempty"`
+	GestaltRef string                                  `yaml:"gestaltRef,omitempty"`
+	Publish    ProviderSnapshotRepositoryPublishConfig `yaml:"publish,omitempty"`
+}
+
+type ProviderSnapshotRepositoryPublishConfig struct {
+	PathLayout string                                  `yaml:"pathLayout,omitempty"`
+	Immutable  bool                                    `yaml:"immutable,omitempty"`
+	Storage    ProviderSnapshotRepositoryStorageConfig `yaml:"storage,omitempty"`
+}
+
+type ProviderSnapshotRepositoryStorageConfig struct {
+	Kind string `yaml:"kind,omitempty"`
+	URL  string `yaml:"url,omitempty"`
 }
 
 type ProvidersConfig struct {
