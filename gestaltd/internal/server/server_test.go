@@ -5243,6 +5243,22 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("plugins status = %d, want 200", resp.StatusCode)
 	}
+	var apps []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&apps); err != nil {
+		t.Fatalf("decode apps: %v", err)
+	}
+	if len(apps) != 1 {
+		t.Fatalf("apps len = %d, want 1", len(apps))
+	}
+	if apps[0]["name"] != "sample_plugin" {
+		t.Fatalf("app name = %v, want sample_plugin", apps[0]["name"])
+	}
+	if apps[0]["authorizationPolicy"] != "sample_policy" {
+		t.Fatalf("app authorizationPolicy = %v, want sample_policy", apps[0]["authorizationPolicy"])
+	}
+	if _, ok := apps[0]["mountedUiPath"]; ok {
+		t.Fatalf("apps response unexpectedly included mountedUiPath: %#v", apps[0])
+	}
 
 	dynamicEmail := "dynamic@example.test"
 	body := bytes.NewBufferString(fmt.Sprintf(`{"email":%q,"role":"viewer"}`, dynamicEmail))
