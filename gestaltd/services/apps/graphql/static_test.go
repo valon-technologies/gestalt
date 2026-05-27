@@ -21,9 +21,10 @@ query ListTeams(
   $after: String
   $filters: TeamFilters
   $ids: [ID!]
+  $requiredIds: [ID!]!
   $includeArchived: Boolean!
 ) {
-  teams(first: $first, after: $after, filters: $filters, ids: $ids, includeArchived: $includeArchived) {
+  teams(first: $first, after: $after, filters: $filters, ids: $ids, requiredIds: $requiredIds, includeArchived: $includeArchived) {
     nodes {
       ...TeamFields
     }
@@ -58,7 +59,7 @@ fragment TeamFields on Team {
 	if strings.Contains(op.Query, `"How many records to return"`) || strings.Contains(op.Query, `"Cursor to continue from"`) {
 		t.Fatalf("op.Query = %q, want executable document without variable descriptions", op.Query)
 	}
-	if !strings.Contains(op.Query, "query ListTeams($first: Int = 50, $after: String, $filters: TeamFilters, $ids: [ID!], $includeArchived: Boolean!)") {
+	if !strings.Contains(op.Query, "query ListTeams($first: Int = 50, $after: String, $filters: TeamFilters, $ids: [ID!], $requiredIds: [ID!]!, $includeArchived: Boolean!)") {
 		t.Fatalf("op.Query = %q, want printed executable document", op.Query)
 	}
 	if op.OperationName != "ListTeams" {
@@ -72,6 +73,7 @@ fragment TeamFields on Team {
 	assertParam(t, op.Parameters, "after", "string", "Cursor to continue from", false, nil)
 	assertParam(t, op.Parameters, "filters", "object", "", false, nil)
 	assertParam(t, op.Parameters, "ids", "array", "", false, nil)
+	assertParam(t, op.Parameters, "requiredIds", "array", "", true, nil)
 	assertParam(t, op.Parameters, "includeArchived", "boolean", "", true, nil)
 }
 
