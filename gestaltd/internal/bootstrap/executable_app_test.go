@@ -202,18 +202,23 @@ type capturingRuntime struct {
 	provider *runtimeprovider.LocalProvider
 
 	mu                  sync.Mutex
+	cond                *sync.Cond
 	startRequests       []runtimeprovider.StartSessionRequest
 	startAppRequests    []runtimeprovider.StartAppRequest
 	startTimes          []time.Time
 	getSessionRequests  chan runtimeprovider.GetSessionRequest
+	getSessionCalls     int
 	sessionLifecycles   map[string]*runtimeprovider.SessionLifecycle
 	lifecycleForSession func(index int) *runtimeprovider.SessionLifecycle
 	startErrForSession  func(index int) error
+	now                 func() time.Time
 	stopCount           atomic.Int32
 }
 
 func newCapturingRuntime() *capturingRuntime {
-	return &capturingRuntime{provider: runtimeprovider.NewLocalProvider()}
+	r := &capturingRuntime{provider: runtimeprovider.NewLocalProvider()}
+	r.cond = sync.NewCond(&r.mu)
+	return r
 }
 
 func (r *capturingRuntime) Support(ctx context.Context) (runtimeprovider.Support, error) {
@@ -229,10 +234,15 @@ func (r *capturingRuntime) StartSession(ctx context.Context, req runtimeprovider
 		ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
 		Metadata:      cloneRuntimeMetadata(req.Metadata),
 	})
-	r.startTimes = append(r.startTimes, time.Now().UTC())
+	now := time.Now
+	if r.now != nil {
+		now = r.now
+	}
+	r.startTimes = append(r.startTimes, now().UTC())
 	index := len(r.startRequests)
 	lifecycleForSession := r.lifecycleForSession
 	startErrForSession := r.startErrForSession
+	r.cond.Broadcast()
 	r.mu.Unlock()
 	if startErrForSession != nil {
 		if err := startErrForSession(index); err != nil {
@@ -267,6 +277,11 @@ func (r *capturingRuntime) ListSessions(ctx context.Context, req runtimeprovider
 }
 
 func (r *capturingRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
+	r.mu.Lock()
+	r.getSessionCalls++
+	r.cond.Broadcast()
+	r.mu.Unlock()
+
 	session, err := r.provider.GetSession(ctx, req)
 	if err != nil {
 		return nil, err
@@ -319,6 +334,59 @@ func (r *capturingRuntime) startSessionRequests() []runtimeprovider.StartSession
 		}
 	}
 	return out
+}
+
+func (r *capturingRuntime) waitStartSessionRequests(t *testing.T, count int) {
+	t.Helper()
+	waitOnTestCond(t, r.cond, fmt.Sprintf("%d start session requests", count), func() bool {
+		return len(r.startRequests) >= count
+	})
+}
+
+func waitOnTestCond(t *testing.T, cond *sync.Cond, description string, ready func() bool) {
+	t.Helper()
+	if cond == nil {
+		t.Fatalf("condition variable unavailable while waiting for %s", description)
+	}
+	timeout := 30 * time.Second
+	if deadline, ok := t.Deadline(); ok {
+		if untilDeadline := time.Until(deadline) - 100*time.Millisecond; untilDeadline < timeout {
+			timeout = untilDeadline
+		}
+	}
+	if timeout <= 0 {
+		t.Fatalf("timed out waiting for %s", description)
+	}
+	timedOut := false
+	timer := time.AfterFunc(timeout, func() {
+		cond.L.Lock()
+		timedOut = true
+		cond.Broadcast()
+		cond.L.Unlock()
+	})
+	defer timer.Stop()
+
+	cond.L.Lock()
+	defer cond.L.Unlock()
+	for !ready() {
+		if timedOut {
+			t.Fatalf("timed out waiting for %s", description)
+		}
+		cond.Wait()
+	}
+}
+
+func (r *capturingRuntime) getSessionCallCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.getSessionCalls
+}
+
+func (r *capturingRuntime) waitGetSessionCalls(t *testing.T, count int) {
+	t.Helper()
+	waitOnTestCond(t, r.cond, fmt.Sprintf("%d get session calls", count), func() bool {
+		return r.getSessionCalls >= count
+	})
 }
 
 func cloneImagePullAuth(src *runtimeprovider.ImagePullAuth) *runtimeprovider.ImagePullAuth {
@@ -1309,48 +1377,15 @@ func assertStartAppRelayEnv(t *testing.T, req runtimeprovider.StartAppRequest, r
 	}
 }
 
-type slowStopRuntime struct {
-	inner     runtimeprovider.Provider
+type blockingStopRuntime struct {
+	runtimeprovider.Provider
 	stopCount atomic.Int32
 }
 
-func (r *slowStopRuntime) Support(ctx context.Context) (runtimeprovider.Support, error) {
-	return r.inner.Support(ctx)
-}
-
-func (r *slowStopRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
-	return r.inner.StartSession(ctx, req)
-}
-
-func (r *slowStopRuntime) ListSessions(ctx context.Context, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
-	return r.inner.ListSessions(ctx, req)
-}
-
-func (r *slowStopRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
-	return r.inner.GetSession(ctx, req)
-}
-
-func (r *slowStopRuntime) StopSession(ctx context.Context, req runtimeprovider.StopSessionRequest) error {
+func (r *blockingStopRuntime) StopSession(ctx context.Context, req runtimeprovider.StopSessionRequest) error {
 	r.stopCount.Add(1)
 	<-ctx.Done()
 	return ctx.Err()
-}
-
-func (r *slowStopRuntime) StartApp(ctx context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
-	return r.inner.StartApp(ctx, req)
-}
-
-func (r *slowStopRuntime) Close() error {
-	return r.inner.Close()
-}
-
-type failingStartAppSlowStopRuntime struct {
-	slowStopRuntime
-	err error
-}
-
-func (r *failingStartAppSlowStopRuntime) StartApp(context.Context, runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
-	return nil, r.err
 }
 
 type staticCapabilityRuntime struct {
@@ -5626,113 +5661,26 @@ func TestInjectedRuntimeStopsSessionOnProviderClose(t *testing.T) {
 	}
 }
 
-func TestInjectedRuntimeStopSessionTimeoutDoesNotHangProviderClose(t *testing.T) {
+func TestRuntimeBackedHostedCloserStopSessionTimeout(t *testing.T) {
 	t.Parallel()
 
-	bin := buildEchoPluginBinary(t)
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "echoext",
-		Operations: []catalog.CatalogOperation{
-			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
-		},
-	})
-	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := &slowStopRuntime{inner: runtimeprovider.NewLocalProvider()}
-	t.Cleanup(func() { _ = runtimeProvider.Close() })
-	cfg := &config.Config{
-		Apps: map[string]*config.ProviderEntry{
-			"echoext": {
-				Command:              bin,
-				Args:                 []string{"provider"},
-				ResolvedManifest:     manifest,
-				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-			},
-		},
+	runtimeProvider := &blockingStopRuntime{}
+	closer := &runtimeBackedHostedCloser{
+		runtime:     runtimeProvider,
+		sessionID:   "session-1",
+		stopTimeout: 25 * time.Millisecond,
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
-		Runtime: runtimeProvider,
-	})
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
+	start := time.Now()
+	err := closer.Close()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Close error = %v, want deadline exceeded", err)
 	}
-
-	prov, err := providers.Get("echoext")
-	if err != nil {
-		t.Fatalf("providers.Get: %v", err)
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("Close elapsed = %s, want short timeout", elapsed)
 	}
-	if _, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": "PATH"}, ""); err != nil {
-		t.Fatalf("Execute read_env: %v", err)
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- CloseProviders(providers)
-	}()
-
-	select {
-	case err := <-done:
-		if err == nil || !strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
-			t.Fatalf("CloseProviders error = %v, want deadline exceeded", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("CloseProviders hung waiting for hosted runtime shutdown")
-	}
-
-	if runtimeProvider.stopCount.Load() == 0 {
-		t.Fatal("expected CloseProviders to attempt stopping the hosted runtime session")
-	}
-}
-
-func TestInjectedRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *testing.T) {
-	t.Parallel()
-
-	bin := buildEchoPluginBinary(t)
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "echoext",
-		Operations: []catalog.CatalogOperation{
-			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
-		},
-	})
-	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := &failingStartAppSlowStopRuntime{
-		slowStopRuntime: slowStopRuntime{inner: runtimeprovider.NewLocalProvider()},
-		err:             fmt.Errorf("start failed"),
-	}
-	t.Cleanup(func() { _ = runtimeProvider.Close() })
-	cfg := &config.Config{
-		Apps: map[string]*config.ProviderEntry{
-			"echoext": {
-				Command:              bin,
-				Args:                 []string{"provider"},
-				ResolvedManifest:     manifest,
-				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Invokes: []config.AppInvocationDependency{
-					{App: "other", Operation: "read"},
-				},
-			},
-		},
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		_, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
-			Runtime: runtimeProvider,
-		}))
-		done <- err
-	}()
-
-	select {
-	case err := <-done:
-		if err == nil || !strings.Contains(err.Error(), "start failed") {
-			t.Fatalf("buildProvidersStrict error = %v, want hosted app start failure", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("buildProvidersStrict hung waiting for hosted runtime shutdown")
-	}
-
-	if runtimeProvider.stopCount.Load() == 0 {
-		t.Fatal("expected bootstrap failure to attempt stopping the hosted runtime session")
+	if got := runtimeProvider.stopCount.Load(); got != 1 {
+		t.Fatalf("StopSession calls = %d, want 1", got)
 	}
 }
 

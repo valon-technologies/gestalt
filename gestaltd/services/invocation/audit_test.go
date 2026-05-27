@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -337,7 +338,21 @@ func TestSlogAuditSink_GuaranteedDelivery(t *testing.T) {
 	}
 }
 
-func TestSlogAuditSink_NilWriterFallsBackToStderr(t *testing.T) { //nolint:paralleltest // swaps os.Stderr
+func TestSlogAuditSink_NilWriterFallsBackToStderr(t *testing.T) {
+	t.Parallel()
+
+	if os.Getenv("GESTALT_TEST_SLOG_AUDIT_STDERR") != "1" {
+		var stdout, stderr bytes.Buffer
+		cmd := exec.Command(os.Args[0], "-test.run=^TestSlogAuditSink_NilWriterFallsBackToStderr$")
+		cmd.Env = append(os.Environ(), "GESTALT_TEST_SLOG_AUDIT_STDERR=1")
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("subprocess failed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+		}
+		return
+	}
+
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("os.Pipe: %v", err)

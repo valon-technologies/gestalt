@@ -14,6 +14,8 @@ import (
 
 const tracerName = "gestaltd"
 
+type tracerProviderContextKey struct{}
+
 var (
 	AttrAgentOperation         = attribute.Key("gestalt.agent.operation")
 	AttrAgentProvider          = attribute.Key("gestalt.agent.provider")
@@ -70,11 +72,30 @@ var (
 
 var genAIClientOperationDurationBuckets = []float64{0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92}
 
+func WithTracerProvider(ctx context.Context, provider trace.TracerProvider) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if provider == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, tracerProviderContextKey{}, provider)
+}
+
+func TracerProviderFromContext(ctx context.Context) trace.TracerProvider {
+	if ctx != nil {
+		if provider, ok := ctx.Value(tracerProviderContextKey{}).(trace.TracerProvider); ok && provider != nil {
+			return provider
+		}
+	}
+	return otel.GetTracerProvider()
+}
+
 func StartSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return otel.Tracer(tracerName).Start(ctx, name,
+	return TracerProviderFromContext(ctx).Tracer(tracerName).Start(ctx, name,
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithAttributes(attrs...),
 	)

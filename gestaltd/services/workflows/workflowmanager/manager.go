@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"sort"
 	"strings"
@@ -108,6 +109,7 @@ type Config struct {
 	CatalogConnection map[string]string
 	AppInvokes        map[string][]invocation.AppInvocationDependency
 	Now               func() time.Time
+	Logger            *slog.Logger
 }
 
 type Manager struct {
@@ -122,6 +124,7 @@ type Manager struct {
 	catalogConnection map[string]string
 	appInvokes        map[string][]invocation.AppInvocationDependency
 	now               func() time.Time
+	logger            *slog.Logger
 }
 
 type ScheduleUpsert struct {
@@ -268,7 +271,15 @@ func New(cfg Config) *Manager {
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		appInvokes:        invocation.CloneAppInvocationDependencyMap(cfg.AppInvokes),
 		now:               now,
+		logger:            cfg.Logger,
 	}
+}
+
+func (m *Manager) log() *slog.Logger {
+	if m != nil && m.logger != nil {
+		return m.logger
+	}
+	return slog.Default()
 }
 
 func (m *Manager) beginWorkflowAudit(ctx context.Context, p *principal.Principal, operation string) (context.Context, *workflowAuditEvent) {
