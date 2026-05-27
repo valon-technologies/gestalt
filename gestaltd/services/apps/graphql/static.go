@@ -101,18 +101,12 @@ func parseStaticOperationDocument(operationID, rawDocument, configuredOperationN
 }
 
 func selectStaticOperation(doc *ast.Document, operationName string) (int, error) {
-	operationRefs := make([]int, 0, len(doc.RootNodes))
-	for _, node := range doc.RootNodes {
-		if node.Kind == ast.NodeKindOperationDefinition {
-			operationRefs = append(operationRefs, node.Ref)
-		}
-	}
-	if len(operationRefs) == 0 {
+	if len(doc.OperationDefinitions) == 0 {
 		return 0, fmt.Errorf("graphql.document must contain an executable operation")
 	}
 
 	if operationName != "" {
-		for _, ref := range operationRefs {
+		for ref := range doc.OperationDefinitions {
 			if doc.OperationDefinitionNameString(ref) == operationName {
 				return ref, nil
 			}
@@ -120,65 +114,17 @@ func selectStaticOperation(doc *ast.Document, operationName string) (int, error)
 		return 0, fmt.Errorf("graphql.operationName %q is not defined in graphql.document", operationName)
 	}
 
-	if len(operationRefs) != 1 {
-		return 0, fmt.Errorf("graphql.operationName is required when graphql.document contains %d operations", len(operationRefs))
+	if len(doc.OperationDefinitions) != 1 {
+		return 0, fmt.Errorf("graphql.operationName is required when graphql.document contains %d operations", len(doc.OperationDefinitions))
 	}
-	return operationRefs[0], nil
+	return 0, nil
 }
 
 func validateSameDocumentFragments(doc *ast.Document) error {
-	fragments := make(map[string]int, len(doc.FragmentDefinitions))
-	for i := range doc.FragmentDefinitions {
-		fragments[doc.FragmentDefinitionNameString(i)] = i
-	}
-	visited := make(map[string]struct{}, len(fragments))
-	for i := range doc.OperationDefinitions {
-		if err := validateSelectionSetFragments(doc, doc.OperationDefinitions[i].SelectionSet, fragments, visited); err != nil {
-			return err
-		}
-	}
-	for i := range doc.FragmentDefinitions {
-		if err := validateSelectionSetFragments(doc, doc.FragmentDefinitions[i].SelectionSet, fragments, visited); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateSelectionSetFragments(doc *ast.Document, selectionSet int, fragments map[string]int, visited map[string]struct{}) error {
-	if selectionSet < 0 || selectionSet >= len(doc.SelectionSets) {
-		return nil
-	}
-	for _, selectionRef := range doc.SelectionSets[selectionSet].SelectionRefs {
-		selection := doc.Selections[selectionRef]
-		switch selection.Kind {
-		case ast.SelectionKindField:
-			field := doc.Fields[selection.Ref]
-			if field.HasSelections {
-				if err := validateSelectionSetFragments(doc, field.SelectionSet, fragments, visited); err != nil {
-					return err
-				}
-			}
-		case ast.SelectionKindInlineFragment:
-			fragment := doc.InlineFragments[selection.Ref]
-			if fragment.HasSelections {
-				if err := validateSelectionSetFragments(doc, fragment.SelectionSet, fragments, visited); err != nil {
-					return err
-				}
-			}
-		case ast.SelectionKindFragmentSpread:
-			name := doc.FragmentSpreadNameString(selection.Ref)
-			fragmentRef, ok := fragments[name]
-			if !ok {
-				return fmt.Errorf("graphql.document fragment %q is not defined in the same document", name)
-			}
-			if _, ok := visited[name]; ok {
-				continue
-			}
-			visited[name] = struct{}{}
-			if err := validateSelectionSetFragments(doc, doc.FragmentDefinitions[fragmentRef].SelectionSet, fragments, visited); err != nil {
-				return err
-			}
+	for ref := range doc.FragmentSpreads {
+		name := doc.FragmentSpreadNameBytes(ref)
+		if _, ok := doc.FragmentDefinitionRef(name); !ok {
+			return fmt.Errorf("graphql.document fragment %q is not defined in the same document", doc.FragmentSpreadNameString(ref))
 		}
 	}
 	return nil

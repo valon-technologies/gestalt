@@ -44,7 +44,6 @@ func DefinitionFromSchema(name, endpoint string, schema *Schema, allowedOps map[
 		return nil, err
 	}
 	def := StaticDefinition(name, endpoint)
-	def.Operations = make(map[string]declarative.OperationDef)
 	if err := addOperations(schema, def, schema.QueryType, false, allowedOps); err != nil {
 		return nil, err
 	}
