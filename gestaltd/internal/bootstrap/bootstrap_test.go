@@ -2446,6 +2446,7 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 
 	factories := validFactories()
 	seen := make(map[string]struct{}, len(cfg.Providers.Workflow))
+	var seenMu sync.Mutex
 	factories.Workflow = func(_ context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		var runtime struct {
 			Name string `yaml:"name"`
@@ -2453,7 +2454,9 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 		if err := node.Decode(&runtime); err != nil {
 			return nil, err
 		}
+		seenMu.Lock()
 		seen[runtime.Name] = struct{}{}
+		seenMu.Unlock()
 		if requireHostService(t, hostServices, "agent_provider").Register == nil {
 			return nil, fmt.Errorf("workflow provider missing agent_provider host service")
 		}
@@ -2492,6 +2495,7 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 	factories := validFactories()
 	seen := make(map[string]struct{}, len(cfg.Providers.Agent))
 	hostSockets := make(map[string]string, len(cfg.Providers.Agent))
+	var seenMu sync.Mutex
 	factories.Agent = func(_ context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
 		var runtime struct {
 			Name string `yaml:"name"`
@@ -2499,8 +2503,10 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 		if err := node.Decode(&runtime); err != nil {
 			return nil, err
 		}
+		seenMu.Lock()
 		seen[runtime.Name] = struct{}{}
 		hostSockets[name] = requireHostService(t, hostServices, "agent_host").Name
+		seenMu.Unlock()
 		return newRecordingAgentProvider(), nil
 	}
 
@@ -5202,7 +5208,10 @@ func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := map[string][]*recordingWorkflowProvider{}
 	sharedSchedules := map[string]map[string]*coreworkflow.Schedule{}
+	var recordersMu sync.Mutex
 	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recordersMu.Lock()
+		defer recordersMu.Unlock()
 		if sharedSchedules[name] == nil {
 			sharedSchedules[name] = map[string]*coreworkflow.Schedule{}
 		}
@@ -5961,7 +5970,10 @@ func TestBootstrapMovesConfiguredWorkflowEventTriggersToNewProvider(t *testing.T
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := map[string][]*recordingWorkflowProvider{}
 	sharedEventTriggers := map[string]map[string]*coreworkflow.EventTrigger{}
+	var recordersMu sync.Mutex
 	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recordersMu.Lock()
+		defer recordersMu.Unlock()
 		if sharedEventTriggers[name] == nil {
 			sharedEventTriggers[name] = map[string]*coreworkflow.EventTrigger{}
 		}
@@ -6040,7 +6052,10 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowEventTriggerIDDuringProviderMo
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := map[string][]*recordingWorkflowProvider{}
+	var recordersMu sync.Mutex
 	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recordersMu.Lock()
+		defer recordersMu.Unlock()
 		recorder := &recordingWorkflowProvider{}
 		if name == "backup" && len(recorders[name]) == 1 {
 			recorder.getEventTrigger = &coreworkflow.EventTrigger{ID: workflowConfigEventTriggerID("task_updated")}
