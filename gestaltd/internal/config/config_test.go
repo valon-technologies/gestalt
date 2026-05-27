@@ -5162,6 +5162,7 @@ apps:
 func TestLoadRejectsUnknownProviderFields(t *testing.T) {
 	t.Parallel()
 
+	legacyAgentHarnessKey := "local" + "Harness"
 	cases := []struct {
 		name    string
 		yaml    string
@@ -5186,6 +5187,17 @@ providers:
       builtin: stdout
 `,
 			wantErr: `field builtin not found`,
+		},
+		{
+			name: "agent legacy harness field is rejected",
+			yaml: fmt.Sprintf(`
+providers:
+  agent:
+    primary:
+      %s:
+        command: /bin/sh
+`, legacyAgentHarnessKey),
+			wantErr: fmt.Sprintf(`field %s not found`, legacyAgentHarnessKey),
 		},
 	}
 

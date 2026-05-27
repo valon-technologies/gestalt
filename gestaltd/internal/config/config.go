@@ -498,7 +498,6 @@ type ProviderEntry struct {
 	IconFile        string                                 `yaml:"iconFile,omitempty"`
 	DefaultHarness  string                                 `yaml:"defaultHarness,omitempty"`
 	Harnesses       map[string]*ProviderEntryHarnessConfig `yaml:"harnesses,omitempty"`
-	LocalHarness    *ProviderEntryHarnessConfig            `yaml:"localHarness,omitempty"`
 	Lifecycle       *AgentProviderLifecycleConfig          `yaml:"lifecycle,omitempty"`
 	RouteAuth       *RouteAuthDef                          `yaml:"-"`
 	SecuritySchemes map[string]*HTTPSecurityScheme         `yaml:"securitySchemes,omitempty"`
@@ -553,10 +552,6 @@ type ProviderEntryHarnessConfig struct {
 	RequiredCommands []string                           `yaml:"requiredCommands,omitempty"`
 	Install          *ProviderEntryHarnessInstallConfig `yaml:"install,omitempty"`
 }
-
-// ProviderEntryLocalHarnessConfig is kept as a compatibility alias for configs
-// that still use providers.agent.<name>.localHarness.
-type ProviderEntryLocalHarnessConfig = ProviderEntryHarnessConfig
 
 // ProviderEntryHarnessInstallConfig describes optional local install guidance
 // for commands required by an agent harness.
@@ -1209,7 +1204,6 @@ func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
 	e.Runtime = cloneRuntimePlacementConfig(e.Runtime)
 	e.Dev = cloneProviderEntryDevConfig(e.Dev)
 	e.Harnesses = cloneProviderEntryHarnessConfigMap(e.Harnesses)
-	e.LocalHarness = cloneProviderEntryHarnessConfig(e.LocalHarness)
 	e.Lifecycle = cloneAgentProviderLifecycleConfig(e.Lifecycle)
 	normalizeProviderEntryAliases(&e)
 	return providerEntryFields(e)
@@ -1291,7 +1285,6 @@ func normalizeProviderEntryAliases(entry *ProviderEntry) {
 	}
 	normalizeAgentProviderLifecycle(entry.Lifecycle)
 	entry.DefaultHarness = strings.TrimSpace(entry.DefaultHarness)
-	normalizeProviderEntryHarness(entry.LocalHarness)
 	for name, harness := range entry.Harnesses {
 		trimmed := strings.TrimSpace(name)
 		if trimmed != name {
@@ -2718,11 +2711,6 @@ func ValidateSelectedAgentHarnessEnvPaths(paths []string, providerName string, h
 	return nil
 }
 
-// ValidateSelectedAgentLocalHarnessEnvPaths preserves the old helper API.
-func ValidateSelectedAgentLocalHarnessEnvPaths(paths []string, providerName string) error {
-	return ValidateSelectedAgentHarnessEnvPaths(paths, providerName, "")
-}
-
 func selectedAgentHarnessNode(entry *yaml.Node, harnessName string) *yaml.Node {
 	if entry == nil {
 		return nil
@@ -2746,9 +2734,6 @@ func selectedAgentHarnessNode(entry *yaml.Node, harnessName string) *yaml.Node {
 		if harness := mappingValueNode(harnesses, harnessName); harness != nil {
 			return harness
 		}
-	}
-	if harnessName == "" || harnessName == DefaultAgentHarnessName {
-		return mappingValueNode(entry, "localHarness")
 	}
 	return nil
 }
@@ -4113,9 +4098,6 @@ func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir stri
 		return
 	}
 	resolveRelativeStringField(entry, "iconFile", baseDir)
-	if localHarness, ok := entry["localHarness"].(map[string]any); ok {
-		resolveRelativeStringField(localHarness, "workingDirectory", baseDir)
-	}
 	if harnesses, ok := entry["harnesses"].(map[string]any); ok {
 		for _, harness := range mapValues(harnesses) {
 			resolveRelativeStringField(harness, "workingDirectory", baseDir)
@@ -4192,9 +4174,6 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		entry.IconFile = resolveRelativePath(baseDir, entry.IconFile)
 		entry.Source.Path = resolveRelativePath(baseDir, entry.Source.Path)
 		entry.Source.metadataPath = resolveRelativePath(baseDir, entry.Source.metadataPath)
-		if entry.LocalHarness != nil {
-			entry.LocalHarness.WorkingDirectory = resolveRelativePath(baseDir, entry.LocalHarness.WorkingDirectory)
-		}
 		for _, harness := range entry.Harnesses {
 			if harness != nil {
 				harness.WorkingDirectory = resolveRelativePath(baseDir, harness.WorkingDirectory)
