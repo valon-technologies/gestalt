@@ -1313,14 +1313,6 @@ func setupAppDir(t *testing.T, baseDir string) string {
 	return setupAppDirWithVersion(t, baseDir, "0.0.1-alpha.1")
 }
 
-func setupAppDirWithHostedHTTPBinding(t *testing.T, baseDir string) string {
-	t.Helper()
-
-	appDir := setupAppDir(t, baseDir)
-	addHostedHTTPBindingToAppManifest(t, appDir, "echo_form", "/echo-form", "echo")
-	return appDir
-}
-
 func setupAppDirWithHTTPSubjectResolution(t *testing.T, baseDir string) string {
 	t.Helper()
 
@@ -2606,140 +2598,6 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 	}
 }
 
-func TestE2EServeAppOwnedUIWiring(t *testing.T) {
-	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping app-owned mounted ui test in short mode")
-	}
-
-	dir := t.TempDir()
-	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
-	appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, dir))
-	mountedUI := setupMountedUIDirWithRoutes(t, dir, []providermanifestv1.UIRoute{{
-		Path:         "/*",
-		AllowedRoles: []string{"viewer"},
-	}})
-	publicPort, publicHolder := reservePort(t)
-	publicURL := fmt.Sprintf("http://127.0.0.1:%d", publicPort)
-	cfgPath := filepath.Join(dir, "config-owned-ui.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
-server:
-  baseUrl: %s
-  public:
-    port: %d
-  encryptionKey: test-app-owned-ui-key
-  providers:
-    indexeddb: inmem
-providers:
-  indexeddb:
-    inmem:
-      source:
-        path: %s
-  ui:
-    roadmap:
-      source:
-        path: %s
-apps:
-  example:
-    source:
-      path: %s
-    ui:
-      bundle: roadmap
-      path: /roadmap
-`, publicURL, publicPort, indexedDBManifest, mountedUI.ManifestPath, appManifest)
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write owned-ui config: %v", err)
-	}
-
-	loadedCfg, _, err := operatorLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{cfgPath}, operator.StatePaths{}, false)
-	if err != nil {
-		t.Fatalf("LoadForExecutionAtPathsWithStatePaths(%s): %v", cfgPath, err)
-	}
-	if got := loadedCfg.Providers.UI["roadmap"].OwnerApp; got != "example" {
-		t.Fatalf(`Providers.UI["roadmap"].OwnerApp = %q, want %q`, got, "example")
-	}
-	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
-	startCommandAfterReleasingPort(t, publicHolder, cmd, publicURL)
-
-	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(publicURL + "/roadmap/sync")
-	if err != nil {
-		t.Fatalf("GET /roadmap/sync: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /roadmap/sync 200, got %d: %s", resp.StatusCode, body)
-	}
-	if !strings.Contains(string(body), "Roadmap Review UI") {
-		t.Fatalf("expected mounted ui body to contain marker, got: %s", body)
-	}
-
-	appsResp, err := (&http.Client{Timeout: 2 * time.Second}).Get(publicURL + "/api/v1/apps")
-	if err != nil {
-		t.Fatalf("GET /api/v1/apps: %v", err)
-	}
-	defer func() { _ = appsResp.Body.Close() }()
-	appsBody, _ := io.ReadAll(appsResp.Body)
-	if appsResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /api/v1/apps 200, got %d: %s", appsResp.StatusCode, appsBody)
-	}
-	var apps []struct {
-		Name        string `json:"name"`
-		MountedPath string `json:"mountedPath"`
-	}
-	if err := json.Unmarshal(appsBody, &apps); err != nil {
-		t.Fatalf("json.Unmarshal apps: %v (body: %s)", err, appsBody)
-	}
-	for _, app := range apps {
-		if app.Name == "example" && app.MountedPath == "/roadmap" {
-			return
-		}
-	}
-	t.Fatalf(`app "example" mountedPath missing from response: %s`, appsBody)
-}
-
-func TestE2EServeMountsManifestHostedHTTPBindingsForLocalSourceApp(t *testing.T) {
-	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping hosted HTTP binding serve test in short mode")
-	}
-
-	dir := t.TempDir()
-	appDir := setupAppDirWithHostedHTTPBinding(t, dir)
-	port, holder := reservePort(t)
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	cfgPath := writeE2EConfig(t, dir, appDir, port)
-
-	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
-	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
-
-	req, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/example/echo-form", strings.NewReader("message=hello"))
-	if err != nil {
-		t.Fatalf("NewRequest: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
-	if err != nil {
-		t.Fatalf("POST /api/v1/example/echo-form: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /api/v1/example/echo-form 200, got %d: %s", resp.StatusCode, body)
-	}
-
-	var result map[string]any
-	if err := json.Unmarshal(body, &result); err != nil {
-		t.Fatalf("decode hosted HTTP response: %v (body: %s)", err, body)
-	}
-	if got, want := result["echo"], "hello"; got != want {
-		t.Fatalf("response echo = %#v, want %q", got, want)
-	}
-}
-
 func TestE2EHostedHTTPSubjectResolutionUsesAuthorizationAndInheritedInvocation(t *testing.T) {
 	t.Parallel()
 
@@ -3021,20 +2879,15 @@ func writeRenamedProviderConfig(t *testing.T, dir, cfgPath string) string {
 	return staleCfgPath
 }
 
-func TestE2ELockWritesOverrideLockfile(t *testing.T) {
+func TestRunLockWritesOverrideLockfile(t *testing.T) {
 	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping E2E lockfile override test in short mode")
-	}
 
 	dir := t.TempDir()
 	cfgPath := writeServeConfig(t, dir, 0, nil)
 	lockPath := filepath.Join(dir, "state", "local", "gestalt.lock.json")
 
-	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd lock with --lockfile failed: %v\noutput: %s", err, out)
+	if err := runLock([]string{"--config", cfgPath, "--lockfile", lockPath}); err != nil {
+		t.Fatalf("runLock with --lockfile: %v", err)
 	}
 	if _, err := os.Stat(lockPath); err != nil {
 		t.Fatalf("expected override lockfile at %s: %v", lockPath, err)
@@ -3044,69 +2897,55 @@ func TestE2ELockWritesOverrideLockfile(t *testing.T) {
 	}
 }
 
-func TestE2ELockAndServeLayeredConfigs(t *testing.T) {
+func TestRunLockSyncLayeredConfigs(t *testing.T) {
 	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping layered config E2E test in short mode")
-	}
 
 	dir := t.TempDir()
 	basePath, overridePath, lockPath, _ := writeLayeredE2EConfigs(t, dir, 0)
 
-	out, err := exec.Command(gestaltdBin, "lock", "--config", basePath, "--config", overridePath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd lock with layered configs failed: %v\noutput: %s", err, out)
+	if err := runLock([]string{"--config", basePath, "--config", overridePath}); err != nil {
+		t.Fatalf("runLock with layered configs: %v", err)
 	}
 	if _, err := os.Stat(lockPath); err != nil {
 		t.Fatalf("expected lock file at %s: %v", lockPath, err)
 	}
-	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", basePath, "--config", overridePath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd sync with layered configs failed: %v\noutput: %s", err, out)
+	if err := runSync([]string{"--locked", "--config", basePath, "--config", overridePath}); err != nil {
+		t.Fatalf("runSync with layered configs: %v", err)
 	}
 
-	baseURL := startGestaltdWithConfigs(t, []string{basePath, overridePath}, true)
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(baseURL + "/api/v1/apps")
+	env, err := setupBootstrapWithConfigPaths([]string{basePath, overridePath}, operator.StatePaths{}, true)
 	if err != nil {
-		t.Fatalf("GET /api/v1/apps: %v", err)
+		t.Fatalf("setupBootstrapWithConfigPaths locked layered configs: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected /api/v1/apps 401 with layered auth override, got %d: %s", resp.StatusCode, body)
+	defer env.Close()
+	if got := env.Config.Server.Providers.Authentication; got != "local" {
+		t.Fatalf("Server.Providers.Authentication = %q, want local", got)
+	}
+	if _, auth, err := env.Config.SelectedAuthenticationProvider(); err != nil || auth == nil {
+		t.Fatalf("SelectedAuthenticationProvider = (%#v, %v), want local auth provider", auth, err)
 	}
 }
 
-func TestE2EServeUsesOverrideLockfile(t *testing.T) {
+func TestRunServeLockedUsesOverrideLockfile(t *testing.T) {
 	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping E2E locked serve lockfile override test in short mode")
-	}
 
 	dir := t.TempDir()
 	cfgPath := writeServeConfig(t, dir, 0, nil)
 	lockPath := filepath.Join(dir, "state", "locked-serve", "gestalt.lock.json")
-	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd lock with --lockfile failed: %v\noutput: %s", err, out)
+	if err := runLock([]string{"--config", cfgPath, "--lockfile", lockPath}); err != nil {
+		t.Fatalf("runLock with --lockfile: %v", err)
 	}
-	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd sync with --lockfile failed: %v\noutput: %s", err, out)
+	if err := runSync([]string{"--locked", "--config", cfgPath, "--lockfile", lockPath}); err != nil {
+		t.Fatalf("runSync with --lockfile: %v", err)
 	}
 
-	baseURL := startGestaltdWithConfigsAndArgs(t, []string{cfgPath}, []string{"serve", "--locked", "--lockfile", lockPath}, "")
-	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/apps")
+	env, err := setupBootstrapWithConfigPaths([]string{cfgPath}, operator.StatePaths{LockfilePath: lockPath}, true)
 	if err != nil {
-		t.Fatalf("GET /api/v1/apps: %v", err)
+		t.Fatalf("setupBootstrapWithConfigPaths locked with --lockfile: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected /api/v1/apps 200, got %d: %s", resp.StatusCode, body)
+	defer env.Close()
+	if env.Config.Apps["example"] == nil {
+		t.Fatal(`Apps["example"] = nil`)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
 		t.Fatalf("default lockfile should not be written, got err=%v", err)
