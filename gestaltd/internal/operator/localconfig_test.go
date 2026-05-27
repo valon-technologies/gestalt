@@ -88,3 +88,58 @@ func TestDefaultLocalSourceConfigIncludesRootUI(t *testing.T) {
 		t.Fatalf(`Providers.ExternalCredentials["default"].Source.Path = %q, want %q`, got, wantExternalCredentialsPath)
 	}
 }
+
+func TestResolveStartConfigPathsGeneratesDefaultLocalSourceConfig(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	workdir := filepath.Join(root, "work")
+	providersDir := filepath.Join(root, "providers")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("MkdirAll home: %v", err)
+	}
+	if err := os.MkdirAll(workdir, 0o755); err != nil {
+		t.Fatalf("MkdirAll workdir: %v", err)
+	}
+
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("GESTALT_CONFIG", "")
+	t.Setenv("GESTALT_PROVIDERS_DIR", providersDir)
+
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(workdir); err != nil {
+		t.Fatalf("Chdir workdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+
+	paths, err := ResolveStartConfigPaths(nil)
+	if err != nil {
+		t.Fatalf("ResolveStartConfigPaths: %v", err)
+	}
+	wantConfigPath := filepath.Join(home, localConfigDirName, "config.yaml")
+	if len(paths) != 1 || paths[0] != wantConfigPath {
+		t.Fatalf("ResolveStartConfigPaths = %v, want [%s]", paths, wantConfigPath)
+	}
+
+	cfg, err := config.Load(wantConfigPath)
+	if err != nil {
+		t.Fatalf("Load(%s): %v", wantConfigPath, err)
+	}
+	rootUI := cfg.Providers.UI["root"]
+	if rootUI == nil {
+		t.Fatal(`Providers.UI["root"] = nil`)
+	}
+	wantUIPath := config.DefaultLocalProviderManifestPath(providersDir, config.DefaultUIProvider)
+	if got := rootUI.SourcePath(); got != wantUIPath {
+		t.Fatalf(`Providers.UI["root"].Source.Path = %q, want %q`, got, wantUIPath)
+	}
+	if got := rootUI.Path; got != "/" {
+		t.Fatalf(`Providers.UI["root"].Path = %q, want %q`, got, "/")
+	}
+	if len(cfg.Apps) != 0 {
+		t.Fatalf("Apps = %#v, want empty", cfg.Apps)
+	}
+}

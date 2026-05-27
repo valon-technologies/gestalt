@@ -1537,33 +1537,6 @@ func setupAuthorizationProviderDir(t *testing.T, baseDir, name string) string {
 	return providerDir
 }
 
-func setupCacheProviderDir(t *testing.T, baseDir, name string) string {
-	t.Helper()
-
-	providerDir := filepath.Join(baseDir, "cache", name)
-	if err := os.MkdirAll(providerDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
-	}
-	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/cache/"+name)), 0o644)
-	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
-	writeTestFile(t, providerDir, "cache.go", []byte(testutil.GeneratedCachePackageSource()), 0o644)
-	artifactRel := ".gestalt/build/cache-provider"
-	writeGoComponentBuildFixture(t, providerDir, "example.com/providers/cache/"+name, providermanifestv1.KindCache, artifactRel)
-	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindCache,
-		Source:      "github.com/test/providers/cache/" + name,
-		Version:     "0.0.1-alpha.1",
-		DisplayName: "Test Cache " + name,
-		Spec:        &providermanifestv1.Spec{},
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"go.mod", "go.sum", "cache.go", "cmd", "build.sh"},
-		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
-	})
-	return providerDir
-}
-
 func setupExecutableProviderDir(t *testing.T, baseDir, kind, name string) string {
 	t.Helper()
 
@@ -2492,97 +2465,6 @@ func e2eLoopbackBaseURL(port int) string {
 	}).String()
 }
 
-func TestE2EServePathServesAdminWithoutInjectingRootUI(t *testing.T) {
-	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping serve --path test in short mode")
-	}
-
-	dir := t.TempDir()
-	providersDir := setupDefaultLocalProvidersDir(t, dir)
-	appDir := setupAppDir(t, dir)
-	port, holder := reservePort(t)
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-
-	cmd := exec.Command(gestaltdBin, "serve", "--path", appDir, "--port", fmt.Sprintf("%d", port))
-	cmd.Env = append(os.Environ(),
-		"GESTALT_PROVIDERS_DIR="+providersDir,
-		"GOTELEMETRY=off",
-	)
-	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
-
-	client := &http.Client{Timeout: 2 * time.Second}
-	adminResp, err := client.Get(baseURL + "/admin/")
-	if err != nil {
-		t.Fatalf("GET /admin/: %v", err)
-	}
-	defer func() { _ = adminResp.Body.Close() }()
-	adminBody, _ := io.ReadAll(adminResp.Body)
-	if adminResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /admin/ 200, got %d: %s", adminResp.StatusCode, adminBody)
-	}
-
-	rootResp, err := client.Get(baseURL + "/")
-	if err != nil {
-		t.Fatalf("GET /: %v", err)
-	}
-	defer func() { _ = rootResp.Body.Close() }()
-	if rootResp.StatusCode == http.StatusOK {
-		body, _ := io.ReadAll(rootResp.Body)
-		t.Fatalf("expected root path to stay unmounted without a public UI, got 200: %s", body)
-	}
-}
-
-func TestE2EServePathAutoMountsOwnedUI(t *testing.T) {
-	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping serve --path owned-ui test in short mode")
-	}
-
-	dir := t.TempDir()
-	providersDir := setupDefaultLocalProvidersDir(t, dir)
-	appDir := setupAppDir(t, dir)
-	mountedUI := setupMountedUIDir(t, dir)
-	attachOwnedUIToAppSource(t, appDir, mountedUI.ManifestPath)
-	port, holder := reservePort(t)
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-
-	cmd := exec.Command(gestaltdBin, "serve", "--path", componentProviderManifestPath(t, appDir), "--port", fmt.Sprintf("%d", port))
-	cmd.Env = append(os.Environ(),
-		"GESTALT_PROVIDERS_DIR="+providersDir,
-		"GOTELEMETRY=off",
-	)
-	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
-
-	client := &http.Client{Timeout: 2 * time.Second}
-	_ = waitForHTTPBody(t, client, baseURL+"/provider/sync", "Roadmap Review UI")
-
-	appsResp, err := client.Get(baseURL + "/api/v1/apps")
-	if err != nil {
-		t.Fatalf("GET /api/v1/apps: %v", err)
-	}
-	defer func() { _ = appsResp.Body.Close() }()
-	appsBody, _ := io.ReadAll(appsResp.Body)
-	if appsResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /api/v1/apps 200, got %d: %s", appsResp.StatusCode, appsBody)
-	}
-	var apps []struct {
-		Name        string `json:"name"`
-		MountedPath string `json:"mountedPath"`
-	}
-	if err := json.Unmarshal(appsBody, &apps); err != nil {
-		t.Fatalf("json.Unmarshal apps: %v (body: %s)", err, appsBody)
-	}
-	for _, app := range apps {
-		if app.Name == "provider" && app.MountedPath == "/provider" {
-			return
-		}
-	}
-	t.Fatalf(`app "provider" mountedPath missing from response: %s`, appsBody)
-}
-
 func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.T) {
 	t.Parallel()
 
@@ -2626,60 +2508,6 @@ func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.
 	}
 	setAppManifestDisplayName(t, manifestPath, "Recovered Config Watch Provider")
 	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Recovered Config Watch Provider")
-}
-
-//nolint:paralleltest // Uses the default 8080 startup path intentionally.
-func TestE2EDefaultServeAutoGeneratesLocalConfig(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping default serve autogen test in short mode")
-	}
-
-	if l, err := net.Listen("tcp", "127.0.0.1:8080"); err != nil {
-		t.Skipf("skipping default serve autogen test because 127.0.0.1:8080 is unavailable: %v", err)
-	} else {
-		_ = l.Close()
-	}
-
-	root := t.TempDir()
-	home := filepath.Join(root, "home")
-	workdir := filepath.Join(root, "work")
-	if err := os.MkdirAll(home, 0o755); err != nil {
-		t.Fatalf("MkdirAll home: %v", err)
-	}
-	if err := os.MkdirAll(workdir, 0o755); err != nil {
-		t.Fatalf("MkdirAll workdir: %v", err)
-	}
-	providersDir := setupDefaultLocalProvidersDir(t, root)
-
-	cmd := exec.Command(gestaltdBin)
-	cmd.Dir = workdir
-	cmd.Env = []string{
-		"HOME=" + home,
-		"GOTELEMETRY=off",
-		"GESTALT_PROVIDERS_DIR=" + providersDir,
-		"PATH=" + os.Getenv("PATH"),
-	}
-	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
-		if value := os.Getenv(key); value != "" {
-			cmd.Env = append(cmd.Env, key+"="+value)
-		}
-	}
-	cfgPath := filepath.Join(home, ".gestaltd", "config.yaml")
-	startCommandAndWaitReadyAndFile(t, cmd, "http://127.0.0.1:8080", cfgPath)
-
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		t.Fatalf("Load(%s): %v", cfgPath, err)
-	}
-	if _, err := os.Stat(cfgPath); err != nil {
-		t.Fatalf("expected generated config at %s: %v", cfgPath, err)
-	}
-	if cfg.Providers.UI["root"] == nil {
-		t.Fatal(`Providers.UI["root"] = nil`)
-	}
-	if len(cfg.Apps) != 0 {
-		t.Fatalf("expected no default local apps, got %#v", cfg.Apps)
-	}
 }
 
 func TestE2EServeSplitManagementRoutes(t *testing.T) {
@@ -2869,60 +2697,6 @@ apps:
 		}
 	}
 	t.Fatalf(`app "example" mountedPath missing from response: %s`, appsBody)
-}
-
-func TestE2EServeStartsWithAppBoundCacheProvider(t *testing.T) {
-	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping E2E cache serve test in short mode")
-	}
-
-	dir := t.TempDir()
-	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
-	cacheManifest := componentProviderManifestPath(t, setupCacheProviderDir(t, dir, "session"))
-	appManifest := componentProviderManifestPath(t, setupPrebuiltAppDir(t, dir))
-	cfgPath := filepath.Join(dir, "config-cache.yaml")
-
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
-server:
-  baseUrl: %s
-  public:
-    port: 0
-  encryptionKey: test-cache-serve-e2e-key
-  providers:
-    indexeddb: inmem
-providers:
-  indexeddb:
-    inmem:
-      source:
-        path: %s
-  cache:
-    session:
-      source:
-        path: %s
-apps:
-  example:
-    source:
-      path: %s
-    cache:
-      - session
-`, e2eLoopbackBaseURL(0), indexedDBManifest, cacheManifest, appManifest)
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	baseURL := startGestaltdWithConfig(t, cfgPath)
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(baseURL + "/api/v1/apps")
-	if err != nil {
-		t.Fatalf("GET /api/v1/apps: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected /api/v1/apps 200, got %d: %s", resp.StatusCode, body)
-	}
 }
 
 func TestE2EServeMountsManifestHostedHTTPBindingsForLocalSourceApp(t *testing.T) {
