@@ -10,18 +10,12 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-const DefaultSocketEnv = "GESTALT_AUTHORIZATION_SOCKET"
-
 const (
 	capabilitySearchSubjects           = "search_subjects"
 	capabilityEffectiveSearchResources = "effective_search_resources"
 	capabilityEffectiveSearchSubjects  = "effective_search_subjects"
 	capabilityExpand                   = "expand"
 )
-
-func SocketTokenEnv() string {
-	return DefaultSocketEnv + "_TOKEN"
-}
 
 type authorizationProviderServer struct {
 	proto.UnimplementedAuthorizationProviderServer

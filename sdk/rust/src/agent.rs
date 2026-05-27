@@ -14,6 +14,7 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
 use crate::api::{ExternalIdentity, RuntimeMetadata, Subject};
+use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::error::Result as ProviderResult;
 use crate::generated::v1::{
     self as pb, agent_host_client::AgentHostClient as ProtoAgentHostClient,
@@ -23,12 +24,6 @@ use crate::rpc_status::rpc_status;
 
 type AgentHostTransport = InterceptedService<Channel, AgentHostRelayTokenInterceptor>;
 
-/// Environment variable containing the agent-host service target.
-/// Alias for [`crate::env::ENV_HOST_SERVICE_SOCKET`].
-pub const ENV_AGENT_HOST_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
-/// Environment variable containing the optional agent-host relay token.
-/// Alias for [`crate::env::ENV_HOST_SERVICE_TOKEN`].
-pub const ENV_AGENT_HOST_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 const AGENT_HOST_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
@@ -955,9 +950,9 @@ pub struct AgentHost {
 impl AgentHost {
     /// Connects to the agent host service described by the environment.
     pub async fn connect() -> std::result::Result<Self, AgentHostError> {
-        let target = std::env::var(ENV_AGENT_HOST_SOCKET)
-            .map_err(|_| AgentHostError::Env(format!("{ENV_AGENT_HOST_SOCKET} is not set")))?;
-        let relay_token = std::env::var(ENV_AGENT_HOST_SOCKET_TOKEN).unwrap_or_default();
+        let target = std::env::var(ENV_HOST_SERVICE_SOCKET)
+            .map_err(|_| AgentHostError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
+        let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
         let channel = match parse_agent_host_target(&target)? {
             AgentHostTarget::Unix(path) => connect_unix(path).await?,
             AgentHostTarget::Tcp(address) => {

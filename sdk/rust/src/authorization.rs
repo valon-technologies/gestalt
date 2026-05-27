@@ -12,6 +12,7 @@ use tonic::{Request, Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
 use crate::api::RuntimeMetadata;
+use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::error::Result as ProviderResult;
 use crate::generated::v1::{
     self as pb, authorization_provider_client::AuthorizationProviderClient,
@@ -21,10 +22,6 @@ use crate::rpc_status::rpc_status;
 
 type AuthorizationTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
-/// Environment variable containing the authorization host-service target.
-pub const ENV_AUTHORIZATION_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
-/// Environment variable containing the optional authorization relay token.
-pub const ENV_AUTHORIZATION_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 const AUTHORIZATION_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 /// Subject type used for canonical Gestalt subject ids in managed grants.
 pub const AUTHORIZATION_SUBJECT_TYPE_SUBJECT: &str = "subject";
@@ -755,10 +752,10 @@ pub struct Authorization {
 impl Authorization {
     /// Connects to the authorization host-service target from the environment.
     pub async fn connect() -> std::result::Result<Self, AuthorizationError> {
-        let target = std::env::var(ENV_AUTHORIZATION_SOCKET).map_err(|_| {
-            AuthorizationError::Env(format!("{ENV_AUTHORIZATION_SOCKET} is not set"))
+        let target = std::env::var(ENV_HOST_SERVICE_SOCKET).map_err(|_| {
+            AuthorizationError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set"))
         })?;
-        let relay_token = std::env::var(ENV_AUTHORIZATION_SOCKET_TOKEN).unwrap_or_default();
+        let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
         Self::connect_target(target, relay_token).await
     }
 

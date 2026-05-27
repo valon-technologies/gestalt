@@ -711,14 +711,14 @@ Agent providers receive canonical session and turn requests with `messages`,
 optional resolved `tools`, optional `responseSchema`, and provider-specific
 `config`. Agent providers that need durable state can opt into a host
 IndexedDB binding with `indexeddb`; the provider process then uses the SDK
-IndexedDB helper against `GESTALT_INDEXEDDB_SOCKET`.
+IndexedDB helper through the unified host-service socket.
 
 Agent providers may also opt into a hosted runtime with
 `runtime`, using the same runtime-provider selection model as
 executable apps. When `providers.agent.<name>.runtime` is set,
 `gestaltd` starts the agent provider inside the selected hosted runtime instead
 of launching it directly on the `gestaltd` host. Tool callbacks still route
-back through the host agent socket, and `egress.allowedHosts` remains the
+back through the unified host-service socket, and `egress.allowedHosts` remains the
 operator-facing egress policy.
 
 When hosted agents accept caller-supplied workspaces,
@@ -1262,11 +1262,8 @@ apps:
 | `dev.attach.allowedRoles` | Roles from this app's `authorizationPolicy` that may create private remote provider-dev attachments for this app. This is denied when omitted, empty, or when the app has no `authorizationPolicy`. |
 | `runtime` | Optional runtime placement for executable apps. Supports hosted runtime fields such as `provider`, `template`, `image`, `imagePullAuth`, and `metadata`. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable apps, this is only a complete boundary when a supported sandboxed runtime is active. |
-| `indexeddb` | Optional app IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the app's single IndexedDB SDK socket; when omitted, the app inherits the selected/default host IndexedDB. `indexeddb.db` overrides the app-visible database name and defaults to the app key. Supported providers derive app scoping from that `db` name using provider-native namespace config; Gestalt does not rewrite object-store names at the SDK transport layer. `indexeddb.objectStores` optionally allowlists the logical object stores the app may use. Apps then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
-| `s3` | Optional list of named `providers.s3` bindings exposed to the executable app through the SDK transport. A single binding also populates the default S3 SDK env var for SDK clients. |
-
-S3 bindings are exposed as `GESTALT_S3_SOCKET_<NAME>`. When exactly one S3
-binding is configured, Gestalt also sets `GESTALT_S3_SOCKET`.
+| `indexeddb` | Optional app IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the app's IndexedDB SDK calls; when omitted, the app inherits the selected/default host IndexedDB. `indexeddb.db` overrides the app-visible database name and defaults to the app key. Supported providers derive app scoping from that `db` name using provider-native namespace config; Gestalt does not rewrite object-store names at the SDK transport layer. `indexeddb.objectStores` optionally allowlists the logical object stores the app may use. Apps then call `new IndexedDB()` (or the equivalent SDK helper) through the unified host-service socket; they do not choose arbitrary schemas or DSNs at runtime. |
+| `s3` | Optional list of named `providers.s3` bindings exposed to the executable app through the unified host-service SDK transport. SDK clients select the configured binding by name. |
 
 ### `apps.*.source`
 
