@@ -48,6 +48,7 @@ func runServeWatch(configPaths []string, state operator.StatePaths) error {
 	if !timer.Stop() {
 		<-timer.C
 	}
+	defer timer.Stop()
 	var timerC <-chan time.Time
 	scheduleReload := func() {
 		if timerC == nil {
@@ -92,31 +93,36 @@ func runServeWatch(configPaths []string, state operator.StatePaths) error {
 			}
 		case <-timerC:
 			timerC = nil
-			next, err := prepareServeWatchCandidate(ctx, configPaths, state)
-			if err != nil {
-				slog.Error("watch reload failed; keeping current server", "error", err)
-				continue
-			}
-			nextWatcher, err := newProviderLocalFSWatcher(next.plan)
-			if err != nil {
-				next.close()
-				slog.Error("watch reload failed; keeping current server", "error", err)
-				continue
-			}
-			if err := active.stop(); err != nil {
-				slog.Warn("watch reload replacing exited server", "error", err)
-			}
-			next.start()
-			_ = watcher.Close()
-			watcher = nextWatcher
-			active = next
-			slog.Info("watch reload complete",
-				"files", len(active.plan.Files),
-				"roots", len(active.plan.Roots),
-				"watch_dirs", len(active.plan.WatchDirs),
-			)
+			active, watcher = reloadServeWatchCandidate(ctx, configPaths, state, active, watcher)
 		}
 	}
+}
+
+func reloadServeWatchCandidate(ctx context.Context, configPaths []string, state operator.StatePaths, active *serveWatchCandidate, watcher *fsnotify.Watcher) (*serveWatchCandidate, *fsnotify.Watcher) {
+	next, err := prepareServeWatchCandidate(ctx, configPaths, state)
+	if err != nil {
+		slog.Error("watch reload failed; keeping current server", "error", err)
+		return active, watcher
+	}
+	nextWatcher, err := newProviderLocalFSWatcher(next.plan)
+	if err != nil {
+		next.close()
+		slog.Error("watch reload failed; keeping current server", "error", err)
+		return active, watcher
+	}
+	if err := active.stop(); err != nil {
+		slog.Warn("watch reload replacing exited server", "error", err)
+	}
+	next.start()
+	if watcher != nil {
+		_ = watcher.Close()
+	}
+	slog.Info("watch reload complete",
+		"files", len(next.plan.Files),
+		"roots", len(next.plan.Roots),
+		"watch_dirs", len(next.plan.WatchDirs),
+	)
+	return next, nextWatcher
 }
 
 func prepareServeWatchCandidate(parent context.Context, configPaths []string, state operator.StatePaths) (*serveWatchCandidate, error) {
