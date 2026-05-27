@@ -14,11 +14,10 @@ import (
 
 type graphQLSessionCatalogProvider struct {
 	core.Provider
-	graphQL            core.GraphQLSurfaceInvoker
-	name               string
-	endpoint           string
-	allowedOperations  map[string]*config.OperationOverride
-	selectionOverrides map[string]string
+	graphQL           core.GraphQLSurfaceInvoker
+	name              string
+	endpoint          string
+	allowedOperations map[string]*config.OperationOverride
 }
 
 var (
@@ -32,7 +31,6 @@ func wrapGraphQLSessionCatalogProvider(
 	name string,
 	endpoint string,
 	allowedOperations map[string]*config.OperationOverride,
-	selectionOverrides map[string]string,
 ) core.Provider {
 	graphQLInvoker, ok := prov.(core.GraphQLSurfaceInvoker)
 	if !ok {
@@ -40,12 +38,11 @@ func wrapGraphQLSessionCatalogProvider(
 	}
 
 	wrapped := &graphQLSessionCatalogProvider{
-		Provider:           prov,
-		graphQL:            graphQLInvoker,
-		name:               name,
-		endpoint:           endpoint,
-		allowedOperations:  allowedOperations,
-		selectionOverrides: selectionOverrides,
+		Provider:          prov,
+		graphQL:           graphQLInvoker,
+		name:              name,
+		endpoint:          endpoint,
+		allowedOperations: allowedOperations,
 	}
 	if auth, ok := prov.(core.OAuthProvider); ok {
 		return &graphQLSessionCatalogOAuthProvider{
@@ -98,8 +95,9 @@ func (p *graphQLSessionCatalogProvider) Execute(ctx context.Context, operation s
 		return nil, fmt.Errorf("graphql operation %q has no query template", operation)
 	}
 	return p.graphQL.InvokeGraphQL(ctx, core.GraphQLRequest{
-		Document:  op.Query,
-		Variables: params,
+		Document:      op.Query,
+		OperationName: op.OperationName,
+		Variables:     params,
 	}, token)
 }
 
@@ -116,7 +114,7 @@ func (p *graphQLSessionCatalogProvider) CatalogForRequest(ctx context.Context, t
 	if err != nil {
 		return nil, err
 	}
-	def, err := graphql.DefinitionFromSchema(p.name, p.endpoint, schema, p.allowedOperations, p.selectionOverrides)
+	def, err := graphql.DefinitionFromSchema(p.name, p.endpoint, schema, p.allowedOperations)
 	if err != nil {
 		return nil, err
 	}

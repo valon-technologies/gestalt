@@ -626,11 +626,7 @@ func buildConfiguredSpecComposite(ctx context.Context, name string, entry *confi
 	if apiProv != nil {
 		apiCatalog = apiProv.Catalog()
 	}
-	var graphQLSelections map[string]string
-	if resolved, ok := plan.ResolvedSurface(config.SpecSurfaceGraphQL); ok {
-		graphQLSelections = resolved.GraphQLSelections
-	}
-	mcpAllowedOperations, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, apiProv != nil, apiCatalog, mcpUp.Catalog(), graphQLSelections)
+	mcpAllowedOperations, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, apiProv != nil, apiCatalog, mcpUp.Catalog())
 	if !includeMCP {
 		closeIfPossible(mcpUp)
 		return apiProv, authFallback, nil
@@ -655,14 +651,14 @@ func buildConfiguredSpecComposite(ctx context.Context, name string, entry *confi
 	return composite.New(name, apiProv, mcpUp), authFallback, nil
 }
 
-func mcpAllowedOperationsForSpecComposite(allowedOperations map[string]*config.OperationOverride, hasAPI bool, apiCatalog, mcpCatalog *catalog.Catalog, graphQLSelections map[string]string) (map[string]*config.OperationOverride, bool) {
+func mcpAllowedOperationsForSpecComposite(allowedOperations map[string]*config.OperationOverride, hasAPI bool, apiCatalog, mcpCatalog *catalog.Catalog) (map[string]*config.OperationOverride, bool) {
 	if allowedOperations == nil {
 		return nil, true
 	}
 	if !hasAPI {
 		return allowedOperations, true
 	}
-	mcpAllowed := dynamicMCPAllowedOperations(allowedOperations, apiCatalog, graphQLSelections)
+	mcpAllowed := dynamicMCPAllowedOperations(allowedOperations, apiCatalog)
 	if mcpCatalog != nil && len(mcpCatalog.Operations) > 0 {
 		matched := operationexposure.MatchingAllowedOperations(mcpAllowed, mcpCatalog)
 		return matched, len(matched) > 0
@@ -673,14 +669,11 @@ func mcpAllowedOperationsForSpecComposite(allowedOperations map[string]*config.O
 	return mcpAllowed, true
 }
 
-func dynamicMCPAllowedOperations(allowedOperations map[string]*config.OperationOverride, apiCatalog *catalog.Catalog, graphQLSelections map[string]string) map[string]*config.OperationOverride {
+func dynamicMCPAllowedOperations(allowedOperations map[string]*config.OperationOverride, apiCatalog *catalog.Catalog) map[string]*config.OperationOverride {
 	apiOps := catalogOperationIDs(apiCatalog)
 	filtered := make(map[string]*config.OperationOverride)
 	for name, override := range allowedOperations {
 		if override != nil && override.GraphQL != nil {
-			continue
-		}
-		if _, ok := graphQLSelections[name]; ok {
 			continue
 		}
 		if _, ok := apiOps[name]; ok {
@@ -886,7 +879,7 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved conf
 			return nil, nil, err
 		}
 		if resolved.Surface == config.SpecSurfaceGraphQL && len(def.Operations) == 0 {
-			prov = wrapGraphQLSessionCatalogProvider(prov, name, resolved.URL, cfg.allowedOperations, resolved.GraphQLSelections)
+			prov = wrapGraphQLSessionCatalogProvider(prov, name, resolved.URL, cfg.allowedOperations)
 		}
 		return prov, def, nil
 	case config.SpecSurfaceMCP:
@@ -924,7 +917,7 @@ func loadSpecDefinition(ctx context.Context, name string, resolved config.Resolv
 	case config.SpecSurfaceOpenAPI:
 		return openapi.LoadDefinition(ctx, name, resolved.URL, allowedOperations)
 	case config.SpecSurfaceGraphQL:
-		if def, err := graphql.StaticAllowedOperationsDefinition(name, resolved.URL, allowedOperations, resolved.GraphQLSelections); def != nil || err != nil {
+		if def, err := graphql.StaticAllowedOperationsDefinition(name, resolved.URL, allowedOperations); def != nil || err != nil {
 			return def, err
 		}
 		return graphql.StaticDefinition(name, resolved.URL), nil

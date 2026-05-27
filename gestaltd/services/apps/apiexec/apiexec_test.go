@@ -294,15 +294,19 @@ func TestDoGraphQLWithVariables(t *testing.T) {
 		if vars["first"] != float64(10) {
 			t.Fatalf("first = %v, want 10", vars["first"])
 		}
+		if body[graphqlBodyKeyOperationName] != "Repos" {
+			t.Fatalf("operationName = %v, want Repos", body[graphqlBodyKeyOperationName])
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"data":{"repos":[{"name":"toolshed"}]}}`))
 	}))
 	testutil.CloseOnCleanup(t, srv)
 
 	result, err := DoGraphQL(context.Background(), srv.Client(), GraphQLRequest{
-		URL:       srv.URL,
-		Query:     "query($first: Int) { repos(first: $first) { name } }",
-		Variables: map[string]any{"first": 10},
+		URL:           srv.URL,
+		Query:         "query($first: Int) { repos(first: $first) { name } }",
+		OperationName: "Repos",
+		Variables:     map[string]any{"first": 10},
 	})
 	if err != nil {
 		t.Fatalf("DoGraphQL: %v", err)

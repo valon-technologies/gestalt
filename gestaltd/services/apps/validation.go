@@ -323,13 +323,14 @@ func loadConfiguredAPICatalog(ctx context.Context, name string, entry *Validatio
 		if !ok {
 			continue
 		}
-		if surface == SpecSurfaceGraphQL {
-			continue
-		}
 		if entry == nil || entry.LoadAPICatalog == nil {
 			return nil, fmt.Errorf("plugin %q %s catalog loader is not configured", name, surface)
 		}
-		apiCatalog, err := entry.LoadAPICatalog(ctx, name, surface, url, allowed)
+		loaderAllowed := allowed
+		if surface == SpecSurfaceGraphQL && loaderAllowed == nil {
+			loaderAllowed = effectiveAllowedOperations(entry, spec)
+		}
+		apiCatalog, err := entry.LoadAPICatalog(ctx, name, surface, url, loaderAllowed)
 		if err != nil {
 			return nil, fmt.Errorf("plugin %q %s catalog: %w", name, surface, err)
 		}
