@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -346,139 +347,141 @@ func TestWorkflowConfigReconciliationReconcilesReadyRuntimeProvidersIndependentl
 }
 
 func TestHostedWorkflowProviderPoolRejectsIncompatibleStartupSession(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	runtimeProvider := &staleSessionWorkflowRuntime{
-		recordingHostedWorkflowRuntime: newRecordingHostedWorkflowRuntime(t),
-	}
-	t.Cleanup(func() { _ = runtimeProvider.Close() })
-	deps := Deps{
-		BaseURL:            "http://127.0.0.1:8080",
-		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		Runtime:            runtimeProvider,
-		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
-	}
-	entry := &config.ProviderEntry{
-		Runtime: &config.RuntimePlacementConfig{
-			Provider: "gke",
-			Pool: &config.RuntimePlacementPoolConfig{
-				MinReadyInstances:   1,
-				MaxReadyInstances:   1,
-				StartupTimeout:      "5s",
-				HealthCheckInterval: "1m",
-				RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
-				DrainTimeout:        "50ms",
+	synctest.Test(t, func(t *testing.T) {
+		ctx := context.Background()
+		runtimeProvider := &staleSessionWorkflowRuntime{
+			recordingHostedWorkflowRuntime: newRecordingHostedWorkflowRuntime(t),
+		}
+		t.Cleanup(func() { _ = runtimeProvider.Close() })
+		deps := Deps{
+			BaseURL:            "http://127.0.0.1:8080",
+			EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
+			Runtime:            runtimeProvider,
+			PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
+		}
+		entry := &config.ProviderEntry{
+			Runtime: &config.RuntimePlacementConfig{
+				Provider: "gke",
+				Pool: &config.RuntimePlacementPoolConfig{
+					MinReadyInstances:   1,
+					MaxReadyInstances:   1,
+					StartupTimeout:      "5s",
+					HealthCheckInterval: "1m",
+					RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
+					DrainTimeout:        "50ms",
+				},
 			},
-		},
-	}
+		}
 
-	pool, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
-		"command": "/bin/temporal-provider",
-	}), []runtimehost.HostService{{
-		Name:           "indexeddb",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.IndexedDB_ServiceDesc.ServiceName)},
-	}}, deps)
-	if err != nil {
-		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
-	}
-	t.Cleanup(func() { _ = pool.Close() })
-	if err := pool.Start(ctx); err != nil {
-		t.Fatalf("pool.Start: %v", err)
-	}
-	waitForHostedWorkflowRuntimeStartSessionRequests(t, runtimeProvider.recordingHostedWorkflowRuntime, 1)
-	if got := len(runtimeProvider.startAppRequestsCopy()); got != 0 {
-		t.Fatalf("StartApp requests = %d, want 0 for incompatible runtime session", got)
-	}
-	waitCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
-	defer cancel()
-	if err := pool.WaitReady(waitCtx); err == nil {
-		t.Fatal("pool.WaitReady: expected timeout for incompatible runtime session")
-	}
-	if got := len(pool.readyWorkers()); got != 0 {
-		t.Fatalf("ready workers = %d, want 0 for incompatible runtime session", got)
-	}
+		pool, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
+			"command": "/bin/temporal-provider",
+		}), []runtimehost.HostService{{
+			Name:           "indexeddb",
+			MethodPrefixes: []string{grpcMethodPrefix(proto.IndexedDB_ServiceDesc.ServiceName)},
+		}}, deps)
+		if err != nil {
+			t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
+		}
+		t.Cleanup(func() { _ = pool.Close() })
+		if err := pool.Start(ctx); err != nil {
+			t.Fatalf("pool.Start: %v", err)
+		}
+		waitForHostedWorkflowRuntimeStartSessionRequestsSynctest(t, runtimeProvider.recordingHostedWorkflowRuntime, 1)
+		if got := len(runtimeProvider.startAppRequestsCopy()); got != 0 {
+			t.Fatalf("StartApp requests = %d, want 0 for incompatible runtime session", got)
+		}
+		waitCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		defer cancel()
+		if err := pool.WaitReady(waitCtx); err == nil {
+			t.Fatal("pool.WaitReady: expected timeout for incompatible runtime session")
+		}
+		if got := len(pool.readyWorkers()); got != 0 {
+			t.Fatalf("ready workers = %d, want 0 for incompatible runtime session", got)
+		}
+	})
 }
 
 func TestHostedWorkflowProviderPoolClosedStartLoopDoesNotMarkReady(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		pool := &hostedWorkflowWorkerPool{
+			name:   "temporal",
+			ctx:    ctx,
+			cancel: cancel,
+			ready:  make(chan struct{}),
+			policy: config.RuntimePlacementLifecyclePolicy{
+				MinReadyInstances:   1,
+				HealthCheckInterval: time.Hour,
+				RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
+			},
+		}
+		pool.mu.Lock()
+		pool.closed = true
+		pool.mu.Unlock()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	pool := &hostedWorkflowWorkerPool{
-		name:   "temporal",
-		ctx:    ctx,
-		cancel: cancel,
-		ready:  make(chan struct{}),
-		policy: config.RuntimePlacementLifecyclePolicy{
-			MinReadyInstances:   1,
-			HealthCheckInterval: time.Hour,
-			RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
-		},
-	}
-	pool.mu.Lock()
-	pool.closed = true
-	pool.mu.Unlock()
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		pool.startLoop()
-	}()
-	select {
-	case <-done:
-	case <-time.After(200 * time.Millisecond):
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			pool.startLoop()
+		}()
+		select {
+		case <-done:
+		case <-time.After(200 * time.Millisecond):
+			select {
+			case <-pool.ready:
+				t.Fatal("pool marked ready after it was closed")
+			default:
+			}
+			t.Fatal("startLoop did not exit after pool closed")
+		}
 		select {
 		case <-pool.ready:
 			t.Fatal("pool marked ready after it was closed")
 		default:
 		}
-		t.Fatal("startLoop did not exit after pool closed")
-	}
-	select {
-	case <-pool.ready:
-		t.Fatal("pool marked ready after it was closed")
-	default:
-	}
+	})
 }
 
 func TestHostedWorkflowProviderPoolCloseUnblocksWaitReady(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	pool := &hostedWorkflowWorkerPool{
-		name:   "temporal",
-		ctx:    ctx,
-		cancel: cancel,
-		ready:  make(chan struct{}),
-		policy: config.RuntimePlacementLifecyclePolicy{
-			MinReadyInstances:   1,
-			HealthCheckInterval: time.Hour,
-			RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
-		},
-	}
-	t.Cleanup(func() { _ = pool.Close() })
-
-	waitDone := make(chan error, 1)
-	go func() {
-		waitDone <- pool.WaitReady(context.Background())
-	}()
-	select {
-	case err := <-waitDone:
-		t.Fatalf("WaitReady returned before pool close: %v", err)
-	case <-time.After(25 * time.Millisecond):
-	}
-	if err := pool.Close(); err != nil {
-		t.Fatalf("pool.Close: %v", err)
-	}
-	select {
-	case err := <-waitDone:
-		if !errors.Is(err, errHostedWorkflowWorkerPoolClosed) {
-			t.Fatalf("WaitReady error = %v, want hosted workflow worker pool closed", err)
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		pool := &hostedWorkflowWorkerPool{
+			name:   "temporal",
+			ctx:    ctx,
+			cancel: cancel,
+			ready:  make(chan struct{}),
+			policy: config.RuntimePlacementLifecyclePolicy{
+				MinReadyInstances:   1,
+				HealthCheckInterval: time.Hour,
+				RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
+			},
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("WaitReady did not unblock after pool close")
-	}
+		t.Cleanup(func() { _ = pool.Close() })
+
+		waitDone := make(chan error, 1)
+		go func() {
+			waitDone <- pool.WaitReady(context.Background())
+		}()
+		synctest.Wait()
+		select {
+		case err := <-waitDone:
+			t.Fatalf("WaitReady returned before pool close: %v", err)
+		default:
+		}
+		if err := pool.Close(); err != nil {
+			t.Fatalf("pool.Close: %v", err)
+		}
+		synctest.Wait()
+		select {
+		case err := <-waitDone:
+			if !errors.Is(err, errHostedWorkflowWorkerPoolClosed) {
+				t.Fatalf("WaitReady error = %v, want hosted workflow worker pool closed", err)
+			}
+		default:
+			t.Fatal("WaitReady did not unblock after pool close")
+		}
+	})
 }
 
 func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T) {
@@ -1051,6 +1054,19 @@ func waitForHostedWorkflowRuntimeStartSessionRequests(t *testing.T, runtimeProvi
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("StartSession requests = %d, want at least %d", len(runtimeProvider.startSessionRequestsCopy()), want)
+}
+
+func waitForHostedWorkflowRuntimeStartSessionRequestsSynctest(t *testing.T, runtimeProvider *recordingHostedWorkflowRuntime, want int) {
+	t.Helper()
+	const step = 25 * time.Millisecond
+	for elapsed := time.Duration(0); elapsed < 2*time.Second; elapsed += step {
+		if got := len(runtimeProvider.startSessionRequestsCopy()); got >= want {
+			return
+		}
+		time.Sleep(step)
+		synctest.Wait()
 	}
 	t.Fatalf("StartSession requests = %d, want at least %d", len(runtimeProvider.startSessionRequestsCopy()), want)
 }
