@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
@@ -706,12 +707,12 @@ func (r *agentRuntime) validateAgentRunGrantTurn(ctx context.Context, grant agen
 		return fmt.Errorf("%w: agent provider %q is not available for run grant", invocation.ErrAuthorizationDenied, strings.TrimSpace(grant.ProviderName))
 	}
 	turnID = strings.TrimSpace(turnID)
-	turn, err := provider.GetTurn(ctx, coreagent.GetTurnRequest{
-		TurnID: turnID,
-		Subject: core.RunAsSubject{
-			SubjectID:           strings.TrimSpace(grant.SubjectID),
-			SubjectKind:         strings.TrimSpace(grant.SubjectKind),
-			CredentialSubjectID: strings.TrimSpace(grant.CredentialSubjectID),
+	turn, err := provider.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
+		TurnId: turnID,
+		Subject: &proto.SubjectContext{
+			Id:                  strings.TrimSpace(grant.SubjectID),
+			Kind:                strings.TrimSpace(grant.SubjectKind),
+			CredentialSubjectId: strings.TrimSpace(grant.CredentialSubjectID),
 			DisplayName:         strings.TrimSpace(grant.DisplayName),
 			AuthSource:          strings.TrimSpace(grant.AuthSource),
 		},

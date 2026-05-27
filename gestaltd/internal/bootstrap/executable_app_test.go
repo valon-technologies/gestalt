@@ -1790,12 +1790,57 @@ func (m *stubWorkflowManager) ScheduleCount() int {
 type stubAgentTurnManagerProvider struct {
 	coreagent.UnimplementedProvider
 	mu                    sync.Mutex
-	createSessionRequests []coreagent.CreateSessionRequest
-	createTurnRequests    []coreagent.CreateTurnRequest
+	createSessionRequests []*proto.CreateAgentProviderSessionRequest
+	createTurnRequests    []*proto.CreateAgentProviderTurnRequest
 	sessions              map[string]*coreagent.Session
 	turns                 map[string]*coreagent.Turn
 	turnEvents            map[string][]*coreagent.TurnEvent
 	interactions          map[string]*coreagent.Interaction
+}
+
+func stubAgentProtoStructToMap(src *structpb.Struct) map[string]any {
+	if src == nil {
+		return nil
+	}
+	return src.AsMap()
+}
+
+func stubAgentActorFromProto(src *proto.AgentActor) coreagent.Actor {
+	if src == nil {
+		return coreagent.Actor{}
+	}
+	return coreagent.Actor{
+		SubjectID:   src.GetSubjectId(),
+		SubjectKind: src.GetSubjectKind(),
+		DisplayName: src.GetDisplayName(),
+		AuthSource:  src.GetAuthSource(),
+	}
+}
+
+func stubAgentMessagesFromProto(src []*proto.AgentMessage) []coreagent.Message {
+	out := make([]coreagent.Message, 0, len(src))
+	for _, message := range src {
+		if message == nil {
+			continue
+		}
+		out = append(out, coreagent.Message{
+			Role:     message.GetRole(),
+			Text:     message.GetText(),
+			Metadata: stubAgentProtoStructToMap(message.GetMetadata()),
+		})
+	}
+	return out
+}
+
+func stubAgentSessionStateFromProto(src proto.AgentSessionState) coreagent.SessionState {
+	switch src {
+	case proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE:
+		return coreagent.SessionStateActive
+	case proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED:
+		return coreagent.SessionStateArchived
+	default:
+		return ""
+	}
 }
 
 func newStubAgentTurnManagerProvider() *stubAgentTurnManagerProvider {
@@ -1807,19 +1852,19 @@ func newStubAgentTurnManagerProvider() *stubAgentTurnManagerProvider {
 	}
 }
 
-func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := time.Now().UTC().Truncate(time.Second)
 	p.createSessionRequests = append(p.createSessionRequests, req)
 	session := &coreagent.Session{
-		ID:           req.SessionID,
+		ID:           req.GetSessionId(),
 		ProviderName: "managed",
-		Model:        req.Model,
-		ClientRef:    req.ClientRef,
+		Model:        req.GetModel(),
+		ClientRef:    req.GetClientRef(),
 		State:        coreagent.SessionStateActive,
-		Metadata:     maps.Clone(req.Metadata),
-		CreatedBy:    req.CreatedBy,
+		Metadata:     stubAgentProtoStructToMap(req.GetMetadata()),
+		CreatedBy:    stubAgentActorFromProto(req.GetCreatedBy()),
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
@@ -1827,17 +1872,17 @@ func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req core
 	return cloneAgentSession(session), nil
 }
 
-func (p *stubAgentTurnManagerProvider) GetSession(_ context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+func (p *stubAgentTurnManagerProvider) GetSession(_ context.Context, req *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	session, ok := p.sessions[req.SessionID]
+	session, ok := p.sessions[req.GetSessionId()]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
 	return cloneAgentSession(session), nil
 }
 
-func (p *stubAgentTurnManagerProvider) ListSessions(context.Context, coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+func (p *stubAgentTurnManagerProvider) ListSessions(context.Context, *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	out := make([]*coreagent.Session, 0, len(p.sessions))
@@ -1847,28 +1892,28 @@ func (p *stubAgentTurnManagerProvider) ListSessions(context.Context, coreagent.L
 	return out, nil
 }
 
-func (p *stubAgentTurnManagerProvider) UpdateSession(_ context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
+func (p *stubAgentTurnManagerProvider) UpdateSession(_ context.Context, req *proto.UpdateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	session, ok := p.sessions[req.SessionID]
+	session, ok := p.sessions[req.GetSessionId()]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
-	if req.ClientRef != "" {
-		session.ClientRef = req.ClientRef
+	if req.GetClientRef() != "" {
+		session.ClientRef = req.GetClientRef()
 	}
-	if req.State != "" {
-		session.State = req.State
+	if state := stubAgentSessionStateFromProto(req.GetState()); state != "" {
+		session.State = state
 	}
-	if req.Metadata != nil {
-		session.Metadata = maps.Clone(req.Metadata)
+	if req.GetMetadata() != nil {
+		session.Metadata = stubAgentProtoStructToMap(req.GetMetadata())
 	}
 	session.UpdatedAt = &now
 	return cloneAgentSession(session), nil
 }
 
-func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -1876,23 +1921,23 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req coreage
 	p.createTurnRequests = append(p.createTurnRequests, req)
 
 	turn := &coreagent.Turn{
-		ID:           req.TurnID,
-		SessionID:    req.SessionID,
+		ID:           req.GetTurnId(),
+		SessionID:    req.GetSessionId(),
 		ProviderName: "managed",
-		Model:        req.Model,
+		Model:        req.GetModel(),
 		Status:       coreagent.ExecutionStatusSucceeded,
-		Messages:     append([]coreagent.Message(nil), req.Messages...),
+		Messages:     stubAgentMessagesFromProto(req.GetMessages()),
 		OutputText:   "turn completed",
-		CreatedBy:    req.CreatedBy,
+		CreatedBy:    stubAgentActorFromProto(req.GetCreatedBy()),
 		CreatedAt:    &now,
 		StartedAt:    &now,
 		CompletedAt:  &now,
-		ExecutionRef: req.ExecutionRef,
+		ExecutionRef: req.GetExecutionRef(),
 	}
 	p.turns[turn.ID] = turn
-	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": req.SessionID})
+	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": req.GetSessionId()})
 
-	if requireInteraction, _ := req.Metadata["requireInteraction"].(bool); requireInteraction {
+	if requireInteraction, _ := stubAgentProtoStructToMap(req.GetMetadata())["requireInteraction"].(bool); requireInteraction {
 		turn.Status = coreagent.ExecutionStatusWaitingForInput
 		turn.StatusMessage = "waiting for input"
 		turn.CompletedAt = nil
@@ -1914,99 +1959,99 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req coreage
 		p.appendTurnEventLocked(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
 	}
 
-	if session := p.sessions[req.SessionID]; session != nil {
+	if session := p.sessions[req.GetSessionId()]; session != nil {
 		session.LastTurnAt = &now
 		session.UpdatedAt = &now
 	}
 	return cloneAgentTurn(turn), nil
 }
 
-func (p *stubAgentTurnManagerProvider) GetTurn(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+func (p *stubAgentTurnManagerProvider) GetTurn(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	turn, ok := p.turns[req.TurnID]
+	turn, ok := p.turns[req.GetTurnId()]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
 	return cloneAgentTurn(turn), nil
 }
 
-func (p *stubAgentTurnManagerProvider) ListTurns(_ context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+func (p *stubAgentTurnManagerProvider) ListTurns(_ context.Context, req *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	out := make([]*coreagent.Turn, 0, len(p.turns))
 	for _, turn := range p.turns {
-		if req.SessionID == "" || turn.SessionID == req.SessionID {
+		if req.GetSessionId() == "" || turn.SessionID == req.GetSessionId() {
 			out = append(out, cloneAgentTurn(turn))
 		}
 	}
 	return out, nil
 }
 
-func (p *stubAgentTurnManagerProvider) CancelTurn(_ context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
+func (p *stubAgentTurnManagerProvider) CancelTurn(_ context.Context, req *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	turn, ok := p.turns[req.TurnID]
+	turn, ok := p.turns[req.GetTurnId()]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	turn.Status = coreagent.ExecutionStatusCanceled
-	turn.StatusMessage = req.Reason
+	turn.StatusMessage = req.GetReason()
 	turn.CompletedAt = &now
-	p.appendTurnEventLocked(turn.ID, "turn.canceled", map[string]any{"reason": req.Reason})
+	p.appendTurnEventLocked(turn.ID, "turn.canceled", map[string]any{"reason": req.GetReason()})
 	return cloneAgentTurn(turn), nil
 }
 
-func (p *stubAgentTurnManagerProvider) ListTurnEvents(_ context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+func (p *stubAgentTurnManagerProvider) ListTurnEvents(_ context.Context, req *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	events := p.turnEvents[req.TurnID]
+	events := p.turnEvents[req.GetTurnId()]
 	out := make([]*coreagent.TurnEvent, 0, len(events))
 	for _, event := range events {
 		if event.Seq <= req.AfterSeq {
 			continue
 		}
 		out = append(out, cloneAgentTurnEvent(event))
-		if req.Limit > 0 && len(out) >= req.Limit {
+		if req.GetLimit() > 0 && len(out) >= int(req.GetLimit()) {
 			break
 		}
 	}
 	return out, nil
 }
 
-func (p *stubAgentTurnManagerProvider) GetInteraction(_ context.Context, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+func (p *stubAgentTurnManagerProvider) GetInteraction(_ context.Context, req *proto.GetAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	interaction, ok := p.interactions[req.InteractionID]
+	interaction, ok := p.interactions[req.GetInteractionId()]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
 	return cloneAgentInteraction(interaction), nil
 }
 
-func (p *stubAgentTurnManagerProvider) ListInteractions(_ context.Context, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+func (p *stubAgentTurnManagerProvider) ListInteractions(_ context.Context, req *proto.ListAgentProviderInteractionsRequest) ([]*coreagent.Interaction, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	out := make([]*coreagent.Interaction, 0, len(p.interactions))
 	for _, interaction := range p.interactions {
-		if req.TurnID == "" || interaction.TurnID == req.TurnID {
+		if req.GetTurnId() == "" || interaction.TurnID == req.GetTurnId() {
 			out = append(out, cloneAgentInteraction(interaction))
 		}
 	}
 	return out, nil
 }
 
-func (p *stubAgentTurnManagerProvider) ResolveInteraction(_ context.Context, req coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
+func (p *stubAgentTurnManagerProvider) ResolveInteraction(_ context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	interaction, ok := p.interactions[req.InteractionID]
+	interaction, ok := p.interactions[req.GetInteractionId()]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	interaction.State = coreagent.InteractionStateResolved
-	interaction.Resolution = maps.Clone(req.Resolution)
+	interaction.Resolution = stubAgentProtoStructToMap(req.GetResolution())
 	interaction.ResolvedAt = &now
 	if turn := p.turns[interaction.TurnID]; turn != nil {
 		turn.Status = coreagent.ExecutionStatusSucceeded
@@ -2018,7 +2063,7 @@ func (p *stubAgentTurnManagerProvider) ResolveInteraction(_ context.Context, req
 	return cloneAgentInteraction(interaction), nil
 }
 
-func (p *stubAgentTurnManagerProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+func (p *stubAgentTurnManagerProvider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
 	return &coreagent.ProviderCapabilities{
 		StreamingText:        true,
 		ToolCalls:            true,
@@ -4205,11 +4250,11 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	agentProvider.mu.Lock()
 	createSessionCount := len(agentProvider.createSessionRequests)
 	createTurnCount := len(agentProvider.createTurnRequests)
-	var sessionReq coreagent.CreateSessionRequest
+	var sessionReq *proto.CreateAgentProviderSessionRequest
 	if createSessionCount > 0 {
 		sessionReq = agentProvider.createSessionRequests[0]
 	}
-	var turnReq coreagent.CreateTurnRequest
+	var turnReq *proto.CreateAgentProviderTurnRequest
 	if createTurnCount > 0 {
 		turnReq = agentProvider.createTurnRequests[0]
 	}
@@ -4224,29 +4269,30 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if sessionReq.IdempotencyKey != "plugin-agent-session" {
 		t.Fatalf("CreateSession idempotency_key = %q, want %q", sessionReq.IdempotencyKey, "plugin-agent-session")
 	}
-	if sessionReq.CreatedBy.SubjectID != "user:user-123" {
-		t.Fatalf("CreateSession created_by.subject_id = %q, want %q", sessionReq.CreatedBy.SubjectID, "user:user-123")
+	if sessionReq.GetCreatedBy().GetSubjectId() != "user:user-123" {
+		t.Fatalf("CreateSession created_by.subject_id = %q, want %q", sessionReq.GetCreatedBy().GetSubjectId(), "user:user-123")
 	}
 	if turnReq.IdempotencyKey != "plugin-agent-turn" {
 		t.Fatalf("CreateTurn idempotency_key = %q, want %q", turnReq.IdempotencyKey, "plugin-agent-turn")
 	}
-	if turnReq.SessionID != roundTrip.SessionID {
-		t.Fatalf("CreateTurn session_id = %q, want %q", turnReq.SessionID, roundTrip.SessionID)
+	if turnReq.GetSessionId() != roundTrip.SessionID {
+		t.Fatalf("CreateTurn session_id = %q, want %q", turnReq.GetSessionId(), roundTrip.SessionID)
 	}
-	if turnReq.CreatedBy.SubjectID != "user:user-123" {
-		t.Fatalf("CreateTurn created_by.subject_id = %q, want %q", turnReq.CreatedBy.SubjectID, "user:user-123")
+	if turnReq.GetCreatedBy().GetSubjectId() != "user:user-123" {
+		t.Fatalf("CreateTurn created_by.subject_id = %q, want %q", turnReq.GetCreatedBy().GetSubjectId(), "user:user-123")
 	}
-	if requireInteraction, _ := turnReq.Metadata["requireInteraction"].(bool); !requireInteraction {
-		t.Fatalf("CreateTurn metadata = %#v, want requireInteraction=true", turnReq.Metadata)
+	turnMetadata := stubAgentProtoStructToMap(turnReq.GetMetadata())
+	if requireInteraction, _ := turnMetadata["requireInteraction"].(bool); !requireInteraction {
+		t.Fatalf("CreateTurn metadata = %#v, want requireInteraction=true", turnMetadata)
 	}
 	if len(turnReq.Tools) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", turnReq.Tools)
 	}
-	if turnReq.ToolSource != coreagent.ToolSourceModeMCPCatalog {
-		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", turnReq.ToolSource)
+	if turnReq.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG {
+		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", turnReq.GetToolSource())
 	}
-	if len(turnReq.ToolRefs) != 1 || turnReq.ToolRefs[0].App != "roadmap" || turnReq.ToolRefs[0].Operation != "sync" {
-		t.Fatalf("CreateTurn tool refs = %#v", turnReq.ToolRefs)
+	if len(turnReq.GetToolRefs()) != 1 || turnReq.GetToolRefs()[0].GetApp() != "roadmap" || turnReq.GetToolRefs()[0].GetOperation() != "sync" {
+		t.Fatalf("CreateTurn tool refs = %#v", turnReq.GetToolRefs())
 	}
 }
 

@@ -12,7 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/structpb"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 type ExecConfig struct {
@@ -87,53 +87,30 @@ func NewRemote(ctx context.Context, cfg RemoteConfig) (coreagent.Provider, error
 	return &remoteAgent{client: cfg.Client, runtime: cfg.Runtime, closer: cfg.Closer}, nil
 }
 
-func (r *remoteAgent) CreateSession(ctx context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+func (r *remoteAgent) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	ctx, cancel := runtimehost.ProviderSessionCreateContext(ctx)
 	defer cancel()
-	metadata, err := structFromMap(req.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := r.client.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:         req.SessionID,
-		IdempotencyKey:    req.IdempotencyKey,
-		Model:             req.Model,
-		ClientRef:         req.ClientRef,
-		Metadata:          metadata,
-		CreatedBy:         agentActorToProto(req.CreatedBy),
-		Subject:           subjectToProto(req.Subject),
-		SessionStart:      sessionStartConfigToProto(req.SessionStart),
-		PreparedWorkspace: preparedAgentWorkspaceToProto(req.PreparedWorkspace),
-	})
+	resp, err := r.client.CreateSession(ctx, cloneAgentRequest(req, &proto.CreateAgentProviderSessionRequest{}))
 	if err != nil {
 		return nil, err
 	}
 	return agentSessionFromProto(resp)
 }
 
-func (r *remoteAgent) GetSession(ctx context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+func (r *remoteAgent) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
-		SessionId: req.SessionID,
-		Subject:   subjectToProto(req.Subject),
-	})
+	resp, err := r.client.GetSession(ctx, cloneAgentRequest(req, &proto.GetAgentProviderSessionRequest{}))
 	if err != nil {
 		return nil, err
 	}
 	return agentSessionFromProto(resp)
 }
 
-func (r *remoteAgent) ListSessions(ctx context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+func (r *remoteAgent) ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.ListSessions(ctx, &proto.ListAgentProviderSessionsRequest{
-		Subject:     subjectToProto(req.Subject),
-		SessionIds:  append([]string(nil), req.SessionIDs...),
-		State:       agentSessionStateToProto(req.State),
-		Limit:       int32(req.Limit),
-		SummaryOnly: req.SummaryOnly,
-	})
+	resp, err := r.client.ListSessions(ctx, cloneAgentRequest(req, &proto.ListAgentProviderSessionsRequest{}))
 	if err != nil {
 		return nil, err
 	}
@@ -148,100 +125,40 @@ func (r *remoteAgent) ListSessions(ctx context.Context, req coreagent.ListSessio
 	return sessions, nil
 }
 
-func (r *remoteAgent) UpdateSession(ctx context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
+func (r *remoteAgent) UpdateSession(ctx context.Context, req *proto.UpdateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	metadata, err := structFromMap(req.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := r.client.UpdateSession(ctx, &proto.UpdateAgentProviderSessionRequest{
-		SessionId: req.SessionID,
-		ClientRef: req.ClientRef,
-		State:     agentSessionStateToProto(req.State),
-		Metadata:  metadata,
-		Subject:   subjectToProto(req.Subject),
-	})
+	resp, err := r.client.UpdateSession(ctx, cloneAgentRequest(req, &proto.UpdateAgentProviderSessionRequest{}))
 	if err != nil {
 		return nil, err
 	}
 	return agentSessionFromProto(resp)
 }
 
-func (r *remoteAgent) CreateTurn(ctx context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+func (r *remoteAgent) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	ctx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
 	defer cancel()
-	messages, err := agentMessagesToProto(req.Messages)
-	if err != nil {
-		return nil, err
-	}
-	tools, err := agentToolsToProto(req.Tools)
-	if err != nil {
-		return nil, err
-	}
-	responseSchema, err := structFromMap(req.ResponseSchema)
-	if err != nil {
-		return nil, err
-	}
-	if req.ResponseSchemaSet && responseSchema == nil {
-		responseSchema = &structpb.Struct{Fields: map[string]*structpb.Value{}}
-	}
-	metadata, err := structFromMap(req.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	modelOptions, err := structFromMap(req.ModelOptions)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := r.client.CreateTurn(ctx, &proto.CreateAgentProviderTurnRequest{
-		TurnId:         req.TurnID,
-		SessionId:      req.SessionID,
-		IdempotencyKey: req.IdempotencyKey,
-		Model:          req.Model,
-		Messages:       messages,
-		Tools:          tools,
-		ResponseSchema: responseSchema,
-		Metadata:       metadata,
-		ModelOptions:   modelOptions,
-		CreatedBy:      agentActorToProto(req.CreatedBy),
-		ExecutionRef:   req.ExecutionRef,
-		ToolRefs:       agentToolRefsToProto(req.ToolRefs),
-		ToolSource:     agentToolSourceModeToProto(req.ToolSource),
-		Subject:        subjectToProto(req.Subject),
-		RunGrant:       req.RunGrant,
-		TimeoutSeconds: int32(req.TimeoutSeconds),
-	})
+	resp, err := r.client.CreateTurn(ctx, cloneAgentRequest(req, &proto.CreateAgentProviderTurnRequest{}))
 	if err != nil {
 		return nil, err
 	}
 	return agentTurnFromProto(resp)
 }
 
-func (r *remoteAgent) GetTurn(ctx context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+func (r *remoteAgent) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	ctx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
-		TurnId:  req.TurnID,
-		Subject: subjectToProto(req.Subject),
-	})
+	resp, err := r.client.GetTurn(ctx, cloneAgentRequest(req, &proto.GetAgentProviderTurnRequest{}))
 	if err != nil {
 		return nil, err
 	}
 	return agentTurnFromProto(resp)
 }
 
-func (r *remoteAgent) ListTurns(ctx context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+func (r *remoteAgent) ListTurns(ctx context.Context, req *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.ListTurns(ctx, &proto.ListAgentProviderTurnsRequest{
-		SessionId:   req.SessionID,
-		Subject:     subjectToProto(req.Subject),
-		TurnIds:     append([]string(nil), req.TurnIDs...),
-		Status:      agentExecutionStatusToProto(req.Status),
-		Limit:       int32(req.Limit),
-		SummaryOnly: req.SummaryOnly,
-	})
+	resp, err := r.client.ListTurns(ctx, cloneAgentRequest(req, &proto.ListAgentProviderTurnsRequest{}))
 	if err != nil {
 		return nil, err
 	}
@@ -256,83 +173,60 @@ func (r *remoteAgent) ListTurns(ctx context.Context, req coreagent.ListTurnsRequ
 	return turns, nil
 }
 
-func (r *remoteAgent) CancelTurn(ctx context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
+func (r *remoteAgent) CancelTurn(ctx context.Context, req *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.CancelTurn(ctx, &proto.CancelAgentProviderTurnRequest{
-		TurnId:  req.TurnID,
-		Reason:  req.Reason,
-		Subject: subjectToProto(req.Subject),
-	})
+	resp, err := r.client.CancelTurn(ctx, cloneAgentRequest(req, &proto.CancelAgentProviderTurnRequest{}))
 	if err != nil {
 		return nil, err
 	}
 	return agentTurnFromProto(resp)
 }
 
-func (r *remoteAgent) ListTurnEvents(ctx context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+func (r *remoteAgent) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.ListTurnEvents(ctx, &proto.ListAgentProviderTurnEventsRequest{
-		TurnId:   req.TurnID,
-		AfterSeq: req.AfterSeq,
-		Limit:    int32(req.Limit),
-		Subject:  subjectToProto(req.Subject),
-	})
+	resp, err := r.client.ListTurnEvents(ctx, cloneAgentRequest(req, &proto.ListAgentProviderTurnEventsRequest{}))
 	if err != nil {
 		return nil, err
 	}
 	return agentTurnEventsFromProto(resp.GetEvents()), nil
 }
 
-func (r *remoteAgent) GetInteraction(ctx context.Context, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+func (r *remoteAgent) GetInteraction(ctx context.Context, req *proto.GetAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.GetInteraction(ctx, &proto.GetAgentProviderInteractionRequest{
-		InteractionId: req.InteractionID,
-		Subject:       subjectToProto(req.Subject),
-	})
+	resp, err := r.client.GetInteraction(ctx, cloneAgentRequest(req, &proto.GetAgentProviderInteractionRequest{}))
 	if err != nil {
 		return nil, err
 	}
 	return agentInteractionFromProto(resp)
 }
 
-func (r *remoteAgent) ListInteractions(ctx context.Context, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+func (r *remoteAgent) ListInteractions(ctx context.Context, req *proto.ListAgentProviderInteractionsRequest) ([]*coreagent.Interaction, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.ListInteractions(ctx, &proto.ListAgentProviderInteractionsRequest{
-		TurnId:  req.TurnID,
-		Subject: subjectToProto(req.Subject),
-	})
+	resp, err := r.client.ListInteractions(ctx, cloneAgentRequest(req, &proto.ListAgentProviderInteractionsRequest{}))
 	if err != nil {
 		return nil, err
 	}
 	return agentInteractionsFromProto(resp.GetInteractions())
 }
 
-func (r *remoteAgent) ResolveInteraction(ctx context.Context, req coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
+func (r *remoteAgent) ResolveInteraction(ctx context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resolution, err := structFromMap(req.Resolution)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := r.client.ResolveInteraction(ctx, &proto.ResolveAgentProviderInteractionRequest{
-		InteractionId: req.InteractionID,
-		Resolution:    resolution,
-		Subject:       subjectToProto(req.Subject),
-	})
+	resp, err := r.client.ResolveInteraction(ctx, cloneAgentRequest(req, &proto.ResolveAgentProviderInteractionRequest{}))
 	if err != nil {
 		return nil, err
 	}
 	return agentInteractionFromProto(resp)
 }
 
-func (r *remoteAgent) GetCapabilities(ctx context.Context, req coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+func (r *remoteAgent) GetCapabilities(ctx context.Context, req *proto.GetAgentProviderCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.GetCapabilities(ctx, &proto.GetAgentProviderCapabilitiesRequest{})
+	resp, err := r.client.GetCapabilities(ctx, cloneAgentRequest(req, &proto.GetAgentProviderCapabilitiesRequest{}))
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
 			return &coreagent.ProviderCapabilities{}, nil
@@ -340,6 +234,17 @@ func (r *remoteAgent) GetCapabilities(ctx context.Context, req coreagent.GetCapa
 		return nil, err
 	}
 	return agentProviderCapabilitiesFromProto(resp), nil
+}
+
+func cloneAgentRequest[T interface {
+	gproto.Message
+	comparable
+}](req T, empty T) T {
+	var zero T
+	if req == zero {
+		return empty
+	}
+	return gproto.Clone(req).(T)
 }
 
 func (r *remoteAgent) Ping(ctx context.Context) error {

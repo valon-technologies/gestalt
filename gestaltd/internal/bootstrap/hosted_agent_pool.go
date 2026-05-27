@@ -14,11 +14,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
+	protobuf "google.golang.org/protobuf/proto"
 )
 
 const hostedAgentRuntimeLifecycleSafetyMargin = 5 * time.Second
@@ -178,11 +180,15 @@ func (p *hostedAgentProviderPool) broadcastStateLocked() {
 	}
 }
 
-func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
-	if req.Workspace != nil && strings.TrimSpace(req.IdempotencyKey) != "" {
-		session, err := p.GetSession(ctx, coreagent.GetSessionRequest{
-			SessionID: req.SessionID,
-			Subject:   req.Subject,
+func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
+	if req == nil {
+		req = &proto.CreateAgentProviderSessionRequest{}
+	}
+	sessionID := strings.TrimSpace(req.GetSessionId())
+	if req.GetWorkspace() != nil && strings.TrimSpace(req.GetIdempotencyKey()) != "" {
+		session, err := p.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
+			SessionId: sessionID,
+			Subject:   req.GetSubject(),
 		})
 		if err == nil {
 			return session, nil
@@ -191,20 +197,20 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req coreage
 			return nil, err
 		}
 	}
-	preferred := p.sessionBackend(req.SessionID)
+	preferred := p.sessionBackend(sessionID)
 	backend, release, err := p.acquireBackendForNewWork(ctx, preferred, preferred != nil)
 	if err != nil {
 		return nil, err
 	}
-	providerReq := req
-	if req.Workspace != nil {
-		p.recordSessionBackend(req.SessionID, backend)
+	providerReq := protobuf.Clone(req).(*proto.CreateAgentProviderSessionRequest)
+	if req.GetWorkspace() != nil {
+		p.recordSessionBackend(sessionID, backend)
 		prepared, err := p.prepareAgentWorkspace(ctx, backend, req)
 		if err != nil {
-			if cleanupErr := p.removeAgentWorkspace(ctx, backend, req.SessionID); cleanupErr != nil {
-				slog.Warn("failed to clean up prepared hosted agent workspace after prepare error", "provider", p.name, "session", req.SessionID, "error", cleanupErr)
+			if cleanupErr := p.removeAgentWorkspace(ctx, backend, sessionID); cleanupErr != nil {
+				slog.Warn("failed to clean up prepared hosted agent workspace after prepare error", "provider", p.name, "session", sessionID, "error", cleanupErr)
 			}
-			p.deleteSessionBackend(req.SessionID)
+			p.deleteSessionBackend(sessionID)
 			release()
 			return nil, err
 		}
@@ -212,22 +218,22 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req coreage
 		providerReq.PreparedWorkspace = prepared
 	}
 	session, err := backend.provider.CreateSession(ctx, providerReq)
-	if err == nil && providerReq.PreparedWorkspace != nil {
+	if err == nil && providerReq.GetPreparedWorkspace() != nil {
 		sessionID := strings.TrimSpace(sessionIDForSession(session))
 		if sessionID == "" {
 			err = fmt.Errorf("agent provider returned session without id")
-		} else if sessionID != strings.TrimSpace(req.SessionID) {
+		} else if sessionID != strings.TrimSpace(req.GetSessionId()) {
 			if cleanupErr := archivePreparedWorkspaceProviderSession(ctx, backend, req, sessionID); cleanupErr != nil {
 				slog.Warn("failed to archive hosted agent provider session after workspace create validation error", "provider", p.name, "session", sessionID, "error", cleanupErr)
 			}
-			err = fmt.Errorf("agent provider returned session id %q, want %q", sessionID, req.SessionID)
+			err = fmt.Errorf("agent provider returned session id %q, want %q", sessionID, req.GetSessionId())
 		}
 	}
-	if err != nil && providerReq.PreparedWorkspace != nil {
-		if cleanupErr := p.removeAgentWorkspace(ctx, backend, req.SessionID); cleanupErr != nil {
-			slog.Warn("failed to clean up prepared hosted agent workspace after create-session error", "provider", p.name, "session", req.SessionID, "error", cleanupErr)
+	if err != nil && providerReq.GetPreparedWorkspace() != nil {
+		if cleanupErr := p.removeAgentWorkspace(ctx, backend, sessionID); cleanupErr != nil {
+			slog.Warn("failed to clean up prepared hosted agent workspace after create-session error", "provider", p.name, "session", sessionID, "error", cleanupErr)
 		}
-		p.deleteSessionBackend(req.SessionID)
+		p.deleteSessionBackend(sessionID)
 	}
 	release()
 	p.maybeProbeAfterCallError(backend, err)
@@ -237,20 +243,20 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req coreage
 	if session != nil {
 		p.recordSession(session, backend)
 	} else {
-		p.recordSessionBackend(req.SessionID, backend)
+		p.recordSessionBackend(sessionID, backend)
 	}
 	return session, nil
 }
 
-func archivePreparedWorkspaceProviderSession(ctx context.Context, backend *hostedAgentPoolBackend, req coreagent.CreateSessionRequest, sessionID string) error {
+func archivePreparedWorkspaceProviderSession(ctx context.Context, backend *hostedAgentPoolBackend, req *proto.CreateAgentProviderSessionRequest, sessionID string) error {
 	sessionID = strings.TrimSpace(sessionID)
 	if backend == nil || backend.provider == nil || sessionID == "" {
 		return nil
 	}
-	_, err := backend.provider.UpdateSession(ctx, coreagent.UpdateSessionRequest{
-		SessionID: sessionID,
-		State:     coreagent.SessionStateArchived,
-		Subject:   req.Subject,
+	_, err := backend.provider.UpdateSession(ctx, &proto.UpdateAgentProviderSessionRequest{
+		SessionId: sessionID,
+		State:     proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED,
+		Subject:   req.GetSubject(),
 	})
 	return err
 }
@@ -259,14 +265,14 @@ func (p *hostedAgentProviderPool) SupportsWorkspaceRequests() bool {
 	return true
 }
 
-func (p *hostedAgentProviderPool) prepareAgentWorkspace(ctx context.Context, backend *hostedAgentPoolBackend, req coreagent.CreateSessionRequest) (*coreagent.PreparedWorkspace, error) {
+func (p *hostedAgentProviderPool) prepareAgentWorkspace(ctx context.Context, backend *hostedAgentPoolBackend, req *proto.CreateAgentProviderSessionRequest) (*proto.PreparedAgentWorkspace, error) {
 	if p == nil || p.launch == nil || p.launch.runtimeConfig.Workspace == nil {
 		return nil, fmt.Errorf("%w: provider %q has no workspace policy", agentmanager.ErrAgentWorkspaceUnsupported, p.name)
 	}
-	if err := validateWorkspacePolicy(req.Workspace, p.launch.runtimeConfig.Workspace); err != nil {
+	if err := validateWorkspacePolicy(req.GetWorkspace(), p.launch.runtimeConfig.Workspace); err != nil {
 		return nil, err
 	}
-	caps, err := backend.provider.GetCapabilities(ctx, coreagent.GetCapabilitiesRequest{})
+	caps, err := backend.provider.GetCapabilities(ctx, &proto.GetAgentProviderCapabilitiesRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -294,8 +300,8 @@ func (p *hostedAgentProviderPool) prepareAgentWorkspace(ctx context.Context, bac
 	defer cancel()
 	prepared, err := workspaceProvider.PrepareWorkspace(prepareCtx, runtimeprovider.PrepareWorkspaceRequest{
 		SessionID:      backend.runtimeSessionID,
-		AgentSessionID: req.SessionID,
-		Workspace:      runtimeWorkspaceFromCore(req.Workspace),
+		AgentSessionID: req.GetSessionId(),
+		Workspace:      runtimeWorkspaceFromProto(req.GetWorkspace()),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("prepare hosted agent workspace: %w", err)
@@ -326,7 +332,7 @@ func hostedAgentWorkspacePrepareTimeout(cfg *config.RuntimePlacementWorkspaceCon
 	return timeout
 }
 
-func validateWorkspacePolicy(workspace *coreagent.Workspace, policy *config.RuntimePlacementWorkspaceConfig) error {
+func validateWorkspacePolicy(workspace *proto.AgentWorkspace, policy *config.RuntimePlacementWorkspaceConfig) error {
 	if workspace == nil {
 		return nil
 	}
@@ -337,8 +343,8 @@ func validateWorkspacePolicy(workspace *coreagent.Workspace, policy *config.Runt
 	if len(allowed) == 0 {
 		return fmt.Errorf("%w: workspace git allowedRepositories is required", agentmanager.ErrAgentWorkspaceUnsupported)
 	}
-	for i, checkout := range workspace.Checkouts {
-		identity, err := coreagent.CanonicalGitRepositoryIdentity(checkout.URL)
+	for i, checkout := range workspace.GetCheckouts() {
+		identity, err := coreagent.CanonicalGitRepositoryIdentity(checkout.GetUrl())
 		if err != nil {
 			return fmt.Errorf("%w: checkout[%d].url: %v", agentmanager.ErrAgentWorkspaceInvalid, i, err)
 		}
@@ -373,25 +379,25 @@ func workspaceRepositoryAllowed(identity string, allowed []string) bool {
 	return false
 }
 
-func runtimeWorkspaceFromCore(workspace *coreagent.Workspace) *runtimeprovider.Workspace {
+func runtimeWorkspaceFromProto(workspace *proto.AgentWorkspace) *runtimeprovider.Workspace {
 	if workspace == nil {
 		return nil
 	}
 	out := &runtimeprovider.Workspace{
-		Checkouts: make([]runtimeprovider.WorkspaceGitCheckout, 0, len(workspace.Checkouts)),
-		CWD:       workspace.CWD,
+		Checkouts: make([]runtimeprovider.WorkspaceGitCheckout, 0, len(workspace.GetCheckouts())),
+		CWD:       workspace.GetCwd(),
 	}
-	for _, checkout := range workspace.Checkouts {
+	for _, checkout := range workspace.GetCheckouts() {
 		out.Checkouts = append(out.Checkouts, runtimeprovider.WorkspaceGitCheckout{
-			URL:  checkout.URL,
-			Ref:  checkout.Ref,
-			Path: checkout.Path,
+			URL:  checkout.GetUrl(),
+			Ref:  checkout.GetRef(),
+			Path: checkout.GetPath(),
 		})
 	}
 	return out
 }
 
-func validatePreparedAgentWorkspace(workspace *runtimeprovider.PreparedWorkspace) (*coreagent.PreparedWorkspace, error) {
+func validatePreparedAgentWorkspace(workspace *runtimeprovider.PreparedWorkspace) (*proto.PreparedAgentWorkspace, error) {
 	if workspace == nil {
 		return nil, fmt.Errorf("prepared workspace is required")
 	}
@@ -406,7 +412,7 @@ func validatePreparedAgentWorkspace(workspace *runtimeprovider.PreparedWorkspace
 	if !preparedWorkspacePathWithin(root, cwd) {
 		return nil, fmt.Errorf("prepared workspace cwd must be inside root")
 	}
-	return &coreagent.PreparedWorkspace{Root: root, CWD: cwd}, nil
+	return &proto.PreparedAgentWorkspace{Root: root, Cwd: cwd}, nil
 }
 
 func preparedWorkspacePathWithin(root string, cwd string) bool {
@@ -417,11 +423,15 @@ func preparedWorkspacePathWithin(root string, cwd string) bool {
 	return rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func (p *hostedAgentProviderPool) GetSession(ctx context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+func (p *hostedAgentProviderPool) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error) {
+	if req == nil {
+		req = &proto.GetAgentProviderSessionRequest{}
+	}
 	var retryableErr error
 	var lastNotFound error
 	tried := map[*hostedAgentPoolBackend]struct{}{}
-	if backend := p.sessionBackend(req.SessionID); backend != nil {
+	sessionID := strings.TrimSpace(req.GetSessionId())
+	if backend := p.sessionBackend(sessionID); backend != nil {
 		tried[backend] = struct{}{}
 		session, err := p.withBackendSession(ctx, backend, req)
 		switch {
@@ -429,7 +439,7 @@ func (p *hostedAgentProviderPool) GetSession(ctx context.Context, req coreagent.
 			p.recordSession(session, backend)
 			return session, nil
 		case errors.Is(err, core.ErrNotFound):
-			p.deleteSessionBackend(req.SessionID)
+			p.deleteSessionBackend(sessionID)
 			lastNotFound = err
 		case isHostedAgentReadRetryableError(err):
 			retryableErr = err
@@ -465,7 +475,10 @@ func (p *hostedAgentProviderPool) GetSession(ctx context.Context, req coreagent.
 	return nil, core.ErrNotFound
 }
 
-func (p *hostedAgentProviderPool) ListSessions(ctx context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+func (p *hostedAgentProviderPool) ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error) {
+	if req == nil {
+		req = &proto.ListAgentProviderSessionsRequest{}
+	}
 	var out []*coreagent.Session
 	seenSessionIDs := map[string]struct{}{}
 	var retryableErr error
@@ -508,10 +521,14 @@ func (p *hostedAgentProviderPool) ListSessions(ctx context.Context, req coreagen
 	return out, nil
 }
 
-func (p *hostedAgentProviderPool) UpdateSession(ctx context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
-	backend := p.sessionBackend(req.SessionID)
+func (p *hostedAgentProviderPool) UpdateSession(ctx context.Context, req *proto.UpdateAgentProviderSessionRequest) (*coreagent.Session, error) {
+	if req == nil {
+		req = &proto.UpdateAgentProviderSessionRequest{}
+	}
+	sessionID := strings.TrimSpace(req.GetSessionId())
+	backend := p.sessionBackend(sessionID)
 	if backend == nil {
-		session, err := p.GetSession(ctx, coreagent.GetSessionRequest{SessionID: req.SessionID})
+		session, err := p.GetSession(ctx, &proto.GetAgentProviderSessionRequest{SessionId: sessionID, Subject: req.GetSubject()})
 		if err != nil {
 			return nil, err
 		}
@@ -528,8 +545,8 @@ func (p *hostedAgentProviderPool) UpdateSession(ctx context.Context, req coreage
 	release()
 	p.maybeProbeAfterCallError(acquired, err)
 	if err == nil {
-		if req.State == coreagent.SessionStateArchived || sessionState(session) == coreagent.SessionStateArchived {
-			cleanupID := strings.TrimSpace(req.SessionID)
+		if req.GetState() == proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED || sessionState(session) == coreagent.SessionStateArchived {
+			cleanupID := sessionID
 			if fromSession := sessionIDForSession(session); fromSession != "" {
 				cleanupID = fromSession
 			}
@@ -544,11 +561,15 @@ func (p *hostedAgentProviderPool) UpdateSession(ctx context.Context, req coreage
 	return session, err
 }
 
-func (p *hostedAgentProviderPool) CreateTurn(ctx context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
-	preferred := p.turnBackend(req.TurnID)
+func (p *hostedAgentProviderPool) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
+	if req == nil {
+		req = &proto.CreateAgentProviderTurnRequest{}
+	}
+	turnID := strings.TrimSpace(req.GetTurnId())
+	preferred := p.turnBackend(turnID)
 	allowDraining := preferred != nil
 	if preferred == nil {
-		preferred = p.sessionBackend(req.SessionID)
+		preferred = p.sessionBackend(req.GetSessionId())
 	}
 	backend, release, err := p.acquireBackendForNewWork(ctx, preferred, allowDraining)
 	if err != nil {
@@ -563,16 +584,20 @@ func (p *hostedAgentProviderPool) CreateTurn(ctx context.Context, req coreagent.
 	if turn != nil {
 		p.recordTurn(turn, backend)
 	} else {
-		p.recordTurnBackend(req.TurnID, backend)
+		p.recordTurnBackend(turnID, backend)
 	}
 	return turn, nil
 }
 
-func (p *hostedAgentProviderPool) GetTurn(ctx context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+func (p *hostedAgentProviderPool) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
+	if req == nil {
+		req = &proto.GetAgentProviderTurnRequest{}
+	}
 	var retryableErr error
 	var lastNotFound error
 	tried := map[*hostedAgentPoolBackend]struct{}{}
-	if backend := p.turnBackend(req.TurnID); backend != nil {
+	turnID := strings.TrimSpace(req.GetTurnId())
+	if backend := p.turnBackend(turnID); backend != nil {
 		tried[backend] = struct{}{}
 		turn, err := p.withBackendTurn(ctx, backend, req)
 		switch {
@@ -580,7 +605,7 @@ func (p *hostedAgentProviderPool) GetTurn(ctx context.Context, req coreagent.Get
 			p.recordTurn(turn, backend)
 			return turn, nil
 		case errors.Is(err, core.ErrNotFound):
-			p.deleteTurnBackend(req.TurnID)
+			p.deleteTurnBackend(turnID)
 			lastNotFound = err
 		case isHostedAgentReadRetryableError(err):
 			retryableErr = err
@@ -616,12 +641,16 @@ func (p *hostedAgentProviderPool) GetTurn(ctx context.Context, req coreagent.Get
 	return nil, core.ErrNotFound
 }
 
-func (p *hostedAgentProviderPool) ListTurns(ctx context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+func (p *hostedAgentProviderPool) ListTurns(ctx context.Context, req *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error) {
+	if req == nil {
+		req = &proto.ListAgentProviderTurnsRequest{}
+	}
 	var retryableErr error
 	var lastNotFound error
 	succeeded := false
 	tried := map[*hostedAgentPoolBackend]struct{}{}
-	if backend := p.sessionBackend(req.SessionID); backend != nil {
+	sessionID := strings.TrimSpace(req.GetSessionId())
+	if backend := p.sessionBackend(sessionID); backend != nil {
 		tried[backend] = struct{}{}
 		turns, err := p.listTurnsFromBackend(ctx, backend, req)
 		if err == nil {
@@ -629,7 +658,7 @@ func (p *hostedAgentProviderPool) ListTurns(ctx context.Context, req coreagent.L
 		}
 		switch {
 		case errors.Is(err, core.ErrNotFound):
-			p.deleteSessionBackend(req.SessionID)
+			p.deleteSessionBackend(sessionID)
 			lastNotFound = err
 		case isHostedAgentReadRetryableError(err):
 			retryableErr = err
@@ -666,10 +695,14 @@ func (p *hostedAgentProviderPool) ListTurns(ctx context.Context, req coreagent.L
 	return out, nil
 }
 
-func (p *hostedAgentProviderPool) CancelTurn(ctx context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
-	backend := p.turnBackend(req.TurnID)
+func (p *hostedAgentProviderPool) CancelTurn(ctx context.Context, req *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
+	if req == nil {
+		req = &proto.CancelAgentProviderTurnRequest{}
+	}
+	turnID := strings.TrimSpace(req.GetTurnId())
+	backend := p.turnBackend(turnID)
 	if backend == nil {
-		turn, err := p.GetTurn(ctx, coreagent.GetTurnRequest{TurnID: req.TurnID})
+		turn, err := p.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{TurnId: turnID, Subject: req.GetSubject()})
 		if err != nil {
 			return nil, err
 		}
@@ -691,11 +724,15 @@ func (p *hostedAgentProviderPool) CancelTurn(ctx context.Context, req coreagent.
 	return turn, err
 }
 
-func (p *hostedAgentProviderPool) ListTurnEvents(ctx context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+func (p *hostedAgentProviderPool) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+	if req == nil {
+		req = &proto.ListAgentProviderTurnEventsRequest{}
+	}
 	var retryableErr error
 	var lastNotFound error
 	tried := map[*hostedAgentPoolBackend]struct{}{}
-	if backend := p.turnBackend(req.TurnID); backend != nil {
+	turnID := strings.TrimSpace(req.GetTurnId())
+	if backend := p.turnBackend(turnID); backend != nil {
 		tried[backend] = struct{}{}
 		events, err := p.listTurnEventsFromBackend(ctx, backend, req)
 		if err == nil {
@@ -703,7 +740,7 @@ func (p *hostedAgentProviderPool) ListTurnEvents(ctx context.Context, req coreag
 		}
 		switch {
 		case errors.Is(err, core.ErrNotFound):
-			p.deleteTurnBackend(req.TurnID)
+			p.deleteTurnBackend(turnID)
 			lastNotFound = err
 		case isHostedAgentReadRetryableError(err):
 			retryableErr = err
@@ -738,11 +775,15 @@ func (p *hostedAgentProviderPool) ListTurnEvents(ctx context.Context, req coreag
 	return nil, core.ErrNotFound
 }
 
-func (p *hostedAgentProviderPool) GetInteraction(ctx context.Context, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+func (p *hostedAgentProviderPool) GetInteraction(ctx context.Context, req *proto.GetAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
+	if req == nil {
+		req = &proto.GetAgentProviderInteractionRequest{}
+	}
 	var retryableErr error
 	var lastNotFound error
 	tried := map[*hostedAgentPoolBackend]struct{}{}
-	if backend := p.interactionBackend(req.InteractionID); backend != nil {
+	interactionID := strings.TrimSpace(req.GetInteractionId())
+	if backend := p.interactionBackend(interactionID); backend != nil {
 		tried[backend] = struct{}{}
 		interaction, err := p.getInteractionFromBackend(ctx, backend, req)
 		switch {
@@ -750,7 +791,7 @@ func (p *hostedAgentProviderPool) GetInteraction(ctx context.Context, req coreag
 			p.recordInteraction(interaction, backend)
 			return interaction, nil
 		case errors.Is(err, core.ErrNotFound):
-			p.deleteInteractionBackend(req.InteractionID)
+			p.deleteInteractionBackend(interactionID)
 			lastNotFound = err
 		case isHostedAgentReadRetryableError(err):
 			retryableErr = err
@@ -786,12 +827,16 @@ func (p *hostedAgentProviderPool) GetInteraction(ctx context.Context, req coreag
 	return nil, core.ErrNotFound
 }
 
-func (p *hostedAgentProviderPool) ListInteractions(ctx context.Context, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+func (p *hostedAgentProviderPool) ListInteractions(ctx context.Context, req *proto.ListAgentProviderInteractionsRequest) ([]*coreagent.Interaction, error) {
+	if req == nil {
+		req = &proto.ListAgentProviderInteractionsRequest{}
+	}
 	var retryableErr error
 	var lastNotFound error
 	succeeded := false
 	tried := map[*hostedAgentPoolBackend]struct{}{}
-	if backend := p.turnBackend(req.TurnID); backend != nil {
+	turnID := strings.TrimSpace(req.GetTurnId())
+	if backend := p.turnBackend(turnID); backend != nil {
 		tried[backend] = struct{}{}
 		interactions, err := p.listInteractionsFromBackend(ctx, backend, req)
 		if err == nil {
@@ -799,7 +844,7 @@ func (p *hostedAgentProviderPool) ListInteractions(ctx context.Context, req core
 		}
 		switch {
 		case errors.Is(err, core.ErrNotFound):
-			p.deleteTurnBackend(req.TurnID)
+			p.deleteTurnBackend(turnID)
 			lastNotFound = err
 		case isHostedAgentReadRetryableError(err):
 			retryableErr = err
@@ -836,10 +881,14 @@ func (p *hostedAgentProviderPool) ListInteractions(ctx context.Context, req core
 	return out, nil
 }
 
-func (p *hostedAgentProviderPool) ResolveInteraction(ctx context.Context, req coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
-	backend := p.interactionBackend(req.InteractionID)
+func (p *hostedAgentProviderPool) ResolveInteraction(ctx context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
+	if req == nil {
+		req = &proto.ResolveAgentProviderInteractionRequest{}
+	}
+	interactionID := strings.TrimSpace(req.GetInteractionId())
+	backend := p.interactionBackend(interactionID)
 	if backend == nil {
-		interaction, err := p.GetInteraction(ctx, coreagent.GetInteractionRequest{InteractionID: req.InteractionID})
+		interaction, err := p.GetInteraction(ctx, &proto.GetAgentProviderInteractionRequest{InteractionId: interactionID, Subject: req.GetSubject()})
 		if err != nil {
 			return nil, err
 		}
@@ -861,7 +910,10 @@ func (p *hostedAgentProviderPool) ResolveInteraction(ctx context.Context, req co
 	return interaction, err
 }
 
-func (p *hostedAgentProviderPool) GetCapabilities(ctx context.Context, req coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+func (p *hostedAgentProviderPool) GetCapabilities(ctx context.Context, req *proto.GetAgentProviderCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	if req == nil {
+		req = &proto.GetAgentProviderCapabilitiesRequest{}
+	}
 	backend, release, err := p.acquireBackend(ctx, nil, false)
 	if err != nil {
 		return nil, err
@@ -955,7 +1007,7 @@ func (p *hostedAgentProviderPool) Close() error {
 	return errors.Join(closeErrs...)
 }
 
-func (p *hostedAgentProviderPool) withBackendSession(ctx context.Context, backend *hostedAgentPoolBackend, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+func (p *hostedAgentProviderPool) withBackendSession(ctx context.Context, backend *hostedAgentPoolBackend, req *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error) {
 	acquired, release, err := p.acquireBackend(ctx, backend, true)
 	if err != nil {
 		return nil, err
@@ -966,7 +1018,7 @@ func (p *hostedAgentProviderPool) withBackendSession(ctx context.Context, backen
 	return session, err
 }
 
-func (p *hostedAgentProviderPool) withBackendTurn(ctx context.Context, backend *hostedAgentPoolBackend, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+func (p *hostedAgentProviderPool) withBackendTurn(ctx context.Context, backend *hostedAgentPoolBackend, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	acquired, release, err := p.acquireBackend(ctx, backend, true)
 	if err != nil {
 		return nil, err
@@ -977,7 +1029,7 @@ func (p *hostedAgentProviderPool) withBackendTurn(ctx context.Context, backend *
 	return turn, err
 }
 
-func (p *hostedAgentProviderPool) listTurnsFromBackend(ctx context.Context, backend *hostedAgentPoolBackend, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+func (p *hostedAgentProviderPool) listTurnsFromBackend(ctx context.Context, backend *hostedAgentPoolBackend, req *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error) {
 	acquired, release, err := p.acquireBackend(ctx, backend, true)
 	if err != nil {
 		return nil, err
@@ -993,7 +1045,7 @@ func (p *hostedAgentProviderPool) listTurnsFromBackend(ctx context.Context, back
 	return turns, err
 }
 
-func (p *hostedAgentProviderPool) listTurnEventsFromBackend(ctx context.Context, backend *hostedAgentPoolBackend, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+func (p *hostedAgentProviderPool) listTurnEventsFromBackend(ctx context.Context, backend *hostedAgentPoolBackend, req *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
 	acquired, release, err := p.acquireBackend(ctx, backend, true)
 	if err != nil {
 		return nil, err
@@ -1004,7 +1056,7 @@ func (p *hostedAgentProviderPool) listTurnEventsFromBackend(ctx context.Context,
 	return events, err
 }
 
-func (p *hostedAgentProviderPool) getInteractionFromBackend(ctx context.Context, backend *hostedAgentPoolBackend, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+func (p *hostedAgentProviderPool) getInteractionFromBackend(ctx context.Context, backend *hostedAgentPoolBackend, req *proto.GetAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	acquired, release, err := p.acquireBackend(ctx, backend, true)
 	if err != nil {
 		return nil, err
@@ -1015,7 +1067,7 @@ func (p *hostedAgentProviderPool) getInteractionFromBackend(ctx context.Context,
 	return interaction, err
 }
 
-func (p *hostedAgentProviderPool) listInteractionsFromBackend(ctx context.Context, backend *hostedAgentPoolBackend, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+func (p *hostedAgentProviderPool) listInteractionsFromBackend(ctx context.Context, backend *hostedAgentPoolBackend, req *proto.ListAgentProviderInteractionsRequest) ([]*coreagent.Interaction, error) {
 	acquired, release, err := p.acquireBackend(ctx, backend, true)
 	if err != nil {
 		return nil, err

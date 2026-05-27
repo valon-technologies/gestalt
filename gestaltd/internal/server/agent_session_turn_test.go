@@ -22,11 +22,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability"
+	gproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func newServerTestAgentRunGrants(t testing.TB) *agentgrant.Manager {
@@ -506,11 +509,11 @@ type memoryAgentProvider struct {
 	turns               map[string]*coreagent.Turn
 	turnEvents          map[string][]*coreagent.TurnEvent
 	interactions        map[string]*coreagent.Interaction
-	turnRequests        []coreagent.CreateTurnRequest
-	getSessionRequests  []coreagent.GetSessionRequest
-	getTurnRequests     []coreagent.GetTurnRequest
-	listSessionRequests []coreagent.ListSessionsRequest
-	listTurnRequests    []coreagent.ListTurnsRequest
+	turnRequests        []*proto.CreateAgentProviderTurnRequest
+	getSessionRequests  []*proto.GetAgentProviderSessionRequest
+	getTurnRequests     []*proto.GetAgentProviderTurnRequest
+	listSessionRequests []*proto.ListAgentProviderSessionsRequest
+	listTurnRequests    []*proto.ListAgentProviderTurnsRequest
 	createSessionHook   func()
 	createTurnHook      func(*coreagent.Turn)
 	createTurnErr       error
@@ -527,22 +530,25 @@ func newMemoryAgentProvider() *memoryAgentProvider {
 	}
 }
 
-func (p *memoryAgentProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+func (p *memoryAgentProvider) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if req == nil {
+		req = &proto.CreateAgentProviderSessionRequest{}
+	}
 	if p.createSessionHook != nil {
 		p.createSessionHook()
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
 	session := &coreagent.Session{
-		ID:           req.SessionID,
+		ID:           req.GetSessionId(),
 		ProviderName: "managed",
-		Model:        req.Model,
-		ClientRef:    req.ClientRef,
+		Model:        req.GetModel(),
+		ClientRef:    req.GetClientRef(),
 		State:        coreagent.SessionStateActive,
-		Metadata:     cloneMap(req.Metadata),
-		CreatedBy:    req.CreatedBy,
+		Metadata:     mapFromStruct(req.GetMetadata()),
+		CreatedBy:    actorFromProto(req.GetCreatedBy()),
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
@@ -550,87 +556,100 @@ func (p *memoryAgentProvider) CreateSession(_ context.Context, req coreagent.Cre
 	return cloneSession(session), nil
 }
 
-func (p *memoryAgentProvider) GetSession(_ context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+func (p *memoryAgentProvider) GetSession(_ context.Context, req *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if req == nil {
+		req = &proto.GetAgentProviderSessionRequest{}
+	}
 
-	p.getSessionRequests = append(p.getSessionRequests, req)
-	session, ok := p.sessions[req.SessionID]
+	p.getSessionRequests = append(p.getSessionRequests, cloneProto(req).(*proto.GetAgentProviderSessionRequest))
+	session, ok := p.sessions[req.GetSessionId()]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
 	return cloneSession(session), nil
 }
 
-func (p *memoryAgentProvider) ListSessions(_ context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+func (p *memoryAgentProvider) ListSessions(_ context.Context, req *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if req == nil {
+		req = &proto.ListAgentProviderSessionsRequest{}
+	}
 
 	p.listSessionRequests = append(p.listSessionRequests, cloneListSessionsRequest(req))
 	out := make([]*coreagent.Session, 0, len(p.sessions))
 	for _, session := range p.sessions {
-		if req.State != "" && session.State != req.State {
+		if state := sessionStateFromProto(req.GetState()); state != "" && session.State != state {
 			continue
 		}
 		out = append(out, cloneSession(session))
-		if req.Limit > 0 && len(out) >= req.Limit {
+		if req.GetLimit() > 0 && len(out) >= int(req.GetLimit()) {
 			break
 		}
 	}
 	return out, nil
 }
 
-func (p *memoryAgentProvider) UpdateSession(_ context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
+func (p *memoryAgentProvider) UpdateSession(_ context.Context, req *proto.UpdateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if req == nil {
+		req = &proto.UpdateAgentProviderSessionRequest{}
+	}
 
-	session, ok := p.sessions[req.SessionID]
+	session, ok := p.sessions[req.GetSessionId()]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
-	if req.ClientRef != "" {
-		session.ClientRef = req.ClientRef
+	if req.GetClientRef() != "" {
+		session.ClientRef = req.GetClientRef()
 	}
-	if req.State != "" {
-		session.State = req.State
+	if state := sessionStateFromProto(req.GetState()); state != "" {
+		session.State = state
 	}
-	if req.Metadata != nil {
-		session.Metadata = cloneMap(req.Metadata)
+	if req.GetMetadata() != nil {
+		session.Metadata = mapFromStruct(req.GetMetadata())
 	}
 	session.UpdatedAt = &now
 	return cloneSession(session), nil
 }
 
-func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+func (p *memoryAgentProvider) CreateTurn(_ context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if req == nil {
+		req = &proto.CreateAgentProviderTurnRequest{}
+	}
 
 	p.turnRequests = append(p.turnRequests, cloneCreateTurnRequest(req))
 	if p.createTurnErr != nil {
 		return nil, p.createTurnErr
 	}
 	now := time.Now().UTC().Truncate(time.Second)
+	metadata := mapFromStruct(req.GetMetadata())
 	turn := &coreagent.Turn{
-		ID:           req.TurnID,
-		SessionID:    req.SessionID,
+		ID:           req.GetTurnId(),
+		SessionID:    req.GetSessionId(),
 		ProviderName: "managed",
-		Model:        req.Model,
+		Model:        req.GetModel(),
 		Status:       coreagent.ExecutionStatusSucceeded,
-		Messages:     append([]coreagent.Message(nil), req.Messages...),
-		CreatedBy:    req.CreatedBy,
+		Messages:     messagesFromProto(req.GetMessages()),
+		CreatedBy:    actorFromProto(req.GetCreatedBy()),
 		CreatedAt:    &now,
 		StartedAt:    &now,
 		CompletedAt:  &now,
-		ExecutionRef: req.ExecutionRef,
+		ExecutionRef: req.GetExecutionRef(),
 		OutputText:   "turn completed",
 	}
 	if p.createTurnHook != nil {
 		p.createTurnHook(turn)
 	}
 	p.turns[turn.ID] = turn
-	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": req.SessionID})
-	if requireInteraction, _ := req.Metadata["requireInteraction"].(bool); requireInteraction {
+	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": req.GetSessionId()})
+	if requireInteraction, _ := metadata["requireInteraction"].(bool); requireInteraction {
 		turn.Status = coreagent.ExecutionStatusWaitingForInput
 		turn.CompletedAt = nil
 		turn.StatusMessage = "waiting for input"
@@ -648,7 +667,7 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.Create
 		}
 		p.appendTurnEventLocked(turn.ID, "interaction.requested", map[string]any{"interaction_id": interactionID})
 	} else {
-		if emitToolEvents, _ := req.Metadata["emitToolEvents"].(bool); emitToolEvents {
+		if emitToolEvents, _ := metadata["emitToolEvents"].(bool); emitToolEvents {
 			startedData := map[string]any{
 				"toolName":   "lookup",
 				"toolCallId": "call-1",
@@ -665,7 +684,7 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.Create
 				},
 			}
 			var failedData map[string]any
-			if nilDisplayAliases, _ := req.Metadata["nilDisplayAliases"].(bool); nilDisplayAliases {
+			if nilDisplayAliases, _ := metadata["nilDisplayAliases"].(bool); nilDisplayAliases {
 				startedData["display_input"] = nil
 				completedData["display_output"] = nil
 				failedData = map[string]any{
@@ -684,85 +703,91 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.Create
 		p.appendTurnEventLocked(turn.ID, "assistant.completed", map[string]any{"text": "turn completed"})
 		p.appendTurnEventLocked(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
 	}
-	if session := p.sessions[req.SessionID]; session != nil {
+	if session := p.sessions[req.GetSessionId()]; session != nil {
 		session.LastTurnAt = &now
 		session.UpdatedAt = &now
 	}
 	return cloneTurn(turn), nil
 }
 
-func (p *memoryAgentProvider) capturedGetSessionRequests() []coreagent.GetSessionRequest {
+func (p *memoryAgentProvider) capturedGetSessionRequests() []*proto.GetAgentProviderSessionRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	return append([]coreagent.GetSessionRequest(nil), p.getSessionRequests...)
+	return append([]*proto.GetAgentProviderSessionRequest(nil), p.getSessionRequests...)
 }
 
-func (p *memoryAgentProvider) capturedTurnRequests() []coreagent.CreateTurnRequest {
+func (p *memoryAgentProvider) capturedTurnRequests() []*proto.CreateAgentProviderTurnRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	out := make([]coreagent.CreateTurnRequest, 0, len(p.turnRequests))
+	out := make([]*proto.CreateAgentProviderTurnRequest, 0, len(p.turnRequests))
 	for _, req := range p.turnRequests {
 		out = append(out, cloneCreateTurnRequest(req))
 	}
 	return out
 }
 
-func (p *memoryAgentProvider) capturedGetTurnRequests() []coreagent.GetTurnRequest {
+func (p *memoryAgentProvider) capturedGetTurnRequests() []*proto.GetAgentProviderTurnRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	return append([]coreagent.GetTurnRequest(nil), p.getTurnRequests...)
+	return append([]*proto.GetAgentProviderTurnRequest(nil), p.getTurnRequests...)
 }
 
-func (p *memoryAgentProvider) capturedListSessionRequests() []coreagent.ListSessionsRequest {
+func (p *memoryAgentProvider) capturedListSessionRequests() []*proto.ListAgentProviderSessionsRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	out := make([]coreagent.ListSessionsRequest, 0, len(p.listSessionRequests))
+	out := make([]*proto.ListAgentProviderSessionsRequest, 0, len(p.listSessionRequests))
 	for _, req := range p.listSessionRequests {
 		out = append(out, cloneListSessionsRequest(req))
 	}
 	return out
 }
 
-func (p *memoryAgentProvider) capturedListTurnRequests() []coreagent.ListTurnsRequest {
+func (p *memoryAgentProvider) capturedListTurnRequests() []*proto.ListAgentProviderTurnsRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	out := make([]coreagent.ListTurnsRequest, 0, len(p.listTurnRequests))
+	out := make([]*proto.ListAgentProviderTurnsRequest, 0, len(p.listTurnRequests))
 	for _, req := range p.listTurnRequests {
 		out = append(out, cloneListTurnsRequest(req))
 	}
 	return out
 }
 
-func (p *memoryAgentProvider) GetTurn(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+func (p *memoryAgentProvider) GetTurn(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if req == nil {
+		req = &proto.GetAgentProviderTurnRequest{}
+	}
 
-	p.getTurnRequests = append(p.getTurnRequests, req)
-	turn, ok := p.turns[req.TurnID]
+	p.getTurnRequests = append(p.getTurnRequests, cloneProto(req).(*proto.GetAgentProviderTurnRequest))
+	turn, ok := p.turns[req.GetTurnId()]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
 	return cloneTurn(turn), nil
 }
 
-func (p *memoryAgentProvider) ListTurns(_ context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+func (p *memoryAgentProvider) ListTurns(_ context.Context, req *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if req == nil {
+		req = &proto.ListAgentProviderTurnsRequest{}
+	}
 
 	out := make([]*coreagent.Turn, 0, len(p.turns))
 	p.listTurnRequests = append(p.listTurnRequests, cloneListTurnsRequest(req))
 	for _, turn := range p.turns {
-		if req.SessionID == "" || turn.SessionID == req.SessionID {
-			if req.Status != "" && turn.Status != req.Status {
+		if req.GetSessionId() == "" || turn.SessionID == req.GetSessionId() {
+			if status := executionStatusFromProto(req.GetStatus()); status != "" && turn.Status != status {
 				continue
 			}
 			out = append(out, cloneTurn(turn))
-			if req.Limit > 0 && len(out) >= req.Limit {
+			if req.GetLimit() > 0 && len(out) >= int(req.GetLimit()) {
 				break
 			}
 		}
@@ -770,78 +795,93 @@ func (p *memoryAgentProvider) ListTurns(_ context.Context, req coreagent.ListTur
 	return out, nil
 }
 
-func (p *memoryAgentProvider) CancelTurn(_ context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
+func (p *memoryAgentProvider) CancelTurn(_ context.Context, req *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if req == nil {
+		req = &proto.CancelAgentProviderTurnRequest{}
+	}
 
-	turn, ok := p.turns[req.TurnID]
+	turn, ok := p.turns[req.GetTurnId()]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	turn.Status = coreagent.ExecutionStatusCanceled
-	turn.StatusMessage = req.Reason
+	turn.StatusMessage = req.GetReason()
 	turn.CompletedAt = &now
-	p.appendTurnEventLocked(turn.ID, "turn.canceled", map[string]any{"reason": req.Reason})
+	p.appendTurnEventLocked(turn.ID, "turn.canceled", map[string]any{"reason": req.GetReason()})
 	return cloneTurn(turn), nil
 }
 
-func (p *memoryAgentProvider) ListTurnEvents(_ context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+func (p *memoryAgentProvider) ListTurnEvents(_ context.Context, req *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if req == nil {
+		req = &proto.ListAgentProviderTurnEventsRequest{}
+	}
 
 	if p.listTurnEventsErr != nil {
 		return nil, p.listTurnEventsErr
 	}
-	events := p.turnEvents[req.TurnID]
+	events := p.turnEvents[req.GetTurnId()]
 	out := make([]*coreagent.TurnEvent, 0, len(events))
 	for _, event := range events {
-		if event.Seq <= req.AfterSeq {
+		if event.Seq <= req.GetAfterSeq() {
 			continue
 		}
 		out = append(out, cloneTurnEvent(event))
-		if req.Limit > 0 && len(out) >= req.Limit {
+		if req.GetLimit() > 0 && len(out) >= int(req.GetLimit()) {
 			break
 		}
 	}
 	return out, nil
 }
 
-func (p *memoryAgentProvider) GetInteraction(_ context.Context, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+func (p *memoryAgentProvider) GetInteraction(_ context.Context, req *proto.GetAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if req == nil {
+		req = &proto.GetAgentProviderInteractionRequest{}
+	}
 
-	interaction, ok := p.interactions[req.InteractionID]
+	interaction, ok := p.interactions[req.GetInteractionId()]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
 	return cloneInteraction(interaction), nil
 }
 
-func (p *memoryAgentProvider) ListInteractions(_ context.Context, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+func (p *memoryAgentProvider) ListInteractions(_ context.Context, req *proto.ListAgentProviderInteractionsRequest) ([]*coreagent.Interaction, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if req == nil {
+		req = &proto.ListAgentProviderInteractionsRequest{}
+	}
 
 	out := make([]*coreagent.Interaction, 0, len(p.interactions))
 	for _, interaction := range p.interactions {
-		if req.TurnID == "" || interaction.TurnID == req.TurnID {
+		if req.GetTurnId() == "" || interaction.TurnID == req.GetTurnId() {
 			out = append(out, cloneInteraction(interaction))
 		}
 	}
 	return out, nil
 }
 
-func (p *memoryAgentProvider) ResolveInteraction(_ context.Context, req coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
+func (p *memoryAgentProvider) ResolveInteraction(_ context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if req == nil {
+		req = &proto.ResolveAgentProviderInteractionRequest{}
+	}
 
-	interaction, ok := p.interactions[req.InteractionID]
+	interaction, ok := p.interactions[req.GetInteractionId()]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	interaction.State = coreagent.InteractionStateResolved
-	interaction.Resolution = cloneMap(req.Resolution)
+	interaction.Resolution = mapFromStruct(req.GetResolution())
 	interaction.ResolvedAt = &now
 	if turn := p.turns[interaction.TurnID]; turn != nil {
 		turn.Status = coreagent.ExecutionStatusSucceeded
@@ -853,7 +893,7 @@ func (p *memoryAgentProvider) ResolveInteraction(_ context.Context, req coreagen
 	return cloneInteraction(interaction), nil
 }
 
-func (p *memoryAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+func (p *memoryAgentProvider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
 	if p.capabilities != nil {
 		caps := *p.capabilities
 		caps.SupportedToolSources = append([]coreagent.ToolSourceMode(nil), p.capabilities.SupportedToolSources...)
@@ -909,26 +949,93 @@ func cloneTurn(src *coreagent.Turn) *coreagent.Turn {
 	return &dst
 }
 
-func cloneCreateTurnRequest(src coreagent.CreateTurnRequest) coreagent.CreateTurnRequest {
-	dst := src
-	dst.Messages = append([]coreagent.Message(nil), src.Messages...)
-	dst.Tools = append([]coreagent.Tool(nil), src.Tools...)
-	dst.ResponseSchema = cloneMap(src.ResponseSchema)
-	dst.Metadata = cloneMap(src.Metadata)
-	dst.ModelOptions = cloneMap(src.ModelOptions)
-	return dst
+func cloneCreateTurnRequest(src *proto.CreateAgentProviderTurnRequest) *proto.CreateAgentProviderTurnRequest {
+	if src == nil {
+		return nil
+	}
+	return cloneProto(src).(*proto.CreateAgentProviderTurnRequest)
 }
 
-func cloneListSessionsRequest(src coreagent.ListSessionsRequest) coreagent.ListSessionsRequest {
-	dst := src
-	dst.SessionIDs = append([]string(nil), src.SessionIDs...)
-	return dst
+func cloneListSessionsRequest(src *proto.ListAgentProviderSessionsRequest) *proto.ListAgentProviderSessionsRequest {
+	if src == nil {
+		return nil
+	}
+	return cloneProto(src).(*proto.ListAgentProviderSessionsRequest)
 }
 
-func cloneListTurnsRequest(src coreagent.ListTurnsRequest) coreagent.ListTurnsRequest {
-	dst := src
-	dst.TurnIDs = append([]string(nil), src.TurnIDs...)
-	return dst
+func cloneListTurnsRequest(src *proto.ListAgentProviderTurnsRequest) *proto.ListAgentProviderTurnsRequest {
+	if src == nil {
+		return nil
+	}
+	return cloneProto(src).(*proto.ListAgentProviderTurnsRequest)
+}
+
+func cloneProto[T gproto.Message](msg T) gproto.Message {
+	return gproto.Clone(msg)
+}
+
+func mapFromStruct(value *structpb.Struct) map[string]any {
+	if value == nil {
+		return nil
+	}
+	return value.AsMap()
+}
+
+func actorFromProto(value *proto.AgentActor) coreagent.Actor {
+	if value == nil {
+		return coreagent.Actor{}
+	}
+	return coreagent.Actor{
+		SubjectID:   value.GetSubjectId(),
+		SubjectKind: value.GetSubjectKind(),
+		DisplayName: value.GetDisplayName(),
+		AuthSource:  value.GetAuthSource(),
+	}
+}
+
+func messagesFromProto(values []*proto.AgentMessage) []coreagent.Message {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]coreagent.Message, 0, len(values))
+	for _, value := range values {
+		out = append(out, coreagent.Message{
+			Role:     value.GetRole(),
+			Text:     value.GetText(),
+			Metadata: mapFromStruct(value.GetMetadata()),
+		})
+	}
+	return out
+}
+
+func sessionStateFromProto(value proto.AgentSessionState) coreagent.SessionState {
+	switch value {
+	case proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE:
+		return coreagent.SessionStateActive
+	case proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED:
+		return coreagent.SessionStateArchived
+	default:
+		return ""
+	}
+}
+
+func executionStatusFromProto(value proto.AgentExecutionStatus) coreagent.ExecutionStatus {
+	switch value {
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING:
+		return coreagent.ExecutionStatusPending
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING:
+		return coreagent.ExecutionStatusRunning
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED:
+		return coreagent.ExecutionStatusSucceeded
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED:
+		return coreagent.ExecutionStatusFailed
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED:
+		return coreagent.ExecutionStatusCanceled
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT:
+		return coreagent.ExecutionStatusWaitingForInput
+	default:
+		return ""
+	}
 }
 
 func cloneTurnEvent(src *coreagent.TurnEvent) *coreagent.TurnEvent {
@@ -1112,13 +1219,13 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if len(turnRequests) != 1 {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
-	if got := turnRequests[0].Tools; len(got) != 0 {
+	if got := turnRequests[0].GetTools(); len(got) != 0 {
 		t.Fatalf("provider turn tools = %#v, want no preloaded tools", got)
 	}
-	if turnRequests[0].ToolSource != coreagent.ToolSourceModeMCPCatalog {
-		t.Fatalf("provider turn tool source = %q, want mcp_catalog", turnRequests[0].ToolSource)
+	if turnRequests[0].GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG {
+		t.Fatalf("provider turn tool source = %q, want mcp_catalog", turnRequests[0].GetToolSource())
 	}
-	if got := turnRequests[0].ToolRefs; len(got) != 1 || got[0].App != "docs" || got[0].Operation != "search" {
+	if got := turnRequests[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != "docs" || got[0].GetOperation() != "search" {
 		t.Fatalf("provider turn tool refs = %#v, want docs.search", got)
 	}
 
@@ -1201,9 +1308,9 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("summary session metadata = %#v, want omitted", summarySessions[0]["metadata"])
 	}
 	listSessionRequests := provider.capturedListSessionRequests()
-	if got := listSessionRequests[len(listSessionRequests)-1]; got.State != coreagent.SessionStateActive || got.Limit != 100 || !got.SummaryOnly {
+	if got := listSessionRequests[len(listSessionRequests)-1]; got.GetState() != proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE || got.GetLimit() != 100 || !got.GetSummaryOnly() {
 		t.Fatalf("provider list sessions request = %#v, want active summary default limit", got)
-	} else if got.Subject.SubjectID == "" {
+	} else if got.GetSubject().GetId() == "" {
 		t.Fatalf("provider list sessions request subject = %#v, want caller subject", got.Subject)
 	}
 
@@ -1235,9 +1342,9 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("summary turn structuredOutput = %#v, want omitted", summaryTurns[0]["structuredOutput"])
 	}
 	listTurnRequests := provider.capturedListTurnRequests()
-	if got := listTurnRequests[len(listTurnRequests)-1]; got.Status != coreagent.ExecutionStatusSucceeded || got.Limit != 1 || !got.SummaryOnly {
+	if got := listTurnRequests[len(listTurnRequests)-1]; got.GetStatus() != proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED || got.GetLimit() != 1 || !got.GetSummaryOnly() {
 		t.Fatalf("provider list turns request = %#v, want succeeded summary limit 1", got)
-	} else if got.Subject.SubjectID == "" {
+	} else if got.GetSubject().GetId() == "" {
 		t.Fatalf("provider list turns request subject = %#v, want caller subject", got.Subject)
 	}
 
@@ -1253,12 +1360,12 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("cancel turn status = %d body=%s", cancelResp.StatusCode, body)
 	}
 	for _, got := range provider.capturedGetSessionRequests() {
-		if got.Subject.SubjectID == "" {
+		if got.GetSubject().GetId() == "" {
 			t.Fatalf("provider get session request subject = %#v, want caller subject", got.Subject)
 		}
 	}
 	for _, got := range provider.capturedGetTurnRequests() {
-		if got.Subject.SubjectID == "" {
+		if got.GetSubject().GetId() == "" {
 			t.Fatalf("provider get turn request subject = %#v, want caller subject", got.Subject)
 		}
 	}
@@ -1529,17 +1636,14 @@ func TestAgentCreateTurnAcceptsNoneToolSourceWithStructuredOutput(t *testing.T) 
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
 	req := turnRequests[0]
-	if req.ToolSource != coreagent.ToolSourceModeNone {
-		t.Fatalf("provider turn tool source = %q, want none", req.ToolSource)
+	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {
+		t.Fatalf("provider turn tool source = %q, want none", req.GetToolSource())
 	}
-	if len(req.ToolRefs) != 0 || len(req.Tools) != 0 {
-		t.Fatalf("provider turn tools = refs:%#v resolved:%#v, want none", req.ToolRefs, req.Tools)
+	if len(req.GetToolRefs()) != 0 || len(req.GetTools()) != 0 {
+		t.Fatalf("provider turn tools = refs:%#v resolved:%#v, want none", req.GetToolRefs(), req.GetTools())
 	}
-	if !req.ResponseSchemaSet {
-		t.Fatal("provider turn response schema presence = false, want true")
-	}
-	if req.ResponseSchema["type"] != "object" {
-		t.Fatalf("provider turn response schema = %#v, want object schema", req.ResponseSchema)
+	if req.GetResponseSchema().AsMap()["type"] != "object" {
+		t.Fatalf("provider turn response schema = %#v, want object schema", req.GetResponseSchema())
 	}
 }
 
@@ -1592,10 +1696,10 @@ func TestAgentTurnOmittedToolsDoNotForceCatalogForUnsupportedProvider(t *testing
 	if len(turnRequests) != 1 {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
-	if got := turnRequests[0].ToolSource; got != coreagent.ToolSourceModeUnspecified {
+	if got := turnRequests[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
 		t.Fatalf("provider turn tool source = %q, want unspecified", got)
 	}
-	if got := turnRequests[0].ToolRefs; len(got) != 0 {
+	if got := turnRequests[0].GetToolRefs(); len(got) != 0 {
 		t.Fatalf("provider turn tool refs = %#v, want none", got)
 	}
 }

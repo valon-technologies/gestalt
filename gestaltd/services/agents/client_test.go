@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -139,16 +138,16 @@ func TestRemoteAgentCreateSessionForwardsSessionStart(t *testing.T) {
 		},
 	}
 
-	_, err := agent.CreateSession(context.Background(), coreagent.CreateSessionRequest{
-		SessionID: "session-1",
-		SessionStart: &coreagent.SessionStartConfig{Hooks: []coreagent.SessionStartHook{{
-			ID:      "setup",
+	_, err := agent.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
+		SessionId: "session-1",
+		SessionStart: &proto.AgentSessionStartConfig{Hooks: []*proto.AgentSessionStartHook{{
+			Id:      "setup",
 			Type:    "command",
 			Command: []string{"bash", "-lc", "printf context"},
-			CWD:     "/tmp",
+			Cwd:     "/tmp",
 			Timeout: "5s",
 			Env:     map[string]string{"FOO": "bar"},
-			Output:  coreagent.SessionStartHookOutput{AdditionalContext: true},
+			Output:  &proto.AgentSessionStartHookOutput{AdditionalContext: true},
 		}}},
 	})
 	if err != nil {
@@ -176,7 +175,7 @@ func TestRemoteAgentCreateSessionPreservesWorkflowDeadline(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), parentDeadline)
 	defer cancel()
 
-	_, err := agent.CreateSession(ctx, coreagent.CreateSessionRequest{SessionID: "session-1"})
+	_, err := agent.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{SessionId: "session-1"})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -225,10 +224,10 @@ func TestRemoteAgentWorkflowAgentTurnCallsPreserveMarkedDeadline(t *testing.T) {
 	defer cancel()
 	ctx := runtimehost.WithWorkflowAgentProviderDeadline(parent)
 
-	if _, err := agent.CreateTurn(ctx, coreagent.CreateTurnRequest{SessionID: "session-1"}); err != nil {
+	if _, err := agent.CreateTurn(ctx, &proto.CreateAgentProviderTurnRequest{SessionId: "session-1"}); err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if _, err := agent.GetTurn(ctx, coreagent.GetTurnRequest{TurnID: "turn-1"}); err != nil {
+	if _, err := agent.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{TurnId: "turn-1"}); err != nil {
 		t.Fatalf("GetTurn: %v", err)
 	}
 	for name, remaining := range map[string]time.Duration{
@@ -282,14 +281,14 @@ func TestRemoteAgentTurnCallsKeepProviderTimeoutWithoutWorkflowMarker(t *testing
 	parent, cancel := context.WithDeadline(context.Background(), parentDeadline)
 	defer cancel()
 
-	if _, err := agent.CreateTurn(parent, coreagent.CreateTurnRequest{SessionID: "session-1"}); err != nil {
+	if _, err := agent.CreateTurn(parent, &proto.CreateAgentProviderTurnRequest{SessionId: "session-1"}); err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if _, err := agent.GetTurn(parent, coreagent.GetTurnRequest{TurnID: "turn-1"}); err != nil {
+	if _, err := agent.GetTurn(parent, &proto.GetAgentProviderTurnRequest{TurnId: "turn-1"}); err != nil {
 		t.Fatalf("GetTurn: %v", err)
 	}
 	marked := runtimehost.WithWorkflowAgentProviderDeadline(parent)
-	if _, err := agent.GetSession(marked, coreagent.GetSessionRequest{SessionID: "session-1"}); err != nil {
+	if _, err := agent.GetSession(marked, &proto.GetAgentProviderSessionRequest{SessionId: "session-1"}); err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
 	for name, remaining := range map[string]time.Duration{
@@ -336,7 +335,7 @@ func TestRemoteAgentListTurnEventsPreservesDisplay(t *testing.T) {
 		},
 	}
 
-	events, err := agent.ListTurnEvents(context.Background(), coreagent.ListTurnEventsRequest{TurnID: "turn-1"})
+	events, err := agent.ListTurnEvents(context.Background(), &proto.ListAgentProviderTurnEventsRequest{TurnId: "turn-1"})
 	if err != nil {
 		t.Fatalf("ListTurnEvents: %v", err)
 	}
@@ -382,10 +381,10 @@ func TestRemoteAgentListSessionsForwardsBoundedSummaryRequest(t *testing.T) {
 		},
 	}
 
-	sessions, err := agent.ListSessions(context.Background(), coreagent.ListSessionsRequest{
-		Subject:     core.RunAsSubject{SubjectID: "user-1"},
-		SessionIDs:  []string{"session-a", "session-b"},
-		State:       coreagent.SessionStateActive,
+	sessions, err := agent.ListSessions(context.Background(), &proto.ListAgentProviderSessionsRequest{
+		Subject:     &proto.SubjectContext{Id: "user-1"},
+		SessionIds:  []string{"session-a", "session-b"},
+		State:       proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
 		Limit:       25,
 		SummaryOnly: true,
 	})
@@ -430,11 +429,11 @@ func TestRemoteAgentListTurnsForwardsBoundedSummaryRequest(t *testing.T) {
 		},
 	}
 
-	turns, err := agent.ListTurns(context.Background(), coreagent.ListTurnsRequest{
-		SessionID:   "session-1",
-		Subject:     core.RunAsSubject{SubjectID: "user-1"},
-		TurnIDs:     []string{"turn-1"},
-		Status:      coreagent.ExecutionStatusSucceeded,
+	turns, err := agent.ListTurns(context.Background(), &proto.ListAgentProviderTurnsRequest{
+		SessionId:   "session-1",
+		Subject:     &proto.SubjectContext{Id: "user-1"},
+		TurnIds:     []string{"turn-1"},
+		Status:      proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED,
 		Limit:       10,
 		SummaryOnly: true,
 	})

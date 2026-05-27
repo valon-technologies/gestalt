@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -1601,13 +1602,13 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 		defaultProviderName: "managed",
 		providers: map[string]coreagent.Provider{
 			"managed": &routingAgentProvider{
-				getTurn: func(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+				getTurn: func(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 					return &coreagent.Turn{
-						ID:        req.TurnID,
+						ID:        req.GetTurnId(),
 						SessionID: "session-1",
 						Status:    coreagent.ExecutionStatusRunning,
 						CreatedBy: coreagent.Actor{
-							SubjectID: req.Subject.SubjectID,
+							SubjectID: req.GetSubject().GetId(),
 						},
 					}, nil
 				},

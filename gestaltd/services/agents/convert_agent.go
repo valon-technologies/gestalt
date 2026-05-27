@@ -3,7 +3,6 @@ package agents
 import (
 	"fmt"
 	"log/slog"
-	"maps"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
@@ -78,65 +77,6 @@ func subjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
 	}
 }
 
-func agentWorkspaceFromProto(workspace *proto.AgentWorkspace) *coreagent.Workspace {
-	if workspace == nil {
-		return nil
-	}
-	out := &coreagent.Workspace{
-		Checkouts: make([]coreagent.WorkspaceGitCheckout, 0, len(workspace.GetCheckouts())),
-		CWD:       workspace.GetCwd(),
-	}
-	for _, checkout := range workspace.GetCheckouts() {
-		if checkout == nil {
-			continue
-		}
-		out.Checkouts = append(out.Checkouts, coreagent.WorkspaceGitCheckout{
-			URL:  checkout.GetUrl(),
-			Ref:  checkout.GetRef(),
-			Path: checkout.GetPath(),
-		})
-	}
-	return out
-}
-
-func preparedAgentWorkspaceToProto(workspace *coreagent.PreparedWorkspace) *proto.PreparedAgentWorkspace {
-	if workspace == nil {
-		return nil
-	}
-	return &proto.PreparedAgentWorkspace{
-		Root: workspace.Root,
-		Cwd:  workspace.CWD,
-	}
-}
-
-func agentToolToProto(tool coreagent.Tool) (*proto.ResolvedAgentTool, error) {
-	schema, err := structFromMap(tool.ParametersSchema)
-	if err != nil {
-		return nil, fmt.Errorf("agent tool parameters schema: %w", err)
-	}
-	return &proto.ResolvedAgentTool{
-		Id:               tool.ID,
-		Name:             tool.Name,
-		Description:      tool.Description,
-		ParametersSchema: schema,
-	}, nil
-}
-
-func agentToolsToProto(tools []coreagent.Tool) ([]*proto.ResolvedAgentTool, error) {
-	if len(tools) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.ResolvedAgentTool, 0, len(tools))
-	for i := range tools {
-		value, err := agentToolToProto(tools[i])
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, value)
-	}
-	return out, nil
-}
-
 func listedAgentToolToProto(tool coreagent.ListedTool) *proto.ListedAgentTool {
 	return &proto.ListedAgentTool{
 		Id:           tool.ToolID,
@@ -167,33 +107,8 @@ func agentToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
 	return agentwire.ToolRefToProto(ref)
 }
 
-func agentToolRefsFromProto(refs []*proto.AgentToolRef) []coreagent.ToolRef {
-	return agentwire.ToolRefsFromProto(refs)
-}
-
-func agentToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
-	return agentwire.ToolRefsToProto(refs)
-}
-
 func agentToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {
 	return agentwire.ToolSourceModeFromProto(mode)
-}
-
-func agentToolSourceModeFromProtoStrict(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {
-	switch mode {
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED:
-		return coreagent.ToolSourceModeUnspecified
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG:
-		return coreagent.ToolSourceModeMCPCatalog
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE:
-		return coreagent.ToolSourceModeNone
-	default:
-		return coreagent.ToolSourceMode(fmt.Sprintf("unknown:%d", mode))
-	}
-}
-
-func agentToolSourceModeToProto(mode coreagent.ToolSourceMode) proto.AgentToolSourceMode {
-	return agentwire.ToolSourceModeToProto(mode)
 }
 
 func agentToolSourceModesFromProto(modes []proto.AgentToolSourceMode) []coreagent.ToolSourceMode {
@@ -499,31 +414,6 @@ func agentProviderCapabilitiesFromProto(value *proto.AgentProviderCapabilities) 
 		BoundedListHydration:      value.GetBoundedListHydration(),
 		SupportedToolSources:      agentToolSourceModesFromProto(value.GetSupportedToolSources()),
 	}
-}
-
-func sessionStartConfigToProto(value *coreagent.SessionStartConfig) *proto.AgentSessionStartConfig {
-	if value == nil || len(value.Hooks) == 0 {
-		return nil
-	}
-	out := &proto.AgentSessionStartConfig{
-		Hooks: make([]*proto.AgentSessionStartHook, 0, len(value.Hooks)),
-	}
-	for i := range value.Hooks {
-		hook := value.Hooks[i]
-		out.Hooks = append(out.Hooks, &proto.AgentSessionStartHook{
-			Id:      hook.ID,
-			Type:    hook.Type,
-			Command: append([]string(nil), hook.Command...),
-			Cwd:     hook.CWD,
-			Timeout: hook.Timeout,
-			Env:     maps.Clone(hook.Env),
-			Output: &proto.AgentSessionStartHookOutput{
-				AdditionalContext: hook.Output.AdditionalContext,
-				Metadata:          hook.Output.Metadata,
-			},
-		})
-	}
-	return out
 }
 
 func agentInteractionTypeFromProto(value proto.AgentInteractionType) (coreagent.InteractionType, error) {
