@@ -6331,8 +6331,6 @@ func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t 
 		Cache: []string{"main"},
 		S3:    []string{"main"},
 	}
-	var cacheFactoryCalls atomic.Int64
-	cacheFactoryCalls.Add(1)
 	manager, err := buildProviderDevManager(&config.Config{
 		Apps: map[string]*config.ProviderEntry{"echoext": entry},
 	}, &providers.Providers, Deps{
@@ -6366,9 +6364,6 @@ func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t 
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
-	}
-	if calls := cacheFactoryCalls.Load(); calls != 1 {
-		t.Fatalf("cache factory calls after CreateSession = %d, want startup-only open", calls)
 	}
 	for _, service := range publicHostServices.Snapshot() {
 		if strings.TrimSpace(service.Service.Name) != "s3" {

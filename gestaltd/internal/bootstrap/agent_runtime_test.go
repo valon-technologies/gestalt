@@ -974,7 +974,7 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	buildCtx := context.WithValue(context.Background(), agentRuntimeFactoryContextKey{}, ctxSentinel)
-	agents, err := buildAgents(buildCtx, cfg, factories, deps)
+	agents, _, err := buildAgents(buildCtx, cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1059,7 +1059,7 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 		AgentRuntime:  agentRuntime,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1199,7 +1199,7 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 		AgentRuntime:  agentRuntime,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1306,7 +1306,7 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1397,7 +1397,7 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1507,7 +1507,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1617,7 +1617,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1695,7 +1695,7 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1766,7 +1766,7 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -2139,7 +2139,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -3427,7 +3427,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -3667,7 +3667,7 @@ func TestAgentRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
-	_, err := buildAgents(context.Background(), cfg, factories, deps)
+	_, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err == nil {
 		t.Fatal("buildAgents error = nil, want host service access failure")
 	}

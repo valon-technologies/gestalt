@@ -1371,26 +1371,28 @@ func waitRuntimeWorkflowProviderReady(ctx context.Context, runtime *workflowRunt
 }
 
 type configuredProviderBuilds[T any] struct {
-	providers []T
-	err       error
+	providers      []T
+	publishedNames []string
+	err            error
 }
 
 func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, []coreagent.Provider, error) {
 	workflowCh := make(chan configuredProviderBuilds[coreworkflow.Provider], 1)
 	agentCh := make(chan configuredProviderBuilds[coreagent.Provider], 1)
 	go func() {
-		providers, err := buildWorkflows(ctx, cfg, factories, deps)
-		workflowCh <- configuredProviderBuilds[coreworkflow.Provider]{providers: providers, err: err}
+		providers, publishedNames, err := buildWorkflows(ctx, cfg, factories, deps)
+		workflowCh <- configuredProviderBuilds[coreworkflow.Provider]{providers: providers, publishedNames: publishedNames, err: err}
 	}()
 	go func() {
-		providers, err := buildAgents(ctx, cfg, factories, deps)
-		agentCh <- configuredProviderBuilds[coreagent.Provider]{providers: providers, err: err}
+		providers, publishedNames, err := buildAgents(ctx, cfg, factories, deps)
+		agentCh <- configuredProviderBuilds[coreagent.Provider]{providers: providers, publishedNames: publishedNames, err: err}
 	}()
 
 	workflowResult := <-workflowCh
 	agentResult := <-agentCh
 	if err := errors.Join(workflowResult.err, agentResult.err); err != nil {
-		failConfiguredStartupProviders(cfg, deps, err)
+		failPublishedWorkflowProviders(deps, workflowResult.publishedNames, err)
+		failPublishedAgentProviders(deps, agentResult.publishedNames, err)
 		_ = closeWorkflows(workflowResult.providers...)
 		_ = closeAgents(agentResult.providers...)
 		return nil, nil, err
@@ -1407,22 +1409,20 @@ func failPendingStartupProviders(deps Deps, err error) {
 	}
 }
 
-func failConfiguredStartupProviders(cfg *config.Config, deps Deps, err error) {
+func failPublishedWorkflowProviders(deps Deps, names []string, err error) {
 	if deps.WorkflowRuntime != nil {
-		for name, entry := range cfg.Providers.Workflow {
-			if entry != nil {
-				deps.WorkflowRuntime.FailProvider(name, err)
-			}
+		for _, name := range names {
+			deps.WorkflowRuntime.FailProvider(name, err)
 		}
 	}
+}
+
+func failPublishedAgentProviders(deps Deps, names []string, err error) {
 	if deps.AgentRuntime != nil {
-		for name, entry := range cfg.Providers.Agent {
-			if entry != nil {
-				deps.AgentRuntime.FailProvider(name, err)
-			}
+		for _, name := range names {
+			deps.AgentRuntime.FailProvider(name, err)
 		}
 	}
-	failPendingStartupProviders(deps, err)
 }
 
 func buildConfiguredProviders[T any](
@@ -1434,7 +1434,7 @@ func buildConfiguredProviders[T any](
 	failPending func(error),
 	closeProviders func(...T) error,
 	wrapErr func(string, error) error,
-) ([]T, error) {
+) ([]T, []string, error) {
 	var pending []struct {
 		name  string
 		entry *config.ProviderEntry
@@ -1449,7 +1449,7 @@ func buildConfiguredProviders[T any](
 		}{name: name, entry: entry})
 	}
 	if len(pending) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	type buildResult struct {
 		name     string
@@ -1506,12 +1506,12 @@ func buildConfiguredProviders[T any](
 		if closeProviders != nil {
 			_ = closeProviders(providers...)
 		}
-		return nil, err
+		return nil, nil, err
 	}
-	return providers, nil
+	return providers, published, nil
 }
 
-func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, error) {
+func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, []string, error) {
 	return buildConfiguredProviders(ctx, cfg.Providers.Workflow,
 		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreworkflow.Provider, error) {
 			return buildWorkflow(ctx, name, entry, factories, deps)
@@ -1538,7 +1538,7 @@ func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryR
 	)
 }
 
-func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreagent.Provider, error) {
+func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreagent.Provider, []string, error) {
 	return buildConfiguredProviders(ctx, cfg.Providers.Agent,
 		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreagent.Provider, error) {
 			return buildAgent(ctx, name, entry, factories, deps)

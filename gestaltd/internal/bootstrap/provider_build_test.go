@@ -185,7 +185,7 @@ func TestBuildConfiguredProvidersUnpublishesSuccessesOnPartialFailure(t *testing
 	closed := &atomic.Bool{}
 	runtime := &agentRuntime{providers: map[string]coreagent.Provider{}}
 	boom := errors.New("boom")
-	providers, err := buildConfiguredProviders(context.Background(), map[string]*config.ProviderEntry{
+	providers, _, err := buildConfiguredProviders(context.Background(), map[string]*config.ProviderEntry{
 		"ok":  {Source: config.ProviderSource{Path: "stub"}},
 		"bad": {Source: config.ProviderSource{Path: "stub"}},
 	}, func(_ context.Context, name string, _ *config.ProviderEntry) (coreagent.Provider, error) {
@@ -219,7 +219,7 @@ func TestBuildConfiguredProvidersDoesNotPublishSuccessAfterFailure(t *testing.T)
 	var published atomic.Int32
 	boom := errors.New("boom")
 	failProcessed := make(chan struct{})
-	providers, err := buildConfiguredProviders(context.Background(), map[string]*config.ProviderEntry{
+	providers, _, err := buildConfiguredProviders(context.Background(), map[string]*config.ProviderEntry{
 		"ok":  {Source: config.ProviderSource{Path: "stub"}},
 		"bad": {Source: config.ProviderSource{Path: "stub"}},
 	}, func(_ context.Context, name string, _ *config.ProviderEntry) (coreagent.Provider, error) {
@@ -265,7 +265,7 @@ func TestBuildConfiguredProvidersLeavesLateSuccessUnpublishedAfterFailure(t *tes
 	var failed []string
 	var closed atomic.Int32
 
-	providers, err := buildConfiguredProviders(context.Background(), map[string]*config.ProviderEntry{
+	providers, _, err := buildConfiguredProviders(context.Background(), map[string]*config.ProviderEntry{
 		"first": {Source: config.ProviderSource{Path: "stub"}},
 		"bad":   {Source: config.ProviderSource{Path: "stub"}},
 		"late":  {Source: config.ProviderSource{Path: "stub"}},
