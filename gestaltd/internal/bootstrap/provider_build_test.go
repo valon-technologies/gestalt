@@ -271,6 +271,48 @@ func TestAgentRuntimeSkipsConfiguredProviderPublishAfterFailure(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeFailProviderTrimsConfiguredProviderName(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := newAgentRuntime(&config.Config{
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				" managed ": {},
+			},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("newAgentRuntime: %v", err)
+	}
+	runtime.FailProvider(" managed ", errors.New("boom"))
+	runtime.PublishProvider("managed", providerBuildOrderingAgentProvider{})
+	if _, err := runtime.ResolveProvider("managed"); err == nil {
+		t.Fatal("configured provider was published after trimmed-name failure")
+	}
+}
+
+func TestWorkflowRuntimeFailProviderTrimsConfiguredProviderName(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Providers: config.ProvidersConfig{
+			Workflow: map[string]*config.ProviderEntry{
+				" temporal ": {},
+			},
+		},
+	}
+	runtime, err := newWorkflowRuntime(cfg)
+	if err != nil {
+		t.Fatalf("newWorkflowRuntime: %v", err)
+	}
+	runtime.InitProviderPlaceholders(cfg.Providers.Workflow)
+	runtime.FailProvider(" temporal ", errors.New("boom"))
+	runtime.PublishProvider("temporal", startupTestWorkflowProvider{})
+	if _, err := runtime.ResolveProvider("temporal"); err == nil {
+		t.Fatal("configured provider was published after trimmed-name failure")
+	}
+}
+
 func TestApplyProviderPaginationUsesExposedAlias(t *testing.T) {
 	t.Parallel()
 

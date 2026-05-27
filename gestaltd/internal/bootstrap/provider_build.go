@@ -370,7 +370,6 @@ func explicitPluginConnection(plan config.StaticConnectionPlan) bool {
 }
 
 func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (*ProviderBuildResult, error) {
-	ctx = invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, name)
 	if entry == nil {
 		return nil, fmt.Errorf("integration %q has no app defined", name)
 	}

@@ -76,7 +76,8 @@ func (r *workflowRuntime) PublishProvider(name string, provider coreworkflow.Pro
 }
 
 func (r *workflowRuntime) FailProvider(name string, err error) {
-	if r == nil || strings.TrimSpace(name) == "" {
+	name = strings.TrimSpace(name)
+	if r == nil || name == "" {
 		return
 	}
 	r.mu.Lock()
