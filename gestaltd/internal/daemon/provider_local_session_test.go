@@ -110,3 +110,43 @@ func TestPrepareProviderLocalSessionAutoMountsSiblingUI(t *testing.T) {
 		t.Fatalf("sibling UI source path = %q, want %q", got, wantManifestPath)
 	}
 }
+
+func TestPrepareProviderLocalSessionLeavesAppWithoutUIUnmounted(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	appDir := setupAppDir(t, dir)
+	setAppManifestSource(t, appDir, "github.com/test/apps/api-only")
+	appManifest := componentProviderManifestPath(t, appDir)
+
+	session, err := prepareProviderLocalSession(providerLocalCommandOptions{Path: appManifest})
+	if err != nil {
+		t.Fatalf("prepareProviderLocalSession: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(session.Dir) })
+
+	if got := session.AutoMountedUIPath; got != "" {
+		t.Fatalf("session.AutoMountedUIPath = %q, want empty", got)
+	}
+	if len(session.PublicUIPaths) != 0 {
+		t.Fatalf("session.PublicUIPaths = %v, want empty", session.PublicUIPaths)
+	}
+
+	cfg, err := config.LoadPaths(session.ConfigPaths)
+	if err != nil {
+		t.Fatalf("LoadPaths(session.ConfigPaths): %v", err)
+	}
+	app := cfg.Apps[session.TargetKey]
+	if app == nil {
+		t.Fatalf("Apps[%q] = nil", session.TargetKey)
+	}
+	if got := app.UI; got != "" {
+		t.Fatalf("App UI = %q, want empty", got)
+	}
+	if got := app.MountPath; got != "" {
+		t.Fatalf("App mount path = %q, want empty", got)
+	}
+	if ui := cfg.Providers.UI[session.TargetKey]; ui != nil {
+		t.Fatalf("Providers.UI[%q] = %#v, want nil", session.TargetKey, ui)
+	}
+}
