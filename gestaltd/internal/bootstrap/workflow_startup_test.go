@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -169,6 +170,28 @@ func TestStartupWorkflowProviderProxyPingReportsPendingProviderUnavailable(t *te
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("Ping blocked on pending startup workflow provider")
+	}
+}
+
+func TestWorkflowRuntimeSkipsConfiguredProviderPublishAfterFailure(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Providers: config.ProvidersConfig{
+			Workflow: map[string]*config.ProviderEntry{
+				"temporal": {},
+			},
+		},
+	}
+	runtime, err := newWorkflowRuntime(cfg)
+	if err != nil {
+		t.Fatalf("newWorkflowRuntime: %v", err)
+	}
+	runtime.InitProviderPlaceholders(cfg.Providers.Workflow)
+	runtime.FailPendingProviders(errors.New("boom"))
+	runtime.PublishProvider("temporal", startupTestWorkflowProvider{})
+	if _, err := runtime.ResolveProvider("temporal"); err == nil {
+		t.Fatal("configured provider was published after startup failure")
 	}
 }
 

@@ -210,6 +210,67 @@ func TestBuildConfiguredProvidersUnpublishesSuccessesOnPartialFailure(t *testing
 	}
 }
 
+func TestBuildConfiguredProvidersDoesNotPublishSuccessAfterFailure(t *testing.T) {
+	t.Parallel()
+
+	closed := &atomic.Bool{}
+	var published atomic.Int32
+	boom := errors.New("boom")
+	failProcessed := make(chan struct{})
+	providers, err := buildConfiguredProviders(context.Background(), map[string]*config.ProviderEntry{
+		"ok":  {Source: config.ProviderSource{Path: "stub"}},
+		"bad": {Source: config.ProviderSource{Path: "stub"}},
+	}, func(_ context.Context, name string, _ *config.ProviderEntry) (coreagent.Provider, error) {
+		if name == "bad" {
+			return nil, boom
+		}
+		select {
+		case <-failProcessed:
+		case <-time.After(2 * time.Second):
+			return nil, fmt.Errorf("timed out waiting for failure handling")
+		}
+		return closeRecordingAgentProvider{closed: closed}, nil
+	}, func(string, coreagent.Provider) {
+		published.Add(1)
+	}, func(string, error) {}, func(error) {
+		close(failProcessed)
+	}, closeAgents, func(name string, err error) error {
+		return fmt.Errorf("bootstrap: agent from resource %q: %w", name, err)
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("buildConfiguredProviders err = %v, want boom", err)
+	}
+	if len(providers) != 0 {
+		t.Fatalf("providers = %d, want none on partial failure", len(providers))
+	}
+	if got := published.Load(); got != 0 {
+		t.Fatalf("published providers after failure = %d, want 0", got)
+	}
+	if !closed.Load() {
+		t.Fatal("successful provider was not closed after partial failure")
+	}
+}
+
+func TestAgentRuntimeSkipsConfiguredProviderPublishAfterFailure(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := newAgentRuntime(&config.Config{
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"managed": {},
+			},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("newAgentRuntime: %v", err)
+	}
+	runtime.FailPendingProviders(errors.New("boom"))
+	runtime.PublishProvider("managed", providerBuildOrderingAgentProvider{})
+	if _, err := runtime.ResolveProvider("managed"); err == nil {
+		t.Fatal("configured provider was published after startup failure")
+	}
+}
+
 func TestApplyProviderPaginationUsesExposedAlias(t *testing.T) {
 	t.Parallel()
 

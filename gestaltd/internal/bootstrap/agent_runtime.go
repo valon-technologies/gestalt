@@ -123,15 +123,20 @@ func agentSessionStartConfigs(cfg *config.Config) map[string]*coreagent.SessionS
 }
 
 func (r *agentRuntime) PublishProvider(name string, provider coreagent.Provider) {
-	if r == nil || provider == nil || strings.TrimSpace(name) == "" {
+	name = strings.TrimSpace(name)
+	if r == nil || provider == nil || name == "" {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	existing, exists := r.providers[name]
+	if _, configured := r.configuredProviders[name]; configured && !exists {
+		return
+	}
 	if r.providers == nil {
 		r.providers = map[string]coreagent.Provider{}
 	}
-	if proxy, ok := r.providers[name].(*startupAgentProviderProxy); ok {
+	if proxy, ok := existing.(*startupAgentProviderProxy); ok {
 		proxy.publish(provider)
 	}
 	r.providers[name] = provider

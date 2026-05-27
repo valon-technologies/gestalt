@@ -13,14 +13,16 @@ import (
 type workflowRuntime struct {
 	mu                  sync.RWMutex
 	defaultProviderName string
+	configuredProviders map[string]struct{}
 	providers           map[string]coreworkflow.Provider
 	startupWaits        *startupWaitTracker
 }
 
 func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 	runtime := &workflowRuntime{
-		providers:    map[string]coreworkflow.Provider{},
-		startupWaits: newStartupWaitTracker(),
+		configuredProviders: map[string]struct{}{},
+		providers:           map[string]coreworkflow.Provider{},
+		startupWaits:        newStartupWaitTracker(),
 	}
 	if cfg != nil {
 		selectedProviderName, _, err := cfg.SelectedWorkflowProvider()
@@ -45,6 +47,10 @@ func (r *workflowRuntime) InitProviderPlaceholders(defs map[string]*config.Provi
 		if name == "" || entry == nil {
 			continue
 		}
+		if r.configuredProviders == nil {
+			r.configuredProviders = map[string]struct{}{}
+		}
+		r.configuredProviders[name] = struct{}{}
 		if _, exists := r.providers[name]; exists {
 			continue
 		}
@@ -53,12 +59,17 @@ func (r *workflowRuntime) InitProviderPlaceholders(defs map[string]*config.Provi
 }
 
 func (r *workflowRuntime) PublishProvider(name string, provider coreworkflow.Provider) {
-	if r == nil || strings.TrimSpace(name) == "" || provider == nil {
+	name = strings.TrimSpace(name)
+	if r == nil || name == "" || provider == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if proxy, ok := r.providers[name].(*startupWorkflowProviderProxy); ok {
+	existing, exists := r.providers[name]
+	if _, configured := r.configuredProviders[name]; configured && !exists {
+		return
+	}
+	if proxy, ok := existing.(*startupWorkflowProviderProxy); ok {
 		proxy.publish(provider)
 	}
 	r.providers[name] = provider

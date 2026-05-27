@@ -1467,14 +1467,24 @@ func buildConfiguredProviders[T any](
 	var providers []T
 	var published []string
 	var errs []error
+	buildFailed := false
 	for range pending {
 		result := <-results
 		if result.err != nil {
 			if failProvider != nil {
 				failProvider(result.name, result.err)
 			}
-			if failPending != nil {
-				failPending(result.err)
+			if !buildFailed {
+				buildFailed = true
+				if failPending != nil {
+					failPending(result.err)
+				}
+				if failProvider != nil {
+					for _, name := range published {
+						failProvider(name, result.err)
+					}
+				}
+				published = nil
 			}
 			if wrapErr != nil {
 				errs = append(errs, wrapErr(result.name, result.err))
@@ -1483,11 +1493,14 @@ func buildConfiguredProviders[T any](
 			}
 			continue
 		}
+		providers = append(providers, result.provider)
+		if buildFailed {
+			continue
+		}
 		if publish != nil {
 			publish(result.name, result.provider)
 		}
 		published = append(published, result.name)
-		providers = append(providers, result.provider)
 	}
 	if len(errs) > 0 {
 		err := errors.Join(errs...)
