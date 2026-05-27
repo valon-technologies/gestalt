@@ -175,7 +175,11 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 			}
 			return nil, fmt.Errorf("listen on host socket: %w", err)
 		}
-		srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.ProviderName, unifiedHostService(), cfg.Telemetry)...)))
+		srv := grpc.NewServer(
+			grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.ProviderName, unifiedHostService(), cfg.Telemetry)...)),
+			grpc.UnaryInterceptor(telemetryUnaryServerInterceptor(cfg.Telemetry)),
+			grpc.StreamInterceptor(telemetryStreamServerInterceptor(cfg.Telemetry)),
+		)
 		for _, hostService := range activeHostServices {
 			hostService.Register(srv)
 		}

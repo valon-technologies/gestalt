@@ -712,8 +712,9 @@ func TestRun_ProviderPackageAndReleaseBuildsGoSourceExternalCredentialsPlugin(t 
 	}
 }
 
-//nolint:paralleltest // Uses t.Setenv in table-driven subtests, which cannot run under parallel ancestors.
 func TestRun_ProviderPackageAndReleaseBuildsExecutableAuthProviders(t *testing.T) {
+	t.Parallel()
+
 	goAuthFixture := func(t *testing.T) sourceComponentReleaseFixtureParams {
 		t.Helper()
 		return sourceComponentReleaseFixtureParams{
@@ -760,10 +761,11 @@ func TestRun_ProviderPackageAndReleaseBuildsExecutableAuthProviders(t *testing.T
 		},
 	}
 
-	//nolint:paralleltest // The subtests share process-wide env mutation through t.Setenv in selected cases.
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			if runtime.GOOS == "windows" && tc.skipOnWindowsReason != "" {
 				t.Skip(tc.skipOnWindowsReason)
 			}

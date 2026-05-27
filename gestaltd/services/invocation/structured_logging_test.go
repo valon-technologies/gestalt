@@ -15,18 +15,16 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"go.opentelemetry.io/otel"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) { //nolint:paralleltest // mutates slog.Default
+func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) {
+	t.Parallel()
 
 	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	logger := testLogger(&buf)
 
 	prov := &stubProviderWithOps{
 		StubIntegration: coretesting.StubIntegration{
@@ -53,7 +51,7 @@ func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) { //nolint:para
 		t.Fatalf("PutCredential: %v", err)
 	}
 
-	broker := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), svc.Users, svc.ExternalCredentials)
+	broker := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), svc.Users, svc.ExternalCredentials, invocation.WithLogger(logger))
 	p := &principal.Principal{
 		Identity: &core.UserIdentity{Email: "test@example.com"},
 	}
@@ -97,7 +95,9 @@ func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) { //nolint:para
 	}
 }
 
-func TestBrokerPlugin5xxResultObservability(t *testing.T) { //nolint:paralleltest // mutates slog.Default and the global tracer provider
+func TestBrokerPlugin5xxResultObservability(t *testing.T) {
+	t.Parallel()
+
 	longBody := `{"error":"` + strings.Repeat("x", 5000) + `"}`
 	tests := []struct {
 		name          string
@@ -126,11 +126,13 @@ func TestBrokerPlugin5xxResultObservability(t *testing.T) { //nolint:paralleltes
 		},
 	}
 
-	for _, tt := range tests { //nolint:paralleltest // subtests mutate slog.Default and the global tracer provider
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			var buf bytes.Buffer
-			installTestLogger(t, &buf)
-			exporter := installTestTracerProvider(t)
+			logger := testLogger(&buf)
+			exporter, tp := testTracerProvider(t)
 			prov := &coretesting.StubIntegration{
 				N:        "slack",
 				ConnMode: core.ConnectionModeNone,
@@ -148,7 +150,10 @@ func TestBrokerPlugin5xxResultObservability(t *testing.T) { //nolint:paralleltes
 			}
 
 			svc := testutil.NewStubServices(t)
-			broker := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), svc.Users, svc.ExternalCredentials)
+			broker := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), svc.Users, svc.ExternalCredentials,
+				invocation.WithLogger(logger),
+				invocation.WithTracerProvider(tp),
+			)
 			result, err := broker.Invoke(
 				tt.ctx,
 				&principal.Principal{SubjectID: "service_account:workflow-config"},
@@ -213,24 +218,18 @@ func TestBrokerPlugin5xxResultObservability(t *testing.T) { //nolint:paralleltes
 	}
 }
 
-func installTestLogger(t *testing.T, buf *bytes.Buffer) {
-	t.Helper()
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+func testLogger(buf *bytes.Buffer) *slog.Logger {
+	return slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
-func installTestTracerProvider(t *testing.T) *tracetest.InMemoryExporter {
+func testTracerProvider(t *testing.T) (*tracetest.InMemoryExporter, *sdktrace.TracerProvider) {
 	t.Helper()
 	exporter := tracetest.NewInMemoryExporter()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-	prev := otel.GetTracerProvider()
-	otel.SetTracerProvider(tp)
 	t.Cleanup(func() {
-		otel.SetTracerProvider(prev)
 		_ = tp.Shutdown(context.Background())
 	})
-	return exporter
+	return exporter, tp
 }
 
 func findStructuredLogRecord(t *testing.T, output, msg string) (map[string]any, bool) {

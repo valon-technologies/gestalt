@@ -204,8 +204,7 @@ type capturingRuntime struct {
 	mu                  sync.Mutex
 	startRequests       []runtimeprovider.StartSessionRequest
 	startAppRequests    []runtimeprovider.StartAppRequest
-	startTimes          []time.Time
-	getSessionRequests  chan runtimeprovider.GetSessionRequest
+	startSessionCh      chan runtimeprovider.StartSessionRequest
 	sessionLifecycles   map[string]*runtimeprovider.SessionLifecycle
 	lifecycleForSession func(index int) *runtimeprovider.SessionLifecycle
 	startErrForSession  func(index int) error
@@ -216,24 +215,29 @@ func newCapturingRuntime() *capturingRuntime {
 	return &capturingRuntime{provider: runtimeprovider.NewLocalProvider()}
 }
 
+func (r *capturingRuntime) captureStartSessionRequests(buffer int) <-chan runtimeprovider.StartSessionRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.startSessionCh = make(chan runtimeprovider.StartSessionRequest, buffer)
+	return r.startSessionCh
+}
+
 func (r *capturingRuntime) Support(ctx context.Context) (runtimeprovider.Support, error) {
 	return r.provider.Support(ctx)
 }
 
 func (r *capturingRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
+	recorded := cloneRuntimeStartSessionRequest(req)
 	r.mu.Lock()
-	r.startRequests = append(r.startRequests, runtimeprovider.StartSessionRequest{
-		AppName:       req.AppName,
-		Template:      req.Template,
-		Image:         req.Image,
-		ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
-		Metadata:      cloneRuntimeMetadata(req.Metadata),
-	})
-	r.startTimes = append(r.startTimes, time.Now().UTC())
+	r.startRequests = append(r.startRequests, recorded)
 	index := len(r.startRequests)
+	startSessionCh := r.startSessionCh
 	lifecycleForSession := r.lifecycleForSession
 	startErrForSession := r.startErrForSession
 	r.mu.Unlock()
+	if startSessionCh != nil {
+		startSessionCh <- recorded
+	}
 	if startErrForSession != nil {
 		if err := startErrForSession(index); err != nil {
 			return nil, err
@@ -272,12 +276,6 @@ func (r *capturingRuntime) GetSession(ctx context.Context, req runtimeprovider.G
 		return nil, err
 	}
 	r.attachSessionLifecycle(session)
-	if r.getSessionRequests != nil {
-		select {
-		case r.getSessionRequests <- req:
-		default:
-		}
-	}
 	return session, nil
 }
 
@@ -310,15 +308,19 @@ func (r *capturingRuntime) startSessionRequests() []runtimeprovider.StartSession
 	defer r.mu.Unlock()
 	out := make([]runtimeprovider.StartSessionRequest, len(r.startRequests))
 	for i, req := range r.startRequests {
-		out[i] = runtimeprovider.StartSessionRequest{
-			AppName:       req.AppName,
-			Template:      req.Template,
-			Image:         req.Image,
-			ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
-			Metadata:      cloneRuntimeMetadata(req.Metadata),
-		}
+		out[i] = cloneRuntimeStartSessionRequest(req)
 	}
 	return out
+}
+
+func cloneRuntimeStartSessionRequest(req runtimeprovider.StartSessionRequest) runtimeprovider.StartSessionRequest {
+	return runtimeprovider.StartSessionRequest{
+		AppName:       req.AppName,
+		Template:      req.Template,
+		Image:         req.Image,
+		ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
+		Metadata:      cloneRuntimeMetadata(req.Metadata),
+	}
 }
 
 func cloneImagePullAuth(src *runtimeprovider.ImagePullAuth) *runtimeprovider.ImagePullAuth {
@@ -328,12 +330,6 @@ func cloneImagePullAuth(src *runtimeprovider.ImagePullAuth) *runtimeprovider.Ima
 	return &runtimeprovider.ImagePullAuth{
 		DockerConfigJSON: src.DockerConfigJSON,
 	}
-}
-
-func (r *capturingRuntime) startSessionTimes() []time.Time {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]time.Time(nil), r.startTimes...)
 }
 
 func (r *capturingRuntime) startAppRequestsCopy() []runtimeprovider.StartAppRequest {

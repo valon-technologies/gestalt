@@ -1174,6 +1174,7 @@ func TestRunDispatcherRetriesTransientPollError(t *testing.T) {
 	executePayload := mustExecuteRequestBase64(t, "hello")
 	var mu sync.Mutex
 	polls := 0
+	completions := 0
 	completed := make(chan CompleteCallRequest, 1)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -1181,9 +1182,14 @@ func TestRunDispatcherRetriesTransientPollError(t *testing.T) {
 			mu.Lock()
 			polls++
 			poll := polls
+			completedCall := completions > 0
 			mu.Unlock()
 			if poll == 1 {
 				http.Error(w, "open provider dev poll transaction: rpc error: code = DeadlineExceeded desc = stream terminated by RST_STREAM with error code: CANCEL", http.StatusInternalServerError)
+				return
+			}
+			if completedCall {
+				w.WriteHeader(http.StatusNoContent)
 				return
 			}
 			writeProviderDevTestJSON(w, http.StatusOK, PollResponse{
@@ -1198,6 +1204,9 @@ func TestRunDispatcherRetriesTransientPollError(t *testing.T) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
+			mu.Lock()
+			completions++
+			mu.Unlock()
 			completed <- req
 			writeProviderDevTestJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		default:
@@ -1246,10 +1255,18 @@ func TestRunDispatcherRetriesHTTP2StreamCancelPollError(t *testing.T) {
 	executePayload := mustExecuteRequestBase64(t, "hello")
 	var mu sync.Mutex
 	polls := 0
+	completions := 0
 	completed := make(chan CompleteCallRequest, 1)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == PathAttachments+"/session-1/poll":
+			mu.Lock()
+			completedCall := completions > 0
+			mu.Unlock()
+			if completedCall {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 			writeProviderDevTestJSON(w, http.StatusOK, PollResponse{
 				CallID:        "call-1",
 				Provider:      "roadmap",
@@ -1262,6 +1279,9 @@ func TestRunDispatcherRetriesHTTP2StreamCancelPollError(t *testing.T) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
+			mu.Lock()
+			completions++
+			mu.Unlock()
 			completed <- req
 			writeProviderDevTestJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		default:

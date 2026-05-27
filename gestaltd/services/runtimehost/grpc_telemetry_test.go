@@ -6,7 +6,10 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	"github.com/valon-technologies/gestalt/server/services/observability"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	nooptrace "go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health"
@@ -58,4 +61,33 @@ func TestProviderClientGRPCOptionsRecordClientDurationWithTelemetryAttrs(t *test
 	metrictest.RequireFloat64Histogram(t, rm, "rpc.client.call.duration", attrs)
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.client.call.duration", attrs, "gestalt.rpc.role")
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.client.call.duration", attrs, "gestalt.provider")
+}
+
+func TestTelemetryUnaryServerInterceptorAddsTelemetryProvidersToContext(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	tracer := nooptrace.NewTracerProvider()
+	telemetry := hostServiceMetricsTelemetry{
+		meterProvider:  metrics.Provider,
+		tracerProvider: tracer,
+	}
+
+	_, err := telemetryUnaryServerInterceptor(telemetry)(
+		context.Background(),
+		nil,
+		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		func(ctx context.Context, req any) (any, error) {
+			if got := metricutil.MeterProviderFromContext(ctx); got != metrics.Provider {
+				t.Fatalf("meter provider = %T, want test provider", got)
+			}
+			if got := observability.TracerProviderFromContext(ctx); got != tracer {
+				t.Fatalf("tracer provider = %T, want test provider", got)
+			}
+			return nil, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("interceptor: %v", err)
+	}
 }

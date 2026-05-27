@@ -79,7 +79,11 @@ func StartHostServices(services []HostService, opts ...HostServicesOption) (*Sta
 		}
 		return nil, fmt.Errorf("listen on host socket: %w", err)
 	}
-	srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.providerName, unifiedHostService(), cfg.telemetry)...)))
+	srv := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.providerName, unifiedHostService(), cfg.telemetry)...)),
+		grpc.UnaryInterceptor(telemetryUnaryServerInterceptor(cfg.telemetry)),
+		grpc.StreamInterceptor(telemetryStreamServerInterceptor(cfg.telemetry)),
+	)
 	for _, service := range active {
 		service.Register(srv)
 		started.serviceNames = append(started.serviceNames, hostServiceMetricName(service))

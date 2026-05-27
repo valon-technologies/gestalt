@@ -66,6 +66,18 @@ func testAgentRuntimeIndexedDBDefs() map[string]*config.ProviderEntry {
 	}
 }
 
+func testHostedAgentRuntimeDeps(clock hostedAgentPoolClock, hooks hostedAgentPoolHooks) Deps {
+	return Deps{
+		BaseURL:              "https://gestalt.example.test",
+		EncryptionKey:        []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:         &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:        testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory:     func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		hostedAgentPoolClock: clock,
+		hostedAgentPoolHooks: hooks,
+	}
+}
+
 type agentRuntimeInvokerCall struct {
 	providerName           string
 	operation              string
@@ -1285,11 +1297,13 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
+	clock := newManualHostedAgentPoolClock(time.Date(2026, time.January, 1, 12, 0, 0, 0, time.UTC))
+	probe := newHostedAgentPoolTestProbe()
 	runtimeProvider := newCapturingRuntime()
 	var drainMu sync.Mutex
 	var firstDrainAt time.Time
 	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
-		startedAt := time.Now().UTC()
+		startedAt := clock.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
 		lifecycle := &runtimeprovider.SessionLifecycle{
 			StartedAt: &startedAt,
@@ -1331,13 +1345,7 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 			},
 		},
 	}
-	deps := Deps{
-		BaseURL:          "https://gestalt.example.test",
-		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
-		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
-	}
+	deps := testHostedAgentRuntimeDeps(clock, probe.hooks())
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -1355,22 +1363,18 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		t.Fatalf("ready backends = %d, want 1", len(backends))
 	}
 	first := backends[0]
-	waitForAgentRuntimeCondition(t, 3*time.Second, func() bool {
-		ready := pool.readyBackends()
-		return len(runtimeProvider.startSessionRequests()) >= 2 && len(ready) == 1 && ready[0] != first
-	})
-	startTimes := runtimeProvider.startSessionTimes()
-	if len(startTimes) < 2 {
-		t.Fatalf("start session times = %d, want at least 2", len(startTimes))
-	}
+	replacementStarts := runtimeProvider.captureStartSessionRequests(1)
 	drainMu.Lock()
 	drainAt := firstDrainAt
 	drainMu.Unlock()
 	if drainAt.IsZero() {
 		t.Fatal("first runtime drain deadline was not captured")
 	}
-	if !startTimes[1].Before(drainAt) {
-		t.Fatalf("replacement started at %s, want before first runtime drain deadline %s", startTimes[1].Format(time.RFC3339Nano), drainAt.Format(time.RFC3339Nano))
+	probe.advanceHealthLoop(t, clock, drainAt.Sub(clock.Now())/2)
+	waitForRuntimeStartSessionRequest(t, replacementStarts)
+	probe.waitForProactiveReplacementComplete(t)
+	if !clock.Now().Before(drainAt) {
+		t.Fatalf("replacement started at %s, want before first runtime drain deadline %s", clock.Now().Format(time.RFC3339Nano), drainAt.Format(time.RFC3339Nano))
 	}
 	pool.mu.Lock()
 	firstRetired := first.draining || first.closed
@@ -1390,12 +1394,17 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 	}
 }
 
-//nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
 func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartFails(t *testing.T) {
+	t.Parallel()
+
 	bin := buildAgentProviderBinary(t)
+	clock := newManualHostedAgentPoolClock(time.Date(2026, time.January, 1, 13, 0, 0, 0, time.UTC))
+	probe := newHostedAgentPoolTestProbe()
 	runtimeProvider := newCapturingRuntime()
+	var drainMu sync.Mutex
+	var firstDrainAt time.Time
 	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
-		startedAt := time.Now().UTC()
+		startedAt := clock.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
 		lifecycle := &runtimeprovider.SessionLifecycle{
 			StartedAt: &startedAt,
@@ -1404,6 +1413,9 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		if index == 1 {
 			recommendedDrainAt := startedAt.Add(3 * time.Second)
 			lifecycle.RecommendedDrainAt = &recommendedDrainAt
+			drainMu.Lock()
+			firstDrainAt = recommendedDrainAt
+			drainMu.Unlock()
 		}
 		return lifecycle
 	}
@@ -1441,13 +1453,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 			},
 		},
 	}
-	deps := Deps{
-		BaseURL:          "https://gestalt.example.test",
-		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
-		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
-	}
+	deps := testHostedAgentRuntimeDeps(clock, probe.hooks())
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -1465,13 +1471,16 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		t.Fatalf("ready backends = %d, want 1", len(backends))
 	}
 	first := backends[0]
-	waitForAgentRuntimeCondition(t, 2*time.Second, func() bool {
-		pool.mu.Lock()
-		defer pool.mu.Unlock()
-		return len(runtimeProvider.startSessionRequests()) >= 2 && !first.replacing
-	})
+	drainMu.Lock()
+	drainAt := firstDrainAt
+	drainMu.Unlock()
+	if drainAt.IsZero() {
+		t.Fatal("first runtime drain deadline was not captured")
+	}
+	probe.advanceHealthLoop(t, clock, drainAt.Sub(clock.Now())/2)
+	probe.waitForProactiveReplacementComplete(t)
 	pool.mu.Lock()
-	acceptsNewWork := pool.backendAcceptsNewWorkLocked(first, time.Now().UTC())
+	acceptsNewWork := pool.backendAcceptsNewWorkLocked(first, clock.Now().UTC())
 	firstDraining := first.draining
 	pool.mu.Unlock()
 	if !acceptsNewWork || firstDraining {
@@ -1492,16 +1501,18 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 	}
 }
 
-//nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
 func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *testing.T) {
+	t.Parallel()
+
 	bin := buildAgentProviderBinary(t)
+	clock := newManualHostedAgentPoolClock(time.Date(2026, time.January, 1, 14, 0, 0, 0, time.UTC))
+	probe := newHostedAgentPoolTestProbe()
 	runtimeProvider := newCapturingRuntime()
-	runtimeProvider.getSessionRequests = make(chan runtimeprovider.GetSessionRequest, 64)
 	releaseReplacement := make(chan struct{})
 	replacementStarted := make(chan struct{})
 	var replacementStartedOnce sync.Once
 	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
-		startedAt := time.Now().UTC()
+		startedAt := clock.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
 		return &runtimeprovider.SessionLifecycle{
 			StartedAt: &startedAt,
@@ -1516,7 +1527,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 			close(replacementStarted)
 		})
 		<-releaseReplacement
-		return nil
+		return context.Canceled
 	}
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -1546,13 +1557,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 			},
 		},
 	}
-	deps := Deps{
-		BaseURL:          "https://gestalt.example.test",
-		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
-		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
-	}
+	deps := testHostedAgentRuntimeDeps(clock, probe.hooks())
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -1570,10 +1575,11 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	if len(ready) != 2 {
 		t.Fatalf("ready backends = %d, want 2", len(ready))
 	}
-	markCapturingRuntimeBackendsDrainingSoon(runtimeProvider, ready, 250*time.Millisecond)
-	<-replacementStarted
-	drainRuntimeGetSessionRequests(runtimeProvider.getSessionRequests)
-	<-runtimeProvider.getSessionRequests
+	clock.waitForTicker(t)
+	drainAt := clock.Now().UTC().Add(250 * time.Millisecond)
+	markCapturingRuntimeBackendsDrainingAt(runtimeProvider, ready, drainAt)
+	probe.advanceHealthLoop(t, clock, drainAt.Sub(clock.Now())/2+time.Nanosecond)
+	waitForReplacementStart(t, replacementStarted)
 	if got := len(runtimeProvider.startSessionRequests()); got != 3 {
 		t.Fatalf("start session requests while one replacement is starting = %d, want 3", got)
 	}
@@ -1585,8 +1591,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	}
 }
 
-func markCapturingRuntimeBackendsDrainingSoon(runtimeProvider *capturingRuntime, backends []*hostedAgentPoolBackend, delay time.Duration) {
-	drainAt := time.Now().UTC().Add(delay)
+func markCapturingRuntimeBackendsDrainingAt(runtimeProvider *capturingRuntime, backends []*hostedAgentPoolBackend, drainAt time.Time) {
 	runtimeProvider.mu.Lock()
 	defer runtimeProvider.mu.Unlock()
 	if runtimeProvider.sessionLifecycles == nil {
@@ -1600,27 +1605,21 @@ func markCapturingRuntimeBackendsDrainingSoon(runtimeProvider *capturingRuntime,
 		if lifecycle == nil {
 			lifecycle = &runtimeprovider.SessionLifecycle{}
 		}
+		drainAt := drainAt.UTC()
 		lifecycle.RecommendedDrainAt = &drainAt
 		runtimeProvider.sessionLifecycles[backend.runtimeSessionID] = lifecycle
 	}
 }
 
-func drainRuntimeGetSessionRequests(ch <-chan runtimeprovider.GetSessionRequest) {
-	for {
-		select {
-		case <-ch:
-		default:
-			return
-		}
-	}
-}
-
-//nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
 func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntimeLifetime(t *testing.T) {
+	t.Parallel()
+
 	bin := buildAgentProviderBinary(t)
+	clock := newManualHostedAgentPoolClock(time.Date(2026, time.January, 1, 15, 0, 0, 0, time.UTC))
+	probe := newHostedAgentPoolTestProbe()
 	runtimeProvider := newCapturingRuntime()
 	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
-		expiresAt := time.Now().UTC().Add(5 * time.Minute)
+		expiresAt := clock.Now().UTC().Add(5 * time.Minute)
 		return &runtimeprovider.SessionLifecycle{
 			ExpiresAt: &expiresAt,
 		}
@@ -1632,7 +1631,8 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 	runtimeConfig := testHostedAgentRuntimeConfig()
 	runtimeConfig.Pool.StartupTimeout = "5m"
 	runtimeConfig.Pool.DrainTimeout = "2m"
-	runtimeConfig.Pool.HealthCheckInterval = "25ms"
+	healthCheckInterval := 25 * time.Millisecond
+	runtimeConfig.Pool.HealthCheckInterval = healthCheckInterval.String()
 	runtimeConfig.Pool.RestartPolicy = config.RuntimePlacementRestartPolicyAlways
 	cfg := &config.Config{
 		Server: config.ServerConfig{
@@ -1653,13 +1653,7 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 			},
 		},
 	}
-	deps := Deps{
-		BaseURL:          "https://gestalt.example.test",
-		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
-		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
-	}
+	deps := testHostedAgentRuntimeDeps(clock, probe.hooks())
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
@@ -1671,7 +1665,12 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 		}
 	}()
 
-	time.Sleep(150 * time.Millisecond)
+	pool := hostedAgentProviderPoolForTest(t, agents[0])
+	ready := pool.readyBackends()
+	if len(ready) != 1 {
+		t.Fatalf("ready backends = %d, want 1", len(ready))
+	}
+	probe.advanceHealthLoop(t, clock, healthCheckInterval)
 	if got := len(runtimeProvider.startSessionRequests()); got != 1 {
 		t.Fatalf("start session requests after expiry health checks = %d, want 1", got)
 	}
@@ -1681,13 +1680,15 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
+	clock := newManualHostedAgentPoolClock(time.Date(2026, time.January, 1, 16, 0, 0, 0, time.UTC))
 	runtimeProvider := newCapturingRuntime()
+	releaseReplacement := make(chan struct{})
 	var expiryMu sync.Mutex
 	var firstExpiresAt time.Time
 	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
-		expiresAt := time.Now().UTC().Add(time.Hour)
+		expiresAt := clock.Now().UTC().Add(time.Hour)
 		if index == 1 {
-			expiresAt = time.Now().UTC().Add(2 * time.Second)
+			expiresAt = clock.Now().UTC().Add(2 * time.Second)
 			expiryMu.Lock()
 			firstExpiresAt = expiresAt
 			expiryMu.Unlock()
@@ -1695,6 +1696,13 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 		return &runtimeprovider.SessionLifecycle{
 			ExpiresAt: &expiresAt,
 		}
+	}
+	runtimeProvider.startErrForSession = func(index int) error {
+		if index <= 1 {
+			return nil
+		}
+		<-releaseReplacement
+		return context.Canceled
 	}
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -1724,30 +1732,23 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 			},
 		},
 	}
-	deps := Deps{
-		BaseURL:          "https://gestalt.example.test",
-		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
-		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
-	}
+	deps := testHostedAgentRuntimeDeps(clock, hostedAgentPoolHooks{})
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
 	defer func() {
+		close(releaseReplacement)
 		if err := closeAgents(agents...); err != nil {
 			t.Fatalf("closeAgents: %v", err)
 		}
 	}()
 
-	waitForAgentRuntimeCondition(t, 3*time.Second, func() bool {
-		return len(runtimeProvider.startSessionRequests()) >= 2
-	})
-	startTimes := runtimeProvider.startSessionTimes()
-	if len(startTimes) < 2 {
-		t.Fatalf("start session times = %d, want at least 2", len(startTimes))
+	pool := hostedAgentProviderPoolForTest(t, agents[0])
+	ready := pool.readyBackends()
+	if len(ready) != 1 {
+		t.Fatalf("ready backends = %d, want 1", len(ready))
 	}
 	expiryMu.Lock()
 	expiresAt := firstExpiresAt
@@ -1755,8 +1756,184 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 	if expiresAt.IsZero() {
 		t.Fatal("first runtime expiry was not captured")
 	}
-	if !startTimes[1].Before(expiresAt) {
-		t.Fatalf("replacement started at %s, want before first runtime expiry %s", startTimes[1].Format(time.RFC3339Nano), expiresAt.Format(time.RFC3339Nano))
+	replacementStarts := runtimeProvider.captureStartSessionRequests(1)
+	clock.waitForTicker(t)
+	clock.Advance(expiresAt.Sub(clock.Now())/2 + time.Nanosecond)
+	waitForRuntimeStartSessionRequest(t, replacementStarts)
+	if !clock.Now().Before(expiresAt) {
+		t.Fatalf("replacement started at %s, want before first runtime expiry %s", clock.Now().Format(time.RFC3339Nano), expiresAt.Format(time.RFC3339Nano))
+	}
+}
+
+func waitForReplacementStart(t *testing.T, ch <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for hosted agent replacement start")
+	}
+}
+
+func waitForRuntimeStartSessionRequest(t *testing.T, ch <-chan runtimeprovider.StartSessionRequest) runtimeprovider.StartSessionRequest {
+	t.Helper()
+	select {
+	case req := <-ch:
+		return req
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for runtime StartSession request")
+	}
+	return runtimeprovider.StartSessionRequest{}
+}
+
+type manualHostedAgentPoolClock struct {
+	mu                sync.Mutex
+	now               time.Time
+	tickers           []*manualHostedAgentPoolTicker
+	tickerCreated     chan struct{}
+	tickerCreatedOnce sync.Once
+}
+
+func newManualHostedAgentPoolClock(now time.Time) *manualHostedAgentPoolClock {
+	return &manualHostedAgentPoolClock{
+		now:           now.UTC(),
+		tickerCreated: make(chan struct{}),
+	}
+}
+
+func (c *manualHostedAgentPoolClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *manualHostedAgentPoolClock) NewTicker(interval time.Duration) hostedAgentPoolTicker {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ticker := &manualHostedAgentPoolTicker{
+		clock:    c,
+		interval: interval,
+		next:     c.now.Add(interval),
+		ch:       make(chan time.Time, 1),
+	}
+	c.tickers = append(c.tickers, ticker)
+	c.tickerCreatedOnce.Do(func() {
+		close(c.tickerCreated)
+	})
+	return ticker
+}
+
+func (c *manualHostedAgentPoolClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	c.now = c.now.Add(d)
+	now := c.now
+	var due []chan time.Time
+	for _, ticker := range c.tickers {
+		if ticker.stopped || now.Before(ticker.next) {
+			continue
+		}
+		ticker.next = now.Add(ticker.interval)
+		due = append(due, ticker.ch)
+	}
+	c.mu.Unlock()
+
+	for _, ch := range due {
+		select {
+		case ch <- now:
+		default:
+		}
+	}
+}
+
+func (c *manualHostedAgentPoolClock) waitForTicker(t *testing.T) {
+	t.Helper()
+	select {
+	case <-c.tickerCreated:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for hosted agent pool ticker")
+	}
+}
+
+type manualHostedAgentPoolTicker struct {
+	clock    *manualHostedAgentPoolClock
+	interval time.Duration
+	next     time.Time
+	ch       chan time.Time
+	stopped  bool
+}
+
+func (t *manualHostedAgentPoolTicker) C() <-chan time.Time {
+	return t.ch
+}
+
+func (t *manualHostedAgentPoolTicker) Stop() {
+	t.clock.mu.Lock()
+	defer t.clock.mu.Unlock()
+	t.stopped = true
+}
+
+type hostedAgentPoolTestProbe struct {
+	healthLoopIterations  chan struct{}
+	proactiveReplacements chan struct{}
+}
+
+func newHostedAgentPoolTestProbe() *hostedAgentPoolTestProbe {
+	return &hostedAgentPoolTestProbe{
+		healthLoopIterations:  make(chan struct{}, 8),
+		proactiveReplacements: make(chan struct{}, 8),
+	}
+}
+
+func (p *hostedAgentPoolTestProbe) hooks() hostedAgentPoolHooks {
+	return hostedAgentPoolHooks{
+		healthLoopIterationComplete: func() {
+			p.signal(p.healthLoopIterations)
+		},
+		proactiveReplacementComplete: func() {
+			p.signal(p.proactiveReplacements)
+		},
+	}
+}
+
+func (p *hostedAgentPoolTestProbe) advanceHealthLoop(t *testing.T, clock *manualHostedAgentPoolClock, d time.Duration) {
+	t.Helper()
+	clock.waitForTicker(t)
+	p.drainHealthLoopIterations()
+	clock.Advance(d)
+	p.waitForHealthLoopIteration(t)
+}
+
+func (p *hostedAgentPoolTestProbe) drainHealthLoopIterations() {
+	for {
+		select {
+		case <-p.healthLoopIterations:
+		default:
+			return
+		}
+	}
+}
+
+func (p *hostedAgentPoolTestProbe) waitForHealthLoopIteration(t *testing.T) {
+	t.Helper()
+	select {
+	case <-p.healthLoopIterations:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for hosted agent health loop iteration")
+	}
+}
+
+func (p *hostedAgentPoolTestProbe) waitForProactiveReplacementComplete(t *testing.T) {
+	t.Helper()
+	select {
+	case <-p.proactiveReplacements:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for hosted agent proactive replacement")
+	}
+}
+
+func (p *hostedAgentPoolTestProbe) signal(ch chan<- struct{}) {
+	select {
+	case ch <- struct{}{}:
+	default:
 	}
 }
 
@@ -3359,11 +3536,8 @@ func hostedAgentProviderPoolForTest(t *testing.T, provider coreagent.Provider) *
 	return pool
 }
 
-//nolint:paralleltest // Hosted public-relay startup is serialized to avoid Linux CI contention.
 func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
-	// This exercises the hosted agent startup path over the public relay and is
-	// sensitive to Linux CI contention when it runs alongside the other hosted
-	// runtime bootstrap tests.
+	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
 	secret := []byte("0123456789abcdef0123456789abcdef")

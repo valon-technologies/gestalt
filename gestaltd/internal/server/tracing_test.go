@@ -20,19 +20,24 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-func TestTracing_HTTPAndBrokerSpans(t *testing.T) { //nolint:paralleltest // mutates global otel.TracerProvider
+func installServerTracingProvider(t *testing.T) (*tracetest.InMemoryExporter, *sdktrace.TracerProvider) {
+	t.Helper()
 	exporter := tracetest.NewInMemoryExporter()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+	t.Cleanup(func() {
+		_ = tp.Shutdown(context.Background())
+	})
+	return exporter, tp
+}
 
-	prev := otel.GetTracerProvider()
-	otel.SetTracerProvider(tp)
-	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+func TestTracing_HTTPAndBrokerSpans(t *testing.T) {
+	t.Parallel()
+
+	exporter, tp := installServerTracingProvider(t)
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
@@ -47,7 +52,7 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) { //nolint:paralleltest // mut
 
 	providers := testutil.NewProviderRegistry(t, stub)
 	ds := testutil.NewStubServices(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithTracerProvider(tp))
 
 	srv, err := server.New(server.Config{
 		Auth: &coretesting.StubAuthProvider{
@@ -59,10 +64,11 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) { //nolint:paralleltest // mut
 				return &core.UserIdentity{Email: "trace@example.com"}, nil
 			},
 		},
-		Services:    ds,
-		Providers:   providers,
-		Invoker:     broker,
-		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		Services:       ds,
+		Providers:      providers,
+		Invoker:        broker,
+		StateSecret:    []byte("0123456789abcdef0123456789abcdef"),
+		TracerProvider: tp,
 	})
 	if err != nil {
 		t.Fatalf("creating server: %v", err)
@@ -125,14 +131,10 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) { //nolint:paralleltest // mut
 	}
 }
 
-func TestTracing_BrokerSpanRecordsErrors(t *testing.T) { //nolint:paralleltest // mutates global otel.TracerProvider
-	exporter := tracetest.NewInMemoryExporter()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+func TestTracing_BrokerSpanRecordsErrors(t *testing.T) {
+	t.Parallel()
 
-	prev := otel.GetTracerProvider()
-	otel.SetTracerProvider(tp)
-	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+	exporter, tp := installServerTracingProvider(t)
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
@@ -147,14 +149,15 @@ func TestTracing_BrokerSpanRecordsErrors(t *testing.T) { //nolint:paralleltest /
 
 	providers := testutil.NewProviderRegistry(t, stub)
 	ds := testutil.NewStubServices(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithTracerProvider(tp))
 
 	srv, err := server.New(server.Config{
-		Auth:        &coretesting.StubAuthProvider{N: "none"},
-		Services:    ds,
-		Providers:   providers,
-		Invoker:     broker,
-		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		Auth:           &coretesting.StubAuthProvider{N: "none"},
+		Services:       ds,
+		Providers:      providers,
+		Invoker:        broker,
+		StateSecret:    []byte("0123456789abcdef0123456789abcdef"),
+		TracerProvider: tp,
 	})
 	if err != nil {
 		t.Fatalf("creating server: %v", err)
@@ -193,14 +196,10 @@ func TestTracing_BrokerSpanRecordsErrors(t *testing.T) { //nolint:paralleltest /
 	}
 }
 
-func TestTracing_AgentTurnTraceTree(t *testing.T) { //nolint:paralleltest // mutates global otel.TracerProvider
-	exporter := tracetest.NewInMemoryExporter()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+func TestTracing_AgentTurnTraceTree(t *testing.T) {
+	t.Parallel()
 
-	prev := otel.GetTracerProvider()
-	otel.SetTracerProvider(tp)
-	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+	exporter, tp := installServerTracingProvider(t)
 
 	agentProvider := observability.InstrumentAgentProvider("managed", newMemoryAgentProvider())
 	services := testutil.NewStubServices(t)
@@ -213,8 +212,9 @@ func TestTracing_AgentTurnTraceTree(t *testing.T) { //nolint:paralleltest // mut
 			ReadOnly: true,
 		}}},
 	})
-	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials)
+	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials, invocation.WithTracerProvider(tp))
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.TracerProvider = tp
 		cfg.Auth = &coretesting.StubAuthProvider{
 			N: "stub",
 			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {

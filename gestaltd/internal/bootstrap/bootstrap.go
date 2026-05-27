@@ -169,6 +169,8 @@ type Deps struct {
 	S3                    map[string]s3sdk.S3
 	WorkflowRuntime       *workflowRuntime
 	AgentRuntime          *agentRuntime
+	hostedAgentPoolClock  hostedAgentPoolClock
+	hostedAgentPoolHooks  hostedAgentPoolHooks
 	AgentRunGrants        *agentgrant.Manager
 	WorkflowManager       workflowmanager.Service
 	AgentManager          agentmanager.Service
@@ -1139,13 +1141,20 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
 	}
-	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
+	brokerOpts := []invocation.BrokerOption{
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithProviderOverrides(providerDevSessions),
-	)
+	}
+	if prepared.Telemetry != nil {
+		brokerOpts = append(brokerOpts,
+			invocation.WithLogger(prepared.Telemetry.Logger()),
+			invocation.WithTracerProvider(prepared.Telemetry.TracerProvider()),
+		)
+	}
+	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials, brokerOpts...)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
@@ -1169,6 +1178,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
 		AppInvokes:        agentPluginInvokes(cfg),
+		Logger:            prepared.Telemetry.Logger(),
 	}))
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:                     providers,

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -337,37 +338,43 @@ func TestSlogAuditSink_GuaranteedDelivery(t *testing.T) {
 	}
 }
 
-func TestSlogAuditSink_NilWriterFallsBackToStderr(t *testing.T) { //nolint:paralleltest // swaps os.Stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
+func TestSlogAuditSink_NilWriterFallsBackToStderr(t *testing.T) {
+	t.Parallel()
+
+	const childEnv = "GESTALT_TEST_SLOG_AUDIT_STDERR"
+	if os.Getenv(childEnv) == "1" {
+		sink := invocation.NewSlogAuditSink(nil)
+		sink.Log(context.Background(), core.AuditEntry{
+			Timestamp: time.Now(),
+			RequestID: "req-stderr",
+			Source:    "binding:test-hook",
+			SubjectID: principal.UserSubjectID("user-stderr"),
+			Provider:  "theta",
+			Operation: "read",
+			Allowed:   true,
+		})
+		return
 	}
-	orig := os.Stderr
-	os.Stderr = w
-	t.Cleanup(func() {
-		os.Stderr = orig
-		_ = r.Close()
-	})
 
-	sink := invocation.NewSlogAuditSink(nil)
-	sink.Log(context.Background(), core.AuditEntry{
-		Timestamp: time.Now(),
-		RequestID: "req-stderr",
-		Source:    "binding:test-hook",
-		SubjectID: principal.UserSubjectID("user-stderr"),
-		Provider:  "theta",
-		Operation: "read",
-		Allowed:   true,
-	})
-	_ = w.Close()
-
-	data, err := io.ReadAll(r)
+	cmd := exec.Command(os.Args[0], "-test.run=^TestSlogAuditSink_NilWriterFallsBackToStderr$")
+	cmd.Env = append(os.Environ(), childEnv+"=1")
+	data, err := cmd.StderrPipe()
 	if err != nil {
-		t.Fatalf("io.ReadAll: %v", err)
+		t.Fatalf("StderrPipe: %v", err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	out, readErr := io.ReadAll(data)
+	if readErr != nil {
+		t.Fatalf("io.ReadAll: %v", readErr)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("child test: %v", err)
 	}
 
 	var record map[string]any
-	if err := json.Unmarshal(data, &record); err != nil {
+	if err := json.Unmarshal(out, &record); err != nil {
 		t.Fatalf("failed to parse JSON log output: %v", err)
 	}
 

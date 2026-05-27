@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -12,7 +14,19 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
-func TestBootstrapSkippedProviderLogsWarning(t *testing.T) { //nolint:paralleltest // mutates slog.Default
+func TestBootstrapSkippedProviderLogsWarning(t *testing.T) {
+	t.Parallel()
+
+	const childEnv = "GESTALT_TEST_BOOTSTRAP_LOGGER"
+	if os.Getenv(childEnv) != "1" {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestBootstrapSkippedProviderLogsWarning$")
+		cmd.Env = append(os.Environ(), childEnv+"=1")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("child test failed: %v\n%s", err, out)
+		}
+		return
+	}
 
 	var buf bytes.Buffer
 	prev := slog.Default()

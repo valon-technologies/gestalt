@@ -25,7 +25,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
-	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -276,16 +275,13 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.app.operation")
 }
 
-func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T) { //nolint:paralleltest // mutates global slog and OTel providers.
+func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T) {
+	t.Parallel()
+
 	metrics := metrictest.NewManualMeterProvider(t)
-	prevMeter := otel.GetMeterProvider()
-	otel.SetMeterProvider(metrics.Provider)
-	t.Cleanup(func() { otel.SetMeterProvider(prevMeter) })
 
 	var logBuf bytes.Buffer
-	prevLogger := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prevLogger) })
+	logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	provider := newWorkflowManagerTelemetryProvider()
 	var auditBuf bytes.Buffer
@@ -304,6 +300,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		AgentManager: workflowManagerTelemetryAgentManager{},
 		Audit:        invocation.NewSlogAuditSink(&auditBuf),
 		Authorizer:   authz,
+		Logger:       logger,
 	})
 	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-telemetry-test-secret"))
 	if err != nil {
@@ -360,7 +357,9 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	}
 
 	lis := bufconn.Listen(1024 * 1024)
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		return handler(metricutil.WithMeterProvider(ctx, metrics.Provider), req)
+	}))
 	proto.RegisterWorkflowProviderServer(srv, NewProviderServer("slack", manager, tokens))
 	go func() {
 		_ = srv.Serve(lis)

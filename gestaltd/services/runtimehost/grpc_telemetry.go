@@ -1,10 +1,13 @@
 package runtimehost
 
 import (
+	"context"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"google.golang.org/grpc"
 )
 
 func providerClientGRPCOptions(providerName string, telemetry metricutil.TelemetryProviders) []otelgrpc.Option {
@@ -21,6 +24,39 @@ func grpcTelemetryOptions(role, providerName, hostService string, telemetry metr
 		ProviderName:    providerName,
 		HostServiceName: hostService,
 	})
+}
+
+func telemetryUnaryServerInterceptor(telemetry metricutil.TelemetryProviders) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		return handler(telemetryContext(ctx, telemetry), req)
+	}
+}
+
+func telemetryStreamServerInterceptor(telemetry metricutil.TelemetryProviders) grpc.StreamServerInterceptor {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		return handler(srv, telemetryServerStream{
+			ServerStream: stream,
+			ctx:          telemetryContext(stream.Context(), telemetry),
+		})
+	}
+}
+
+type telemetryServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (s telemetryServerStream) Context() context.Context {
+	return s.ctx
+}
+
+func telemetryContext(ctx context.Context, telemetry metricutil.TelemetryProviders) context.Context {
+	if telemetry == nil {
+		return ctx
+	}
+	ctx = metricutil.WithMeterProvider(ctx, telemetry.MeterProvider())
+	ctx = observability.WithTracerProvider(ctx, telemetry.TracerProvider())
+	return ctx
 }
 
 func hostServiceMetricName(service HostService) string {

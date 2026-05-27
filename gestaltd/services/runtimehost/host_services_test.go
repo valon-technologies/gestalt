@@ -17,14 +17,18 @@ import (
 )
 
 type hostServiceMetricsTelemetry struct {
-	meterProvider metric.MeterProvider
+	meterProvider  metric.MeterProvider
+	tracerProvider trace.TracerProvider
 }
 
 func (t hostServiceMetricsTelemetry) MeterProvider() metric.MeterProvider {
 	return t.meterProvider
 }
 
-func (hostServiceMetricsTelemetry) TracerProvider() trace.TracerProvider {
+func (t hostServiceMetricsTelemetry) TracerProvider() trace.TracerProvider {
+	if t.tracerProvider != nil {
+		return t.tracerProvider
+	}
 	return nooptrace.NewTracerProvider()
 }
 

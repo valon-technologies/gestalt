@@ -75,12 +75,19 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		return warnings, err
 	}
 	defer func() { _ = authz.Close() }()
-	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
+	brokerOpts := []invocation.BrokerOption{
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
-	)
+	}
+	if prepared.Telemetry != nil {
+		brokerOpts = append(brokerOpts,
+			invocation.WithLogger(prepared.Telemetry.Logger()),
+			invocation.WithTracerProvider(prepared.Telemetry.TracerProvider()),
+		)
+	}
+	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials, brokerOpts...)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
 	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
