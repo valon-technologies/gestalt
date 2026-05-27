@@ -22,7 +22,6 @@ var (
 	appBin                 string
 	indexedDBBin           string
 	externalCredentialsBin string
-	gestaltCLIBin          string
 )
 
 func TestMain(m *testing.M) {
@@ -85,46 +84,9 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	gestaltCLIBin = buildGestaltCLI()
-
 	code := m.Run()
 	_ = os.RemoveAll(tmpDir)
 	os.Exit(code)
-}
-
-func buildGestaltCLI() string {
-	if _, err := exec.LookPath("cargo"); err != nil {
-		return ""
-	}
-
-	repoRoot := filepath.Dir(filepath.Dir(testutil.MustExampleProviderPluginPath()))
-	for {
-		if _, err := os.Stat(filepath.Join(repoRoot, "gestalt", "Cargo.toml")); err == nil {
-			break
-		}
-		parent := filepath.Dir(repoRoot)
-		if parent == repoRoot {
-			return ""
-		}
-		repoRoot = parent
-	}
-
-	workspaceDir := filepath.Join(repoRoot, "gestalt")
-	cmd := exec.Command("cargo", "build", "-p", "gestalt", "--release")
-	cmd.Dir = workspaceDir
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "build gestalt CLI: %v (skipping CLI tests)\n", err)
-		return ""
-	}
-
-	builtBin := filepath.Join(workspaceDir, "target", "release", "gestalt")
-	if _, err := os.Stat(builtBin); err != nil {
-		fmt.Fprintf(os.Stderr, "gestalt CLI binary not found at %s\n", builtBin)
-		return ""
-	}
-	return builtBin
 }
 
 func buildTarget(dir, target, output string) error {
