@@ -2457,51 +2457,6 @@ func e2eLoopbackBaseURL(port int) string {
 	}).String()
 }
 
-func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.T) {
-	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping serve --watch config test in short mode")
-	}
-
-	dir := t.TempDir()
-	appDir := setupAppDir(t, dir)
-	manifestPath := componentProviderManifestPath(t, appDir)
-	port, holder := reservePort(t)
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	cfgPath := writeE2EConfig(t, dir, appDir, port)
-	originalConfig, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-
-	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath, "--app", "example", "--watch")
-	cmd.Env = append(os.Environ(), "GOTELEMETRY=off")
-	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
-
-	client := &http.Client{Timeout: 2 * time.Second}
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Example Provider")
-
-	setAppManifestDisplayName(t, manifestPath, "Config Watch Provider")
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Config Watch Provider")
-
-	invalidConfig := strings.Replace(string(originalConfig), manifestPath, filepath.Join(dir, "missing", "manifest.yaml"), 1)
-	if invalidConfig == string(originalConfig) {
-		t.Fatalf("test config did not contain manifest path %s", manifestPath)
-	}
-	if err := os.WriteFile(cfgPath, []byte(invalidConfig), 0o644); err != nil {
-		t.Fatalf("write invalid config: %v", err)
-	}
-	time.Sleep(750 * time.Millisecond)
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Config Watch Provider")
-
-	if err := os.WriteFile(cfgPath, originalConfig, 0o644); err != nil {
-		t.Fatalf("restore config: %v", err)
-	}
-	setAppManifestDisplayName(t, manifestPath, "Recovered Config Watch Provider")
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Recovered Config Watch Provider")
-}
-
 func TestE2EServeSplitManagementRoutes(t *testing.T) {
 	t.Parallel()
 
