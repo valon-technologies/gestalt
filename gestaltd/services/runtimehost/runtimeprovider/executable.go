@@ -90,7 +90,6 @@ func (p *executableProvider) Support(ctx context.Context) (Support, error) {
 		return Support{}, fmt.Errorf("get runtime support: %w", err)
 	}
 	support := supportFromProto(resp)
-	support.SupportsDirectHostServices = true
 	return support, nil
 }
 

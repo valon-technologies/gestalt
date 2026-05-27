@@ -38,7 +38,7 @@ func TestExecutableProviderReadsRuntimeSupport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Support: %v", err)
 	}
-	want := Support{CanHostApps: true, EgressMode: EgressModeNone, SupportsDirectHostServices: true}
+	want := Support{CanHostApps: true, EgressMode: EgressModeNone}
 	if !reflect.DeepEqual(support, want) {
 		t.Fatalf("Support = %#v, want %#v", support, want)
 	}
@@ -181,14 +181,6 @@ func TestExecutableProviderStartsDirectHostServicesForHostedApp(t *testing.T) {
 	t.Cleanup(func() {
 		_ = runtimeProvider.Close()
 	})
-	support, err := runtimeProvider.Support(ctx)
-	if err != nil {
-		t.Fatalf("Support: %v", err)
-	}
-	if !support.SupportsDirectHostServices {
-		t.Fatal("executable runtime provider does not support direct host services")
-	}
-
 	session, err := runtimeProvider.StartSession(ctx, StartSessionRequest{
 		AppName: "agent",
 	})
