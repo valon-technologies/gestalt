@@ -12,8 +12,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-const DefaultSocketEnv = "GESTALT_EXTERNAL_CREDENTIAL_SOCKET"
-
 type externalCredentialProviderServer struct {
 	proto.UnimplementedExternalCredentialProviderServer
 	provider core.ExternalCredentialProvider

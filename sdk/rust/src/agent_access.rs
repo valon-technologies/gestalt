@@ -18,15 +18,12 @@ use crate::{
         event_from_proto, interaction_from_proto, new_agent_messages, new_agent_tool_refs,
         new_agent_workspace, session_from_proto, turn_from_proto,
     },
+    env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN},
     protocol,
 };
 
 type AgentTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
-/// Environment variable containing the agent host-service target.
-pub const ENV_AGENT_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
-/// Environment variable containing the optional agent relay token.
-pub const ENV_AGENT_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 const AGENT_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
@@ -425,9 +422,9 @@ impl Agent {
             return Err(AgentError::MissingInvocationToken);
         }
 
-        let socket_path = std::env::var(ENV_AGENT_SOCKET)
-            .map_err(|_| AgentError::Env(format!("{ENV_AGENT_SOCKET} is not set")))?;
-        let relay_token = std::env::var(ENV_AGENT_SOCKET_TOKEN).unwrap_or_default();
+        let socket_path = std::env::var(ENV_HOST_SERVICE_SOCKET)
+            .map_err(|_| AgentError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
+        let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
         let channel = match parse_agent_target(&socket_path)? {
             AgentTarget::Unix(path) => {
                 Endpoint::try_from("http://[::]:50051")?

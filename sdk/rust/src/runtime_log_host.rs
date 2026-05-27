@@ -9,18 +9,13 @@ use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
+use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::generated::v1::{
     self as pb, runtime_log_host_client::RuntimeLogHostClient as ProtoRuntimeLogHostClient,
 };
 
 type RuntimeLogHostTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
-/// Environment variable containing the runtime-log host-service target.
-/// Alias for [`crate::env::ENV_HOST_SERVICE_SOCKET`].
-pub const ENV_RUNTIME_LOG_HOST_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
-/// Environment variable containing the optional runtime-log relay token.
-/// Alias for [`crate::env::ENV_HOST_SERVICE_TOKEN`].
-pub const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 /// Environment variable containing the current runtime session id.
 pub const ENV_RUNTIME_SESSION_ID: &str = "GESTALT_RUNTIME_SESSION_ID";
 const RUNTIME_LOG_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
@@ -113,10 +108,10 @@ pub struct RuntimeLogHost {
 impl RuntimeLogHost {
     /// Connects to the runtime-log host service described by the environment.
     pub async fn connect() -> std::result::Result<Self, RuntimeLogHostError> {
-        let socket_path = std::env::var(ENV_RUNTIME_LOG_HOST_SOCKET).map_err(|_| {
-            RuntimeLogHostError::Env(format!("{ENV_RUNTIME_LOG_HOST_SOCKET} is not set"))
+        let socket_path = std::env::var(ENV_HOST_SERVICE_SOCKET).map_err(|_| {
+            RuntimeLogHostError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set"))
         })?;
-        let relay_token = std::env::var(ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN).unwrap_or_default();
+        let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
         let channel = match parse_runtime_log_host_target(&socket_path)? {
             RuntimeLogHostTarget::Unix(path) => {
                 Endpoint::try_from("http://[::]:50051")?

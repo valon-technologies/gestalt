@@ -1309,6 +1309,14 @@ func assertStartAppRelayEnv(t *testing.T, req runtimeprovider.StartAppRequest, r
 	}
 }
 
+func legacyResourceSocketEnv(resource, binding string) string {
+	envName := "GESTALT_" + resource + "_SOCKET"
+	if strings.TrimSpace(binding) != "" {
+		envName += "_" + binding
+	}
+	return envName
+}
+
 type slowStopRuntime struct {
 	inner     runtimeprovider.Provider
 	stopCount atomic.Int32
@@ -3838,10 +3846,10 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 	if got := checkEnv(t, &config.IndexedDBBindingConfig{Provider: "archive"}, runtimehost.DefaultHostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set when app explicitly selects one indexeddb provider")
 	}
-	if got := checkEnv(t, nil, "GESTALT_INDEXEDDB_SOCKET_MAIN"); got {
+	if got := checkEnv(t, nil, legacyResourceSocketEnv("INDEXEDDB", "MAIN")); got {
 		t.Fatal("named IndexedDB env should not be set for inherited app indexeddb access")
 	}
-	if got := checkEnv(t, &config.IndexedDBBindingConfig{Provider: "archive"}, "GESTALT_INDEXEDDB_SOCKET_ARCHIVE"); got {
+	if got := checkEnv(t, &config.IndexedDBBindingConfig{Provider: "archive"}, legacyResourceSocketEnv("INDEXEDDB", "ARCHIVE")); got {
 		t.Fatal("named IndexedDB env should not be set when apps expose a single indexeddb socket")
 	}
 }
@@ -5578,22 +5586,22 @@ func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
 		return env.Found && env.Value != ""
 	}
 
-	if got := checkEnv(t, nil, "GESTALT_CACHE_SOCKET"); got {
+	if got := checkEnv(t, nil, legacyResourceSocketEnv("CACHE", "")); got {
 		t.Fatal("legacy cache env should not be set without app cache bindings")
 	}
 	if got := checkEnv(t, []string{"session"}, runtimehost.DefaultHostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set with a single app cache binding")
 	}
-	if got := checkEnv(t, []string{"session"}, "GESTALT_CACHE_SOCKET_SESSION"); got {
+	if got := checkEnv(t, []string{"session"}, legacyResourceSocketEnv("CACHE", "SESSION")); got {
 		t.Fatal("named cache env should not be set when app uses the unified host-service socket")
 	}
 	if got := checkEnv(t, []string{"session", "rate_limit"}, runtimehost.DefaultHostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set with multiple app cache bindings")
 	}
-	if got := checkEnv(t, []string{"session", "rate_limit"}, "GESTALT_CACHE_SOCKET_SESSION"); got {
+	if got := checkEnv(t, []string{"session", "rate_limit"}, legacyResourceSocketEnv("CACHE", "SESSION")); got {
 		t.Fatal(`named cache env for "session" should not be set when app uses the unified host-service socket`)
 	}
-	if got := checkEnv(t, []string{"session", "rate_limit"}, "GESTALT_CACHE_SOCKET_RATE_LIMIT"); got {
+	if got := checkEnv(t, []string{"session", "rate_limit"}, legacyResourceSocketEnv("CACHE", "RATE_LIMIT")); got {
 		t.Fatal(`named cache env for "rate_limit" should not be set when app uses the unified host-service socket`)
 	}
 }
@@ -9387,22 +9395,22 @@ func TestPluginS3BindingsExposeHostSocketEnv(t *testing.T) {
 		return env.Found && env.Value != ""
 	}
 
-	if got := checkEnv(t, nil, "GESTALT_S3_SOCKET"); got {
+	if got := checkEnv(t, nil, legacyResourceSocketEnv("S3", "")); got {
 		t.Fatal("legacy S3 env should not be set without app s3 bindings")
 	}
 	if got := checkEnv(t, []string{"main"}, runtimehost.DefaultHostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set with a single app s3 binding")
 	}
-	if got := checkEnv(t, []string{"main"}, "GESTALT_S3_SOCKET_MAIN"); got {
+	if got := checkEnv(t, []string{"main"}, legacyResourceSocketEnv("S3", "MAIN")); got {
 		t.Fatal("named S3 env should not be set when app uses the unified host-service socket")
 	}
 	if got := checkEnv(t, []string{"main", "archive"}, runtimehost.DefaultHostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set with multiple app s3 bindings")
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, "GESTALT_S3_SOCKET_MAIN"); got {
+	if got := checkEnv(t, []string{"main", "archive"}, legacyResourceSocketEnv("S3", "MAIN")); got {
 		t.Fatal(`named S3 env for "main" should not be set when app uses the unified host-service socket`)
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, "GESTALT_S3_SOCKET_ARCHIVE"); got {
+	if got := checkEnv(t, []string{"main", "archive"}, legacyResourceSocketEnv("S3", "ARCHIVE")); got {
 		t.Fatal(`named S3 env for "archive" should not be set when app uses the unified host-service socket`)
 	}
 }

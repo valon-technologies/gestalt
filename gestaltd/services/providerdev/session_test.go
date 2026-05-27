@@ -82,7 +82,7 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 		},
 		RuntimeEnv: func(string) (RuntimeEnv, error) {
 			return RuntimeEnv{
-				Env: map[string]string{"GESTALT_APP_SOCKET": "tls://gestalt.example.test:443"},
+				Env: map[string]string{"CUSTOM_PROVIDER_ENV": "tls://gestalt.example.test:443"},
 			}, nil
 		},
 	}})
@@ -111,7 +111,7 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	if len(session.Providers) != 1 {
 		t.Fatalf("session providers = %#v, want one", session.Providers)
 	}
-	if got := session.Providers[0].Env["GESTALT_APP_SOCKET"]; got != "tls://gestalt.example.test:443" {
+	if got := session.Providers[0].Env["CUSTOM_PROVIDER_ENV"]; got != "tls://gestalt.example.test:443" {
 		t.Fatalf("runtime env = %q, want relay target", got)
 	}
 
