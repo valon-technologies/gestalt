@@ -551,3 +551,14 @@ fi
 		t.Fatal("staged catalog.yaml is empty")
 	}
 }
+
+func TestStagedReleaseBinaryNameAddsWindowsSuffix(t *testing.T) {
+	t.Parallel()
+
+	if got := stagedReleaseBinaryName("release-test", "windows"); got != "gestalt-app-release-test.exe" {
+		t.Fatalf("windows binary name = %q, want %q", got, "gestalt-app-release-test.exe")
+	}
+	if got := stagedReleaseBinaryName("release-test", "linux"); got != "gestalt-app-release-test" {
+		t.Fatalf("linux binary name = %q, want %q", got, "gestalt-app-release-test")
+	}
+}
