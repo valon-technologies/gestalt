@@ -274,24 +274,6 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 	}
 }
 
-func assertReleasePlatforms(
-	t *testing.T,
-	outputDir string,
-	platforms []releasePlatform,
-	archiveName func(releasePlatform) string,
-	assertPlatform func(*testing.T, providermanifestv1.Artifact, releasePlatform),
-) {
-	t.Helper()
-
-	for _, platform := range platforms {
-		manifest := readReleasedManifest(t, outputDir, archiveName(platform))
-		if len(manifest.Artifacts) != 1 {
-			t.Fatalf("artifacts for %s/%s = %+v, want one artifact", platform.GOOS, platform.GOARCH, manifest.Artifacts)
-		}
-		assertPlatform(t, manifest.Artifacts[0], platform)
-	}
-}
-
 func writeManagedPluginConfigForTest(t *testing.T, dir, pluginKey, metadataURL, mountPath string) string {
 	t.Helper()
 
