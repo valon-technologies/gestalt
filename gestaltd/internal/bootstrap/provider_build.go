@@ -1725,7 +1725,7 @@ func appendAllowedHost(allowedHosts []string, host string) []string {
 
 func hostedAgentAllowedHosts(allowedHosts []string, runtimePlan RuntimePlacementPlan) []string {
 	cloned := slices.Clone(allowedHosts)
-	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay || runtimePlan.RequiresHostnameEgress {
+	if runtimePlan.HostServiceAccess != RuntimeHostServiceAccessRelay || runtimePlan.RequiresHostnameEgress {
 		return cloned
 	}
 	// Hosted agent bundles include loopback host allowances for local SDK

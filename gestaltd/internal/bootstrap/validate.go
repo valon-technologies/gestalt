@@ -56,30 +56,25 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	}()
 	connMaps, err := BuildConnectionMaps(cfg)
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		prepared.Deps.AgentRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return warnings, err
 	}
 	connRuntime, err := BuildConnectionRuntime(cfg)
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		prepared.Deps.AgentRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return warnings, err
 	}
 	if err := ValidateConnectionRuntimeCredentials(ctx, prepared.Services.ExternalCredentials, connRuntime); err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		prepared.Deps.AgentRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return warnings, err
 	}
 	if _, _, err := cfg.SelectedAuthorizationProvider(); err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		prepared.Deps.AgentRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return warnings, err
 	}
 	authz, err := authorization.New(config.AuthorizationStaticConfig(cfg.Authorization, cfg.Apps))
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		prepared.Deps.AgentRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return warnings, err
 	}
 	defer func() { _ = authz.Close() }()

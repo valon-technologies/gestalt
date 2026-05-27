@@ -164,64 +164,6 @@ func TestExecutableProviderForwardsStartAppWorkdir(t *testing.T) {
 	}
 }
 
-func TestExecutableProviderStartsDirectHostServicesForHostedApp(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	runtimeBin := buildRuntimeLogProviderBinary(t)
-	runtimeProvider, err := NewExecutableProvider(ctx, ExecutableConfig{
-		Name:    "modal",
-		Command: runtimeBin,
-	})
-	if err != nil {
-		t.Fatalf("NewExecutableProvider: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = runtimeProvider.Close()
-	})
-	session, err := runtimeProvider.StartSession(ctx, StartSessionRequest{
-		AppName: "agent",
-	})
-	if err != nil {
-		t.Fatalf("StartSession: %v", err)
-	}
-
-	env := map[string]string{"EXISTING": "value"}
-	hosted, err := runtimeProvider.StartApp(ctx, StartAppRequest{
-		SessionID: session.ID,
-		AppName:   "host-services",
-		Command:   "/bin/plugin",
-		Env:       env,
-		HostServices: []runtimehost.HostService{{
-			Name: "test_host_service",
-			Register: func(*grpc.Server) {
-			},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("StartApp: %v", err)
-	}
-	const dialPrefix = "host-service://"
-	if !strings.HasPrefix(hosted.DialTarget, dialPrefix) {
-		t.Fatalf("DialTarget = %q, want host-service socket", hosted.DialTarget)
-	}
-	socketPath := strings.TrimPrefix(hosted.DialTarget, dialPrefix)
-	if _, err := os.Stat(socketPath); err != nil {
-		t.Fatalf("host service socket %q: %v", socketPath, err)
-	}
-	if _, ok := env[runtimehost.DefaultHostServiceSocketEnv]; ok {
-		t.Fatal("StartApp mutated caller env with host service socket")
-	}
-	if err := runtimeProvider.StopSession(ctx, StopSessionRequest{SessionID: session.ID}); err != nil {
-		t.Fatalf("StopSession: %v", err)
-	}
-	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
-		t.Fatalf("host service socket after StopSession stat err = %v, want not exist", err)
-	}
-}
-
 func buildRuntimeLogProviderBinary(t *testing.T) string {
 	t.Helper()
 

@@ -65,7 +65,7 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 }
 
 func appendRuntimeLogHostService(hostServices []runtimehost.HostService, runtimeConfig config.EffectiveRuntimePlacement, deps Deps, runtimePlan RuntimePlacementPlan) []runtimehost.HostService {
-	if deps.Services == nil || deps.Services.RuntimeSessionLogs == nil || runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessNone {
+	if deps.Services == nil || deps.Services.RuntimeSessionLogs == nil || runtimePlan.HostServiceAccess == RuntimeHostServiceAccessNone {
 		return hostServices
 	}
 	runtimeProviderName := runtimeSessionLogProviderName(runtimeConfig)
@@ -142,7 +142,7 @@ func hostServiceBindingDescriptorsFromConfigured(hostServices []runtimehost.Host
 }
 
 func runtimeStartHostServices(runtimePlan RuntimePlacementPlan, hostServices []runtimehost.HostService) []runtimehost.HostService {
-	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessDirect {
+	if runtimePlan.HostServiceAccess != RuntimeHostServiceAccessDirect {
 		return nil
 	}
 	return append([]runtimehost.HostService(nil), hostServices...)
@@ -176,7 +176,7 @@ func mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostS
 
 func applyHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostServices []runtimehost.HostService, runtimePlan RuntimePlacementPlan, deps Deps, env map[string]string, allowedHosts []string) (map[string]string, []string, error) {
 	relayHost := ""
-	if runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessRelay {
+	if runtimePlan.HostServiceAccess == RuntimeHostServiceAccessRelay {
 		bindingEnv, resolvedRelayHost, err := mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID, hostServiceBindingDescriptorsFromConfigured(hostServices), deps)
 		if err != nil {
 			return nil, nil, err
@@ -235,7 +235,7 @@ func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.
 }
 
 func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimePlan RuntimePlacementPlan, runtimeProvider runtimeprovider.Provider) (func(), error) {
-	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay {
+	if runtimePlan.HostServiceAccess != RuntimeHostServiceAccessRelay {
 		return nil, nil
 	}
 	return registerVerifiedPublicHostServices(providerName, hostServices, deps, runtimeHostServiceSessionVerifier{

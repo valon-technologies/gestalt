@@ -1145,25 +1145,21 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 
 	connMaps, err := BuildConnectionMaps(cfg)
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		prepared.Deps.AgentRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
 	connRuntime, err := BuildConnectionRuntime(cfg)
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		prepared.Deps.AgentRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
 	if err := ValidateConnectionRuntimeCredentials(ctx, prepared.Services.ExternalCredentials, connRuntime); err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		prepared.Deps.AgentRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
 	baseAuthz, err := authorization.New(config.AuthorizationStaticConfig(cfg.Authorization, cfg.Apps))
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		prepared.Deps.AgentRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
 	closeAuthz := true
@@ -1178,15 +1174,13 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			authorization.WithDynamicFragmentSource(prepared.Services.AuthzFragments),
 		)
 		if err != nil {
-			prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-			prepared.Deps.AgentRuntime.FailPendingProviders(err)
+			failPendingStartupProviders(prepared.Deps, err)
 			return nil, err
 		}
 	}
 	providerDevSessions, err := buildProviderDevManager(cfg, providers, prepared.Deps)
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		prepared.Deps.AgentRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
@@ -1200,8 +1194,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		prepared.Deps.AgentRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
 	closeAudit := true
@@ -1397,27 +1390,39 @@ func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories 
 	workflowResult := <-workflowCh
 	agentResult := <-agentCh
 	if err := errors.Join(workflowResult.err, agentResult.err); err != nil {
-		if deps.WorkflowRuntime != nil {
-			for name, entry := range cfg.Providers.Workflow {
-				if entry != nil {
-					deps.WorkflowRuntime.FailProvider(name, err)
-				}
-			}
-			deps.WorkflowRuntime.FailPendingProviders(err)
-		}
-		if deps.AgentRuntime != nil {
-			for name, entry := range cfg.Providers.Agent {
-				if entry != nil {
-					deps.AgentRuntime.FailProvider(name, err)
-				}
-			}
-			deps.AgentRuntime.FailPendingProviders(err)
-		}
+		failConfiguredStartupProviders(cfg, deps, err)
 		_ = closeWorkflows(workflowResult.providers...)
 		_ = closeAgents(agentResult.providers...)
 		return nil, nil, err
 	}
 	return workflowResult.providers, agentResult.providers, nil
+}
+
+func failPendingStartupProviders(deps Deps, err error) {
+	if deps.WorkflowRuntime != nil {
+		deps.WorkflowRuntime.FailPendingProviders(err)
+	}
+	if deps.AgentRuntime != nil {
+		deps.AgentRuntime.FailPendingProviders(err)
+	}
+}
+
+func failConfiguredStartupProviders(cfg *config.Config, deps Deps, err error) {
+	if deps.WorkflowRuntime != nil {
+		for name, entry := range cfg.Providers.Workflow {
+			if entry != nil {
+				deps.WorkflowRuntime.FailProvider(name, err)
+			}
+		}
+	}
+	if deps.AgentRuntime != nil {
+		for name, entry := range cfg.Providers.Agent {
+			if entry != nil {
+				deps.AgentRuntime.FailProvider(name, err)
+			}
+		}
+	}
+	failPendingStartupProviders(deps, err)
 }
 
 func buildConfiguredProviders[T any](

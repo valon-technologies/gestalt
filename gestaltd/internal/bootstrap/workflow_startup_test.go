@@ -5,12 +5,15 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
@@ -133,6 +136,69 @@ func (p startupTestWorkflowProvider) PublishEvent(_ context.Context, req corewor
 func (p startupTestWorkflowProvider) Ping(context.Context) error { return nil }
 func (p startupTestWorkflowProvider) Close() error               { return nil }
 
+func TestStartupWorkflowProviderProxyPingReportsPendingProviderUnavailable(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := newWorkflowRuntime(&config.Config{
+		Providers: config.ProvidersConfig{
+			Workflow: map[string]*config.ProviderEntry{
+				"temporal": {},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("newWorkflowRuntime: %v", err)
+	}
+	runtime.InitProviderPlaceholders(map[string]*config.ProviderEntry{
+		"temporal": {},
+	})
+	provider, err := runtime.ResolveProvider("temporal")
+	if err != nil {
+		t.Fatalf("ResolveProvider: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- provider.Ping(context.Background())
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), `workflow provider "temporal" is not available`) {
+			t.Fatalf("Ping error = %v, want provider unavailable", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Ping blocked on pending startup workflow provider")
+	}
+}
+
+func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testing.T) {
+	t.Parallel()
+
+	hostServices, invTokens, cleanup, err := buildProviderHostServices("metadata", Deps{
+		Services: &coredata.Services{
+			ExternalCredentials: coretesting.NewStubExternalCredentialProvider(),
+		},
+		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
+	})
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err != nil {
+		t.Fatalf("buildProviderHostServices: %v", err)
+	}
+	if invTokens == nil {
+		t.Fatal("invocation token manager is nil")
+	}
+
+	names := hostServiceNames(hostServices)
+	for _, want := range []string{"app", "workflow_provider", "agent_provider", "external_credentials", "authorization"} {
+		if !hasHostServiceName(names, want) {
+			t.Fatalf("provider host services missing %q: %v", want, names)
+		}
+	}
+}
+
 func TestBuildWorkflowRegistersIndexedDBPublicRelay(t *testing.T) {
 	t.Parallel()
 
@@ -210,6 +276,14 @@ func hasHostServiceName(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func hostServiceNames(hostServices []runtimehost.HostService) []string {
+	names := make([]string, 0, len(hostServices))
+	for _, hostService := range hostServices {
+		names = append(names, hostService.Name)
+	}
+	return names
 }
 
 func (noopTelemetryProvider) Logger() *slog.Logger {

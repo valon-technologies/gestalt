@@ -234,9 +234,15 @@ func (p *startupWorkflowProviderProxy) PublishEvent(ctx context.Context, req cor
 }
 
 func (p *startupWorkflowProviderProxy) Ping(ctx context.Context) error {
-	provider, err := p.awaitForApp(ctx, "")
+	provider, ready, err := p.gate.resolved()
+	if !ready {
+		return fmt.Errorf("workflow provider %q is not available", p.providerName)
+	}
 	if err != nil {
 		return err
+	}
+	if provider == nil {
+		return fmt.Errorf("workflow provider %q is not available", p.providerName)
 	}
 	return provider.Ping(ctx)
 }

@@ -599,10 +599,8 @@ func TestHostedWorkflowAllowedHostsFiltersLoopbackRelayTargets(t *testing.T) {
 	t.Parallel()
 
 	allowed := hostedWorkflowAllowedHosts([]string{"localhost", "127.0.0.1", "api.example.com"}, RuntimePlacementPlan{
-		Resolved: RuntimeBehavior{
-			HostServiceAccess: RuntimeHostServiceAccessRelay,
-			EgressMode:        RuntimeEgressModeNone,
-		},
+		HostServiceAccess: RuntimeHostServiceAccessRelay,
+		EgressMode:        RuntimeEgressModeNone,
 	})
 	if !slices.Equal(allowed, []string{"api.example.com"}) {
 		t.Fatalf("hostedWorkflowAllowedHosts = %#v, want api.example.com only", allowed)

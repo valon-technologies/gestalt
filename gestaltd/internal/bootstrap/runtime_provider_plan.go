@@ -40,17 +40,21 @@ type RuntimeBehavior struct {
 }
 
 type RuntimePlacementPlan struct {
-	Resolved               RuntimeBehavior
+	CanHostApps            bool
+	HostServiceAccess      RuntimeHostServiceAccess
+	EgressMode             RuntimeEgressMode
 	RequiresHostnameEgress bool
 	HostnameEgressDelivery RuntimeHostnameEgressDelivery
 }
 
 func buildRuntimePlacementPlan(support runtimeprovider.Support, deps Deps, requiresHostnameEgress bool) RuntimePlacementPlan {
-	resolved := runtimeResolvedBehavior(runtimeAdvertisedBehavior(support), runtimeHostServiceAccess(support, deps), deps)
+	effective := runtimeEffectiveBehavior(support, deps)
 	return RuntimePlacementPlan{
-		Resolved:               resolved,
+		CanHostApps:            effective.CanHostApps,
+		HostServiceAccess:      effective.HostServiceAccess,
+		EgressMode:             effective.EgressMode,
 		RequiresHostnameEgress: requiresHostnameEgress,
-		HostnameEgressDelivery: runtimeHostnameEgressDelivery(requiresHostnameEgress, resolved),
+		HostnameEgressDelivery: runtimeHostnameEgressDelivery(requiresHostnameEgress, effective),
 	}
 }
 
@@ -66,7 +70,11 @@ func runtimeAdvertisedBehavior(support runtimeprovider.Support) RuntimeBehavior 
 	}
 }
 
-func runtimeResolvedBehavior(advertised RuntimeBehavior, hostServiceAccess RuntimeHostServiceAccess, deps Deps) RuntimeBehavior {
+func runtimeEffectiveBehavior(support runtimeprovider.Support, deps Deps) RuntimeBehavior {
+	return runtimeResolveBehavior(runtimeAdvertisedBehavior(support), runtimeHostServiceAccess(support, deps), deps)
+}
+
+func runtimeResolveBehavior(advertised RuntimeBehavior, hostServiceAccess RuntimeHostServiceAccess, deps Deps) RuntimeBehavior {
 	resolved := advertised
 	resolved.HostServiceAccess = hostServiceAccess
 	if resolved.EgressMode == RuntimeEgressModeHostname && resolved.HostServiceAccess != RuntimeHostServiceAccessDirect && !hostCanProvideHostedHostnameEgress(deps) {
@@ -126,13 +134,13 @@ func (p RuntimePlacementPlan) Validate(label string) error {
 	if label == "" {
 		label = "hosted runtime"
 	}
-	if !p.Resolved.CanHostApps {
+	if !p.CanHostApps {
 		return fmt.Errorf("%s cannot host executable providers in a host-reachable session", label)
 	}
-	if p.Resolved.HostServiceAccess == RuntimeHostServiceAccessNone {
+	if p.HostServiceAccess == RuntimeHostServiceAccessNone {
 		return fmt.Errorf("%s cannot provide host service access required by this provider", label)
 	}
-	if p.RequiresHostnameEgress && p.Resolved.EgressMode != RuntimeEgressModeHostname {
+	if p.RequiresHostnameEgress && p.EgressMode != RuntimeEgressModeHostname {
 		return fmt.Errorf("%s cannot preserve hostname-based egress required by this provider", label)
 	}
 	return nil
