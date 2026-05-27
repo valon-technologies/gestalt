@@ -126,7 +126,6 @@ message AgentProviderCapabilities {
   bool streaming_text = 1;
   bool tool_calls = 2;
   bool parallel_tool_calls = 3;
-  bool structured_output = 4;
   bool interactions = 5;
   bool resumable_turns = 6;
   bool reasoning_summaries = 7;
@@ -245,14 +244,25 @@ message AgentTurn {
   string model = 4;
   AgentExecutionStatus status = 5;
   repeated AgentMessage messages = 6;
-  string output_text = 7;
-  google.protobuf.Struct structured_output = 8;
   string status_message = 9;
   AgentActor created_by = 10;
   google.protobuf.Timestamp created_at = 11;
   google.protobuf.Timestamp started_at = 12;
   google.protobuf.Timestamp completed_at = 13;
   string execution_ref = 14;
+  oneof output {
+    AgentTurnTextOutput text = 20;
+    AgentTurnStructuredOutput structured = 21;
+  }
+}
+
+message AgentTurnTextOutput {
+  string text = 1;
+}
+
+message AgentTurnStructuredOutput {
+  string text = 1;
+  google.protobuf.Struct value = 2;
 }
 
 message AgentTurnDisplay {
@@ -280,7 +290,6 @@ message CreateAgentProviderTurnRequest {
   string model = 4;
   repeated AgentMessage messages = 5;
   repeated ResolvedAgentTool tools = 6;
-  google.protobuf.Struct response_schema = 7;
   google.protobuf.Struct metadata = 8;
   AgentActor created_by = 10;
   string execution_ref = 11;
@@ -292,6 +301,20 @@ message CreateAgentProviderTurnRequest {
   int32 timeout_seconds = 18;
   string invocation_token = 19;
   bool tool_refs_set = 20;
+  AgentOutput output = 21;
+}
+
+message AgentTextOutput {}
+
+message AgentStructuredOutput {
+  google.protobuf.Struct response_schema = 1;
+}
+
+message AgentOutput {
+  oneof kind {
+    AgentTextOutput text = 1;
+    AgentStructuredOutput structured = 2;
+  }
 }
 
 message GetAgentProviderTurnRequest {

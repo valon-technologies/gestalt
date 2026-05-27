@@ -113,9 +113,11 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 					Prompt:       coreworkflow.Text{Template: "Diagnose the alert."},
 					Messages:     []coreworkflow.AgentMessage{{Role: "system", Text: coreworkflow.Text{Template: "Use concise replies."}}},
 					ToolRefs:     []coreagent.ToolRef{{App: "datadog", Operation: "queryLogs"}},
-					ResponseSchema: map[string]any{
-						"type":       "object",
-						"properties": map[string]any{"actionableForPr": map[string]any{"type": "boolean"}},
+					Output: coreagent.Output{
+						Structured: &coreagent.StructuredOutput{ResponseSchema: map[string]any{
+							"type":       "object",
+							"properties": map[string]any{"actionableForPr": map[string]any{"type": "boolean"}},
+						}},
 					},
 					ModelOptions: map[string]any{"temperature": 0},
 				},
@@ -128,7 +130,7 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 					Name:      "slack",
 					Operation: "reply",
 					Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
-						"text": {StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.text"}},
+						"text": {StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.output.structured.text"}},
 					}},
 				},
 			},
@@ -139,9 +141,10 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 					Model:        "deep",
 					Prompt:       coreworkflow.Text{Template: "Open the PR."},
 					ToolRefs:     []coreagent.ToolRef{{App: "github", Operation: "createPullRequest"}},
+					Output:       coreagent.Output{Text: &coreagent.TextOutput{}},
 				},
 				When: &coreworkflow.StepWhen{
-					Value:     coreworkflow.Value{StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.structuredOutput.actionableForPr"}},
+					Value:     coreworkflow.Value{StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.output.structured.value.actionableForPr"}},
 					Equals:    true,
 					EqualsSet: true,
 				},
@@ -151,7 +154,7 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("workflowTargetToProto: %v", err)
 	}
-	if got := target.GetSteps()[0].GetAgent().GetResponseSchema().AsMap()["type"]; got != "object" {
+	if got := target.GetSteps()[0].GetAgent().GetOutput().GetStructured().GetResponseSchema().AsMap()["type"]; got != "object" {
 		t.Fatalf("step response schema = %#v, want object", got)
 	}
 	if got := target.GetSteps()[2].GetWhen().GetEquals().GetBoolValue(); got != true {
@@ -177,7 +180,7 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 		t.Fatalf("round trip reply step = %#v", reply)
 	}
 	prFix := roundTrip.Steps[2]
-	if prFix.When == nil || prFix.When.Value.StepOutput.StepID != "diagnosis" || prFix.When.Value.StepOutput.Path != "agent.structuredOutput.actionableForPr" || prFix.When.Equals != true {
+	if prFix.When == nil || prFix.When.Value.StepOutput.StepID != "diagnosis" || prFix.When.Value.StepOutput.Path != "agent.output.structured.value.actionableForPr" || prFix.When.Equals != true {
 		t.Fatalf("round trip pr_fix when = %#v", prFix.When)
 	}
 }

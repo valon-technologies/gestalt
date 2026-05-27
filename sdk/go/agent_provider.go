@@ -160,7 +160,7 @@ type ResolvedAgentTool struct {
 }
 
 type AgentToolRef struct {
-	App                string
+	App                   string
 	Operation             string
 	Connection            string
 	Instance              string
@@ -175,7 +175,6 @@ type AgentProviderCapabilities struct {
 	StreamingText             bool
 	ToolCalls                 bool
 	ParallelToolCalls         bool
-	StructuredOutput          bool
 	Interactions              bool
 	ResumableTurns            bool
 	ReasoningSummaries        bool
@@ -271,20 +270,33 @@ type UpdateAgentProviderSessionRequest struct {
 }
 
 type AgentTurn struct {
-	ID               string
-	SessionID        string
-	ProviderName     string
-	Model            string
-	Status           AgentExecutionStatus
-	Messages         []AgentMessage
-	OutputText       string
-	StructuredOutput map[string]any
-	StatusMessage    string
-	CreatedBy        *AgentActor
-	CreatedAt        time.Time
-	StartedAt        *time.Time
-	CompletedAt      *time.Time
-	ExecutionRef     string
+	ID            string
+	SessionID     string
+	ProviderName  string
+	Model         string
+	Status        AgentExecutionStatus
+	Messages      []AgentMessage
+	Output        AgentTurnOutput
+	StatusMessage string
+	CreatedBy     *AgentActor
+	CreatedAt     time.Time
+	StartedAt     *time.Time
+	CompletedAt   *time.Time
+	ExecutionRef  string
+}
+
+type AgentTurnOutput struct {
+	Text       *AgentTurnTextOutput
+	Structured *AgentTurnStructuredOutput
+}
+
+type AgentTurnTextOutput struct {
+	Text string
+}
+
+type AgentTurnStructuredOutput struct {
+	Text  string
+	Value map[string]any
 }
 
 type AgentTurnDisplay struct {
@@ -303,23 +315,33 @@ type AgentTurnDisplay struct {
 }
 
 type CreateAgentProviderTurnRequest struct {
-	TurnID            string
-	SessionID         string
-	IdempotencyKey    string
-	Model             string
-	Messages          []AgentMessage
-	Tools             []ResolvedAgentTool
-	ResponseSchema    map[string]any
-	ResponseSchemaSet bool
-	Metadata          map[string]any
-	CreatedBy         *AgentActor
-	ExecutionRef      string
-	ToolRefs          []AgentToolRef
-	ToolSource        AgentToolSourceMode
-	Subject           *Subject
-	ModelOptions      map[string]any
-	RunGrant          string
-	TimeoutSeconds    int32
+	TurnID         string
+	SessionID      string
+	IdempotencyKey string
+	Model          string
+	Messages       []AgentMessage
+	Tools          []ResolvedAgentTool
+	Output         AgentOutput
+	Metadata       map[string]any
+	CreatedBy      *AgentActor
+	ExecutionRef   string
+	ToolRefs       []AgentToolRef
+	ToolSource     AgentToolSourceMode
+	Subject        *Subject
+	ModelOptions   map[string]any
+	RunGrant       string
+	TimeoutSeconds int32
+}
+
+type AgentOutput struct {
+	Text       *AgentTextOutput
+	Structured *AgentStructuredOutput
+}
+
+type AgentTextOutput struct{}
+
+type AgentStructuredOutput struct {
+	ResponseSchema map[string]any
 }
 
 type GetAgentProviderTurnRequest struct {

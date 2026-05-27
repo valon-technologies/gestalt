@@ -60,6 +60,10 @@ func bootstrapGraphQLStringPtr(value string) *string {
 	return &value
 }
 
+func bootstrapTextAgentOutput() *proto.AgentOutput {
+	return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}
+}
+
 func bootstrapGraphQLSchema() graphqlschema.Schema {
 	return graphqlschema.Schema{
 		QueryType: &graphqlschema.TypeName{Name: "Query"},
@@ -853,6 +857,7 @@ func (p *recordingAgentProvider) CreateTurn(_ context.Context, req *proto.Create
 		Model:        strings.TrimSpace(req.GetModel()),
 		Status:       coreagent.ExecutionStatusSucceeded,
 		Messages:     cloneBootstrapAgentMessages(bootstrapAgentMessagesFromProto(req.GetMessages())),
+		Output:       coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
 		CreatedBy:    createdBy,
 		CreatedAt:    &now,
 		StartedAt:    &now,
@@ -981,7 +986,6 @@ func (p *recordingAgentProvider) GetCapabilities(context.Context, *proto.GetAgen
 		ToolCalls:            true,
 		Interactions:         true,
 		ResumableTurns:       true,
-		StructuredOutput:     true,
 		BoundedListHydration: true,
 		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
 	}, nil
@@ -1181,7 +1185,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 	if turn == nil {
 		return nil, core.ErrNotFound
 	}
-	turn.OutputText = outputBody
+	turn.Output = coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: outputBody}}
 	turn.Status = coreagent.ExecutionStatusSucceeded
 	turn.CompletedAt = &now
 	if outputBody != "" {
@@ -1248,7 +1252,6 @@ func (p *callbackAgentProvider) GetCapabilities(context.Context, *proto.GetAgent
 		ToolCalls:            true,
 		Interactions:         true,
 		ResumableTurns:       true,
-		StructuredOutput:     true,
 		BoundedListHydration: true,
 		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
 	}, nil
@@ -1354,7 +1357,12 @@ func cloneBootstrapAgentTurn(src *coreagent.Turn) *coreagent.Turn {
 	}
 	dst := *src
 	dst.Messages = cloneBootstrapAgentMessages(src.Messages)
-	dst.StructuredOutput = maps.Clone(src.StructuredOutput)
+	if src.Output.Structured != nil {
+		dst.Output.Structured = &coreagent.TurnStructuredOutput{
+			Text:  src.Output.Structured.Text,
+			Value: maps.Clone(src.Output.Structured.Value),
+		}
+	}
 	return &dst
 }
 
@@ -1734,7 +1742,9 @@ func cloneBootstrapWorkflowTarget(target coreworkflow.Target) coreworkflow.Targe
 				agent.Messages[j].Metadata = maps.Clone(agent.Messages[j].Metadata)
 			}
 			agent.ToolRefs = slices.Clone(agent.ToolRefs)
-			agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
+			if agent.Output.Structured != nil {
+				agent.Output.Structured.ResponseSchema = maps.Clone(agent.Output.Structured.ResponseSchema)
+			}
 			agent.ModelOptions = maps.Clone(agent.ModelOptions)
 			step.Agent = &agent
 		}
@@ -2728,6 +2738,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		IdempotencyKey: "demo-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync it"}},
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "roadmap",
 			Operation: "sync",
@@ -2793,6 +2804,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync it without explicit tools"}},
 		ToolRefsSet:    true,
+		Output:         bootstrapTextAgentOutput(),
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(global search): %v", err)
@@ -2809,6 +2821,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		IdempotencyKey: "scoped-unavailable-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync ashby"}},
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs:       []*proto.AgentToolRef{{App: "ashby", Operation: "sync"}},
 	})
 	if err == nil || !strings.Contains(err.Error(), `no external credential stored for integration "ashby"`) {
@@ -3020,6 +3033,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		IdempotencyKey: "linear-search-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "get my linear tickets"}},
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs:       []*proto.AgentToolRef{{App: "linear", Operation: "list_issues"}},
 	})
 	if err != nil {
@@ -3041,6 +3055,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		IdempotencyKey: "linear-search-after-unavailable-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "get my assigned tickets"}},
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs:       []*proto.AgentToolRef{{App: "linear", Operation: "list_issues"}},
 	})
 	if err != nil {
@@ -3152,6 +3167,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		IdempotencyKey: "candidate-search-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "search docs"}},
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs:       []*proto.AgentToolRef{{App: "docs"}},
 	})
 	if err != nil {
@@ -3211,6 +3227,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		IdempotencyKey: "candidate-load-ref-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "load beta docs"}},
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs:       []*proto.AgentToolRef{{App: "docs", Operation: betaOperation}},
 	})
 	if err != nil {
@@ -3232,6 +3249,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		IdempotencyKey: "candidate-mixed-global-exact-hidden-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "load hidden docs"}},
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs: []*proto.AgentToolRef{
 			{App: "*"},
 			{App: "docs", Operation: "aardvark_admin"},
@@ -3382,6 +3400,7 @@ func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalog
 		IdempotencyKey: "configured-narrowing-linear",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "show me my linear tickets"}},
+		Output:         bootstrapTextAgentOutput(),
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn: %v", err)
@@ -3498,6 +3517,7 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *t
 		IdempotencyKey: "http-slack-linear-search",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "get my linear tickets"}},
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs:       []*proto.AgentToolRef{{App: "*"}},
 	})
 	if err != nil {
@@ -3629,6 +3649,7 @@ func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T)
 		IdempotencyKey: "http-global-linear-search",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "get my linear tickets"}},
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs:       []*proto.AgentToolRef{{App: "*"}},
 	})
 	if err != nil {
@@ -3711,6 +3732,7 @@ func TestBootstrapAgentProviderSupportsDirectTurnInteractionLifecycle(t *testing
 		SessionId: "agent-session-plain",
 		Model:     "gpt-test",
 		CreatedBy: bootstrapAgentActorToProto(coreagent.Actor{SubjectID: "system:config"}),
+		Output:    bootstrapTextAgentOutput(),
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -3822,6 +3844,7 @@ func TestBootstrapAgentManagerResolvesProviderOwnedInteractions(t *testing.T) {
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
 		SessionId: session.ID,
 		Model:     "gpt-test",
+		Output:    bootstrapTextAgentOutput(),
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -3922,6 +3945,7 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundWhenProviderInter
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
 		SessionId: session.ID,
 		Model:     "gpt-test",
+		Output:    bootstrapTextAgentOutput(),
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -4005,6 +4029,7 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundOnProviderInterac
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
 		SessionId: session.ID,
 		Model:     "gpt-test",
+		Output:    bootstrapTextAgentOutput(),
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -4089,6 +4114,7 @@ func TestBootstrapAgentManagerListInteractionsRejectsMissingSessionID(t *testing
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
 		SessionId: session.ID,
 		Model:     "gpt-test",
+		Output:    bootstrapTextAgentOutput(),
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -4157,6 +4183,7 @@ func TestBootstrapAgentManagerResolveInteractionRejectsMissingSessionID(t *testi
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
 		SessionId: session.ID,
 		Model:     "gpt-test",
+		Output:    bootstrapTextAgentOutput(),
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -4264,6 +4291,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		IdempotencyKey: "same-run",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync it"}},
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "roadmap",
 			Operation: "sync",
@@ -4291,6 +4319,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		IdempotencyKey: "same-run",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync it"}},
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "roadmap",
 			Operation: "sync",
@@ -6464,6 +6493,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	turn, err := result.AgentManager.CreateTurn(startCtx, systemPrincipal, &proto.CreateAgentProviderTurnRequest{
 		SessionId: session.ID,
 		Model:     "gpt-test",
+		Output:    bootstrapTextAgentOutput(),
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "roadmap",
 			Operation: "sync",
@@ -6653,6 +6683,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 	turn, err := result.AgentManager.CreateTurn(startCtx, systemPrincipal, &proto.CreateAgentProviderTurnRequest{
 		SessionId: session.ID,
 		Model:     "gpt-test",
+		Output:    bootstrapTextAgentOutput(),
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "roadmap",
 			Operation: "sync",
@@ -6801,6 +6832,7 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 		SessionId: "agent-session-1",
 		Model:     "gpt-test",
 		CreatedBy: bootstrapAgentActorToProto(coreagent.Actor{SubjectID: "system:config"}),
+		Output:    bootstrapTextAgentOutput(),
 		Tools:     bootstrapAgentToolsToProto([]coreagent.Tool{tool}),
 	}); err == nil {
 		t.Fatal("CreateTurn error = nil, want mismatched turn id failure")
@@ -6825,6 +6857,7 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 		IdempotencyKey: "workflow:github:run-1:turn",
 		Model:          "gpt-test",
 		CreatedBy:      bootstrapAgentActorToProto(coreagent.Actor{SubjectID: "system:config"}),
+		Output:         bootstrapTextAgentOutput(),
 		Tools:          bootstrapAgentToolsToProto([]coreagent.Tool{tool}),
 	})
 	if err != nil {

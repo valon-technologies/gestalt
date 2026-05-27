@@ -36,14 +36,14 @@ type workflowAppStepRequest struct {
 }
 
 type workflowAgentStepRequest struct {
-	ProviderName   string                   `json:"provider,omitempty"`
-	Model          string                   `json:"model,omitempty"`
-	SessionKey     string                   `json:"sessionKey,omitempty"`
-	Prompt         workflowTextRequest      `json:"prompt,omitempty"`
-	Messages       []workflowMessageRequest `json:"messages,omitempty"`
-	ToolRefs       []agentToolRefRequest    `json:"tools,omitempty"`
-	ResponseSchema map[string]any           `json:"responseSchema,omitempty"`
-	ModelOptions   map[string]any           `json:"modelOptions,omitempty"`
+	ProviderName string                   `json:"provider,omitempty"`
+	Model        string                   `json:"model,omitempty"`
+	SessionKey   string                   `json:"sessionKey,omitempty"`
+	Prompt       workflowTextRequest      `json:"prompt,omitempty"`
+	Messages     []workflowMessageRequest `json:"messages,omitempty"`
+	ToolRefs     []agentToolRefRequest    `json:"tools,omitempty"`
+	Output       *agentOutputRequest      `json:"output,omitempty"`
+	ModelOptions map[string]any           `json:"modelOptions,omitempty"`
 }
 
 type workflowStepTargetRequest struct {
@@ -223,14 +223,14 @@ type workflowAppStepInfo struct {
 }
 
 type workflowAgentStepInfo struct {
-	ProviderName   string                `json:"provider,omitempty"`
-	Model          string                `json:"model,omitempty"`
-	SessionKey     string                `json:"sessionKey,omitempty"`
-	Prompt         *workflowTextInfo     `json:"prompt,omitempty"`
-	Messages       []workflowMessageInfo `json:"messages,omitempty"`
-	ToolRefs       []agentToolRefRequest `json:"tools,omitempty"`
-	ResponseSchema map[string]any        `json:"responseSchema,omitempty"`
-	ModelOptions   map[string]any        `json:"modelOptions,omitempty"`
+	ProviderName string                `json:"provider,omitempty"`
+	Model        string                `json:"model,omitempty"`
+	SessionKey   string                `json:"sessionKey,omitempty"`
+	Prompt       *workflowTextInfo     `json:"prompt,omitempty"`
+	Messages     []workflowMessageInfo `json:"messages,omitempty"`
+	ToolRefs     []agentToolRefRequest `json:"tools,omitempty"`
+	Output       *agentOutputRequest   `json:"output,omitempty"`
+	ModelOptions map[string]any        `json:"modelOptions,omitempty"`
 }
 
 type workflowStepTargetInfo struct {
@@ -318,11 +318,16 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	target, err := workflowScheduleTargetFromRequest(req.Target)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	managed, err := s.workflowSchedules.CreateSchedule(r.Context(), p, workflowmanager.ScheduleUpsert{
 		ProviderName: strings.TrimSpace(req.Provider),
 		Cron:         strings.TrimSpace(req.Cron),
 		Timezone:     strings.TrimSpace(req.Timezone),
-		Target:       workflowScheduleTargetFromRequest(req.Target),
+		Target:       target,
 		Paused:       req.Paused,
 	})
 	if err != nil {
@@ -365,11 +370,16 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	target, err := workflowScheduleTargetFromRequest(req.Target)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	managed, err := s.workflowSchedules.UpdateSchedule(r.Context(), p, scheduleID, workflowmanager.ScheduleUpsert{
 		ProviderName: strings.TrimSpace(req.Provider),
 		Cron:         strings.TrimSpace(req.Cron),
 		Timezone:     strings.TrimSpace(req.Timezone),
-		Target:       workflowScheduleTargetFromRequest(req.Target),
+		Target:       target,
 		Paused:       req.Paused,
 	})
 	if err != nil {
@@ -433,21 +443,25 @@ func (s *Server) resolveWorkflowScheduleActor(w http.ResponseWriter, r *http.Req
 	return p, true
 }
 
-func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) coreworkflow.Target {
+func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) (coreworkflow.Target, error) {
 	steps := make([]coreworkflow.Step, 0, len(target.Steps))
 	for i := range target.Steps {
 		step := target.Steps[i]
+		agent, err := workflowAgentTurnFromRequest(step.Agent)
+		if err != nil {
+			return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d].agent output: %w", i, err)
+		}
 		steps = append(steps, coreworkflow.Step{
 			ID:             strings.TrimSpace(step.ID),
 			Inputs:         workflowValueMapFromRequest(step.Inputs),
 			App:            workflowAppCallFromRequest(step.App),
-			Agent:          workflowAgentTurnFromRequest(step.Agent),
+			Agent:          agent,
 			Metadata:       maps.Clone(step.Metadata),
 			TimeoutSeconds: step.TimeoutSeconds,
 			When:           workflowStepWhenFromRequest(step.When),
 		})
 	}
-	return coreworkflow.Target{Steps: steps}
+	return coreworkflow.Target{Steps: steps}, nil
 }
 
 func decodeWorkflowJSONBody(r *http.Request, dst any) error {
@@ -489,20 +503,24 @@ func workflowAppCallFromRequest(target *workflowAppStepRequest) *coreworkflow.Ap
 	}
 }
 
-func workflowAgentTurnFromRequest(target *workflowAgentStepRequest) *coreworkflow.AgentTurn {
+func workflowAgentTurnFromRequest(target *workflowAgentStepRequest) (*coreworkflow.AgentTurn, error) {
 	if target == nil {
-		return nil
+		return nil, nil
+	}
+	output, err := agentOutputFromRequest(target.Output, nil)
+	if err != nil {
+		return nil, err
 	}
 	return &coreworkflow.AgentTurn{
-		ProviderName:   strings.TrimSpace(target.ProviderName),
-		Model:          strings.TrimSpace(target.Model),
-		SessionKey:     strings.TrimSpace(target.SessionKey),
-		Prompt:         workflowTextFromRequest(target.Prompt),
-		Messages:       workflowMessagesFromRequest(target.Messages),
-		ToolRefs:       agentToolRefsFromRequest(target.ToolRefs),
-		ResponseSchema: maps.Clone(target.ResponseSchema),
-		ModelOptions:   maps.Clone(target.ModelOptions),
-	}
+		ProviderName: strings.TrimSpace(target.ProviderName),
+		Model:        strings.TrimSpace(target.Model),
+		SessionKey:   strings.TrimSpace(target.SessionKey),
+		Prompt:       workflowTextFromRequest(target.Prompt),
+		Messages:     workflowMessagesFromRequest(target.Messages),
+		ToolRefs:     agentToolRefsFromRequest(target.ToolRefs),
+		Output:       output,
+		ModelOptions: maps.Clone(target.ModelOptions),
+	}, nil
 }
 
 func workflowStepWhenFromRequest(when *workflowStepWhenRequest) *coreworkflow.StepWhen {
@@ -674,14 +692,14 @@ func workflowAgentInfoFromCore(agent *coreworkflow.AgentTurn) *workflowAgentStep
 		return nil
 	}
 	return &workflowAgentStepInfo{
-		ProviderName:   agent.ProviderName,
-		Model:          agent.Model,
-		SessionKey:     agent.SessionKey,
-		Prompt:         workflowTextInfoFromCore(agent.Prompt),
-		Messages:       workflowMessagesInfoFromCore(agent.Messages),
-		ToolRefs:       agentToolRefsToRequest(agent.ToolRefs),
-		ResponseSchema: maps.Clone(agent.ResponseSchema),
-		ModelOptions:   maps.Clone(agent.ModelOptions),
+		ProviderName: agent.ProviderName,
+		Model:        agent.Model,
+		SessionKey:   agent.SessionKey,
+		Prompt:       workflowTextInfoFromCore(agent.Prompt),
+		Messages:     workflowMessagesInfoFromCore(agent.Messages),
+		ToolRefs:     agentToolRefsToRequest(agent.ToolRefs),
+		Output:       agentOutputRequestFromCore(agent.Output),
+		ModelOptions: maps.Clone(agent.ModelOptions),
 	}
 }
 

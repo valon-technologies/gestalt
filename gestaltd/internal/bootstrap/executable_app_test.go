@@ -1177,6 +1177,11 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 		Model:           "gpt-test",
 		IdempotencyKey:  "plugin-agent-turn",
 		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+		Output: &proto.AgentOutput{
+			Kind: &proto.AgentOutput_Text{
+				Text: &proto.AgentTextOutput{},
+			},
+		},
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "roadmap",
 			Operation: "sync",
@@ -1927,7 +1932,7 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req *proto.
 		Model:        req.GetModel(),
 		Status:       coreagent.ExecutionStatusSucceeded,
 		Messages:     stubAgentMessagesFromProto(req.GetMessages()),
-		OutputText:   "turn completed",
+		Output:       coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
 		CreatedBy:    stubAgentActorFromProto(req.GetCreatedBy()),
 		CreatedAt:    &now,
 		StartedAt:    &now,
@@ -2069,7 +2074,6 @@ func (p *stubAgentTurnManagerProvider) GetCapabilities(context.Context, *proto.G
 		ToolCalls:            true,
 		Interactions:         true,
 		ResumableTurns:       true,
-		StructuredOutput:     true,
 		BoundedListHydration: true,
 		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
 	}, nil
@@ -2108,7 +2112,12 @@ func cloneAgentTurn(src *coreagent.Turn) *coreagent.Turn {
 	}
 	dst := *src
 	dst.Messages = append([]coreagent.Message(nil), src.Messages...)
-	dst.StructuredOutput = maps.Clone(src.StructuredOutput)
+	if src.Output.Structured != nil {
+		dst.Output.Structured = &coreagent.TurnStructuredOutput{
+			Text:  src.Output.Structured.Text,
+			Value: maps.Clone(src.Output.Structured.Value),
+		}
+	}
 	return &dst
 }
 
@@ -2206,7 +2215,9 @@ func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
 				agent.Messages[j].Metadata = maps.Clone(agent.Messages[j].Metadata)
 			}
 			agent.ToolRefs = slices.Clone(agent.ToolRefs)
-			agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
+			if agent.Output.Structured != nil {
+				agent.Output.Structured.ResponseSchema = maps.Clone(agent.Output.Structured.ResponseSchema)
+			}
 			agent.ModelOptions = maps.Clone(agent.ModelOptions)
 			step.Agent = &agent
 		}

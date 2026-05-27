@@ -3274,11 +3274,13 @@ workflows:
             agent:
               provider: simple
               prompt: "diagnose"
+              output:
+                text: {}
             when:
               value:
                 stepOutput:
                   stepId: diagnosis
-                  path: agent.structuredOutput.actionable_for_pr
+                  path: agent.output.structured.value.actionable_for_pr
               equals: true
 providers:
   agent:
@@ -3309,14 +3311,18 @@ workflows:
               source:
                 stepOutput:
                   stepId: pr_fix
-                  path: agent.text
+                  path: agent.output.text.text
             agent:
               provider: simple
               prompt: "diagnose"
+              output:
+                text: {}
           - id: pr_fix
             agent:
               provider: simple
               prompt: "fix"
+              output:
+                text: {}
 providers:
   agent:
     simple:
@@ -3345,15 +3351,19 @@ workflows:
             agent:
               provider: simple
               prompt: "diagnose"
+              output:
+                text: {}
           - id: pr_fix
             agent:
               provider: simple
               prompt: "fix"
+              output:
+                text: {}
             when:
               value:
                 stepOutput:
                   stepId: diagnosis
-                  path: agent.structuredOutput.actionable_for_pr
+                  path: agent.output.structured.value.actionable_for_pr
 providers:
   agent:
     simple:
@@ -3382,10 +3392,14 @@ workflows:
             agent:
               provider: simple
               prompt: "diagnose"
+              output:
+                text: {}
           - id: pr_fix
             agent:
               provider: simple
               prompt: "fix"
+              output:
+                text: {}
             when:
               equals: null
 providers:

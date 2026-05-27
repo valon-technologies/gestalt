@@ -109,16 +109,65 @@ type agentSessionUpdateRequest struct {
 }
 
 type agentTurnCreateRequest struct {
-	Model             string                `json:"model,omitempty"`
-	Messages          []agentMessageRequest `json:"messages,omitempty"`
-	ToolRefs          []agentToolRefRequest `json:"toolRefs,omitempty"`
-	ToolSource        string                `json:"toolSource,omitempty"`
-	ResponseSchema    map[string]any        `json:"responseSchema,omitempty"`
-	Metadata          map[string]any        `json:"metadata,omitempty"`
-	ModelOptions      map[string]any        `json:"modelOptions,omitempty"`
-	IdempotencyKey    string                `json:"idempotencyKey,omitempty"`
-	toolRefsSet       bool
-	responseSchemaSet bool
+	Model          string                `json:"model,omitempty"`
+	Messages       []agentMessageRequest `json:"messages,omitempty"`
+	ToolRefs       []agentToolRefRequest `json:"toolRefs,omitempty"`
+	ToolSource     string                `json:"toolSource,omitempty"`
+	Output         *agentOutputRequest   `json:"output,omitempty"`
+	Metadata       map[string]any        `json:"metadata,omitempty"`
+	ModelOptions   map[string]any        `json:"modelOptions,omitempty"`
+	IdempotencyKey string                `json:"idempotencyKey,omitempty"`
+}
+
+type agentOutputRequest struct {
+	Text          *agentTextOutputRequest       `json:"text,omitempty"`
+	Structured    *agentStructuredOutputRequest `json:"structured,omitempty"`
+	textSet       bool
+	structuredSet bool
+}
+
+func (output *agentOutputRequest) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if value, ok := raw["text"]; ok {
+		output.textSet = true
+		if !jsonRawMessageIsNull(value) {
+			text := agentTextOutputRequest{}
+			if err := json.Unmarshal(value, &text); err != nil {
+				return err
+			}
+			output.Text = &text
+		}
+	}
+	if value, ok := raw["structured"]; ok {
+		output.structuredSet = true
+		if !jsonRawMessageIsNull(value) {
+			structured := agentStructuredOutputRequest{}
+			if err := json.Unmarshal(value, &structured); err != nil {
+				return err
+			}
+			output.Structured = &structured
+		}
+	}
+	return nil
+}
+
+type agentTurnCreateRequestPresence struct {
+	ToolRefs bool
+	Output   *agentOutputRequestPresence
+}
+
+type agentOutputRequestPresence struct {
+	Text       bool
+	Structured bool
+}
+
+type agentTextOutputRequest struct{}
+
+type agentStructuredOutputRequest struct {
+	ResponseSchema map[string]any `json:"responseSchema,omitempty"`
 }
 
 type agentTurnCancelRequest struct {
@@ -156,7 +205,6 @@ type agentProviderCapabilitiesInfo struct {
 	StreamingText             bool     `json:"streamingText,omitempty"`
 	ToolCalls                 bool     `json:"toolCalls,omitempty"`
 	ParallelToolCalls         bool     `json:"parallelToolCalls,omitempty"`
-	StructuredOutput          bool     `json:"structuredOutput,omitempty"`
 	Interactions              bool     `json:"interactions,omitempty"`
 	ResumableTurns            bool     `json:"resumableTurns,omitempty"`
 	ReasoningSummaries        bool     `json:"reasoningSummaries,omitempty"`
@@ -195,20 +243,33 @@ type agentHarnessInstallCommandInfo struct {
 }
 
 type agentTurnInfo struct {
-	ID               string                `json:"id"`
-	SessionID        string                `json:"sessionId"`
-	Provider         string                `json:"provider"`
-	Model            string                `json:"model,omitempty"`
-	Status           string                `json:"status,omitempty"`
-	Messages         []agentMessageRequest `json:"messages,omitempty"`
-	OutputText       string                `json:"outputText,omitempty"`
-	StructuredOutput map[string]any        `json:"structuredOutput,omitempty"`
-	StatusMessage    string                `json:"statusMessage,omitempty"`
-	CreatedBy        *workflowActorInfo    `json:"createdBy,omitempty"`
-	CreatedAt        *time.Time            `json:"createdAt,omitempty"`
-	StartedAt        *time.Time            `json:"startedAt,omitempty"`
-	CompletedAt      *time.Time            `json:"completedAt,omitempty"`
-	ExecutionRef     string                `json:"executionRef,omitempty"`
+	ID            string                `json:"id"`
+	SessionID     string                `json:"sessionId"`
+	Provider      string                `json:"provider"`
+	Model         string                `json:"model,omitempty"`
+	Status        string                `json:"status,omitempty"`
+	Messages      []agentMessageRequest `json:"messages,omitempty"`
+	Output        *agentTurnOutputInfo  `json:"output,omitempty"`
+	StatusMessage string                `json:"statusMessage,omitempty"`
+	CreatedBy     *workflowActorInfo    `json:"createdBy,omitempty"`
+	CreatedAt     *time.Time            `json:"createdAt,omitempty"`
+	StartedAt     *time.Time            `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time            `json:"completedAt,omitempty"`
+	ExecutionRef  string                `json:"executionRef,omitempty"`
+}
+
+type agentTurnOutputInfo struct {
+	Text       *agentTurnTextOutputInfo       `json:"text,omitempty"`
+	Structured *agentTurnStructuredOutputInfo `json:"structured,omitempty"`
+}
+
+type agentTurnTextOutputInfo struct {
+	Text string `json:"text,omitempty"`
+}
+
+type agentTurnStructuredOutputInfo struct {
+	Text  string         `json:"text,omitempty"`
+	Value map[string]any `json:"value,omitempty"`
 }
 
 type agentTurnEventInfo struct {
@@ -487,18 +548,13 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionID := chi.URLParam(r, "sessionID")
 	var req agentTurnCreateRequest
+	var presence agentTurnCreateRequestPresence
 	if r.Body != nil {
 		defer func() { _ = r.Body.Close() }()
-		if err := decodeAgentTurnCreateRequest(r.Body, &req); err != nil && !errors.Is(err, io.EOF) {
+		var err error
+		req, presence, err = decodeAgentTurnCreateRequest(r.Body)
+		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON body")
-			return
-		}
-		if req.toolRefsSet && req.ToolRefs == nil {
-			writeError(w, http.StatusBadRequest, "toolRefs cannot be null")
-			return
-		}
-		if req.responseSchemaSet && req.ResponseSchema == nil {
-			writeError(w, http.StatusBadRequest, "responseSchema cannot be null")
 			return
 		}
 	}
@@ -508,6 +564,10 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validateAgentToolRefs(req.ToolRefs); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if presence.ToolRefs && req.ToolRefs == nil {
+		writeError(w, http.StatusBadRequest, "toolRefs must be an array")
 		return
 	}
 	toolSource, err := agentToolSourceModeFromRequest(req.ToolSource)
@@ -520,13 +580,15 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid messages: %v", err))
 		return
 	}
-	var responseSchema *structpb.Struct
-	if req.responseSchemaSet {
-		responseSchema, err = structpb.NewStruct(req.ResponseSchema)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid responseSchema: %v", err))
-			return
-		}
+	output, err := agentOutputFromRequest(req.Output, presence.Output)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	outputProto, err := agentOutputToProto(output)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 	metadata, err := agentStructFromMap(req.Metadata)
 	if err != nil {
@@ -544,9 +606,9 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		SessionId:      strings.TrimSpace(sessionID),
 		Messages:       messages,
 		ToolRefs:       agentToolRefsForCreateTurn(req),
-		ToolRefsSet:    req.toolRefsSet,
+		ToolRefsSet:    presence.ToolRefs,
 		ToolSource:     agentToolSourceModeToProto(toolSource),
-		ResponseSchema: responseSchema,
+		Output:         outputProto,
 		Metadata:       metadata,
 		ModelOptions:   modelOptions,
 	})
@@ -561,32 +623,47 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, agentTurnInfoFromCore(turn))
 }
 
-func decodeAgentTurnCreateRequest(r io.Reader, req *agentTurnCreateRequest) error {
-	body, err := io.ReadAll(r)
+func decodeAgentTurnCreateRequest(body io.Reader) (agentTurnCreateRequest, agentTurnCreateRequestPresence, error) {
+	var req agentTurnCreateRequest
+	var presence agentTurnCreateRequestPresence
+	rawBody, err := io.ReadAll(body)
 	if err != nil {
-		return err
+		return req, presence, err
 	}
-	if len(bytes.TrimSpace(body)) == 0 {
-		return io.EOF
+	if len(strings.TrimSpace(string(rawBody))) == 0 {
+		return req, presence, nil
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(body, &fields); err != nil {
-		return err
+	if err := json.Unmarshal(rawBody, &req); err != nil {
+		return req, presence, err
 	}
-	rawToolRefs, hasToolRefs := fields["toolRefs"]
-	rawResponseSchema, hasResponseSchema := fields["responseSchema"]
-	if err := json.Unmarshal(body, req); err != nil {
-		return err
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(rawBody, &raw); err != nil {
+		return req, presence, err
 	}
-	req.toolRefsSet = hasToolRefs
-	req.responseSchemaSet = hasResponseSchema
-	if hasToolRefs && bytes.Equal(bytes.TrimSpace(rawToolRefs), []byte("null")) {
-		req.ToolRefs = nil
+	if _, ok := raw["toolRefs"]; ok {
+		presence.ToolRefs = true
 	}
-	if hasResponseSchema && bytes.Equal(bytes.TrimSpace(rawResponseSchema), []byte("null")) {
-		req.ResponseSchema = nil
+	if value, ok := raw["output"]; ok {
+		presence.Output = &agentOutputRequestPresence{}
+		if jsonRawMessageIsNull(value) {
+			return req, presence, nil
+		}
+		var output map[string]json.RawMessage
+		if err := json.Unmarshal(value, &output); err != nil {
+			return req, presence, fmt.Errorf("output must be an object")
+		}
+		if _, ok := output["text"]; ok {
+			presence.Output.Text = true
+		}
+		if _, ok := output["structured"]; ok {
+			presence.Output.Structured = true
+		}
 	}
-	return nil
+	return req, presence, nil
+}
+
+func jsonRawMessageIsNull(value json.RawMessage) bool {
+	return string(bytes.TrimSpace(value)) == "null"
 }
 
 func (s *Server) listAgentTurns(w http.ResponseWriter, r *http.Request) {
@@ -1364,7 +1441,6 @@ func agentProviderCapabilitiesInfoFromCore(caps *coreagent.ProviderCapabilities)
 		StreamingText:             caps.StreamingText,
 		ToolCalls:                 caps.ToolCalls,
 		ParallelToolCalls:         caps.ParallelToolCalls,
-		StructuredOutput:          caps.StructuredOutput,
 		Interactions:              caps.Interactions,
 		ResumableTurns:            caps.ResumableTurns,
 		ReasoningSummaries:        caps.ReasoningSummaries,
@@ -1410,10 +1486,91 @@ func agentTurnInfoFromCoreView(turn *coreagent.Turn, summaryOnly bool) agentTurn
 	info.ExecutionRef = strings.TrimSpace(turn.ExecutionRef)
 	if !summaryOnly {
 		info.Messages = agentMessageInfoFromCore(turn.Messages)
-		info.OutputText = turn.OutputText
-		info.StructuredOutput = maps.Clone(turn.StructuredOutput)
+		info.Output = agentTurnOutputInfoFromCore(turn.Output)
 	}
 	return info
+}
+
+func agentOutputFromRequest(output *agentOutputRequest, presence *agentOutputRequestPresence) (coreagent.Output, error) {
+	if output == nil {
+		return coreagent.Output{}, fmt.Errorf("output is required")
+	}
+	textSet := output.Text != nil
+	structuredSet := output.Structured != nil
+	if presence != nil {
+		textSet = presence.Text
+		structuredSet = presence.Structured
+	} else if output.textSet || output.structuredSet {
+		textSet = output.textSet
+		structuredSet = output.structuredSet
+	}
+	if textSet == structuredSet {
+		return coreagent.Output{}, fmt.Errorf("exactly one of output.text or output.structured is required")
+	}
+	if structuredSet {
+		if output.Structured == nil {
+			return coreagent.Output{}, fmt.Errorf("output.structured must be an object")
+		}
+		return coreagent.Output{
+			Structured: &coreagent.StructuredOutput{
+				ResponseSchema: maps.Clone(output.Structured.ResponseSchema),
+			},
+		}, nil
+	}
+	if textSet {
+		if output.Text == nil {
+			return coreagent.Output{}, fmt.Errorf("output.text must be an object")
+		}
+		return coreagent.Output{Text: &coreagent.TextOutput{}}, nil
+	}
+	return coreagent.Output{}, fmt.Errorf("exactly one of output.text or output.structured is required")
+}
+
+func agentOutputToProto(output coreagent.Output) (*proto.AgentOutput, error) {
+	if output.Structured != nil {
+		responseSchema, err := agentStructFromMap(output.Structured.ResponseSchema)
+		if err != nil {
+			return nil, fmt.Errorf("invalid output.structured.responseSchema: %v", err)
+		}
+		return &proto.AgentOutput{
+			Kind: &proto.AgentOutput_Structured{
+				Structured: &proto.AgentStructuredOutput{ResponseSchema: responseSchema},
+			},
+		}, nil
+	}
+	if output.Text != nil {
+		return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}, nil
+	}
+	return nil, fmt.Errorf("exactly one of output.text or output.structured is required")
+}
+
+func agentOutputRequestFromCore(output coreagent.Output) *agentOutputRequest {
+	if output.Structured != nil {
+		return &agentOutputRequest{
+			Structured: &agentStructuredOutputRequest{
+				ResponseSchema: maps.Clone(output.Structured.ResponseSchema),
+			},
+		}
+	}
+	if output.Text != nil {
+		return &agentOutputRequest{Text: &agentTextOutputRequest{}}
+	}
+	return nil
+}
+
+func agentTurnOutputInfoFromCore(output coreagent.TurnOutput) *agentTurnOutputInfo {
+	if output.Structured != nil {
+		return &agentTurnOutputInfo{
+			Structured: &agentTurnStructuredOutputInfo{
+				Text:  output.Structured.Text,
+				Value: maps.Clone(output.Structured.Value),
+			},
+		}
+	}
+	if output.Text != nil {
+		return &agentTurnOutputInfo{Text: &agentTurnTextOutputInfo{Text: output.Text.Text}}
+	}
+	return nil
 }
 
 func agentTurnEventInfoFromCore(event *coreagent.TurnEvent) agentTurnEventInfo {
@@ -1553,8 +1710,7 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 		errors.Is(err, agentmanager.ErrAgentWorkflowToolsNotConfigured),
 		errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported),
 		errors.Is(err, agentmanager.ErrAgentSessionStartUnsupported),
-		errors.Is(err, agentmanager.ErrAgentWorkspaceUnsupported),
-		errors.Is(err, agentmanager.ErrAgentStructuredOutputUnsupported):
+		errors.Is(err, agentmanager.ErrAgentWorkspaceUnsupported):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentProviderNotAvailable):
 		writeError(w, http.StatusServiceUnavailable, err.Error())

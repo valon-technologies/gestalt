@@ -171,8 +171,7 @@ const TURN_TRANSCRIPT_JSON: &str = r#"{
             {"json":{"priority":"high"}}
         ]}
     ],
-    "outputText":"historical answer",
-    "structuredOutput":{"summary":"done"},
+	"output":{"structured":{"text":"historical answer","value":{"summary":"done"}}},
     "createdAt":"2026-04-22T00:00:00Z",
     "executionRef":"turn-1"
 }"#;
@@ -288,10 +287,14 @@ fn test_cli_creates_agent_turn_from_input() {
         "toolSource":"mcp_catalog",
         "metadata":{"ticket":"TASK-123"},
         "modelOptions":{"temperature":0.2},
-        "responseSchema":{
-            "type":"object",
-            "properties":{"summary":{"type":"string"}},
-            "required":["summary"]
+        "output":{
+            "structured":{
+                "responseSchema":{
+                    "type":"object",
+                    "properties":{"summary":{"type":"string"}},
+                    "required":["summary"]
+                }
+            }
         },
         "messages":[
             {"role":"user","text":"Summarize the roadmap risk."}
@@ -666,7 +669,7 @@ fn test_cli_runs_interactive_agent_session() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello\nthere"}],"toolRefs":[{"app":"tracker","operation":"searchItems"}]}"#.to_string(),
+        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello\nthere"}],"toolRefs":[{"app":"tracker","operation":"searchItems"}],"output":{"text":{}}}"#.to_string(),
     ))
     .with_body(TURN_JSON)
     .create();
@@ -698,8 +701,7 @@ fn test_cli_runs_interactive_agent_session() {
             "provider":"managed",
             "model":"gpt-5.4",
             "status":"succeeded",
-            "outputText":"hello back",
-            "structuredOutput":{"summary":"ok"}
+            "output":{"structured":{"text":"hello back","value":{"summary":"ok"}}}
         }"#,
     )
     .create();
@@ -754,7 +756,7 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"display events"}]}"#.to_string(),
+        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"display events"}],"output":{"text":{}}}"#.to_string(),
     ))
     .with_body(TURN_JSON)
     .create();
@@ -796,7 +798,7 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
             "provider":"managed",
             "model":"gpt-5.4",
             "status":"succeeded",
-            "outputText":"**hello**\n  display"
+            "output":{"text":{"text":"**hello**\n  display"}}
         }"#,
     )
     .create();
@@ -880,7 +882,7 @@ fn test_cli_runs_tty_agent_session_in_isolated_selectable_ui() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"hello from tui"
+                "output":{"text":{"text":"hello from tui"}}
             }"#,
         ),
     ]);
@@ -1052,7 +1054,7 @@ fn test_cli_tty_resume_model_override_updates_visible_model_and_turn_payload() {
                 "provider":"managed",
                 "model":"gpt-5.5",
                 "status":"succeeded",
-                "outputText":"override acknowledged"
+                "output":{"text":{"text":"override acknowledged"}}
             }"#,
         ),
     ]);
@@ -1134,7 +1136,7 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"display done"
+                "output":{"text":{"text":"display done"}}
             }"#,
         ),
     ]);
@@ -1264,7 +1266,7 @@ fn test_cli_tty_groups_tool_activity_rows() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"tools done"
+                "output":{"text":{"text":"tools done"}}
             }"#,
         ),
     ]);
@@ -1445,7 +1447,7 @@ fn test_cli_tty_help_and_prompt_history() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"first response"
+                "output":{"text":{"text":"first response"}}
             }"#,
         ),
         ExpectedRequest::json(
@@ -1481,7 +1483,7 @@ fn test_cli_tty_help_and_prompt_history() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"beta response"
+                "output":{"text":{"text":"beta response"}}
             }"#,
         ),
         ExpectedRequest::json(
@@ -1517,7 +1519,7 @@ fn test_cli_tty_help_and_prompt_history() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"gamma response"
+                "output":{"text":{"text":"gamma response"}}
             }"#,
         ),
     ]);
@@ -1602,7 +1604,7 @@ fn test_cli_tty_ctrl_j_inserts_multiline_prompt() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"multiline received"
+                "output":{"text":{"text":"multiline received"}}
             }"#,
         ),
     ]);
@@ -1760,7 +1762,7 @@ fn test_cli_tty_ctrl_l_redraw_preserves_transcript_and_input() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"redraw preserved input"
+                "output":{"text":{"text":"redraw preserved input"}}
             }"#,
         ),
     ]);
@@ -1894,7 +1896,7 @@ fn test_cli_tty_renders_markdown_like_assistant_content() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"**Fixture Heading**\nUse `lookupItems` with _active_ filters and [Reference](https://example.test).\n```json\n{\"ok\":true}\n```\nKeep record_id and __init__ literal."
+                "output":{"text":{"text":"**Fixture Heading**\nUse `lookupItems` with _active_ filters and [Reference](https://example.test).\n```json\n{\"ok\":true}\n```\nKeep record_id and __init__ literal."}}
             }"#,
         ),
     ]);
@@ -1984,7 +1986,7 @@ fn test_cli_tty_wraps_wide_transcript_text_by_display_width() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"一二三四五六七八九十👩‍💻👨‍💻"
+                "output":{"text":{"text":"一二三四五六七八九十👩‍💻👨‍💻"}}
             }"#,
         ),
     ]);
@@ -2060,7 +2062,7 @@ fn test_cli_tty_queues_prompt_while_turn_is_running() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"done-one"
+                "output":{"text":{"text":"done-one"}}
             }"#,
         ),
         ExpectedRequest::json(
@@ -2096,7 +2098,7 @@ fn test_cli_tty_queues_prompt_while_turn_is_running() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"done-two"
+                "output":{"text":{"text":"done-two"}}
             }"#,
         ),
     ]);
@@ -2242,7 +2244,7 @@ fn test_cli_tty_turn_boundary_stops_stale_streaming_transcript_item() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"beta"
+                "output":{"text":{"text":"beta"}}
             }"#,
         ),
     ]);
@@ -2375,7 +2377,7 @@ fn test_cli_tty_secret_interaction_masks_and_requires_input() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"token accepted"
+                "output":{"text":{"text":"token accepted"}}
             }"#,
         ),
     ]);
@@ -2474,7 +2476,7 @@ fn test_cli_resumes_latest_active_agent_session() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"continued"
+                "output":{"text":{"text":"continued"}}
             }"#,
         ),
     ]);
@@ -2882,7 +2884,7 @@ fn test_cli_agent_model_slash_sets_future_turn_model() {
                 "provider":"managed",
                 "model":"gpt-5.5",
                 "status":"succeeded",
-                "outputText":"hello from 5.5"
+                "output":{"text":{"text":"hello from 5.5"}}
             }"#,
         ),
     ]);
@@ -3013,7 +3015,7 @@ fn test_cli_resumes_existing_agent_session_and_resolves_input_interaction() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"incident INC-42 summarized"
+                "output":{"text":{"text":"incident INC-42 summarized"}}
             }"#,
         ),
     ]);
@@ -3146,7 +3148,7 @@ fn test_cli_resolves_agent_interaction_in_interactive_mode() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"deployment approved"
+                "output":{"text":{"text":"deployment approved"}}
             }"#,
         ),
     ]);
@@ -3200,10 +3202,20 @@ impl ExpectedRequest {
         content_type: &str,
         response_body: &str,
     ) -> Self {
+        let mut body: Value = serde_json::from_str(body).unwrap();
+        if method == Method::POST
+            && path.starts_with("/api/v1/agent/sessions/")
+            && path.ends_with("/turns")
+            && body.get("output").is_none()
+        {
+            body.as_object_mut()
+                .unwrap()
+                .insert("output".to_string(), serde_json::json!({"text": {}}));
+        }
         Self {
             method,
             path: path.to_string(),
-            body: Some(serde_json::from_str(body).unwrap()),
+            body: Some(body),
             status,
             content_type: content_type.to_string(),
             response_body: response_body.to_string(),

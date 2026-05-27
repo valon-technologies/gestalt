@@ -277,6 +277,8 @@ workflows:
               provider: simple
               model: fast
               prompt: Summarize yesterday.
+              output:
+                text: {}
               tools:
                 - app: roadmap
                   operation: sync

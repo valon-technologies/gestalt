@@ -139,8 +139,7 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, token strin
 		Model:          model,
 		Messages:       messages,
 		ToolRefs:       append([]gestalt.AgentToolRef(nil), agent.Tools...),
-		ToolRefsSet:    true,
-		ResponseSchema: agent.ResponseSchema,
+		Output:         agent.Output,
 		Metadata:       stepMetadata,
 		ModelOptions:   agent.ModelOptions,
 		TimeoutSeconds: timeoutSeconds,
@@ -323,8 +322,17 @@ func WorkflowAgentOutputEnvelope(session *gestalt.AgentSession, turn *gestalt.Ag
 	}
 	if turn != nil {
 		agent["turnId"] = turn.ID
-		agent["text"] = turn.OutputText
-		agent["structuredOutput"] = maps.Clone(turn.StructuredOutput)
+		output := map[string]any{}
+		if text := turn.Output.Text; text != nil {
+			output["text"] = map[string]any{"text": text.Text}
+		}
+		if structured := turn.Output.Structured; structured != nil {
+			output["structured"] = map[string]any{
+				"text":  structured.Text,
+				"value": maps.Clone(structured.Value),
+			}
+		}
+		agent["output"] = output
 	}
 	return map[string]any{"version": 1, "kind": "agent", "agent": agent}
 }

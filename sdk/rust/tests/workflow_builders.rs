@@ -4,11 +4,11 @@ use serde::Serialize;
 use serde_json::json;
 
 use gestalt::{
-    AgentToolRef, BoundWorkflowRun, BoundWorkflowTarget, WorkflowAgentMessage, WorkflowRunStatus,
-    WorkflowRunTrigger, WorkflowSignal, WorkflowStep, WorkflowStepAction, WorkflowStepAgentTurn,
-    WorkflowStepAppCall, WorkflowStepOutputSource, WorkflowStepWhen, WorkflowText, WorkflowValue,
-    new_bound_workflow_run, new_bound_workflow_target, new_bound_workflow_target_from_target,
-    new_workflow_signal,
+    AgentOutput, AgentToolRef, BoundWorkflowRun, BoundWorkflowTarget, WorkflowAgentMessage,
+    WorkflowRunStatus, WorkflowRunTrigger, WorkflowSignal, WorkflowStep, WorkflowStepAction,
+    WorkflowStepAgentTurn, WorkflowStepAppCall, WorkflowStepOutputSource, WorkflowStepWhen,
+    WorkflowText, WorkflowValue, new_bound_workflow_run, new_bound_workflow_target,
+    new_bound_workflow_target_from_target, new_workflow_signal,
 };
 
 #[derive(Serialize)]
@@ -125,9 +125,9 @@ fn workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()> {
                         operation: "queryLogs".to_string(),
                         ..Default::default()
                     }],
-                    response_schema: Some(json!({"type": "object"})),
+                    output: AgentOutput::structured_schema(json!({"type": "object"}))?,
                     model_options: Some(json!({"temperature": 0})),
-                    ..Default::default()
+                    session_key: String::new(),
                 }),
                 timeout_seconds: 45,
                 metadata: Some(json!({"kind": "diagnosis"})),
@@ -146,12 +146,15 @@ fn workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()> {
                         operation: "createPullRequest".to_string(),
                         ..Default::default()
                     }],
-                    ..Default::default()
+                    output: AgentOutput::text(),
+                    session_key: String::new(),
+                    messages: Vec::new(),
+                    model_options: None,
                 }),
                 when: Some(WorkflowStepWhen {
                     value: Some(WorkflowValue::StepOutput(WorkflowStepOutputSource {
                         step_id: "diagnosis".to_string(),
-                        path: "agent.structuredOutput.actionable_for_pr".to_string(),
+                        path: "agent.output.structured.value.actionable_for_pr".to_string(),
                     })),
                     equals: Some(json!(true)),
                 }),
@@ -182,7 +185,7 @@ fn workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()> {
                 Some(WorkflowValue::StepOutput(source)) => Some(source.path.as_str()),
                 _ => None,
             }),
-        Some("agent.structuredOutput.actionable_for_pr")
+        Some("agent.output.structured.value.actionable_for_pr")
     );
     Ok(())
 }

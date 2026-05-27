@@ -30,14 +30,15 @@ use generated::v1::{
     UpsertWorkflowProviderScheduleRequest, WorkflowEvent as ProtoWorkflowEvent, workflow_step,
 };
 use gestalt::{
-    BoundWorkflowTarget, Request, Workflow, WorkflowAgentMessage, WorkflowCreateDefinition,
-    WorkflowCreateEventTrigger, WorkflowCreateSchedule, WorkflowDeleteDefinition,
-    WorkflowDeleteEventTrigger, WorkflowDeleteSchedule, WorkflowEvent, WorkflowEventMatch,
-    WorkflowGetDefinition, WorkflowGetEventTrigger, WorkflowGetSchedule, WorkflowPauseEventTrigger,
-    WorkflowPauseSchedule, WorkflowPublishEvent, WorkflowResumeEventTrigger,
-    WorkflowResumeSchedule, WorkflowSignal, WorkflowSignalOrStartRun, WorkflowSignalRun,
-    WorkflowStartRun, WorkflowStep, WorkflowStepAction, WorkflowStepAgentTurn, WorkflowStepAppCall,
-    WorkflowText, WorkflowUpdateDefinition, WorkflowUpdateEventTrigger, WorkflowUpdateSchedule,
+    AgentOutput, BoundWorkflowTarget, Request, Workflow, WorkflowAgentMessage,
+    WorkflowCreateDefinition, WorkflowCreateEventTrigger, WorkflowCreateSchedule,
+    WorkflowDeleteDefinition, WorkflowDeleteEventTrigger, WorkflowDeleteSchedule, WorkflowEvent,
+    WorkflowEventMatch, WorkflowGetDefinition, WorkflowGetEventTrigger, WorkflowGetSchedule,
+    WorkflowPauseEventTrigger, WorkflowPauseSchedule, WorkflowPublishEvent,
+    WorkflowResumeEventTrigger, WorkflowResumeSchedule, WorkflowSignal, WorkflowSignalOrStartRun,
+    WorkflowSignalRun, WorkflowStartRun, WorkflowStep, WorkflowStepAction, WorkflowStepAgentTurn,
+    WorkflowStepAppCall, WorkflowText, WorkflowUpdateDefinition, WorkflowUpdateEventTrigger,
+    WorkflowUpdateSchedule,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -1094,7 +1095,11 @@ async fn workflow_signal_or_start_accepts_native_values() {
                             }),
                             ..Default::default()
                         }],
-                        ..Default::default()
+                        output: AgentOutput::text(),
+                        session_key: String::new(),
+                        prompt: None,
+                        tools: Vec::new(),
+                        model_options: None,
                     }),
                     ..Default::default()
                 }],

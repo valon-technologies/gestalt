@@ -98,7 +98,7 @@ test("workflow values preserve null literals and empty collections", () => {
       condition: {
         stepOutput: {
           stepId: "diagnosis",
-          path: "agent.structuredOutput.actionableForPr",
+          path: "agent.output.structured.value.actionableForPr",
         },
       },
     },
@@ -115,7 +115,7 @@ test("workflow values preserve null literals and empty collections", () => {
     case: "stepOutput",
     value: {
       stepId: "diagnosis",
-      path: "agent.structuredOutput.actionableForPr",
+      path: "agent.output.structured.value.actionableForPr",
     },
   });
 });
@@ -147,7 +147,7 @@ test("agent and app workflow steps round-trip through copy helpers", () => {
           prompt: "Diagnose the alert.",
           messages: [{ role: "system", text: "Use concise replies." }],
           tools: [{ app: "datadog", operation: "queryLogs" }],
-          responseSchema: { type: "object" },
+          output: { structured: { responseSchema: { type: "object" } } },
           modelOptions: { temperature: 0 },
         },
         timeoutSeconds: 45,
@@ -158,13 +158,14 @@ test("agent and app workflow steps round-trip through copy helpers", () => {
         agent: {
           provider: "agent",
           prompt: "Open a PR.",
+          output: { text: {} },
           tools: [{ app: "github", operation: "createPullRequest" }],
         },
         when: {
           value: {
             stepOutput: {
               stepId: "diagnosis",
-              path: "agent.structuredOutput.actionableForPr",
+              path: "agent.output.structured.value.actionableForPr",
             },
           },
           equals: true,
@@ -181,12 +182,12 @@ test("agent and app workflow steps round-trip through copy helpers", () => {
 
   const copied = boundWorkflowTargetFromTarget(target);
   const copiedSteps = copied.steps ?? [];
-  expect(copiedSteps[0]?.agent?.responseSchema).toEqual({ type: "object" });
+  expect(copiedSteps[0]?.agent?.output?.structured?.responseSchema).toEqual({ type: "object" });
   expect(copiedSteps[1]?.when?.value?.kind).toEqual({
     case: "stepOutput",
     value: {
       stepId: "diagnosis",
-      path: "agent.structuredOutput.actionableForPr",
+      path: "agent.output.structured.value.actionableForPr",
     },
   });
 });

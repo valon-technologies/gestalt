@@ -82,8 +82,10 @@ import {
   type WorkflowText as ProtoWorkflowText,
   type WorkflowValue as ProtoWorkflowValue,
 } from "./internal/gen/v1/workflow_pb.ts";
-import type { AgentToolRef } from "./agent.ts";
+import type { AgentOutput, AgentToolRef } from "./agent.ts";
 import {
+  agentOutputFromProto,
+  agentOutputToProto,
   agentToolRefFromProto,
   agentToolRefToProto,
 } from "./agent-conversions.ts";
@@ -172,7 +174,7 @@ export interface WorkflowStepAgentTurn {
   prompt?: WorkflowText | string | undefined;
   messages?: readonly WorkflowAgentMessage[] | undefined;
   tools?: readonly AgentToolRef[] | undefined;
-  responseSchema?: JsonObjectInput | undefined;
+  output: AgentOutput;
   modelOptions?: JsonObjectInput | undefined;
 }
 
@@ -694,7 +696,7 @@ export function workflowAgentMessageInputFromMessage(
 
 /** Creates a workflow agent step turn from native input. */
 export function workflowStepAgentTurn(
-  input: WorkflowStepAgentTurn = {},
+  input: WorkflowStepAgentTurn,
 ): WorkflowStepAgentTurn {
   return {
     provider: input.provider ?? "",
@@ -703,7 +705,7 @@ export function workflowStepAgentTurn(
     prompt: input.prompt === undefined ? undefined : workflowText(input.prompt),
     messages: input.messages?.map(workflowAgentMessage) ?? [],
     tools: [...(input.tools ?? [])],
-    responseSchema: input.responseSchema === undefined ? undefined : structFromObject(input.responseSchema),
+    output: input.output,
     modelOptions: input.modelOptions === undefined ? undefined : structFromObject(input.modelOptions),
   };
 }
@@ -722,7 +724,7 @@ export function workflowStepAgentTurnInputFromTurn(
     prompt: workflowTextInputFromText(input.prompt as WorkflowText | undefined),
     messages: input.messages?.map((message) => workflowAgentMessageInputFromMessage(message)!) ?? [],
     tools: [...(input.tools ?? [])],
-    responseSchema: input.responseSchema === undefined ? undefined : jsonObjectClone(input.responseSchema),
+    output: workflowAgentOutputInputFromOutput(input.output),
     modelOptions: input.modelOptions === undefined ? undefined : jsonObjectClone(input.modelOptions),
   };
 }
@@ -1907,16 +1909,20 @@ export function workflowStepAgentTurnToProto(
     prompt: workflowTextToProto(input.prompt),
     messages: input.messages?.map(workflowAgentMessageToProto) ?? [],
     tools: input.tools?.map(agentToolRefToProto) ?? [],
-    responseSchema: optionalStruct(input.responseSchema),
+    output: agentOutputToProto(input.output),
     modelOptions: optionalStruct(input.modelOptions),
   });
 }
 
 export function workflowStepAgentTurnFromProto(
-  input?: ProtoWorkflowStepAgentTurn | undefined,
+	input?: ProtoWorkflowStepAgentTurn | undefined,
 ): WorkflowStepAgentTurn | undefined {
   if (input === undefined) {
     return undefined;
+  }
+  const output = agentOutputFromProto(input.output);
+  if (output === undefined) {
+    throw new Error("workflow agent output is required");
   }
   return {
     provider: input.provider,
@@ -1925,7 +1931,7 @@ export function workflowStepAgentTurnFromProto(
     prompt: workflowTextFromProto(input.prompt),
     messages: input.messages.map(workflowAgentMessageFromProto),
     tools: input.tools.map(agentToolRefFromProto),
-    responseSchema: optionalObjectFromStruct(input.responseSchema),
+    output,
     modelOptions: optionalObjectFromStruct(input.modelOptions),
   };
 }
@@ -2599,6 +2605,22 @@ function cloneWorkflowValueKind(kind: WorkflowValueKind): WorkflowValueKind {
 
 function valueMapInput(input?: Record<string, JsonInput>): Record<string, JsonInput> {
   return input === undefined ? {} : { ...input };
+}
+
+function workflowAgentOutputInputFromOutput(
+  input: AgentOutput,
+): AgentOutput {
+  if (input.text !== undefined) {
+    return { text: {} };
+  }
+  if (input.structured !== undefined) {
+    return {
+      structured: {
+        responseSchema: jsonObjectClone(input.structured.responseSchema),
+      },
+    };
+  }
+  throw new Error("workflow agent output is required");
 }
 
 function jsonObjectClone(input: JsonObjectInput): JsonObjectInput {

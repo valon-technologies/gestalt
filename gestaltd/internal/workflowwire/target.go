@@ -152,7 +152,7 @@ func parseAgentTurn(value any, path string) (*coreworkflow.AgentTurn, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: %s must be an object", ErrInvalid, path)
 	}
-	if err := rejectUnknownKeys(agentMap, path, "provider", "model", "sessionKey", "prompt", "messages", "tools", "responseSchema", "modelOptions"); err != nil {
+	if err := rejectUnknownKeys(agentMap, path, "provider", "model", "sessionKey", "prompt", "messages", "tools", "output", "modelOptions"); err != nil {
 		return nil, err
 	}
 	messages, err := parseMessages(agentMap["messages"], path+".messages")
@@ -163,7 +163,7 @@ func parseAgentTurn(value any, path string) (*coreworkflow.AgentTurn, error) {
 	if err != nil {
 		return nil, err
 	}
-	responseSchema, err := objectArg(agentMap, "responseSchema", path)
+	output, err := parseAgentOutput(agentMap["output"], path+".output")
 	if err != nil {
 		return nil, err
 	}
@@ -176,15 +176,55 @@ func parseAgentTurn(value any, path string) (*coreworkflow.AgentTurn, error) {
 		return nil, err
 	}
 	return &coreworkflow.AgentTurn{
-		ProviderName:   stringArg(agentMap, "provider"),
-		Model:          stringArg(agentMap, "model"),
-		SessionKey:     stringArg(agentMap, "sessionKey"),
-		Prompt:         prompt,
-		Messages:       messages,
-		ToolRefs:       tools,
-		ResponseSchema: responseSchema,
-		ModelOptions:   modelOptions,
+		ProviderName: stringArg(agentMap, "provider"),
+		Model:        stringArg(agentMap, "model"),
+		SessionKey:   stringArg(agentMap, "sessionKey"),
+		Prompt:       prompt,
+		Messages:     messages,
+		ToolRefs:     tools,
+		Output:       output,
+		ModelOptions: modelOptions,
 	}, nil
+}
+
+func parseAgentOutput(value any, path string) (coreagent.Output, error) {
+	if value == nil {
+		return coreagent.Output{}, fmt.Errorf("%w: %s is required", ErrInvalid, path)
+	}
+	outputMap, ok := asMap(value)
+	if !ok {
+		return coreagent.Output{}, fmt.Errorf("%w: %s must be an object", ErrInvalid, path)
+	}
+	if err := rejectUnknownKeys(outputMap, path, "text", "structured"); err != nil {
+		return coreagent.Output{}, err
+	}
+	_, hasText := outputMap["text"]
+	_, hasStructured := outputMap["structured"]
+	if hasText == hasStructured {
+		return coreagent.Output{}, fmt.Errorf("%w: exactly one of %s.text or %s.structured is required", ErrInvalid, path, path)
+	}
+	if hasText {
+		textMap, ok := asMap(outputMap["text"])
+		if !ok {
+			return coreagent.Output{}, fmt.Errorf("%w: %s.text must be an object", ErrInvalid, path)
+		}
+		if err := rejectUnknownKeys(textMap, path+".text"); err != nil {
+			return coreagent.Output{}, err
+		}
+		return coreagent.Output{Text: &coreagent.TextOutput{}}, nil
+	}
+	structuredMap, ok := asMap(outputMap["structured"])
+	if !ok {
+		return coreagent.Output{}, fmt.Errorf("%w: %s.structured must be an object", ErrInvalid, path)
+	}
+	if err := rejectUnknownKeys(structuredMap, path+".structured", "responseSchema"); err != nil {
+		return coreagent.Output{}, err
+	}
+	responseSchema, err := objectArg(structuredMap, "responseSchema", path+".structured")
+	if err != nil {
+		return coreagent.Output{}, err
+	}
+	return coreagent.Output{Structured: &coreagent.StructuredOutput{ResponseSchema: responseSchema}}, nil
 }
 
 func parseStepWhen(value any, path string) (*coreworkflow.StepWhen, error) {
@@ -345,8 +385,15 @@ func encodeAgentTurn(agent coreworkflow.AgentTurn) map[string]any {
 		}
 		value["messages"] = messages
 	}
-	if agent.ResponseSchema != nil {
-		value["responseSchema"] = mapDeepClone(agent.ResponseSchema)
+	if agent.Output.Text != nil {
+		value["output"] = map[string]any{"text": map[string]any{}}
+	}
+	if agent.Output.Structured != nil {
+		value["output"] = map[string]any{
+			"structured": map[string]any{
+				"responseSchema": mapDeepClone(agent.Output.Structured.ResponseSchema),
+			},
+		}
 	}
 	return value
 }

@@ -1994,6 +1994,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
       metadata: {
         requireInteraction: true,
       },
+      output: { kind: { case: "text", value: {} } },
       executionRef: "exec-turn-1",
     }),
   );
@@ -2110,6 +2111,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
         displayName: "Ada",
         authSource: "api_token",
       },
+      output: { kind: { case: "text", value: {} } },
       executionRef: "exec-turn-2",
     }),
   );
@@ -2117,7 +2119,8 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
   expect(completedTurn.providerName).toBe("fixture-agent");
   expect(completedTurn.model).toBe("gpt-test");
   expect(completedTurn.status).toBe(AgentExecutionStatus.SUCCEEDED);
-  expect(completedTurn.outputText).toBe("echo:Summarize deployment status");
+  expect(completedTurn.output.case).toBe("text");
+  expect(completedTurn.output.value?.text).toBe("echo:Summarize deployment status");
   expect(completedTurn.createdBy?.subjectId).toBe("user:user-123");
   expect(completedTurn.messages[0]?.parts[0]?.type).toBe(
     AgentMessagePartType.TEXT,

@@ -185,20 +185,44 @@ type SessionStartHookOutput struct {
 }
 
 type Turn struct {
-	ID               string
-	SessionID        string
-	ProviderName     string
-	Model            string
-	Status           ExecutionStatus
-	Messages         []Message
-	OutputText       string
-	StructuredOutput map[string]any
-	StatusMessage    string
-	CreatedBy        Actor
-	CreatedAt        *time.Time
-	StartedAt        *time.Time
-	CompletedAt      *time.Time
-	ExecutionRef     string
+	ID            string
+	SessionID     string
+	ProviderName  string
+	Model         string
+	Status        ExecutionStatus
+	Messages      []Message
+	Output        TurnOutput
+	StatusMessage string
+	CreatedBy     Actor
+	CreatedAt     *time.Time
+	StartedAt     *time.Time
+	CompletedAt   *time.Time
+	ExecutionRef  string
+}
+
+type Output struct {
+	Text       *TextOutput
+	Structured *StructuredOutput
+}
+
+type TextOutput struct{}
+
+type StructuredOutput struct {
+	ResponseSchema map[string]any
+}
+
+type TurnOutput struct {
+	Text       *TurnTextOutput
+	Structured *TurnStructuredOutput
+}
+
+type TurnTextOutput struct {
+	Text string
+}
+
+type TurnStructuredOutput struct {
+	Text  string
+	Value map[string]any
 }
 
 type TurnEvent struct {
@@ -232,7 +256,6 @@ type ProviderCapabilities struct {
 	StreamingText             bool
 	ToolCalls                 bool
 	ParallelToolCalls         bool
-	StructuredOutput          bool
 	Interactions              bool
 	ResumableTurns            bool
 	ReasoningSummaries        bool

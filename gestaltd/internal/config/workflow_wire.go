@@ -127,15 +127,32 @@ func workflowAgentTurnToCore(agent *WorkflowStepAgentConfig) *coreworkflow.Agent
 		})
 	}
 	return &coreworkflow.AgentTurn{
-		ProviderName:   strings.TrimSpace(agent.Provider),
-		Model:          strings.TrimSpace(agent.Model),
-		SessionKey:     strings.TrimSpace(agent.SessionKey),
-		Prompt:         coreworkflow.Text{Template: strings.TrimSpace(agent.Prompt.Template)},
-		Messages:       messages,
-		ToolRefs:       tools,
-		ResponseSchema: maps.Clone(agent.ResponseSchema),
-		ModelOptions:   maps.Clone(agent.ModelOptions),
+		ProviderName: strings.TrimSpace(agent.Provider),
+		Model:        strings.TrimSpace(agent.Model),
+		SessionKey:   strings.TrimSpace(agent.SessionKey),
+		Prompt:       coreworkflow.Text{Template: strings.TrimSpace(agent.Prompt.Template)},
+		Messages:     messages,
+		ToolRefs:     tools,
+		Output:       WorkflowAgentOutputToCore(agent.Output),
+		ModelOptions: maps.Clone(agent.ModelOptions),
 	}
+}
+
+func WorkflowAgentOutputToCore(output *WorkflowAgentOutputConfig) coreagent.Output {
+	if output == nil {
+		return coreagent.Output{}
+	}
+	if output.Structured != nil {
+		return coreagent.Output{
+			Structured: &coreagent.StructuredOutput{
+				ResponseSchema: maps.Clone(output.Structured.ResponseSchema),
+			},
+		}
+	}
+	if output.Text != nil {
+		return coreagent.Output{Text: &coreagent.TextOutput{}}
+	}
+	return coreagent.Output{}
 }
 
 // WorkflowStepWhenToCore converts config YAML step-when form into core workflow form.

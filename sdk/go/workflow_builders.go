@@ -41,14 +41,14 @@ type WorkflowStepAppCall struct {
 // WorkflowStepAgentTurn contains fields for an agent action inside a workflow
 // step.
 type WorkflowStepAgentTurn struct {
-	Provider       string
-	Model          string
-	SessionKey     string
-	Prompt         WorkflowText
-	Messages       []WorkflowAgentMessage
-	Tools          []AgentToolRef
-	ResponseSchema any
-	ModelOptions   any
+	Provider     string
+	Model        string
+	SessionKey   string
+	Prompt       WorkflowText
+	Messages     []WorkflowAgentMessage
+	Tools        []AgentToolRef
+	Output       AgentOutput
+	ModelOptions any
 }
 
 // WorkflowAgentMessage contains one rendered agent message.
@@ -276,23 +276,23 @@ func workflowStepAgentTurnToProto(input *WorkflowStepAgentTurn) (*proto.Workflow
 	if err != nil {
 		return nil, err
 	}
-	responseSchema, err := structFromAny(input.ResponseSchema)
+	output, err := agentOutputToProto(input.Output)
 	if err != nil {
-		return nil, fmt.Errorf("response_schema: %w", err)
+		return nil, fmt.Errorf("output: %w", err)
 	}
 	modelOptions, err := structFromAny(input.ModelOptions)
 	if err != nil {
 		return nil, fmt.Errorf("model_options: %w", err)
 	}
 	return &proto.WorkflowStepAgentTurn{
-		Provider:       input.Provider,
-		Model:          input.Model,
-		SessionKey:     input.SessionKey,
-		Prompt:         workflowTextToProto(input.Prompt),
-		Messages:       messages,
-		Tools:          agentToolRefsToProto(input.Tools),
-		ResponseSchema: responseSchema,
-		ModelOptions:   modelOptions,
+		Provider:     input.Provider,
+		Model:        input.Model,
+		SessionKey:   input.SessionKey,
+		Prompt:       workflowTextToProto(input.Prompt),
+		Messages:     messages,
+		Tools:        agentToolRefsToProto(input.Tools),
+		Output:       output,
+		ModelOptions: modelOptions,
 	}, nil
 }
 
@@ -301,14 +301,14 @@ func workflowStepAgentTurnFromProto(value *proto.WorkflowStepAgentTurn) *Workflo
 		return nil
 	}
 	return &WorkflowStepAgentTurn{
-		Provider:       value.GetProvider(),
-		Model:          value.GetModel(),
-		SessionKey:     value.GetSessionKey(),
-		Prompt:         workflowTextFromProto(value.GetPrompt()),
-		Messages:       workflowAgentMessagesFromProto(value.GetMessages()),
-		Tools:          agentToolRefsFromProto(value.GetTools()),
-		ResponseSchema: mapFromStruct(value.GetResponseSchema()),
-		ModelOptions:   mapFromStruct(value.GetModelOptions()),
+		Provider:     value.GetProvider(),
+		Model:        value.GetModel(),
+		SessionKey:   value.GetSessionKey(),
+		Prompt:       workflowTextFromProto(value.GetPrompt()),
+		Messages:     workflowAgentMessagesFromProto(value.GetMessages()),
+		Tools:        agentToolRefsFromProto(value.GetTools()),
+		Output:       agentOutputFromProto(value.GetOutput()),
+		ModelOptions: mapFromStruct(value.GetModelOptions()),
 	}
 }
 

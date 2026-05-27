@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -34,23 +35,22 @@ import (
 )
 
 var (
-	ErrAgentNotConfigured               = errors.New("agent is not configured")
-	ErrAgentProviderRequired            = errors.New("agent provider is required")
-	ErrAgentProviderNotAvailable        = errors.New("agent provider is not available")
-	ErrAgentSubjectRequired             = errors.New("agent subject is required")
-	ErrAgentCallerAppRequired           = errors.New("agent caller app is required for inherited tools")
-	ErrAgentInheritedSurfaceTool        = errors.New("agent inherited surface tools are not supported")
-	ErrAgentInteractionRequired         = errors.New("agent interaction is required")
-	ErrAgentInteractionNotFound         = errors.New("agent interaction is not found")
-	ErrAgentSessionNotFound             = errors.New("agent session is not found")
-	ErrAgentWorkflowToolsNotConfigured  = errors.New("agent workflow tools are not configured")
-	ErrAgentBoundedListUnsupported      = errors.New("agent provider does not support bounded list hydration")
-	ErrAgentSessionStartUnsupported     = errors.New("agent provider does not support session start hooks")
-	ErrAgentWorkspaceUnsupported        = errors.New("agent provider does not support workspaces")
-	ErrAgentWorkspaceInvalid            = errors.New("agent workspace is invalid")
-	ErrAgentSessionMetadataInvalid      = errors.New("agent session metadata is invalid")
-	ErrAgentInvalidListRequest          = errors.New("agent list request is invalid")
-	ErrAgentStructuredOutputUnsupported = errors.New("agent provider does not support structured output")
+	ErrAgentNotConfigured              = errors.New("agent is not configured")
+	ErrAgentProviderRequired           = errors.New("agent provider is required")
+	ErrAgentProviderNotAvailable       = errors.New("agent provider is not available")
+	ErrAgentSubjectRequired            = errors.New("agent subject is required")
+	ErrAgentCallerAppRequired          = errors.New("agent caller app is required for inherited tools")
+	ErrAgentInheritedSurfaceTool       = errors.New("agent inherited surface tools are not supported")
+	ErrAgentInteractionRequired        = errors.New("agent interaction is required")
+	ErrAgentInteractionNotFound        = errors.New("agent interaction is not found")
+	ErrAgentSessionNotFound            = errors.New("agent session is not found")
+	ErrAgentWorkflowToolsNotConfigured = errors.New("agent workflow tools are not configured")
+	ErrAgentBoundedListUnsupported     = errors.New("agent provider does not support bounded list hydration")
+	ErrAgentSessionStartUnsupported    = errors.New("agent provider does not support session start hooks")
+	ErrAgentWorkspaceUnsupported       = errors.New("agent provider does not support workspaces")
+	ErrAgentWorkspaceInvalid           = errors.New("agent workspace is invalid")
+	ErrAgentSessionMetadataInvalid     = errors.New("agent session metadata is invalid")
+	ErrAgentInvalidListRequest         = errors.New("agent list request is invalid")
 )
 
 const (
@@ -778,16 +778,9 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 		toolRefs = m.defaultAgentTurnToolRefs(ctx, p, callerAppName, agentwire.MessagesFromProto(req.GetMessages()))
 	}
 	toolRefsSet := req.GetToolRefsSet() || len(toolRefs) > 0
-	responseSchema := protoutil.MapFromStruct(req.GetResponseSchema())
-	if req.GetResponseSchema() != nil {
-		if err := validateAgentResponseSchema(responseSchema); err != nil {
-			return nil, err
-		}
-		if supported, err := agentProviderSupportsStructuredOutput(ctx, ownedSession.provider); err != nil {
-			return nil, err
-		} else if !supported {
-			return nil, fmt.Errorf("%w: agent provider %q", ErrAgentStructuredOutputUnsupported, ownedSession.providerName)
-		}
+	requestedOutput := agentOutputFromProto(req.GetOutput())
+	if err := validateAgentOutput(requestedOutput); err != nil {
+		return nil, err
 	}
 	var tools []coreagent.Tool
 	switch toolSource {
@@ -854,6 +847,9 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	}
 	if !providerTurnOwnedBy(normalized, p) {
 		return nil, core.ErrNotFound
+	}
+	if err := validateAgentTurnOutput(requestedOutput, normalized); err != nil {
+		return nil, err
 	}
 	return normalized, nil
 }
@@ -2506,6 +2502,9 @@ func normalizeProviderTurn(providerName, sessionID, turnID string, turn *coreage
 	if strings.TrimSpace(cloned.ProviderName) == "" {
 		cloned.ProviderName = strings.TrimSpace(providerName)
 	}
+	if err := validateSuccessfulAgentTurnOutputVariant(&cloned); err != nil {
+		return nil, err
+	}
 	return &cloned, nil
 }
 
@@ -2528,6 +2527,9 @@ func normalizeProviderTurnForCreate(providerName, sessionID, turnID, idempotency
 	}
 	if strings.TrimSpace(cloned.ProviderName) == "" {
 		cloned.ProviderName = strings.TrimSpace(providerName)
+	}
+	if err := validateSuccessfulAgentTurnOutputVariant(&cloned); err != nil {
+		return nil, err
 	}
 	return &cloned, nil
 }
@@ -3295,17 +3297,99 @@ func validateProviderTurnToolSource(source coreagent.ToolSourceMode) (coreagent.
 	}
 }
 
+func agentOutputFromProto(output *proto.AgentOutput) coreagent.Output {
+	if output == nil {
+		return coreagent.Output{}
+	}
+	if structured := output.GetStructured(); structured != nil {
+		return coreagent.Output{
+			Structured: &coreagent.StructuredOutput{
+				ResponseSchema: protoutil.MapFromStruct(structured.GetResponseSchema()),
+			},
+		}
+	}
+	if output.GetText() != nil {
+		return coreagent.Output{Text: &coreagent.TextOutput{}}
+	}
+	return coreagent.Output{}
+}
+
+func validateAgentOutput(output coreagent.Output) error {
+	textSet := output.Text != nil
+	structuredSet := output.Structured != nil
+	if textSet == structuredSet {
+		return fmt.Errorf("%w: exactly one of output.text or output.structured is required", invocation.ErrInvalidInvocation)
+	}
+	if output.Structured != nil {
+		if err := validateAgentResponseSchema(output.Structured.ResponseSchema); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validateAgentResponseSchema(schema map[string]any) error {
 	if len(schema) == 0 {
-		return fmt.Errorf("%w: responseSchema must be a non-empty JSON schema object with type %q", invocation.ErrInvalidInvocation, "object")
+		return fmt.Errorf("%w: output.structured.responseSchema must be a non-empty JSON schema object with type %q", invocation.ErrInvalidInvocation, "object")
 	}
 	rawType, ok := schema["type"]
 	if !ok {
-		return fmt.Errorf("%w: responseSchema.type must be %q", invocation.ErrInvalidInvocation, "object")
+		return fmt.Errorf("%w: output.structured.responseSchema.type must be %q", invocation.ErrInvalidInvocation, "object")
 	}
 	typeValue, ok := rawType.(string)
 	if !ok || strings.TrimSpace(typeValue) != "object" {
-		return fmt.Errorf("%w: responseSchema.type must be %q", invocation.ErrInvalidInvocation, "object")
+		return fmt.Errorf("%w: output.structured.responseSchema.type must be %q", invocation.ErrInvalidInvocation, "object")
+	}
+	return nil
+}
+
+func validateAgentTurnOutput(requested coreagent.Output, turn *coreagent.Turn) error {
+	if turn == nil || turn.Status != coreagent.ExecutionStatusSucceeded {
+		return nil
+	}
+	if err := validateSuccessfulAgentTurnOutputVariant(turn); err != nil {
+		return err
+	}
+	if requested.Text != nil {
+		if turn.Output.Text == nil {
+			return fmt.Errorf("agent provider returned successful turn without text output")
+		}
+		return nil
+	}
+	if requested.Structured != nil {
+		if turn.Output.Structured == nil {
+			return fmt.Errorf("agent provider returned successful turn without structured output")
+		}
+		if err := validateAgentStructuredValue(requested.Structured.ResponseSchema, turn.Output.Structured.Value); err != nil {
+			return fmt.Errorf("agent provider returned invalid structured output: %w", err)
+		}
+	}
+	return nil
+}
+
+func validateSuccessfulAgentTurnOutputVariant(turn *coreagent.Turn) error {
+	if turn == nil || turn.Status != coreagent.ExecutionStatusSucceeded {
+		return nil
+	}
+	textSet := turn.Output.Text != nil
+	structuredSet := turn.Output.Structured != nil
+	if textSet == structuredSet {
+		return fmt.Errorf("agent provider returned successful turn without exactly one of output.text or output.structured")
+	}
+	return nil
+}
+
+func validateAgentStructuredValue(schema map[string]any, value map[string]any) error {
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("agent-output.schema", schema); err != nil {
+		return fmt.Errorf("invalid response schema: %w", err)
+	}
+	compiled, err := compiler.Compile("agent-output.schema")
+	if err != nil {
+		return fmt.Errorf("compile response schema: %w", err)
+	}
+	if err := compiled.Validate(value); err != nil {
+		return err
 	}
 	return nil
 }
@@ -3843,17 +3927,6 @@ func agentProviderSupportsToolSource(ctx context.Context, provider coreagent.Pro
 	return agentProviderCapabilitiesSupportToolSource(caps, source), nil
 }
 
-func agentProviderSupportsStructuredOutput(ctx context.Context, provider coreagent.Provider) (bool, error) {
-	if provider == nil {
-		return false, ErrAgentProviderNotAvailable
-	}
-	caps, err := provider.GetCapabilities(ctx, &proto.GetAgentProviderCapabilitiesRequest{})
-	if err != nil {
-		return false, err
-	}
-	return caps != nil && caps.StructuredOutput, nil
-}
-
 func agentProviderCapabilitiesSupportToolSource(caps *coreagent.ProviderCapabilities, source coreagent.ToolSourceMode) bool {
 	if caps == nil {
 		return false
@@ -3995,8 +4068,7 @@ func summarizeAgentTurn(turn *coreagent.Turn) *coreagent.Turn {
 	}
 	cloned := *turn
 	cloned.Messages = nil
-	cloned.OutputText = ""
-	cloned.StructuredOutput = nil
+	cloned.Output = coreagent.TurnOutput{}
 	return &cloned
 }
 

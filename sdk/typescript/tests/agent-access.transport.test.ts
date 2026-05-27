@@ -130,6 +130,7 @@ test("Agent forwards invocation tokens across session, turn, and interaction cal
             model: input.model,
             status: AgentExecutionStatus.WAITING_FOR_INPUT,
             messages: input.messages,
+            output: { case: "text", value: { text: "pending" } },
             statusMessage: "waiting for input",
             executionRef: "exec-turn-1",
           });
@@ -146,6 +147,7 @@ test("Agent forwards invocation tokens across session, turn, and interaction cal
             providerName: "basic",
             model: "gpt-test",
             status: AgentExecutionStatus.WAITING_FOR_INPUT,
+            output: { case: "text", value: { text: "pending" } },
             statusMessage: "waiting for input",
             executionRef: "exec-turn-1",
           });
@@ -164,6 +166,7 @@ test("Agent forwards invocation tokens across session, turn, and interaction cal
                 providerName: "basic",
                 model: "gpt-test",
                 status: AgentExecutionStatus.WAITING_FOR_INPUT,
+                output: { case: "text", value: { text: "pending" } },
                 statusMessage: "waiting for input",
                 executionRef: "exec-turn-1",
               }),
@@ -300,6 +303,7 @@ test("Agent forwards invocation tokens across session, turn, and interaction cal
           operation: "lookup",
         },
       ],
+      output: { text: {} },
       idempotencyKey: "turn-req-1",
     });
     const fetchedTurn = await fromRequest.getTurn({ turnId: "turn-1" });

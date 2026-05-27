@@ -432,6 +432,9 @@ pub(crate) fn build_turn_create_body(args: &AgentTurnCreateArgs) -> Result<Value
             Value::Array(args.tools.iter().map(agent_tool_ref_value).collect()),
         );
     }
+    if !body.contains_key("output") {
+        body.insert("output".to_string(), json!({ "text": {} }));
+    }
 
     validate_turn_create_body(&body)?;
     Ok(Value::Object(body))
@@ -446,6 +449,22 @@ fn validate_turn_create_body(body: &Map<String, Value>) -> Result<()> {
         bail!(
             "agent turns create requires at least one message; pass --message, --system, or --input with a non-empty messages array"
         );
+    }
+    validate_turn_output_body(body)?;
+    Ok(())
+}
+
+fn validate_turn_output_body(body: &Map<String, Value>) -> Result<()> {
+    let Some(output) = body.get("output") else {
+        bail!("agent turns create requires output.text or output.structured");
+    };
+    let Some(output) = output.as_object() else {
+        bail!("agent turns create output must be an object");
+    };
+    let has_text = output.contains_key("text");
+    let has_structured = output.contains_key("structured");
+    if has_text == has_structured {
+        bail!("agent turns create requires exactly one of output.text or output.structured");
     }
     Ok(())
 }

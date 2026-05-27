@@ -50,14 +50,14 @@ type AppCall struct {
 }
 
 type AgentTurn struct {
-	ProviderName   string
-	Model          string
-	SessionKey     string
-	Prompt         Text
-	Messages       []AgentMessage
-	ToolRefs       []coreagent.ToolRef
-	ResponseSchema map[string]any
-	ModelOptions   map[string]any
+	ProviderName string
+	Model        string
+	SessionKey   string
+	Prompt       Text
+	Messages     []AgentMessage
+	ToolRefs     []coreagent.ToolRef
+	Output       coreagent.Output
+	ModelOptions map[string]any
 }
 
 type AgentMessage struct {
@@ -440,8 +440,8 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 			if len(agent.ToolRefs) == 0 {
 				agent.ToolRefs = nil
 			}
-			if len(agent.ResponseSchema) == 0 {
-				agent.ResponseSchema = nil
+			if agent.Output.Structured != nil && len(agent.Output.Structured.ResponseSchema) == 0 {
+				agent.Output.Structured.ResponseSchema = nil
 			}
 			if len(agent.ModelOptions) == 0 {
 				agent.ModelOptions = nil

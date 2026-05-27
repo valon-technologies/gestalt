@@ -1,6 +1,7 @@
 package gestalt
 
 import (
+	"fmt"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -412,7 +413,6 @@ func agentProviderCapabilitiesToProto(value *AgentProviderCapabilities) *proto.A
 		StreamingText:             value.StreamingText,
 		ToolCalls:                 value.ToolCalls,
 		ParallelToolCalls:         value.ParallelToolCalls,
-		StructuredOutput:          value.StructuredOutput,
 		Interactions:              value.Interactions,
 		ResumableTurns:            value.ResumableTurns,
 		ReasoningSummaries:        value.ReasoningSummaries,
@@ -421,6 +421,95 @@ func agentProviderCapabilitiesToProto(value *AgentProviderCapabilities) *proto.A
 		SupportsSessionStart:      value.SupportsSessionStart,
 		SupportsPreparedWorkspace: value.SupportsPreparedWorkspace,
 	}
+}
+
+func agentOutputToProto(value AgentOutput) (*proto.AgentOutput, error) {
+	textSet := value.Text != nil
+	structuredSet := value.Structured != nil
+	if textSet == structuredSet {
+		return nil, fmt.Errorf("exactly one of output.text or output.structured is required")
+	}
+	if value.Structured != nil {
+		if len(value.Structured.ResponseSchema) == 0 {
+			return nil, fmt.Errorf("output.structured.response_schema is required")
+		}
+		responseSchema, err := structFromAny(value.Structured.ResponseSchema)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.AgentOutput{
+			Kind: &proto.AgentOutput_Structured{
+				Structured: &proto.AgentStructuredOutput{ResponseSchema: responseSchema},
+			},
+		}, nil
+	}
+	if value.Text != nil {
+		return &proto.AgentOutput{
+			Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}},
+		}, nil
+	}
+	return nil, fmt.Errorf("exactly one of output.text or output.structured is required")
+}
+
+func agentOutputFromProto(value *proto.AgentOutput) AgentOutput {
+	if value == nil {
+		return AgentOutput{}
+	}
+	if structured := value.GetStructured(); structured != nil {
+		return AgentOutput{
+			Structured: &AgentStructuredOutput{ResponseSchema: mapFromStruct(structured.GetResponseSchema())},
+		}
+	}
+	if value.GetText() != nil {
+		return AgentOutput{Text: &AgentTextOutput{}}
+	}
+	return AgentOutput{}
+}
+
+func setAgentTurnOutputProto(turn *proto.AgentTurn, value AgentTurnOutput) error {
+	if turn == nil {
+		return nil
+	}
+	textSet := value.Text != nil
+	structuredSet := value.Structured != nil
+	if textSet && structuredSet {
+		return fmt.Errorf("exactly one of output.text or output.structured is required")
+	}
+	if value.Structured != nil {
+		structuredValue, err := structFromAny(value.Structured.Value)
+		if err != nil {
+			return err
+		}
+		turn.Output = &proto.AgentTurn_Structured{
+			Structured: &proto.AgentTurnStructuredOutput{
+				Text:  value.Structured.Text,
+				Value: structuredValue,
+			},
+		}
+		return nil
+	}
+	if value.Text != nil {
+		turn.Output = &proto.AgentTurn_Text{Text: &proto.AgentTurnTextOutput{Text: value.Text.Text}}
+	}
+	return nil
+}
+
+func agentTurnOutputFromProto(value *proto.AgentTurn) AgentTurnOutput {
+	if value == nil {
+		return AgentTurnOutput{}
+	}
+	if structured := value.GetStructured(); structured != nil {
+		return AgentTurnOutput{
+			Structured: &AgentTurnStructuredOutput{
+				Text:  structured.GetText(),
+				Value: mapFromStruct(structured.GetValue()),
+			},
+		}
+	}
+	if text := value.GetText(); text != nil {
+		return AgentTurnOutput{Text: &AgentTurnTextOutput{Text: text.GetText()}}
+	}
+	return AgentTurnOutput{}
 }
 
 func agentSessionToProto(value *AgentSession) (*proto.AgentSession, error) {
@@ -608,26 +697,24 @@ func agentTurnToProto(value *AgentTurn) (*proto.AgentTurn, error) {
 	if err != nil {
 		return nil, err
 	}
-	structuredOutput, err := structFromAny(value.StructuredOutput)
-	if err != nil {
+	turn := &proto.AgentTurn{
+		Id:            value.ID,
+		SessionId:     value.SessionID,
+		ProviderName:  value.ProviderName,
+		Model:         value.Model,
+		Status:        proto.AgentExecutionStatus(value.Status),
+		Messages:      messages,
+		StatusMessage: value.StatusMessage,
+		CreatedBy:     agentActorToProto(value.CreatedBy),
+		CreatedAt:     timestampFromNonZeroTime(value.CreatedAt),
+		StartedAt:     timestampFromOptionalTime(value.StartedAt),
+		CompletedAt:   timestampFromOptionalTime(value.CompletedAt),
+		ExecutionRef:  value.ExecutionRef,
+	}
+	if err := setAgentTurnOutputProto(turn, value.Output); err != nil {
 		return nil, err
 	}
-	return &proto.AgentTurn{
-		Id:               value.ID,
-		SessionId:        value.SessionID,
-		ProviderName:     value.ProviderName,
-		Model:            value.Model,
-		Status:           proto.AgentExecutionStatus(value.Status),
-		Messages:         messages,
-		OutputText:       value.OutputText,
-		StructuredOutput: structuredOutput,
-		StatusMessage:    value.StatusMessage,
-		CreatedBy:        agentActorToProto(value.CreatedBy),
-		CreatedAt:        timestampFromNonZeroTime(value.CreatedAt),
-		StartedAt:        timestampFromOptionalTime(value.StartedAt),
-		CompletedAt:      timestampFromOptionalTime(value.CompletedAt),
-		ExecutionRef:     value.ExecutionRef,
-	}, nil
+	return turn, nil
 }
 
 func agentTurnsToProto(values []AgentTurn) ([]*proto.AgentTurn, error) {
@@ -650,20 +737,19 @@ func agentTurnFromProto(value *proto.AgentTurn) *AgentTurn {
 		return nil
 	}
 	return &AgentTurn{
-		ID:               value.GetId(),
-		SessionID:        value.GetSessionId(),
-		ProviderName:     value.GetProviderName(),
-		Model:            value.GetModel(),
-		Status:           AgentExecutionStatus(value.GetStatus()),
-		Messages:         agentMessagesFromProto(value.GetMessages()),
-		OutputText:       value.GetOutputText(),
-		StructuredOutput: mapFromStruct(value.GetStructuredOutput()),
-		StatusMessage:    value.GetStatusMessage(),
-		CreatedBy:        agentActorFromProto(value.GetCreatedBy()),
-		CreatedAt:        timeFromTimestamp(value.GetCreatedAt()),
-		StartedAt:        timePtrFromTimestampUnchecked(value.GetStartedAt()),
-		CompletedAt:      timePtrFromTimestampUnchecked(value.GetCompletedAt()),
-		ExecutionRef:     value.GetExecutionRef(),
+		ID:            value.GetId(),
+		SessionID:     value.GetSessionId(),
+		ProviderName:  value.GetProviderName(),
+		Model:         value.GetModel(),
+		Status:        AgentExecutionStatus(value.GetStatus()),
+		Messages:      agentMessagesFromProto(value.GetMessages()),
+		Output:        agentTurnOutputFromProto(value),
+		StatusMessage: value.GetStatusMessage(),
+		CreatedBy:     agentActorFromProto(value.GetCreatedBy()),
+		CreatedAt:     timeFromTimestamp(value.GetCreatedAt()),
+		StartedAt:     timePtrFromTimestampUnchecked(value.GetStartedAt()),
+		CompletedAt:   timePtrFromTimestampUnchecked(value.GetCompletedAt()),
+		ExecutionRef:  value.GetExecutionRef(),
 	}
 }
 
@@ -694,23 +780,22 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		return &CreateAgentProviderTurnRequest{}
 	}
 	return &CreateAgentProviderTurnRequest{
-		TurnID:            req.GetTurnId(),
-		SessionID:         req.GetSessionId(),
-		IdempotencyKey:    req.GetIdempotencyKey(),
-		Model:             req.GetModel(),
-		Messages:          agentMessagesFromProto(req.GetMessages()),
-		Tools:             resolvedAgentToolsFromProto(req.GetTools()),
-		ResponseSchema:    mapFromStruct(req.GetResponseSchema()),
-		ResponseSchemaSet: req.ResponseSchema != nil,
-		Metadata:          mapFromStruct(req.GetMetadata()),
-		CreatedBy:         agentActorFromProto(req.GetCreatedBy()),
-		ExecutionRef:      req.GetExecutionRef(),
-		ToolRefs:          agentToolRefsFromProto(req.GetToolRefs()),
-		ToolSource:        AgentToolSourceMode(req.GetToolSource()),
-		Subject:           subjectFromProto(req.GetSubject()),
-		ModelOptions:      mapFromStruct(req.GetModelOptions()),
-		RunGrant:          req.GetRunGrant(),
-		TimeoutSeconds:    req.GetTimeoutSeconds(),
+		TurnID:         req.GetTurnId(),
+		SessionID:      req.GetSessionId(),
+		IdempotencyKey: req.GetIdempotencyKey(),
+		Model:          req.GetModel(),
+		Messages:       agentMessagesFromProto(req.GetMessages()),
+		Tools:          resolvedAgentToolsFromProto(req.GetTools()),
+		Output:         agentOutputFromProto(req.GetOutput()),
+		Metadata:       mapFromStruct(req.GetMetadata()),
+		CreatedBy:      agentActorFromProto(req.GetCreatedBy()),
+		ExecutionRef:   req.GetExecutionRef(),
+		ToolRefs:       agentToolRefsFromProto(req.GetToolRefs()),
+		ToolSource:     AgentToolSourceMode(req.GetToolSource()),
+		Subject:        subjectFromProto(req.GetSubject()),
+		ModelOptions:   mapFromStruct(req.GetModelOptions()),
+		RunGrant:       req.GetRunGrant(),
+		TimeoutSeconds: req.GetTimeoutSeconds(),
 	}
 }
 

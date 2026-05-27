@@ -37,6 +37,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func agentRuntimeTextOutput() *proto.AgentOutput {
+	return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}
+}
+
 func buildAgentProviderBinary(t *testing.T) string {
 	t.Helper()
 	if sharedAgentProviderBin == "" {
@@ -1123,6 +1127,7 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 		TurnId:    "turn-1",
 		SessionId: "session-1",
 		Model:     "gpt-test",
+		Output:    agentRuntimeTextOutput(),
 		Metadata: mustTestProtoStruct(t, map[string]any{
 			"requireInteraction": true,
 		}),
@@ -2004,6 +2009,7 @@ func TestHostedAgentProviderPoolSkipsPastDrainBackendForNewTurn(t *testing.T) {
 	turn, err := pool.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
 		TurnId:    "turn-1",
 		SessionId: "session-1",
+		Output:    agentRuntimeTextOutput(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -2303,6 +2309,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		Model:        "gpt-test",
 		Messages:     testAgentMessagesToProto(t, []coreagent.Message{{Role: "user", Text: "Plan it"}}),
 		ExecutionRef: "exec-turn-1",
+		Output:       agentRuntimeTextOutput(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -2323,7 +2330,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTurn: %v", err)
 	}
-	if fetchedTurn == nil || fetchedTurn.Status != coreagent.ExecutionStatusSucceeded || fetchedTurn.OutputText == "" {
+	if fetchedTurn == nil || fetchedTurn.Status != coreagent.ExecutionStatusSucceeded || fetchedTurn.Output.Text == nil || fetchedTurn.Output.Text.Text == "" {
 		t.Fatalf("GetTurn = %#v, want succeeded turn with output", fetchedTurn)
 	}
 
@@ -2377,6 +2384,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		SessionId: "session-1",
 		Model:     "gpt-test",
 		CreatedBy: testAgentActorToProto(coreagent.Actor{SubjectID: "user:user-123"}),
+		Output:    agentRuntimeTextOutput(),
 		Metadata: mustTestProtoStruct(t, map[string]any{
 			"requireInteraction": true,
 		}),
@@ -2396,8 +2404,11 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		InteractionID        string `json:"interaction_id"`
 		InteractionError     string `json:"interaction_error"`
 	}
-	if err := json.Unmarshal([]byte(pausedTurn.OutputText), &pausedOutput); err != nil {
-		t.Fatalf("json.Unmarshal(pausedTurn.OutputText): %v", err)
+	if pausedTurn.Output.Text == nil {
+		t.Fatalf("paused turn output = %#v, want text output", pausedTurn.Output)
+	}
+	if err := json.Unmarshal([]byte(pausedTurn.Output.Text.Text), &pausedOutput); err != nil {
+		t.Fatalf("json.Unmarshal(pausedTurn.Output.Text.Text): %v", err)
 	}
 	if !pausedOutput.InteractionRequested || strings.TrimSpace(pausedOutput.InteractionID) == "" || pausedOutput.InteractionError != "" {
 		t.Fatalf("paused turn output = %+v", pausedOutput)
@@ -3690,11 +3701,12 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 		TurnId:    "turn-1",
 		SessionId: "session-1",
 		Model:     "gpt-test",
+		Output:    agentRuntimeTextOutput(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if turn == nil || turn.OutputText != `{"provider_name":"simple"}` {
+	if turn == nil || turn.Output.Text == nil || turn.Output.Text.Text != `{"provider_name":"simple"}` {
 		t.Fatalf("turn = %#v, want provider-only output", turn)
 	}
 

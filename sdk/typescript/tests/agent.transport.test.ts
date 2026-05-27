@@ -5,13 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { create, toJson } from "@bufbuild/protobuf";
-import { type ServiceImpl } from "@connectrpc/connect";
+import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { expect, test } from "bun:test";
 
 import {
   AgentTurnEventSchema,
   AgentHost as AgentHostService,
+  CreateAgentProviderTurnRequestSchema,
   ExecuteAgentToolRequestSchema,
   ExecuteAgentToolResponseSchema,
   ListAgentToolsResponseSchema,
@@ -92,6 +93,34 @@ test("AgentProvider accepts JSON display payloads for turn events", async () => 
       error: "none",
     },
   });
+});
+
+test("AgentProvider rejects structured output without a schema", async () => {
+  const provider = defineAgentProvider({
+    async createTurn() {
+      throw new Error("provider should not receive invalid output");
+    },
+  });
+  const service = createAgentProviderService(provider);
+
+  try {
+    await (service.createTurn as any)(
+      create(CreateAgentProviderTurnRequestSchema, {
+        turnId: "turn-1",
+        sessionId: "session-1",
+        output: {
+          kind: {
+            case: "structured",
+            value: {},
+          },
+        },
+      }),
+    );
+    throw new Error("createTurn succeeded, want InvalidArgument");
+  } catch (error) {
+    expect(error).toBeInstanceOf(ConnectError);
+    expect((error as ConnectError).code).toBe(Code.InvalidArgument);
+  }
 });
 
 async function reserveTCPAddress(): Promise<string> {

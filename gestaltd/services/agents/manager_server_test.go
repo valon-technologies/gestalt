@@ -160,8 +160,11 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 			if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {
 				t.Fatalf("tool source = %q, want none", req.GetToolSource())
 			}
-			if req.GetResponseSchema().AsMap()["type"] != "object" {
-				t.Fatalf("response schema = %#v, want object schema", req.GetResponseSchema())
+			if req.GetOutput().GetStructured() == nil {
+				t.Fatal("output.structured = nil, want structured output request")
+			}
+			if req.GetOutput().GetStructured().GetResponseSchema().AsMap()["type"] != "object" {
+				t.Fatalf("response schema = %#v, want object schema", req.GetOutput().GetStructured().GetResponseSchema())
 			}
 			return &coreagent.Turn{
 				ID:        "turn-1",
@@ -179,7 +182,9 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 		SessionId:       "session-1",
 		InvocationToken: token,
 		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
-		ResponseSchema:  schema,
+		Output: &proto.AgentOutput{Kind: &proto.AgentOutput_Structured{
+			Structured: &proto.AgentStructuredOutput{ResponseSchema: schema},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -216,36 +221,6 @@ func TestManagerServerCreateTurnFallsBackToPluginCallerApp(t *testing.T) {
 		InvocationToken: token,
 	}); err != nil {
 		t.Fatalf("CreateTurn: %v", err)
-	}
-}
-
-func TestManagerServerMapsStructuredOutputUnsupportedToFailedPrecondition(t *testing.T) {
-	t.Parallel()
-
-	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-structured-output-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "user-1",
-		Kind:      principal.KindUser,
-	})
-	token, err := tokens.MintRootToken(ctx, "caller-plugin", nil)
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
-	server := NewProviderServer("caller-plugin", &recordingManagerService{
-		createTurn: func(context.Context, *principal.Principal, *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
-			return nil, agentmanager.ErrAgentStructuredOutputUnsupported
-		},
-	}, tokens)
-
-	_, err = server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		SessionId:       "session-1",
-		InvocationToken: token,
-	})
-	if status.Code(err) != codes.FailedPrecondition {
-		t.Fatalf("CreateTurn code = %v, want %v", status.Code(err), codes.FailedPrecondition)
 	}
 }
 
@@ -287,12 +262,16 @@ func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 				t.Fatalf("list turns req = %#v", req)
 			}
 			return []*coreagent.Turn{{
-				ID:               "turn-1",
-				SessionID:        "session-1",
-				Status:           coreagent.ExecutionStatusSucceeded,
-				Messages:         []coreagent.Message{{Role: "user", Text: "heavy"}},
-				OutputText:       "heavy output",
-				StructuredOutput: map[string]any{"heavy": "value"},
+				ID:        "turn-1",
+				SessionID: "session-1",
+				Status:    coreagent.ExecutionStatusSucceeded,
+				Messages:  []coreagent.Message{{Role: "user", Text: "heavy"}},
+				Output: coreagent.TurnOutput{
+					Structured: &coreagent.TurnStructuredOutput{
+						Text:  "heavy output",
+						Value: map[string]any{"heavy": "value"},
+					},
+				},
 			}}, nil
 		},
 	}
@@ -345,7 +324,7 @@ func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 		t.Fatalf("turns = %#v", got)
 	} else {
 		turn := got[0]
-		if len(turn.GetMessages()) != 1 || turn.GetMessages()[0].GetText() != "heavy" || turn.GetOutputText() != "heavy output" || turn.GetStructuredOutput().GetFields()["heavy"].GetStringValue() != "value" {
+		if len(turn.GetMessages()) != 1 || turn.GetMessages()[0].GetText() != "heavy" || turn.GetStructured().GetText() != "heavy output" || turn.GetStructured().GetValue().GetFields()["heavy"].GetStringValue() != "value" {
 			t.Fatalf("summary turn = %#v, want manager result preserved", turn)
 		}
 	}

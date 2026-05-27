@@ -102,6 +102,7 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 	turn, err := client.CreateTurn(context.Background(), gestalt.AgentCreateTurn{
 		SessionID: "session-1",
 		Model:     "gpt-test",
+		Output:    gestalt.AgentOutput{Text: &gestalt.AgentTextOutput{}},
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -182,10 +183,12 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 			Operation:  "issues.get",
 			Connection: "default",
 		}},
-		ToolSource:     gestalt.AgentToolSourceModeMCPCatalog,
-		ResponseSchema: map[string]any{"type": "object"},
-		Metadata:       map[string]any{"request": "native"},
-		ModelOptions:   map[string]any{"temperature": 0},
+		ToolSource: gestalt.AgentToolSourceModeMCPCatalog,
+		Output: gestalt.AgentOutput{
+			Structured: &gestalt.AgentStructuredOutput{ResponseSchema: map[string]any{"type": "object"}},
+		},
+		Metadata:     map[string]any{"request": "native"},
+		ModelOptions: map[string]any{"temperature": 0},
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -212,7 +215,7 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	if got.GetToolRefs()[0].GetApp() != "github" || got.GetToolRefs()[0].GetConnection() != "default" {
 		t.Fatalf("tool refs = %#v", got.GetToolRefs())
 	}
-	if schema := got.GetResponseSchema().AsMap(); schema["type"] != "object" {
+	if schema := got.GetOutput().GetStructured().GetResponseSchema().AsMap(); schema["type"] != "object" {
 		t.Fatalf("response schema = %#v", schema)
 	}
 }

@@ -20,8 +20,8 @@ use gestalt::{
     AgentExecutionStatus, AgentHost, AgentHostExecuteToolInput, AgentHostListToolsInput,
     AgentHostResolveConnectionInput, AgentInteraction, AgentInteractionState, AgentInteractionType,
     AgentMessagePartType, AgentProvider, AgentProviderCapabilities, AgentSession,
-    AgentSessionState, AgentToolSourceMode, AgentTurn, AgentTurnEvent,
-    CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
+    AgentSessionState, AgentToolSourceMode, AgentTurn, AgentTurnEvent, AgentTurnOutput,
+    AgentTurnTextOutput, CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
     CreateAgentProviderTurnRequest, GetAgentProviderCapabilitiesRequest,
     GetAgentProviderInteractionRequest, GetAgentProviderSessionRequest,
     GetAgentProviderTurnRequest, ListAgentProviderInteractionsRequest,
@@ -200,7 +200,9 @@ impl AgentProvider for TestAgentProvider {
             model: request.model,
             status: AgentExecutionStatus::WaitingForInput,
             messages: request.messages,
-            output_text: "echo:Plan it".to_string(),
+            output: Some(AgentTurnOutput::Text(AgentTurnTextOutput {
+                text: "echo:Plan it".to_string(),
+            })),
             status_message: "waiting for input".to_string(),
             created_by: request.created_by,
             created_at: Some(SystemTime::now()),
@@ -217,7 +219,9 @@ impl AgentProvider for TestAgentProvider {
             provider_name: configured_name(self),
             model: "gpt-5.1".to_string(),
             status: AgentExecutionStatus::WaitingForInput,
-            output_text: "echo:Plan it".to_string(),
+            output: Some(AgentTurnOutput::Text(AgentTurnTextOutput {
+                text: "echo:Plan it".to_string(),
+            })),
             status_message: "waiting for input".to_string(),
             created_at: Some(SystemTime::now()),
             started_at: Some(SystemTime::now()),
@@ -357,7 +361,6 @@ impl AgentProvider for TestAgentProvider {
             streaming_text: true,
             tool_calls: true,
             parallel_tool_calls: false,
-            structured_output: true,
             interactions: true,
             resumable_turns: true,
             reasoning_summaries: false,
@@ -598,6 +601,9 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
                 }))),
             }],
             execution_ref: "exec-turn-1".to_string(),
+            output: Some(pb::AgentOutput {
+                kind: Some(pb::agent_output::Kind::Text(pb::AgentTextOutput {})),
+            }),
             ..Default::default()
         })
         .await

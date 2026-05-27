@@ -920,6 +920,7 @@ func telemetryCoreAgentStepTarget(tools []coreagent.ToolRef) coreworkflow.Target
 			ProviderName: "simple",
 			Prompt:       coreworkflow.Text{Template: "handle the Slack message"},
 			ToolRefs:     tools,
+			Output:       coreagent.Output{Text: &coreagent.TextOutput{}},
 		}}},
 	}
 }
@@ -941,6 +942,7 @@ func telemetryProtoAgentStepTarget(tools []*proto.AgentToolRef) *proto.BoundWork
 				Provider: "simple",
 				Prompt:   &proto.WorkflowText{Template: "handle the Slack message"},
 				Tools:    tools,
+				Output:   &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}},
 			}},
 		}},
 	}

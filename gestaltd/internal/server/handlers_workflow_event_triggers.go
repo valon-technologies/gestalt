@@ -85,10 +85,15 @@ func (s *Server) createGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "workflow trigger match.type is required")
 		return
 	}
+	target, err := workflowScheduleTargetFromRequest(req.Target)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	managed, err := s.workflowSchedules.CreateEventTrigger(r.Context(), p, workflowmanager.EventTriggerUpsert{
 		ProviderName: strings.TrimSpace(req.Provider),
 		Match:        workflowEventMatchFromRequest(req.Match),
-		Target:       workflowScheduleTargetFromRequest(req.Target),
+		Target:       target,
 		Paused:       req.Paused,
 	})
 	if err != nil {
@@ -135,10 +140,15 @@ func (s *Server) updateGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "workflow trigger match.type is required")
 		return
 	}
+	target, err := workflowScheduleTargetFromRequest(req.Target)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	managed, err := s.workflowSchedules.UpdateEventTrigger(r.Context(), p, triggerID, workflowmanager.EventTriggerUpsert{
 		ProviderName: strings.TrimSpace(req.Provider),
 		Match:        workflowEventMatchFromRequest(req.Match),
-		Target:       workflowScheduleTargetFromRequest(req.Target),
+		Target:       target,
 		Paused:       req.Paused,
 	})
 	if err != nil {

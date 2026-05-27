@@ -83,9 +83,13 @@ import {
 import {
   agentActorFromProto,
   agentActorToProto,
+  agentOutputFromProto,
+  agentOutputToProto,
   agentMessageFromProto,
   agentMessageToProto,
   agentToolRefFromProto,
+  agentTurnOutputFromProto,
+  agentTurnOutputToProto,
   agentTurnDisplayToProto,
 } from "./agent-conversions.ts";
 import {
@@ -227,7 +231,6 @@ export interface AgentProviderCapabilities {
   streamingText?: boolean | undefined;
   toolCalls?: boolean | undefined;
   parallelToolCalls?: boolean | undefined;
-  structuredOutput?: boolean | undefined;
   interactions?: boolean | undefined;
   resumableTurns?: boolean | undefined;
   reasoningSummaries?: boolean | undefined;
@@ -318,8 +321,7 @@ export interface AgentTurn {
   model?: string | undefined;
   status?: AgentExecutionStatus | undefined;
   messages?: readonly AgentMessage[] | undefined;
-  outputText?: string | undefined;
-  structuredOutput?: JsonObjectInput | undefined;
+  output?: AgentTurnOutput | undefined;
   statusMessage?: string | undefined;
   createdBy?: AgentActor | undefined;
   createdAt?: Date | undefined;
@@ -327,6 +329,19 @@ export interface AgentTurn {
   completedAt?: Date | undefined;
   executionRef?: string | undefined;
 }
+
+export interface AgentTurnTextOutput {
+  text?: string | undefined;
+}
+
+export interface AgentTurnStructuredOutput {
+  text?: string | undefined;
+  value?: JsonObjectInput | undefined;
+}
+
+export type AgentTurnOutput =
+  | { text: AgentTurnTextOutput; structured?: undefined }
+  | { text?: undefined; structured: AgentTurnStructuredOutput };
 
 export interface AgentTurnDisplay {
   kind?: string | undefined;
@@ -350,7 +365,7 @@ export interface CreateAgentProviderTurnRequest {
   model: string;
   messages: readonly AgentMessage[];
   tools: readonly ResolvedAgentTool[];
-  responseSchema?: JsonObjectInput | undefined;
+  output: AgentOutput;
   metadata?: JsonObjectInput | undefined;
   createdBy?: AgentActor | undefined;
   executionRef: string;
@@ -361,6 +376,17 @@ export interface CreateAgentProviderTurnRequest {
   runGrant: string;
   timeoutSeconds: number;
 }
+
+export interface AgentTextOutput {
+}
+
+export interface AgentStructuredOutput {
+  responseSchema: JsonObjectInput;
+}
+
+export type AgentOutput =
+  | { text: AgentTextOutput; structured?: undefined }
+  | { text?: undefined; structured: AgentStructuredOutput };
 
 export interface GetAgentProviderTurnRequest {
   turnId: string;
@@ -843,6 +869,15 @@ function updateAgentProviderSessionRequestFromProto(
 function createAgentProviderTurnRequestFromProto(
   request: ProtoCreateAgentProviderTurnRequest,
 ): CreateAgentProviderTurnRequest {
+  let output: AgentOutput | undefined;
+  try {
+    output = agentOutputFromProto(request.output);
+  } catch (error) {
+    throw new ConnectError(errorMessage(error), Code.InvalidArgument);
+  }
+  if (output === undefined) {
+    throw new ConnectError("create turn output is required", Code.InvalidArgument);
+  }
   return {
     turnId: request.turnId,
     sessionId: request.sessionId,
@@ -850,7 +885,7 @@ function createAgentProviderTurnRequestFromProto(
     model: request.model,
     messages: request.messages.map(agentMessageFromProto),
     tools: request.tools.map(resolvedAgentToolFromProto),
-    responseSchema: optionalObjectFromStruct(request.responseSchema),
+    output,
     metadata: optionalObjectFromStruct(request.metadata),
     createdBy: agentActorFromProto(request.createdBy),
     executionRef: request.executionRef,
@@ -959,8 +994,7 @@ function agentTurnToProto(turn: AgentTurn): MessageInitShape<typeof AgentTurnSch
     model: turn.model ?? "",
     status: turn.status ?? AgentExecutionStatus.UNSPECIFIED,
     messages: turn.messages?.map(agentMessageToProto) ?? [],
-    outputText: turn.outputText ?? "",
-    structuredOutput: optionalStruct(turn.structuredOutput),
+    output: agentTurnOutputToProto(turn.output),
     statusMessage: turn.statusMessage ?? "",
     createdBy: agentActorToProto(turn.createdBy),
     createdAt: optionalTimestamp(turn.createdAt),
@@ -1011,7 +1045,6 @@ function capabilitiesToProto(
     streamingText: capabilities.streamingText ?? false,
     toolCalls: capabilities.toolCalls ?? false,
     parallelToolCalls: capabilities.parallelToolCalls ?? false,
-    structuredOutput: capabilities.structuredOutput ?? false,
     interactions: capabilities.interactions ?? false,
     resumableTurns: capabilities.resumableTurns ?? false,
     reasoningSummaries: capabilities.reasoningSummaries ?? false,

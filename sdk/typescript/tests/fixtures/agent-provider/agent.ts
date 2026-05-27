@@ -11,6 +11,7 @@ import {
   type AgentTurn,
   type AgentTurnDisplay,
   type AgentTurnEvent,
+  type AgentTurnOutput,
   type CreateAgentProviderTurnRequest,
   type GetAgentProviderInteractionRequest,
   type GetAgentProviderSessionRequest,
@@ -115,7 +116,6 @@ export const provider = defineAgentProvider({
       streamingText: true,
       toolCalls: true,
       parallelToolCalls: false,
-      structuredOutput: true,
       interactions: true,
       resumableTurns: true,
       reasoningSummaries: false,
@@ -164,6 +164,7 @@ async function createCanonicalTurn(
   const outputText = request.messages.at(-1)?.text
     ? `echo:${request.messages.at(-1)!.text}`
     : "";
+  const output = turnOutputForRequest(request, outputText);
   const turn: AgentTurn = {
     id: request.turnId || `turn-${turns.size + 1}`,
     sessionId: request.sessionId,
@@ -171,7 +172,7 @@ async function createCanonicalTurn(
     model: request.model,
     status,
     messages: request.messages,
-    outputText,
+    output,
     statusMessage: waitingForInput ? "waiting for input" : "completed",
     ...(request.createdBy !== undefined ? { createdBy: request.createdBy } : {}),
     createdAt: timestampNow(),
@@ -222,6 +223,33 @@ async function createCanonicalTurn(
   return turn;
 }
 
+function turnOutputForRequest(
+  request: CreateAgentProviderTurnRequest,
+  text: string,
+): AgentTurnOutput {
+  if (request.output.structured !== undefined) {
+    return {
+      structured: {
+        text,
+        value: { text },
+      },
+    };
+  }
+  return { text: { text } };
+}
+
+function turnOutputForExistingTurn(turn: AgentTurn, text: string): AgentTurnOutput {
+  if (turn.output?.structured !== undefined) {
+    return {
+      structured: {
+        text,
+        value: { text },
+      },
+    };
+  }
+  return { text: { text } };
+}
+
 async function cancelCanonicalTurn(request: {
   turnId: string;
   reason: string;
@@ -234,8 +262,7 @@ async function cancelCanonicalTurn(request: {
     model: turn.model,
     status: AgentExecutionStatus.CANCELED,
     messages: turn.messages,
-    outputText: turn.outputText,
-    ...(turn.structuredOutput ? { structuredOutput: turn.structuredOutput } : {}),
+    ...(turn.output !== undefined ? { output: turn.output } : {}),
     statusMessage: request.reason,
     ...(turn.createdBy ? { createdBy: turn.createdBy } : {}),
     ...(turn.createdAt ? { createdAt: turn.createdAt } : {}),
@@ -277,8 +304,7 @@ async function resolveCanonicalInteraction(request: {
     model: turn.model,
     status: AgentExecutionStatus.SUCCEEDED,
     messages: turn.messages,
-    outputText: `resolved:${resolved.id}`,
-    ...(turn.structuredOutput ? { structuredOutput: turn.structuredOutput } : {}),
+    output: turnOutputForExistingTurn(turn, `resolved:${resolved.id}`),
     statusMessage: resolved.id,
     ...(turn.createdBy ? { createdBy: turn.createdBy } : {}),
     ...(turn.createdAt ? { createdAt: turn.createdAt } : {}),

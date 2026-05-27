@@ -19,15 +19,17 @@ func TestWorkflowTargetToCoreClonesMutableMaps(t *testing.T) {
 					Role:     "user",
 					Metadata: messageMetadata,
 				}},
-				ResponseSchema: responseSchema,
-				ModelOptions:   modelOptions,
+				Output: &WorkflowAgentOutputConfig{
+					Structured: &WorkflowAgentStructuredOutputConfig{ResponseSchema: responseSchema},
+				},
+				ModelOptions: modelOptions,
 			},
 		}},
 	})
 
 	target.Steps[0].Metadata["step"] = "mutated"
 	target.Steps[0].Agent.Messages[0].Metadata["message"] = "mutated"
-	target.Steps[0].Agent.ResponseSchema["schema"] = "mutated"
+	target.Steps[0].Agent.Output.Structured.ResponseSchema["schema"] = "mutated"
 	target.Steps[0].Agent.ModelOptions["option"] = "mutated"
 
 	if stepMetadata["step"] != "original" {

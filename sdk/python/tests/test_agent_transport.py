@@ -36,13 +36,18 @@ from gestalt import (
     AgentMessagePartImageRef,
     AgentMessagePartToolCall,
     AgentMessagePartToolResult,
+    AgentOutput,
     AgentProvider,
     AgentProviderCapabilities,
     AgentResolveInteraction,
     AgentSession,
+    AgentStructuredOutput,
+    AgentTextOutput,
     AgentToolRef,
     AgentTurn,
     AgentTurnEvent,
+    AgentTurnOutput,
+    AgentTurnTextOutput,
     Error,
     ListAgentProviderInteractionsResponse,
     ListAgentProviderSessionsResponse,
@@ -85,7 +90,7 @@ _host_relay_tokens: list[str] = []
 _host_list_requests: list[dict[str, Any]] = []
 _host_execute_requests: list[dict[str, Any]] = []
 _host_connection_requests: list[dict[str, Any]] = []
-_manager_requests: list[dict[str, str]] = []
+_manager_requests: list[dict[str, Any]] = []
 _manager_relay_tokens: list[str] = []
 
 
@@ -167,7 +172,9 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             model=request.model,
             status=AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
             messages=request.messages,
-            output_text="echo:Plan it",
+            output=AgentTurnOutput(
+                text=AgentTurnTextOutput(text="echo:Plan it"),
+            ),
             status_message="waiting for input",
             created_by=request.created_by,
             execution_ref=request.execution_ref,
@@ -180,7 +187,9 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             provider_name="py-agent",
             model="gpt-5.1",
             status=AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
-            output_text="echo:Plan it",
+            output=AgentTurnOutput(
+                text=AgentTurnTextOutput(text="echo:Plan it"),
+            ),
             status_message="waiting for input",
         )
 
@@ -273,7 +282,6 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             streaming_text=True,
             tool_calls=True,
             parallel_tool_calls=False,
-            structured_output=True,
             interactions=True,
             resumable_turns=True,
             reasoning_summaries=False,
@@ -468,9 +476,17 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
                 "interaction_id": "",
                 "reason": "",
                 "tool_source": request.tool_source,
-                "tool_refs_set": request.tool_refs_set,
+                "tool_ref_count": len(request.tool_refs),
                 "timeout_seconds": request.timeout_seconds,
-                "has_response_schema": request.HasField("response_schema"),
+                "output_kind": request.output.WhichOneof("kind")
+                if request.HasField("output")
+                else "",
+                "has_structured_schema": request.output.structured.HasField(
+                    "response_schema"
+                )
+                if request.HasField("output")
+                and request.output.WhichOneof("kind") == "structured"
+                else False,
             }
         )
         return agent_pb2.AgentTurn(
@@ -480,7 +496,7 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
             model=request.model,
             status=agent_pb2.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
             messages=request.messages,
-            output_text="echo:Summarize this",
+            text=agent_pb2.AgentTurnTextOutput(text="echo:Summarize this"),
             status_message="waiting for input",
         )
 
@@ -503,7 +519,7 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
             provider_name="openai",
             model="gpt-5.1",
             status=agent_pb2.AGENT_EXECUTION_STATUS_SUCCEEDED,
-            output_text="done",
+            text=agent_pb2.AgentTurnTextOutput(text="done"),
             status_message="completed",
         )
 
@@ -949,6 +965,9 @@ class AgentTransportTests(unittest.TestCase):
                     )
                 ],
                 execution_ref="exec-turn-1",
+                output=agent_pb2.AgentOutput(
+                    text=agent_pb2.AgentTextOutput(),
+                ),
             )
         )
         listed_turns = provider_client.ListTurns(
@@ -1195,7 +1214,11 @@ class AgentTransportTests(unittest.TestCase):
                         )
                     ],
                     tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
-                    response_schema={"type": "object"},
+                    output=agent_pb2.AgentOutput(
+                        structured=agent_pb2.AgentStructuredOutput(
+                            response_schema={"type": "object"},
+                        ),
+                    ),
                 )
             )
             fetched_turn = manager.get_turn(
@@ -1291,9 +1314,10 @@ class AgentTransportTests(unittest.TestCase):
                     "interaction_id": "",
                     "reason": "",
                     "tool_source": agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
-                    "tool_refs_set": False,
+                    "tool_ref_count": 0,
                     "timeout_seconds": 0,
-                    "has_response_schema": True,
+                    "output_kind": "structured",
+                    "has_structured_schema": True,
                 },
                 {
                     "method": "get_turn",
@@ -1398,9 +1422,12 @@ class AgentTransportTests(unittest.TestCase):
                             connection="default",
                         )
                     ],
-                    tool_refs_set=True,
                     tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
-                    response_schema={"type": "object"},
+                    output=AgentOutput(
+                        structured=AgentStructuredOutput(
+                            response_schema={"type": "object"},
+                        ),
+                    ),
                     metadata={"request": "native"},
                     model_options={"temperature": 0},
                     timeout_seconds=120,
@@ -1428,9 +1455,49 @@ class AgentTransportTests(unittest.TestCase):
             ["create_turn", "resolve_interaction"],
         )
         self.assertEqual(_manager_requests[0]["tool_source"], agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE)
-        self.assertTrue(_manager_requests[0]["tool_refs_set"])
+        self.assertEqual(_manager_requests[0]["tool_ref_count"], 1)
         self.assertEqual(_manager_requests[0]["timeout_seconds"], 120)
-        self.assertTrue(_manager_requests[0]["has_response_schema"])
+        self.assertEqual(_manager_requests[0]["output_kind"], "structured")
+        self.assertTrue(_manager_requests[0]["has_structured_schema"])
+
+    def test_agent_create_turn_requires_unambiguous_output(self) -> None:
+        with Agent("token-123") as manager:
+            with self.assertRaisesRegex(ValueError, "agent output is required"):
+                manager.create_turn(
+                    AgentCreateTurn(
+                        session_id="session-managed-1",
+                        messages=[AgentMessage(role="user", text="Summarize this")],
+                    )
+                )
+            with self.assertRaisesRegex(
+                ValueError,
+                "exactly one of output.text or output.structured is required",
+            ):
+                manager.create_turn(
+                    AgentCreateTurn(
+                        session_id="session-managed-1",
+                        messages=[AgentMessage(role="user", text="Summarize this")],
+                        output=AgentOutput(
+                            text=AgentTextOutput(),
+                            structured=AgentStructuredOutput(
+                                response_schema={"type": "object"}
+                            ),
+                        ),
+                    )
+                )
+            with self.assertRaisesRegex(
+                ValueError,
+                "output.structured.response_schema is required",
+            ):
+                manager.create_turn(
+                    AgentCreateTurn(
+                        session_id="session-managed-1",
+                        messages=[AgentMessage(role="user", text="Summarize this")],
+                        output=AgentOutput(
+                            structured={"response_schema": None},
+                        ),
+                    )
+                )
 
 
 if __name__ == "__main__":

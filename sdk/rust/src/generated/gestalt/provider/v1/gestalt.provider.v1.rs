@@ -608,8 +608,6 @@ pub struct AgentProviderCapabilities {
     pub tool_calls: bool,
     #[prost(bool, tag = "3")]
     pub parallel_tool_calls: bool,
-    #[prost(bool, tag = "4")]
-    pub structured_output: bool,
     #[prost(bool, tag = "5")]
     pub interactions: bool,
     #[prost(bool, tag = "6")]
@@ -801,10 +799,6 @@ pub struct AgentTurn {
     pub status: i32,
     #[prost(message, repeated, tag = "6")]
     pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
-    #[prost(string, tag = "7")]
-    pub output_text: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "8")]
-    pub structured_output: ::core::option::Option<::prost_types::Struct>,
     #[prost(string, tag = "9")]
     pub status_message: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "10")]
@@ -817,6 +811,30 @@ pub struct AgentTurn {
     pub completed_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(string, tag = "14")]
     pub execution_ref: ::prost::alloc::string::String,
+    #[prost(oneof = "agent_turn::Output", tags = "20, 21")]
+    pub output: ::core::option::Option<agent_turn::Output>,
+}
+/// Nested message and enum types in `AgentTurn`.
+pub mod agent_turn {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Output {
+        #[prost(message, tag = "20")]
+        Text(super::AgentTurnTextOutput),
+        #[prost(message, tag = "21")]
+        Structured(super::AgentTurnStructuredOutput),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AgentTurnTextOutput {
+    #[prost(string, tag = "1")]
+    pub text: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentTurnStructuredOutput {
+    #[prost(string, tag = "1")]
+    pub text: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub value: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentTurnDisplay {
@@ -859,8 +877,6 @@ pub struct CreateAgentProviderTurnRequest {
     pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
     #[prost(message, repeated, tag = "6")]
     pub tools: ::prost::alloc::vec::Vec<ResolvedAgentTool>,
-    #[prost(message, optional, tag = "7")]
-    pub response_schema: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "8")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "10")]
@@ -883,6 +899,30 @@ pub struct CreateAgentProviderTurnRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(bool, tag = "20")]
     pub tool_refs_set: bool,
+    #[prost(message, optional, tag = "21")]
+    pub output: ::core::option::Option<AgentOutput>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AgentTextOutput {}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentStructuredOutput {
+    #[prost(message, optional, tag = "1")]
+    pub response_schema: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentOutput {
+    #[prost(oneof = "agent_output::Kind", tags = "1, 2")]
+    pub kind: ::core::option::Option<agent_output::Kind>,
+}
+/// Nested message and enum types in `AgentOutput`.
+pub mod agent_output {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "1")]
+        Text(super::AgentTextOutput),
+        #[prost(message, tag = "2")]
+        Structured(super::AgentStructuredOutput),
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderTurnRequest {
@@ -3145,7 +3185,7 @@ pub struct WorkflowStepAgentTurn {
     #[prost(message, repeated, tag = "6")]
     pub tools: ::prost::alloc::vec::Vec<AgentToolRef>,
     #[prost(message, optional, tag = "7")]
-    pub response_schema: ::core::option::Option<::prost_types::Struct>,
+    pub output: ::core::option::Option<AgentOutput>,
     #[prost(message, optional, tag = "8")]
     pub model_options: ::core::option::Option<::prost_types::Struct>,
 }

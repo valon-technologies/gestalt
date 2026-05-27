@@ -5,13 +5,20 @@ import {
 
 import {
   AgentActorSchema,
+  AgentOutputSchema,
+  AgentStructuredOutputSchema,
+  AgentTextOutputSchema,
   AgentMessagePartSchema,
   AgentMessagePartType as ProtoAgentMessagePartType,
   AgentMessageSchema,
   AgentTurnDisplaySchema,
+  AgentTurnStructuredOutputSchema,
+  AgentTurnTextOutputSchema,
   type AgentActor as ProtoAgentActor,
   type AgentMessage as ProtoAgentMessage,
   type AgentMessagePart as ProtoAgentMessagePart,
+  type AgentOutput as ProtoAgentOutput,
+  type AgentTurn as ProtoAgentTurn,
   type AgentTurnDisplay as ProtoAgentTurnDisplay,
 } from "./internal/gen/v1/agent_pb.ts";
 import {
@@ -33,10 +40,12 @@ import {
 } from "./protocol-internal.ts";
 import type {
   AgentActor,
+  AgentOutput,
   AgentMessage,
   AgentMessagePart,
   AgentMessagePartType,
   AgentToolRef,
+  AgentTurnOutput,
   AgentTurnDisplay,
 } from "./agent.ts";
 import type { ExternalIdentity, Subject, SubjectInput } from "./api.ts";
@@ -83,6 +92,110 @@ export function agentTurnDisplayToProto(
     format: display.format ?? "",
     language: display.language ?? "",
   };
+}
+
+export function agentOutputFromProto(
+  output?: ProtoAgentOutput | undefined,
+): AgentOutput | undefined {
+  switch (output?.kind.case) {
+    case "text":
+      return { text: {} };
+    case "structured":
+      if (output.kind.value.responseSchema === undefined) {
+        throw new Error("output.structured.response_schema is required");
+      }
+      return {
+        structured: {
+          responseSchema: optionalObjectFromStruct(output.kind.value.responseSchema) ?? {},
+        },
+      };
+    default:
+      return undefined;
+  }
+}
+
+export function agentOutputToProto(
+  output: AgentOutput | undefined,
+): MessageInitShape<typeof AgentOutputSchema> | undefined {
+  if (output === undefined) {
+    throw new Error("agent output is required");
+  }
+  const textSet = output.text !== undefined;
+  const structuredSet = output.structured !== undefined;
+  if (textSet === structuredSet) {
+    throw new Error("exactly one of output.text or output.structured is required");
+  }
+  if (textSet) {
+    return {
+      kind: {
+        case: "text",
+        value: create(AgentTextOutputSchema, {}),
+      },
+    };
+  }
+  if (structuredSet) {
+    if (output.structured.responseSchema === undefined) {
+      throw new Error("output.structured.response_schema is required");
+    }
+    return {
+      kind: {
+        case: "structured",
+        value: create(AgentStructuredOutputSchema, {
+          responseSchema: optionalStruct(output.structured.responseSchema),
+        }),
+      },
+    };
+  }
+  throw new Error("exactly one of output.text or output.structured is required");
+}
+
+export function agentTurnOutputFromProto(
+  output: ProtoAgentTurn["output"],
+): AgentTurnOutput | undefined {
+  switch (output.case) {
+    case "text":
+      return { text: { text: output.value.text } };
+    case "structured":
+      return {
+        structured: {
+          text: output.value.text,
+          value: optionalObjectFromStruct(output.value.value),
+        },
+      };
+    default:
+      return undefined;
+  }
+}
+
+export function agentTurnOutputToProto(
+  output: AgentTurnOutput | undefined,
+): ProtoAgentTurn["output"] {
+  if (output === undefined) {
+    return { case: undefined };
+  }
+  const textSet = output.text !== undefined;
+  const structuredSet = output.structured !== undefined;
+  if (textSet === structuredSet) {
+    throw new Error("exactly one of output.text or output.structured is required");
+  }
+  if (textSet) {
+    return {
+      case: "text",
+      value: create(AgentTurnTextOutputSchema, {
+        text: output.text.text ?? "",
+      }),
+    };
+  }
+  if (structuredSet) {
+    return {
+      case: "structured",
+      value: create(AgentTurnStructuredOutputSchema, {
+        text: output.structured.text ?? "",
+        value: optionalStruct(output.structured.value),
+      }),
+    };
+  }
+  throw new Error("exactly one of output.text or output.structured is required");
 }
 
 export function agentMessageFromProto(message: ProtoAgentMessage): AgentMessage {

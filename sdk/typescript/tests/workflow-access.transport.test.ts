@@ -35,7 +35,7 @@ function workflowAppStepTarget(name: string, operation: string) {
 
 function workflowAgentStepTarget(provider: string, prompt: string) {
   return {
-    steps: [{ id: "agent", agent: { provider, prompt } }],
+    steps: [{ id: "agent", agent: { provider, prompt, output: { text: {} } } }],
   };
 }
 

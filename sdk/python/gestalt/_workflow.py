@@ -13,7 +13,10 @@ import grpc
 from google.protobuf import message as _message
 
 from ._agent import (
+    AgentOutput,
     AgentToolRef,
+    _agent_output_from_proto,
+    _agent_output_to_proto,
     agent_message_from_dict,
     agent_message_from_proto,
     agent_message_to_proto,
@@ -159,7 +162,7 @@ class WorkflowStepAgentTurn:
         default_factory=list
     )
     tools: Sequence[AgentToolRef] = _dataclasses.field(default_factory=list)
-    response_schema: WorkflowJsonObject | None = None
+    output: AgentOutput | Mapping[str, Any] | None = None
     model_options: WorkflowJsonObject | None = None
 
 
@@ -965,7 +968,7 @@ def workflow_step_agent_turn(value: Any | None = None, **kwargs: Any) -> Any:
         prompt=workflow_text(prompt) if prompt is not None else None,
         messages=_workflow_agent_message_proto_list(data.get("messages")),
         tools=_message_proto_list(data.get("tools"), _app_pb.AgentToolRef),
-        response_schema=_optional_struct(data.get("response_schema")),
+        output=_agent_output_to_proto(data.get("output")),
         model_options=_optional_struct(data.get("model_options")),
     )
 
@@ -977,6 +980,9 @@ def workflow_step_agent_turn_input_from_turn(
 
     if value is None:
         return None
+    output = _agent_output_from_proto(value.output) if has_field(value, "output") else None
+    if output is None:
+        raise ValueError("workflow agent output is required")
     return WorkflowStepAgentTurn(
         provider=value.provider,
         model=value.model,
@@ -986,9 +992,7 @@ def workflow_step_agent_turn_input_from_turn(
         else None,
         messages=_workflow_agent_message_input_list(value.messages),
         tools=_agent_tool_ref_input_list(value.tools),
-        response_schema=cast(WorkflowJsonObject, struct_to_dict(value.response_schema))
-        if has_field(value, "response_schema")
-        else None,
+        output=output,
         model_options=cast(WorkflowJsonObject, struct_to_dict(value.model_options))
         if has_field(value, "model_options")
         else None,

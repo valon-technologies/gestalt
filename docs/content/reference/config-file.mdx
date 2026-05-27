@@ -708,8 +708,8 @@ providers:
 ```
 
 Agent providers receive canonical session and turn requests with `messages`,
-optional resolved `tools`, optional `responseSchema`, and provider-specific
-`config`. Agent providers that need durable state can opt into a host
+explicit `output`, optional resolved `tools`, and provider-specific `config`.
+Agent providers that need durable state can opt into a host
 IndexedDB binding with `indexeddb`; the provider process then uses the SDK
 IndexedDB helper through the unified host-service socket.
 
@@ -824,7 +824,7 @@ workflows:
 | `target.steps[].app.connection` | Optional target connection name. |
 | `target.steps[].app.instance` | Optional target instance name. |
 | `target.steps[].app.input` | Optional workflow value that must resolve to a JSON object. Use `literal` for static params. |
-| `target.steps[].agent` | Optional agent turn using `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `responseSchema`, and `modelOptions`. |
+| `target.steps[].agent` | Optional agent turn using `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `output`, and `modelOptions`. |
 | `target.steps[].when` | Optional guard with `value` and scalar `equals`; `value.stepOutput.stepId` may reference only earlier steps. |
 | `runAs.subject.id` | Optional service-account subject ID, such as `service_account:roadmap-sync`, used as the runtime principal and credential subject. Without [`runAs`](/service-accounts#runas), config-managed workflows run as `system:config` and cannot target subject-scoped credentials. |
 | `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
@@ -841,7 +841,7 @@ workflows:
 | `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
 | `target.steps` | Required ordered workflow steps. Each step has `id` and exactly one of `app` or `agent`. |
 | `target.steps[].app` | App step call fields: `name`, `operation`, optional `connection`, optional `instance`, and optional workflow-value `input`. |
-| `target.steps[].agent` | Agent step turn fields: `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `responseSchema`, and `modelOptions`. |
+| `target.steps[].agent` | Agent step turn fields: `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `output`, and `modelOptions`. |
 | `target.steps[].when` | Optional guard with `value` and scalar `equals`; `value.stepOutput.stepId` may reference only earlier steps. |
 | `runAs.subject.id` | Optional service-account subject ID used as the runtime principal and credential subject. See [`runAs`](/service-accounts#runas). |
 | `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |

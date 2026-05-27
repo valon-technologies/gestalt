@@ -135,8 +135,10 @@ func TestParseTargetMapClonesObjectArgs(t *testing.T) {
 							"metadata": messageMetadata,
 						},
 					},
-					"responseSchema": responseSchema,
-					"modelOptions":   modelOptions,
+					"output": map[string]any{
+						"structured": map[string]any{"responseSchema": responseSchema},
+					},
+					"modelOptions": modelOptions,
 				},
 			},
 		},
@@ -159,8 +161,8 @@ func TestParseTargetMapClonesObjectArgs(t *testing.T) {
 	if nested := step.Metadata["nested"].(map[string]any); nested["value"] != "before" {
 		t.Fatalf("step metadata nested value = %#v, want before", nested["value"])
 	}
-	if step.Agent.ResponseSchema["type"] != "object" {
-		t.Fatalf("response schema = %#v, want original object type", step.Agent.ResponseSchema)
+	if step.Agent.Output.Structured.ResponseSchema["type"] != "object" {
+		t.Fatalf("response schema = %#v, want original object type", step.Agent.Output.Structured.ResponseSchema)
 	}
 	if step.Agent.ModelOptions["temperature"] != 0.2 {
 		t.Fatalf("model options = %#v, want original temperature", step.Agent.ModelOptions)
@@ -186,8 +188,10 @@ func TestParseAndEncodeTargetMapPreservesEmptyObjectArgs(t *testing.T) {
 							"metadata": map[string]any{},
 						},
 					},
-					"responseSchema": map[string]any{},
-					"modelOptions":   map[string]any{},
+					"output": map[string]any{
+						"structured": map[string]any{"responseSchema": map[string]any{}},
+					},
+					"modelOptions": map[string]any{},
 				},
 			},
 		},
@@ -204,8 +208,8 @@ func TestParseAndEncodeTargetMapPreservesEmptyObjectArgs(t *testing.T) {
 	if step.Agent.Messages[0].Metadata == nil || len(step.Agent.Messages[0].Metadata) != 0 {
 		t.Fatalf("message metadata = %#v, want non-nil empty map", step.Agent.Messages[0].Metadata)
 	}
-	if step.Agent.ResponseSchema == nil || len(step.Agent.ResponseSchema) != 0 {
-		t.Fatalf("response schema = %#v, want non-nil empty map", step.Agent.ResponseSchema)
+	if step.Agent.Output.Structured.ResponseSchema == nil || len(step.Agent.Output.Structured.ResponseSchema) != 0 {
+		t.Fatalf("response schema = %#v, want non-nil empty map", step.Agent.Output.Structured.ResponseSchema)
 	}
 	if step.Agent.ModelOptions == nil || len(step.Agent.ModelOptions) != 0 {
 		t.Fatalf("model options = %#v, want non-nil empty map", step.Agent.ModelOptions)
@@ -217,8 +221,10 @@ func TestParseAndEncodeTargetMapPreservesEmptyObjectArgs(t *testing.T) {
 		t.Fatalf("encoded step metadata = %#v, want empty object", encodedStep["metadata"])
 	}
 	encodedAgent := encodedStep["agent"].(map[string]any)
-	if schema, ok := encodedAgent["responseSchema"].(map[string]any); !ok || len(schema) != 0 {
-		t.Fatalf("encoded response schema = %#v, want empty object", encodedAgent["responseSchema"])
+	encodedOutput := encodedAgent["output"].(map[string]any)
+	encodedStructured := encodedOutput["structured"].(map[string]any)
+	if schema, ok := encodedStructured["responseSchema"].(map[string]any); !ok || len(schema) != 0 {
+		t.Fatalf("encoded response schema = %#v, want empty object", encodedStructured["responseSchema"])
 	}
 	if options, ok := encodedAgent["modelOptions"].(map[string]any); !ok || len(options) != 0 {
 		t.Fatalf("encoded model options = %#v, want empty object", encodedAgent["modelOptions"])

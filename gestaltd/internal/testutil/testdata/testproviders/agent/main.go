@@ -102,6 +102,7 @@ func (p *agentProvider) CreateTurn(ctx context.Context, req *gestalt.CreateAgent
 		req.Messages,
 		req.Tools,
 		req.Metadata,
+		req.Output,
 		req.CreatedBy,
 		strings.TrimSpace(req.ExecutionRef),
 		strings.TrimSpace(req.RunGrant),
@@ -239,7 +240,6 @@ func (p *agentProvider) GetCapabilities(context.Context, *gestalt.GetAgentProvid
 		StreamingText:      true,
 		ToolCalls:          true,
 		ParallelToolCalls:  true,
-		StructuredOutput:   true,
 		Interactions:       true,
 		ResumableTurns:     true,
 		ReasoningSummaries: false,
@@ -254,6 +254,7 @@ func (p *agentProvider) startTurn(
 	messages []gestalt.AgentMessage,
 	tools []gestalt.ResolvedAgentTool,
 	metadata map[string]any,
+	requestedOutput gestalt.AgentOutput,
 	createdBy *gestalt.AgentActor,
 	executionRef string,
 	runGrant string,
@@ -368,7 +369,16 @@ func (p *agentProvider) startTurn(
 			ExecutionRef: executionRef,
 		}
 	}
-	turn.OutputText = string(body)
+	if requestedOutput.Structured != nil {
+		turn.Output = gestalt.AgentTurnOutput{
+			Structured: &gestalt.AgentTurnStructuredOutput{
+				Text:  string(body),
+				Value: output,
+			},
+		}
+	} else {
+		turn.Output = gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: string(body)}}
+	}
 	turn.Status = gestalt.AgentExecutionStatusSucceeded
 	if requireInteraction {
 		turn.Status = gestalt.AgentExecutionStatusWaitingForInput
@@ -679,21 +689,35 @@ func cloneTurn(input *gestalt.AgentTurn) *gestalt.AgentTurn {
 		return nil
 	}
 	return &gestalt.AgentTurn{
-		ID:               input.ID,
-		SessionID:        input.SessionID,
-		ProviderName:     input.ProviderName,
-		Model:            input.Model,
-		Status:           input.Status,
-		Messages:         cloneMessages(input.Messages),
-		OutputText:       input.OutputText,
-		StructuredOutput: cloneMap(input.StructuredOutput),
-		StatusMessage:    input.StatusMessage,
-		CreatedBy:        cloneActor(input.CreatedBy),
-		CreatedAt:        input.CreatedAt,
-		StartedAt:        cloneTime(input.StartedAt),
-		CompletedAt:      cloneTime(input.CompletedAt),
-		ExecutionRef:     input.ExecutionRef,
+		ID:            input.ID,
+		SessionID:     input.SessionID,
+		ProviderName:  input.ProviderName,
+		Model:         input.Model,
+		Status:        input.Status,
+		Messages:      cloneMessages(input.Messages),
+		Output:        cloneTurnOutput(input.Output),
+		StatusMessage: input.StatusMessage,
+		CreatedBy:     cloneActor(input.CreatedBy),
+		CreatedAt:     input.CreatedAt,
+		StartedAt:     cloneTime(input.StartedAt),
+		CompletedAt:   cloneTime(input.CompletedAt),
+		ExecutionRef:  input.ExecutionRef,
 	}
+}
+
+func cloneTurnOutput(input gestalt.AgentTurnOutput) gestalt.AgentTurnOutput {
+	if input.Structured != nil {
+		return gestalt.AgentTurnOutput{
+			Structured: &gestalt.AgentTurnStructuredOutput{
+				Text:  input.Structured.Text,
+				Value: cloneMap(input.Structured.Value),
+			},
+		}
+	}
+	if input.Text != nil {
+		return gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: input.Text.Text}}
+	}
+	return gestalt.AgentTurnOutput{}
 }
 
 func cloneTurnEvent(input *gestalt.AgentTurnEvent) *gestalt.AgentTurnEvent {

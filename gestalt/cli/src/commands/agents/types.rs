@@ -112,11 +112,59 @@ pub(crate) struct AgentTurnInfo {
     #[serde(default)]
     pub(crate) status: String,
     #[serde(default)]
-    pub(crate) output_text: String,
-    #[serde(default)]
-    pub(crate) structured_output: Option<Value>,
+    pub(crate) output: Option<AgentTurnOutputInfo>,
     #[serde(default)]
     pub(crate) status_message: String,
+}
+
+impl AgentTurnInfo {
+    pub(crate) fn output_text(&self) -> &str {
+        if let Some(text) = self
+            .output
+            .as_ref()
+            .and_then(|output| output.text.as_ref())
+            .map(|output| output.text.as_str())
+        {
+            return text;
+        }
+        self.output
+            .as_ref()
+            .and_then(|output| output.structured.as_ref())
+            .map(|output| output.text.as_str())
+            .unwrap_or("")
+    }
+
+    pub(crate) fn structured_output(&self) -> Option<&Value> {
+        self.output
+            .as_ref()
+            .and_then(|output| output.structured.as_ref())
+            .and_then(|output| output.value.as_ref())
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentTurnOutputInfo {
+    #[serde(default)]
+    pub(crate) text: Option<AgentTurnTextOutputInfo>,
+    #[serde(default)]
+    pub(crate) structured: Option<AgentTurnStructuredOutputInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentTurnTextOutputInfo {
+    #[serde(default)]
+    pub(crate) text: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentTurnStructuredOutputInfo {
+    #[serde(default)]
+    pub(crate) text: String,
+    #[serde(default)]
+    pub(crate) value: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
