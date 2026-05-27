@@ -104,6 +104,59 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(copied.object["thread"].signal_payload, "event.thread_ts")
         self.assertEqual(copied.object["result"].step_output.step_id, "diagnosis")
 
+    def test_workflow_value_objects_accept_raw_nested_json_inputs(self) -> None:
+        value = gestalt.WorkflowValue(
+            object={
+                "literal": "ordinary",
+                "object": {"literal": "nested"},
+                "array": [{"template": "still json"}, 2],
+                "template": "${not.rendered}",
+                "run_input": "customer.id",
+                "signal_payload": "event.thread_ts",
+                "step_output": {"step_id": "diagnosis", "path": "agent.text"},
+            }
+        )
+
+        copied = gestalt.workflow_value_input_from_value(gestalt.workflow_value(value))
+
+        self.assertEqual(copied.object["literal"].literal, "ordinary")
+        self.assertEqual(copied.object["object"].object["literal"].literal, "nested")
+        self.assertEqual(copied.object["array"].array[0].object["template"].literal, "still json")
+        self.assertEqual(copied.object["template"].literal, "${not.rendered}")
+        self.assertEqual(copied.object["run_input"].literal, "customer.id")
+        self.assertEqual(copied.object["signal_payload"].literal, "event.thread_ts")
+        self.assertEqual(
+            copied.object["step_output"].object["step_id"].literal,
+            "diagnosis",
+        )
+
+    def test_workflow_app_inputs_accept_raw_json_objects(self) -> None:
+        target = gestalt.bound_workflow_target(
+            steps=[
+                gestalt.WorkflowStep(
+                    id="run",
+                    app=gestalt.WorkflowStepAppCall(
+                        name="app",
+                        operation="run",
+                        input={
+                            "literal": "ordinary",
+                            "array": [1, {"object": "nested"}],
+                        },
+                    ),
+                )
+            ]
+        )
+
+        copied = gestalt.bound_workflow_target_input_from_target(target)
+        app_input = copied.steps[0].app.input
+
+        self.assertEqual(app_input.object["literal"].literal, "ordinary")
+        self.assertEqual(app_input.object["array"].array[0].literal, 1)
+        self.assertEqual(
+            app_input.object["array"].array[1].object["object"].literal,
+            "nested",
+        )
+
     def test_steps_target_round_trip(self) -> None:
         self.assertIsNotNone(gestalt.workflow_step)
         self.assertIsNotNone(gestalt.workflow_step_when)

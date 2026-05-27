@@ -71,6 +71,7 @@ WORKFLOW_RUN_STATUS_FAILED = pb.WORKFLOW_RUN_STATUS_FAILED
 WORKFLOW_RUN_STATUS_CANCELED = pb.WORKFLOW_RUN_STATUS_CANCELED
 
 WorkflowJsonScalar: TypeAlias = None | bool | int | float | str
+WorkflowJsonNonNullScalar: TypeAlias = bool | int | float | str
 WorkflowJsonValue: TypeAlias = (
     WorkflowJsonScalar | list["WorkflowJsonValue"] | dict[str, "WorkflowJsonValue"]
 )
@@ -85,49 +86,70 @@ class _WorkflowUnset:
 _UNSET = _WorkflowUnset()
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowText:
     """Native data for templated workflow text."""
+    __hash__ = None
 
     template: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowStepOutputSource:
     """Native data for a workflow step output value source."""
+    __hash__ = None
 
     step_id: str = ""
     path: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowValue:
     """Native data for a workflow value expression."""
+    __hash__ = None
 
     literal: WorkflowJsonValue | _WorkflowUnset = _UNSET
-    object: Mapping[str, "WorkflowValue"] | None = None
-    array: Sequence["WorkflowValue"] | None = None
+    object: Mapping[str, "WorkflowValuePayload"] | None = None
+    array: list["WorkflowValuePayload"] | tuple["WorkflowValuePayload", ...] | None = None
     template: WorkflowText | str | None = None
     run_input: str = ""
     signal_payload: str = ""
     step_output: WorkflowStepOutputSource | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+WorkflowValuePayload: TypeAlias = (
+    WorkflowValue
+    | WorkflowJsonScalar
+    | Mapping[str, "WorkflowValuePayload"]
+    | list["WorkflowValuePayload"]
+    | tuple["WorkflowValuePayload", ...]
+)
+WorkflowValueInput: TypeAlias = (
+    WorkflowValue
+    | WorkflowJsonNonNullScalar
+    | Mapping[str, WorkflowValuePayload]
+    | list[WorkflowValuePayload]
+    | tuple[WorkflowValuePayload, ...]
+)
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowStepAppCall:
     """Native data for a workflow app step call."""
+    __hash__ = None
 
     name: str = ""
     operation: str = ""
-    input: WorkflowValue | None = None
+    input: WorkflowValueInput | None = None
     connection: str = ""
     instance: str = ""
     credential_mode: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowStepAgentTurn:
     """Native data for a workflow agent step turn."""
+    __hash__ = None
 
     provider: str = ""
     model: str = ""
@@ -141,29 +163,32 @@ class WorkflowStepAgentTurn:
     model_options: WorkflowJsonObject | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowAgentMessage:
     """Native data for a workflow agent message."""
+    __hash__ = None
 
     role: str = ""
     text: WorkflowText | str | None = None
     metadata: WorkflowJsonObject | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowStepWhen:
     """Native data for a workflow step condition."""
+    __hash__ = None
 
-    value: WorkflowValue | None = None
+    value: WorkflowValueInput | None = None
     equals: WorkflowJsonValue | _WorkflowUnset = _UNSET
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowStep:
     """Native data for one workflow step."""
+    __hash__ = None
 
     id: str = ""
-    inputs: Mapping[str, WorkflowValue] = _dataclasses.field(default_factory=dict)
+    inputs: Mapping[str, WorkflowValuePayload] = _dataclasses.field(default_factory=dict)
     app: WorkflowStepAppCall | None = None
     agent: WorkflowStepAgentTurn | None = None
     when: WorkflowStepWhen | None = None
@@ -171,16 +196,18 @@ class WorkflowStep:
     metadata: WorkflowJsonObject | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class BoundWorkflowTarget:
     """Native data for a bound workflow target."""
+    __hash__ = None
 
     steps: Sequence[WorkflowStep] = _dataclasses.field(default_factory=list)
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowActor:
     """Native data for a workflow actor."""
+    __hash__ = None
 
     subject_id: str = ""
     subject_kind: str = ""
@@ -188,9 +215,10 @@ class WorkflowActor:
     auth_source: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowEvent:
     """Native data for a workflow event."""
+    __hash__ = None
 
     id: str = ""
     source: str = ""
@@ -203,18 +231,20 @@ class WorkflowEvent:
     extensions: WorkflowJsonObject | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowEventMatch:
     """Native data for workflow event matching fields."""
+    __hash__ = None
 
     type: str = ""
     source: str = ""
     subject: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowSignal:
     """Native data for a workflow signal."""
+    __hash__ = None
 
     id: str = ""
     name: str = ""
@@ -226,34 +256,38 @@ class WorkflowSignal:
     sequence: int = 0
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowScheduleTrigger:
     """Native data for a schedule-triggered workflow run."""
+    __hash__ = None
 
     schedule_id: str = ""
     scheduled_for: _dt.datetime | Any | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowEventTriggerInvocation:
     """Native data for an event-triggered workflow run."""
+    __hash__ = None
 
     trigger_id: str = ""
     event: WorkflowEvent | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowRunTrigger:
     """Native data for a workflow run trigger."""
+    __hash__ = None
 
     manual: bool = False
     schedule: WorkflowScheduleTrigger | None = None
     event: WorkflowEventTriggerInvocation | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class BoundWorkflowRun:
     """Native data for a workflow-provider run."""
+    __hash__ = None
 
     id: str = ""
     status: int = WORKFLOW_RUN_STATUS_UNSPECIFIED
@@ -270,9 +304,10 @@ class BoundWorkflowRun:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class BoundWorkflowDefinition:
     """Native data copied from a workflow-provider definition."""
+    __hash__ = None
 
     id: str = ""
     target: BoundWorkflowTarget | None = None
@@ -281,9 +316,10 @@ class BoundWorkflowDefinition:
     provider_name: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class BoundWorkflowSchedule:
     """Native data for a workflow-provider schedule."""
+    __hash__ = None
 
     id: str = ""
     cron: str = ""
@@ -298,9 +334,10 @@ class BoundWorkflowSchedule:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class BoundWorkflowEventTrigger:
     """Native data for a workflow-provider event trigger."""
+    __hash__ = None
 
     id: str = ""
     match: WorkflowEventMatch | None = None
@@ -313,8 +350,9 @@ class BoundWorkflowEventTrigger:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowStartRun:
+    __hash__ = None
     provider_name: str = ""
     target: BoundWorkflowTarget | None = None
     idempotency_key: str = ""
@@ -322,14 +360,16 @@ class WorkflowStartRun:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowSignalRun:
+    __hash__ = None
     run_id: str = ""
     signal: WorkflowSignal | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowSignalOrStartRun:
+    __hash__ = None
     provider_name: str = ""
     workflow_key: str = ""
     target: BoundWorkflowTarget | None = None
@@ -338,32 +378,37 @@ class WorkflowSignalOrStartRun:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowCreateDefinition:
+    __hash__ = None
     provider_name: str = ""
     target: BoundWorkflowTarget | None = None
     idempotency_key: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowGetDefinition:
+    __hash__ = None
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowUpdateDefinition:
+    __hash__ = None
     definition_id: str = ""
     provider_name: str = ""
     target: BoundWorkflowTarget | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowDeleteDefinition:
+    __hash__ = None
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowCreateSchedule:
+    __hash__ = None
     provider_name: str = ""
     cron: str = ""
     timezone: str = ""
@@ -373,13 +418,15 @@ class WorkflowCreateSchedule:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowGetSchedule:
+    __hash__ = None
     schedule_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowUpdateSchedule:
+    __hash__ = None
     schedule_id: str = ""
     provider_name: str = ""
     cron: str = ""
@@ -389,23 +436,27 @@ class WorkflowUpdateSchedule:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowDeleteSchedule:
+    __hash__ = None
     schedule_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowPauseSchedule:
+    __hash__ = None
     schedule_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowResumeSchedule:
+    __hash__ = None
     schedule_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowCreateEventTrigger:
+    __hash__ = None
     provider_name: str = ""
     match: WorkflowEventMatch | None = None
     target: BoundWorkflowTarget | None = None
@@ -414,13 +465,15 @@ class WorkflowCreateEventTrigger:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowGetEventTrigger:
+    __hash__ = None
     trigger_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowUpdateEventTrigger:
+    __hash__ = None
     trigger_id: str = ""
     provider_name: str = ""
     match: WorkflowEventMatch | None = None
@@ -429,35 +482,41 @@ class WorkflowUpdateEventTrigger:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowDeleteEventTrigger:
+    __hash__ = None
     trigger_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowPauseEventTrigger:
+    __hash__ = None
     trigger_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowResumeEventTrigger:
+    __hash__ = None
     trigger_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowPublishEvent:
+    __hash__ = None
     provider_name: str = ""
     event: WorkflowEvent | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowRun:
+    __hash__ = None
     provider_name: str = ""
     run: BoundWorkflowRun | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowRunSignal:
+    __hash__ = None
     provider_name: str = ""
     run: BoundWorkflowRun | None = None
     signal: WorkflowSignal | None = None
@@ -465,20 +524,23 @@ class WorkflowRunSignal:
     workflow_key: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowDefinition:
+    __hash__ = None
     provider_name: str = ""
     definition: BoundWorkflowDefinition | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowSchedule:
+    __hash__ = None
     provider_name: str = ""
     schedule: BoundWorkflowSchedule | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowEventTrigger:
+    __hash__ = None
     provider_name: str = ""
     trigger: BoundWorkflowEventTrigger | None = None
 
@@ -676,12 +738,41 @@ def _workflow_path_source(path: str) -> Any:
     return pb.WorkflowPathSource(path=path)
 
 
+def _workflow_value_nested(value: WorkflowValuePayload | Any) -> Any:
+    if isinstance(value, pb.WorkflowValue):
+        return _copy(value)
+    if isinstance(value, WorkflowValue):
+        return workflow_value(value)
+    if isinstance(value, Mapping):
+        return pb.WorkflowValue(
+            object=pb.WorkflowObject(
+                fields={
+                    key: _workflow_value_nested(nested)
+                    for key, nested in value.items()
+                }
+            )
+        )
+    if isinstance(value, Sequence) and not isinstance(
+        value, str | bytes | bytearray | memoryview
+    ):
+        return pb.WorkflowValue(
+            array=pb.WorkflowArray(
+                values=[_workflow_value_nested(nested) for nested in value]
+            )
+        )
+    return pb.WorkflowValue(literal=_value(value))
+
+
 def workflow_value(value: Any | None = None, **kwargs: Any) -> Any:
     """Create a workflow value expression."""
 
     if isinstance(value, pb.WorkflowValue):
         return _copy(value)
-    if value is not None and _dataclass_mapping(value) is None and not isinstance(value, Mapping):
+    if (
+        value is not None
+        and _dataclass_mapping(value) is None
+        and not isinstance(value, Mapping)
+    ):
         data = {"literal": value}
         data.update(kwargs)
     else:
@@ -715,12 +806,17 @@ def workflow_value(value: Any | None = None, **kwargs: Any) -> Any:
     if name == "object":
         return pb.WorkflowValue(
             object=pb.WorkflowObject(
-                fields={key: workflow_value(nested) for key, nested in item.items()}
+                fields={
+                    key: _workflow_value_nested(nested)
+                    for key, nested in item.items()
+                }
             )
         )
     if name == "array":
         return pb.WorkflowValue(
-            array=pb.WorkflowArray(values=[workflow_value(nested) for nested in item])
+            array=pb.WorkflowArray(
+                values=[_workflow_value_nested(nested) for nested in item]
+            )
         )
     if name == "template":
         return pb.WorkflowValue(template=workflow_text(item))
@@ -780,7 +876,7 @@ def workflow_step_app_call(value: Any | None = None, **kwargs: Any) -> Any:
     return pb.WorkflowStepAppCall(
         name=data.get("name", ""),
         operation=data.get("operation", ""),
-        input=workflow_value(input_value) if input_value is not None else None,
+        input=_workflow_value_nested(input_value) if input_value is not None else None,
         connection=data.get("connection", ""),
         instance=data.get("instance", ""),
         credential_mode=data.get("credential_mode", ""),
@@ -907,7 +1003,7 @@ def workflow_step_when(value: Any | None = None, **kwargs: Any) -> Any:
     data = _data(value, kwargs)
     condition = pb.WorkflowStepWhen()
     if data.get("value") is not None:
-        condition.value.CopyFrom(workflow_value(data["value"]))
+        condition.value.CopyFrom(_workflow_value_nested(data["value"]))
     equals = data.get("equals", _UNSET)
     if equals is not _UNSET:
         condition.equals.CopyFrom(_value(equals))
@@ -944,7 +1040,7 @@ def workflow_step(value: Any | None = None, **kwargs: Any) -> Any:
     step = pb.WorkflowStep(
         id=data.get("id", ""),
         inputs={
-            key: workflow_value(item)
+            key: _workflow_value_nested(item)
             for key, item in (data.get("inputs") or {}).items()
         },
         timeout_seconds=data.get("timeout_seconds", 0),
@@ -1667,9 +1763,10 @@ def workflow_event_trigger_from_proto(
     )
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class StartWorkflowProviderRunRequest:
     """Start-run request passed to workflow providers."""
+    __hash__ = None
 
     target: BoundWorkflowTarget | None = None
     idempotency_key: str = ""
@@ -1678,16 +1775,18 @@ class StartWorkflowProviderRunRequest:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class GetWorkflowProviderRunRequest:
     """Get-run request passed to workflow providers."""
+    __hash__ = None
 
     run_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class ListWorkflowProviderRunsRequest:
     """List-runs request passed to workflow providers."""
+    __hash__ = None
 
     page_size: int = 0
     page_token: str = ""
@@ -1695,33 +1794,37 @@ class ListWorkflowProviderRunsRequest:
     target_app: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class ListWorkflowProviderRunsResponse:
     """Runs returned by workflow providers."""
+    __hash__ = None
 
     runs: Sequence[BoundWorkflowRun] = _dataclasses.field(default_factory=list)
     next_page_token: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class CancelWorkflowProviderRunRequest:
     """Cancel-run request passed to workflow providers."""
+    __hash__ = None
 
     run_id: str = ""
     reason: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class SignalWorkflowProviderRunRequest:
     """Signal-run request passed to workflow providers."""
+    __hash__ = None
 
     run_id: str = ""
     signal: WorkflowSignal | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class SignalOrStartWorkflowProviderRunRequest:
     """Signal-or-start request passed to workflow providers."""
+    __hash__ = None
 
     workflow_key: str = ""
     target: BoundWorkflowTarget | None = None
@@ -1731,9 +1834,10 @@ class SignalOrStartWorkflowProviderRunRequest:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class SignalWorkflowRunResponse:
     """Signal-run response returned by workflow providers."""
+    __hash__ = None
 
     run: BoundWorkflowRun | None = None
     signal: WorkflowSignal | None = None
@@ -1741,41 +1845,46 @@ class SignalWorkflowRunResponse:
     workflow_key: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class CreateWorkflowProviderDefinitionRequest:
     """Create-definition request passed to workflow providers."""
+    __hash__ = None
 
     target: BoundWorkflowTarget | None = None
     idempotency_key: str = ""
     created_by: WorkflowActor | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class GetWorkflowProviderDefinitionRequest:
     """Get-definition request passed to workflow providers."""
+    __hash__ = None
 
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class UpdateWorkflowProviderDefinitionRequest:
     """Update-definition request passed to workflow providers."""
+    __hash__ = None
 
     definition_id: str = ""
     target: BoundWorkflowTarget | None = None
     requested_by: WorkflowActor | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class DeleteWorkflowProviderDefinitionRequest:
     """Delete-definition request passed to workflow providers."""
+    __hash__ = None
 
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class UpsertWorkflowProviderScheduleRequest:
     """Upsert-schedule request passed to workflow providers."""
+    __hash__ = None
 
     schedule_id: str = ""
     cron: str = ""
@@ -1787,51 +1896,58 @@ class UpsertWorkflowProviderScheduleRequest:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class GetWorkflowProviderScheduleRequest:
     """Get-schedule request passed to workflow providers."""
+    __hash__ = None
 
     schedule_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class ListWorkflowProviderSchedulesRequest:
     """List-schedules request passed to workflow providers."""
+    __hash__ = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class ListWorkflowProviderSchedulesResponse:
     """Schedules returned by workflow providers."""
+    __hash__ = None
 
     schedules: Sequence[BoundWorkflowSchedule] = _dataclasses.field(
         default_factory=list
     )
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class DeleteWorkflowProviderScheduleRequest:
     """Delete-schedule request passed to workflow providers."""
+    __hash__ = None
 
     schedule_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class PauseWorkflowProviderScheduleRequest:
     """Pause-schedule request passed to workflow providers."""
+    __hash__ = None
 
     schedule_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class ResumeWorkflowProviderScheduleRequest:
     """Resume-schedule request passed to workflow providers."""
+    __hash__ = None
 
     schedule_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class UpsertWorkflowProviderEventTriggerRequest:
     """Upsert-event-trigger request passed to workflow providers."""
+    __hash__ = None
 
     trigger_id: str = ""
     match: WorkflowEventMatch | None = None
@@ -1842,51 +1958,58 @@ class UpsertWorkflowProviderEventTriggerRequest:
     definition_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class GetWorkflowProviderEventTriggerRequest:
     """Get-event-trigger request passed to workflow providers."""
+    __hash__ = None
 
     trigger_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class ListWorkflowProviderEventTriggersRequest:
     """List-event-triggers request passed to workflow providers."""
+    __hash__ = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class ListWorkflowProviderEventTriggersResponse:
     """Event triggers returned by workflow providers."""
+    __hash__ = None
 
     triggers: Sequence[BoundWorkflowEventTrigger] = _dataclasses.field(
         default_factory=list
     )
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class DeleteWorkflowProviderEventTriggerRequest:
     """Delete-event-trigger request passed to workflow providers."""
+    __hash__ = None
 
     trigger_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class PauseWorkflowProviderEventTriggerRequest:
     """Pause-event-trigger request passed to workflow providers."""
+    __hash__ = None
 
     trigger_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class ResumeWorkflowProviderEventTriggerRequest:
     """Resume-event-trigger request passed to workflow providers."""
+    __hash__ = None
 
     trigger_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class PublishWorkflowProviderEventRequest:
     """Publish-event request passed to workflow providers."""
+    __hash__ = None
 
     app_name: str = ""
     event: WorkflowEvent | None = None
@@ -2629,8 +2752,9 @@ def _grpc_call(method: Any, request: Any) -> Any:
     except grpc.RpcError:
         raise
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowExecutionRequest:
+    __hash__ = None
     provider_name: str = ""
     run_id: str = ""
     target: BoundWorkflowTarget | None = None
@@ -2642,16 +2766,18 @@ class WorkflowExecutionRequest:
     signals: Sequence[WorkflowSignal] = _dataclasses.field(default_factory=list)
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowRunContextActor:
+    __hash__ = None
     subject_id: str = ""
     subject_kind: str = ""
     display_name: str = ""
     auth_source: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowRunContextTrigger:
+    __hash__ = None
     kind: str = ""
     schedule_id: str = ""
     scheduled_for: str = ""
@@ -2659,8 +2785,9 @@ class WorkflowRunContextTrigger:
     event: WorkflowJsonObject | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowRunContextSignal:
+    __hash__ = None
     id: str = ""
     name: str = ""
     payload: WorkflowJsonObject = _dataclasses.field(default_factory=dict)
@@ -2671,8 +2798,9 @@ class WorkflowRunContextSignal:
     sequence: int | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowRunContext:
+    __hash__ = None
     provider: str = ""
     run_id: str = ""
     target: WorkflowJsonObject | None = None
@@ -2691,8 +2819,9 @@ class WorkflowRunContext:
         return self.signals[-1] if self.signals else None
 
 
-@_dataclasses.dataclass(slots=True)
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowEvalContext:
+    __hash__ = None
     request: WorkflowExecutionRequest
     outputs: Mapping[str, Any] | None = None
     inputs: Mapping[str, Any] | None = None
@@ -2704,7 +2833,7 @@ class WorkflowValueError(ValueError):
 
 
 def evaluate_workflow_step_inputs(
-    ctx: WorkflowEvalContext, values: Mapping[str, WorkflowValue] | None
+    ctx: WorkflowEvalContext, values: Mapping[str, WorkflowValuePayload] | None
 ) -> dict[str, Any] | None:
     if not values:
         return None
@@ -2717,7 +2846,37 @@ def evaluate_workflow_step_inputs(
     return out
 
 
-def evaluate_workflow_value(ctx: WorkflowEvalContext, value: WorkflowValue) -> tuple[Any, bool]:
+def evaluate_workflow_value(
+    ctx: WorkflowEvalContext, value: WorkflowValuePayload
+) -> tuple[Any, bool]:
+    if not isinstance(value, WorkflowValue):
+        if isinstance(value, Mapping):
+            out: dict[str, Any] = {}
+            for key, child in value.items():
+                if not isinstance(key, str):
+                    raise WorkflowValueError(
+                        f"workflow value object keys must be strings, got {type(key).__name__}"
+                    )
+                resolved, ok = evaluate_workflow_value(
+                    ctx, cast(WorkflowValuePayload, child)
+                )
+                if not ok:
+                    return None, False
+                out[key] = resolved
+            return out, True
+        if isinstance(value, Sequence) and not isinstance(
+            value, str | bytes | bytearray | memoryview
+        ):
+            out = []
+            for child in value:
+                resolved, ok = evaluate_workflow_value(
+                    ctx, cast(WorkflowValuePayload, child)
+                )
+                if not ok:
+                    return None, False
+                out.append(resolved)
+            return out, True
+        return value, True
     if _literal_is_set(value):
         return value.literal, True
     if value.object is not None:

@@ -310,6 +310,8 @@ _WORKFLOW_AUTHORED_EXPORTS = (
     "WorkflowStepWhen",
     "WorkflowText",
     "WorkflowValue",
+    "WorkflowValueInput",
+    "WorkflowValuePayload",
     "WorkflowRunTrigger",
     "WorkflowScheduleTrigger",
     "WorkflowSignal",
