@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/apps/openapi"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 )
@@ -41,6 +42,15 @@ func DefaultAPICatalogLoader(ctx context.Context, name string, surface SpecSurfa
 		def, err := openapi.LoadDefinition(ctx, name, specURL, allowed)
 		if err != nil {
 			return nil, err
+		}
+		return declarative.CatalogFromDefinition(def), nil
+	case SpecSurfaceGraphQL:
+		def, err := graphql.StaticAllowedOperationsDefinition(name, specURL, allowed)
+		if err != nil {
+			return nil, err
+		}
+		if def == nil {
+			return nil, nil
 		}
 		return declarative.CatalogFromDefinition(def), nil
 	default:

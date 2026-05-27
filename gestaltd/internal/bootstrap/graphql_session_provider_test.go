@@ -87,10 +87,9 @@ func TestGraphQLSessionCatalogProviderLoadsCatalogOnDemand(t *testing.T) {
 
 	wrapped := wrapGraphQLSessionCatalogProvider(base, "linear", srv.URL, map[string]*config.OperationOverride{
 		"viewer": {
-			Tags:    []string{"profile"},
-			GraphQL: &providermanifestv1.ManifestGraphQLOperation{SelectionSet: "id"},
+			Tags: []string{"profile"},
 		},
-	}, nil)
+	})
 	if got := len(wrapped.Catalog().Operations); got != 0 {
 		t.Fatalf("static catalog ops = %d, want 0", got)
 	}
@@ -139,8 +138,9 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 	t.Parallel()
 
 	type graphQLRequestPayload struct {
-		Query     string         `json:"query"`
-		Variables map[string]any `json:"variables"`
+		Query         string         `json:"query"`
+		OperationName string         `json:"operationName,omitempty"`
+		Variables     map[string]any `json:"variables"`
 	}
 
 	var (
@@ -175,6 +175,18 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
+	statusDocument := `query { status }`
+	recordDocument := `query Record($id: String!) { record(id: $id) { id } }`
+	searchRecordsDocument := `query SearchRecords(
+  "Optional record type filter."
+  $recordType: RecordType
+) {
+  searchRecords(recordType: $recordType) {
+    records { id name }
+  }
+}`
+	viewerDocument := `query { viewer { id } }`
+
 	prov, _, err := buildConfiguredSpecProvider(
 		context.Background(),
 		"exampleGraphQL",
@@ -190,17 +202,13 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 			allowedOperations: map[string]*config.OperationOverride{
 				"status": {
 					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						OperationType: "query",
+						Document: statusDocument,
 					},
 				},
 				"record": {
 					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						OperationType: "query",
-						Arguments: graphQLTestArgs(providermanifestv1.ManifestGraphQLArgument{
-							Name: "id",
-							Type: "String!",
-						}),
-						SelectionSet: "id",
+						Document:      recordDocument,
+						OperationName: "Record",
 					},
 				},
 				"searchRecords": {
@@ -209,13 +217,8 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 					AllowedRoles: []string{"viewer"},
 					Tags:         []string{"records"},
 					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						OperationType: "query",
-						Arguments: graphQLTestArgs(providermanifestv1.ManifestGraphQLArgument{
-							Name:        "recordType",
-							Type:        "RecordType",
-							Description: "Optional record type filter.",
-						}),
-						SelectionSet: "records { id name }",
+						Document:      searchRecordsDocument,
+						OperationName: "SearchRecords",
 					},
 				},
 			},
@@ -289,13 +292,12 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 			allowedOperations: map[string]*config.OperationOverride{
 				"status": {
 					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						OperationType: "query",
+						Document: statusDocument,
 					},
 				},
 				"viewer": {
 					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						OperationType: "query",
-						SelectionSet:  "id",
+						Document: viewerDocument,
 					},
 				},
 			},
@@ -331,20 +333,29 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 	mu.Unlock()
 	wantRequests := []graphQLRequestPayload{
 		{
-			Query:     "query($recordType: RecordType) { searchRecords(recordType: $recordType) { records { id name } } }",
-			Variables: map[string]any{"recordType": "ACTIVE"},
+			Query: "query SearchRecords($recordType: RecordType){\n" +
+				"  searchRecords(recordType: $recordType){\n" +
+				"    records {\n" +
+				"      id\n" +
+				"      name\n" +
+				"    }\n" +
+				"  }\n" +
+				"}",
+			OperationName: "SearchRecords",
+			Variables:     map[string]any{"recordType": "ACTIVE"},
 		},
 		{
-			Query:     "query($id: String!) { record(id: $id) { id } }",
-			Variables: map[string]any{"id": "rec_123"},
+			Query:         "query Record($id: String!){\n  record(id: $id){\n    id\n  }\n}",
+			OperationName: "Record",
+			Variables:     map[string]any{"id": "rec_123"},
 		},
 		{
-			Query: "query { status }",
+			Query: "{\n  status\n}",
 		},
 		{
-			Query: "query { status }",
+			Query: "{\n  status\n}",
 		},
-		{Query: "query { viewer { id } }"},
+		{Query: "{\n  viewer {\n    id\n  }\n}"},
 	}
 	if !reflect.DeepEqual(gotRequests, wantRequests) {
 		t.Fatalf("requests = %#v, want %#v", gotRequests, wantRequests)
@@ -360,46 +371,37 @@ func TestConfiguredStaticGraphQLProviderRejectsInvalidStaticConfig(t *testing.T)
 		wantErr    string
 	}{
 		{
-			name: "invalid argument type",
+			name: "invalid variable type",
 			operations: map[string]*config.OperationOverride{
 				"searchRecords": {
 					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						Arguments: graphQLTestArgs(providermanifestv1.ManifestGraphQLArgument{
-							Name: "recordType",
-							Type: "RecordType!!",
-						}),
-						SelectionSet: "records { id }",
+						Document: `query Search($recordType: RecordType!!) { searchRecords(recordType: $recordType) { records { id } } }`,
 					},
 				},
 			},
-			wantErr: `unexpected input "!"`,
+			wantErr: `graphql.document`,
 		},
 		{
-			name: "invalid argument name",
+			name: "invalid variable name",
 			operations: map[string]*config.OperationOverride{
 				"searchRecords": {
 					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						Arguments: graphQLTestArgs(providermanifestv1.ManifestGraphQLArgument{
-							Name: "record-type",
-							Type: "String",
-						}),
-						SelectionSet: "records { id }",
+						Document: `query Search($1record: String) { searchRecords(recordType: $1record) { records { id } } }`,
 					},
 				},
 			},
-			wantErr: `argument "record-type" is not a valid GraphQL name`,
+			wantErr: `graphql.document`,
 		},
 		{
 			name: "empty nested selection",
 			operations: map[string]*config.OperationOverride{
 				"viewer": {
 					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						Arguments:    graphQLTestArgs(),
-						SelectionSet: "user { }",
+						Document: `query Viewer { user { } }`,
 					},
 				},
 			},
-			wantErr: "empty selection set",
+			wantErr: "graphql.document",
 		},
 	}
 
@@ -474,7 +476,7 @@ func TestGraphQLSessionCatalogProviderPreservesPostConnectCapability(t *testing.
 		"gestalt.external_identity.type": "slack_identity",
 		"gestalt.external_identity.id":   "team:T123:user:U456",
 	}
-	wrapped := wrapGraphQLSessionCatalogProvider(&graphQLPostConnectProvider{metadata: want}, "linear", "https://example.com/graphql", nil, nil)
+	wrapped := wrapGraphQLSessionCatalogProvider(&graphQLPostConnectProvider{metadata: want}, "linear", "https://example.com/graphql", nil)
 
 	if _, ok := wrapped.(core.OAuthProvider); !ok {
 		t.Fatal("expected wrapped provider to preserve oauth support")
@@ -501,11 +503,4 @@ func TestGraphQLSessionCatalogProviderPreservesPostConnectCapability(t *testing.
 
 func stringPtr(value string) *string {
 	return &value
-}
-
-func graphQLTestArgs(args ...providermanifestv1.ManifestGraphQLArgument) *[]providermanifestv1.ManifestGraphQLArgument {
-	if args == nil {
-		args = []providermanifestv1.ManifestGraphQLArgument{}
-	}
-	return &args
 }

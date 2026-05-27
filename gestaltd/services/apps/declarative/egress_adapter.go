@@ -73,7 +73,7 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 	return result, nil
 }
 
-func (b *Base) executeGraphQL(ctx context.Context, operation string, query string, params map[string]any, token string) (*core.OperationResult, error) {
+func (b *Base) executeGraphQL(ctx context.Context, operation string, query string, operationName string, params map[string]any, token string) (*core.OperationResult, error) {
 	gqlURL, headers := b.resolvedURLAndHeaders(ctx)
 
 	if err := b.checkEgressHost(gqlURL); err != nil {
@@ -89,6 +89,7 @@ func (b *Base) executeGraphQL(ctx context.Context, operation string, query strin
 	gqlReq := apiexec.GraphQLRequest{
 		URL:           gqlURL,
 		Query:         query,
+		OperationName: operationName,
 		Variables:     params,
 		AuthHeader:    credential.Authorization,
 		CustomHeaders: headers,

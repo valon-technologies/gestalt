@@ -321,13 +321,6 @@ func (s *Spec) GraphQLURL() string {
 	return s.Surfaces.GraphQL.URL
 }
 
-func (s *Spec) GraphQLOperationSelections() map[string]string {
-	if s == nil || s.Surfaces == nil || s.Surfaces.GraphQL == nil {
-		return nil
-	}
-	return s.Surfaces.GraphQL.OperationSelections
-}
-
 func (s *Spec) MCPURL() string {
 	if s == nil || s.Surfaces == nil || s.Surfaces.MCP == nil {
 		return ""
@@ -409,9 +402,8 @@ type OpenAPISurface struct {
 }
 
 type GraphQLSurface struct {
-	Connection          string            `json:"connection,omitempty" yaml:"connection,omitempty"`
-	URL                 string            `json:"url" yaml:"url"`
-	OperationSelections map[string]string `json:"operationSelections,omitempty" yaml:"operationSelections,omitempty"`
+	Connection string `json:"connection,omitempty" yaml:"connection,omitempty"`
+	URL        string `json:"url" yaml:"url"`
 }
 
 type MCPSurface struct {
@@ -494,16 +486,8 @@ type ManifestOperationOverride struct {
 }
 
 type ManifestGraphQLOperation struct {
-	OperationType string                     `json:"operationType,omitempty" yaml:"operationType,omitempty"`
-	SelectionSet  string                     `json:"selectionSet,omitempty" yaml:"selectionSet,omitempty"`
-	Arguments     *[]ManifestGraphQLArgument `json:"arguments,omitempty" yaml:"arguments,omitempty"`
-}
-
-type ManifestGraphQLArgument struct {
-	Name          string `json:"name" yaml:"name"`
-	Type          string `json:"type" yaml:"type"`
-	Description   string `json:"description,omitempty" yaml:"description,omitempty"`
-	ParameterType string `json:"parameterType,omitempty" yaml:"parameterType,omitempty"`
+	Document      string `json:"document" yaml:"document"`
+	OperationName string `json:"operationName,omitempty" yaml:"operationName,omitempty"`
 }
 
 type ManifestConnectionDef struct {

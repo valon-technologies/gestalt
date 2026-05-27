@@ -49,6 +49,7 @@ type CatalogOperation struct {
 	Visible        *bool                 `yaml:"visible,omitempty"        json:"visible,omitempty"`
 	Transport      string                `yaml:"transport,omitempty"      json:"transport,omitempty"`
 	Query          string                `yaml:"query,omitempty"          json:"query,omitempty"`
+	OperationName  string                `yaml:"operationName,omitempty"  json:"operationName,omitempty"`
 }
 
 func OperationVisibleByDefault(op CatalogOperation) bool {
@@ -96,6 +97,7 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		Visible        *bool                 `yaml:"visible,omitempty"`
 		Transport      string                `yaml:"transport,omitempty"`
 		Query          string                `yaml:"query,omitempty"`
+		OperationName  string                `yaml:"operationName,omitempty"`
 	}
 
 	var aux catalogOperationYAML
@@ -130,6 +132,7 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		Visible:        aux.Visible,
 		Transport:      aux.Transport,
 		Query:          aux.Query,
+		OperationName:  aux.OperationName,
 	}
 	return nil
 }

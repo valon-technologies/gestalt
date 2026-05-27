@@ -307,6 +307,7 @@ func retryDelay(_ int, retryAfter string, attempt int) time.Duration {
 type GraphQLRequest struct {
 	URL           string
 	Query         string
+	OperationName string
 	Variables     map[string]any
 	Token         string
 	AuthHeader    string
@@ -314,10 +315,11 @@ type GraphQLRequest struct {
 }
 
 const (
-	graphqlBodyKeyQuery     = "query"
-	graphqlBodyKeyVariables = "variables"
-	graphqlRespKeyData      = "data"
-	graphqlRespKeyErrors    = "errors"
+	graphqlBodyKeyQuery         = "query"
+	graphqlBodyKeyOperationName = "operationName"
+	graphqlBodyKeyVariables     = "variables"
+	graphqlRespKeyData          = "data"
+	graphqlRespKeyErrors        = "errors"
 )
 
 type graphqlError struct {
@@ -329,6 +331,9 @@ type graphqlError struct {
 func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*core.OperationResult, error) {
 	payload := map[string]any{
 		graphqlBodyKeyQuery: req.Query,
+	}
+	if req.OperationName != "" {
+		payload[graphqlBodyKeyOperationName] = req.OperationName
 	}
 	if len(req.Variables) > 0 {
 		payload[graphqlBodyKeyVariables] = req.Variables

@@ -84,8 +84,9 @@ type GraphQLSurfaceInvoker interface {
 }
 
 type GraphQLRequest struct {
-	Document  string
-	Variables map[string]any
+	Document      string
+	OperationName string
+	Variables     map[string]any
 }
 
 type OAuthProvider interface {

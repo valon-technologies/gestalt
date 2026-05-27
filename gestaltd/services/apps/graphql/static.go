@@ -1,18 +1,22 @@
 package graphql
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
+	"github.com/wundergraph/graphql-go-tools/v2/pkg/ast"
+	"github.com/wundergraph/graphql-go-tools/v2/pkg/astparser"
+	"github.com/wundergraph/graphql-go-tools/v2/pkg/astprinter"
 )
 
-func StaticAllowedOperationsDefinition(name, endpoint string, allowedOps map[string]*operationexposure.OperationOverride, selectionOverrides map[string]string) (*declarative.Definition, error) {
+func StaticAllowedOperationsDefinition(name, endpoint string, allowedOps map[string]*operationexposure.OperationOverride) (*declarative.Definition, error) {
 	graphQLNames := make([]string, 0)
 	for opName, override := range allowedOps {
 		if override == nil || override.GraphQL == nil {
@@ -22,9 +26,6 @@ func StaticAllowedOperationsDefinition(name, endpoint string, allowedOps map[str
 	}
 	if len(graphQLNames) == 0 {
 		return nil, nil
-	}
-	if len(selectionOverrides) > 0 {
-		return nil, fmt.Errorf("graphql %s: operationSelections cannot be combined with static allowedOperations", name)
 	}
 
 	sort.Strings(graphQLNames)
@@ -45,18 +46,7 @@ func StaticAllowedOperationsDefinition(name, endpoint string, allowedOps map[str
 }
 
 func staticOperationDefinition(name string, override *operationexposure.OperationOverride) (declarative.OperationDef, string, error) {
-	if !isGraphQLName(name) {
-		return declarative.OperationDef{}, "", fmt.Errorf("graphql allowed operation %q is not a valid GraphQL field name", name)
-	}
-	operationType, err := graphQLOperationType(override)
-	if err != nil {
-		return declarative.OperationDef{}, "", fmt.Errorf("graphql allowed operation %q: %w", name, err)
-	}
-	if operationType == "" {
-		operationType = graphQLOperationTypeQuery
-	}
-
-	query, params, err := staticOperationQuery(operationType, name, override.GraphQL)
+	document, selected, err := parseStaticOperationDocument(name, override.GraphQL.Document, override.GraphQL.OperationName)
 	if err != nil {
 		return declarative.OperationDef{}, "", fmt.Errorf("graphql allowed operation %q: %w", name, err)
 	}
@@ -66,118 +56,276 @@ func staticOperationDefinition(name string, override *operationexposure.Operatio
 		exposedName = override.Alias
 	}
 	return declarative.OperationDef{
-		Description:  declarative.TruncateDescription(override.Description),
-		AllowedRoles: slices.Clone(override.AllowedRoles),
-		Tags:         catalog.MergeTags(override.Tags),
-		Transport:    "graphql",
-		Query:        query,
-		Parameters:   params,
+		Description:   declarative.TruncateDescription(override.Description),
+		AllowedRoles:  slices.Clone(override.AllowedRoles),
+		Tags:          catalog.MergeTags(override.Tags),
+		Transport:     "graphql",
+		Query:         document,
+		OperationName: strings.TrimSpace(override.GraphQL.OperationName),
+		Parameters:    selected.parameters,
 	}, exposedName, nil
 }
 
-func staticOperationQuery(operationType, fieldName string, graphQLOp *providermanifestv1.ManifestGraphQLOperation) (string, []declarative.ParameterDef, error) {
-	var rawArgs []providermanifestv1.ManifestGraphQLArgument
-	if graphQLOp.Arguments != nil {
-		rawArgs = *graphQLOp.Arguments
-	}
-	args, typeOverrides, err := staticInputValues(rawArgs)
-	if err != nil {
-		return "", nil, err
-	}
-
-	selectionSet := strings.TrimSpace(graphQLOp.SelectionSet)
-	if _, err := parseSelectionSet(selectionSet); err != nil {
-		return "", nil, fmt.Errorf("graphql.selectionSet: %w", err)
-	}
-
-	field := Field{Name: fieldName, Args: args}
-	query := generateQueryWithExplicitSelection(nil, field, operationType == graphQLOperationTypeMutation, selectionSet)
-	return query, argsToParamsWithTypeOverrides(nil, args, typeOverrides), nil
+type parsedStaticOperation struct {
+	parameters []declarative.ParameterDef
 }
 
-func staticInputValues(args []providermanifestv1.ManifestGraphQLArgument) ([]InputValue, map[string]string, error) {
-	if len(args) == 0 {
-		return nil, nil, nil
+func parseStaticOperationDocument(operationID, rawDocument, configuredOperationName string) (string, parsedStaticOperation, error) {
+	document := strings.TrimSpace(rawDocument)
+	if document == "" {
+		return "", parsedStaticOperation{}, fmt.Errorf("graphql.document is required")
 	}
-	values := make([]InputValue, 0, len(args))
-	var typeOverrides map[string]string
-	argNames := make(map[string]struct{}, len(args))
-	for _, arg := range args {
-		if !isGraphQLName(arg.Name) {
-			return nil, nil, fmt.Errorf("argument %q is not a valid GraphQL name", arg.Name)
-		}
-		if _, exists := argNames[arg.Name]; exists {
-			return nil, nil, fmt.Errorf("duplicate argument %q", arg.Name)
-		}
-		argNames[arg.Name] = struct{}{}
 
-		typ, err := parseGraphQLType(arg.Type)
-		if err != nil {
-			return nil, nil, fmt.Errorf("argument %q type: %w", arg.Name, err)
+	doc, report := astparser.ParseGraphqlDocumentString(document)
+	if report.HasErrors() {
+		return "", parsedStaticOperation{}, fmt.Errorf("graphql.document: %s", report.Error())
+	}
+
+	operationRef, err := selectStaticOperation(&doc, strings.TrimSpace(configuredOperationName))
+	if err != nil {
+		return "", parsedStaticOperation{}, err
+	}
+	operation := doc.OperationDefinitions[operationRef]
+	if operation.OperationType == ast.OperationTypeSubscription {
+		return "", parsedStaticOperation{}, fmt.Errorf("subscription operations are not supported")
+	}
+	if err := validateSameDocumentFragments(&doc); err != nil {
+		return "", parsedStaticOperation{}, err
+	}
+
+	params, err := staticOperationParameters(&doc, operationRef)
+	if err != nil {
+		return "", parsedStaticOperation{}, fmt.Errorf("%s variables: %w", operationID, err)
+	}
+	stripVariableDescriptions(&doc)
+	printedDocument, err := astprinter.PrintStringIndent(&doc, "  ")
+	if err != nil {
+		return "", parsedStaticOperation{}, fmt.Errorf("graphql.document: %w", err)
+	}
+	return strings.TrimSpace(printedDocument), parsedStaticOperation{parameters: params}, nil
+}
+
+func selectStaticOperation(doc *ast.Document, operationName string) (int, error) {
+	operationRefs := make([]int, 0, len(doc.RootNodes))
+	for _, node := range doc.RootNodes {
+		if node.Kind == ast.NodeKindOperationDefinition {
+			operationRefs = append(operationRefs, node.Ref)
 		}
-		values = append(values, InputValue{
-			Name:        arg.Name,
-			Description: arg.Description,
-			Type:        typ,
-		})
-		if override := strings.TrimSpace(arg.ParameterType); override != "" {
-			if typeOverrides == nil {
-				typeOverrides = make(map[string]string)
+	}
+	if len(operationRefs) == 0 {
+		return 0, fmt.Errorf("graphql.document must contain an executable operation")
+	}
+
+	if operationName != "" {
+		for _, ref := range operationRefs {
+			if doc.OperationDefinitionNameString(ref) == operationName {
+				return ref, nil
 			}
-			typeOverrides[arg.Name] = override
+		}
+		return 0, fmt.Errorf("graphql.operationName %q is not defined in graphql.document", operationName)
+	}
+
+	if len(operationRefs) != 1 {
+		return 0, fmt.Errorf("graphql.operationName is required when graphql.document contains %d operations", len(operationRefs))
+	}
+	return operationRefs[0], nil
+}
+
+func validateSameDocumentFragments(doc *ast.Document) error {
+	fragments := make(map[string]int, len(doc.FragmentDefinitions))
+	for i := range doc.FragmentDefinitions {
+		fragments[doc.FragmentDefinitionNameString(i)] = i
+	}
+	visited := make(map[string]struct{}, len(fragments))
+	for i := range doc.OperationDefinitions {
+		if err := validateSelectionSetFragments(doc, doc.OperationDefinitions[i].SelectionSet, fragments, visited); err != nil {
+			return err
 		}
 	}
-	return values, typeOverrides, nil
+	for i := range doc.FragmentDefinitions {
+		if err := validateSelectionSetFragments(doc, doc.FragmentDefinitions[i].SelectionSet, fragments, visited); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func parseGraphQLType(raw string) (TypeRef, error) {
-	p := selectionParser{input: strings.TrimSpace(raw)}
-	typ, err := parseGraphQLTypeRef(&p)
-	if err != nil {
-		return TypeRef{}, err
+func validateSelectionSetFragments(doc *ast.Document, selectionSet int, fragments map[string]int, visited map[string]struct{}) error {
+	if selectionSet < 0 || selectionSet >= len(doc.SelectionSets) {
+		return nil
 	}
-	p.skipIgnored()
-	if !p.eof() {
-		return TypeRef{}, fmt.Errorf("unexpected input %q", p.input[p.pos:])
+	for _, selectionRef := range doc.SelectionSets[selectionSet].SelectionRefs {
+		selection := doc.Selections[selectionRef]
+		switch selection.Kind {
+		case ast.SelectionKindField:
+			field := doc.Fields[selection.Ref]
+			if field.HasSelections {
+				if err := validateSelectionSetFragments(doc, field.SelectionSet, fragments, visited); err != nil {
+					return err
+				}
+			}
+		case ast.SelectionKindInlineFragment:
+			fragment := doc.InlineFragments[selection.Ref]
+			if fragment.HasSelections {
+				if err := validateSelectionSetFragments(doc, fragment.SelectionSet, fragments, visited); err != nil {
+					return err
+				}
+			}
+		case ast.SelectionKindFragmentSpread:
+			name := doc.FragmentSpreadNameString(selection.Ref)
+			fragmentRef, ok := fragments[name]
+			if !ok {
+				return fmt.Errorf("graphql.document fragment %q is not defined in the same document", name)
+			}
+			if _, ok := visited[name]; ok {
+				continue
+			}
+			visited[name] = struct{}{}
+			if err := validateSelectionSetFragments(doc, doc.FragmentDefinitions[fragmentRef].SelectionSet, fragments, visited); err != nil {
+				return err
+			}
+		}
 	}
-	return typ, nil
+	return nil
 }
 
-func parseGraphQLTypeRef(p *selectionParser) (TypeRef, error) {
-	p.skipIgnored()
-	if p.eof() {
-		return TypeRef{}, fmt.Errorf("expected GraphQL type")
+func stripVariableDescriptions(doc *ast.Document) {
+	for i := range doc.VariableDefinitions {
+		doc.VariableDefinitions[i].Description = ast.Description{}
 	}
-	var typ TypeRef
-	if p.consume("[") {
-		inner, err := parseGraphQLTypeRef(p)
+}
+
+func staticOperationParameters(doc *ast.Document, operationRef int) ([]declarative.ParameterDef, error) {
+	operation := doc.OperationDefinitions[operationRef]
+	if !operation.HasVariableDefinitions {
+		return nil, nil
+	}
+
+	params := make([]declarative.ParameterDef, 0, len(operation.VariableDefinitions.Refs))
+	seen := make(map[string]struct{}, len(operation.VariableDefinitions.Refs))
+	for _, variableDefinitionRef := range operation.VariableDefinitions.Refs {
+		variableName := doc.VariableDefinitionNameString(variableDefinitionRef)
+		if _, ok := seen[variableName]; ok {
+			return nil, fmt.Errorf("duplicate variable %q", variableName)
+		}
+		seen[variableName] = struct{}{}
+
+		variableDefinition := doc.VariableDefinitions[variableDefinitionRef]
+		defaultValue, hasDefault, err := staticVariableDefault(doc, variableDefinition)
 		if err != nil {
-			return TypeRef{}, err
+			return nil, fmt.Errorf("%s default value: %w", variableName, err)
 		}
-		p.skipIgnored()
-		if !p.consume("]") {
-			return TypeRef{}, fmt.Errorf("missing closing bracket")
-		}
-		typ = TypeRef{Kind: KindList, OfType: &inner}
-	} else {
-		name, err := p.readName()
-		if err != nil {
-			return TypeRef{}, err
-		}
-		typ = TypeRef{Kind: KindScalar, Name: &name}
+		params = append(params, declarative.ParameterDef{
+			Name:        variableName,
+			Type:        staticVariableParamType(doc, variableDefinition.Type),
+			Description: staticDescription(doc, variableDefinition.Description),
+			Required:    doc.TypeIsNonNull(variableDefinition.Type) && !hasDefault,
+			Default:     defaultValue,
+		})
 	}
-	p.skipIgnored()
-	if p.consume("!") {
-		inner := typ
-		typ = TypeRef{Kind: KindNonNull, OfType: &inner}
-	}
-	return typ, nil
+	return params, nil
 }
 
-func isGraphQLName(value string) bool {
-	p := selectionParser{input: value}
-	if _, err := p.readName(); err != nil {
-		return false
+func staticDescription(doc *ast.Document, description ast.Description) string {
+	if !description.IsDefined {
+		return ""
 	}
-	return p.eof()
+	return doc.Input.ByteSliceString(description.Content)
+}
+
+func staticVariableParamType(doc *ast.Document, typeRef int) string {
+	if doc.TypeIsList(typeRef) {
+		return "array"
+	}
+
+	name := staticNamedType(doc, typeRef)
+	switch name {
+	case "Int":
+		return "integer"
+	case "Float":
+		return "number"
+	case "Boolean":
+		return "boolean"
+	case "JSON", "JSONObject":
+		return "object"
+	case "String", "ID", "DateTime", "Date", "URI", "URL", "UUID", "JSONString", "TimelessDate":
+		return "string"
+	default:
+		if strings.HasSuffix(name, "Input") || strings.HasSuffix(name, "Filter") || strings.HasSuffix(name, "Filters") {
+			return "object"
+		}
+		return "string"
+	}
+}
+
+func staticNamedType(doc *ast.Document, typeRef int) string {
+	for typeRef >= 0 {
+		typ := doc.Types[typeRef]
+		if typ.TypeKind == ast.TypeKindNamed {
+			return doc.TypeNameString(typeRef)
+		}
+		typeRef = typ.OfType
+	}
+	return ""
+}
+
+func staticVariableDefault(doc *ast.Document, variableDefinition ast.VariableDefinition) (any, bool, error) {
+	if !variableDefinition.DefaultValue.IsDefined {
+		return nil, false, nil
+	}
+	value, err := staticGraphQLValue(doc, variableDefinition.DefaultValue.Value)
+	return value, true, err
+}
+
+func staticGraphQLValue(doc *ast.Document, value ast.Value) (any, error) {
+	switch value.Kind {
+	case ast.ValueKindNull:
+		return nil, nil
+	case ast.ValueKindString:
+		return doc.StringValueContentString(value.Ref), nil
+	case ast.ValueKindBoolean:
+		return bool(doc.BooleanValue(value.Ref)), nil
+	case ast.ValueKindInteger:
+		return doc.IntValueAsInt(value.Ref), nil
+	case ast.ValueKindFloat:
+		raw := doc.Input.ByteSliceString(doc.FloatValues[value.Ref].Raw)
+		if doc.FloatValueIsNegative(value.Ref) {
+			raw = "-" + raw
+		}
+		return strconv.ParseFloat(raw, 64)
+	case ast.ValueKindEnum:
+		return doc.EnumValueNameString(value.Ref), nil
+	case ast.ValueKindList:
+		out := make([]any, 0, len(doc.ListValues[value.Ref].Refs))
+		for _, ref := range doc.ListValues[value.Ref].Refs {
+			item, err := staticGraphQLValue(doc, doc.Values[ref])
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, item)
+		}
+		return out, nil
+	case ast.ValueKindObject:
+		out := make(map[string]any, len(doc.ObjectValues[value.Ref].Refs))
+		for _, ref := range doc.ObjectValues[value.Ref].Refs {
+			item, err := staticGraphQLValue(doc, doc.ObjectFieldValue(ref))
+			if err != nil {
+				return nil, err
+			}
+			out[doc.ObjectFieldNameString(ref)] = item
+		}
+		return out, nil
+	case ast.ValueKindVariable:
+		return nil, fmt.Errorf("variable references are not supported")
+	default:
+		data, err := doc.PrintValueBytes(value, nil)
+		if err != nil {
+			return nil, err
+		}
+		var out any
+		if err := json.Unmarshal(data, &out); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
 }

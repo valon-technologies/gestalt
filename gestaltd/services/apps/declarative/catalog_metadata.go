@@ -24,15 +24,16 @@ func CatalogFromDefinition(def *Definition) *catalog.Catalog {
 	for name := range def.Operations {
 		opDef := def.Operations[name] //nolint:gocritic // map values not addressable
 		catOp := catalog.CatalogOperation{
-			ID:           name,
-			Method:       strings.ToUpper(opDef.Method),
-			Path:         opDef.Path,
-			Description:  opDef.Description,
-			AllowedRoles: slices.Clone(opDef.AllowedRoles),
-			Tags:         catalog.MergeTags(opDef.Tags),
-			Transport:    opDef.Transport,
-			Query:        opDef.Query,
-			InputSchema:  opDef.InputSchema,
+			ID:            name,
+			Method:        strings.ToUpper(opDef.Method),
+			Path:          opDef.Path,
+			Description:   opDef.Description,
+			AllowedRoles:  slices.Clone(opDef.AllowedRoles),
+			Tags:          catalog.MergeTags(opDef.Tags),
+			Transport:     opDef.Transport,
+			Query:         opDef.Query,
+			OperationName: opDef.OperationName,
+			InputSchema:   opDef.InputSchema,
 		}
 		for _, p := range opDef.Parameters {
 			catOp.Parameters = append(catOp.Parameters, catalog.CatalogParameter{

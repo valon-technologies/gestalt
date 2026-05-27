@@ -778,13 +778,6 @@
         "url": {
           "type": "string",
           "minLength": 1
-        },
-        "operationSelections": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string",
-            "minLength": 1
-          }
         }
       }
     },
@@ -1277,55 +1270,17 @@
     "manifestGraphQLOperation": {
       "type": "object",
       "additionalProperties": false,
-      "properties": {
-        "operationType": {
-          "type": "string",
-          "enum": [
-            "query",
-            "mutation"
-          ]
-        },
-        "selectionSet": {
-          "type": "string",
-          "minLength": 1
-        },
-        "arguments": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/manifestGraphQLArgument"
-          }
-        }
-      }
-    },
-    "manifestGraphQLArgument": {
-      "type": "object",
-      "additionalProperties": false,
       "required": [
-        "name",
-        "type"
+        "document"
       ],
       "properties": {
-        "name": {
+        "document": {
           "type": "string",
           "minLength": 1
         },
-        "type": {
+        "operationName": {
           "type": "string",
           "minLength": 1
-        },
-        "description": {
-          "type": "string"
-        },
-        "parameterType": {
-          "type": "string",
-          "enum": [
-            "string",
-            "integer",
-            "number",
-            "boolean",
-            "array",
-            "object"
-          ]
         }
       }
     },

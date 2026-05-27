@@ -160,7 +160,7 @@ func (b *Base) Execute(ctx context.Context, operation string, params map[string]
 		return nil, fmt.Errorf("unknown operation: %s", operation)
 	}
 	if catOp.Query != "" {
-		return b.executeGraphQL(ctx, operation, catOp.Query, params, token)
+		return b.executeGraphQL(ctx, operation, catOp.Query, catOp.OperationName, params, token)
 	}
 	return b.executeREST(ctx, operation, catOp, params, token)
 }
@@ -170,7 +170,7 @@ func (b *Base) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, t
 	if document == "" {
 		return nil, fmt.Errorf("graphql document is required")
 	}
-	return b.executeGraphQL(ctx, "graphql", document, request.Variables, token)
+	return b.executeGraphQL(ctx, "graphql", document, request.OperationName, request.Variables, token)
 }
 
 func (b *Base) egressAuthStyle() egress.AuthStyle {
