@@ -677,7 +677,11 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-	ticker := time.NewTicker(250 * time.Millisecond)
+	tickInterval := 250 * time.Millisecond
+	if s.agentStreamHeartbeat > 0 && s.agentStreamHeartbeat < tickInterval {
+		tickInterval = s.agentStreamHeartbeat
+	}
+	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
 	lastWrite := time.Now()
 
