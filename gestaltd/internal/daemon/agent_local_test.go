@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestE2EAgentLaunchDryRunUsesLocalHarnessOnly(t *testing.T) {
+func TestE2EAgentLaunchDryRunUsesHarnessesDefault(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -24,13 +24,14 @@ providers:
   agent:
     local:
       default: true
-      localHarness:
-        command: /bin/sh
-        args: ["-c", "echo hi"]
-        workingDirectory: work
-        env:
-          OPENAI_API_KEY: secret
-          PLAIN: visible
+      harnesses:
+        default:
+          command: /bin/sh
+          args: ["-c", "echo hi"]
+          workingDirectory: work
+          env:
+            OPENAI_API_KEY: secret
+            PLAIN: visible
     deployment_only:
       runtime:
         provider: missing
@@ -103,11 +104,12 @@ providers:
   agent:
     local:
       default: true
-      localHarness:
-        command: ./harness.sh
-        workingDirectory: work
-        env:
-          HARNESS_VALUE: from-config
+      harnesses:
+        default:
+          command: ./harness.sh
+          workingDirectory: work
+          env:
+            HARNESS_VALUE: from-config
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -147,10 +149,11 @@ providers:
   agent:
     local:
       default: true
-      localHarness:
-        command: /bin/sh
-        requiredCommands:
-          - definitely-missing-gestalt-agent-command
+      harnesses:
+        default:
+          command: /bin/sh
+          requiredCommands:
+            - definitely-missing-gestalt-agent-command
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -178,15 +181,17 @@ providers:
   agent:
     local:
       default: true
-      localHarness:
-        command: /bin/sh
-        env:
-          OPENAI_API_KEY: ${GESTALT_TEST_MISSING_SELECTED_HARNESS_ENV}
+      harnesses:
+        default:
+          command: /bin/sh
+          env:
+            OPENAI_API_KEY: ${GESTALT_TEST_MISSING_SELECTED_HARNESS_ENV}
     unselected:
-      localHarness:
-        command: /bin/sh
-        env:
-          OTHER: ${GESTALT_TEST_MISSING_UNSELECTED_HARNESS_ENV}
+      harnesses:
+        default:
+          command: /bin/sh
+          env:
+            OTHER: ${GESTALT_TEST_MISSING_UNSELECTED_HARNESS_ENV}
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)

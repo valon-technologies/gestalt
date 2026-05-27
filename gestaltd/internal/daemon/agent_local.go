@@ -26,7 +26,7 @@ type localAgentCommandOptions struct {
 type localAgentHarnessPlan struct {
 	ProviderName    string
 	HarnessName     string
-	Harness         config.ProviderEntryLocalHarnessConfig
+	Harness         config.ProviderEntryHarnessConfig
 	WorkingDir      string
 	Env             map[string]string
 	ResolvedCommand string
@@ -341,9 +341,8 @@ func printAgentLaunchUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd agent launch [--config PATH]... [--provider NAME] [--harness NAME] [--dry-run]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the selected provider's configured agent harness.")
-	writeUsageLine(w, "Only providers.agent.<name>.harnesses is used; legacy localHarness")
-	writeUsageLine(w, "is also accepted. No server, session,")
-	writeUsageLine(w, "persistence, runtime, tool grant, or AgentProvider RPC stack is started.")
+	writeUsageLine(w, "No server, session, persistence, runtime, tool grant,")
+	writeUsageLine(w, "or AgentProvider RPC stack is started.")
 }
 
 func printAgentDoctorUsage(w io.Writer) {

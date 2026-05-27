@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// DefaultAgentHarnessName is the conventional harness name selected when a
-// provider has a single legacy localHarness or an explicit default harness.
+// DefaultAgentHarnessName is the conventional harness name selected when an
+// agent provider defines a default harness entry.
 const DefaultAgentHarnessName = "default"
 
 // EffectiveAgentHarness is the resolved provider and harness launch
@@ -42,9 +42,6 @@ func ResolveProviderEntryAgentHarness(providerName string, entry *ProviderEntry,
 			selectedName = strings.TrimSpace(name)
 		}
 	}
-	if selectedName == "" && entry.LocalHarness != nil {
-		selectedName = DefaultAgentHarnessName
-	}
 	if selectedName == "" {
 		return EffectiveAgentHarness{}, fmt.Errorf("providers.agent.%s.harnesses is required for agent harness launch", providerName)
 	}
@@ -52,9 +49,6 @@ func ResolveProviderEntryAgentHarness(providerName string, entry *ProviderEntry,
 	var harness *ProviderEntryHarnessConfig
 	if entry.Harnesses != nil {
 		harness = entry.Harnesses[selectedName]
-	}
-	if harness == nil && selectedName == DefaultAgentHarnessName && entry.LocalHarness != nil {
-		harness = entry.LocalHarness
 	}
 	if harness == nil {
 		return EffectiveAgentHarness{}, fmt.Errorf("providers.agent.%s.harnesses.%s is not configured", providerName, selectedName)
