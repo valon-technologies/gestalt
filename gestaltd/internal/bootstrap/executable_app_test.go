@@ -205,6 +205,7 @@ type capturingRuntime struct {
 	startRequests       []runtimeprovider.StartSessionRequest
 	startAppRequests    []runtimeprovider.StartAppRequest
 	startTimes          []time.Time
+	getSessionRequests  chan runtimeprovider.GetSessionRequest
 	sessionLifecycles   map[string]*runtimeprovider.SessionLifecycle
 	lifecycleForSession func(index int) *runtimeprovider.SessionLifecycle
 	startErrForSession  func(index int) error
@@ -271,6 +272,12 @@ func (r *capturingRuntime) GetSession(ctx context.Context, req runtimeprovider.G
 		return nil, err
 	}
 	r.attachSessionLifecycle(session)
+	if r.getSessionRequests != nil {
+		select {
+		case r.getSessionRequests <- req:
+		default:
+		}
+	}
 	return session, nil
 }
 

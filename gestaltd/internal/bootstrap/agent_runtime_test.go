@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -834,22 +835,24 @@ func TestAgentRuntimePingChecksConfiguredProviders(t *testing.T) {
 func TestAgentRuntimePingChecksConfiguredProvidersInParallel(t *testing.T) {
 	t.Parallel()
 
-	runtime := &agentRuntime{
-		defaultProviderName: "simple",
-		configuredProviders: map[string]struct{}{
-			"canary": {},
-			"simple": {},
-		},
-		providers: map[string]coreagent.Provider{
-			"canary": &pingAgentProvider{delay: 100 * time.Millisecond},
-			"simple": &pingAgentProvider{delay: 100 * time.Millisecond},
-		},
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
-	defer cancel()
-	if err := runtime.Ping(ctx); err != nil {
-		t.Fatalf("Ping: %v", err)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		runtime := &agentRuntime{
+			defaultProviderName: "simple",
+			configuredProviders: map[string]struct{}{
+				"canary": {},
+				"simple": {},
+			},
+			providers: map[string]coreagent.Provider{
+				"canary": &pingAgentProvider{delay: 100 * time.Millisecond},
+				"simple": &pingAgentProvider{delay: 100 * time.Millisecond},
+			},
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+		defer cancel()
+		if err := runtime.Ping(ctx); err != nil {
+			t.Fatalf("Ping: %v", err)
+		}
+	})
 }
 
 func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *testing.T) {
@@ -1094,13 +1097,8 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	if resolved == nil || resolved.Status != coreagent.ExecutionStatusSucceeded {
 		t.Fatalf("GetTurn(after ResolveInteraction) = %#v, want succeeded turn", resolved)
 	}
-	select {
-	case err := <-drainDone:
-		if err != nil {
-			t.Fatalf("drainAndCloseBackend: %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("drainAndCloseBackend did not finish after live turn completed")
+	if err := <-drainDone; err != nil {
+		t.Fatalf("drainAndCloseBackend: %v", err)
 	}
 }
 
@@ -1498,21 +1496,17 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *testing.T) {
 	bin := buildAgentProviderBinary(t)
 	runtimeProvider := newCapturingRuntime()
+	runtimeProvider.getSessionRequests = make(chan runtimeprovider.GetSessionRequest, 64)
 	releaseReplacement := make(chan struct{})
 	replacementStarted := make(chan struct{})
 	var replacementStartedOnce sync.Once
 	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
 		startedAt := time.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
-		lifecycle := &runtimeprovider.SessionLifecycle{
+		return &runtimeprovider.SessionLifecycle{
 			StartedAt: &startedAt,
 			ExpiresAt: &expiresAt,
 		}
-		if index <= 2 {
-			recommendedDrainAt := startedAt.Add(500 * time.Millisecond)
-			lifecycle.RecommendedDrainAt = &recommendedDrainAt
-		}
-		return lifecycle
 	}
 	runtimeProvider.startErrForSession = func(index int) error {
 		if index <= 2 {
@@ -1572,15 +1566,14 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	}()
 
 	pool := hostedAgentProviderPoolForTest(t, agents[0])
-	if ready := pool.readyBackends(); len(ready) != 2 {
+	ready := pool.readyBackends()
+	if len(ready) != 2 {
 		t.Fatalf("ready backends = %d, want 2", len(ready))
 	}
-	select {
-	case <-replacementStarted:
-	case <-time.After(2 * time.Second):
-		t.Fatal("proactive replacement did not start")
-	}
-	time.Sleep(150 * time.Millisecond)
+	markCapturingRuntimeBackendsDrainingSoon(runtimeProvider, ready, 250*time.Millisecond)
+	<-replacementStarted
+	drainRuntimeGetSessionRequests(runtimeProvider.getSessionRequests)
+	<-runtimeProvider.getSessionRequests
 	if got := len(runtimeProvider.startSessionRequests()); got != 3 {
 		t.Fatalf("start session requests while one replacement is starting = %d, want 3", got)
 	}
@@ -1589,6 +1582,36 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	pool.mu.Unlock()
 	if starting != 1 {
 		t.Fatalf("starting instances = %d, want 1", starting)
+	}
+}
+
+func markCapturingRuntimeBackendsDrainingSoon(runtimeProvider *capturingRuntime, backends []*hostedAgentPoolBackend, delay time.Duration) {
+	drainAt := time.Now().UTC().Add(delay)
+	runtimeProvider.mu.Lock()
+	defer runtimeProvider.mu.Unlock()
+	if runtimeProvider.sessionLifecycles == nil {
+		runtimeProvider.sessionLifecycles = map[string]*runtimeprovider.SessionLifecycle{}
+	}
+	for _, backend := range backends {
+		if backend == nil || backend.runtimeSessionID == "" {
+			continue
+		}
+		lifecycle := cloneRuntimeSessionLifecycle(runtimeProvider.sessionLifecycles[backend.runtimeSessionID])
+		if lifecycle == nil {
+			lifecycle = &runtimeprovider.SessionLifecycle{}
+		}
+		lifecycle.RecommendedDrainAt = &drainAt
+		runtimeProvider.sessionLifecycles[backend.runtimeSessionID] = lifecycle
+	}
+}
+
+func drainRuntimeGetSessionRequests(ch <-chan runtimeprovider.GetSessionRequest) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
 	}
 }
 
@@ -1740,26 +1763,28 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 func TestHostedAgentProviderPoolPingChecksReadyBackendsInParallel(t *testing.T) {
 	t.Parallel()
 
-	pool := &hostedAgentProviderPool{
-		name: "simple",
-		backends: []*hostedAgentPoolBackend{
-			{
-				id:        1,
-				provider:  &pingAgentProvider{delay: 100 * time.Millisecond},
-				liveTurns: map[string]struct{}{},
+	synctest.Test(t, func(t *testing.T) {
+		pool := &hostedAgentProviderPool{
+			name: "simple",
+			backends: []*hostedAgentPoolBackend{
+				{
+					id:        1,
+					provider:  &pingAgentProvider{delay: 100 * time.Millisecond},
+					liveTurns: map[string]struct{}{},
+				},
+				{
+					id:        2,
+					provider:  &pingAgentProvider{delay: 100 * time.Millisecond},
+					liveTurns: map[string]struct{}{},
+				},
 			},
-			{
-				id:        2,
-				provider:  &pingAgentProvider{delay: 100 * time.Millisecond},
-				liveTurns: map[string]struct{}{},
-			},
-		},
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
-	defer cancel()
-	if err := pool.Ping(ctx); err != nil {
-		t.Fatalf("Ping: %v", err)
-	}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+		defer cancel()
+		if err := pool.Ping(ctx); err != nil {
+			t.Fatalf("Ping: %v", err)
+		}
+	})
 }
 
 func TestHostedAgentProviderPoolListSessionsDeduplicatesSharedStoreSessions(t *testing.T) {
