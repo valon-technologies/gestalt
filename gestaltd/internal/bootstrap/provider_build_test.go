@@ -15,6 +15,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -46,6 +47,18 @@ type closeRecordingAgentProvider struct {
 }
 
 func (p closeRecordingAgentProvider) Close() error {
+	if p.closed != nil {
+		p.closed.Store(true)
+	}
+	return nil
+}
+
+type closeRecordingWorkflowProvider struct {
+	startupTestWorkflowProvider
+	closed *atomic.Bool
+}
+
+func (p closeRecordingWorkflowProvider) Close() error {
 	if p.closed != nil {
 		p.closed.Store(true)
 	}
@@ -209,6 +222,66 @@ func TestBuildConfiguredProvidersUnpublishesSuccessesOnPartialFailure(t *testing
 	}
 	if _, err := runtime.ResolveProvider("ok"); err == nil {
 		t.Fatal("successful provider remained published after partial failure")
+	}
+}
+
+func TestBuildWorkflowsAndAgentsReturnsSuccessesForCallerCleanupOnCrossGroupFailure(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Providers: config.ProvidersConfig{
+			Workflow: map[string]*config.ProviderEntry{
+				"temporal": {Source: config.ProviderSource{Path: "stub"}},
+			},
+			Agent: map[string]*config.ProviderEntry{
+				"managed": {Source: config.ProviderSource{Path: "stub"}},
+			},
+		},
+	}
+	workflowRuntime, err := newWorkflowRuntime(cfg)
+	if err != nil {
+		t.Fatalf("newWorkflowRuntime: %v", err)
+	}
+	workflowRuntime.InitProviderPlaceholders(cfg.Providers.Workflow)
+	agentRuntime, err := newAgentRuntime(cfg, workflowRuntime.StartupWaitTracker())
+	if err != nil {
+		t.Fatalf("newAgentRuntime: %v", err)
+	}
+	deps := Deps{
+		WorkflowRuntime: workflowRuntime,
+		AgentRuntime:    agentRuntime,
+	}
+	closed := &atomic.Bool{}
+	boom := errors.New("boom")
+	factories := NewFactoryRegistry()
+	factories.Workflow = func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (coreworkflow.Provider, error) {
+		return closeRecordingWorkflowProvider{closed: closed}, nil
+	}
+	factories.Agent = func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (coreagent.Provider, error) {
+		return nil, boom
+	}
+
+	workflows, agents, err := buildWorkflowsAndAgents(context.Background(), cfg, factories, deps)
+	if !errors.Is(err, boom) {
+		t.Fatalf("buildWorkflowsAndAgents err = %v, want boom", err)
+	}
+	if got := len(workflows); got != 1 {
+		t.Fatalf("workflows = %d, want 1 for caller cleanup", got)
+	}
+	if got := len(agents); got != 0 {
+		t.Fatalf("agents = %d, want 0", got)
+	}
+	if closed.Load() {
+		t.Fatal("successful workflow provider was closed before caller cleanup")
+	}
+	if _, err := workflowRuntime.ResolveProvider("temporal"); err == nil {
+		t.Fatal("successful workflow provider remained published after cross-group failure")
+	}
+	if err := closeWorkflows(workflows...); err != nil {
+		t.Fatalf("closeWorkflows: %v", err)
+	}
+	if !closed.Load() {
+		t.Fatal("successful workflow provider was not closed by caller cleanup")
 	}
 }
 

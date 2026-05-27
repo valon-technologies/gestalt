@@ -115,6 +115,11 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	providersReady, _, _, errResolver = providerBuilds.Start(ctx, prepared.Deps, buildProviderForValidation)
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
+		if providersReady != nil {
+			<-providersReady
+		}
+		_ = closeWorkflows(extraWorkflows...)
+		_ = closeAgents(extraAgents...)
 		return warnings, err
 	}
 	defer func() { _ = closeWorkflows(extraWorkflows...) }()

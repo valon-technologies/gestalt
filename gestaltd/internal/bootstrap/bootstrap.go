@@ -1206,6 +1206,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	providersReady, connAuthResolver, manualConnAuthResolver, _ = providerBuilds.Start(ctx, prepared.Deps, buildProvider)
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
+		if providersReady != nil {
+			<-providersReady
+		}
+		_ = closeWorkflows(extraWorkflows...)
+		_ = closeAgents(extraAgents...)
 		return nil, err
 	}
 	closeWorkflowsOnError := true
@@ -1367,9 +1372,7 @@ func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories 
 	if err := errors.Join(workflowResult.err, agentResult.err); err != nil {
 		failPublishedWorkflowProviders(deps, workflowResult.publishedNames, err)
 		failPublishedAgentProviders(deps, agentResult.publishedNames, err)
-		_ = closeWorkflows(workflowResult.providers...)
-		_ = closeAgents(agentResult.providers...)
-		return nil, nil, err
+		return workflowResult.providers, agentResult.providers, err
 	}
 	return workflowResult.providers, agentResult.providers, nil
 }
