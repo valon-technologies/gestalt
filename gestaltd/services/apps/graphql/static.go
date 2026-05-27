@@ -46,7 +46,7 @@ func StaticAllowedOperationsDefinition(name, endpoint string, allowedOps map[str
 }
 
 func staticOperationDefinition(name string, override *operationexposure.OperationOverride) (declarative.OperationDef, string, error) {
-	document, selected, err := parseStaticOperationDocument(name, override.GraphQL.Document, override.GraphQL.OperationName)
+	document, parameters, err := parseStaticOperationDocument(name, override.GraphQL.Document, override.GraphQL.OperationName)
 	if err != nil {
 		return declarative.OperationDef{}, "", fmt.Errorf("graphql allowed operation %q: %w", name, err)
 	}
@@ -62,47 +62,43 @@ func staticOperationDefinition(name string, override *operationexposure.Operatio
 		Transport:     "graphql",
 		Query:         document,
 		OperationName: strings.TrimSpace(override.GraphQL.OperationName),
-		Parameters:    selected.parameters,
+		Parameters:    parameters,
 	}, exposedName, nil
 }
 
-type parsedStaticOperation struct {
-	parameters []declarative.ParameterDef
-}
-
-func parseStaticOperationDocument(operationID, rawDocument, configuredOperationName string) (string, parsedStaticOperation, error) {
+func parseStaticOperationDocument(operationID, rawDocument, configuredOperationName string) (string, []declarative.ParameterDef, error) {
 	document := strings.TrimSpace(rawDocument)
 	if document == "" {
-		return "", parsedStaticOperation{}, fmt.Errorf("graphql.document is required")
+		return "", nil, fmt.Errorf("graphql.document is required")
 	}
 
 	doc, report := astparser.ParseGraphqlDocumentString(document)
 	if report.HasErrors() {
-		return "", parsedStaticOperation{}, fmt.Errorf("graphql.document: %s", report.Error())
+		return "", nil, fmt.Errorf("graphql.document: %s", report.Error())
 	}
 
 	operationRef, err := selectStaticOperation(&doc, strings.TrimSpace(configuredOperationName))
 	if err != nil {
-		return "", parsedStaticOperation{}, err
+		return "", nil, err
 	}
 	operation := doc.OperationDefinitions[operationRef]
 	if operation.OperationType == ast.OperationTypeSubscription {
-		return "", parsedStaticOperation{}, fmt.Errorf("subscription operations are not supported")
+		return "", nil, fmt.Errorf("subscription operations are not supported")
 	}
 	if err := validateSameDocumentFragments(&doc); err != nil {
-		return "", parsedStaticOperation{}, err
+		return "", nil, err
 	}
 
 	params, err := staticOperationParameters(&doc, operationRef)
 	if err != nil {
-		return "", parsedStaticOperation{}, fmt.Errorf("%s variables: %w", operationID, err)
+		return "", nil, fmt.Errorf("%s variables: %w", operationID, err)
 	}
 	stripVariableDescriptions(&doc)
 	printedDocument, err := astprinter.PrintStringIndent(&doc, "  ")
 	if err != nil {
-		return "", parsedStaticOperation{}, fmt.Errorf("graphql.document: %w", err)
+		return "", nil, fmt.Errorf("graphql.document: %w", err)
 	}
-	return strings.TrimSpace(printedDocument), parsedStaticOperation{parameters: params}, nil
+	return strings.TrimSpace(printedDocument), params, nil
 }
 
 func selectStaticOperation(doc *ast.Document, operationName string) (int, error) {
