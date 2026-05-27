@@ -1076,7 +1076,7 @@ func TestPollSessionDropsCanceledQueuedCall(t *testing.T) {
 		id:                   "session-1",
 		dispatcherSecretHash: hashDispatcherSecret(dispatcherSecret),
 		owner:                p.SubjectID,
-		calls:                make(chan *rpcCall, 1),
+		calls:                make(chan *rpcCall, 2),
 		pending:              map[string]*rpcCall{},
 		done:                 make(chan struct{}),
 		closeDone:            make(chan struct{}),
@@ -1092,18 +1092,26 @@ func TestPollSessionDropsCanceledQueuedCall(t *testing.T) {
 		invokeDone <- session.invoke(invokeCtx, "roadmap", "Execute", &emptypb.Empty{}, &emptypb.Empty{})
 	}()
 
-	deadline := time.Now().Add(time.Second)
-	for len(session.calls) == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if len(session.calls) == 0 {
+	var canceledCall *rpcCall
+	select {
+	case canceledCall = <-session.calls:
+	case <-time.After(time.Second):
 		t.Fatal("invoke did not enqueue a call")
 	}
+	session.calls <- canceledCall
 
 	cancel()
 	if err := <-invokeDone; !errors.Is(err, context.Canceled) {
 		t.Fatalf("invoke error = %v, want %v", err, context.Canceled)
 	}
+	activeCall := &rpcCall{
+		id:       "call-active",
+		provider: "roadmap",
+		method:   "Execute",
+		request:  []byte("active"),
+		response: make(chan rpcResponse, 1),
+	}
+	session.calls <- activeCall
 
 	pollCtx, pollCancel := context.WithTimeout(context.Background(), time.Second)
 	defer pollCancel()
@@ -1111,11 +1119,17 @@ func TestPollSessionDropsCanceledQueuedCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PollSessionWithDispatcherSecretOnly: %v", err)
 	}
-	if ok || resp != nil {
-		t.Fatalf("PollSession = (%#v, %t), want no call", resp, ok)
+	if !ok || resp == nil {
+		t.Fatalf("PollSession = (%#v, %t), want active call", resp, ok)
 	}
-	if got := len(session.pending); got != 0 {
-		t.Fatalf("pending calls = %d, want 0", got)
+	if resp.CallID != activeCall.id {
+		t.Fatalf("PollSession call ID = %q, want %q", resp.CallID, activeCall.id)
+	}
+	if _, ok := session.pending[canceledCall.id]; ok {
+		t.Fatalf("canceled call %q is pending", canceledCall.id)
+	}
+	if got := len(session.pending); got != 1 {
+		t.Fatalf("pending calls = %d, want 1", got)
 	}
 	if got := len(session.calls); got != 0 {
 		t.Fatalf("queued calls = %d, want 0", got)

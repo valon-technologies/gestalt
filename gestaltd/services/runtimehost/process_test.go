@@ -168,11 +168,16 @@ func TestWaitForPluginConnReturnsProcessExitBeforeReady(t *testing.T) {
 		t.Fatalf("listen raw unix socket: %v", err)
 	}
 	t.Cleanup(func() { _ = rawLis.Close() })
+	rawAccepted := make(chan struct{}, 1)
 	go func() {
 		for {
 			conn, err := rawLis.Accept()
 			if err != nil {
 				return
+			}
+			select {
+			case rawAccepted <- struct{}{}:
+			default:
 			}
 			_ = conn.Close()
 		}
@@ -180,18 +185,24 @@ func TestWaitForPluginConnReturnsProcessExitBeforeReady(t *testing.T) {
 
 	exitErr := errors.New("provider crashed")
 	waitCh := make(chan error, 1)
-	go func() {
-		time.Sleep(75 * time.Millisecond)
-		waitCh <- exitErr
-		close(waitCh)
-	}()
-
+	result := make(chan error, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	conn, err := waitForPluginConn(ctx, socket, waitCh, ProcessConfig{})
-	if conn != nil {
-		_ = conn.Close()
+	go func() {
+		conn, err := waitForPluginConn(ctx, socket, waitCh, ProcessConfig{})
+		if conn != nil {
+			_ = conn.Close()
+		}
+		result <- err
+	}()
+	select {
+	case <-rawAccepted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("waitForPluginConn() did not dial the raw socket")
 	}
+	waitCh <- exitErr
+	close(waitCh)
+	err = <-result
 	if err == nil {
 		t.Fatal("waitForPluginConn() error = nil, want provider exit error")
 	}
