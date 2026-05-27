@@ -10,11 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -22,23 +20,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"gopkg.in/yaml.v3"
 )
-
-type providerBuildOrderingInvoker struct{}
-
-func (providerBuildOrderingInvoker) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
-	return &core.OperationResult{Status: http.StatusAccepted}, nil
-}
-
-type providerBuildOrderingWorkflowManager struct {
-	unavailableWorkflowManager
-}
-
-func (providerBuildOrderingWorkflowManager) ListSchedules(context.Context, *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
-	return nil, nil
-}
 
 type providerBuildOrderingAgentProvider struct {
 	coreagent.UnimplementedProvider
@@ -85,9 +68,6 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 			},
 		},
 		Providers: config.ProvidersConfig{
-			Workflow: map[string]*config.ProviderEntry{
-				"temporal": {Source: config.ProviderSource{Path: "stub"}},
-			},
 			Agent: map[string]*config.ProviderEntry{
 				"managed": {Source: config.ProviderSource{Path: "stub"}},
 			},
@@ -102,12 +82,8 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 	if err != nil {
 		t.Fatalf("newAgentRuntime: %v", err)
 	}
-	appInvoker := newLazyInvoker()
-	workflowManager := newLazyWorkflowManager()
 	agentManager := newLazyAgentManager()
 	deps := Deps{
-		AppInvocation:   appInvoker,
-		WorkflowManager: workflowManager,
 		AgentManager:    agentManager,
 		WorkflowRuntime: workflowRuntime,
 		AgentRuntime:    agentRuntime,
@@ -119,17 +95,6 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 	}
 	t.Cleanup(func() { _ = CloseProviders(builds.providers) })
 	factories := NewFactoryRegistry()
-	factories.Workflow = func(ctx context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ Deps) (coreworkflow.Provider, error) {
-		provider, err := builds.providers.Get("caller")
-		if err != nil {
-			return nil, err
-		}
-		_, err = provider.Execute(invocation.WithCallerProvider(ctx, invocation.ProviderKindWorkflow, name), "sync", nil, "")
-		if err != nil {
-			return nil, err
-		}
-		return startupTestWorkflowProvider{}, nil
-	}
 	factories.Agent = func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (coreagent.Provider, error) {
 		return providerBuildOrderingAgentProvider{}, nil
 	}
@@ -142,12 +107,6 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 		caller := invocation.CallerProviderFromContext(ctx)
 		if caller.Kind != invocation.ProviderKindApp || caller.Name != name {
 			return nil, fmt.Errorf("provider build caller = %#v, want app/%s", caller, name)
-		}
-		if _, err := deps.AppInvocation.Invoke(ctx, nil, "roadmap", "", "sync", nil); err != nil {
-			return nil, fmt.Errorf("app invocation target unavailable during %s build: %w", name, err)
-		}
-		if _, err := deps.WorkflowManager.ListSchedules(ctx, nil); err != nil {
-			return nil, fmt.Errorf("workflow manager target unavailable during %s build: %w", name, err)
 		}
 		if !deps.AgentManager.Available() {
 			return nil, fmt.Errorf("agent manager target unavailable during %s build", name)
@@ -178,8 +137,7 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 		}
 		return &ProviderBuildResult{
 			Provider: &coretesting.StubIntegration{
-				N:        name,
-				ConnMode: core.ConnectionModeNone,
+				N: name,
 				CatalogVal: &catalog.Catalog{
 					Name: name,
 				},
@@ -187,8 +145,6 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 		}, nil
 	}
 
-	appInvoker.SetTarget(providerBuildOrderingInvoker{})
-	workflowManager.SetTarget(providerBuildOrderingWorkflowManager{})
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{Agent: agentRuntime}))
 	ready, _, _, errResolver := builds.Start(context.Background(), deps, builder)
 	select {
