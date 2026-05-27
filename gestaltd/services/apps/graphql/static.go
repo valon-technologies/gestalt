@@ -1,7 +1,6 @@
 package graphql
 
 import (
-	"encoding/json"
 	"fmt"
 	"slices"
 	"sort"
@@ -207,14 +206,23 @@ func staticOperationParameters(doc *ast.Document, operationRef int) ([]declarati
 		seen[variableName] = struct{}{}
 
 		variableDefinition := doc.VariableDefinitions[variableDefinitionRef]
-		defaultValue, hasDefault, err := staticVariableDefault(doc, variableDefinition)
-		if err != nil {
-			return nil, fmt.Errorf("%s default value: %w", variableName, err)
+		var defaultValue any
+		hasDefault := variableDefinition.DefaultValue.IsDefined
+		if hasDefault {
+			var err error
+			defaultValue, err = staticGraphQLValue(doc, variableDefinition.DefaultValue.Value)
+			if err != nil {
+				return nil, fmt.Errorf("%s default value: %w", variableName, err)
+			}
+		}
+		description := ""
+		if variableDefinition.Description.IsDefined {
+			description = doc.Input.ByteSliceString(variableDefinition.Description.Content)
 		}
 		params = append(params, declarative.ParameterDef{
 			Name:        variableName,
 			Type:        staticVariableParamType(doc, variableDefinition.Type),
-			Description: staticDescription(doc, variableDefinition.Description),
+			Description: description,
 			Required:    doc.TypeIsNonNull(variableDefinition.Type) && !hasDefault,
 			Default:     defaultValue,
 		})
@@ -222,19 +230,12 @@ func staticOperationParameters(doc *ast.Document, operationRef int) ([]declarati
 	return params, nil
 }
 
-func staticDescription(doc *ast.Document, description ast.Description) string {
-	if !description.IsDefined {
-		return ""
-	}
-	return doc.Input.ByteSliceString(description.Content)
-}
-
 func staticVariableParamType(doc *ast.Document, typeRef int) string {
 	if doc.TypeIsList(typeRef) {
 		return "array"
 	}
 
-	name := staticNamedType(doc, typeRef)
+	name := doc.ResolveTypeNameString(typeRef)
 	switch name {
 	case "Int":
 		return "integer"
@@ -252,25 +253,6 @@ func staticVariableParamType(doc *ast.Document, typeRef int) string {
 		}
 		return "string"
 	}
-}
-
-func staticNamedType(doc *ast.Document, typeRef int) string {
-	for typeRef >= 0 {
-		typ := doc.Types[typeRef]
-		if typ.TypeKind == ast.TypeKindNamed {
-			return doc.TypeNameString(typeRef)
-		}
-		typeRef = typ.OfType
-	}
-	return ""
-}
-
-func staticVariableDefault(doc *ast.Document, variableDefinition ast.VariableDefinition) (any, bool, error) {
-	if !variableDefinition.DefaultValue.IsDefined {
-		return nil, false, nil
-	}
-	value, err := staticGraphQLValue(doc, variableDefinition.DefaultValue.Value)
-	return value, true, err
 }
 
 func staticGraphQLValue(doc *ast.Document, value ast.Value) (any, error) {
@@ -314,14 +296,6 @@ func staticGraphQLValue(doc *ast.Document, value ast.Value) (any, error) {
 	case ast.ValueKindVariable:
 		return nil, fmt.Errorf("variable references are not supported")
 	default:
-		data, err := doc.PrintValueBytes(value, nil)
-		if err != nil {
-			return nil, err
-		}
-		var out any
-		if err := json.Unmarshal(data, &out); err != nil {
-			return nil, err
-		}
-		return out, nil
+		return nil, fmt.Errorf("unsupported GraphQL value kind %s", value.Kind)
 	}
 }

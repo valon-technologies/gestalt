@@ -39,8 +39,8 @@ func StaticDefinition(name, endpoint string) *declarative.Definition {
 }
 
 func DefinitionFromSchema(name, endpoint string, schema *Schema, allowedOps map[string]*operationexposure.OperationOverride) (*declarative.Definition, error) {
-	allowedOps = graphQLAllowedOperations(schema, allowedOps)
-	if err := validateAllowedOperationRoots(schema, allowedOps); err != nil {
+	allowedOps, err := graphQLAllowedOperations(schema, allowedOps)
+	if err != nil {
 		return nil, err
 	}
 	def := StaticDefinition(name, endpoint)
@@ -59,24 +59,35 @@ func DefinitionFromSchema(name, endpoint string, schema *Schema, allowedOps map[
 	return def, nil
 }
 
-func graphQLAllowedOperations(schema *Schema, allowedOps map[string]*operationexposure.OperationOverride) map[string]*operationexposure.OperationOverride {
+func graphQLAllowedOperations(schema *Schema, allowedOps map[string]*operationexposure.OperationOverride) (map[string]*operationexposure.OperationOverride, error) {
 	if len(allowedOps) == 0 {
-		return allowedOps
+		return allowedOps, nil
 	}
 
-	roots := graphQLRootNames(schema)
-	filtered := make(map[string]*operationexposure.OperationOverride)
-	for name, override := range allowedOps {
-		if _, ok := roots[name]; ok {
-			filtered[name] = override
-		}
+	roots := graphQLRootAvailability(schema)
+	names := make([]string, 0, len(allowedOps))
+	for name := range allowedOps {
+		names = append(names, name)
 	}
-	return filtered
+	sort.Strings(names)
+
+	filtered := make(map[string]*operationexposure.OperationOverride)
+	for _, name := range names {
+		availability, ok := roots[name]
+		if !ok {
+			continue
+		}
+		if availability.query && availability.mutation {
+			return nil, fmt.Errorf("graphql allowed operation %q is defined on both query and mutation roots; use allowedOperations.%s.graphql.document", name, name)
+		}
+		filtered[name] = allowedOps[name]
+	}
+	return filtered, nil
 }
 
-func graphQLRootNames(schema *Schema) map[string]struct{} {
-	roots := make(map[string]struct{})
-	addRoot := func(root *TypeName) {
+func graphQLRootAvailability(schema *Schema) map[string]rootAvailability {
+	roots := map[string]rootAvailability{}
+	addRoot := func(root *TypeName, isMutation bool) {
 		if root == nil {
 			return
 		}
@@ -85,11 +96,17 @@ func graphQLRootNames(schema *Schema) map[string]struct{} {
 			return
 		}
 		for _, field := range rootType.Fields {
-			roots[field.Name] = struct{}{}
+			availability := roots[field.Name]
+			if isMutation {
+				availability.mutation = true
+			} else {
+				availability.query = true
+			}
+			roots[field.Name] = availability
 		}
 	}
-	addRoot(schema.QueryType)
-	addRoot(schema.MutationType)
+	addRoot(schema.QueryType, false)
+	addRoot(schema.MutationType, true)
 	return roots
 }
 
@@ -166,50 +183,6 @@ func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, 
 		opDef.Parameters = argsToParams(schema, field.Args)
 
 		def.Operations[opName] = opDef
-	}
-	return nil
-}
-
-func validateAllowedOperationRoots(schema *Schema, allowedOps map[string]*operationexposure.OperationOverride) error {
-	if len(allowedOps) == 0 {
-		return nil
-	}
-
-	roots := map[string]rootAvailability{}
-	collectRootFields := func(root *TypeName, isMutation bool) {
-		if root == nil {
-			return
-		}
-		rootType := schema.lookupType(root.Name)
-		if rootType == nil {
-			return
-		}
-		for _, field := range rootType.Fields {
-			availability := roots[field.Name]
-			if isMutation {
-				availability.mutation = true
-			} else {
-				availability.query = true
-			}
-			roots[field.Name] = availability
-		}
-	}
-	collectRootFields(schema.QueryType, false)
-	collectRootFields(schema.MutationType, true)
-
-	names := make([]string, 0, len(allowedOps))
-	for name := range allowedOps {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		availability, ok := roots[name]
-		if !ok {
-			return fmt.Errorf("graphql allowed operation %q is not defined in schema", name)
-		}
-		if availability.query && availability.mutation {
-			return fmt.Errorf("graphql allowed operation %q is defined on both query and mutation roots; use allowedOperations.%s.graphql.document", name, name)
-		}
 	}
 	return nil
 }
