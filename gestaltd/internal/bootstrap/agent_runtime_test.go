@@ -2242,11 +2242,11 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[runtimehost.DefaultHostServiceSocketEnv]; got != wantRelayTarget {
+	if got := startRequests[0].Env[runtimehost.HostServiceSocketEnv]; got != wantRelayTarget {
 		t.Fatalf("agent host relay target = %q, want %q", got, wantRelayTarget)
 	}
-	if got := startRequests[0].Env[runtimehost.DefaultHostServiceTokenEnv]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartApp env missing %s", runtimehost.DefaultHostServiceTokenEnv)
+	if got := startRequests[0].Env[runtimehost.HostServiceTokenEnv]; strings.TrimSpace(got) == "" {
+		t.Fatalf("StartApp env missing %s", runtimehost.HostServiceTokenEnv)
 	}
 
 	pausedTurn, err := agents[0].CreateTurn(context.Background(), coreagent.CreateTurnRequest{
@@ -3442,11 +3442,11 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("start app requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[runtimehost.DefaultHostServiceSocketEnv]; got != "tls://"+relaySrv.Listener.Addr().String() {
-		t.Fatalf("StartApp env %s = %q, want tls relay target", runtimehost.DefaultHostServiceSocketEnv, got)
+	if got := startRequests[0].Env[runtimehost.HostServiceSocketEnv]; got != "tls://"+relaySrv.Listener.Addr().String() {
+		t.Fatalf("StartApp env %s = %q, want tls relay target", runtimehost.HostServiceSocketEnv, got)
 	}
-	if got := startRequests[0].Env[runtimehost.DefaultHostServiceTokenEnv]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartApp env missing %s: %#v", runtimehost.DefaultHostServiceTokenEnv, startRequests[0].Env)
+	if got := startRequests[0].Env[runtimehost.HostServiceTokenEnv]; strings.TrimSpace(got) == "" {
+		t.Fatalf("StartApp env missing %s: %#v", runtimehost.HostServiceTokenEnv, startRequests[0].Env)
 	}
 }
 

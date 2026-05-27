@@ -102,11 +102,11 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		t.Fatalf("StartApp requests after StartWorkflowProviders = %d, want 2 workers", len(startRequests))
 	}
 	workerReq := startRequests[0]
-	if got := workerReq.Env[runtimehost.DefaultHostServiceSocketEnv]; got != "tcp://127.0.0.1:8080" {
-		t.Fatalf("worker env %s = %q, want public relay target", runtimehost.DefaultHostServiceSocketEnv, got)
+	if got := workerReq.Env[runtimehost.HostServiceSocketEnv]; got != "tcp://127.0.0.1:8080" {
+		t.Fatalf("worker env %s = %q, want public relay target", runtimehost.HostServiceSocketEnv, got)
 	}
-	if got := workerReq.Env[runtimehost.DefaultHostServiceTokenEnv]; got == "" {
-		t.Fatalf("worker env missing %s", runtimehost.DefaultHostServiceTokenEnv)
+	if got := workerReq.Env[runtimehost.HostServiceTokenEnv]; got == "" {
+		t.Fatalf("worker env missing %s", runtimehost.HostServiceTokenEnv)
 	}
 	sessions := runtimeProvider.startSessionRequestsCopy()
 	if len(sessions) != 2 {

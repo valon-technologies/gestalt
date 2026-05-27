@@ -709,13 +709,13 @@ func (r *capturingBundleRuntime) cleanupFakeHostedApp(sessionID string) {
 }
 
 func fakeHostedHostServiceRelay(serviceName string, env map[string]string) (string, string, error) {
-	target := strings.TrimSpace(env[runtimehost.DefaultHostServiceSocketEnv])
+	target := strings.TrimSpace(env[runtimehost.HostServiceSocketEnv])
 	if target == "" {
-		return "", "", fmt.Errorf("missing %s relay target in %s", serviceName, runtimehost.DefaultHostServiceSocketEnv)
+		return "", "", fmt.Errorf("missing %s relay target in %s", serviceName, runtimehost.HostServiceSocketEnv)
 	}
-	token := strings.TrimSpace(env[runtimehost.DefaultHostServiceTokenEnv])
+	token := strings.TrimSpace(env[runtimehost.HostServiceTokenEnv])
 	if token == "" {
-		return "", "", fmt.Errorf("missing %s relay token in %s", serviceName, runtimehost.DefaultHostServiceTokenEnv)
+		return "", "", fmt.Errorf("missing %s relay token in %s", serviceName, runtimehost.HostServiceTokenEnv)
 	}
 	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
 	if address == "" || address == target {
@@ -1301,20 +1301,12 @@ func assertStartAppEgressPolicy(t *testing.T, req runtimeprovider.StartAppReques
 
 func assertStartAppRelayEnv(t *testing.T, req runtimeprovider.StartAppRequest, relayContext string) {
 	t.Helper()
-	if got := req.Env[runtimehost.DefaultHostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
-		t.Fatalf("StartApp env %s = %q, want tls:// public relay target for %s", runtimehost.DefaultHostServiceSocketEnv, got, relayContext)
+	if got := req.Env[runtimehost.HostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
+		t.Fatalf("StartApp env %s = %q, want tls:// public relay target for %s", runtimehost.HostServiceSocketEnv, got, relayContext)
 	}
-	if got := req.Env[runtimehost.DefaultHostServiceTokenEnv]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartApp env missing non-empty %s for %s", runtimehost.DefaultHostServiceTokenEnv, relayContext)
+	if got := req.Env[runtimehost.HostServiceTokenEnv]; strings.TrimSpace(got) == "" {
+		t.Fatalf("StartApp env missing non-empty %s for %s", runtimehost.HostServiceTokenEnv, relayContext)
 	}
-}
-
-func legacyResourceSocketEnv(resource, binding string) string {
-	envName := "GESTALT_" + resource + "_SOCKET"
-	if strings.TrimSpace(binding) != "" {
-		envName += "_" + binding
-	}
-	return envName
 }
 
 type slowStopRuntime struct {
@@ -3837,20 +3829,14 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 		return env.Found && env.Value != ""
 	}
 
-	if got := checkEnv(t, nil, runtimehost.DefaultHostServiceSocketEnv); !got {
+	if got := checkEnv(t, nil, runtimehost.HostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set when app omits indexeddb and inherits the host selection")
 	}
-	if got := checkEnv(t, &config.IndexedDBBindingConfig{}, runtimehost.DefaultHostServiceSocketEnv); !got {
+	if got := checkEnv(t, &config.IndexedDBBindingConfig{}, runtimehost.HostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set when app indexeddb is explicitly empty")
 	}
-	if got := checkEnv(t, &config.IndexedDBBindingConfig{Provider: "archive"}, runtimehost.DefaultHostServiceSocketEnv); !got {
+	if got := checkEnv(t, &config.IndexedDBBindingConfig{Provider: "archive"}, runtimehost.HostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set when app explicitly selects one indexeddb provider")
-	}
-	if got := checkEnv(t, nil, legacyResourceSocketEnv("INDEXEDDB", "MAIN")); got {
-		t.Fatal("named IndexedDB env should not be set for inherited app indexeddb access")
-	}
-	if got := checkEnv(t, &config.IndexedDBBindingConfig{Provider: "archive"}, legacyResourceSocketEnv("INDEXEDDB", "ARCHIVE")); got {
-		t.Fatal("named IndexedDB env should not be set when apps expose a single indexeddb socket")
 	}
 }
 
@@ -3892,7 +3878,7 @@ func TestPluginInvokesExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(caller): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.DefaultHostServiceSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.HostServiceSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -3905,7 +3891,7 @@ func TestPluginInvokesExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("host-service env %q should be set when app declares invokes", runtimehost.DefaultHostServiceSocketEnv)
+		t.Fatalf("host-service env %q should be set when app declares invokes", runtimehost.HostServiceSocketEnv)
 	}
 }
 
@@ -3945,7 +3931,7 @@ func TestAppWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(echo): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.DefaultHostServiceSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.HostServiceSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -3958,7 +3944,7 @@ func TestAppWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("host-service env %q should be set for executable plugins", runtimehost.DefaultHostServiceSocketEnv)
+		t.Fatalf("host-service env %q should be set for executable plugins", runtimehost.HostServiceSocketEnv)
 	}
 }
 
@@ -3998,7 +3984,7 @@ func TestPluginAgentManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(echo): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.DefaultHostServiceSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.HostServiceSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -4011,7 +3997,7 @@ func TestPluginAgentManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("host-service env %q should be set for executable plugins", runtimehost.DefaultHostServiceSocketEnv)
+		t.Fatalf("host-service env %q should be set for executable plugins", runtimehost.HostServiceSocketEnv)
 	}
 }
 
@@ -4283,7 +4269,7 @@ func TestPluginHostedHTTPBindingsExposeAuthorizationSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(echo): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.DefaultHostServiceSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.HostServiceSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -4296,7 +4282,7 @@ func TestPluginHostedHTTPBindingsExposeAuthorizationSocketEnv(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("host-service env %q should be set for executable apps with hosted HTTP bindings", runtimehost.DefaultHostServiceSocketEnv)
+		t.Fatalf("host-service env %q should be set for executable apps with hosted HTTP bindings", runtimehost.HostServiceSocketEnv)
 	}
 }
 
@@ -5586,23 +5572,11 @@ func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
 		return env.Found && env.Value != ""
 	}
 
-	if got := checkEnv(t, nil, legacyResourceSocketEnv("CACHE", "")); got {
-		t.Fatal("legacy cache env should not be set without app cache bindings")
-	}
-	if got := checkEnv(t, []string{"session"}, runtimehost.DefaultHostServiceSocketEnv); !got {
+	if got := checkEnv(t, []string{"session"}, runtimehost.HostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set with a single app cache binding")
 	}
-	if got := checkEnv(t, []string{"session"}, legacyResourceSocketEnv("CACHE", "SESSION")); got {
-		t.Fatal("named cache env should not be set when app uses the unified host-service socket")
-	}
-	if got := checkEnv(t, []string{"session", "rate_limit"}, runtimehost.DefaultHostServiceSocketEnv); !got {
+	if got := checkEnv(t, []string{"session", "rate_limit"}, runtimehost.HostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set with multiple app cache bindings")
-	}
-	if got := checkEnv(t, []string{"session", "rate_limit"}, legacyResourceSocketEnv("CACHE", "SESSION")); got {
-		t.Fatal(`named cache env for "session" should not be set when app uses the unified host-service socket`)
-	}
-	if got := checkEnv(t, []string{"session", "rate_limit"}, legacyResourceSocketEnv("CACHE", "RATE_LIMIT")); got {
-		t.Fatal(`named cache env for "rate_limit" should not be set when app uses the unified host-service socket`)
 	}
 }
 
@@ -6242,18 +6216,18 @@ func TestRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *tes
 		return env.Value, env.Found
 	}
 
-	if got, found := checkEnv(runtimehost.DefaultHostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
-		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.DefaultHostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
+	if got, found := checkEnv(runtimehost.HostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.HostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
-	if got, found := checkEnv(runtimehost.DefaultHostServiceTokenEnv); !found || got == "" {
-		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.DefaultHostServiceTokenEnv, got, found)
+	if got, found := checkEnv(runtimehost.HostServiceTokenEnv); !found || got == "" {
+		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.HostServiceTokenEnv, got, found)
 	}
 
 	startRequests := runtimeProvider.startAppRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartAppRelayEnv(t, startRequests[0], runtimehost.DefaultHostServiceSocketEnv)
+	assertStartAppRelayEnv(t, startRequests[0], runtimehost.HostServiceSocketEnv)
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -6319,11 +6293,11 @@ func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 	}
 	env := session.Providers[0].Env
 
-	if got := env[runtimehost.DefaultHostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
-		t.Fatalf("runtime env %s = %q, want tls relay target", runtimehost.DefaultHostServiceSocketEnv, got)
+	if got := env[runtimehost.HostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
+		t.Fatalf("runtime env %s = %q, want tls relay target", runtimehost.HostServiceSocketEnv, got)
 	}
-	if got := env[runtimehost.DefaultHostServiceTokenEnv]; got == "" {
-		t.Fatalf("runtime env %s is empty, want relay token", runtimehost.DefaultHostServiceTokenEnv)
+	if got := env[runtimehost.HostServiceTokenEnv]; got == "" {
+		t.Fatalf("runtime env %s is empty, want relay token", runtimehost.HostServiceTokenEnv)
 	}
 	record, err := fakeHostedS3RoundTrip("plans/q3.txt", "ship-it", "main", env)
 	if err != nil {
@@ -6544,11 +6518,11 @@ func TestRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCapabi
 		return env.Value, env.Found
 	}
 
-	if got, found := checkEnv(runtimehost.DefaultHostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
-		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.DefaultHostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
+	if got, found := checkEnv(runtimehost.HostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.HostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
-	if got, found := checkEnv(runtimehost.DefaultHostServiceTokenEnv); !found || got == "" {
-		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.DefaultHostServiceTokenEnv, got, found)
+	if got, found := checkEnv(runtimehost.HostServiceTokenEnv); !found || got == "" {
+		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.HostServiceTokenEnv, got, found)
 	}
 
 	startRequests := runtimeProvider.startAppRequestsCopy()
@@ -6649,10 +6623,10 @@ func TestRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapability
 		return env.Value
 	}
 
-	if got := checkEnv(runtimehost.DefaultHostServiceSocketEnv); got != "tls://gestalt.example.test:443" {
+	if got := checkEnv(runtimehost.HostServiceSocketEnv); got != "tls://gestalt.example.test:443" {
 		t.Fatalf("plugin indexeddb socket env = %q, want %q", got, "tls://gestalt.example.test:443")
 	}
-	if got := checkEnv(runtimehost.DefaultHostServiceTokenEnv); got == "" {
+	if got := checkEnv(runtimehost.HostServiceTokenEnv); got == "" {
 		t.Fatal("plugin host-service token env should be set for the public relay")
 	}
 
@@ -6780,11 +6754,11 @@ func TestRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[runtimehost.DefaultHostServiceTokenEnv]; got == "" {
+	if got := startRequests[0].Env[runtimehost.HostServiceTokenEnv]; got == "" {
 		t.Fatal("StartApp env should include the host-service relay token")
 	}
-	if got := startRequests[0].Env[runtimehost.DefaultHostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
-		t.Fatalf("StartApp env %s = %q, want tls relay target", runtimehost.DefaultHostServiceSocketEnv, got)
+	if got := startRequests[0].Env[runtimehost.HostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
+		t.Fatalf("StartApp env %s = %q, want tls relay target", runtimehost.HostServiceSocketEnv, got)
 	}
 
 	expiredAt := time.Now().Add(-time.Minute)
@@ -6883,18 +6857,18 @@ func TestRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapability(t *
 		return env.Value, env.Found
 	}
 
-	if got, found := checkEnv(runtimehost.DefaultHostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
-		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.DefaultHostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
+	if got, found := checkEnv(runtimehost.HostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.HostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
-	if got, found := checkEnv(runtimehost.DefaultHostServiceTokenEnv); !found || got == "" {
-		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.DefaultHostServiceTokenEnv, got, found)
+	if got, found := checkEnv(runtimehost.HostServiceTokenEnv); !found || got == "" {
+		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.HostServiceTokenEnv, got, found)
 	}
 
 	startRequests := runtimeProvider.startAppRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartAppRelayEnv(t, startRequests[0], runtimehost.DefaultHostServiceSocketEnv)
+	assertStartAppRelayEnv(t, startRequests[0], runtimehost.HostServiceSocketEnv)
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -7389,11 +7363,11 @@ func TestRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelCapa
 		return env.Value, env.Found
 	}
 
-	if got, found := checkEnv(runtimehost.DefaultHostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
-		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.DefaultHostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
+	if got, found := checkEnv(runtimehost.HostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.HostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
-	if got, found := checkEnv(runtimehost.DefaultHostServiceTokenEnv); !found || got == "" {
-		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.DefaultHostServiceTokenEnv, got, found)
+	if got, found := checkEnv(runtimehost.HostServiceTokenEnv); !found || got == "" {
+		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.HostServiceTokenEnv, got, found)
 	}
 
 	startRequests := runtimeProvider.startAppRequestsCopy()
@@ -7579,11 +7553,11 @@ func TestRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T) {
 	if got := startRequests[0].Env[runtimehost.DefaultRuntimeSessionIDEnv]; got != startRequests[0].SessionID {
 		t.Fatalf("StartApp %s = %q, want session id %q", runtimehost.DefaultRuntimeSessionIDEnv, got, startRequests[0].SessionID)
 	}
-	if got := startRequests[0].Env[runtimehost.DefaultHostServiceSocketEnv]; got != "tls://gestalt.example.test:443" {
+	if got := startRequests[0].Env[runtimehost.HostServiceSocketEnv]; got != "tls://gestalt.example.test:443" {
 		t.Fatalf("runtime log host relay target = %q, want public relay target", got)
 	}
-	if got := startRequests[0].Env[runtimehost.DefaultHostServiceTokenEnv]; got == "" {
-		t.Fatalf("StartApp env missing %s", runtimehost.DefaultHostServiceTokenEnv)
+	if got := startRequests[0].Env[runtimehost.HostServiceTokenEnv]; got == "" {
+		t.Fatalf("StartApp env missing %s", runtimehost.HostServiceTokenEnv)
 	}
 }
 
@@ -9395,23 +9369,11 @@ func TestPluginS3BindingsExposeHostSocketEnv(t *testing.T) {
 		return env.Found && env.Value != ""
 	}
 
-	if got := checkEnv(t, nil, legacyResourceSocketEnv("S3", "")); got {
-		t.Fatal("legacy S3 env should not be set without app s3 bindings")
-	}
-	if got := checkEnv(t, []string{"main"}, runtimehost.DefaultHostServiceSocketEnv); !got {
+	if got := checkEnv(t, []string{"main"}, runtimehost.HostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set with a single app s3 binding")
 	}
-	if got := checkEnv(t, []string{"main"}, legacyResourceSocketEnv("S3", "MAIN")); got {
-		t.Fatal("named S3 env should not be set when app uses the unified host-service socket")
-	}
-	if got := checkEnv(t, []string{"main", "archive"}, runtimehost.DefaultHostServiceSocketEnv); !got {
+	if got := checkEnv(t, []string{"main", "archive"}, runtimehost.HostServiceSocketEnv); !got {
 		t.Fatal("unified host-service env should be set with multiple app s3 bindings")
-	}
-	if got := checkEnv(t, []string{"main", "archive"}, legacyResourceSocketEnv("S3", "MAIN")); got {
-		t.Fatal(`named S3 env for "main" should not be set when app uses the unified host-service socket`)
-	}
-	if got := checkEnv(t, []string{"main", "archive"}, legacyResourceSocketEnv("S3", "ARCHIVE")); got {
-		t.Fatal(`named S3 env for "archive" should not be set when app uses the unified host-service socket`)
 	}
 }
 
