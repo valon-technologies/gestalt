@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -248,6 +250,80 @@ func TestBuildConfiguredProvidersDoesNotPublishSuccessAfterFailure(t *testing.T)
 	}
 	if !closed.Load() {
 		t.Fatal("successful provider was not closed after partial failure")
+	}
+}
+
+func TestBuildConfiguredProvidersLeavesLateSuccessUnpublishedAfterFailure(t *testing.T) {
+	t.Parallel()
+
+	boom := errors.New("boom")
+	firstPublished := make(chan struct{})
+	failProcessed := make(chan struct{})
+	var firstPublishedOnce sync.Once
+	var mu sync.Mutex
+	var published []string
+	var failed []string
+	var closed atomic.Int32
+
+	providers, err := buildConfiguredProviders(context.Background(), map[string]*config.ProviderEntry{
+		"first": {Source: config.ProviderSource{Path: "stub"}},
+		"bad":   {Source: config.ProviderSource{Path: "stub"}},
+		"late":  {Source: config.ProviderSource{Path: "stub"}},
+	}, func(_ context.Context, name string, _ *config.ProviderEntry) (coreagent.Provider, error) {
+		switch name {
+		case "first":
+			return providerBuildOrderingAgentProvider{}, nil
+		case "bad":
+			select {
+			case <-firstPublished:
+			case <-time.After(2 * time.Second):
+				return nil, fmt.Errorf("timed out waiting for first provider publish")
+			}
+			return nil, boom
+		case "late":
+			select {
+			case <-failProcessed:
+			case <-time.After(2 * time.Second):
+				return nil, fmt.Errorf("timed out waiting for failure handling")
+			}
+			return providerBuildOrderingAgentProvider{}, nil
+		default:
+			return nil, fmt.Errorf("unexpected provider %q", name)
+		}
+	}, func(name string, _ coreagent.Provider) {
+		mu.Lock()
+		defer mu.Unlock()
+		published = append(published, name)
+		if name == "first" {
+			firstPublishedOnce.Do(func() { close(firstPublished) })
+		}
+	}, func(name string, _ error) {
+		mu.Lock()
+		defer mu.Unlock()
+		failed = append(failed, name)
+	}, func(error) {
+		close(failProcessed)
+	}, func(providers ...coreagent.Provider) error {
+		closed.Add(int32(len(providers)))
+		return nil
+	}, func(name string, err error) error {
+		return fmt.Errorf("bootstrap: agent from resource %q: %w", name, err)
+	})
+
+	if !errors.Is(err, boom) {
+		t.Fatalf("buildConfiguredProviders err = %v, want boom", err)
+	}
+	if len(providers) != 0 {
+		t.Fatalf("providers = %d, want none on partial failure", len(providers))
+	}
+	if got, want := published, []string{"first"}; !slices.Equal(got, want) {
+		t.Fatalf("published providers = %v, want %v", got, want)
+	}
+	if got, want := failed, []string{"bad", "first"}; !slices.Equal(got, want) {
+		t.Fatalf("failed providers = %v, want %v", got, want)
+	}
+	if got := closed.Load(); got != 2 {
+		t.Fatalf("closed providers = %d, want 2", got)
 	}
 }
 

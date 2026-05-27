@@ -1484,7 +1484,6 @@ func buildConfiguredProviders[T any](
 						failProvider(name, result.err)
 					}
 				}
-				published = nil
 			}
 			if wrapErr != nil {
 				errs = append(errs, wrapErr(result.name, result.err))
@@ -1504,11 +1503,6 @@ func buildConfiguredProviders[T any](
 	}
 	if len(errs) > 0 {
 		err := errors.Join(errs...)
-		if failProvider != nil {
-			for _, name := range published {
-				failProvider(name, err)
-			}
-		}
 		if closeProviders != nil {
 			_ = closeProviders(providers...)
 		}
