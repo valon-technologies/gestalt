@@ -184,7 +184,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 		go func() {
 			_ = srv.Serve(lis)
 		}()
-		env[DefaultHostServiceSocketEnv] = hostSocket
+		env[HostServiceSocketEnv] = hostSocket
 	}
 
 	if sandboxActive {

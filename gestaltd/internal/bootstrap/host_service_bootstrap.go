@@ -207,7 +207,7 @@ func mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostS
 	if !ok {
 		return nil, "", fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to relay host services through the public host service relay", providerName)
 	}
-	relayEnv[runtimehost.DefaultHostServiceSocketEnv] = relayDialTarget
+	relayEnv[runtimehost.HostServiceSocketEnv] = relayDialTarget
 	return relayEnv, relayHost, nil
 }
 
@@ -325,7 +325,7 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, de
 		return "", nil, "", false, fmt.Errorf("mint %s host service relay token: %w", serviceLabel, err)
 	}
 	return dialTarget, map[string]string{
-		runtimehost.DefaultHostServiceTokenEnv: token,
+		runtimehost.HostServiceTokenEnv: token,
 	}, relayHost, true, nil
 }
 func buildIndexedDBServices(serverLabel, metricsName string, effective config.EffectiveIndexedDBBinding, deps Deps) ([]runtimehost.HostService, func(), error) {
