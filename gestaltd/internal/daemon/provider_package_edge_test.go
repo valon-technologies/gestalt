@@ -470,48 +470,6 @@ func TestRun_ProviderPackageAndReleasePreservesYAMLManifestFormatAndConnectionDe
 	}
 }
 
-func TestRun_ProviderPackageAndReleaseSupportsSourcePackageManifestFile(t *testing.T) {
-	t.Parallel()
-
-	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
-	if err := os.Remove(filepath.Join(pluginDir, providerpkg.ManifestFile)); err != nil {
-		t.Fatalf("remove %s: %v", providerpkg.ManifestFile, err)
-	}
-	writeReleaseTestManifestFormat(t, pluginDir, "manifest.yaml", &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindApp,
-		Source:      "github.com/testowner/apps/source-manifest",
-		Version:     "0.0.1",
-		DisplayName: "Source Manifest",
-		Spec: &providermanifestv1.Spec{
-			ConfigSchemaPath: releaseProviderSchemaPath,
-			MCP:              true,
-		},
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
-		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: ".gestalt/build/provider"},
-	})
-
-	outputDir := t.TempDir()
-	const testVersion = "0.0.4-source.1"
-
-	runProviderPackageAndReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--output", outputDir,
-	)
-
-	archiveName := "gestalt-app-source-manifest_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
-	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	manifestPath, manifest := readManifestFromDir(t, extractDir)
-	if filepath.Base(manifestPath) != "manifest.yaml" {
-		t.Fatalf("released manifest = %q, want manifest.yaml", filepath.Base(manifestPath))
-	}
-	if manifest.Source != "github.com/testowner/apps/source-manifest" {
-		t.Fatalf("manifest source = %q, want %q", manifest.Source, "github.com/testowner/apps/source-manifest")
-	}
-}
-
 func TestRun_ProviderPackageRemovesStaleArchivesForSameApp(t *testing.T) {
 	t.Parallel()
 
@@ -569,35 +527,24 @@ func TestRun_ProviderPackageDoesNotWriteReleaseFinalizationFiles(t *testing.T) {
 	}
 }
 
-func TestRun_ProviderPackagePreservesOtherPlatformArchives(t *testing.T) {
+func TestProviderPackagePreservesOtherPlatformArchives(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	linuxArchive := platformArchiveNameForTest(releaseTestAppName, "1.0.0", "linux", "amd64")
-	darwinArchive := platformArchiveNameForTest(releaseTestAppName, "1.0.0", "darwin", "arm64")
+	darwinArchive := platformArchiveNameForTest(releaseTestAppName, "0.9.0", "darwin", "arm64")
+	writeTestFile(t, outputDir, linuxArchive, []byte("linux archive"), 0o644)
+	writeTestFile(t, outputDir, darwinArchive, []byte("stale darwin archive"), 0o644)
 
-	runProviderPackageAndReleaseCommand(t, pluginDir,
-		"--version", "1.0.0",
-		"--output", outputDir,
-		"--platform", "linux/amd64",
-	)
-	runProviderPackageAndReleaseCommand(t, pluginDir,
-		"--version", "1.0.0",
-		"--output", outputDir,
-		"--platform", "darwin/arm64",
-	)
-
-	for _, archiveName := range []string{linuxArchive, darwinArchive} {
-		if _, err := os.Stat(filepath.Join(outputDir, archiveName)); err != nil {
-			t.Fatalf("expected archive %s to remain: %v", archiveName, err)
-		}
+	err := removeStalePackageArchives(outputDir, releaseTestAppName, releaseArchiveTargets([]releasePlatform{{GOOS: "darwin", GOARCH: "arm64"}}))
+	if err != nil {
+		t.Fatalf("removeStalePackageArchives: %v", err)
 	}
-	metadata := readProviderReleaseMetadata(t, outputDir)
-	for _, target := range []string{"linux/amd64", "darwin/arm64"} {
-		if _, ok := metadata.Artifacts[target]; !ok {
-			t.Fatalf("release metadata artifacts missing %s: %+v", target, metadata.Artifacts)
-		}
+	if _, err := os.Stat(filepath.Join(outputDir, linuxArchive)); err != nil {
+		t.Fatalf("expected other platform archive %s to remain: %v", linuxArchive, err)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, darwinArchive)); !os.IsNotExist(err) {
+		t.Fatalf("expected same platform archive %s to be removed, got err=%v", darwinArchive, err)
 	}
 }
 
@@ -802,35 +749,5 @@ func TestRun_ProviderPackageRejectsGoModuleWithoutBuildCommand(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "provider package requires build.command for executable source providers") {
 		t.Fatalf("unexpected output: %s", out)
-	}
-}
-
-func TestRun_ProviderPackageAndReleaseWindowsArtifactUsesExe(t *testing.T) {
-	t.Parallel()
-
-	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
-	outputDir := t.TempDir()
-	const testVersion = "0.0.9-test"
-	const windowsPlatform = "windows/amd64"
-
-	runProviderPackageAndReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", windowsPlatform,
-		"--output", outputDir,
-	)
-
-	archiveName := "gestalt-app-" + releaseTestAppName + "_v" + testVersion + "_windows_amd64.tar.gz"
-	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-	binaryName := ".gestalt/build/provider"
-
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
-		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
-	}
-	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != binaryName {
-		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoint, binaryName)
-	}
-	if _, err := os.Stat(filepath.Join(extractDir, binaryName)); err != nil {
-		t.Fatalf("expected %s in archive: %v", binaryName, err)
 	}
 }

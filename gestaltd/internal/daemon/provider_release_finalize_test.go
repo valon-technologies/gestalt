@@ -7,28 +7,23 @@ import (
 	"strings"
 	"testing"
 
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
 func TestRun_ProviderReleaseFinalizesArchivesWithoutSourceTree(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	const testVersion = "0.0.4-finalize.1"
-	runProviderPackageCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
-		"--output", outputDir,
-	)
-	writeReleaseBuildScript(t, pluginDir, "build.sh", "echo should-not-run >&2\nexit 42\n")
+	archiveName := platformArchiveNameForTest(releaseTestAppName, testVersion, runtime.GOOS, runtime.GOARCH)
+	writeProviderReleaseArchiveForTest(t, outputDir, archiveName, providerReleaseManifestForTest(testVersion, "Release Test", runtime.GOOS, runtime.GOARCH))
 
 	out, err := runProviderCommandResult(t.TempDir(), "release", "--dist-dir", outputDir, "--version", testVersion)
 	if err != nil {
 		t.Fatalf("provider release failed: %v\n%s", err, out)
 	}
 
-	archiveName := "gestalt-app-" + releaseTestAppName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	metadata := readProviderReleaseMetadata(t, outputDir)
 	artifact, ok := metadata.Artifacts[providerpkg.CurrentPlatformString()]
 	if !ok {
@@ -39,40 +34,23 @@ func TestRun_ProviderReleaseFinalizesArchivesWithoutSourceTree(t *testing.T) {
 	}
 }
 
-func TestRun_ProviderReleaseRejectsDuplicateArchiveTargets(t *testing.T) {
+func TestProviderReleaseRejectsDuplicateArchiveTargets(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	const testVersion = "0.0.4-duplicate.1"
-	runProviderPackageCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
-		"--output", outputDir,
-	)
-	archiveName := "gestalt-app-" + releaseTestAppName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
-	data, err := os.ReadFile(filepath.Join(outputDir, archiveName))
-	if err != nil {
-		t.Fatalf("read archive: %v", err)
-	}
-	duplicateName := "gestalt-app-" + releaseTestAppName + "_v" + testVersion + "_duplicate.tar.gz"
-	if err := os.WriteFile(filepath.Join(outputDir, duplicateName), data, 0o644); err != nil {
-		t.Fatalf("write duplicate archive: %v", err)
-	}
+	writeProviderReleaseArchiveForTest(t, outputDir, platformArchiveNameForTest(releaseTestAppName, testVersion, runtime.GOOS, runtime.GOARCH), providerReleaseManifestForTest(testVersion, "Release Test", runtime.GOOS, runtime.GOARCH))
+	writeProviderReleaseArchiveForTest(t, outputDir, "gestalt-app-"+releaseTestAppName+"_v"+testVersion+"_duplicate.tar.gz", providerReleaseManifestForTest(testVersion, "Release Test", runtime.GOOS, runtime.GOARCH))
 
-	out, err := runProviderCommandResult(pluginDir, "release", "--dist-dir", outputDir, "--version", testVersion)
-	if err == nil {
-		t.Fatalf("expected duplicate target failure, got output: %s", out)
-	}
-	if !strings.Contains(string(out), "multiple release archives map to target") {
-		t.Fatalf("unexpected output: %s", out)
+	_, _, _, err := collectReleaseArchives(outputDir, testVersion)
+	if err == nil || !strings.Contains(err.Error(), "multiple release archives map to target") {
+		t.Fatalf("collectReleaseArchives error = %v, want duplicate target failure", err)
 	}
 }
 
-func TestRun_ProviderReleaseRejectsMismatchedArchiveManifests(t *testing.T) {
+func TestProviderReleaseRejectsMismatchedArchiveManifests(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	const testVersion = "0.0.4-mismatch.1"
 	alternatePlatform := releasePlatform{}
@@ -85,115 +63,131 @@ func TestRun_ProviderReleaseRejectsMismatchedArchiveManifests(t *testing.T) {
 	if alternatePlatform.GOOS == "" {
 		t.Fatal("no alternate release platform available")
 	}
-	runProviderPackageCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH+","+providerpkg.PlatformString(alternatePlatform.GOOS, alternatePlatform.GOARCH),
-		"--output", outputDir,
-	)
-	archiveName := platformArchiveNameForTest(releaseTestAppName, testVersion, alternatePlatform.GOOS, alternatePlatform.GOARCH)
-	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	manifestPath, manifest := readManifestFromDir(t, extractDir)
-	manifest.DisplayName = "Different Release Test"
-	data, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatFromPath(manifestPath))
-	if err != nil {
-		t.Fatalf("encode manifest: %v", err)
-	}
-	if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
-	}
-	if err := providerpkg.CreatePackageFromDir(extractDir, filepath.Join(outputDir, archiveName)); err != nil {
-		t.Fatalf("rewrite archive: %v", err)
-	}
+	writeProviderReleaseArchiveForTest(t, outputDir, platformArchiveNameForTest(releaseTestAppName, testVersion, runtime.GOOS, runtime.GOARCH), providerReleaseManifestForTest(testVersion, "Release Test", runtime.GOOS, runtime.GOARCH))
+	writeProviderReleaseArchiveForTest(t, outputDir, platformArchiveNameForTest(releaseTestAppName, testVersion, alternatePlatform.GOOS, alternatePlatform.GOARCH), providerReleaseManifestForTest(testVersion, "Different Release Test", alternatePlatform.GOOS, alternatePlatform.GOARCH))
 
-	out, err := runProviderCommandResult(pluginDir, "release", "--dist-dir", outputDir, "--version", testVersion)
-	if err == nil {
-		t.Fatalf("expected mismatched manifest failure, got output: %s", out)
-	}
-	if !strings.Contains(string(out), "manifest does not match other release archives") {
-		t.Fatalf("unexpected output: %s", out)
+	_, _, _, err := collectReleaseArchives(outputDir, testVersion)
+	if err == nil || !strings.Contains(err.Error(), "manifest does not match other release archives") {
+		t.Fatalf("collectReleaseArchives error = %v, want mismatched manifest failure", err)
 	}
 }
 
-func TestRun_ProviderReleaseRejectsArchiveVersionMismatch(t *testing.T) {
+func TestProviderReleaseRejectsArchiveVersionMismatch(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newUIReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
-	runProviderPackageCommand(t, pluginDir,
-		"--version", "1.0.0",
-		"--output", outputDir,
-	)
+	writeProviderReleaseArchiveForTest(t, outputDir, "gestalt-app-"+uiTestAppName+"_v1.0.0.tar.gz", uiReleaseManifestForTest("1.0.0"))
 
-	out, err := runProviderCommandResult(pluginDir, "release", "--dist-dir", outputDir, "--version", "1.0.1")
-	if err == nil {
-		t.Fatalf("expected version mismatch failure, got output: %s", out)
-	}
-	if !strings.Contains(string(out), "does not match --version") {
-		t.Fatalf("unexpected output: %s", out)
+	_, _, _, err := collectReleaseArchives(outputDir, "1.0.1")
+	if err == nil || !strings.Contains(err.Error(), "does not match --version") {
+		t.Fatalf("collectReleaseArchives error = %v, want version mismatch failure", err)
 	}
 }
 
-func TestRun_ProviderReleaseRejectsNoArchives(t *testing.T) {
+func TestProviderReleaseRejectsNoArchives(t *testing.T) {
 	t.Parallel()
 
-	out, err := runProviderCommandResult(t.TempDir(), "release", "--dist-dir", t.TempDir())
-	if err == nil {
-		t.Fatalf("expected no archives failure, got output: %s", out)
-	}
-	if !strings.Contains(string(out), "no .tar.gz release archives found") {
-		t.Fatalf("unexpected output: %s", out)
+	_, _, _, err := collectReleaseArchives(t.TempDir(), "")
+	if err == nil || !strings.Contains(err.Error(), "no .tar.gz release archives found") {
+		t.Fatalf("collectReleaseArchives error = %v, want no archives failure", err)
 	}
 }
 
-func TestRun_ProviderReleaseRejectsMultipleRootManifests(t *testing.T) {
+func TestProviderReleaseRejectsMultipleRootManifests(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newUIReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	const testVersion = "1.0.0"
-	runProviderPackageCommand(t, pluginDir,
-		"--version", testVersion,
-		"--output", outputDir,
-	)
+	packageDir := t.TempDir()
+	writeProviderReleaseManifestSupportFilesForTest(t, packageDir, uiReleaseManifestForTest(testVersion))
+	writeReleasedManifestForArchiveTest(t, packageDir, uiReleaseManifestForTest(testVersion))
 	archiveName := "gestalt-app-" + uiTestAppName + "_v" + testVersion + ".tar.gz"
-	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	manifestData, err := os.ReadFile(filepath.Join(extractDir, providerpkg.ManifestFile))
+	manifestData, err := os.ReadFile(filepath.Join(packageDir, providerpkg.ManifestFile))
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(extractDir, "manifest.yml"), manifestData, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(packageDir, "manifest.yml"), manifestData, 0o644); err != nil {
 		t.Fatalf("write second manifest: %v", err)
 	}
-	if err := providerpkg.CreatePackageFromDir(extractDir, filepath.Join(outputDir, archiveName)); err != nil {
-		t.Fatalf("rewrite archive: %v", err)
+	if err := providerpkg.CreatePackageFromDir(packageDir, filepath.Join(outputDir, archiveName)); err != nil {
+		t.Fatalf("CreatePackageFromDir(%s): %v", archiveName, err)
 	}
 
-	out, err := runProviderCommandResult(pluginDir, "release", "--dist-dir", outputDir, "--version", testVersion)
-	if err == nil {
-		t.Fatalf("expected multiple manifest failure, got output: %s", out)
-	}
-	if !strings.Contains(string(out), "contains multiple root provider manifests") {
-		t.Fatalf("unexpected output: %s", out)
+	_, _, _, err = collectReleaseArchives(outputDir, testVersion)
+	if err == nil || !strings.Contains(err.Error(), "contains multiple root provider manifests") {
+		t.Fatalf("collectReleaseArchives error = %v, want multiple manifest failure", err)
 	}
 }
 
-func TestRun_ProviderReleaseRejectsCorruptArchive(t *testing.T) {
+func TestProviderReleaseRejectsCorruptArchive(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newUIReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	const testVersion = "1.0.0"
-	runProviderPackageCommand(t, pluginDir,
-		"--version", testVersion,
-		"--output", outputDir,
-	)
 	archiveName := "gestalt-app-" + uiTestAppName + "_v" + testVersion + ".tar.gz"
 	if err := os.WriteFile(filepath.Join(outputDir, archiveName), []byte("not a gzip archive\n"), 0o644); err != nil {
 		t.Fatalf("rewrite corrupt archive: %v", err)
 	}
 
-	out, err := runProviderCommandResult(pluginDir, "release", "--dist-dir", outputDir, "--version", testVersion)
+	_, _, _, err := collectReleaseArchives(outputDir, testVersion)
 	if err == nil {
-		t.Fatalf("expected corrupt archive failure, got output: %s", out)
+		t.Fatal("expected corrupt archive failure")
+	}
+}
+
+func TestProviderReleaseMetadataIncludesPlatformArchives(t *testing.T) {
+	t.Parallel()
+
+	metadata, err := buildProviderReleaseMetadata(
+		providerReleaseManifestForTest("1.0.0", "Release Test", "linux", "amd64"),
+		"1.0.0",
+		[]releaseArchive{
+			{Path: "gestalt-app-release-test_v1.0.0_linux_amd64.tar.gz", SHA256: "linux-sha", Target: "linux/amd64"},
+			{Path: "gestalt-app-release-test_v1.0.0_darwin_arm64.tar.gz", SHA256: "darwin-sha", Target: "darwin/arm64"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	for target, wantSHA := range map[string]string{
+		"linux/amd64":  "linux-sha",
+		"darwin/arm64": "darwin-sha",
+	} {
+		artifact, ok := metadata.Artifacts[target]
+		if !ok {
+			t.Fatalf("metadata artifacts missing %s: %+v", target, metadata.Artifacts)
+		}
+		if artifact.SHA256 != wantSHA {
+			t.Fatalf("metadata artifact %s sha = %q, want %q", target, artifact.SHA256, wantSHA)
+		}
+	}
+}
+
+func providerReleaseManifestForTest(version, displayName, goos, goarch string) *providermanifestv1.Manifest {
+	artifactPath := filepath.ToSlash(filepath.Join("bin", "provider-"+goos+"-"+goarch))
+	return &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
+		Source:      releaseTestSource,
+		Version:     version,
+		DisplayName: displayName,
+		IconFile:    releaseTestIconPath,
+		Spec:        &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:   goos,
+			Arch: goarch,
+			Path: artifactPath,
+		}},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+	}
+}
+
+func uiReleaseManifestForTest(version string) *providermanifestv1.Manifest {
+	return &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindUI,
+		Source:      uiTestSource,
+		Version:     version,
+		DisplayName: "UI Test",
+		IconFile:    releaseTestIconPath,
+		Spec:        &providermanifestv1.Spec{AssetRoot: uiTestAssetRoot},
 	}
 }
