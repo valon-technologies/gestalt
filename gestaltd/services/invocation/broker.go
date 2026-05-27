@@ -123,6 +123,8 @@ type Broker struct {
 	mcpMapper         ConnectionMapper
 	connectionRuntime ConnectionRuntimeResolver
 	providerOverrides ProviderOverrideResolver
+	logger            *slog.Logger
+	tracerProvider    trace.TracerProvider
 }
 
 type BrokerOption func(*Broker)
@@ -147,12 +149,34 @@ func WithProviderOverrides(r ProviderOverrideResolver) BrokerOption {
 	return func(b *Broker) { b.providerOverrides = r }
 }
 
+func WithLogger(l *slog.Logger) BrokerOption {
+	return func(b *Broker) { b.logger = l }
+}
+
+func WithTracerProvider(provider trace.TracerProvider) BrokerOption {
+	return func(b *Broker) { b.tracerProvider = provider }
+}
+
 func NewBroker(providers *registry.ProviderMap[core.Provider], users UserStore, externalCreds core.ExternalCredentialProvider, opts ...BrokerOption) *Broker {
 	b := &Broker{providers: providers, users: users, externalCreds: externalCreds}
 	for _, o := range opts {
 		o(b)
 	}
 	return b
+}
+
+func (b *Broker) log() *slog.Logger {
+	if b != nil && b.logger != nil {
+		return b.logger
+	}
+	return slog.Default()
+}
+
+func (b *Broker) tracer() trace.Tracer {
+	if b != nil && b.tracerProvider != nil {
+		return b.tracerProvider.Tracer(tracerName)
+	}
+	return otel.Tracer(tracerName)
 }
 
 func (b *Broker) ListProviders() []string {
@@ -182,7 +206,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	metricTransport := metricutil.UnknownAttrValue
 	metricConnectionMode := metricutil.UnknownAttrValue
 
-	ctx, span := otel.Tracer(tracerName).Start(ctx, "broker.invoke",
+	ctx, span := b.tracer().Start(ctx, "broker.invoke",
 		trace.WithSpanKind(trace.SpanKindInternal),
 	)
 	defer span.End()
@@ -358,12 +382,12 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if err != nil {
 		return fail(err)
 	}
-	observePlugin5xxResult(ctx, span, p, providerName, opMeta.ID, transport, result)
+	b.observePlugin5xxResult(ctx, span, p, providerName, opMeta.ID, transport, result)
 
 	return result, nil
 }
 
-func observePlugin5xxResult(ctx context.Context, span trace.Span, p *principal.Principal, providerName, operation, transport string, result *core.OperationResult) {
+func (b *Broker) observePlugin5xxResult(ctx context.Context, span trace.Span, p *principal.Principal, providerName, operation, transport string, result *core.OperationResult) {
 	if result == nil || transport != catalog.TransportApp || !validHTTPStatus(result.Status) || result.Status < http.StatusInternalServerError {
 		return
 	}
@@ -396,7 +420,7 @@ func observePlugin5xxResult(ctx context.Context, span trace.Span, p *principal.P
 		}
 	}
 
-	slog.WarnContext(ctx, "provider operation returned 5xx result", attrs...)
+	b.log().WarnContext(ctx, "provider operation returned 5xx result", attrs...)
 }
 
 func truncateResultBodyForLog(body string) string {
@@ -426,7 +450,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	metricTransport := metricutil.AttrValue("graphql")
 	metricConnectionMode := metricutil.UnknownAttrValue
 
-	ctx, span := otel.Tracer(tracerName).Start(ctx, "broker.invoke_graphql",
+	ctx, span := b.tracer().Start(ctx, "broker.invoke_graphql",
 		trace.WithSpanKind(trace.SpanKindInternal),
 	)
 	defer span.End()
@@ -929,7 +953,7 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 	if metadataJSON != "" {
 		var connParams map[string]string
 		if err := json.Unmarshal([]byte(metadataJSON), &connParams); err != nil {
-			slog.WarnContext(ctx, "malformed metadata JSON", "provider", providerName, "error", err)
+			b.log().WarnContext(ctx, "malformed metadata JSON", "provider", providerName, "error", err)
 		} else if len(connParams) > 0 {
 			ctx = core.WithConnectionParams(ctx, connParams)
 		}
@@ -969,7 +993,7 @@ func (b *Broker) withAgentExternalIdentity(ctx context.Context, providerName, co
 	}
 	identity, err := b.agentExternalIdentity(ctx, subjectID, providerName, connection)
 	if err != nil {
-		slog.DebugContext(ctx, "agent external identity unavailable", "provider", providerName, "subject_id", subjectID, "error", err)
+		b.log().DebugContext(ctx, "agent external identity unavailable", "provider", providerName, "subject_id", subjectID, "error", err)
 		return ctx
 	}
 	return WithAgentExternalIdentityContext(ctx, identity)

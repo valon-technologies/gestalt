@@ -23,6 +23,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -30,6 +31,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ReadinessChecker reports whether the server is ready to handle requests.
@@ -197,6 +199,7 @@ type Config struct {
 	BuiltinAdminUI        *BuiltinAdminUIOptions
 	RouteProfile          RouteProfile
 	MeterProvider         metric.MeterProvider
+	TracerProvider        trace.TracerProvider
 }
 
 func New(cfg Config) (*Server, error) {
@@ -318,6 +321,9 @@ func New(cfg Config) (*Server, error) {
 	if cfg.MeterProvider != nil {
 		otelOptions = append(otelOptions, otelhttp.WithMeterProvider(cfg.MeterProvider))
 	}
+	if cfg.TracerProvider != nil {
+		otelOptions = append(otelOptions, otelhttp.WithTracerProvider(cfg.TracerProvider))
+	}
 	var hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
 	var egressProxyTokens *egressproxy.TokenManager
 	var s3ObjectAccessURLs *s3.ObjectAccessURLManager
@@ -340,7 +346,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	s := &Server{
 		router:                 router,
-		handler:                withRequestMeterProvider(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider),
+		handler:                withRequestTelemetryProviders(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider, cfg.TracerProvider),
 		auth:                   cfg.Auth,
 		authProviders:          authProviders,
 		serverAuthProvider:     serverAuthProvider,
@@ -461,11 +467,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
 }
 
-func withRequestMeterProvider(next http.Handler, provider metric.MeterProvider) http.Handler {
-	if provider == nil {
+func withRequestTelemetryProviders(next http.Handler, meterProvider metric.MeterProvider, tracerProvider trace.TracerProvider) http.Handler {
+	if meterProvider == nil && tracerProvider == nil {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r.WithContext(metricutil.WithMeterProvider(r.Context(), provider)))
+		ctx := r.Context()
+		if meterProvider != nil {
+			ctx = metricutil.WithMeterProvider(ctx, meterProvider)
+		}
+		if tracerProvider != nil {
+			ctx = observability.WithTracerProvider(ctx, tracerProvider)
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

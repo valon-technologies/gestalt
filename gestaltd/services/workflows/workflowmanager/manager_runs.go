@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -154,7 +153,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 		}
 		audit.finish(ctx, err)
 		if err != nil {
-			logWorkflowSignalOrStartFailure(ctx, req, phase, targetAuthFailure, err)
+			m.logWorkflowSignalOrStartFailure(ctx, req, phase, targetAuthFailure, err)
 		}
 	}()
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
@@ -201,7 +200,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	return managedSignalResponse(providerName, provider, resp)
 }
 
-func logWorkflowSignalOrStartFailure(ctx context.Context, req RunSignalOrStart, phase string, targetAuthFailure *targetAuthorizationFailure, err error) {
+func (m *Manager) logWorkflowSignalOrStartFailure(ctx context.Context, req RunSignalOrStart, phase string, targetAuthFailure *targetAuthorizationFailure, err error) {
 	if err == nil {
 		return
 	}
@@ -219,7 +218,7 @@ func logWorkflowSignalOrStartFailure(ctx context.Context, req RunSignalOrStart, 
 	if targetAuthFailure != nil {
 		attrs = appendTargetAuthorizationFailureAttrs(attrs, *targetAuthFailure)
 	}
-	slog.WarnContext(ctx, "workflow manager signal-or-start failed", attrs...)
+	m.log().WarnContext(ctx, "workflow manager signal-or-start failed", attrs...)
 }
 
 func appendTargetAuthorizationFailureAttrs(attrs []any, failure targetAuthorizationFailure) []any {

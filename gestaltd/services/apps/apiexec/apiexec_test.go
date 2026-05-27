@@ -40,6 +40,19 @@ func newRetryTestClient(t *testing.T, handle func(*http.Request) (int, http.Head
 	})}
 }
 
+func advanceRetryDelay(t *testing.T, delay time.Duration, beforeComplete func()) {
+	t.Helper()
+	if delay > time.Nanosecond {
+		time.Sleep(delay - time.Nanosecond)
+		synctest.Wait()
+	}
+	if beforeComplete != nil {
+		beforeComplete()
+	}
+	time.Sleep(time.Nanosecond)
+	synctest.Wait()
+}
+
 func TestSubstitutePath_MissingParam(t *testing.T) {
 	t.Parallel()
 	_, err := substitutePath("/users/{userId}/messages", map[string]any{})
@@ -417,33 +430,55 @@ func TestDoGraphQLAuthHeaders(t *testing.T) {
 func TestRetryOn429ThenSuccess(t *testing.T) {
 	t.Parallel()
 
-	var attempts atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		if attempts.Add(1) == 1 {
-			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = w.Write([]byte("rate limited"))
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	}))
-	testutil.CloseOnCleanup(t, srv)
+	synctest.Test(t, func(t *testing.T) {
+		var attempts atomic.Int32
+		client := newRetryTestClient(t, func(*http.Request) (int, http.Header, string) {
+			if attempts.Add(1) == 1 {
+				return http.StatusTooManyRequests, nil, "rate limited"
+			}
+			return http.StatusOK, nil, `{"status":"ok"}`
+		})
 
-	result, err := Do(context.Background(), srv.Client(), Request{
-		Method:     http.MethodGet,
-		BaseURL:    srv.URL,
-		Path:       "/test",
-		MaxRetries: 2,
+		done := make(chan error, 1)
+		var resultStatus int
+		go func() {
+			result, err := Do(context.Background(), client, Request{
+				Method:     http.MethodGet,
+				BaseURL:    "https://api.example.test",
+				Path:       "/test",
+				MaxRetries: 2,
+			})
+			if result != nil {
+				resultStatus = result.Status
+			}
+			done <- err
+		}()
+
+		synctest.Wait()
+		if got := attempts.Load(); got != 1 {
+			t.Fatalf("attempts before retry delay = %d, want 1", got)
+		}
+		advanceRetryDelay(t, time.Second, func() {
+			if got := attempts.Load(); got != 1 {
+				t.Fatalf("attempts before retry delay completes = %d, want 1", got)
+			}
+		})
+		if got := attempts.Load(); got != 2 {
+			t.Fatalf("attempts after retry delay = %d, want 2", got)
+		}
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("expected success after retry, got: %v", err)
+			}
+		default:
+			t.Fatal("Do did not return after successful retry")
+		}
+		if resultStatus != http.StatusOK {
+			t.Fatalf("status = %d, want %d", resultStatus, http.StatusOK)
+		}
 	})
-	if err != nil {
-		t.Fatalf("expected success after retry, got: %v", err)
-	}
-	if result.Status != http.StatusOK {
-		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
-	}
-	if got := attempts.Load(); got != 2 {
-		t.Fatalf("attempts = %d, want 2", got)
-	}
 }
 
 func TestRetryOn503WithBackoff(t *testing.T) {
@@ -483,24 +518,20 @@ func TestRetryOn503WithBackoff(t *testing.T) {
 		default:
 		}
 
-		time.Sleep(time.Second - time.Nanosecond)
-		synctest.Wait()
-		if got := attempts.Load(); got != 1 {
-			t.Fatalf("attempts before first backoff completes = %d, want 1", got)
-		}
-		time.Sleep(time.Nanosecond)
-		synctest.Wait()
+		advanceRetryDelay(t, time.Second, func() {
+			if got := attempts.Load(); got != 1 {
+				t.Fatalf("attempts before first backoff completes = %d, want 1", got)
+			}
+		})
 		if got := attempts.Load(); got != 2 {
 			t.Fatalf("attempts after first backoff = %d, want 2", got)
 		}
 
-		time.Sleep(2*time.Second - time.Nanosecond)
-		synctest.Wait()
-		if got := attempts.Load(); got != 2 {
-			t.Fatalf("attempts before second backoff completes = %d, want 2", got)
-		}
-		time.Sleep(time.Nanosecond)
-		synctest.Wait()
+		advanceRetryDelay(t, 2*time.Second, func() {
+			if got := attempts.Load(); got != 2 {
+				t.Fatalf("attempts before second backoff completes = %d, want 2", got)
+			}
+		})
 		if got := attempts.Load(); got != 3 {
 			t.Fatalf("attempts after second backoff = %d, want 3", got)
 		}
@@ -552,13 +583,11 @@ func TestRetryAfterHeaderRespected(t *testing.T) {
 		if got := attempts.Load(); got != 1 {
 			t.Fatalf("attempts before Retry-After delay = %d, want 1", got)
 		}
-		time.Sleep(2*time.Second - time.Nanosecond)
-		synctest.Wait()
-		if got := attempts.Load(); got != 1 {
-			t.Fatalf("attempts before Retry-After delay completes = %d, want 1", got)
-		}
-		time.Sleep(time.Nanosecond)
-		synctest.Wait()
+		advanceRetryDelay(t, 2*time.Second, func() {
+			if got := attempts.Load(); got != 1 {
+				t.Fatalf("attempts before Retry-After delay completes = %d, want 1", got)
+			}
+		})
 		if got := attempts.Load(); got != 2 {
 			t.Fatalf("attempts after Retry-After delay = %d, want 2", got)
 		}
@@ -605,27 +634,54 @@ func TestNoRetryDisablesRetry(t *testing.T) {
 func TestRetriesStopAfterMaxRetries(t *testing.T) {
 	t.Parallel()
 
-	var attempts atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		attempts.Add(1)
-		w.WriteHeader(http.StatusBadGateway)
-		_, _ = w.Write([]byte("bad gateway"))
-	}))
-	testutil.CloseOnCleanup(t, srv)
+	synctest.Test(t, func(t *testing.T) {
+		var attempts atomic.Int32
+		client := newRetryTestClient(t, func(*http.Request) (int, http.Header, string) {
+			attempts.Add(1)
+			return http.StatusBadGateway, nil, "bad gateway"
+		})
 
-	_, err := Do(context.Background(), srv.Client(), Request{
-		Method:     http.MethodGet,
-		BaseURL:    srv.URL,
-		Path:       "/test",
-		MaxRetries: 2,
+		done := make(chan error, 1)
+		go func() {
+			_, err := Do(context.Background(), client, Request{
+				Method:     http.MethodGet,
+				BaseURL:    "https://api.example.test",
+				Path:       "/test",
+				MaxRetries: 2,
+			})
+			done <- err
+		}()
+
+		synctest.Wait()
+		if got := attempts.Load(); got != 1 {
+			t.Fatalf("attempts before first retry delay = %d, want 1", got)
+		}
+		advanceRetryDelay(t, time.Second, func() {
+			if got := attempts.Load(); got != 1 {
+				t.Fatalf("attempts before first retry delay completes = %d, want 1", got)
+			}
+		})
+		if got := attempts.Load(); got != 2 {
+			t.Fatalf("attempts after first retry delay = %d, want 2", got)
+		}
+		advanceRetryDelay(t, 2*time.Second, func() {
+			if got := attempts.Load(); got != 2 {
+				t.Fatalf("attempts before second retry delay completes = %d, want 2", got)
+			}
+		})
+		if got := attempts.Load(); got != 3 {
+			t.Fatalf("attempts after second retry delay = %d, want 3", got)
+		}
+
+		select {
+		case err := <-done:
+			if err == nil {
+				t.Fatal("expected error after exhausting retries")
+			}
+		default:
+			t.Fatal("Do did not return after exhausting retries")
+		}
 	})
-	if err == nil {
-		t.Fatal("expected error after exhausting retries")
-	}
-	// 1 initial + 2 retries = 3 total
-	if got := attempts.Load(); got != 3 {
-		t.Fatalf("attempts = %d, want 3", got)
-	}
 }
 
 func TestContextCancellationStopsRetries(t *testing.T) {

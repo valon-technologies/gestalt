@@ -144,6 +144,9 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	if cfg.Authorizer != nil {
 		brokerOpts = append(brokerOpts, invocation.WithAuthorizer(cfg.Authorizer))
 	}
+	if cfg.TracerProvider != nil {
+		brokerOpts = append(brokerOpts, invocation.WithTracerProvider(cfg.TracerProvider))
+	}
 	if cfg.Invoker == nil {
 		externalCredentials := cfg.Services.ExternalCredentials
 		cfg.Invoker = invocation.NewBroker(cfg.Providers, cfg.Services.Users, externalCredentials, brokerOpts...)
@@ -10590,9 +10593,12 @@ func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGeneric
 	}
 }
 
-//nolint:paralleltest // This response-shape integration test flakes under full-package parallelism in CI.
 func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T) {
+	t.Parallel()
+
 	t.Run("non manifest-backed connections still expose app and named auth", func(t *testing.T) {
+		t.Parallel()
+
 		stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
 		plugin := &config.ProviderEntry{
 			Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-example/v1.0.0/provider-release.yaml"),
@@ -10752,6 +10758,8 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 	})
 
 	t.Run("manifest-backed API surfaces only expose the resolved named connection", func(t *testing.T) {
+		t.Parallel()
+
 		stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
 		plugin := &config.ProviderEntry{
 			Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-example/v1.0.0/provider-release.yaml"),

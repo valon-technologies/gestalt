@@ -969,7 +969,9 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
+	clock := newHostedAgentPoolManualClock(time.Now().UTC())
 	runtimeProvider := newCapturingRuntime()
+	runtimeProvider.now = clock.Now
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
@@ -1000,10 +1002,11 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
 	agentRuntime.SetRunGrants(newTestAgentRunGrants(t))
 	deps := Deps{
-		BaseURL:       "https://gestalt.example.test",
-		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
-		Services:      services,
-		AgentRuntime:  agentRuntime,
+		BaseURL:              "https://gestalt.example.test",
+		EncryptionKey:        []byte("0123456789abcdef0123456789abcdef"),
+		Services:             services,
+		AgentRuntime:         agentRuntime,
+		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
@@ -1054,15 +1057,12 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	if turn.Status != coreagent.ExecutionStatusWaitingForInput {
 		t.Fatalf("turn status = %q, want %q", turn.Status, coreagent.ExecutionStatusWaitingForInput)
 	}
+	waiters := clock.waiterCountSnapshot()
 	drainDone := make(chan error, 1)
 	go func() {
 		drainDone <- pool.drainAndCloseBackend(sessionBackend)
 	}()
-	waitForAgentRuntimeCondition(t, 2*time.Second, func() bool {
-		pool.mu.Lock()
-		defer pool.mu.Unlock()
-		return sessionBackend.closing
-	})
+	clock.waitForWaiterAfter(t, waiters)
 	sessions, err := agents[0].ListSessions(context.Background(), coreagent.ListSessionsRequest{})
 	if err != nil {
 		t.Fatalf("ListSessions(during drain): %v", err)
@@ -1097,6 +1097,7 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	if resolved == nil || resolved.Status != coreagent.ExecutionStatusSucceeded {
 		t.Fatalf("GetTurn(after ResolveInteraction) = %#v, want succeeded turn", resolved)
 	}
+	clock.Advance(25 * time.Millisecond)
 	if err := <-drainDone; err != nil {
 		t.Fatalf("drainAndCloseBackend: %v", err)
 	}
@@ -1179,9 +1180,13 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 	if sessionBackend != first {
 		t.Fatalf("scale-out triggering request backend = %#v, want existing ready backend", sessionBackend)
 	}
-	waitForAgentRuntimeCondition(t, 2*time.Second, func() bool {
-		return len(runtimeProvider.startSessionRequests()) == 2 && len(pool.readyBackends()) == 2
+	runtimeProvider.waitStartSessionRequests(t, 2)
+	waitHostedAgentPoolState(t, pool, func() bool {
+		return len(hostedAgentPoolReadyBackendsLocked(pool)) == 2
 	})
+	if got := len(runtimeProvider.startSessionRequests()); got != 2 {
+		t.Fatalf("start session requests after scale out = %d, want 2", got)
+	}
 
 	var scaledBackend *hostedAgentPoolBackend
 	for _, backend := range pool.readyBackends() {
@@ -1213,7 +1218,9 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
+	clock := newHostedAgentPoolManualClock(time.Now().UTC())
 	runtimeProvider := newCapturingRuntime()
+	runtimeProvider.now = clock.Now
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
 		return runtimeProvider, nil
@@ -1241,11 +1248,12 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 		},
 	}
 	deps := Deps{
-		BaseURL:          "https://gestalt.example.test",
-		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
-		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		BaseURL:              "https://gestalt.example.test",
+		EncryptionKey:        []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:         &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:        testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory:     func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
@@ -1263,12 +1271,21 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 	if len(backends) != 1 {
 		t.Fatalf("ready backends = %d, want 1", len(backends))
 	}
+	clock.waitForTicker(t)
 	if err := backends[0].provider.Close(); err != nil {
 		t.Fatalf("Close backend provider: %v", err)
 	}
-	waitForAgentRuntimeCondition(t, 2*time.Second, func() bool {
-		return len(runtimeProvider.startSessionRequests()) >= 2 && len(pool.readyBackends()) == 1
+	clock.Advance(50 * time.Millisecond)
+	runtimeProvider.waitStartSessionRequests(t, 2)
+	waitHostedAgentPoolState(t, pool, func() bool {
+		return len(hostedAgentPoolReadyBackendsLocked(pool)) == 1 && pool.starting == 0
 	})
+	if got := len(runtimeProvider.startSessionRequests()); got < 2 {
+		t.Fatalf("start session requests after unhealthy backend = %d, want at least 2", got)
+	}
+	if got := len(pool.readyBackends()); got != 1 {
+		t.Fatalf("ready backends after unhealthy replacement = %d, want 1", got)
+	}
 	session, err := agents[0].CreateSession(context.Background(), coreagent.CreateSessionRequest{
 		SessionID: "session-after-restart",
 		Model:     "gpt-test",
@@ -1285,11 +1302,13 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
+	clock := newHostedAgentPoolManualClock(time.Now().UTC())
 	runtimeProvider := newCapturingRuntime()
+	runtimeProvider.now = clock.Now
 	var drainMu sync.Mutex
 	var firstDrainAt time.Time
 	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
-		startedAt := time.Now().UTC()
+		startedAt := clock.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
 		lifecycle := &runtimeprovider.SessionLifecycle{
 			StartedAt: &startedAt,
@@ -1332,11 +1351,12 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		},
 	}
 	deps := Deps{
-		BaseURL:          "https://gestalt.example.test",
-		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
-		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		BaseURL:              "https://gestalt.example.test",
+		EncryptionKey:        []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:         &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:        testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory:     func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
@@ -1355,10 +1375,17 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		t.Fatalf("ready backends = %d, want 1", len(backends))
 	}
 	first := backends[0]
-	waitForAgentRuntimeCondition(t, 3*time.Second, func() bool {
-		ready := pool.readyBackends()
-		return len(runtimeProvider.startSessionRequests()) >= 2 && len(ready) == 1 && ready[0] != first
+	clock.waitForTicker(t)
+	clock.Advance(250 * time.Millisecond)
+	runtimeProvider.waitStartSessionRequests(t, 2)
+	waitHostedAgentPoolState(t, pool, func() bool {
+		ready := hostedAgentPoolReadyBackendsLocked(pool)
+		return len(ready) == 1 && ready[0] != first && pool.starting == 0
 	})
+	ready := pool.readyBackends()
+	if len(ready) != 1 || ready[0] == first {
+		t.Fatalf("ready backends after replacement = %#v, want only replacement", ready)
+	}
 	startTimes := runtimeProvider.startSessionTimes()
 	if len(startTimes) < 2 {
 		t.Fatalf("start session times = %d, want at least 2", len(startTimes))
@@ -1390,12 +1417,15 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 	}
 }
 
-//nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
 func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartFails(t *testing.T) {
+	t.Parallel()
+
 	bin := buildAgentProviderBinary(t)
+	clock := newHostedAgentPoolManualClock(time.Now().UTC())
 	runtimeProvider := newCapturingRuntime()
+	runtimeProvider.now = clock.Now
 	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
-		startedAt := time.Now().UTC()
+		startedAt := clock.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
 		lifecycle := &runtimeprovider.SessionLifecycle{
 			StartedAt: &startedAt,
@@ -1442,11 +1472,12 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		},
 	}
 	deps := Deps{
-		BaseURL:          "https://gestalt.example.test",
-		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
-		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		BaseURL:              "https://gestalt.example.test",
+		EncryptionKey:        []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:         &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:        testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory:     func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
@@ -1465,13 +1496,14 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		t.Fatalf("ready backends = %d, want 1", len(backends))
 	}
 	first := backends[0]
-	waitForAgentRuntimeCondition(t, 2*time.Second, func() bool {
-		pool.mu.Lock()
-		defer pool.mu.Unlock()
-		return len(runtimeProvider.startSessionRequests()) >= 2 && !first.replacing
+	clock.waitForTicker(t)
+	clock.Advance(1500 * time.Millisecond)
+	runtimeProvider.waitStartSessionRequests(t, 2)
+	waitHostedAgentPoolState(t, pool, func() bool {
+		return !first.replacing && pool.starting == 0
 	})
 	pool.mu.Lock()
-	acceptsNewWork := pool.backendAcceptsNewWorkLocked(first, time.Now().UTC())
+	acceptsNewWork := pool.backendAcceptsNewWorkLocked(first, clock.Now().UTC())
 	firstDraining := first.draining
 	pool.mu.Unlock()
 	if !acceptsNewWork || firstDraining {
@@ -1492,16 +1524,18 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 	}
 }
 
-//nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
 func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *testing.T) {
+	t.Parallel()
+
 	bin := buildAgentProviderBinary(t)
+	clock := newHostedAgentPoolManualClock(time.Now().UTC())
 	runtimeProvider := newCapturingRuntime()
-	runtimeProvider.getSessionRequests = make(chan runtimeprovider.GetSessionRequest, 64)
+	runtimeProvider.now = clock.Now
 	releaseReplacement := make(chan struct{})
 	replacementStarted := make(chan struct{})
 	var replacementStartedOnce sync.Once
 	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
-		startedAt := time.Now().UTC()
+		startedAt := clock.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
 		return &runtimeprovider.SessionLifecycle{
 			StartedAt: &startedAt,
@@ -1547,11 +1581,12 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 		},
 	}
 	deps := Deps{
-		BaseURL:          "https://gestalt.example.test",
-		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
-		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		BaseURL:              "https://gestalt.example.test",
+		EncryptionKey:        []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:         &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:        testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory:     func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
@@ -1570,10 +1605,10 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	if len(ready) != 2 {
 		t.Fatalf("ready backends = %d, want 2", len(ready))
 	}
-	markCapturingRuntimeBackendsDrainingSoon(runtimeProvider, ready, 250*time.Millisecond)
+	clock.waitForTicker(t)
+	markCapturingRuntimeBackendsDrainingSoon(runtimeProvider, ready, clock.Now().UTC().Add(250*time.Millisecond))
+	clock.Advance(125 * time.Millisecond)
 	<-replacementStarted
-	drainRuntimeGetSessionRequests(runtimeProvider.getSessionRequests)
-	<-runtimeProvider.getSessionRequests
 	if got := len(runtimeProvider.startSessionRequests()); got != 3 {
 		t.Fatalf("start session requests while one replacement is starting = %d, want 3", got)
 	}
@@ -1585,8 +1620,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	}
 }
 
-func markCapturingRuntimeBackendsDrainingSoon(runtimeProvider *capturingRuntime, backends []*hostedAgentPoolBackend, delay time.Duration) {
-	drainAt := time.Now().UTC().Add(delay)
+func markCapturingRuntimeBackendsDrainingSoon(runtimeProvider *capturingRuntime, backends []*hostedAgentPoolBackend, drainAt time.Time) {
 	runtimeProvider.mu.Lock()
 	defer runtimeProvider.mu.Unlock()
 	if runtimeProvider.sessionLifecycles == nil {
@@ -1605,22 +1639,15 @@ func markCapturingRuntimeBackendsDrainingSoon(runtimeProvider *capturingRuntime,
 	}
 }
 
-func drainRuntimeGetSessionRequests(ch <-chan runtimeprovider.GetSessionRequest) {
-	for {
-		select {
-		case <-ch:
-		default:
-			return
-		}
-	}
-}
-
-//nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
 func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntimeLifetime(t *testing.T) {
+	t.Parallel()
+
 	bin := buildAgentProviderBinary(t)
+	clock := newHostedAgentPoolManualClock(time.Now().UTC())
 	runtimeProvider := newCapturingRuntime()
+	runtimeProvider.now = clock.Now
 	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
-		expiresAt := time.Now().UTC().Add(5 * time.Minute)
+		expiresAt := clock.Now().UTC().Add(5 * time.Minute)
 		return &runtimeprovider.SessionLifecycle{
 			ExpiresAt: &expiresAt,
 		}
@@ -1654,11 +1681,12 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 		},
 	}
 	deps := Deps{
-		BaseURL:          "https://gestalt.example.test",
-		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
-		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		BaseURL:              "https://gestalt.example.test",
+		EncryptionKey:        []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:         &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:        testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory:     func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
@@ -1671,7 +1699,10 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 		}
 	}()
 
-	time.Sleep(150 * time.Millisecond)
+	clock.waitForTicker(t)
+	getSessionCalls := runtimeProvider.getSessionCallCount()
+	clock.Advance(25 * time.Millisecond)
+	runtimeProvider.waitGetSessionCalls(t, getSessionCalls+1)
 	if got := len(runtimeProvider.startSessionRequests()); got != 1 {
 		t.Fatalf("start session requests after expiry health checks = %d, want 1", got)
 	}
@@ -1681,13 +1712,15 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
+	clock := newHostedAgentPoolManualClock(time.Now().UTC())
 	runtimeProvider := newCapturingRuntime()
+	runtimeProvider.now = clock.Now
 	var expiryMu sync.Mutex
 	var firstExpiresAt time.Time
 	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
-		expiresAt := time.Now().UTC().Add(time.Hour)
+		expiresAt := clock.Now().UTC().Add(time.Hour)
 		if index == 1 {
-			expiresAt = time.Now().UTC().Add(2 * time.Second)
+			expiresAt = clock.Now().UTC().Add(2 * time.Second)
 			expiryMu.Lock()
 			firstExpiresAt = expiresAt
 			expiryMu.Unlock()
@@ -1725,11 +1758,12 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 		},
 	}
 	deps := Deps{
-		BaseURL:          "https://gestalt.example.test",
-		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
-		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		BaseURL:              "https://gestalt.example.test",
+		EncryptionKey:        []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:         &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:        testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory:     func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
@@ -1742,8 +1776,18 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 		}
 	}()
 
-	waitForAgentRuntimeCondition(t, 3*time.Second, func() bool {
-		return len(runtimeProvider.startSessionRequests()) >= 2
+	clock.waitForTicker(t)
+	pool := hostedAgentProviderPoolForTest(t, agents[0])
+	initialReady := pool.readyBackends()
+	if len(initialReady) != 1 {
+		t.Fatalf("ready backends = %d, want 1", len(initialReady))
+	}
+	first := initialReady[0]
+	clock.Advance(time.Second)
+	runtimeProvider.waitStartSessionRequests(t, 2)
+	waitHostedAgentPoolState(t, pool, func() bool {
+		ready := hostedAgentPoolReadyBackendsLocked(pool)
+		return len(ready) == 1 && ready[0] != first && pool.starting == 0
 	})
 	startTimes := runtimeProvider.startSessionTimes()
 	if len(startTimes) < 2 {
@@ -3325,18 +3369,158 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 	}
 }
 
-func waitForAgentRuntimeCondition(t *testing.T, timeout time.Duration, fn func() bool) {
+func waitHostedAgentPoolState(t *testing.T, pool *hostedAgentProviderPool, ready func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for {
-		if fn() {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("condition was not satisfied before timeout")
-		}
-		time.Sleep(25 * time.Millisecond)
+	if pool == nil || pool.stateChanged == nil {
+		t.Fatal("hosted agent pool state notifications are unavailable")
 	}
+	waitOnTestCond(t, pool.stateChanged, "hosted agent pool state", ready)
+}
+
+func hostedAgentPoolReadyBackendsLocked(pool *hostedAgentProviderPool) []*hostedAgentPoolBackend {
+	now := pool.nowUTC()
+	ready := make([]*hostedAgentPoolBackend, 0, len(pool.backends))
+	for _, backend := range pool.backends {
+		if pool.backendAcceptsNewWorkLocked(backend, now) {
+			ready = append(ready, backend)
+		}
+	}
+	return ready
+}
+
+type hostedAgentPoolManualClock struct {
+	mu          sync.Mutex
+	cond        *sync.Cond
+	now         time.Time
+	tickerCount int
+	waiterCount int
+	waiters     []hostedAgentPoolManualClockWaiter
+	tickers     []*hostedAgentPoolManualTicker
+}
+
+type hostedAgentPoolManualClockWaiter struct {
+	at time.Time
+	ch chan time.Time
+}
+
+type hostedAgentPoolManualTicker struct {
+	clock    *hostedAgentPoolManualClock
+	interval time.Duration
+	next     time.Time
+	ch       chan time.Time
+	stopped  bool
+}
+
+func newHostedAgentPoolManualClock(now time.Time) *hostedAgentPoolManualClock {
+	clock := &hostedAgentPoolManualClock{now: now}
+	clock.cond = sync.NewCond(&clock.mu)
+	return clock
+}
+
+func (c *hostedAgentPoolManualClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *hostedAgentPoolManualClock) After(d time.Duration) <-chan time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ch := make(chan time.Time, 1)
+	at := c.now.Add(d)
+	if d <= 0 {
+		ch <- c.now
+		return ch
+	}
+	c.waiters = append(c.waiters, hostedAgentPoolManualClockWaiter{at: at, ch: ch})
+	c.waiterCount++
+	c.cond.Broadcast()
+	return ch
+}
+
+func (c *hostedAgentPoolManualClock) NewTicker(d time.Duration) hostedAgentPoolTicker {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if d <= 0 {
+		d = time.Nanosecond
+	}
+	ticker := &hostedAgentPoolManualTicker{
+		clock:    c,
+		interval: d,
+		next:     c.now.Add(d),
+		ch:       make(chan time.Time, 1),
+	}
+	c.tickers = append(c.tickers, ticker)
+	c.tickerCount++
+	c.cond.Broadcast()
+	return ticker
+}
+
+func (c *hostedAgentPoolManualClock) Sleep(d time.Duration) {
+	<-c.After(d)
+}
+
+func (c *hostedAgentPoolManualClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	c.now = c.now.Add(d)
+	now := c.now
+	waiters := c.waiters[:0]
+	for _, waiter := range c.waiters {
+		if now.Before(waiter.at) {
+			waiters = append(waiters, waiter)
+			continue
+		}
+		waiter.ch <- now
+	}
+	c.waiters = waiters
+	for _, ticker := range c.tickers {
+		if ticker.stopped {
+			continue
+		}
+		for !now.Before(ticker.next) {
+			select {
+			case ticker.ch <- now:
+			default:
+			}
+			ticker.next = ticker.next.Add(ticker.interval)
+		}
+	}
+	c.mu.Unlock()
+}
+
+func (c *hostedAgentPoolManualClock) waitForTicker(t *testing.T) {
+	t.Helper()
+	c.waitFor(t, "manual clock ticker", func() bool {
+		return c.tickerCount > 0
+	})
+}
+
+func (c *hostedAgentPoolManualClock) waitFor(t *testing.T, description string, ready func() bool) {
+	t.Helper()
+	waitOnTestCond(t, c.cond, description, ready)
+}
+
+func (c *hostedAgentPoolManualClock) waiterCountSnapshot() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.waiterCount
+}
+
+func (c *hostedAgentPoolManualClock) waitForWaiterAfter(t *testing.T, count int) {
+	t.Helper()
+	c.waitFor(t, "manual clock waiter", func() bool {
+		return c.waiterCount > count
+	})
+}
+
+func (t *hostedAgentPoolManualTicker) C() <-chan time.Time {
+	return t.ch
+}
+
+func (t *hostedAgentPoolManualTicker) Stop() {
+	t.clock.mu.Lock()
+	t.stopped = true
+	t.clock.mu.Unlock()
 }
 
 func hostedAgentProviderPoolForTest(t *testing.T, provider coreagent.Provider) *hostedAgentProviderPool {
@@ -3359,11 +3543,8 @@ func hostedAgentProviderPoolForTest(t *testing.T, provider coreagent.Provider) *
 	return pool
 }
 
-//nolint:paralleltest // Hosted public-relay startup is serialized to avoid Linux CI contention.
 func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
-	// This exercises the hosted agent startup path over the public relay and is
-	// sensitive to Linux CI contention when it runs alongside the other hosted
-	// runtime bootstrap tests.
+	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
 	secret := []byte("0123456789abcdef0123456789abcdef")

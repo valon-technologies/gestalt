@@ -181,6 +181,8 @@ type Deps struct {
 	HostServiceTLSCAFile  string
 	HostServiceTLSCAPEM   string
 	Telemetry             core.TelemetryProvider
+
+	hostedAgentPoolClock hostedAgentPoolClock
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
