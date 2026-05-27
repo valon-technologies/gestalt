@@ -118,16 +118,11 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	prepared.Deps.AgentRuntime.SetToolSearcher(prepared.AgentManager)
 	prepared.AppInvocation.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", nil, invocation.WithoutRateLimit()))
 	providersReady, _, _, errResolver = providerBuilds.Start(ctx, prepared.Deps, buildProviderForValidation)
-	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
+	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
-		prepared.Deps.AgentRuntime.FailPendingProviders(err)
 		return warnings, err
 	}
 	defer func() { _ = closeWorkflows(extraWorkflows...) }()
-	extraAgents, err := buildAgents(ctx, cfg, factories, prepared.Deps)
-	if err != nil {
-		return warnings, err
-	}
 	defer func() { _ = closeAgents(extraAgents...) }()
 	<-providersReady
 	if errs := errResolver(); len(errs) > 0 {
