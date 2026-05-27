@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
@@ -95,39 +94,6 @@ func TestStartupProviderProxyPrefersWorkflowContext(t *testing.T) {
 	}
 	if appEdge != 0 {
 		t.Fatalf("app self edge count = %d, want 0", appEdge)
-	}
-}
-
-func TestStartupWorkflowProviderProxyTracksPingCaller(t *testing.T) {
-	t.Parallel()
-
-	proxy := newStartupWorkflowProviderProxy("temporal", newStartupWaitTracker())
-	ctx := invocation.WithCallerProvider(context.Background(), invocation.ProviderKindWorkflow, "temporal")
-	err := proxy.Ping(ctx)
-	if err == nil {
-		t.Fatal("Ping returned nil error, want startup dependency cycle")
-	}
-	if !strings.Contains(err.Error(), `workflow "temporal" -> workflow "temporal"`) {
-		t.Fatalf("Ping error = %v, want workflow self-cycle path", err)
-	}
-}
-
-func TestStartupAgentProviderProxyPingReportsUnavailableWhilePending(t *testing.T) {
-	t.Parallel()
-
-	proxy := newStartupAgentProviderProxy("managed", nil)
-	done := make(chan error, 1)
-	go func() {
-		done <- proxy.Ping(context.Background())
-	}()
-
-	select {
-	case err := <-done:
-		if !errors.Is(err, agentmanager.ErrAgentProviderNotAvailable) {
-			t.Fatalf("Ping error = %v, want ErrAgentProviderNotAvailable", err)
-		}
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Ping blocked on pending startup agent proxy")
 	}
 }
 

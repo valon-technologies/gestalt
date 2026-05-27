@@ -40,28 +40,22 @@ type RuntimeBehavior struct {
 }
 
 type RuntimePlacementPlan struct {
-	Resolved                  RuntimeBehavior
-	RequiresHostServiceAccess bool
-	RequiresHostnameEgress    bool
-	HostnameEgressDelivery    RuntimeHostnameEgressDelivery
+	Resolved               RuntimeBehavior
+	RequiresHostnameEgress bool
+	HostnameEgressDelivery RuntimeHostnameEgressDelivery
 }
 
-func buildRuntimePlacementPlan(support runtimeprovider.Support, deps Deps, requiresHostServiceAccess, requiresHostnameEgress bool) RuntimePlacementPlan {
+func buildRuntimePlacementPlan(support runtimeprovider.Support, deps Deps, requiresHostnameEgress bool) RuntimePlacementPlan {
 	resolved := runtimeResolvedBehavior(runtimeAdvertisedBehavior(support), runtimeHostServiceAccess(support, deps), deps)
 	return RuntimePlacementPlan{
-		Resolved:                  resolved,
-		RequiresHostServiceAccess: requiresHostServiceAccess,
-		RequiresHostnameEgress:    requiresHostnameEgress,
-		HostnameEgressDelivery:    runtimeHostnameEgressDelivery(requiresHostnameEgress, resolved),
+		Resolved:               resolved,
+		RequiresHostnameEgress: requiresHostnameEgress,
+		HostnameEgressDelivery: runtimeHostnameEgressDelivery(requiresHostnameEgress, resolved),
 	}
 }
 
-func buildRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, support runtimeprovider.Support) (RuntimePlacementPlan, error) {
-	requiresHostServiceAccess, requiresHostnameEgress, err := runtimeRequirementsForApp(pluginName, entry, deps)
-	if err != nil {
-		return RuntimePlacementPlan{}, err
-	}
-	return buildRuntimePlacementPlan(support, deps, requiresHostServiceAccess, requiresHostnameEgress), nil
+func buildRuntimePlan(entry *config.ProviderEntry, deps Deps, support runtimeprovider.Support) RuntimePlacementPlan {
+	return buildRuntimePlacementPlan(support, deps, runtimeRequiresHostnameEgress(entry, deps))
 }
 
 func runtimeAdvertisedBehavior(support runtimeprovider.Support) RuntimeBehavior {
@@ -121,18 +115,11 @@ func hostedRuntimeRelayBaseURL(deps Deps) (string, bool) {
 	return strings.TrimSpace(deps.BaseURL), false
 }
 
-func runtimeRequirementsForApp(_ string, entry *config.ProviderEntry, deps Deps) (bool, bool, error) {
+func runtimeRequiresHostnameEgress(entry *config.ProviderEntry, deps Deps) bool {
 	if entry == nil {
-		return false, false, nil
+		return false
 	}
-	return true, deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement(), nil
-}
-
-func agentRuntimeRequirementsForProvider(_ string, entry *config.ProviderEntry, deps Deps) (bool, bool, error) {
-	if entry == nil {
-		return false, false, nil
-	}
-	return true, deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement(), nil
+	return deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement()
 }
 
 func (p RuntimePlacementPlan) Validate(label string) error {
@@ -142,7 +129,7 @@ func (p RuntimePlacementPlan) Validate(label string) error {
 	if !p.Resolved.CanHostApps {
 		return fmt.Errorf("%s cannot host executable providers in a host-reachable session", label)
 	}
-	if p.RequiresHostServiceAccess && p.Resolved.HostServiceAccess == RuntimeHostServiceAccessNone {
+	if p.Resolved.HostServiceAccess == RuntimeHostServiceAccessNone {
 		return fmt.Errorf("%s cannot provide host service access required by this provider", label)
 	}
 	if p.RequiresHostnameEgress && p.Resolved.EgressMode != RuntimeEgressModeHostname {

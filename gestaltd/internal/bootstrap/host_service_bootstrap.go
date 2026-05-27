@@ -174,6 +174,27 @@ func mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostS
 	return relayEnv, relayHost, nil
 }
 
+func applyHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostServices []runtimehost.HostService, runtimePlan RuntimePlacementPlan, deps Deps, env map[string]string, allowedHosts []string) (map[string]string, []string, error) {
+	relayHost := ""
+	if runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessRelay {
+		bindingEnv, resolvedRelayHost, err := mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID, hostServiceBindingDescriptorsFromConfigured(hostServices), deps)
+		if err != nil {
+			return nil, nil, err
+		}
+		relayHost = resolvedRelayHost
+		if len(bindingEnv) > 0 {
+			if env == nil {
+				env = make(map[string]string, len(bindingEnv))
+			}
+			maps.Copy(env, bindingEnv)
+		}
+	}
+	if runtimePlan.RequiresHostnameEgress {
+		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
+	}
+	return env, allowedHosts, nil
+}
+
 type runtimeHostServiceSessionVerifier struct {
 	providerName string
 	provider     runtimeprovider.Provider

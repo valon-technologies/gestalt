@@ -1017,13 +1017,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		}
 		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
-	runtimePlan, err := buildRuntimePlan(name, entry, deps, runtimeSupport)
-	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
-		return nil, err
-	}
+	runtimePlan := buildRuntimePlan(entry, deps, runtimeSupport)
 	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig)); err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -1103,23 +1097,9 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	startEnv = withHostServiceTLSCAEnv(startEnv, deps)
 	egressPolicy := deps.Egress.ProviderPolicy(entry)
 	allowedHosts := entry.EffectiveAllowedHosts()
-	relayHost := ""
-	if runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessRelay {
-		bindingTargets := hostServiceBindingDescriptorsFromConfigured(hostServices)
-		bindingEnv, resolvedRelayHost, err := mergeHostedRuntimeHostServiceRelayEnv(name, sessionID, bindingTargets, deps)
-		if err != nil {
-			return nil, err
-		}
-		relayHost = resolvedRelayHost
-		if len(bindingEnv) > 0 {
-			if startEnv == nil {
-				startEnv = make(map[string]string, len(bindingEnv))
-			}
-			maps.Copy(startEnv, bindingEnv)
-		}
-	}
-	if runtimePlan.RequiresHostnameEgress {
-		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
+	startEnv, allowedHosts, err = applyHostedRuntimeHostServiceRelayEnv(name, sessionID, hostServices, runtimePlan, deps, startEnv, allowedHosts)
+	if err != nil {
+		return nil, err
 	}
 	egressPlan, err := buildHostedRuntimeEgressLaunchPlan(name, sessionID, egressPolicy, allowedHosts, runtimePlan, deps)
 	if err != nil {
@@ -1251,14 +1231,7 @@ func prepareHostedAgentProviderLaunch(ctx context.Context, name string, entry *c
 		}
 		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
-	requiresHostServiceAccess, requiresHostnameEgress, err := agentRuntimeRequirementsForProvider(name, entry, deps)
-	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
-		return nil, err
-	}
-	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, requiresHostServiceAccess, requiresHostnameEgress)
+	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, runtimeRequiresHostnameEgress(entry, deps))
 	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig)); err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -1375,24 +1348,10 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	}
 	allowedHosts := hostedAgentAllowedHosts(agentAllowedHosts, runtimePlan)
 	phaseStarted = time.Now()
-	relayHost := ""
-	if runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessRelay {
-		bindingTargets := hostServiceBindingDescriptorsFromConfigured(hostServices)
-		bindingEnv, resolvedRelayHost, err := mergeHostedRuntimeHostServiceRelayEnv(name, sessionID, bindingTargets, deps)
-		if err != nil {
-			recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_relay", phaseStarted, err)
-			return nil, err
-		}
-		relayHost = resolvedRelayHost
-		if len(bindingEnv) > 0 {
-			if startEnv == nil {
-				startEnv = make(map[string]string, len(bindingEnv))
-			}
-			maps.Copy(startEnv, bindingEnv)
-		}
-	}
-	if runtimePlan.RequiresHostnameEgress {
-		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
+	startEnv, allowedHosts, err = applyHostedRuntimeHostServiceRelayEnv(name, sessionID, hostServices, runtimePlan, deps, startEnv, allowedHosts)
+	if err != nil {
+		recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_relay", phaseStarted, err)
+		return nil, err
 	}
 	recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_relay", phaseStarted, nil)
 	phaseStarted = time.Now()
