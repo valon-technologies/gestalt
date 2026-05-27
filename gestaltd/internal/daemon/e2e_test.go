@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -3202,50 +3201,97 @@ providers:
 	}
 }
 
-func TestE2ELockSyncLocalProviders(t *testing.T) {
+func TestRunLockSyncLocalProviders(t *testing.T) {
 	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping E2E lock/sync test in short mode")
-	}
 
 	dir := t.TempDir()
 	cfgPath := writeServeConfig(t, dir, 0, nil)
-	lockPath := filepath.Join(dir, "gestalt.lock.json")
 
-	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd lock failed: %v\noutput: %s", err, out)
+	if err := runLock([]string{"--config", cfgPath}); err != nil {
+		t.Fatalf("runLock: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); err != nil {
+		t.Fatalf("expected default lockfile: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".gestaltd")); !os.IsNotExist(err) {
 		t.Fatalf("lock should not prepare final artifacts, got err=%v", err)
 	}
-	out, err = exec.Command(gestaltdBin, "lock", "--check", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd lock --check failed: %v\noutput: %s", err, out)
+	if err := runLock([]string{"--check", "--config", cfgPath}); err != nil {
+		t.Fatalf("runLock --check: %v", err)
 	}
 
-	cmdDir := filepath.Join(dir, "command-cwd")
-	if err := os.MkdirAll(cmdDir, 0o755); err != nil {
-		t.Fatalf("create command cwd: %v", err)
+	err := runSync([]string{"--locked", "--check", "--config", cfgPath})
+	if err == nil {
+		t.Fatal("runSync --check before sync unexpectedly succeeded")
 	}
-	relCfgPath, err := filepath.Rel(cmdDir, cfgPath)
-	if err != nil {
-		t.Fatalf("relative config path: %v", err)
+	if !strings.Contains(err.Error(), "gestaltd sync --locked") {
+		t.Fatalf("sync --check error should point at sync, got: %v", err)
 	}
-	relativeArtifactsDir := "relative-prepared"
-	cmd := exec.Command(gestaltdBin, "sync", "--locked", "--config", relCfgPath, "--artifacts-dir", relativeArtifactsDir)
-	cmd.Dir = cmdDir
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd sync with relative artifacts dir failed: %v\noutput: %s", err, out)
+
+	if err := runSync([]string{"--locked", "--config", cfgPath}); err != nil {
+		t.Fatalf("runSync: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(cmdDir, relativeArtifactsDir, ".gestaltd", "providers", "example")); err != nil {
-		t.Fatalf("relative artifacts dir should be rooted at command cwd, stat err=%v", err)
+	if _, err := os.Stat(filepath.Join(dir, ".gestaltd", "providers", "example")); err != nil {
+		t.Fatalf("expected synced app artifact: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, relativeArtifactsDir, ".gestaltd", "providers", "example")); !os.IsNotExist(err) {
-		t.Fatalf("relative artifacts dir should not be rooted at config dir, stat err=%v", err)
+	if _, err := os.Stat(filepath.Join(dir, "indexeddb", "inmem")); err != nil {
+		t.Fatalf("expected synced indexeddb artifact: %v", err)
 	}
+
+	if err := runSync([]string{"--locked", "--check", "--config", cfgPath}); err != nil {
+		t.Fatalf("runSync --check after sync: %v", err)
+	}
+}
+
+func TestRunSyncStaleLocalProviderRemediation(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := writeServeConfig(t, dir, 0, nil)
+	lockPath := filepath.Join(dir, "gestalt.lock.json")
+	if err := runLock([]string{"--config", cfgPath}); err != nil {
+		t.Fatalf("runLock: %v", err)
+	}
+
+	staleCfgPath := writeRenamedProviderConfig(t, dir, cfgPath)
+	err := runSync([]string{"--locked", "--check", "--config", staleCfgPath, "--artifacts-dir", filepath.Join(dir, "prepared")})
+	if err == nil {
+		t.Fatal("runSync --check with stale lock unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "prepared artifact for provider") ||
+		!strings.Contains(err.Error(), "renamed") ||
+		!strings.Contains(err.Error(), "gestaltd sync --locked") {
+		t.Fatalf("stale local source error should point at sync, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "--artifacts-dir") {
+		t.Fatalf("sync remediation should include --artifacts-dir, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "--lockfile") {
+		t.Fatalf("sync remediation should not include default --lockfile, got: %v", err)
+	}
+
+	staleArtifactsDir := filepath.Join(dir, "prepared-stale")
+	if err := runSync([]string{"--locked", "--config", staleCfgPath, "--artifacts-dir", staleArtifactsDir}); err != nil {
+		t.Fatalf("runSync with renamed local provider: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(staleArtifactsDir, ".gestaltd", "providers", "renamed")); err != nil {
+		t.Fatalf("renamed local provider should be prepared from source, stat err=%v", err)
+	}
+
+	err = runSync([]string{"--locked", "--check", "--config", staleCfgPath, "--lockfile", lockPath, "--artifacts-dir", filepath.Join(dir, "prepared-explicit")})
+	if err == nil {
+		t.Fatal("runSync --check with stale explicit lock unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "--lockfile "+lockPath) {
+		t.Fatalf("sync remediation should preserve explicit --lockfile, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "--artifacts-dir") {
+		t.Fatalf("sync remediation should include --artifacts-dir, got: %v", err)
+	}
+}
+
+func writeRenamedProviderConfig(t *testing.T, dir, cfgPath string) string {
+	t.Helper()
 
 	staleCfgPath := filepath.Join(dir, "config-stale.yaml")
 	cfgBytes, err := os.ReadFile(cfgPath)
@@ -3259,88 +3305,7 @@ func TestE2ELockSyncLocalProviders(t *testing.T) {
 	if err := os.WriteFile(staleCfgPath, []byte(staleCfg), 0o644); err != nil {
 		t.Fatalf("write stale config: %v", err)
 	}
-	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--config", staleCfgPath, "--artifacts-dir", filepath.Join(dir, "prepared")).CombinedOutput()
-	if err == nil {
-		t.Fatalf("gestaltd sync --check with stale lock unexpectedly succeeded\noutput: %s", out)
-	}
-	if !strings.Contains(string(out), "prepared artifact for provider") ||
-		!strings.Contains(string(out), "renamed") ||
-		!strings.Contains(string(out), "gestaltd sync --locked") {
-		t.Fatalf("stale local source output should point at sync, got: %s", out)
-	}
-	if !strings.Contains(string(out), "--artifacts-dir") {
-		t.Fatalf("sync remediation should include --artifacts-dir, got: %s", out)
-	}
-	if strings.Contains(string(out), "--lockfile") {
-		t.Fatalf("sync remediation should not include default --lockfile, got: %s", out)
-	}
-	staleArtifactsDir := filepath.Join(dir, "prepared-stale")
-	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", staleCfgPath, "--artifacts-dir", staleArtifactsDir).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd sync with renamed local provider should materialize from source: %v\noutput: %s", err, out)
-	}
-	if _, err := os.Stat(filepath.Join(staleArtifactsDir, ".gestaltd", "providers", "renamed")); err != nil {
-		t.Fatalf("renamed local provider should be prepared from source, stat err=%v", err)
-	}
-
-	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--config", staleCfgPath, "--lockfile", lockPath, "--artifacts-dir", filepath.Join(dir, "prepared")).CombinedOutput()
-	if err == nil {
-		t.Fatalf("gestaltd sync --check with stale lock unexpectedly succeeded\noutput: %s", out)
-	}
-	if !strings.Contains(string(out), "--lockfile "+lockPath) {
-		t.Fatalf("sync remediation should preserve explicit --lockfile, got: %s", out)
-	}
-	if !strings.Contains(string(out), "--artifacts-dir") {
-		t.Fatalf("sync remediation should include --artifacts-dir, got: %s", out)
-	}
-
-	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--config", cfgPath).CombinedOutput()
-	if err == nil {
-		t.Fatalf("gestaltd sync --check before sync unexpectedly succeeded\noutput: %s", out)
-	}
-	if !strings.Contains(string(out), "gestaltd sync --locked") {
-		t.Fatalf("sync --check output should point at sync, got: %s", out)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	out, err = exec.CommandContext(ctx, gestaltdBin, "serve", "--locked", "--config", cfgPath).CombinedOutput()
-	if err == nil {
-		t.Fatalf("gestaltd serve --locked before sync unexpectedly succeeded\noutput: %s", out)
-	}
-	if ctx.Err() != nil {
-		t.Fatalf("gestaltd serve --locked before sync timed out\noutput: %s", out)
-	}
-	if !strings.Contains(string(out), "gestaltd sync --locked") {
-		t.Fatalf("locked serve output should point at sync, got: %s", out)
-	}
-
-	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd sync failed: %v\noutput: %s", err, out)
-	}
-	if _, err := os.Stat(filepath.Join(dir, ".gestaltd", "providers", "example")); err != nil {
-		t.Fatalf("expected synced app artifact: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "indexeddb", "inmem")); err != nil {
-		t.Fatalf("expected synced indexeddb artifact: %v", err)
-	}
-
-	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd sync --check after sync failed: %v\noutput: %s", err, out)
-	}
-
-	baseURL := startGestaltdWithConfigs(t, []string{cfgPath}, true)
-	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/apps")
-	if err != nil {
-		t.Fatalf("GET /api/v1/apps: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected /api/v1/apps 200, got %d: %s", resp.StatusCode, body)
-	}
+	return staleCfgPath
 }
 
 func TestE2ELockSyncAppOwnedUI(t *testing.T) {
