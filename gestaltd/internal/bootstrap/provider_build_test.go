@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -73,6 +72,9 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 			},
 		},
 		Providers: config.ProvidersConfig{
+			Workflow: map[string]*config.ProviderEntry{
+				"temporal": {Source: config.ProviderSource{Path: "stub"}},
+			},
 			Agent: map[string]*config.ProviderEntry{
 				"managed": {Source: config.ProviderSource{Path: "stub"}},
 			},
@@ -82,6 +84,7 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 	if err != nil {
 		t.Fatalf("newWorkflowRuntime: %v", err)
 	}
+	workflowRuntime.InitProviderPlaceholders(cfg.Providers.Workflow)
 	agentRuntime, err := newAgentRuntime(cfg, workflowRuntime.StartupWaitTracker())
 	if err != nil {
 		t.Fatalf("newAgentRuntime: %v", err)
@@ -102,6 +105,21 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 		t.Fatalf("prepareProviderBuilds: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(builds.providers) })
+	factories := NewFactoryRegistry()
+	factories.Workflow = func(ctx context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ Deps) (coreworkflow.Provider, error) {
+		provider, err := builds.providers.Get("caller")
+		if err != nil {
+			return nil, err
+		}
+		_, err = provider.Execute(invocation.WithCallerProvider(ctx, invocation.ProviderKindWorkflow, name), "sync", nil, "")
+		if err != nil {
+			return nil, err
+		}
+		return startupTestWorkflowProvider{}, nil
+	}
+	factories.Agent = func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (coreagent.Provider, error) {
+		return providerBuildOrderingAgentProvider{}, nil
+	}
 
 	var builderStarted atomic.Bool
 	builderWaitingForAgent := make(chan struct{})
@@ -175,127 +193,18 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 		t.Fatal("provider build finished before configured agent provider was published")
 	default:
 	}
-	agentRuntime.PublishProvider("managed", providerBuildOrderingAgentProvider{})
+	workflows, agents, err := buildWorkflowsAndAgents(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildWorkflowsAndAgents: %v", err)
+	}
+	defer func() { _ = closeWorkflows(workflows...) }()
+	defer func() { _ = closeAgents(agents...) }()
 	<-ready
 	if errs := errResolver(); len(errs) != 0 {
 		t.Fatalf("provider build errors = %v, want none", errs)
 	}
 	if !builderStarted.Load() {
 		t.Fatal("provider builder was not started")
-	}
-}
-
-func TestBuildWorkflowsAndAgentsStartsAgentsWhileAppsBuild(t *testing.T) {
-	t.Parallel()
-
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "caller",
-		Operations: []catalog.CatalogOperation{{
-			ID:     "sync",
-			Method: http.MethodPost,
-		}},
-	})
-	cfg := &config.Config{
-		Apps: map[string]*config.ProviderEntry{
-			"caller": {
-				ResolvedManifest:     newExecutableManifest("Caller", "Calls agents during startup"),
-				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-			},
-		},
-		Providers: config.ProvidersConfig{
-			Workflow: map[string]*config.ProviderEntry{
-				"temporal": {Source: config.ProviderSource{Path: "stub"}},
-			},
-			Agent: map[string]*config.ProviderEntry{
-				"managed": {Source: config.ProviderSource{Path: "stub"}},
-			},
-		},
-	}
-	workflowRuntime, err := newWorkflowRuntime(cfg)
-	if err != nil {
-		t.Fatalf("newWorkflowRuntime: %v", err)
-	}
-	workflowRuntime.InitProviderPlaceholders(cfg.Providers.Workflow)
-	agentRuntime, err := newAgentRuntime(cfg, workflowRuntime.StartupWaitTracker())
-	if err != nil {
-		t.Fatalf("newAgentRuntime: %v", err)
-	}
-	agentManager := newLazyAgentManager()
-	deps := Deps{
-		AgentManager:    agentManager,
-		WorkflowRuntime: workflowRuntime,
-		AgentRuntime:    agentRuntime,
-	}
-	agentManager.SetTarget(agentmanager.New(agentmanager.Config{Agent: agentRuntime}))
-
-	builds, err := prepareProviderBuilds(cfg, NewFactoryRegistry(), deps)
-	if err != nil {
-		t.Fatalf("prepareProviderBuilds: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseProviders(builds.providers) })
-
-	appBuilder := func(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (*ProviderBuildResult, error) {
-		session, err := deps.AgentManager.CreateSession(ctx, &principal.Principal{
-			SubjectID: "user:startup",
-			Kind:      principal.KindUser,
-			Source:    principal.SourceSession,
-		}, coreagent.ManagerCreateSessionRequest{
-			ProviderName: "managed",
-			Model:        "gpt-startup",
-		})
-		if err != nil {
-			return nil, err
-		}
-		if session == nil || session.ProviderName != "managed" {
-			return nil, fmt.Errorf("agent manager returned session %#v, want managed provider", session)
-		}
-		return &ProviderBuildResult{
-			Provider: &coretesting.StubIntegration{
-				N:        name,
-				ConnMode: core.ConnectionModeNone,
-				CatalogVal: &catalog.Catalog{
-					Name: name,
-				},
-			},
-		}, nil
-	}
-	providersReady, _, _, appBuildErrs := builds.Start(context.Background(), deps, appBuilder)
-
-	factories := NewFactoryRegistry()
-	factories.Workflow = func(ctx context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ Deps) (coreworkflow.Provider, error) {
-		provider, err := builds.providers.Get("caller")
-		if err != nil {
-			return nil, err
-		}
-		_, err = provider.Execute(invocation.WithCallerProvider(ctx, invocation.ProviderKindWorkflow, name), "sync", nil, "")
-		if err != nil {
-			return nil, err
-		}
-		return startupTestWorkflowProvider{}, nil
-	}
-	factories.Agent = func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (coreagent.Provider, error) {
-		return providerBuildOrderingAgentProvider{}, nil
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		workflows, agents, err := buildWorkflowsAndAgents(context.Background(), cfg, factories, deps)
-		if err == nil {
-			err = errors.Join(closeWorkflows(workflows...), closeAgents(agents...))
-		}
-		done <- err
-	}()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("buildWorkflowsAndAgents: %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("workflow/app/agent startup waits did not resolve")
-	}
-	<-providersReady
-	if errs := appBuildErrs(); len(errs) != 0 {
-		t.Fatalf("provider build errors = %v, want none", errs)
 	}
 }
 

@@ -1377,26 +1377,21 @@ func waitRuntimeWorkflowProviderReady(ctx context.Context, runtime *workflowRunt
 	return nil
 }
 
-type builtWorkflowProviders struct {
-	providers []coreworkflow.Provider
-	err       error
-}
-
-type builtAgentProviders struct {
-	providers []coreagent.Provider
+type configuredProviderBuilds[T any] struct {
+	providers []T
 	err       error
 }
 
 func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, []coreagent.Provider, error) {
-	workflowCh := make(chan builtWorkflowProviders, 1)
-	agentCh := make(chan builtAgentProviders, 1)
+	workflowCh := make(chan configuredProviderBuilds[coreworkflow.Provider], 1)
+	agentCh := make(chan configuredProviderBuilds[coreagent.Provider], 1)
 	go func() {
 		providers, err := buildWorkflows(ctx, cfg, factories, deps)
-		workflowCh <- builtWorkflowProviders{providers: providers, err: err}
+		workflowCh <- configuredProviderBuilds[coreworkflow.Provider]{providers: providers, err: err}
 	}()
 	go func() {
 		providers, err := buildAgents(ctx, cfg, factories, deps)
-		agentCh <- builtAgentProviders{providers: providers, err: err}
+		agentCh <- configuredProviderBuilds[coreagent.Provider]{providers: providers, err: err}
 	}()
 
 	workflowResult := <-workflowCh
@@ -1415,17 +1410,21 @@ func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories 
 	return workflowResult.providers, agentResult.providers, nil
 }
 
-func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, error) {
-	type workflowBuildResult struct {
-		name     string
-		provider coreworkflow.Provider
-		err      error
-	}
+func buildConfiguredProviders[T any](
+	ctx context.Context,
+	entries map[string]*config.ProviderEntry,
+	build func(context.Context, string, *config.ProviderEntry) (T, error),
+	publish func(string, T),
+	failProvider func(string, error),
+	failPending func(error),
+	closeProviders func(...T) error,
+	wrapErr func(string, error) error,
+) ([]T, error) {
 	var pending []struct {
 		name  string
 		entry *config.ProviderEntry
 	}
-	for name, entry := range cfg.Providers.Workflow {
+	for name, entry := range entries {
 		if entry == nil {
 			continue
 		}
@@ -1437,90 +1436,103 @@ func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryR
 	if len(pending) == 0 {
 		return nil, nil
 	}
-	results := make(chan workflowBuildResult, len(pending))
+	type buildResult struct {
+		name     string
+		provider T
+		err      error
+	}
+	results := make(chan buildResult, len(pending))
 	for _, item := range pending {
 		go func(name string, entry *config.ProviderEntry) {
-			value, err := buildWorkflow(ctx, name, entry, factories, deps)
-			results <- workflowBuildResult{name: name, provider: value, err: err}
+			provider, err := build(ctx, name, entry)
+			results <- buildResult{name: name, provider: provider, err: err}
 		}(item.name, item.entry)
 	}
 
-	var extraWorkflows []coreworkflow.Provider
+	var providers []T
 	var errs []error
 	for range pending {
 		result := <-results
 		if result.err != nil {
-			if deps.WorkflowRuntime != nil {
-				deps.WorkflowRuntime.FailProvider(result.name, result.err)
-				deps.WorkflowRuntime.FailPendingProviders(result.err)
+			if failProvider != nil {
+				failProvider(result.name, result.err)
 			}
-			errs = append(errs, fmt.Errorf("bootstrap: workflow from resource %q: %w", result.name, result.err))
+			if failPending != nil {
+				failPending(result.err)
+			}
+			if wrapErr != nil {
+				errs = append(errs, wrapErr(result.name, result.err))
+			} else {
+				errs = append(errs, result.err)
+			}
 			continue
 		}
-		if deps.WorkflowRuntime != nil {
-			deps.WorkflowRuntime.PublishProvider(result.name, result.provider)
+		if publish != nil {
+			publish(result.name, result.provider)
 		}
-		extraWorkflows = append(extraWorkflows, result.provider)
+		providers = append(providers, result.provider)
 	}
 	if len(errs) > 0 {
-		_ = closeWorkflows(extraWorkflows...)
+		if closeProviders != nil {
+			_ = closeProviders(providers...)
+		}
 		return nil, errors.Join(errs...)
 	}
-	return extraWorkflows, nil
+	return providers, nil
+}
+
+func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, error) {
+	return buildConfiguredProviders(ctx, cfg.Providers.Workflow,
+		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreworkflow.Provider, error) {
+			return buildWorkflow(ctx, name, entry, factories, deps)
+		},
+		func(name string, provider coreworkflow.Provider) {
+			if deps.WorkflowRuntime != nil {
+				deps.WorkflowRuntime.PublishProvider(name, provider)
+			}
+		},
+		func(name string, err error) {
+			if deps.WorkflowRuntime != nil {
+				deps.WorkflowRuntime.FailProvider(name, err)
+			}
+		},
+		func(err error) {
+			if deps.WorkflowRuntime != nil {
+				deps.WorkflowRuntime.FailPendingProviders(err)
+			}
+		},
+		closeWorkflows,
+		func(name string, err error) error {
+			return fmt.Errorf("bootstrap: workflow from resource %q: %w", name, err)
+		},
+	)
 }
 
 func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreagent.Provider, error) {
-	type agentBuildResult struct {
-		name     string
-		provider coreagent.Provider
-		err      error
-	}
-	var pending []struct {
-		name  string
-		entry *config.ProviderEntry
-	}
-	for name, entry := range cfg.Providers.Agent {
-		if entry == nil {
-			continue
-		}
-		pending = append(pending, struct {
-			name  string
-			entry *config.ProviderEntry
-		}{name: name, entry: entry})
-	}
-	if len(pending) == 0 {
-		return nil, nil
-	}
-	results := make(chan agentBuildResult, len(pending))
-	for _, item := range pending {
-		go func(name string, entry *config.ProviderEntry) {
-			value, err := buildAgent(ctx, name, entry, factories, deps)
-			results <- agentBuildResult{name: name, provider: value, err: err}
-		}(item.name, item.entry)
-	}
-
-	var extraAgents []coreagent.Provider
-	var errs []error
-	for range pending {
-		result := <-results
-		if result.err != nil {
+	return buildConfiguredProviders(ctx, cfg.Providers.Agent,
+		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreagent.Provider, error) {
+			return buildAgent(ctx, name, entry, factories, deps)
+		},
+		func(name string, provider coreagent.Provider) {
 			if deps.AgentRuntime != nil {
-				deps.AgentRuntime.FailProvider(result.name, result.err)
-				deps.AgentRuntime.FailPendingProviders(result.err)
+				deps.AgentRuntime.PublishProvider(name, provider)
 			}
-			errs = append(errs, fmt.Errorf("bootstrap: agent from resource %q: %w", result.name, result.err))
-			continue
-		}
-		if deps.AgentRuntime != nil {
-			deps.AgentRuntime.PublishProvider(result.name, result.provider)
-		}
-		extraAgents = append(extraAgents, result.provider)
-	}
-	if len(errs) > 0 {
-		_ = closeAgents(extraAgents...)
-		return nil, errors.Join(errs...)
-	}
-	return extraAgents, nil
+		},
+		func(name string, err error) {
+			if deps.AgentRuntime != nil {
+				deps.AgentRuntime.FailProvider(name, err)
+			}
+		},
+		func(err error) {
+			if deps.AgentRuntime != nil {
+				deps.AgentRuntime.FailPendingProviders(err)
+			}
+		},
+		closeAgents,
+		func(name string, err error) error {
+			return fmt.Errorf("bootstrap: agent from resource %q: %w", name, err)
+		},
+	)
 }
 
 func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.TelemetryProvider, error) {
