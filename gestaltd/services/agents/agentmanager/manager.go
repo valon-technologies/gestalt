@@ -99,8 +99,7 @@ func NewAgentProviderNotAvailableError(name string) error {
 }
 
 type AgentControl interface {
-	ResolveProvider(name string) (coreagent.Provider, error)
-	ResolveProviderSelection(name string) (providerName string, provider coreagent.Provider, err error)
+	ResolveProvider(ctx context.Context, name string) (providerName string, provider coreagent.Provider, err error)
 	ProviderNames() []string
 }
 
@@ -138,7 +137,6 @@ type Config struct {
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
-	AppInvokes        map[string][]invocation.AppInvocationDependency
 	AgentConnections  map[string][]string
 	SessionStart      map[string]*coreagent.SessionStartConfig
 	// DefaultToolNarrowingThreshold controls when implicit default wildcard
@@ -157,7 +155,6 @@ type Manager struct {
 	authorizer                    authorization.RuntimeAuthorizer
 	defaultConnection             map[string]string
 	catalogConnection             map[string]string
-	appInvokes                    map[string][]invocation.AppInvocationDependency
 	agentConnections              map[string][]string
 	sessionStart                  map[string]*coreagent.SessionStartConfig
 	defaultToolNarrowingThreshold int
@@ -173,7 +170,6 @@ func New(cfg Config) *Manager {
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
-		appInvokes:        invocation.CloneAppInvocationDependencyMap(cfg.AppInvokes),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
 		sessionStart:      cloneSessionStartConfigMap(cfg.SessionStart),
 		defaultToolNarrowingThreshold: effectiveAgentToolNarrowingThreshold(
@@ -424,10 +420,6 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	if err != nil {
 		return nil, err
 	}
-	refs, err = m.applyCallerInvokePolicies(req.CallerAppName, refs)
-	if err != nil {
-		return nil, err
-	}
 	systemTools, err := m.searchWorkflowSystemTools(ctx, p, refs)
 	if err != nil {
 		return nil, err
@@ -479,7 +471,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	if subjectID == "" {
 		return nil, ErrAgentSubjectRequired
 	}
-	providerName, provider, err := m.resolveProviderSelection(req.GetProviderName())
+	providerName, provider, err := m.resolveProvider(ctx, req.GetProviderName())
 	if err != nil {
 		return nil, err
 	}
@@ -762,10 +754,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 		return nil, err
 	}
 	callerAppName := agentCallerAppName(ctx)
-	toolRefs, err = m.applyCallerInvokePolicies(callerAppName, toolRefs)
-	if err != nil {
-		return nil, err
-	}
 	toolSource, err := validateProviderTurnToolSource(agentToolSourceModeFromProtoStrict(req.GetToolSource()))
 	if err != nil {
 		return nil, err
@@ -1087,18 +1075,11 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 	return interaction, nil
 }
 
-func (m *Manager) resolveProviderSelection(providerName string) (string, coreagent.Provider, error) {
+func (m *Manager) resolveProvider(ctx context.Context, providerName string) (string, coreagent.Provider, error) {
 	if m == nil || m.agent == nil {
 		return "", nil, ErrAgentNotConfigured
 	}
-	return m.agent.ResolveProviderSelection(strings.TrimSpace(providerName))
-}
-
-func (m *Manager) resolveProviderByName(providerName string) (coreagent.Provider, error) {
-	if m == nil || m.agent == nil {
-		return nil, ErrAgentNotConfigured
-	}
-	return m.agent.ResolveProvider(strings.TrimSpace(providerName))
+	return m.agent.ResolveProvider(ctx, strings.TrimSpace(providerName))
 }
 
 type namedAgentProvider struct {
@@ -1127,13 +1108,13 @@ type accessibleAgentTurn struct {
 	sessionOwned bool
 }
 
-func (m *Manager) providerCandidates(providerName string) ([]namedAgentProvider, error) {
+func (m *Manager) providerCandidates(ctx context.Context, providerName string) ([]namedAgentProvider, error) {
 	if m == nil || m.agent == nil {
 		return nil, ErrAgentNotConfigured
 	}
 	providerName = strings.TrimSpace(providerName)
 	if providerName != "" {
-		provider, err := m.resolveProviderByName(providerName)
+		_, provider, err := m.resolveProvider(ctx, providerName)
 		if err != nil {
 			return nil, err
 		}
@@ -1146,7 +1127,7 @@ func (m *Manager) providerCandidates(providerName string) ([]namedAgentProvider,
 		if name == "" {
 			continue
 		}
-		provider, err := m.resolveProviderByName(name)
+		_, provider, err := m.resolveProvider(ctx, name)
 		if err != nil {
 			return nil, err
 		}
@@ -1155,10 +1136,10 @@ func (m *Manager) providerCandidates(providerName string) ([]namedAgentProvider,
 	return candidates, nil
 }
 
-func (m *Manager) directReadProviderCandidates(providerName string) ([]namedAgentProvider, error, error) {
+func (m *Manager) directReadProviderCandidates(ctx context.Context, providerName string) ([]namedAgentProvider, error, error) {
 	providerName = strings.TrimSpace(providerName)
 	if providerName != "" {
-		candidates, err := m.providerCandidates(providerName)
+		candidates, err := m.providerCandidates(ctx, providerName)
 		return candidates, nil, err
 	}
 	if m == nil || m.agent == nil {
@@ -1172,7 +1153,7 @@ func (m *Manager) directReadProviderCandidates(providerName string) ([]namedAgen
 		if name == "" {
 			continue
 		}
-		provider, err := m.resolveProviderByName(name)
+		_, provider, err := m.resolveProvider(ctx, name)
 		if err != nil {
 			if agentProviderReadFallbackAllowed(err) {
 				retainedErr = retainAgentProviderReadError(retainedErr, err)
@@ -1186,7 +1167,7 @@ func (m *Manager) directReadProviderCandidates(providerName string) ([]namedAgen
 }
 
 func (m *Manager) authorizedProviderCandidates(ctx context.Context, p *principal.Principal, providerName string) ([]namedAgentProvider, error) {
-	candidates, err := m.providerCandidates(providerName)
+	candidates, err := m.providerCandidates(ctx, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -1214,7 +1195,7 @@ func (m *Manager) findAccessibleSession(ctx context.Context, p *principal.Princi
 }
 
 func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*accessibleAgentSession, error) {
-	candidates, retainedErr, err := m.directReadProviderCandidates(providerName)
+	candidates, retainedErr, err := m.directReadProviderCandidates(ctx, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -1281,7 +1262,7 @@ func (m *Manager) findAccessibleTurn(ctx context.Context, p *principal.Principal
 }
 
 func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principal.Principal, turnID, providerName, expectedSessionID string) (*accessibleAgentTurn, error) {
-	candidates, retainedErr, err := m.directReadProviderCandidates(providerName)
+	candidates, retainedErr, err := m.directReadProviderCandidates(ctx, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -1386,7 +1367,7 @@ func (m *Manager) findOwnedSession(ctx context.Context, p *principal.Principal, 
 }
 
 func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*ownedAgentSession, error) {
-	candidates, retainedErr, err := m.directReadProviderCandidates(providerName)
+	candidates, retainedErr, err := m.directReadProviderCandidates(ctx, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -3749,127 +3730,12 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d] global search ref cannot include operation, connection, instance, credential mode, runAs, runAs external identity, title, or description", invocation.ErrProviderNotFound, idx)
 			}
 		}
-		if ref.RunAsExternalIdentity != nil && ref.RunAs == nil {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires runAs.subject", invocation.ErrInvalidInvocation, idx)
+		if ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d] runAs delegation is not supported for provider tool refs", invocation.ErrAuthorizationDenied, idx)
 		}
 		out = append(out, ref)
 	}
 	return out, nil
-}
-
-func (m *Manager) applyCallerInvokePolicies(callerAppName string, refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
-	callerAppName = strings.TrimSpace(callerAppName)
-	if len(refs) == 0 || m == nil {
-		return refs, nil
-	}
-	modes := make(map[string]core.ConnectionMode)
-	runAsSubjects := make(map[string]*core.RunAsSubject)
-	runAsExternalIdentities := make(map[string]*core.ExternalIdentityRef)
-	runAsExplicitOnly := make(map[string]bool)
-	if callerAppName != "" {
-		for _, invoke := range m.appInvokes[callerAppName] {
-			if strings.TrimSpace(invoke.Surface) != "" {
-				continue
-			}
-			appName := strings.TrimSpace(invoke.App)
-			operation := strings.TrimSpace(invoke.Operation)
-			if appName == "" || operation == "" {
-				continue
-			}
-			mode, err := normalizeAgentToolCredentialMode(invoke.CredentialMode)
-			if err != nil {
-				return nil, err
-			}
-			if mode != "" {
-				modes[agentToolInvokeKey(appName, operation)] = mode
-			}
-			if runAs := core.NormalizeRunAsSubject(invoke.RunAs); runAs != nil {
-				key := agentToolInvokeKey(appName, operation)
-				runAsSubjects[key] = runAs
-				runAsExplicitOnly[key] = invoke.RunAsExplicitOnly
-				if identity := core.NormalizeExternalIdentityRef(invoke.RunAsExternalIdentity); identity != nil {
-					runAsExternalIdentities[key] = identity
-				}
-			}
-		}
-	}
-	out := append([]coreagent.ToolRef(nil), refs...)
-	for i := range out {
-		operation := strings.TrimSpace(out[i].Operation)
-		if out[i].CredentialMode != "" && callerAppName == "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a caller app declaration", invocation.ErrAuthorizationDenied, i)
-		}
-		if out[i].RunAs != nil && callerAppName == "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a caller app declaration", invocation.ErrAuthorizationDenied, i)
-		}
-		if out[i].RunAsExternalIdentity != nil && callerAppName == "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires a caller app declaration", invocation.ErrAuthorizationDenied, i)
-		}
-		if operation == "" {
-			if out[i].CredentialMode != "" {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires an exact operation", invocation.ErrAuthorizationDenied, i)
-			}
-			if out[i].RunAs != nil {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires an exact operation", invocation.ErrAuthorizationDenied, i)
-			}
-			if out[i].RunAsExternalIdentity != nil {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires an exact operation", invocation.ErrAuthorizationDenied, i)
-			}
-			continue
-		}
-		key := agentToolInvokeKey(out[i].App, operation)
-		mode, hasMode := modes[key]
-		runAs, hasRunAs := runAsSubjects[key]
-		externalIdentity, hasExternalIdentity := runAsExternalIdentities[key]
-		explicitOnly := runAsExplicitOnly[key]
-		requestedRunAs := out[i].RunAs != nil
-		requestedExternalIdentity := out[i].RunAsExternalIdentity != nil
-		requestedDelegation := requestedRunAs || requestedExternalIdentity
-		if !hasMode && !hasRunAs && !hasExternalIdentity {
-			if out[i].CredentialMode != "" {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
-			}
-			if out[i].RunAs != nil {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
-			}
-			if out[i].RunAsExternalIdentity != nil {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
-			}
-			continue
-		}
-		if hasMode && out[i].CredentialMode != "" && out[i].CredentialMode != mode {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode %q exceeds declared invoke mode %q", invocation.ErrAuthorizationDenied, i, out[i].CredentialMode, mode)
-		}
-		if !hasMode && out[i].CredentialMode != "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
-		}
-		if hasRunAs && out[i].RunAs != nil && !core.RunAsSubjectsMatchIdentity(out[i].RunAs, runAs) {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs exceeds declared invoke delegation", invocation.ErrAuthorizationDenied, i)
-		}
-		if !hasRunAs && out[i].RunAs != nil {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
-		}
-		if hasExternalIdentity && out[i].RunAsExternalIdentity != nil && !core.ExternalIdentityRefsEqual(out[i].RunAsExternalIdentity, externalIdentity) {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity exceeds declared invoke delegation", invocation.ErrAuthorizationDenied, i)
-		}
-		if !hasExternalIdentity && out[i].RunAsExternalIdentity != nil {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
-		}
-		if hasMode {
-			out[i].CredentialMode = mode
-		}
-		if hasRunAs && (!explicitOnly || requestedDelegation) {
-			out[i].RunAs = runAs
-		}
-		if hasExternalIdentity && (!explicitOnly || requestedDelegation) {
-			out[i].RunAsExternalIdentity = externalIdentity
-		}
-	}
-	return out, nil
-}
-
-func agentToolInvokeKey(appName, operation string) string {
-	return strings.TrimSpace(appName) + "\x00" + strings.TrimSpace(operation)
 }
 
 func agentToolRunAsKey(subject *core.RunAsSubject) core.RunAsSubject {

@@ -298,22 +298,14 @@ type managerServerWorkflowControl struct {
 	providers   map[string]coreworkflow.Provider
 }
 
-func (c managerServerWorkflowControl) ResolveProvider(name string) (coreworkflow.Provider, error) {
-	provider := c.providers[strings.TrimSpace(name)]
-	if provider == nil {
-		return nil, errors.New("provider not found")
-	}
-	return provider, nil
-}
-
-func (c managerServerWorkflowControl) ResolveProviderSelection(name string) (string, coreworkflow.Provider, error) {
+func (c managerServerWorkflowControl) ResolveProvider(_ context.Context, name string) (string, coreworkflow.Provider, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = c.defaultName
 	}
-	provider, err := c.ResolveProvider(name)
-	if err != nil {
-		return "", nil, err
+	provider := c.providers[name]
+	if provider == nil {
+		return "", nil, errors.New("provider not found")
 	}
 	return name, provider, nil
 }

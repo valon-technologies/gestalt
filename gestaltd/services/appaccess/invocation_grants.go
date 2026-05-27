@@ -7,8 +7,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
+
+const InvocationGrantAllApps = "*"
 
 type InvocationGrant struct {
 	AllOperations bool
@@ -25,37 +26,10 @@ type invocationGrantClaims struct {
 	Surfaces       []string          `json:"surfaces,omitempty"`
 }
 
-func InvocationDependencyGrants(deps []invocation.AppInvocationDependency) InvocationGrants {
-	if len(deps) == 0 {
-		return nil
+func AllInvocationGrants() InvocationGrants {
+	return InvocationGrants{
+		InvocationGrantAllApps: {AllOperations: true},
 	}
-	grants := make(InvocationGrants, len(deps))
-	for _, dep := range deps {
-		app := strings.TrimSpace(dep.App)
-		operation := strings.TrimSpace(dep.Operation)
-		surface := strings.ToLower(strings.TrimSpace(dep.Surface))
-		if app == "" || (operation == "" && surface == "") {
-			continue
-		}
-		grant := grants[app]
-		if operation != "" {
-			if grant.Operations == nil {
-				grant.Operations = make(map[string]core.ConnectionMode)
-			}
-			grant.Operations[operation] = dep.CredentialMode
-		}
-		if surface != "" {
-			if grant.Surfaces == nil {
-				grant.Surfaces = make(map[string]struct{})
-			}
-			grant.Surfaces[surface] = struct{}{}
-		}
-		grants[app] = grant
-	}
-	if len(grants) == 0 {
-		return nil
-	}
-	return grants
 }
 
 func decodeAppInvocationGrantProto(grants []*proto.AppInvocationGrant) (InvocationGrants, error) {
@@ -214,7 +188,7 @@ func invocationGrantSubset(candidate, allowed InvocationGrants) bool {
 		return true
 	}
 	for plugin, grant := range candidate {
-		allowedGrant, ok := allowed[plugin]
+		allowedGrant, ok := grantForApp(allowed, plugin)
 		if !ok {
 			return false
 		}
@@ -233,6 +207,9 @@ func invocationGrantSubset(candidate, allowed InvocationGrants) bool {
 			}
 		}
 		for surface := range grant.Surfaces {
+			if allowedGrant.AllOperations {
+				continue
+			}
 			if _, ok := allowedGrant.Surfaces[surface]; !ok {
 				return false
 			}
@@ -244,7 +221,7 @@ func invocationGrantSubset(candidate, allowed InvocationGrants) bool {
 func inheritInvocationGrantModes(candidate, parent InvocationGrants) InvocationGrants {
 	out := cloneInvocationGrants(candidate)
 	for plugin, grant := range out {
-		parentGrant, ok := parent[plugin]
+		parentGrant, ok := grantForApp(parent, plugin)
 		if !ok || len(grant.Operations) == 0 {
 			continue
 		}
@@ -258,11 +235,20 @@ func inheritInvocationGrantModes(candidate, parent InvocationGrants) InvocationG
 	return out
 }
 
-func allowsOperation(grants InvocationGrants, plugin, operation string) bool {
-	if len(grants) == 0 {
-		return false
+func grantForApp(grants InvocationGrants, plugin string) (InvocationGrant, bool) {
+	plugin = strings.TrimSpace(plugin)
+	if len(grants) == 0 || plugin == "" {
+		return InvocationGrant{}, false
 	}
-	grant, ok := grants[plugin]
+	if grant, ok := grants[plugin]; ok {
+		return grant, true
+	}
+	grant, ok := grants[InvocationGrantAllApps]
+	return grant, ok
+}
+
+func allowsOperation(grants InvocationGrants, plugin, operation string) bool {
+	grant, ok := grantForApp(grants, plugin)
 	if !ok {
 		return false
 	}
@@ -274,10 +260,7 @@ func allowsOperation(grants InvocationGrants, plugin, operation string) bool {
 }
 
 func operationCredentialMode(grants InvocationGrants, plugin, operation string) core.ConnectionMode {
-	if len(grants) == 0 {
-		return ""
-	}
-	grant, ok := grants[plugin]
+	grant, ok := grantForApp(grants, plugin)
 	if !ok || grant.AllOperations {
 		return ""
 	}
@@ -285,12 +268,12 @@ func operationCredentialMode(grants InvocationGrants, plugin, operation string) 
 }
 
 func allowsSurface(grants InvocationGrants, plugin, surface string) bool {
-	if len(grants) == 0 {
-		return false
-	}
-	grant, ok := grants[plugin]
+	grant, ok := grantForApp(grants, plugin)
 	if !ok {
 		return false
+	}
+	if grant.AllOperations {
+		return true
 	}
 	_, ok = grant.Surfaces[strings.ToLower(strings.TrimSpace(surface))]
 	return ok

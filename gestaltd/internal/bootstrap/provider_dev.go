@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
 func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap[core.Provider], deps Deps) (*providerdev.Manager, error) {
@@ -23,10 +24,10 @@ func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap
 	}
 
 	sharedAttachmentState := cfg.Server.Dev.AttachmentState == config.DevAttachmentStateIndexedDB
-	runtimeHostServiceDescriptors := map[string][]hostServiceBindingDescriptor{}
+	runtimeHostServices := map[string][]runtimehost.HostService{}
 	targets := make([]providerdev.Target, 0, len(cfg.Apps))
 	for name, entry := range cfg.Apps {
-		result := deriveProviderDevTarget(name, entry, providers, deps, runtimeHostServiceDescriptors)
+		result := deriveProviderDevTarget(name, entry, providers, deps, runtimeHostServices)
 		switch result.state {
 		case providerDevTargetAttachable:
 			targets = append(targets, result.target)
@@ -54,7 +55,7 @@ func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap
 	if err != nil {
 		return nil, err
 	}
-	if err := registerProviderDevPublicHostServices(cfg, manager, deps, targets, runtimeHostServiceDescriptors); err != nil {
+	if err := registerProviderDevPublicHostServices(cfg, manager, deps, targets, runtimeHostServices); err != nil {
 		_ = manager.Close()
 		return nil, err
 	}
@@ -76,7 +77,7 @@ type providerDevTargetResult struct {
 	err    error
 }
 
-func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers *registry.ProviderMap[core.Provider], deps Deps, runtimeHostServiceDescriptors map[string][]hostServiceBindingDescriptor) providerDevTargetResult {
+func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers *registry.ProviderMap[core.Provider], deps Deps, runtimeHostServices map[string][]runtimehost.HostService) providerDevTargetResult {
 	if entry == nil {
 		return providerDevTargetResult{state: providerDevTargetUnsupported, reason: "missing config entry"}
 	}
@@ -121,7 +122,7 @@ func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers
 			Config: pluginConfig,
 			UIPath: strings.TrimSpace(entry.MountPath),
 			RuntimeEnv: func(sessionID string) (providerdev.RuntimeEnv, error) {
-				return buildProviderDevRuntimeEnv(targetName, targetEntry, deps, sessionID, runtimeHostServiceDescriptors[targetName])
+				return buildProviderDevRuntimeEnv(targetName, targetEntry, deps, sessionID, runtimeHostServices[targetName])
 			},
 		},
 	}
@@ -165,7 +166,7 @@ func providerDevEntryIsLocal(entry *config.ProviderEntry) bool {
 	return entry != nil && (entry.HasLocalSource() || entry.HasLocalReleaseSource())
 }
 
-func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps Deps, sessionID string, hostServices []hostServiceBindingDescriptor) (providerdev.RuntimeEnv, error) {
+func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps Deps, sessionID string, hostServices []runtimehost.HostService) (providerdev.RuntimeEnv, error) {
 	env := withRuntimeSessionEnv(map[string]string{}, sessionID)
 	env = withHostServiceTLSCAEnv(env, deps)
 	bindingEnv, _, err := mergeHostedRuntimeHostServiceRelayEnv(name, sessionID, hostServices, deps)
@@ -196,7 +197,7 @@ func (v providerDevHostServiceVerifier) VerifyHostServiceSession(ctx context.Con
 	return v.manager.VerifyHostServiceSession(ctx, v.provider, sessionID)
 }
 
-func registerProviderDevPublicHostServices(cfg *config.Config, manager *providerdev.Manager, deps Deps, targets []providerdev.Target, runtimeHostServiceDescriptors map[string][]hostServiceBindingDescriptor) error {
+func registerProviderDevPublicHostServices(cfg *config.Config, manager *providerdev.Manager, deps Deps, targets []providerdev.Target, runtimeHostServices map[string][]runtimehost.HostService) error {
 	if cfg == nil || manager == nil || deps.PublicHostServices == nil {
 		return nil
 	}
@@ -211,28 +212,19 @@ func registerProviderDevPublicHostServices(cfg *config.Config, manager *provider
 		if entry == nil || !entry.HasResolvedManifest() {
 			continue
 		}
-		hostServices, _, cleanup, err := buildRuntimeHostServices(name, entry, deps)
+		hostServices, _, err := buildProviderHostServices(name, deps)
 		if err != nil {
-			if cleanup != nil {
-				cleanup()
-			}
 			return fmt.Errorf("provider dev public host services %q: %w", name, err)
 		}
 		if len(hostServices) == 0 {
-			if cleanup != nil {
-				cleanup()
-			}
 			continue
 		}
-		if runtimeHostServiceDescriptors != nil {
-			runtimeHostServiceDescriptors[name] = hostServiceBindingDescriptorsFromConfigured(hostServices)
+		if runtimeHostServices != nil {
+			runtimeHostServices[name] = slices.Clone(hostServices)
 		}
 		registration := deps.PublicHostServices.RegisterVerified(name, providerDevHostServiceVerifier{manager: manager, provider: name}, hostServices...)
 		manager.AddCleanup(func() {
 			registration.Unregister()
-			if cleanup != nil {
-				cleanup()
-			}
 		})
 	}
 	return nil

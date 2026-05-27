@@ -11,11 +11,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
 
 // Validate loads daemon dependencies and integration factories without
@@ -37,41 +39,42 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		warnings = w.Warnings()
 	}
 
-	providers, providersReady, _, _, errResolver, err := buildProvidersAsync(
-		ctx,
-		cfg,
-		factories,
-		prepared.Deps,
-		buildProviderForValidation,
-	)
+	providerBuilds, err := prepareProviderBuilds(cfg, factories, prepared.Deps)
 	if err != nil {
 		return warnings, err
 	}
+	providers := providerBuilds.providers
+	var (
+		providersReady <-chan struct{}
+		errResolver    func() []error
+	)
 	defer func() {
-		<-providersReady
+		if providersReady != nil {
+			<-providersReady
+		}
 		_ = CloseProviders(providers)
 	}()
 	connMaps, err := BuildConnectionMaps(cfg)
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return warnings, err
 	}
 	connRuntime, err := BuildConnectionRuntime(cfg)
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return warnings, err
 	}
 	if err := ValidateConnectionRuntimeCredentials(ctx, prepared.Services.ExternalCredentials, connRuntime); err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return warnings, err
 	}
 	if _, _, err := cfg.SelectedAuthorizationProvider(); err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return warnings, err
 	}
 	authz, err := authorization.New(config.AuthorizationStaticConfig(cfg.Authorization, cfg.Apps))
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return warnings, err
 	}
 	defer func() { _ = authz.Close() }()
@@ -82,15 +85,44 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 	)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
-	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
+	workflowTools := newWorkflowSystemTools(prepared.WorkflowManager, prepared.Deps.WorkflowRuntime)
+	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)
+	prepared.WorkflowManager.SetTarget(workflowmanager.New(workflowmanager.Config{
+		Providers:         providers,
+		Workflow:          prepared.Deps.WorkflowRuntime,
+		Agent:             prepared.Deps.AgentRuntime,
+		AgentManager:      prepared.AgentManager,
+		Invoker:           sharedInvoker,
+		Authorizer:        authz,
+		DefaultConnection: connMaps.DefaultConnection,
+		CatalogConnection: connMaps.APIConnection,
+	}))
+	prepared.AgentManager.SetTarget(agentmanager.New(agentmanager.Config{
+		Providers:                     providers,
+		Agent:                         prepared.Deps.AgentRuntime,
+		WorkflowTools:                 workflowTools,
+		RunGrants:                     prepared.Deps.AgentRunGrants,
+		Invoker:                       sharedInvoker,
+		Authorizer:                    authz,
+		DefaultConnection:             connMaps.DefaultConnection,
+		CatalogConnection:             connMaps.APIConnection,
+		AgentConnections:              agentConnectionBindings(cfg),
+		SessionStart:                  agentSessionStartConfigs(cfg),
+		DefaultToolNarrowingThreshold: cfg.Server.Agent.DefaultToolNarrowingThreshold,
+	}))
+	prepared.Deps.AgentRuntime.SetToolSearcher(prepared.AgentManager)
+	prepared.AppInvocation.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", nil, invocation.WithoutRateLimit()))
+	providersReady, _, _, errResolver = providerBuilds.Start(ctx, prepared.Deps, buildProviderForValidation)
+	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
+		if providersReady != nil {
+			<-providersReady
+		}
+		_ = closeWorkflows(extraWorkflows...)
+		_ = closeAgents(extraAgents...)
 		return warnings, err
 	}
 	defer func() { _ = closeWorkflows(extraWorkflows...) }()
-	extraAgents, err := buildAgents(ctx, cfg, factories, prepared.Deps)
-	if err != nil {
-		return warnings, err
-	}
 	defer func() { _ = closeAgents(extraAgents...) }()
 	<-providersReady
 	if errs := errResolver(); len(errs) > 0 {

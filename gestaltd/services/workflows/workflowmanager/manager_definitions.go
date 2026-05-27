@@ -27,7 +27,7 @@ func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, 
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
+	providerName, provider, err := m.resolveProvider(ctx, strings.TrimSpace(req.ProviderName))
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 	providerName := existing.ProviderName
 	provider := existing.provider
 	if selected := strings.TrimSpace(req.ProviderName); selected != "" {
-		selectedProviderName, _, err := m.resolveProviderSelection(selected)
+		selectedProviderName, _, err := m.resolveProvider(ctx, selected)
 		if err != nil {
 			return nil, err
 		}
@@ -126,7 +126,7 @@ func (m *Manager) findDefinition(ctx context.Context, definitionID, providerSele
 		return nil, core.ErrNotFound
 	}
 	if providerSelection = strings.TrimSpace(providerSelection); providerSelection != "" {
-		providerName, provider, err := m.resolveProviderSelection(providerSelection)
+		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
 		if err != nil {
 			return nil, err
 		}
@@ -140,7 +140,7 @@ func (m *Manager) findDefinition(ctx context.Context, definitionID, providerSele
 	var match *ManagedDefinition
 	var firstErr error
 	for _, providerName := range m.providerNames() {
-		provider, err := m.resolveProviderByName(providerName)
+		_, provider, err := m.resolveProvider(ctx, providerName)
 		if err != nil {
 			return nil, err
 		}

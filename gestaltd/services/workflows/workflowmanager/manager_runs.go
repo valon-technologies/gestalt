@@ -293,7 +293,7 @@ func (m *Manager) findRun(ctx context.Context, runID, providerSelection string) 
 		return nil, core.ErrNotFound
 	}
 	if providerSelection = strings.TrimSpace(providerSelection); providerSelection != "" {
-		providerName, provider, err := m.resolveProviderSelection(providerSelection)
+		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
 		if err != nil {
 			return nil, err
 		}
@@ -306,7 +306,7 @@ func (m *Manager) findRun(ctx context.Context, runID, providerSelection string) 
 	var match *ManagedRun
 	var firstErr error
 	for _, providerName := range m.providerNames() {
-		provider, err := m.resolveProviderByName(providerName)
+		_, provider, err := m.resolveProvider(ctx, providerName)
 		if err != nil {
 			return nil, err
 		}

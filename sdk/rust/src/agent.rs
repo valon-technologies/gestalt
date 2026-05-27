@@ -556,6 +556,7 @@ pub struct CreateAgentProviderSessionRequest {
     pub subject: Option<Subject>,
     pub session_start: Option<AgentSessionStartConfig>,
     pub prepared_workspace: Option<AgentPreparedWorkspace>,
+    pub invocation_token: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -584,6 +585,7 @@ pub struct AgentSessionStartHookOutput {
 pub struct GetAgentProviderSessionRequest {
     pub session_id: String,
     pub subject: Option<Subject>,
+    pub invocation_token: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -593,6 +595,7 @@ pub struct ListAgentProviderSessionsRequest {
     pub state: AgentSessionState,
     pub limit: i32,
     pub summary_only: bool,
+    pub invocation_token: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -607,6 +610,7 @@ pub struct UpdateAgentProviderSessionRequest {
     pub state: AgentSessionState,
     pub metadata: Option<AgentJson>,
     pub subject: Option<Subject>,
+    pub invocation_token: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -677,6 +681,7 @@ pub struct CreateAgentProviderTurnRequest {
     pub model_options: Option<AgentJson>,
     pub run_grant: String,
     pub timeout_seconds: i32,
+    pub invocation_token: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -711,6 +716,7 @@ impl AgentOutput {
 pub struct GetAgentProviderTurnRequest {
     pub turn_id: String,
     pub subject: Option<Subject>,
+    pub invocation_token: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -721,6 +727,7 @@ pub struct ListAgentProviderTurnsRequest {
     pub status: AgentExecutionStatus,
     pub limit: i32,
     pub summary_only: bool,
+    pub invocation_token: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -733,6 +740,7 @@ pub struct CancelAgentProviderTurnRequest {
     pub turn_id: String,
     pub reason: String,
     pub subject: Option<Subject>,
+    pub invocation_token: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -754,6 +762,7 @@ pub struct ListAgentProviderTurnEventsRequest {
     pub after_seq: i64,
     pub limit: i32,
     pub subject: Option<Subject>,
+    pub invocation_token: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -765,12 +774,14 @@ pub struct ListAgentProviderTurnEventsResponse {
 pub struct GetAgentProviderInteractionRequest {
     pub interaction_id: String,
     pub subject: Option<Subject>,
+    pub invocation_token: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ListAgentProviderInteractionsRequest {
     pub turn_id: String,
     pub subject: Option<Subject>,
+    pub invocation_token: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -783,6 +794,7 @@ pub struct ResolveAgentProviderInteractionRequest {
     pub interaction_id: String,
     pub resolution: Option<AgentJson>,
     pub subject: Option<Subject>,
+    pub invocation_token: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1731,6 +1743,7 @@ fn create_session_request_from_proto(
                 root: value.root,
                 cwd: value.cwd,
             }),
+        invocation_token: value.invocation_token,
     }
 }
 
@@ -1767,6 +1780,7 @@ fn create_turn_request_from_proto(
         model_options: json_from_struct(value.model_options),
         run_grant: value.run_grant,
         timeout_seconds: value.timeout_seconds,
+        invocation_token: value.invocation_token,
     })
 }
 
@@ -2030,6 +2044,7 @@ where
                 GetAgentProviderSessionRequest {
                     session_id: request.session_id,
                     subject: agent_subject_from_proto(request.subject),
+                    invocation_token: request.invocation_token,
                 }
             })
             .await
@@ -2053,6 +2068,7 @@ where
                     state: AgentSessionState::from_i32_lossy(request.state),
                     limit: request.limit,
                     summary_only: request.summary_only,
+                    invocation_token: request.invocation_token,
                 }
             })
             .await
@@ -2081,6 +2097,7 @@ where
                     state: AgentSessionState::from_i32_lossy(request.state),
                     metadata: json_from_struct(request.metadata),
                     subject: agent_subject_from_proto(request.subject),
+                    invocation_token: request.invocation_token,
                 }
             })
             .await
@@ -2118,6 +2135,7 @@ where
                 GetAgentProviderTurnRequest {
                     turn_id: request.turn_id,
                     subject: agent_subject_from_proto(request.subject),
+                    invocation_token: request.invocation_token,
                 }
             })
             .await
@@ -2142,6 +2160,7 @@ where
                     status: AgentExecutionStatus::from_i32_lossy(request.status),
                     limit: request.limit,
                     summary_only: request.summary_only,
+                    invocation_token: request.invocation_token,
                 }
             })
             .await
@@ -2168,6 +2187,7 @@ where
                     turn_id: request.turn_id,
                     reason: request.reason,
                     subject: agent_subject_from_proto(request.subject),
+                    invocation_token: request.invocation_token,
                 }
             })
             .await
@@ -2190,6 +2210,7 @@ where
                     after_seq: request.after_seq,
                     limit: request.limit,
                     subject: agent_subject_from_proto(request.subject),
+                    invocation_token: request.invocation_token,
                 }
             })
             .await
@@ -2215,6 +2236,7 @@ where
                 GetAgentProviderInteractionRequest {
                     interaction_id: request.interaction_id,
                     subject: agent_subject_from_proto(request.subject),
+                    invocation_token: request.invocation_token,
                 }
             })
             .await
@@ -2236,6 +2258,7 @@ where
                 ListAgentProviderInteractionsRequest {
                     turn_id: request.turn_id,
                     subject: agent_subject_from_proto(request.subject),
+                    invocation_token: request.invocation_token,
                 }
             })
             .await
@@ -2264,6 +2287,7 @@ where
                     interaction_id: request.interaction_id,
                     resolution: json_from_struct(request.resolution),
                     subject: agent_subject_from_proto(request.subject),
+                    invocation_token: request.invocation_token,
                 }
             })
             .await

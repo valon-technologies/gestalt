@@ -293,11 +293,23 @@ func (p *runtimeProvider) StopSession(_ context.Context, sessionID string) error
 }
 
 func (p *runtimeProvider) StartApp(ctx context.Context, req gestalt.StartHostedAppRequest) (gestalt.HostedApp, error) {
+	if req.AppName == "host-services" {
+		socket := strings.TrimSpace(req.Env[gestalt.EnvHostServiceSocket])
+		if socket == "" {
+			return gestalt.HostedApp{}, status.Error(codes.FailedPrecondition, "host service socket missing")
+		}
+		return gestalt.HostedApp{
+			ID:         "hosted-" + req.AppName,
+			SessionID:  req.SessionID,
+			AppName:    req.AppName,
+			DialTarget: "host-service://" + socket,
+		}, nil
+	}
 	if req.Workdir != "" {
 		return gestalt.HostedApp{
 			ID:         "hosted-" + req.AppName,
 			SessionID:  req.SessionID,
-			AppName: req.AppName,
+			AppName:    req.AppName,
 			DialTarget: "workdir://" + req.Workdir,
 		}, nil
 	}

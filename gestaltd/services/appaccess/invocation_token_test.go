@@ -24,7 +24,8 @@ func TestInvocationTokenUsesCallerAppClaim(t *testing.T) {
 		t.Fatalf("NewInvocationTokenManager: %v", err)
 	}
 
-	token, err := manager.MintRootToken(context.Background(), "caller", nil)
+	ctx := invocation.WithCallerProvider(context.Background(), invocation.ProviderKindApp, "caller")
+	token, err := manager.MintRootToken(ctx, "caller", nil)
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
 	}
@@ -43,10 +44,37 @@ func TestInvocationTokenUsesCallerAppClaim(t *testing.T) {
 	if got := claims["caller_app"]; got != "caller" {
 		t.Fatalf("caller_app claim = %v, want caller", got)
 	}
+	if got := claims["caller_provider_kind"]; got != string(invocation.ProviderKindApp) {
+		t.Fatalf("caller_provider_kind claim = %v, want app", got)
+	}
 	for key := range claims {
-		if strings.HasPrefix(key, "caller_") && key != "caller_app" {
+		if strings.HasPrefix(key, "caller_") && key != "caller_app" && key != "caller_provider_kind" {
 			t.Fatalf("unexpected caller claim %q", key)
 		}
+	}
+}
+
+func TestInvocationTokenDoesNotInferCallerProviderKind(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewInvocationTokenManager([]byte("invocation-token-test-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+
+	token, err := manager.MintRootToken(context.Background(), "caller", nil)
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+	claims, err := manager.parseClaims(token)
+	if err != nil {
+		t.Fatalf("parseClaims: %v", err)
+	}
+	if got := claims.CallerApp; got != "caller" {
+		t.Fatalf("caller app = %q, want caller", got)
+	}
+	if got := claims.CallerProviderKind; got != "" {
+		t.Fatalf("caller provider kind = %q, want empty", got)
 	}
 }
 
@@ -84,7 +112,7 @@ func TestInvocationTokenExchangePreservesAbsoluteDelegationExpiry(t *testing.T) 
 		t.Fatalf("MintRootToken: %v", err)
 	}
 
-	childToken, err := manager.ExchangeToken(rootToken, "caller", nil, 15*time.Minute)
+	childToken, err := manager.ExchangeToken(rootToken, nil, 15*time.Minute)
 	if err != nil {
 		t.Fatalf("ExchangeToken(root): %v", err)
 	}
@@ -98,7 +126,7 @@ func TestInvocationTokenExchangePreservesAbsoluteDelegationExpiry(t *testing.T) 
 	}
 
 	now = baseTime.Add(14 * time.Minute)
-	refreshedToken, err := manager.ExchangeToken(childToken, "caller", nil, 15*time.Minute)
+	refreshedToken, err := manager.ExchangeToken(childToken, nil, 15*time.Minute)
 	if err != nil {
 		t.Fatalf("ExchangeToken(child): %v", err)
 	}
@@ -111,7 +139,7 @@ func TestInvocationTokenExchangePreservesAbsoluteDelegationExpiry(t *testing.T) 
 	}
 
 	now = baseTime.Add(16 * time.Minute)
-	if _, err := manager.ExchangeToken(childToken, "caller", nil, time.Minute); err == nil {
+	if _, err := manager.ExchangeToken(childToken, nil, time.Minute); err == nil {
 		t.Fatal("ExchangeToken should reject tokens after the delegation window expires")
 	}
 }
@@ -143,7 +171,7 @@ func TestInvocationTokenExchangeAllowsNarrowingWildcardGrants(t *testing.T) {
 		t.Fatalf("MintRootToken: %v", err)
 	}
 
-	if _, err := manager.ExchangeToken(rootToken, "caller", InvocationGrants{
+	if _, err := manager.ExchangeToken(rootToken, InvocationGrants{
 		"example": {Operations: map[string]core.ConnectionMode{"request_context": ""}},
 	}, time.Minute); err != nil {
 		t.Fatalf("ExchangeToken should allow narrowing wildcard grants: %v", err)
@@ -177,10 +205,7 @@ func TestAppInvocationExchangeRequiresExplicitGrantScope(t *testing.T) {
 		t.Fatalf("MintRootToken: %v", err)
 	}
 
-	server := NewAppServer("caller", []invocation.AppInvocationDependency{{
-		App:       "example",
-		Operation: "request_context",
-	}}, nil, manager)
+	server := NewAppServer(nil, manager)
 	_, err = server.ExchangeInvocationToken(context.Background(), &proto.ExchangeInvocationTokenRequest{
 		ParentInvocationToken: rootToken,
 		Grants: []*proto.AppInvocationGrant{{
@@ -251,6 +276,7 @@ func TestInvocationTokenRestoresWorkflowContext(t *testing.T) {
 			Source:    principal.SourceSession,
 		},
 	)
+	ctx = invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, "caller")
 	ctx = invocation.WithWorkflowContext(ctx, map[string]any{
 		"providerName":       "temporal",
 		"runId":              "run-123",
@@ -275,6 +301,10 @@ func TestInvocationTokenRestoresWorkflowContext(t *testing.T) {
 	restored := RestoreTokenContext(context.Background(), tokenCtx, "")
 	if got := InvocationTokenFromContext(restored); got != token {
 		t.Fatalf("restored invocation token = %q, want original token", got)
+	}
+	caller := invocation.CallerProviderFromContext(restored)
+	if caller.Kind != invocation.ProviderKindApp || caller.Name != "caller" {
+		t.Fatalf("restored caller provider = %#v, want app/caller", caller)
 	}
 	workflow := invocation.WorkflowContextFromContext(restored)
 	if got := invocation.WorkflowContextString(workflow, "providerName"); got != "temporal" {
@@ -320,7 +350,7 @@ func TestInvocationTokenExchangePreservesWorkflowContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
 	}
-	childToken, err := manager.ExchangeToken(rootToken, "caller", InvocationGrants{
+	childToken, err := manager.ExchangeToken(rootToken, InvocationGrants{
 		"slack": {Operations: map[string]core.ConnectionMode{"chat.postMessage": ""}},
 	}, time.Minute)
 	if err != nil {

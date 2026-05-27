@@ -2,7 +2,6 @@ package gestalt
 
 import (
 	"context"
-	"strings"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
@@ -14,23 +13,12 @@ func ServeWorkflowProvider(ctx context.Context, provider WorkflowProvider) error
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindWorkflow, provider))
 		proto.RegisterWorkflowProviderServer(srv, workflowProviderServer{provider: provider})
-	}, grpc.UnaryInterceptor(workflowProviderInvocationUnaryInterceptor))
+	}, grpc.UnaryInterceptor(providerInvocationUnaryInterceptor))
 }
 
 type workflowProviderServer struct {
 	proto.UnimplementedWorkflowProviderServer
 	provider WorkflowProvider
-}
-
-type workflowProviderInvocationTokenRequest interface {
-	GetInvocationToken() string
-}
-
-func workflowProviderInvocationUnaryInterceptor(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	if tokenReq, ok := req.(workflowProviderInvocationTokenRequest); ok {
-		ctx = workflowProviderInvocationContext(ctx, tokenReq.GetInvocationToken())
-	}
-	return handler(ctx, req)
 }
 
 func (s workflowProviderServer) CreateDefinition(ctx context.Context, req *proto.CreateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
@@ -247,13 +235,6 @@ func (s workflowProviderServer) PublishEvent(ctx context.Context, req *proto.Pub
 	}
 	event, err := workflowEventToProto(*eventInput)
 	return event, providerRPCError("workflow publish event", err)
-}
-
-func workflowProviderInvocationContext(ctx context.Context, token string) context.Context {
-	if strings.TrimSpace(token) == "" {
-		return ctx
-	}
-	return withInvocationToken(ctx, token)
 }
 
 func createWorkflowProviderDefinitionRequestFromProto(req *proto.CreateWorkflowProviderDefinitionRequest) *CreateWorkflowProviderDefinitionRequest {

@@ -26,14 +26,17 @@ import (
 )
 
 type agentRuntime struct {
-	mu                  sync.RWMutex
-	defaultProviderName string
-	configuredProviders map[string]struct{}
-	providers           map[string]coreagent.Provider
-	invoker             invocation.Invoker
-	systemTools         agentSystemToolExecutor
-	runGrants           *agentgrant.Manager
-	toolSearcher        agentToolResolver
+	mu                     sync.RWMutex
+	defaultProviderName    string
+	configuredProviders    map[string]struct{}
+	startupFailedProviders map[string]struct{}
+	providers              map[string]coreagent.Provider
+	pendingProviders       map[string]*startupProviderHandle[coreagent.Provider]
+	startupWaits           *startupWaitTracker
+	invoker                invocation.Invoker
+	systemTools            agentSystemToolExecutor
+	runGrants              *agentgrant.Manager
+	toolSearcher           agentToolResolver
 }
 
 type agentSystemToolExecutionRequest struct {
@@ -61,10 +64,16 @@ type agentToolResolver interface {
 	ResolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error)
 }
 
-func newAgentRuntime(cfg *config.Config) (*agentRuntime, error) {
+func newAgentRuntime(cfg *config.Config, startupWaits *startupWaitTracker) (*agentRuntime, error) {
+	if startupWaits == nil {
+		startupWaits = newStartupWaitTracker()
+	}
 	runtime := &agentRuntime{
-		configuredProviders: map[string]struct{}{},
-		providers:           map[string]coreagent.Provider{},
+		configuredProviders:    map[string]struct{}{},
+		startupFailedProviders: map[string]struct{}{},
+		providers:              map[string]coreagent.Provider{},
+		pendingProviders:       map[string]*startupProviderHandle[coreagent.Provider]{},
+		startupWaits:           startupWaits,
 	}
 	if cfg != nil {
 		selectedProviderName, _, err := cfg.SelectedAgentProvider()
@@ -77,9 +86,14 @@ func newAgentRuntime(cfg *config.Config) (*agentRuntime, error) {
 				continue
 			}
 			runtime.configuredProviders[name] = struct{}{}
+			runtime.pendingProviders[name] = newAgentProviderHandle(name, startupWaits)
 		}
 	}
 	return runtime, nil
+}
+
+func newAgentProviderHandle(name string, tracker *startupWaitTracker) *startupProviderHandle[coreagent.Provider] {
+	return newStartupProviderHandle[coreagent.Provider](name, newStartupProviderNode(invocation.ProviderKindAgent, name), tracker)
 }
 
 func agentSessionStartConfigs(cfg *config.Config) map[string]*coreagent.SessionStartConfig {
@@ -118,7 +132,8 @@ func agentSessionStartConfigs(cfg *config.Config) map[string]*coreagent.SessionS
 }
 
 func (r *agentRuntime) PublishProvider(name string, provider coreagent.Provider) {
-	if r == nil || provider == nil || strings.TrimSpace(name) == "" {
+	name = strings.TrimSpace(name)
+	if r == nil || provider == nil || name == "" {
 		return
 	}
 	r.mu.Lock()
@@ -126,16 +141,73 @@ func (r *agentRuntime) PublishProvider(name string, provider coreagent.Provider)
 	if r.providers == nil {
 		r.providers = map[string]coreagent.Provider{}
 	}
+	if r.pendingProviders == nil {
+		r.pendingProviders = map[string]*startupProviderHandle[coreagent.Provider]{}
+	}
+	if r.startupFailedProviders == nil {
+		r.startupFailedProviders = map[string]struct{}{}
+	}
+	if _, failedStartup := r.startupFailedProviders[name]; failedStartup {
+		return
+	}
+	if handle := r.pendingProviders[name]; handle != nil {
+		handle.publish(provider)
+		delete(r.pendingProviders, name)
+	}
 	r.providers[name] = provider
 }
 
-func (r *agentRuntime) FailProvider(name string) {
-	if r == nil || strings.TrimSpace(name) == "" {
+func (r *agentRuntime) FailStartupProvider(name string, err error) {
+	name = strings.TrimSpace(name)
+	if r == nil || name == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	handle := r.pendingProviders[name]
+	if handle == nil {
+		return
+	}
+	if err == nil {
+		err = agentmanager.NewAgentProviderNotAvailableError(name)
+	}
+	handle.fail(err)
+	if r.startupFailedProviders == nil {
+		r.startupFailedProviders = map[string]struct{}{}
+	}
+	r.startupFailedProviders[name] = struct{}{}
+	delete(r.pendingProviders, name)
+}
+
+func (r *agentRuntime) UnpublishProvider(name string) {
+	name = strings.TrimSpace(name)
+	if r == nil || name == "" {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.providers, name)
+	delete(r.pendingProviders, name)
+}
+
+func (r *agentRuntime) FailPendingProviders(err error) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for name, handle := range r.pendingProviders {
+		failErr := err
+		if failErr == nil {
+			failErr = agentmanager.NewAgentProviderNotAvailableError(name)
+		}
+		handle.fail(failErr)
+		if r.startupFailedProviders == nil {
+			r.startupFailedProviders = map[string]struct{}{}
+		}
+		r.startupFailedProviders[name] = struct{}{}
+		delete(r.pendingProviders, name)
+	}
 }
 
 func (r *agentRuntime) HasConfiguredProviders() bool {
@@ -144,7 +216,7 @@ func (r *agentRuntime) HasConfiguredProviders() bool {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return len(r.configuredProviders) > 0 || len(r.providers) > 0
+	return len(r.configuredProviders) > 0 || len(r.providers) > 0 || len(r.pendingProviders) > 0
 }
 
 func (r *agentRuntime) SetInvoker(invoker invocation.Invoker) {
@@ -182,34 +254,33 @@ func (r *agentRuntime) SetSystemToolExecutor(executor agentSystemToolExecutor) {
 	defer r.mu.Unlock()
 	r.systemTools = executor
 }
-func (r *agentRuntime) ResolveProvider(name string) (coreagent.Provider, error) {
-	if r == nil {
-		return nil, fmt.Errorf("agent runtime is not configured")
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	provider, ok := r.providers[strings.TrimSpace(name)]
-	if !ok || provider == nil {
-		return nil, agentmanager.NewAgentProviderNotAvailableError(name)
-	}
-	return provider, nil
-}
-
-func (r *agentRuntime) ResolveProviderSelection(name string) (string, coreagent.Provider, error) {
+func (r *agentRuntime) ResolveProvider(ctx context.Context, name string) (string, coreagent.Provider, error) {
 	if r == nil {
 		return "", nil, fmt.Errorf("agent runtime is not configured")
 	}
 	r.mu.RLock()
-	defer r.mu.RUnlock()
 	selectedName := strings.TrimSpace(name)
 	if selectedName == "" {
 		selectedName = strings.TrimSpace(r.defaultProviderName)
 	}
 	if selectedName == "" {
+		r.mu.RUnlock()
 		return "", nil, agentmanager.ErrAgentProviderRequired
 	}
 	provider, ok := r.providers[selectedName]
-	if !ok || provider == nil {
+	handle := r.pendingProviders[selectedName]
+	r.mu.RUnlock()
+	if ok && provider != nil {
+		return selectedName, provider, nil
+	}
+	if handle == nil {
+		return "", nil, agentmanager.NewAgentProviderNotAvailableError(selectedName)
+	}
+	provider, err := handle.await(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	if provider == nil {
 		return "", nil, agentmanager.NewAgentProviderNotAvailableError(selectedName)
 	}
 	return selectedName, provider, nil
@@ -221,9 +292,20 @@ func (r *agentRuntime) ProviderNames() []string {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	names := make([]string, 0, len(r.providers))
+	seen := map[string]struct{}{}
+	names := make([]string, 0, len(r.providers)+len(r.pendingProviders))
 	for name := range r.providers {
 		if strings.TrimSpace(name) == "" {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	for name := range r.pendingProviders {
+		if strings.TrimSpace(name) == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
 			continue
 		}
 		names = append(names, name)
@@ -239,6 +321,7 @@ func (r *agentRuntime) Ping(ctx context.Context) error {
 	r.mu.RLock()
 	defaultProviderName := strings.TrimSpace(r.defaultProviderName)
 	providers := maps.Clone(r.providers)
+	pendingProviders := maps.Clone(r.pendingProviders)
 	configuredProviders := make(map[string]struct{}, len(r.configuredProviders))
 	for name := range r.configuredProviders {
 		name = strings.TrimSpace(name)
@@ -273,8 +356,18 @@ func (r *agentRuntime) Ping(ctx context.Context) error {
 	for _, name := range names {
 		provider := providers[name]
 		if provider == nil {
-			errs <- fmt.Errorf("agent provider %q unavailable: %w", name, agentmanager.NewAgentProviderNotAvailableError(name))
-			continue
+			if handle := pendingProviders[name]; handle != nil {
+				if resolved, ready, err := handle.resolved(); err != nil {
+					errs <- fmt.Errorf("agent provider %q unavailable: %w", name, err)
+					continue
+				} else if ready {
+					provider = resolved
+				}
+			}
+			if provider == nil {
+				errs <- fmt.Errorf("agent provider %q unavailable: %w", name, agentmanager.NewAgentProviderNotAvailableError(name))
+				continue
+			}
 		}
 		wg.Add(1)
 		go func(name string, provider coreagent.Provider) {
@@ -702,9 +795,20 @@ func resolveAgentRunGrant(grants *agentgrant.Manager, token, providerName, sessi
 func (r *agentRuntime) validateAgentRunGrantTurn(ctx context.Context, grant agentgrant.Grant, turnID string) error {
 	r.mu.RLock()
 	provider := r.providers[strings.TrimSpace(grant.ProviderName)]
+	handle := r.pendingProviders[strings.TrimSpace(grant.ProviderName)]
 	r.mu.RUnlock()
 	if provider == nil {
-		return fmt.Errorf("%w: agent provider %q is not available for run grant", invocation.ErrAuthorizationDenied, strings.TrimSpace(grant.ProviderName))
+		if handle == nil {
+			return fmt.Errorf("%w: agent provider %q is not available for run grant", invocation.ErrAuthorizationDenied, strings.TrimSpace(grant.ProviderName))
+		}
+		resolved, err := handle.await(ctx)
+		if err != nil {
+			return err
+		}
+		provider = resolved
+		if provider == nil {
+			return fmt.Errorf("%w: agent provider %q is not available for run grant", invocation.ErrAuthorizationDenied, strings.TrimSpace(grant.ProviderName))
+		}
 	}
 	turnID = strings.TrimSpace(turnID)
 	turn, err := provider.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{

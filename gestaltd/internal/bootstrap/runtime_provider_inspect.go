@@ -29,8 +29,7 @@ type RuntimeProviderSnapshot struct {
 	Default       bool
 	Loaded        bool
 	SupportLoaded bool
-	Advertised    RuntimeBehavior
-	Effective     RuntimeBehavior
+	Profile       RuntimePlacementPlan
 	Error         string
 }
 
@@ -89,8 +88,7 @@ func (r *runtimeRegistry) SnapshotRuntimes(ctx context.Context) ([]RuntimeProvid
 				continue
 			}
 			snapshot.SupportLoaded = true
-			snapshot.Advertised = runtimeAdvertisedBehavior(support)
-			snapshot.Effective = runtimeResolvedBehavior(snapshot.Advertised, r.deps)
+			snapshot.Profile = buildRuntimePlacementPlan(support, r.deps, false)
 		}
 		out = append(out, snapshot)
 	}

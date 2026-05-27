@@ -121,28 +121,19 @@ type routeCountingAgentControl struct {
 	providers   map[string]*routeCountingAgentProvider
 }
 
-func (c *routeCountingAgentControl) ResolveProviderSelection(name string) (string, coreagent.Provider, error) {
+func (c *routeCountingAgentControl) ResolveProvider(_ context.Context, name string) (string, coreagent.Provider, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = strings.TrimSpace(c.defaultName)
 	}
-	provider, err := c.ResolveProvider(name)
-	if err != nil {
-		return "", nil, err
-	}
-	return name, provider, nil
-}
-
-func (c *routeCountingAgentControl) ResolveProvider(name string) (coreagent.Provider, error) {
-	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, ErrAgentProviderRequired
+		return "", nil, ErrAgentProviderRequired
 	}
 	provider := c.providers[name]
 	if provider == nil {
-		return nil, NewAgentProviderNotAvailableError(name)
+		return "", nil, NewAgentProviderNotAvailableError(name)
 	}
-	return provider, nil
+	return name, provider, nil
 }
 
 func (c *routeCountingAgentControl) ProviderNames() []string {
@@ -2336,6 +2327,91 @@ func TestResolveToolsExpandsAppOnlyRefs(t *testing.T) {
 	}
 }
 
+func TestResolveToolsUsesExplicitProviderCredentialMode(t *testing.T) {
+	t.Parallel()
+
+	hidden := false
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:      "events.reply",
+				Title:   "Reply",
+				Visible: &hidden,
+			}}},
+		},
+	}
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
+
+	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.ResolveToolsRequest{
+		ToolRefs: []coreagent.ToolRef{{
+			App:            "slack",
+			Operation:      "events.reply",
+			CredentialMode: core.ConnectionModeNone,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("ResolveTools: %v", err)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("ResolveTools returned %d tools, want 1", len(tools))
+	}
+	if tools[0].Target.App != "slack" || tools[0].Target.Operation != "events.reply" {
+		t.Fatalf("tool target = %#v, want slack.events.reply", tools[0].Target)
+	}
+	if tools[0].Target.CredentialMode != core.ConnectionModeNone {
+		t.Fatalf("tool credential mode = %q, want %q", tools[0].Target.CredentialMode, core.ConnectionModeNone)
+	}
+}
+
+func TestNormalizeToolRefsRejectsProviderRunAsDelegation(t *testing.T) {
+	t.Parallel()
+
+	runAs := &core.RunAsSubject{
+		SubjectID:           "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectKind:         "service_account",
+		CredentialSubjectID: "service_account:github_app_installation:99:repo:acme/widgets",
+	}
+	externalIdentity := &core.ExternalIdentityRef{
+		Type: "github_app_installation",
+		ID:   "repo:acme/widgets",
+	}
+	for _, tc := range []struct {
+		name string
+		ref  coreagent.ToolRef
+	}{
+		{
+			name: "runAs",
+			ref: coreagent.ToolRef{
+				App:       "github",
+				Operation: "bot.createPullRequest",
+				RunAs:     runAs,
+			},
+		},
+		{
+			name: "external identity",
+			ref: coreagent.ToolRef{
+				App:                   "github",
+				Operation:             "bot.createPullRequest",
+				RunAs:                 runAs,
+				RunAsExternalIdentity: externalIdentity,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := normalizeToolRefs([]coreagent.ToolRef{tc.ref})
+			if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+				t.Fatalf("normalizeToolRefs error = %v, want authorization denied", err)
+			}
+		})
+	}
+}
+
 func TestListToolsClampsOversizedPageSize(t *testing.T) {
 	t.Parallel()
 
@@ -2395,574 +2471,6 @@ func TestListToolsClampsOversizedPageSize(t *testing.T) {
 	}
 	if len(lastPage.Tools) != 2 || lastPage.NextPageToken != "" {
 		t.Fatalf("ListTools last page = %d tools, next %q; want 2 tools and no token", len(lastPage.Tools), lastPage.NextPageToken)
-	}
-}
-
-func TestResolveToolsAppliesDeclaredInvokeCredentialMode(t *testing.T) {
-	t.Parallel()
-
-	hidden := false
-	provider := &catalogCountingProvider{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "slack",
-			ConnMode: core.ConnectionModeUser,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:      "events.reply",
-				Title:   "Reply",
-				Visible: &hidden,
-			}}},
-		},
-	}
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, provider),
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"slackbot": {{
-				App:            "slack",
-				Operation:      "events.reply",
-				CredentialMode: core.ConnectionModeNone,
-			}},
-		},
-	})
-
-	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
-		SubjectID: principal.UserSubjectID("user-1"),
-	}, coreagent.ResolveToolsRequest{
-		CallerAppName: "slackbot",
-		ToolRefs: []coreagent.ToolRef{{
-			App:       "slack",
-			Operation: "events.reply",
-		}},
-	})
-	if err != nil {
-		t.Fatalf("ResolveTools: %v", err)
-	}
-	if len(tools) != 1 {
-		t.Fatalf("ResolveTools returned %d tools, want 1", len(tools))
-	}
-	if tools[0].Target.App != "slack" || tools[0].Target.Operation != "events.reply" {
-		t.Fatalf("tool target = %#v, want slack.events.reply", tools[0].Target)
-	}
-	if tools[0].Target.CredentialMode != core.ConnectionModeNone {
-		t.Fatalf("tool credential mode = %q, want %q", tools[0].Target.CredentialMode, core.ConnectionModeNone)
-	}
-}
-
-func TestResolveToolsAppliesDeclaredInvokeRunAs(t *testing.T) {
-	t.Parallel()
-
-	provider := &catalogCountingProvider{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "github",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:    "bot.createPullRequest",
-				Title: "Create pull request",
-			}}},
-		},
-	}
-	runAs := &core.RunAsSubject{
-		SubjectID:           "service_account:github-toolshed",
-		SubjectKind:         "service_account",
-		CredentialSubjectID: "service_account:github-toolshed-credential",
-		DisplayName:         "GitHub Toolshed",
-		AuthSource:          "github_app_webhook",
-	}
-	externalIdentity := &core.ExternalIdentityRef{
-		Type: "github_app_installation",
-		ID:   "repo:{owner}/{repo}",
-	}
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, provider),
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"slack": {{
-				App:                   "github",
-				Operation:             "bot.createPullRequest",
-				RunAs:                 runAs,
-				RunAsExternalIdentity: externalIdentity,
-			}},
-		},
-	})
-
-	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
-		SubjectID: principal.UserSubjectID("user-1"),
-	}, coreagent.ResolveToolsRequest{
-		CallerAppName: "slack",
-		ToolRefs: []coreagent.ToolRef{{
-			App:       "github",
-			Operation: "bot.createPullRequest",
-			RunAs: &core.RunAsSubject{
-				SubjectID:   runAs.SubjectID,
-				DisplayName: "Spoofed display name",
-				AuthSource:  "spoofed_auth_source",
-			},
-			RunAsExternalIdentity: externalIdentity,
-		}},
-	})
-	if err != nil {
-		t.Fatalf("ResolveTools: %v", err)
-	}
-	if len(tools) != 1 {
-		t.Fatalf("ResolveTools returned %d tools, want 1", len(tools))
-	}
-	if tools[0].Target.RunAs == nil || tools[0].Target.RunAs.SubjectID != runAs.SubjectID {
-		t.Fatalf("tool runAs = %#v, want %q", tools[0].Target.RunAs, runAs.SubjectID)
-	}
-	if tools[0].Target.RunAs.CredentialSubjectID != runAs.CredentialSubjectID {
-		t.Fatalf("tool runAs credential subject = %q, want %q", tools[0].Target.RunAs.CredentialSubjectID, runAs.CredentialSubjectID)
-	}
-	if tools[0].Target.RunAs.DisplayName != runAs.DisplayName || tools[0].Target.RunAs.AuthSource != runAs.AuthSource {
-		t.Fatalf("tool runAs metadata = %#v, want declared invoke metadata", tools[0].Target.RunAs)
-	}
-	if !core.ExternalIdentityRefsEqual(tools[0].Target.RunAsExternalIdentity, externalIdentity) {
-		t.Fatalf("tool runAs external identity = %#v, want %#v", tools[0].Target.RunAsExternalIdentity, externalIdentity)
-	}
-}
-
-func TestResolveToolsExplicitOnlyInvokeRunAsDoesNotApplyImplicitly(t *testing.T) {
-	t.Parallel()
-
-	provider := &catalogCountingProvider{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "notion",
-			ConnMode: core.ConnectionModeUser,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:    "search",
-				Title: "Search",
-			}}},
-		},
-	}
-	runAs := &core.RunAsSubject{
-		SubjectID:           "service_account:gestalt-support-notion",
-		SubjectKind:         "service_account",
-		CredentialSubjectID: "service_account:gestalt-support-notion",
-		DisplayName:         "Gestalt Support Notion",
-	}
-	externalIdentity := &core.ExternalIdentityRef{
-		Type: "notion_workspace",
-		ID:   "valon-support",
-	}
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, provider),
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"slack": {{
-				App:                   "notion",
-				Operation:             "search",
-				RunAs:                 runAs,
-				RunAsExternalIdentity: externalIdentity,
-				RunAsExplicitOnly:     true,
-			}},
-		},
-	})
-
-	implicitTools, err := manager.ResolveTools(context.Background(), &principal.Principal{
-		SubjectID: principal.UserSubjectID("user-1"),
-	}, coreagent.ResolveToolsRequest{
-		CallerAppName: "slack",
-		ToolRefs: []coreagent.ToolRef{{
-			App:       "notion",
-			Operation: "search",
-		}},
-	})
-	if err != nil {
-		t.Fatalf("ResolveTools implicit: %v", err)
-	}
-	if len(implicitTools) != 1 {
-		t.Fatalf("implicit ResolveTools returned %d tools, want 1", len(implicitTools))
-	}
-	if implicitTools[0].Target.RunAs != nil {
-		t.Fatalf("implicit tool runAs = %#v, want nil", implicitTools[0].Target.RunAs)
-	}
-	if implicitTools[0].Target.RunAsExternalIdentity != nil {
-		t.Fatalf("implicit tool runAs external identity = %#v, want nil", implicitTools[0].Target.RunAsExternalIdentity)
-	}
-
-	explicitTools, err := manager.ResolveTools(context.Background(), &principal.Principal{
-		SubjectID: principal.UserSubjectID("user-1"),
-	}, coreagent.ResolveToolsRequest{
-		CallerAppName: "slack",
-		ToolRefs: []coreagent.ToolRef{{
-			App:       "notion",
-			Operation: "search",
-			RunAs: &core.RunAsSubject{
-				SubjectID: runAs.SubjectID,
-			},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("ResolveTools explicit: %v", err)
-	}
-	if len(explicitTools) != 1 {
-		t.Fatalf("explicit ResolveTools returned %d tools, want 1", len(explicitTools))
-	}
-	if !core.RunAsSubjectsEqual(explicitTools[0].Target.RunAs, runAs) {
-		t.Fatalf("explicit tool runAs = %#v, want %#v", explicitTools[0].Target.RunAs, runAs)
-	}
-	if !core.ExternalIdentityRefsEqual(explicitTools[0].Target.RunAsExternalIdentity, externalIdentity) {
-		t.Fatalf("explicit tool runAs external identity = %#v, want %#v", explicitTools[0].Target.RunAsExternalIdentity, externalIdentity)
-	}
-}
-
-func TestApplyCallerInvokePoliciesExplicitOnlyExternalIdentityRequestAppliesRunAs(t *testing.T) {
-	t.Parallel()
-
-	runAs := &core.RunAsSubject{
-		SubjectID:           "service_account:gestalt-support-notion",
-		SubjectKind:         "service_account",
-		CredentialSubjectID: "service_account:gestalt-support-notion",
-		DisplayName:         "Gestalt Support Notion",
-	}
-	externalIdentity := &core.ExternalIdentityRef{
-		Type: "notion_workspace",
-		ID:   "valon-support",
-	}
-	manager := newTestManager(t, Config{
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"slack": {{
-				App:                   "notion",
-				Operation:             "search",
-				RunAs:                 runAs,
-				RunAsExternalIdentity: externalIdentity,
-				RunAsExplicitOnly:     true,
-			}},
-		},
-	})
-
-	// Exercise the policy helper directly because normalizeToolRefs rejects this
-	// user-facing shape before policy application.
-	refs, err := manager.applyCallerInvokePolicies("slack", []coreagent.ToolRef{{
-		App:                   "notion",
-		Operation:             "search",
-		RunAsExternalIdentity: externalIdentity,
-	}})
-	if err != nil {
-		t.Fatalf("applyCallerInvokePolicies: %v", err)
-	}
-	if len(refs) != 1 {
-		t.Fatalf("applyCallerInvokePolicies returned %d refs, want 1", len(refs))
-	}
-	if !core.RunAsSubjectsEqual(refs[0].RunAs, runAs) {
-		t.Fatalf("tool ref runAs = %#v, want %#v", refs[0].RunAs, runAs)
-	}
-	if !core.ExternalIdentityRefsEqual(refs[0].RunAsExternalIdentity, externalIdentity) {
-		t.Fatalf("tool ref runAs external identity = %#v, want %#v", refs[0].RunAsExternalIdentity, externalIdentity)
-	}
-}
-
-func TestManagerCreateTurnAppliesExplicitInvokeRunAsToProviderAndRunGrant(t *testing.T) {
-	t.Parallel()
-
-	alpha := newRouteCountingAgentProvider("alpha")
-	grants := newAgentManagerTestRunGrants(t)
-	provider := &catalogCountingProvider{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "notion",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:    "search",
-				Title: "Search",
-			}}},
-		},
-	}
-	runAs := &core.RunAsSubject{
-		SubjectID:           "service_account:gestalt-support-notion",
-		SubjectKind:         "service_account",
-		CredentialSubjectID: "service_account:gestalt-support-notion-credential",
-		DisplayName:         "Gestalt Support Notion",
-		AuthSource:          "notion_service_account",
-	}
-	externalIdentity := &core.ExternalIdentityRef{
-		Type: "notion_workspace",
-		ID:   "valon-support",
-	}
-	manager := newTestManager(t, Config{
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		Providers: testutil.NewProviderRegistry(t, provider),
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"slack": {{
-				App:                   "notion",
-				Operation:             "search",
-				RunAs:                 runAs,
-				RunAsExternalIdentity: externalIdentity,
-			}},
-		},
-		RunGrants: grants,
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	ctx := WithCallerAppName(context.Background(), "slack")
-	_, err = manager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
-		SessionId:   session.ID,
-		Model:       "test-model",
-		ToolSource:  proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
-		ToolRefsSet: true,
-		Output:      agentTextOutputProto(),
-		ToolRefs: []*proto.AgentToolRef{{
-			App:       "notion",
-			Operation: "search",
-			RunAs: agentwire.RunAsSubjectToProto(&core.RunAsSubject{
-				SubjectID: runAs.SubjectID,
-			}),
-			RunAsExternalIdentity: &proto.ExternalIdentityContext{Type: externalIdentity.Type, Id: externalIdentity.ID},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if len(alpha.createTurnReqs) != 1 {
-		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
-	}
-	req := alpha.createTurnReqs[0]
-	if len(req.GetToolRefs()) != 1 {
-		t.Fatalf("CreateTurn tool refs = %d, want 1", len(req.GetToolRefs()))
-	}
-	if !core.RunAsSubjectsEqual(agentwire.RunAsSubjectFromProto(req.GetToolRefs()[0].GetRunAs()), runAs) {
-		t.Fatalf("CreateTurn tool ref runAs = %#v, want %#v", req.GetToolRefs()[0].GetRunAs(), runAs)
-	}
-	if got := req.GetToolRefs()[0].GetRunAsExternalIdentity(); got.GetType() != externalIdentity.Type || got.GetId() != externalIdentity.ID {
-		t.Fatalf("CreateTurn tool ref runAs external identity = %#v, want %#v", got, externalIdentity)
-	}
-	grant, err := grants.Resolve(req.GetRunGrant())
-	if err != nil {
-		t.Fatalf("Resolve run grant: %v", err)
-	}
-	if grant.CallerAppName != "slack" {
-		t.Fatalf("run grant caller app = %q, want slack", grant.CallerAppName)
-	}
-	if len(grant.ToolRefs) != 1 {
-		t.Fatalf("run grant tool refs = %d, want 1", len(grant.ToolRefs))
-	}
-	if !core.RunAsSubjectsEqual(grant.ToolRefs[0].RunAs, runAs) {
-		t.Fatalf("run grant tool ref runAs = %#v, want %#v", grant.ToolRefs[0].RunAs, runAs)
-	}
-	if !core.ExternalIdentityRefsEqual(grant.ToolRefs[0].RunAsExternalIdentity, externalIdentity) {
-		t.Fatalf("run grant tool ref runAs external identity = %#v, want %#v", grant.ToolRefs[0].RunAsExternalIdentity, externalIdentity)
-	}
-}
-
-func TestResolveToolsAppliesDeclaredInvokeCredentialModeAndRunAs(t *testing.T) {
-	t.Parallel()
-
-	provider := &catalogCountingProvider{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "slack",
-			ConnMode: core.ConnectionModeUser,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:    "chat.postMessage",
-				Title: "Post message",
-			}}},
-		},
-	}
-	runAs := &core.RunAsSubject{
-		SubjectID:   "service_account:slack-bot",
-		SubjectKind: "service_account",
-		DisplayName: "Platform Slack Bot",
-	}
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, provider),
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"slack": {{
-				App:            "slack",
-				Operation:      "chat.postMessage",
-				CredentialMode: core.ConnectionModeNone,
-				RunAs:          runAs,
-			}},
-		},
-	})
-
-	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
-		SubjectID: principal.UserSubjectID("user-1"),
-	}, coreagent.ResolveToolsRequest{
-		CallerAppName: "slack",
-		ToolRefs: []coreagent.ToolRef{{
-			App:       "slack",
-			Operation: "chat.postMessage",
-		}},
-	})
-	if err != nil {
-		t.Fatalf("ResolveTools: %v", err)
-	}
-	if len(tools) != 1 {
-		t.Fatalf("ResolveTools returned %d tools, want 1", len(tools))
-	}
-	if tools[0].Target.CredentialMode != core.ConnectionModeNone {
-		t.Fatalf("tool credential mode = %q, want %q", tools[0].Target.CredentialMode, core.ConnectionModeNone)
-	}
-	if tools[0].Target.RunAs == nil || tools[0].Target.RunAs.SubjectID != runAs.SubjectID {
-		t.Fatalf("tool runAs = %#v, want %q", tools[0].Target.RunAs, runAs.SubjectID)
-	}
-}
-
-func TestResolveToolsRejectsUndeclaredCredentialMode(t *testing.T) {
-	t.Parallel()
-
-	provider := &catalogCountingProvider{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "slack",
-			ConnMode: core.ConnectionModeUser,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:    "events.reply",
-				Title: "Reply",
-			}}},
-		},
-	}
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, provider),
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"slackbot": {{
-				App:            "slack",
-				Operation:      "chat.postMessage",
-				CredentialMode: core.ConnectionModeNone,
-			}},
-		},
-	})
-
-	for _, tc := range []struct {
-		name          string
-		callerAppName string
-	}{
-		{name: "public request"},
-		{name: "caller without matching invoke", callerAppName: "slackbot"},
-	} {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			_, err := manager.ResolveTools(context.Background(), &principal.Principal{
-				SubjectID: principal.UserSubjectID("user-1"),
-			}, coreagent.ResolveToolsRequest{
-				CallerAppName: tc.callerAppName,
-				ToolRefs: []coreagent.ToolRef{{
-					App:            "slack",
-					Operation:      "events.reply",
-					CredentialMode: core.ConnectionModeNone,
-				}},
-			})
-			if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-				t.Fatalf("ResolveTools error = %v, want ErrAuthorizationDenied", err)
-			}
-		})
-	}
-}
-
-func TestResolveToolsRejectsUndeclaredRunAs(t *testing.T) {
-	t.Parallel()
-
-	provider := &catalogCountingProvider{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "github",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:    "bot.createPullRequest",
-				Title: "Create pull request",
-			}}},
-		},
-	}
-	runAs := &core.RunAsSubject{
-		SubjectID:   "service_account:github_app_installation:99:repo:acme/widgets",
-		SubjectKind: "service_account",
-		AuthSource:  "github_app_webhook",
-	}
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, provider),
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"slack": {{
-				App:       "github",
-				Operation: "bot.getPullRequest",
-				RunAs:     runAs,
-			}},
-		},
-	})
-
-	for _, tc := range []struct {
-		name          string
-		callerAppName string
-	}{
-		{name: "public request"},
-		{name: "caller without matching invoke", callerAppName: "slack"},
-	} {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			_, err := manager.ResolveTools(context.Background(), &principal.Principal{
-				SubjectID: principal.UserSubjectID("user-1"),
-			}, coreagent.ResolveToolsRequest{
-				CallerAppName: tc.callerAppName,
-				ToolRefs: []coreagent.ToolRef{{
-					App:       "github",
-					Operation: "bot.createPullRequest",
-					RunAs:     runAs,
-				}},
-			})
-			if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-				t.Fatalf("ResolveTools error = %v, want ErrAuthorizationDenied", err)
-			}
-		})
-	}
-}
-
-func TestResolveToolsRejectsMismatchedRunAsExternalIdentity(t *testing.T) {
-	t.Parallel()
-
-	provider := &catalogCountingProvider{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "github",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:    "bot.createPullRequest",
-				Title: "Create pull request",
-			}}},
-		},
-	}
-	runAs := &core.RunAsSubject{
-		SubjectID:           "service_account:github-toolshed",
-		SubjectKind:         "service_account",
-		CredentialSubjectID: "service_account:github-toolshed",
-	}
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, provider),
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"slack": {{
-				App:       "github",
-				Operation: "bot.createPullRequest",
-				RunAs:     runAs,
-				RunAsExternalIdentity: &core.ExternalIdentityRef{
-					Type: "github_app_installation",
-					ID:   "repo:acme/widgets",
-				},
-			}},
-		},
-	})
-
-	_, err := manager.ResolveTools(context.Background(), &principal.Principal{
-		SubjectID: principal.UserSubjectID("user-1"),
-	}, coreagent.ResolveToolsRequest{
-		CallerAppName: "slack",
-		ToolRefs: []coreagent.ToolRef{{
-			App:       "github",
-			Operation: "bot.createPullRequest",
-			RunAs:     runAs,
-			RunAsExternalIdentity: &core.ExternalIdentityRef{
-				Type: "github_app_installation",
-				ID:   "repo:acme/other",
-			},
-		}},
-	})
-	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("ResolveTools error = %v, want ErrAuthorizationDenied", err)
 	}
 }
 

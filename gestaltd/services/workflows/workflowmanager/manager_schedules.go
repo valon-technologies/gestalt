@@ -22,7 +22,7 @@ func (m *Manager) ListSchedules(ctx context.Context, p *principal.Principal) ([]
 	out := []*ManagedSchedule{}
 	var firstErr error
 	for _, providerName := range m.providerNames() {
-		provider, err := m.resolveProviderByName(providerName)
+		_, provider, err := m.resolveProvider(ctx, providerName)
 		if err != nil {
 			return nil, err
 		}
@@ -280,7 +280,7 @@ func (m *Manager) ListEventTriggers(ctx context.Context, p *principal.Principal)
 	out := []*ManagedEventTrigger{}
 	var firstErr error
 	for _, providerName := range m.providerNames() {
-		provider, err := m.resolveProviderByName(providerName)
+		_, provider, err := m.resolveProvider(ctx, providerName)
 		if err != nil {
 			return nil, err
 		}
@@ -540,7 +540,7 @@ func (m *Manager) findSchedule(ctx context.Context, scheduleID, providerSelectio
 		return nil, coreworkflowProviderNotFound()
 	}
 	if providerSelection = strings.TrimSpace(providerSelection); providerSelection != "" {
-		providerName, provider, err := m.resolveProviderSelection(providerSelection)
+		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
 		if err != nil {
 			return nil, err
 		}
@@ -553,7 +553,7 @@ func (m *Manager) findSchedule(ctx context.Context, scheduleID, providerSelectio
 	var match *ManagedSchedule
 	var firstErr error
 	for _, providerName := range m.providerNames() {
-		provider, err := m.resolveProviderByName(providerName)
+		_, provider, err := m.resolveProvider(ctx, providerName)
 		if err != nil {
 			return nil, err
 		}
@@ -587,7 +587,7 @@ func (m *Manager) findEventTrigger(ctx context.Context, triggerID, providerSelec
 		return nil, coreworkflowProviderNotFound()
 	}
 	if providerSelection = strings.TrimSpace(providerSelection); providerSelection != "" {
-		providerName, provider, err := m.resolveProviderSelection(providerSelection)
+		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
 		if err != nil {
 			return nil, err
 		}
@@ -600,7 +600,7 @@ func (m *Manager) findEventTrigger(ctx context.Context, triggerID, providerSelec
 	var match *ManagedEventTrigger
 	var firstErr error
 	for _, providerName := range m.providerNames() {
-		provider, err := m.resolveProviderByName(providerName)
+		_, provider, err := m.resolveProvider(ctx, providerName)
 		if err != nil {
 			return nil, err
 		}

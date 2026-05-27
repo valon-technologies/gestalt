@@ -9,8 +9,7 @@ import (
 // AgentControl exposes the configured agent-provider selection surface that
 // higher-level manager and HTTP layers build on.
 type AgentControl interface {
-	ResolveProvider(name string) (coreagent.Provider, error)
-	ResolveProviderSelection(name string) (providerName string, provider coreagent.Provider, err error)
+	ResolveProvider(ctx context.Context, name string) (providerName string, provider coreagent.Provider, err error)
 	ProviderNames() []string
 	Ping(context.Context) error
 }

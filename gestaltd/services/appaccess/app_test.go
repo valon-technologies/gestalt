@@ -71,8 +71,6 @@ func TestAppServerInvokeRestoresWorkflowContext(t *testing.T) {
 
 	invoker := &recordingAppInvocation{}
 	server := NewAppServer(
-		"workflow-provider",
-		[]invocation.AppInvocationDependency{{App: "slack", Operation: "chat.postMessage"}},
 		invoker,
 		tokens,
 	)
@@ -134,8 +132,6 @@ func TestAppServerInvokeUsesRequestWorkflowContext(t *testing.T) {
 
 	invoker := &recordingAppInvocation{}
 	server := NewAppServer(
-		"workflow-provider",
-		[]invocation.AppInvocationDependency{{App: "slack", Operation: "chat.postMessage"}},
 		invoker,
 		tokens,
 	)
@@ -170,7 +166,6 @@ func TestAppServerInvokeCredentialModeForForwardedToken(t *testing.T) {
 		name        string
 		grantMode   core.ConnectionMode
 		requestMode string
-		deps        []invocation.AppInvocationDependency
 		want        core.ConnectionMode
 		wantErr     codes.Code
 	}{
@@ -183,25 +178,12 @@ func TestAppServerInvokeCredentialModeForForwardedToken(t *testing.T) {
 		{
 			name:        "explicit unqualified mode",
 			requestMode: "none",
-			wantErr:     codes.PermissionDenied,
+			want:        core.ConnectionModeNone,
 		},
 		{
-			name: "host declared mode ignored for forwarded token",
-			deps: []invocation.AppInvocationDependency{{
-				App:            "slack",
-				Operation:      "chat.postMessage",
-				CredentialMode: core.ConnectionModeUser,
-			}},
-		},
-		{
-			name:        "explicit host declared mode ignored for forwarded token",
+			name:        "explicit user mode",
 			requestMode: "user",
-			deps: []invocation.AppInvocationDependency{{
-				App:            "slack",
-				Operation:      "chat.postMessage",
-				CredentialMode: core.ConnectionModeUser,
-			}},
-			wantErr: codes.PermissionDenied,
+			want:        core.ConnectionModeUser,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -224,7 +206,7 @@ func TestAppServerInvokeCredentialModeForForwardedToken(t *testing.T) {
 			}
 
 			invoker := &recordingAppInvocation{}
-			server := NewAppServer("workflow-provider", tc.deps, invoker, tokens)
+			server := NewAppServer(invoker, tokens)
 			client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 				proto.RegisterAppServer(srv, server)
 			}))
@@ -272,10 +254,6 @@ func TestAppServerInvokePropagatesInternalConnectionAccess(t *testing.T) {
 
 	invoker := &recordingAppInvocation{}
 	server := NewAppServer(
-		"brain",
-		[]invocation.AppInvocationDependency{
-			{App: "slack", Operation: "conversations.history"},
-		},
 		invoker,
 		tokens,
 	)
@@ -315,8 +293,6 @@ func TestAppServerInvokeMapsInvalidInvocationToInvalidArgument(t *testing.T) {
 	}
 
 	server := NewAppServer(
-		"brain",
-		[]invocation.AppInvocationDependency{{App: "gmail", Operation: "gmail.users.messages.modify"}},
 		erroringAppInvocation{err: fmt.Errorf("%w: bad connection override", invocation.ErrInvalidInvocation)},
 		tokens,
 	)
@@ -374,11 +350,6 @@ func TestAppServerInvokePropagatesIdempotencyKey(t *testing.T) {
 
 	invoker := &recordingAppInvocation{}
 	server := NewAppServer(
-		"caller",
-		[]invocation.AppInvocationDependency{
-			{App: "github", Operation: "issues.create"},
-			{App: "linear", Surface: "graphql"},
-		},
 		invoker,
 		tokens,
 	)

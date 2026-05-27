@@ -299,17 +299,14 @@ func (s *ProviderServer) tokenContext(token string) (appaccessservice.TokenConte
 	if err != nil {
 		return appaccessservice.TokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
+	if tokenCtx.CallerApp() == "" {
+		return appaccessservice.TokenContext{}, status.Error(codes.FailedPrecondition, "invocation token caller app is required")
+	}
 	return tokenCtx, nil
 }
 
 func (s *ProviderServer) callerAppName(tokenCtx appaccessservice.TokenContext) string {
-	if caller := tokenCtx.CallerApp(); caller != "" {
-		return caller
-	}
-	if s == nil {
-		return ""
-	}
-	return strings.TrimSpace(s.pluginName)
+	return tokenCtx.CallerApp()
 }
 
 func (s *ProviderServer) restoreTokenContext(ctx context.Context, tokenCtx appaccessservice.TokenContext) context.Context {

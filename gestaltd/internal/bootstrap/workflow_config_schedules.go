@@ -48,7 +48,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		schedule := desiredEntry.schedule
 		target := workflowConfigTarget(schedule.Target)
 		appName := workflowConfigTargetLabel(target)
-		_, provider, err := runtime.ResolveProviderSelection(schedule.Provider)
+		_, provider, err := runtime.ResolveProvider(ctx, schedule.Provider)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
@@ -145,7 +145,7 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 		if !workflowConfigProviderIncluded(includeProvider, providerName) {
 			continue
 		}
-		provider, err := runtime.ResolveProvider(providerName)
+		_, provider, err := runtime.ResolveProvider(ctx, providerName)
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow schedules requires provider %q: %w", providerName, err)
 		}

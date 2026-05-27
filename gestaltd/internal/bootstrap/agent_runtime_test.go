@@ -135,6 +135,33 @@ func (i *recordingAgentRuntimeInvoker) Calls() []agentRuntimeInvokerCall {
 	return out
 }
 
+type staticAgentToolResolver struct {
+	tools []coreagent.Tool
+}
+
+func (r staticAgentToolResolver) ListTools(context.Context, *principal.Principal, coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error) {
+	return &coreagent.ListToolsResponse{}, nil
+}
+
+func (r staticAgentToolResolver) ResolveTool(_ context.Context, _ *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
+	target := coreagent.ToolTarget{
+		System:                strings.TrimSpace(ref.System),
+		App:                   strings.TrimSpace(ref.App),
+		Operation:             strings.TrimSpace(ref.Operation),
+		Connection:            strings.TrimSpace(ref.Connection),
+		Instance:              strings.TrimSpace(ref.Instance),
+		CredentialMode:        ref.CredentialMode,
+		RunAs:                 core.NormalizeRunAsSubject(ref.RunAs),
+		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(ref.RunAsExternalIdentity),
+	}
+	for i := range r.tools {
+		if agentToolTargetsEqual(r.tools[i].Target, target) {
+			return r.tools[i], nil
+		}
+	}
+	return coreagent.Tool{}, core.ErrNotFound
+}
+
 type reconnectingAgentRuntimeInvoker struct {
 	recordingAgentRuntimeInvoker
 	tokenErrs map[string]error
@@ -278,7 +305,7 @@ func (p *turnLookupAgentProvider) GetTurn(context.Context, *proto.GetAgentProvid
 func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := newAgentRuntime(&config.Config{})
+	runtime, err := newAgentRuntime(&config.Config{}, nil)
 	if err != nil {
 		t.Fatalf("newAgentRuntime() error = %v", err)
 	}
@@ -903,7 +930,7 @@ func TestAgentRuntimePingChecksConfiguredProviders(t *testing.T) {
 
 	defaultCalls = 0
 	canaryCalls = 0
-	runtime.FailProvider("canary")
+	runtime.UnpublishProvider("canary")
 	if err := runtime.Ping(context.Background()); err == nil || !strings.Contains(err.Error(), `agent provider "canary" unavailable`) {
 		t.Fatalf("Ping after failed provider error = %v, want canary unavailable", err)
 	}
@@ -936,6 +963,35 @@ func TestAgentRuntimePingChecksConfiguredProvidersInParallel(t *testing.T) {
 			t.Fatalf("Ping: %v", err)
 		}
 	})
+}
+
+func TestAgentRuntimePingReportsPendingStartupProvidersUnavailable(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := newAgentRuntime(&config.Config{
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"managed": {},
+			},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("newAgentRuntime: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runtime.Ping(context.Background())
+	}()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, agentmanager.ErrAgentProviderNotAvailable) {
+			t.Fatalf("Ping error = %v, want ErrAgentProviderNotAvailable", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Ping blocked on pending startup agent provider")
+	}
 }
 
 func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *testing.T) {
@@ -1004,7 +1060,7 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 	buildCtx := context.WithValue(context.Background(), agentRuntimeFactoryContextKey{}, ctxSentinel)
-	agents, err := buildAgents(buildCtx, cfg, factories, deps)
+	agents, _, err := buildAgents(buildCtx, cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1092,7 +1148,7 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1226,7 +1282,7 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 		AgentRuntime:  agentRuntime,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1340,7 +1396,7 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1443,7 +1499,7 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1516,7 +1572,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 			ExpiresAt: &expiresAt,
 		}
 		if index == 1 {
-			recommendedDrainAt := startedAt.Add(3 * time.Second)
+			recommendedDrainAt := startedAt.Add(8 * time.Second)
 			lifecycle.RecommendedDrainAt = &recommendedDrainAt
 		}
 		return lifecycle
@@ -1533,8 +1589,8 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
 	runtimeConfig.Pool.MaxReadyInstances = 2
-	runtimeConfig.Pool.StartupTimeout = "5s"
-	runtimeConfig.Pool.HealthCheckInterval = "25ms"
+	runtimeConfig.Pool.StartupTimeout = "15s"
+	runtimeConfig.Pool.HealthCheckInterval = "500ms"
 	runtimeConfig.Pool.RestartPolicy = config.RuntimePlacementRestartPolicyAlways
 	cfg := &config.Config{
 		Server: config.ServerConfig{
@@ -1564,7 +1620,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1581,7 +1637,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 	}
 	first := backends[0]
 	clock.waitForTicker(t)
-	clock.Advance(1500 * time.Millisecond)
+	clock.Advance(5 * time.Second)
 	runtimeProvider.waitStartSessionRequests(t, 2)
 	waitHostedAgentPoolState(t, pool, func() bool {
 		return !first.replacing && pool.starting == 0
@@ -1621,10 +1677,11 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
 		startedAt := clock.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
-		return &runtimeprovider.SessionLifecycle{
+		lifecycle := &runtimeprovider.SessionLifecycle{
 			StartedAt: &startedAt,
 			ExpiresAt: &expiresAt,
 		}
+		return lifecycle
 	}
 	runtimeProvider.startErrForSession = func(index int) error {
 		if index <= 2 {
@@ -1643,6 +1700,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	runtimeConfig := testHostedAgentRuntimeConfig()
 	runtimeConfig.Pool.MinReadyInstances = 2
 	runtimeConfig.Pool.MaxReadyInstances = 3
+	runtimeConfig.Pool.StartupTimeout = "15s"
 	runtimeConfig.Pool.HealthCheckInterval = "25ms"
 	runtimeConfig.Pool.RestartPolicy = config.RuntimePlacementRestartPolicyAlways
 	cfg := &config.Config{
@@ -1673,7 +1731,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1773,7 +1831,7 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -1850,7 +1908,7 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 		hostedAgentPoolClock: clock,
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -2235,7 +2293,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -2613,29 +2671,6 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 
 	invoker := &recordingAgentRuntimeInvoker{}
 	runGrants := newTestAgentRunGrants(t)
-	providers := testutil.NewProviderRegistry(t,
-		&coretesting.StubIntegration{
-			N:        "slack",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:    "events.reply",
-				Title: "Reply",
-			}}},
-		},
-		&coretesting.StubIntegration{
-			N:        "github",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:    "bot.createPullRequest",
-				Title: "Create pull request",
-			}}},
-		},
-	)
-	manager := agentmanager.New(agentmanager.Config{
-		Providers: providers,
-		RunGrants: runGrants,
-		Invoker:   invoker,
-	})
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
 			"simple": &routingAgentProvider{
@@ -2652,7 +2687,6 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 	}
 	runtime.SetInvoker(invoker)
 	runtime.SetRunGrants(runGrants)
-	runtime.SetToolSearcher(manager)
 
 	runAs := &core.RunAsSubject{
 		SubjectID:   "service_account:github-toolshed",
@@ -2662,6 +2696,24 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		Type: "github_app_installation",
 		ID:   "repo:{owner}/{repo}",
 	}
+	slackTarget := coreagent.ToolTarget{
+		App:       "slack",
+		Operation: "events.reply",
+	}
+	githubTarget := coreagent.ToolTarget{
+		App:                   "github",
+		Operation:             "bot.createPullRequest",
+		CredentialMode:        core.ConnectionModeNone,
+		RunAs:                 runAs,
+		RunAsExternalIdentity: externalIdentity,
+	}
+	slackToolID := mustMintAgentToolID(t, runGrants, slackTarget)
+	githubToolID := mustMintAgentToolID(t, runGrants, githubTarget)
+	runtime.SetToolSearcher(staticAgentToolResolver{tools: []coreagent.Tool{
+		{ID: slackToolID, Target: slackTarget},
+		{ID: githubToolID, Target: githubTarget},
+	}})
+
 	grant, err := runGrants.Mint(agentgrant.Grant{
 		ProviderName: "simple",
 		SessionID:    "session-1",
@@ -2688,12 +2740,9 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			App:       "slack",
-			Operation: "events.reply",
-		}),
-		RunGrant:  grant,
-		Arguments: map[string]any{"eventId": "evt-1"},
+		ToolID:       slackToolID,
+		RunGrant:     grant,
+		Arguments:    map[string]any{"eventId": "evt-1"},
 	}); err != nil {
 		t.Fatalf("ExecuteTool slack: %v", err)
 	}
@@ -2702,15 +2751,9 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			App:                   "github",
-			Operation:             "bot.createPullRequest",
-			CredentialMode:        core.ConnectionModeNone,
-			RunAs:                 runAs,
-			RunAsExternalIdentity: externalIdentity,
-		}),
-		RunGrant:  grant,
-		Arguments: map[string]any{"owner": "acme", "repo": "widgets"},
+		ToolID:       githubToolID,
+		RunGrant:     grant,
+		Arguments:    map[string]any{"owner": "acme", "repo": "widgets"},
 	}); err != nil {
 		t.Fatalf("ExecuteTool github: %v", err)
 	}
@@ -3615,9 +3658,6 @@ func (t *hostedAgentPoolManualTicker) Stop() {
 
 func hostedAgentProviderPoolForTest(t *testing.T, provider coreagent.Provider) *hostedAgentProviderPool {
 	t.Helper()
-	if withCleanup, ok := provider.(*agentProviderWithCleanup); ok {
-		provider = withCleanup.Provider
-	}
 	tracked, ok := provider.(*agentProviderWithTracking)
 	if !ok {
 		t.Fatalf("agent provider type = %T, want *agentProviderWithTracking", provider)
@@ -3680,7 +3720,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
-	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	agents, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
 	}
@@ -3881,7 +3921,7 @@ func TestAgentRuntimeLocalFallbackImageLaunchUsesConfiguredCommand(t *testing.T)
 	}
 }
 
-func TestAgentRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
+func TestAgentRuntimeConfigRejectsMissingHostServiceRelay(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
@@ -3921,7 +3961,7 @@ func TestAgentRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
-	_, err := buildAgents(context.Background(), cfg, factories, deps)
+	_, _, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err == nil {
 		t.Fatal("buildAgents error = nil, want host service access failure")
 	}

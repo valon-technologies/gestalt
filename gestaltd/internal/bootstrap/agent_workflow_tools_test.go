@@ -1666,11 +1666,6 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 		Workflow:     workflowRuntime,
 		Agent:        runtime,
 		AgentManager: agentManager,
-		AppInvokes: map[string][]invocation.AppInvocationDependency{
-			"slack": {
-				{App: "notification", Operation: "reply", CredentialMode: core.ConnectionModeNone},
-			},
-		},
 	})
 	runtime.SetRunGrants(newTestAgentRunGrants(t))
 	runtime.SetToolSearcher(workflowSystemToolResolver{})
