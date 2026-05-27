@@ -15,65 +15,65 @@ import (
 )
 
 type recordingManagerService struct {
-	createSession func(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error)
-	createTurn    func(context.Context, *principal.Principal, coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error)
-	listSessions  func(context.Context, *principal.Principal, coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error)
-	listTurns     func(context.Context, *principal.Principal, coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error)
+	createSession func(context.Context, *principal.Principal, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error)
+	createTurn    func(context.Context, *principal.Principal, *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error)
+	listSessions  func(context.Context, *principal.Principal, *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error)
+	listTurns     func(context.Context, *principal.Principal, *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error)
 }
 
-func (s *recordingManagerService) CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+func (s *recordingManagerService) CreateSession(ctx context.Context, p *principal.Principal, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	if s.createSession != nil {
 		return s.createSession(ctx, p, req)
 	}
 	return nil, errors.New("unexpected CreateSession call")
 }
 
-func (s *recordingManagerService) GetSession(context.Context, *principal.Principal, string) (*coreagent.Session, error) {
+func (s *recordingManagerService) GetSession(context.Context, *principal.Principal, *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error) {
 	return nil, errors.New("unexpected GetSession call")
 }
 
-func (s *recordingManagerService) ListSessions(ctx context.Context, p *principal.Principal, req coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error) {
+func (s *recordingManagerService) ListSessions(ctx context.Context, p *principal.Principal, req *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error) {
 	if s.listSessions != nil {
 		return s.listSessions(ctx, p, req)
 	}
 	return nil, errors.New("unexpected ListSessions call")
 }
 
-func (s *recordingManagerService) UpdateSession(context.Context, *principal.Principal, coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error) {
+func (s *recordingManagerService) UpdateSession(context.Context, *principal.Principal, *proto.UpdateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	return nil, errors.New("unexpected UpdateSession call")
 }
 
-func (s *recordingManagerService) CreateTurn(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+func (s *recordingManagerService) CreateTurn(ctx context.Context, p *principal.Principal, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	if s.createTurn != nil {
 		return s.createTurn(ctx, p, req)
 	}
 	return nil, errors.New("unexpected CreateTurn call")
 }
 
-func (s *recordingManagerService) GetTurn(context.Context, *principal.Principal, string) (*coreagent.Turn, error) {
+func (s *recordingManagerService) GetTurn(context.Context, *principal.Principal, *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	return nil, errors.New("unexpected GetTurn call")
 }
 
-func (s *recordingManagerService) ListTurns(ctx context.Context, p *principal.Principal, req coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error) {
+func (s *recordingManagerService) ListTurns(ctx context.Context, p *principal.Principal, req *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error) {
 	if s.listTurns != nil {
 		return s.listTurns(ctx, p, req)
 	}
 	return nil, errors.New("unexpected ListTurns call")
 }
 
-func (s *recordingManagerService) CancelTurn(context.Context, *principal.Principal, string, string) (*coreagent.Turn, error) {
+func (s *recordingManagerService) CancelTurn(context.Context, *principal.Principal, *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	return nil, errors.New("unexpected CancelTurn call")
 }
 
-func (s *recordingManagerService) ListTurnEvents(context.Context, *principal.Principal, string, int64, int) ([]*coreagent.TurnEvent, error) {
+func (s *recordingManagerService) ListTurnEvents(context.Context, *principal.Principal, *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
 	return nil, errors.New("unexpected ListTurnEvents call")
 }
 
-func (s *recordingManagerService) ListInteractions(context.Context, *principal.Principal, string) ([]*coreagent.Interaction, error) {
+func (s *recordingManagerService) ListInteractions(context.Context, *principal.Principal, *proto.ListAgentProviderInteractionsRequest) ([]*coreagent.Interaction, error) {
 	return nil, errors.New("unexpected ListInteractions call")
 }
 
-func (s *recordingManagerService) ResolveInteraction(context.Context, *principal.Principal, string, string, map[string]any) (*coreagent.Interaction, error) {
+func (s *recordingManagerService) ResolveInteraction(context.Context, *principal.Principal, *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	return nil, errors.New("unexpected ResolveInteraction call")
 }
 
@@ -93,7 +93,7 @@ func TestManagerServerMapsSessionStartUnsupportedToFailedPrecondition(t *testing
 		t.Fatalf("MintRootToken: %v", err)
 	}
 	server := NewProviderServer("caller-plugin", &recordingManagerService{
-		createSession: func(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+		createSession: func(context.Context, *principal.Principal, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 			return nil, agentmanager.ErrAgentSessionStartUnsupported
 		},
 	}, tokens)
@@ -123,7 +123,7 @@ func TestManagerServerMapsInvalidSessionMetadataToInvalidArgument(t *testing.T) 
 		t.Fatalf("MintRootToken: %v", err)
 	}
 	server := NewProviderServer("caller-plugin", &recordingManagerService{
-		createSession: func(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+		createSession: func(context.Context, *principal.Principal, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 			return nil, agentmanager.ErrAgentSessionMetadataInvalid
 		},
 	}, tokens)
@@ -153,22 +153,19 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 		t.Fatalf("MintRootToken: %v", err)
 	}
 	server := NewProviderServer("caller-plugin", &recordingManagerService{
-		createTurn: func(_ context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+		createTurn: func(_ context.Context, p *principal.Principal, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 			if p == nil || p.SubjectID != "user-1" {
 				t.Fatalf("principal = %#v, want subject user-1", p)
 			}
-			if req.ToolSource != coreagent.ToolSourceModeNone {
-				t.Fatalf("tool source = %q, want none", req.ToolSource)
+			if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {
+				t.Fatalf("tool source = %q, want none", req.GetToolSource())
 			}
-			if !req.ResponseSchemaSet {
-				t.Fatal("response schema presence = false, want true")
-			}
-			if req.ResponseSchema["type"] != "object" {
-				t.Fatalf("response schema = %#v, want object schema", req.ResponseSchema)
+			if req.GetResponseSchema().AsMap()["type"] != "object" {
+				t.Fatalf("response schema = %#v, want object schema", req.GetResponseSchema())
 			}
 			return &coreagent.Turn{
 				ID:        "turn-1",
-				SessionID: req.SessionID,
+				SessionID: req.GetSessionId(),
 				Status:    coreagent.ExecutionStatusRunning,
 			}, nil
 		},
@@ -205,13 +202,10 @@ func TestManagerServerCreateTurnFallsBackToPluginCallerApp(t *testing.T) {
 		t.Fatalf("MintRootToken: %v", err)
 	}
 	server := NewProviderServer("agent-host", &recordingManagerService{
-		createTurn: func(_ context.Context, _ *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
-			if req.CallerAppName != "agent-host" {
-				t.Fatalf("caller app = %q, want agent-host", req.CallerAppName)
-			}
+		createTurn: func(_ context.Context, _ *principal.Principal, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 			return &coreagent.Turn{
 				ID:        "turn-1",
-				SessionID: req.SessionID,
+				SessionID: req.GetSessionId(),
 				Status:    coreagent.ExecutionStatusRunning,
 			}, nil
 		},
@@ -241,7 +235,7 @@ func TestManagerServerMapsStructuredOutputUnsupportedToFailedPrecondition(t *tes
 		t.Fatalf("MintRootToken: %v", err)
 	}
 	server := NewProviderServer("caller-plugin", &recordingManagerService{
-		createTurn: func(context.Context, *principal.Principal, coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+		createTurn: func(context.Context, *principal.Principal, *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 			return nil, agentmanager.ErrAgentStructuredOutputUnsupported
 		},
 	}, tokens)
@@ -272,11 +266,11 @@ func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 	}
 
 	service := &recordingManagerService{
-		listSessions: func(_ context.Context, p *principal.Principal, req coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error) {
+		listSessions: func(_ context.Context, p *principal.Principal, req *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error) {
 			if p == nil || p.SubjectID != "user-1" {
 				t.Fatalf("principal = %#v, want subject user-1", p)
 			}
-			if req.ProviderName != "managed" || req.State != coreagent.SessionStateActive || req.Limit != 7 || !req.SummaryOnly {
+			if req.GetProviderName() != " managed " || req.GetState() != proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE || req.GetLimit() != 7 || !req.GetSummaryOnly() {
 				t.Fatalf("list sessions req = %#v", req)
 			}
 			return []*coreagent.Session{{
@@ -285,11 +279,11 @@ func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 				Metadata: map[string]any{"heavy": "value"},
 			}}, nil
 		},
-		listTurns: func(_ context.Context, p *principal.Principal, req coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error) {
+		listTurns: func(_ context.Context, p *principal.Principal, req *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error) {
 			if p == nil || p.SubjectID != "user-1" {
 				t.Fatalf("principal = %#v, want subject user-1", p)
 			}
-			if req.SessionID != "session-1" || req.Status != coreagent.ExecutionStatusSucceeded || req.Limit != 3 || !req.SummaryOnly {
+			if req.GetSessionId() != "session-1" || req.GetStatus() != proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED || req.GetLimit() != 3 || !req.GetSummaryOnly() {
 				t.Fatalf("list turns req = %#v", req)
 			}
 			return []*coreagent.Turn{{

@@ -22,6 +22,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -1875,47 +1876,47 @@ func (unavailableAgentManager) ListTools(context.Context, *principal.Principal, 
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) CreateSession(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+func (unavailableAgentManager) CreateSession(context.Context, *principal.Principal, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) GetSession(context.Context, *principal.Principal, string) (*coreagent.Session, error) {
+func (unavailableAgentManager) GetSession(context.Context, *principal.Principal, *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) ListSessions(context.Context, *principal.Principal, coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error) {
+func (unavailableAgentManager) ListSessions(context.Context, *principal.Principal, *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) UpdateSession(context.Context, *principal.Principal, coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error) {
+func (unavailableAgentManager) UpdateSession(context.Context, *principal.Principal, *proto.UpdateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) CreateTurn(context.Context, *principal.Principal, coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+func (unavailableAgentManager) CreateTurn(context.Context, *principal.Principal, *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) GetTurn(context.Context, *principal.Principal, string) (*coreagent.Turn, error) {
+func (unavailableAgentManager) GetTurn(context.Context, *principal.Principal, *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) ListTurns(context.Context, *principal.Principal, coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error) {
+func (unavailableAgentManager) ListTurns(context.Context, *principal.Principal, *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) CancelTurn(context.Context, *principal.Principal, string, string) (*coreagent.Turn, error) {
+func (unavailableAgentManager) CancelTurn(context.Context, *principal.Principal, *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) ListTurnEvents(context.Context, *principal.Principal, string, int64, int) ([]*coreagent.TurnEvent, error) {
+func (unavailableAgentManager) ListTurnEvents(context.Context, *principal.Principal, *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) ListInteractions(context.Context, *principal.Principal, string) ([]*coreagent.Interaction, error) {
+func (unavailableAgentManager) ListInteractions(context.Context, *principal.Principal, *proto.ListAgentProviderInteractionsRequest) ([]*coreagent.Interaction, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) ResolveInteraction(context.Context, *principal.Principal, string, string, map[string]any) (*coreagent.Interaction, error) {
+func (unavailableAgentManager) ResolveInteraction(context.Context, *principal.Principal, *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 

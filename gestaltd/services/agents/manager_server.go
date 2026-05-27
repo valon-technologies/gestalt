@@ -23,17 +23,17 @@ func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
 }
 
 type ManagerService interface {
-	CreateSession(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error)
-	GetSession(context.Context, *principal.Principal, string) (*coreagent.Session, error)
-	ListSessions(context.Context, *principal.Principal, coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error)
-	UpdateSession(context.Context, *principal.Principal, coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error)
-	CreateTurn(context.Context, *principal.Principal, coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error)
-	GetTurn(context.Context, *principal.Principal, string) (*coreagent.Turn, error)
-	ListTurns(context.Context, *principal.Principal, coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error)
-	CancelTurn(context.Context, *principal.Principal, string, string) (*coreagent.Turn, error)
-	ListTurnEvents(context.Context, *principal.Principal, string, int64, int) ([]*coreagent.TurnEvent, error)
-	ListInteractions(context.Context, *principal.Principal, string) ([]*coreagent.Interaction, error)
-	ResolveInteraction(context.Context, *principal.Principal, string, string, map[string]any) (*coreagent.Interaction, error)
+	CreateSession(context.Context, *principal.Principal, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error)
+	GetSession(context.Context, *principal.Principal, *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error)
+	ListSessions(context.Context, *principal.Principal, *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error)
+	UpdateSession(context.Context, *principal.Principal, *proto.UpdateAgentProviderSessionRequest) (*coreagent.Session, error)
+	CreateTurn(context.Context, *principal.Principal, *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error)
+	GetTurn(context.Context, *principal.Principal, *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error)
+	ListTurns(context.Context, *principal.Principal, *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error)
+	CancelTurn(context.Context, *principal.Principal, *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error)
+	ListTurnEvents(context.Context, *principal.Principal, *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error)
+	ListInteractions(context.Context, *principal.Principal, *proto.ListAgentProviderInteractionsRequest) ([]*coreagent.Interaction, error)
+	ResolveInteraction(context.Context, *principal.Principal, *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error)
 }
 
 type ProviderServer struct {
@@ -60,14 +60,7 @@ func (s *ProviderServer) CreateSession(ctx context.Context, req *proto.CreateAge
 	if err != nil {
 		return nil, err
 	}
-	session, err := s.manager.CreateSession(appaccessservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerCreateSessionRequest{
-		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
-		ProviderName:   strings.TrimSpace(req.GetProviderName()),
-		Model:          strings.TrimSpace(req.GetModel()),
-		ClientRef:      strings.TrimSpace(req.GetClientRef()),
-		Metadata:       mapFromStruct(req.GetMetadata()),
-		Workspace:      agentWorkspaceFromProto(req.GetWorkspace()),
-	})
+	session, err := s.manager.CreateSession(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -86,7 +79,7 @@ func (s *ProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProv
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
-	session, err := s.manager.GetSession(appaccessservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), sessionID)
+	session, err := s.manager.GetSession(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -101,19 +94,10 @@ func (s *ProviderServer) ListSessions(ctx context.Context, req *proto.ListAgentP
 	if err != nil {
 		return nil, err
 	}
-	state, err := agentSessionStateFromProto(req.GetState())
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
 	if req.GetLimit() < 0 {
 		return nil, status.Error(codes.InvalidArgument, "limit must be non-negative")
 	}
-	sessions, err := s.manager.ListSessions(appaccessservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerListSessionsRequest{
-		ProviderName: strings.TrimSpace(req.GetProviderName()),
-		State:        state,
-		Limit:        int(req.GetLimit()),
-		SummaryOnly:  req.GetSummaryOnly(),
-	})
+	sessions, err := s.manager.ListSessions(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -140,16 +124,7 @@ func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAge
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
-	state, err := agentSessionStateFromProto(req.GetState())
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-	session, err := s.manager.UpdateSession(appaccessservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerUpdateSessionRequest{
-		SessionID: sessionID,
-		ClientRef: strings.TrimSpace(req.GetClientRef()),
-		State:     state,
-		Metadata:  mapFromStruct(req.GetMetadata()),
-	})
+	session, err := s.manager.UpdateSession(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -168,21 +143,7 @@ func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentP
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
-	turn, err := s.manager.CreateTurn(appaccessservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerCreateTurnRequest{
-		CallerAppName:     s.callerAppName(tokenCtx),
-		IdempotencyKey:    strings.TrimSpace(req.GetIdempotencyKey()),
-		Model:             strings.TrimSpace(req.GetModel()),
-		SessionID:         sessionID,
-		Messages:          agentMessagesFromProto(req.GetMessages()),
-		ToolRefs:          agentToolRefsFromProto(req.GetToolRefs()),
-		ToolRefsSet:       req.GetToolRefsSet() || len(req.GetToolRefs()) > 0,
-		ToolSource:        agentToolSourceModeFromProtoStrict(req.GetToolSource()),
-		ResponseSchema:    mapFromStruct(req.GetResponseSchema()),
-		ResponseSchemaSet: req.ResponseSchema != nil,
-		Metadata:          mapFromStruct(req.GetMetadata()),
-		ModelOptions:      mapFromStruct(req.GetModelOptions()),
-		TimeoutSeconds:    int(req.GetTimeoutSeconds()),
-	})
+	turn, err := s.manager.CreateTurn(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -201,7 +162,7 @@ func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProvide
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	turn, err := s.manager.GetTurn(appaccessservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID)
+	turn, err := s.manager.GetTurn(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -220,19 +181,10 @@ func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProv
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
-	statusFilter, err := agentExecutionStatusFromProto(req.GetStatus())
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
 	if req.GetLimit() < 0 {
 		return nil, status.Error(codes.InvalidArgument, "limit must be non-negative")
 	}
-	turns, err := s.manager.ListTurns(appaccessservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerListTurnsRequest{
-		SessionID:   sessionID,
-		Status:      statusFilter,
-		Limit:       int(req.GetLimit()),
-		SummaryOnly: req.GetSummaryOnly(),
-	})
+	turns, err := s.manager.ListTurns(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -259,7 +211,7 @@ func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentP
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	turn, err := s.manager.CancelTurn(appaccessservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID, strings.TrimSpace(req.GetReason()))
+	turn, err := s.manager.CancelTurn(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -278,7 +230,7 @@ func (s *ProviderServer) ListTurnEvents(ctx context.Context, req *proto.ListAgen
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	events, err := s.manager.ListTurnEvents(appaccessservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID, req.GetAfterSeq(), int(req.GetLimit()))
+	events, err := s.manager.ListTurnEvents(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -301,7 +253,7 @@ func (s *ProviderServer) ListInteractions(ctx context.Context, req *proto.ListAg
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	interactions, err := s.manager.ListInteractions(appaccessservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID)
+	interactions, err := s.manager.ListInteractions(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -324,7 +276,7 @@ func (s *ProviderServer) ResolveInteraction(ctx context.Context, req *proto.Reso
 	if interactionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "interaction_id is required")
 	}
-	interaction, err := s.manager.ResolveInteraction(appaccessservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), turnID, interactionID, mapFromStruct(req.GetResolution()))
+	interaction, err := s.manager.ResolveInteraction(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -358,6 +310,14 @@ func (s *ProviderServer) callerAppName(tokenCtx appaccessservice.TokenContext) s
 		return ""
 	}
 	return strings.TrimSpace(s.pluginName)
+}
+
+func (s *ProviderServer) restoreTokenContext(ctx context.Context, tokenCtx appaccessservice.TokenContext) context.Context {
+	ctx = appaccessservice.RestoreTokenContext(ctx, tokenCtx, "")
+	if caller := s.callerAppName(tokenCtx); caller != "" {
+		ctx = agentmanager.WithCallerAppName(ctx, caller)
+	}
+	return ctx
 }
 
 func agentManagerStatusError(err error) error {

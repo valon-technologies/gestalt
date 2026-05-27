@@ -18,11 +18,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const agentIdempotencyKeyHeader = "Idempotency-Key"
@@ -266,13 +268,18 @@ func (s *Server) createAgentSession(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	session, err := s.agentRuns.CreateSession(r.Context(), p, coreagent.ManagerCreateSessionRequest{
+	metadata, err := agentStructFromMap(req.Metadata)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid metadata: %v", err))
+		return
+	}
+	session, err := s.agentRuns.CreateSession(r.Context(), p, &proto.CreateAgentProviderSessionRequest{
 		IdempotencyKey: idempotencyKey,
 		ProviderName:   strings.TrimSpace(req.ProviderName),
 		Model:          strings.TrimSpace(req.Model),
 		ClientRef:      strings.TrimSpace(req.ClientRef),
-		Metadata:       maps.Clone(req.Metadata),
-		Workspace:      agentWorkspaceRequestToCore(req.Workspace),
+		Metadata:       metadata,
+		Workspace:      agentWorkspaceRequestToProto(req.Workspace),
 	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "session", "", nil, err)
@@ -296,10 +303,10 @@ func (s *Server) listAgentSessions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	sessions, err := s.agentRuns.ListSessions(r.Context(), p, coreagent.ManagerListSessionsRequest{
+	sessions, err := s.agentRuns.ListSessions(r.Context(), p, &proto.ListAgentProviderSessionsRequest{
 		ProviderName: providerName,
 		State:        state,
-		Limit:        limit,
+		Limit:        int32(limit),
 		SummaryOnly:  summaryOnly,
 	})
 	if err != nil {
@@ -343,7 +350,7 @@ func (s *Server) listAgentProviders(w http.ResponseWriter, r *http.Request) {
 		}
 		provider, err := s.agent.ResolveProvider(name)
 		if err == nil && provider != nil {
-			if caps, err := provider.GetCapabilities(r.Context(), coreagent.GetCapabilitiesRequest{}); err == nil {
+			if caps, err := provider.GetCapabilities(r.Context(), &proto.GetAgentProviderCapabilitiesRequest{}); err == nil {
 				info.Capabilities = agentProviderCapabilitiesInfoFromCore(caps)
 			} else {
 				slog.WarnContext(r.Context(), "agent provider capabilities unavailable", "provider", name, "error", err)
@@ -428,7 +435,7 @@ func (s *Server) getAgentSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sessionID := chi.URLParam(r, "sessionID")
-	session, err := s.agentRuns.GetSession(r.Context(), p, sessionID)
+	session, err := s.agentRuns.GetSession(r.Context(), p, &proto.GetAgentProviderSessionRequest{SessionId: strings.TrimSpace(sessionID)})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "session", sessionID, nil, err)
 		return
@@ -455,11 +462,16 @@ func (s *Server) updateAgentSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	session, err := s.agentRuns.UpdateSession(r.Context(), p, coreagent.ManagerUpdateSessionRequest{
-		SessionID: strings.TrimSpace(sessionID),
+	metadata, err := agentStructFromMap(req.Metadata)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid metadata: %v", err))
+		return
+	}
+	session, err := s.agentRuns.UpdateSession(r.Context(), p, &proto.UpdateAgentProviderSessionRequest{
+		SessionId: strings.TrimSpace(sessionID),
 		ClientRef: strings.TrimSpace(req.ClientRef),
 		State:     state,
-		Metadata:  maps.Clone(req.Metadata),
+		Metadata:  metadata,
 	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "session", sessionID, nil, err)
@@ -503,18 +515,40 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	turn, err := s.agentRuns.CreateTurn(r.Context(), p, coreagent.ManagerCreateTurnRequest{
-		IdempotencyKey:    idempotencyKey,
-		Model:             strings.TrimSpace(req.Model),
-		SessionID:         strings.TrimSpace(sessionID),
-		Messages:          agentMessagesFromRequest(req.Messages),
-		ToolRefs:          agentToolRefsForCreateTurn(req),
-		ToolRefsSet:       req.toolRefsSet,
-		ToolSource:        toolSource,
-		ResponseSchema:    maps.Clone(req.ResponseSchema),
-		ResponseSchemaSet: req.responseSchemaSet,
-		Metadata:          maps.Clone(req.Metadata),
-		ModelOptions:      maps.Clone(req.ModelOptions),
+	messages, err := agentMessagesFromRequest(req.Messages)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid messages: %v", err))
+		return
+	}
+	var responseSchema *structpb.Struct
+	if req.responseSchemaSet {
+		responseSchema, err = structpb.NewStruct(req.ResponseSchema)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid responseSchema: %v", err))
+			return
+		}
+	}
+	metadata, err := agentStructFromMap(req.Metadata)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid metadata: %v", err))
+		return
+	}
+	modelOptions, err := agentStructFromMap(req.ModelOptions)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid modelOptions: %v", err))
+		return
+	}
+	turn, err := s.agentRuns.CreateTurn(r.Context(), p, &proto.CreateAgentProviderTurnRequest{
+		IdempotencyKey: idempotencyKey,
+		Model:          strings.TrimSpace(req.Model),
+		SessionId:      strings.TrimSpace(sessionID),
+		Messages:       messages,
+		ToolRefs:       agentToolRefsForCreateTurn(req),
+		ToolRefsSet:    req.toolRefsSet,
+		ToolSource:     agentToolSourceModeToProto(toolSource),
+		ResponseSchema: responseSchema,
+		Metadata:       metadata,
+		ModelOptions:   modelOptions,
 	})
 	if err != nil {
 		if errors.Is(err, agentmanager.ErrAgentSessionNotFound) {
@@ -570,10 +604,10 @@ func (s *Server) listAgentTurns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	turns, err := s.agentRuns.ListTurns(r.Context(), p, coreagent.ManagerListTurnsRequest{
-		SessionID:   sessionID,
+	turns, err := s.agentRuns.ListTurns(r.Context(), p, &proto.ListAgentProviderTurnsRequest{
+		SessionId:   sessionID,
 		Status:      statusFilter,
-		Limit:       limit,
+		Limit:       int32(limit),
 		SummaryOnly: summaryOnly,
 	})
 	if err != nil {
@@ -596,7 +630,7 @@ func (s *Server) getAgentTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	turnID := chi.URLParam(r, "turnID")
-	turn, err := s.agentRuns.GetTurn(r.Context(), p, turnID)
+	turn, err := s.agentRuns.GetTurn(r.Context(), p, &proto.GetAgentProviderTurnRequest{TurnId: strings.TrimSpace(turnID)})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
 		return
@@ -618,7 +652,10 @@ func (s *Server) cancelAgentTurn(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	turn, err := s.agentRuns.CancelTurn(r.Context(), p, turnID, req.Reason)
+	turn, err := s.agentRuns.CancelTurn(r.Context(), p, &proto.CancelAgentProviderTurnRequest{
+		TurnId: strings.TrimSpace(turnID),
+		Reason: req.Reason,
+	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
 		return
@@ -636,7 +673,11 @@ func (s *Server) listAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	events, err := s.agentRuns.ListTurnEvents(r.Context(), p, turnID, afterSeq, limit)
+	events, err := s.agentRuns.ListTurnEvents(r.Context(), p, &proto.ListAgentProviderTurnEventsRequest{
+		TurnId:   strings.TrimSpace(turnID),
+		AfterSeq: afterSeq,
+		Limit:    int32(limit),
+	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
 		return
@@ -663,7 +704,11 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
+	events, err := s.agentRuns.ListTurnEvents(ctx, p, &proto.ListAgentProviderTurnEventsRequest{
+		TurnId:   strings.TrimSpace(turnID),
+		AfterSeq: afterSeq,
+		Limit:    int32(limit),
+	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
 		return
@@ -750,7 +795,11 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	pageFull := writeEvents(events)
 	for {
 		if pageFull {
-			events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
+			events, err := s.agentRuns.ListTurnEvents(ctx, p, &proto.ListAgentProviderTurnEventsRequest{
+				TurnId:   strings.TrimSpace(turnID),
+				AfterSeq: afterSeq,
+				Limit:    int32(limit),
+			})
 			if err != nil {
 				writeStreamError(err)
 				return
@@ -764,7 +813,11 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if done {
-			events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
+			events, err := s.agentRuns.ListTurnEvents(ctx, p, &proto.ListAgentProviderTurnEventsRequest{
+				TurnId:   strings.TrimSpace(turnID),
+				AfterSeq: afterSeq,
+				Limit:    int32(limit),
+			})
 			if err != nil {
 				writeStreamError(err)
 				return
@@ -782,7 +835,11 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 			if time.Since(lastWrite) >= s.agentStreamHeartbeat {
 				writeHeartbeat("keepalive")
 			}
-			events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
+			events, err := s.agentRuns.ListTurnEvents(ctx, p, &proto.ListAgentProviderTurnEventsRequest{
+				TurnId:   strings.TrimSpace(turnID),
+				AfterSeq: afterSeq,
+				Limit:    int32(limit),
+			})
 			if err != nil {
 				writeStreamError(err)
 				return
@@ -811,7 +868,9 @@ func (s *Server) listAgentTurnInteractions(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	turnID := chi.URLParam(r, "turnID")
-	interactions, err := s.agentRuns.ListInteractions(r.Context(), p, turnID)
+	interactions, err := s.agentRuns.ListInteractions(r.Context(), p, &proto.ListAgentProviderInteractionsRequest{
+		TurnId: strings.TrimSpace(turnID),
+	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
 		return
@@ -838,7 +897,16 @@ func (s *Server) resolveAgentInteraction(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	interaction, err := s.agentRuns.ResolveInteraction(r.Context(), p, turnID, interactionID, maps.Clone(req.Resolution))
+	resolution, err := agentStructFromMap(req.Resolution)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid resolution: %v", err))
+		return
+	}
+	interaction, err := s.agentRuns.ResolveInteraction(r.Context(), p, &proto.ResolveAgentProviderInteractionRequest{
+		TurnId:        strings.TrimSpace(turnID),
+		InteractionId: strings.TrimSpace(interactionID),
+		Resolution:    resolution,
+	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "interaction", interactionID, nil, err)
 		return
@@ -961,7 +1029,7 @@ func parseAgentTurnEventStreamUntil(w http.ResponseWriter, r *http.Request) (str
 }
 
 func (s *Server) agentTurnStreamDone(ctx context.Context, p *principal.Principal, turnID string, until string) (bool, error) {
-	turn, err := s.agentRuns.GetTurn(ctx, p, turnID)
+	turn, err := s.agentRuns.GetTurn(ctx, p, &proto.GetAgentProviderTurnRequest{TurnId: strings.TrimSpace(turnID)})
 	if err != nil {
 		return false, err
 	}
@@ -975,62 +1043,82 @@ func (s *Server) agentTurnStreamDone(ctx context.Context, p *principal.Principal
 	}
 }
 
-func agentMessagesFromRequest(messages []agentMessageRequest) []coreagent.Message {
+func agentMessagesFromRequest(messages []agentMessageRequest) ([]*proto.AgentMessage, error) {
 	if len(messages) == 0 {
-		return nil
+		return nil, nil
 	}
-	out := make([]coreagent.Message, 0, len(messages))
+	out := make([]*proto.AgentMessage, 0, len(messages))
 	for _, message := range messages {
-		out = append(out, coreagent.Message{
+		parts, err := agentMessagePartsFromRequest(message.Parts)
+		if err != nil {
+			return nil, err
+		}
+		metadata, err := agentStructFromMap(message.Metadata)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, &proto.AgentMessage{
 			Role:     strings.TrimSpace(message.Role),
 			Text:     message.Text,
-			Parts:    agentMessagePartsFromRequest(message.Parts),
-			Metadata: maps.Clone(message.Metadata),
+			Parts:    parts,
+			Metadata: metadata,
 		})
 	}
-	return out
+	return out, nil
 }
 
-func agentMessagePartsFromRequest(parts []agentMessagePartRequest) []coreagent.MessagePart {
+func agentMessagePartsFromRequest(parts []agentMessagePartRequest) ([]*proto.AgentMessagePart, error) {
 	if len(parts) == 0 {
-		return nil
+		return nil, nil
 	}
-	out := make([]coreagent.MessagePart, 0, len(parts))
+	out := make([]*proto.AgentMessagePart, 0, len(parts))
 	for _, part := range parts {
-		var toolCall *coreagent.ToolCallPart
+		jsonValue, err := agentStructFromMap(part.JSON)
+		if err != nil {
+			return nil, err
+		}
+		var toolCall *proto.AgentMessagePartToolCall
 		if part.ToolCall != nil {
-			toolCall = &coreagent.ToolCallPart{
-				ID:        strings.TrimSpace(part.ToolCall.ID),
-				ToolID:    strings.TrimSpace(part.ToolCall.ToolID),
-				Arguments: maps.Clone(part.ToolCall.Arguments),
+			args, err := agentStructFromMap(part.ToolCall.Arguments)
+			if err != nil {
+				return nil, err
+			}
+			toolCall = &proto.AgentMessagePartToolCall{
+				Id:        strings.TrimSpace(part.ToolCall.ID),
+				ToolId:    strings.TrimSpace(part.ToolCall.ToolID),
+				Arguments: args,
 			}
 		}
-		var toolResult *coreagent.ToolResultPart
+		var toolResult *proto.AgentMessagePartToolResult
 		if part.ToolResult != nil {
-			toolResult = &coreagent.ToolResultPart{
-				ToolCallID: strings.TrimSpace(part.ToolResult.ToolCallID),
-				Status:     part.ToolResult.Status,
+			output, err := agentStructFromMap(part.ToolResult.Output)
+			if err != nil {
+				return nil, err
+			}
+			toolResult = &proto.AgentMessagePartToolResult{
+				ToolCallId: strings.TrimSpace(part.ToolResult.ToolCallID),
+				Status:     int32(part.ToolResult.Status),
 				Content:    part.ToolResult.Content,
-				Output:     maps.Clone(part.ToolResult.Output),
+				Output:     output,
 			}
 		}
-		var imageRef *coreagent.ImageRefPart
+		var imageRef *proto.AgentMessagePartImageRef
 		if part.ImageRef != nil {
-			imageRef = &coreagent.ImageRefPart{
-				URI:      strings.TrimSpace(part.ImageRef.URI),
-				MIMEType: strings.TrimSpace(part.ImageRef.MIMEType),
+			imageRef = &proto.AgentMessagePartImageRef{
+				Uri:      strings.TrimSpace(part.ImageRef.URI),
+				MimeType: strings.TrimSpace(part.ImageRef.MIMEType),
 			}
 		}
-		out = append(out, coreagent.MessagePart{
-			Type:       coreagent.MessagePartType(strings.TrimSpace(part.Type)),
+		out = append(out, &proto.AgentMessagePart{
+			Type:       agentMessagePartTypeToProto(coreagent.MessagePartType(strings.TrimSpace(part.Type))),
 			Text:       part.Text,
-			JSON:       maps.Clone(part.JSON),
+			Json:       jsonValue,
 			ToolCall:   toolCall,
 			ToolResult: toolResult,
 			ImageRef:   imageRef,
 		})
 	}
-	return out
+	return out, nil
 }
 
 func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
@@ -1054,8 +1142,28 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 	return out
 }
 
-func agentToolRefsForCreateTurn(req agentTurnCreateRequest) []coreagent.ToolRef {
-	return agentToolRefsFromRequest(req.ToolRefs)
+func agentToolRefsForCreateTurn(req agentTurnCreateRequest) []*proto.AgentToolRef {
+	return agentToolRefsToProto(agentToolRefsFromRequest(req.ToolRefs))
+}
+
+func agentToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]*proto.AgentToolRef, 0, len(refs))
+	for i := range refs {
+		ref := refs[i]
+		out = append(out, &proto.AgentToolRef{
+			System:      strings.TrimSpace(ref.System),
+			App:         strings.TrimSpace(ref.App),
+			Operation:   strings.TrimSpace(ref.Operation),
+			Connection:  strings.TrimSpace(ref.Connection),
+			Instance:    strings.TrimSpace(ref.Instance),
+			Title:       strings.TrimSpace(ref.Title),
+			Description: strings.TrimSpace(ref.Description),
+		})
+	}
+	return out
 }
 
 func agentToolRefsToRequest(refs []coreagent.ToolRef) []agentToolRefRequest {
@@ -1137,51 +1245,86 @@ func agentToolSourceModeFromRequest(value string) (coreagent.ToolSourceMode, err
 	}
 }
 
-func agentSessionStateFromRequest(value string) (coreagent.SessionState, error) {
+func agentToolSourceModeToProto(mode coreagent.ToolSourceMode) proto.AgentToolSourceMode {
+	switch mode {
+	case coreagent.ToolSourceModeMCPCatalog:
+		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
+	case coreagent.ToolSourceModeNone:
+		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE
+	default:
+		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
+	}
+}
+
+func agentMessagePartTypeToProto(partType coreagent.MessagePartType) proto.AgentMessagePartType {
+	switch partType {
+	case coreagent.MessagePartTypeText:
+		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT
+	case coreagent.MessagePartTypeJSON:
+		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_JSON
+	case coreagent.MessagePartTypeToolCall:
+		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_CALL
+	case coreagent.MessagePartTypeToolResult:
+		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_RESULT
+	case coreagent.MessagePartTypeImageRef:
+		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF
+	default:
+		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
+	}
+}
+
+func agentStructFromMap(values map[string]any) (*structpb.Struct, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	return structpb.NewStruct(values)
+}
+
+func agentSessionStateFromRequest(value string) (proto.AgentSessionState, error) {
 	switch strings.TrimSpace(value) {
 	case "":
-		return "", nil
+		return proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED, nil
 	case string(coreagent.SessionStateActive):
-		return coreagent.SessionStateActive, nil
+		return proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE, nil
 	case string(coreagent.SessionStateArchived):
-		return coreagent.SessionStateArchived, nil
+		return proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED, nil
 	default:
-		return "", fmt.Errorf("unsupported agent session state %q", value)
+		return proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED, fmt.Errorf("unsupported agent session state %q", value)
 	}
 }
 
-func agentExecutionStatusFromRequest(value string) (coreagent.ExecutionStatus, error) {
+func agentExecutionStatusFromRequest(value string) (proto.AgentExecutionStatus, error) {
 	switch strings.TrimSpace(value) {
 	case "":
-		return "", nil
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED, nil
 	case string(coreagent.ExecutionStatusPending):
-		return coreagent.ExecutionStatusPending, nil
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING, nil
 	case string(coreagent.ExecutionStatusRunning):
-		return coreagent.ExecutionStatusRunning, nil
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING, nil
 	case string(coreagent.ExecutionStatusSucceeded):
-		return coreagent.ExecutionStatusSucceeded, nil
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED, nil
 	case string(coreagent.ExecutionStatusFailed):
-		return coreagent.ExecutionStatusFailed, nil
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED, nil
 	case string(coreagent.ExecutionStatusCanceled):
-		return coreagent.ExecutionStatusCanceled, nil
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED, nil
 	case string(coreagent.ExecutionStatusWaitingForInput):
-		return coreagent.ExecutionStatusWaitingForInput, nil
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT, nil
 	default:
-		return "", fmt.Errorf("unsupported agent turn status %q", value)
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED, fmt.Errorf("unsupported agent turn status %q", value)
 	}
 }
 
-func agentWorkspaceRequestToCore(workspace *agentWorkspaceRequest) *coreagent.Workspace {
+func agentWorkspaceRequestToProto(workspace *agentWorkspaceRequest) *proto.AgentWorkspace {
 	if workspace == nil {
 		return nil
 	}
-	out := &coreagent.Workspace{
-		Checkouts: make([]coreagent.WorkspaceGitCheckout, 0, len(workspace.Checkouts)),
-		CWD:       workspace.CWD,
+	out := &proto.AgentWorkspace{
+		Checkouts: make([]*proto.AgentWorkspaceGitCheckout, 0, len(workspace.Checkouts)),
+		Cwd:       workspace.CWD,
 	}
 	for _, checkout := range workspace.Checkouts {
-		out.Checkouts = append(out.Checkouts, coreagent.WorkspaceGitCheckout{
-			URL:  checkout.URL,
+		out.Checkouts = append(out.Checkouts, &proto.AgentWorkspaceGitCheckout{
+			Url:  checkout.URL,
 			Ref:  checkout.Ref,
 			Path: checkout.Path,
 		})

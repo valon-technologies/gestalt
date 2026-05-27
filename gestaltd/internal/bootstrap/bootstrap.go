@@ -535,7 +535,7 @@ type agentProviderWithTracking struct {
 	providerName string
 }
 
-func (p *agentProviderWithTracking) CreateSession(ctx context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+func (p *agentProviderWithTracking) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
@@ -543,38 +543,38 @@ func (p *agentProviderWithTracking) CreateSession(ctx context.Context, req corea
 	if err != nil {
 		return nil, err
 	}
-	requestedID := strings.TrimSpace(req.SessionID)
+	requestedID := strings.TrimSpace(req.GetSessionId())
 	if requestedID != "" && session != nil {
 		actualID := strings.TrimSpace(session.ID)
-		if actualID != "" && actualID != requestedID && strings.TrimSpace(req.IdempotencyKey) == "" {
+		if actualID != "" && actualID != requestedID && strings.TrimSpace(req.GetIdempotencyKey()) == "" {
 			return nil, fmt.Errorf("%w: agent provider %q returned session id %q for requested session id %q", invocation.ErrInternal, p.providerName, actualID, requestedID)
 		}
 	}
 	return session, nil
 }
 
-func (p *agentProviderWithTracking) GetSession(ctx context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+func (p *agentProviderWithTracking) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
 	return p.delegate.GetSession(ctx, req)
 }
 
-func (p *agentProviderWithTracking) ListSessions(ctx context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+func (p *agentProviderWithTracking) ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
 	return p.delegate.ListSessions(ctx, req)
 }
 
-func (p *agentProviderWithTracking) UpdateSession(ctx context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
+func (p *agentProviderWithTracking) UpdateSession(ctx context.Context, req *proto.UpdateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
 	return p.delegate.UpdateSession(ctx, req)
 }
 
-func (p *agentProviderWithTracking) CreateTurn(ctx context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+func (p *agentProviderWithTracking) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
@@ -582,10 +582,10 @@ func (p *agentProviderWithTracking) CreateTurn(ctx context.Context, req coreagen
 	if err != nil {
 		return nil, err
 	}
-	requestedID := strings.TrimSpace(req.TurnID)
+	requestedID := strings.TrimSpace(req.GetTurnId())
 	if requestedID != "" && turn != nil {
 		actualID := strings.TrimSpace(turn.ID)
-		if actualID != "" && actualID != requestedID && strings.TrimSpace(req.IdempotencyKey) == "" {
+		if actualID != "" && actualID != requestedID && strings.TrimSpace(req.GetIdempotencyKey()) == "" {
 			err := fmt.Errorf("%w: agent provider %q returned turn id %q for requested turn id %q", invocation.ErrInternal, p.providerName, actualID, requestedID)
 			cancelErr := p.cancelProviderTurn(actualID, "agent provider returned mismatched turn id")
 			if cancelErr != nil {
@@ -597,56 +597,56 @@ func (p *agentProviderWithTracking) CreateTurn(ctx context.Context, req coreagen
 	return turn, nil
 }
 
-func (p *agentProviderWithTracking) GetTurn(ctx context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+func (p *agentProviderWithTracking) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
 	return p.delegate.GetTurn(ctx, req)
 }
 
-func (p *agentProviderWithTracking) ListTurns(ctx context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+func (p *agentProviderWithTracking) ListTurns(ctx context.Context, req *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
 	return p.delegate.ListTurns(ctx, req)
 }
 
-func (p *agentProviderWithTracking) CancelTurn(ctx context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
+func (p *agentProviderWithTracking) CancelTurn(ctx context.Context, req *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
 	return p.delegate.CancelTurn(ctx, req)
 }
 
-func (p *agentProviderWithTracking) ListTurnEvents(ctx context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+func (p *agentProviderWithTracking) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
 	return p.delegate.ListTurnEvents(ctx, req)
 }
 
-func (p *agentProviderWithTracking) GetInteraction(ctx context.Context, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+func (p *agentProviderWithTracking) GetInteraction(ctx context.Context, req *proto.GetAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
 	return p.delegate.GetInteraction(ctx, req)
 }
 
-func (p *agentProviderWithTracking) ListInteractions(ctx context.Context, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+func (p *agentProviderWithTracking) ListInteractions(ctx context.Context, req *proto.ListAgentProviderInteractionsRequest) ([]*coreagent.Interaction, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
 	return p.delegate.ListInteractions(ctx, req)
 }
 
-func (p *agentProviderWithTracking) ResolveInteraction(ctx context.Context, req coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
+func (p *agentProviderWithTracking) ResolveInteraction(ctx context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
 	return p.delegate.ResolveInteraction(ctx, req)
 }
 
-func (p *agentProviderWithTracking) GetCapabilities(ctx context.Context, req coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+func (p *agentProviderWithTracking) GetCapabilities(ctx context.Context, req *proto.GetAgentProviderCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
@@ -668,8 +668,8 @@ func (p *agentProviderWithTracking) cancelProviderTurn(turnID string, reason str
 	if turnID == "" {
 		return nil
 	}
-	_, cancelErr := p.delegate.CancelTurn(context.Background(), coreagent.CancelTurnRequest{
-		TurnID: turnID,
+	_, cancelErr := p.delegate.CancelTurn(context.Background(), &proto.CancelAgentProviderTurnRequest{
+		TurnId: turnID,
 		Reason: strings.TrimSpace(reason),
 	})
 	if cancelErr != nil && !errors.Is(cancelErr, core.ErrNotFound) {
