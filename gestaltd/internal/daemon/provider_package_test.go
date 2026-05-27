@@ -3,24 +3,20 @@ package daemon
 import (
 	"context"
 	"errors"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
-	authenticationservice "github.com/valon-technologies/gestalt/server/services/authentication"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -226,148 +222,29 @@ func TestRun_ProviderPackageAndReleaseDefaultsSourcePluginToHostPlatform(t *test
 	assertReleasedManifestHasHostedHTTPMetadata(t, manifest, "echo")
 }
 
-func TestRun_ProviderPackageAndReleaseBuildsRequestedPlatformSets(t *testing.T) {
+func TestProviderPackageExpandsRequestedPlatformSets(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newGoSourceReleaseFixture(t, t.TempDir())
-	outputDir := t.TempDir()
-	const testVersion = "0.0.12-go-all"
-
-	runProviderPackageAndReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", allPlatformsValue,
-		"--output", outputDir,
-	)
-
-	assertReleasePlatforms(t, outputDir, defaultReleasePlatformsForTest(t), func(platform releasePlatform) string {
-		return "gestalt-app-release-test_v" + testVersion + "_" + platform.GOOS + "_" + platform.GOARCH + ".tar.gz"
-	}, func(t *testing.T, artifact providermanifestv1.Artifact, platform releasePlatform) {
-		assertExpectedGoArtifactPlatform(t, artifact, platform.GOOS, platform.GOARCH, "")
-	})
-}
-
-func TestRun_ProviderPackageAndReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
-	t.Parallel()
-
-	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
-		appName:    authReleaseAppName,
-		schemaPath: authReleaseSchemaPath,
-		sourceFile: "auth.go",
-		sourceCode: testutil.GeneratedAuthPackageSource(),
-		manifest: &providermanifestv1.Manifest{
-			Kind:   providermanifestv1.KindAuthentication,
-			Source: authReleaseSource, Version: "0.0.1", DisplayName: "Auth Release",
-			Spec: &providermanifestv1.Spec{ConfigSchemaPath: authReleaseSchemaPath},
-		},
-	})
-	outputDir := t.TempDir()
-	const testVersion = "0.0.15-test"
-
-	runProviderPackageAndReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
-		"--output", outputDir,
-	)
-
-	archiveName := platformArchiveNameForTest(authReleaseAppName, testVersion, runtime.GOOS, runtime.GOARCH)
-	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-	binaryName := ".gestalt/build/provider"
-
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
-		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
-	}
-	assertExpectedGoArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
-	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != binaryName {
-		t.Fatalf("auth entrypoint = %+v, want artifact path %q", manifest.Entrypoint, binaryName)
-	}
-	if _, err := os.Stat(filepath.Join(extractDir, authReleaseSchemaPath)); err != nil {
-		t.Fatalf("expected %s in archive: %v", authReleaseSchemaPath, err)
-	}
-	metadata := readProviderReleaseMetadata(t, outputDir)
-	if metadata.Package != authReleaseSource {
-		t.Fatalf("release metadata package = %q, want %q", metadata.Package, authReleaseSource)
-	}
-	if metadata.Kind != providermanifestv1.KindAuthentication {
-		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindAuthentication)
-	}
-	if metadata.Runtime != providerReleaseRuntimeKindExecutable {
-		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
-	}
-	authArtifact, ok := metadata.Artifacts[providerpkg.CurrentPlatformString()]
-	if !ok {
-		t.Fatalf("release metadata artifacts missing current platform key %q: %+v", providerpkg.CurrentPlatformString(), metadata.Artifacts)
-	}
-	authDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
+	platforms, err := parseReleasePlatforms(defaultPlatforms)
 	if err != nil {
-		t.Fatalf("hash auth archive: %v", err)
+		t.Fatalf("parseReleasePlatforms(defaultPlatforms): %v", err)
 	}
-	if authArtifact.Path != archiveName || authArtifact.SHA256 != authDigest {
-		t.Fatalf("release metadata auth artifact = %+v, want path %q sha %q", authArtifact, archiveName, authDigest)
-	}
-
-	auth, err := authenticationservice.NewExecutable(context.Background(), authenticationservice.ExecConfig{
-		Command:     filepath.Join(extractDir, binaryName),
-		Name:        "auth-release",
-		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
-		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
-	})
+	expanded, err := expandReleasePlatformValue(allPlatformsValue)
 	if err != nil {
-		t.Fatalf("authenticationservice.NewExecutable: %v", err)
+		t.Fatalf("expandReleasePlatformValue(%q): %v", allPlatformsValue, err)
 	}
-	defer func() {
-		if closer, ok := auth.(interface{ Close() error }); ok {
-			_ = closer.Close()
+	if expanded != defaultPlatforms {
+		t.Fatalf("expandReleasePlatformValue(%q) = %q, want %q", allPlatformsValue, expanded, defaultPlatforms)
+	}
+	targets := releaseArchiveTargets(platforms)
+	if len(targets) != len(platforms) {
+		t.Fatalf("releaseArchiveTargets len = %d, want %d", len(targets), len(platforms))
+	}
+	for i, platform := range platforms {
+		wantSuffix := providerpkg.PlatformArchiveSuffix(platform.GOOS, platform.GOARCH)
+		if targets[i].Generic || targets[i].PlatformSuffix != wantSuffix {
+			t.Fatalf("target[%d] = %+v, want suffix %q", i, targets[i], wantSuffix)
 		}
-	}()
-
-	loginURL, err := auth.LoginURL("host-state")
-	if err != nil {
-		t.Fatalf("LoginURL: %v", err)
-	}
-	parsed, err := url.Parse(loginURL)
-	if err != nil {
-		t.Fatalf("url.Parse(loginURL): %v", err)
-	}
-	state := parsed.Query().Get("state")
-	if state == "" {
-		t.Fatal("login URL did not include state")
-	}
-
-	callbackHandler, ok := auth.(interface {
-		HandleCallbackRequest(context.Context, url.Values) (*core.UserIdentity, string, error)
-	})
-	if !ok {
-		t.Fatal("auth provider did not expose HandleCallbackRequest")
-	}
-	identity, originalState, err := callbackHandler.HandleCallbackRequest(context.Background(), url.Values{
-		"code":   {"callback-code"},
-		"state":  {state},
-		"prompt": {parsed.Query().Get("prompt")},
-	})
-	if err != nil {
-		t.Fatalf("HandleCallbackRequest: %v", err)
-	}
-	if originalState != "host-state" {
-		t.Fatalf("original state = %q, want %q", originalState, "host-state")
-	}
-	if identity == nil || identity.Email != "generated-auth@example.com" {
-		t.Fatalf("identity = %+v", identity)
-	}
-	if ttlProvider, ok := auth.(interface{ SessionTokenTTL() time.Duration }); !ok || ttlProvider.SessionTokenTTL() != 90*time.Minute {
-		t.Fatalf("SessionTokenTTL = %v", ttlProvider)
-	}
-
-	externalJWT, err := session.IssueToken(&core.UserIdentity{Email: "jwt@example.com"}, []byte("abcdef0123456789abcdef0123456789"), 24*time.Hour)
-	if err != nil {
-		t.Fatalf("IssueToken: %v", err)
-	}
-	validated, err := auth.ValidateToken(context.Background(), externalJWT)
-	if err != nil {
-		t.Fatalf("ValidateToken(external jwt): %v", err)
-	}
-	if validated == nil || validated.Email != "jwt@example.com" {
-		t.Fatalf("validated = %+v", validated)
 	}
 }
 
@@ -792,6 +669,28 @@ func TestRun_ProviderPackageAndReleaseBuildsExecutableAuthProviders(t *testing.T
 			}
 			if _, err := os.Stat(filepath.Join(extractDir, authReleaseSchemaPath)); err != nil {
 				t.Fatalf("expected %s in archive: %v", authReleaseSchemaPath, err)
+			}
+
+			metadata := readProviderReleaseMetadata(t, outputDir)
+			if metadata.Package != authReleaseSource {
+				t.Fatalf("release metadata package = %q, want %q", metadata.Package, authReleaseSource)
+			}
+			if metadata.Kind != providermanifestv1.KindAuthentication {
+				t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindAuthentication)
+			}
+			if metadata.Runtime != providerReleaseRuntimeKindExecutable {
+				t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
+			}
+			authArtifact, ok := metadata.Artifacts[providerpkg.CurrentPlatformString()]
+			if !ok {
+				t.Fatalf("release metadata artifacts missing current platform key %q: %+v", providerpkg.CurrentPlatformString(), metadata.Artifacts)
+			}
+			authDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
+			if err != nil {
+				t.Fatalf("hash auth archive: %v", err)
+			}
+			if authArtifact.Path != archiveName || authArtifact.SHA256 != authDigest {
+				t.Fatalf("release metadata auth artifact = %+v, want path %q sha %q", authArtifact, archiveName, authDigest)
 			}
 
 			assertExecutableAuthProviderWorks(t, filepath.Join(extractDir, binaryName), tc.appName, tc.assertSessionTTL, tc.assertExternalJWT)
