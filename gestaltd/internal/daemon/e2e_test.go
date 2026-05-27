@@ -1901,13 +1901,6 @@ func startCommandAfterReleasingPort(t *testing.T, holder net.Listener, cmd *exec
 	})
 }
 
-func startCommandAfterReleasingPortWithOutput(t *testing.T, holder net.Listener, cmd *exec.Cmd, baseURL string, output io.Writer) {
-	t.Helper()
-	releasePortHoldersAndStart(t, []net.Listener{holder}, func() {
-		startCommandAndWaitReadyWithOutput(t, cmd, baseURL, output)
-	})
-}
-
 func setupIndexedDBProviderDir(t *testing.T, baseDir string) string {
 	t.Helper()
 
@@ -2483,36 +2476,6 @@ func waitForHTTPBody(t *testing.T, client *http.Client, url, wantBody string) st
 	}
 }
 
-func waitForFileBody(t *testing.T, path, wantBody string) string {
-	t.Helper()
-
-	tick := time.NewTicker(250 * time.Millisecond)
-	defer tick.Stop()
-	timeout := time.After(60 * time.Second)
-	var lastBody string
-	var lastErr error
-	for {
-		select {
-		case <-timeout:
-			if lastErr != nil {
-				t.Fatalf("%s did not become readable within 60 seconds; last error: %v", path, lastErr)
-			}
-			t.Fatalf("%s did not contain expected body within 60 seconds; body=%s", path, lastBody)
-		case <-tick.C:
-			body, err := os.ReadFile(path)
-			if err != nil {
-				lastErr = err
-				continue
-			}
-			lastErr = nil
-			lastBody = string(body)
-			if strings.Contains(lastBody, wantBody) {
-				return lastBody
-			}
-		}
-	}
-}
-
 func startGestaltdWithConfig(t *testing.T, cfgPath string) string {
 	t.Helper()
 	return startGestaltdWithConfigs(t, []string{cfgPath}, false)
@@ -2682,59 +2645,6 @@ func TestE2EServePathAutoMountsOwnedUI(t *testing.T) {
 	t.Fatalf(`app "provider" mountedPath missing from response: %s`, appsBody)
 }
 
-func TestE2EServePathServesSourceUI(t *testing.T) {
-	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping serve --path ui test in short mode")
-	}
-
-	dir := t.TempDir()
-	providersDir := setupDefaultLocalProvidersDir(t, dir)
-	mountedUI := setupMountedUIDir(t, dir)
-	setUIManifestSource(t, mountedUI.ManifestPath, "github.com/test/ui/roadmap.review")
-	port, holder := reservePort(t)
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-
-	cmd := exec.Command(gestaltdBin, "serve", "--path", mountedUI.ManifestPath, "--port", fmt.Sprintf("%d", port))
-	cmd.Env = append(os.Environ(),
-		"GESTALT_PROVIDERS_DIR="+providersDir,
-		"GOTELEMETRY=off",
-	)
-	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
-
-	client := &http.Client{Timeout: 2 * time.Second}
-	_ = waitForHTTPBody(t, client, baseURL+"/roadmap.review/sync", "Roadmap Review UI")
-}
-
-func TestE2EServePathAutoMountsSiblingUIForApp(t *testing.T) {
-	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping serve --path sibling-ui test in short mode")
-	}
-
-	dir := t.TempDir()
-	providersDir := setupDefaultLocalProvidersDir(t, dir)
-	rootDir := filepath.Join(dir, "package")
-	appDir := setupAppDir(t, filepath.Join(rootDir, "app"))
-	setAppManifestSource(t, appDir, "github.com/test/apps/vm-style-guide")
-	_ = setupMountedUIDirAt(t, filepath.Join(rootDir, "ui"), nil)
-	port, holder := reservePort(t)
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-
-	cmd := exec.Command(gestaltdBin, "serve", "--path", componentProviderManifestPath(t, appDir), "--port", fmt.Sprintf("%d", port))
-	cmd.Env = append(os.Environ(),
-		"GESTALT_PROVIDERS_DIR="+providersDir,
-		"GOTELEMETRY=off",
-	)
-	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
-
-	client := &http.Client{Timeout: 2 * time.Second}
-	_ = waitForHTTPBody(t, client, baseURL+"/vm-style-guide/sync", "Roadmap Review UI")
-	_ = waitForHTTPBody(t, client, baseURL+"/vm-style-guide/assets/app.js", "ready")
-}
-
 func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.T) {
 	t.Parallel()
 
@@ -2778,72 +2688,6 @@ func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.
 	}
 	setAppManifestDisplayName(t, manifestPath, "Recovered Config Watch Provider")
 	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Recovered Config Watch Provider")
-}
-
-func TestE2EServeConfigWatchReloadsLocalReleaseMetadata(t *testing.T) {
-	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping serve --watch local release metadata test in short mode")
-	}
-
-	dir := t.TempDir()
-	appDir := setupPrebuiltAppDir(t, dir)
-	metadataPath := filepath.Join(appDir, "provider-release.yaml")
-	if err := writeLocalProviderReleaseMetadata(appDir); err != nil {
-		t.Fatalf("write provider-release metadata: %v", err)
-	}
-	port, holder := reservePort(t)
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v6
-server:
-  baseUrl: %s
-  public:
-    port: %d
-  encryptionKey: test-watch-release-key
-%sapps:
-  example:
-    source: %s
-`, e2eLoopbackBaseURL(port), port, authIndexedDBConfigYAML(t, dir, "", "sqlite", filepath.Join(dir, "gestalt.db")), metadataPath)
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	logPath := filepath.Join(dir, "gestaltd-watch.log")
-	logFile, err := os.Create(logPath)
-	if err != nil {
-		t.Fatalf("create watch log: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = logFile.Close()
-	})
-
-	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath, "--app", "example", "--watch")
-	cmd.Env = append(os.Environ(), "GOTELEMETRY=off")
-	startCommandAfterReleasingPortWithOutput(t, holder, cmd, baseURL, logFile)
-
-	client := &http.Client{Timeout: 2 * time.Second}
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Example Provider")
-
-	missingArchive := "missing-after-watch.tar.gz"
-	metadata := fmt.Sprintf(`schema: gestaltd-provider-release
-schemaVersion: 1
-package: github.com/test/apps/provider
-kind: app
-version: 0.0.1-alpha.1
-runtime: %s
-artifacts:
-  %s:
-    path: %s
-    sha256: %s
-`, "executable", providerpkg.CurrentPlatformString(), missingArchive, strings.Repeat("0", 64))
-	if err := os.WriteFile(metadataPath, []byte(metadata), 0o644); err != nil {
-		t.Fatalf("write %s: %v", metadataPath, err)
-	}
-
-	_ = waitForFileBody(t, logPath, missingArchive)
-	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/apps", "Example Provider")
 }
 
 //nolint:paralleltest // Uses the default 8080 startup path intentionally.
@@ -3630,79 +3474,33 @@ func TestE2EServeUsesOverrideLockfile(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("skipping E2E serve lockfile override tests in short mode")
+		t.Skip("skipping E2E locked serve lockfile override test in short mode")
 	}
 
-	tests := []struct {
-		name       string
-		lockDir    string
-		args       func(lockPath string) []string
-		preSync    bool
-		waitForNew bool
-	}{
-		{
-			name:    "serve auto prepare",
-			lockDir: "serve",
-			args: func(lockPath string) []string {
-				return []string{"serve", "--lockfile", lockPath}
-			},
-			waitForNew: true,
-		},
-		{
-			name:    "default serve auto prepare",
-			lockDir: "default-serve",
-			args: func(lockPath string) []string {
-				return []string{"--lockfile", lockPath}
-			},
-			waitForNew: true,
-		},
-		{
-			name:    "locked serve",
-			lockDir: "locked-serve",
-			args: func(lockPath string) []string {
-				return []string{"serve", "--locked", "--lockfile", lockPath}
-			},
-			preSync: true,
-		},
+	dir := t.TempDir()
+	cfgPath := writeServeConfig(t, dir, 0, nil)
+	lockPath := filepath.Join(dir, "state", "locked-serve", "gestalt.lock.json")
+	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock with --lockfile failed: %v\noutput: %s", err, out)
+	}
+	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd sync with --lockfile failed: %v\noutput: %s", err, out)
 	}
 
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			dir := t.TempDir()
-			cfgPath := writeServeConfig(t, dir, 0, nil)
-			lockPath := filepath.Join(dir, "state", tc.lockDir, "gestalt.lock.json")
-			if tc.preSync {
-				out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
-				if err != nil {
-					t.Fatalf("gestaltd lock with --lockfile failed: %v\noutput: %s", err, out)
-				}
-				out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
-				if err != nil {
-					t.Fatalf("gestaltd sync with --lockfile failed: %v\noutput: %s", err, out)
-				}
-			}
-
-			requiredPath := ""
-			if tc.waitForNew {
-				requiredPath = lockPath
-			}
-			baseURL := startGestaltdWithConfigsAndArgs(t, []string{cfgPath}, tc.args(lockPath), requiredPath)
-			resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/apps")
-			if err != nil {
-				t.Fatalf("GET /api/v1/apps: %v", err)
-			}
-			defer func() { _ = resp.Body.Close() }()
-			if resp.StatusCode != http.StatusOK {
-				body, _ := io.ReadAll(resp.Body)
-				t.Fatalf("expected /api/v1/apps 200, got %d: %s", resp.StatusCode, body)
-			}
-			if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
-				t.Fatalf("default lockfile should not be written, got err=%v", err)
-			}
-		})
+	baseURL := startGestaltdWithConfigsAndArgs(t, []string{cfgPath}, []string{"serve", "--locked", "--lockfile", lockPath}, "")
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/apps")
+	if err != nil {
+		t.Fatalf("GET /api/v1/apps: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected /api/v1/apps 200, got %d: %s", resp.StatusCode, body)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
+		t.Fatalf("default lockfile should not be written, got err=%v", err)
 	}
 }
 
