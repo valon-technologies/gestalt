@@ -198,15 +198,12 @@ func TestWorkflowRuntimeSkipsConfiguredProviderPublishAfterFailure(t *testing.T)
 func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testing.T) {
 	t.Parallel()
 
-	hostServices, invTokens, cleanup, err := buildProviderHostServices("metadata", Deps{
+	hostServices, invTokens, err := buildProviderHostServices("metadata", Deps{
 		Services: &coredata.Services{
 			ExternalCredentials: coretesting.NewStubExternalCredentialProvider(),
 		},
 		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
 	})
-	if cleanup != nil {
-		defer cleanup()
-	}
 	if err != nil {
 		t.Fatalf("buildProviderHostServices: %v", err)
 	}

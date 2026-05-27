@@ -211,17 +211,11 @@ func registerProviderDevPublicHostServices(cfg *config.Config, manager *provider
 		if entry == nil || !entry.HasResolvedManifest() {
 			continue
 		}
-		hostServices, _, cleanup, err := buildProviderHostServices(name, deps)
+		hostServices, _, err := buildProviderHostServices(name, deps)
 		if err != nil {
-			if cleanup != nil {
-				cleanup()
-			}
 			return fmt.Errorf("provider dev public host services %q: %w", name, err)
 		}
 		if len(hostServices) == 0 {
-			if cleanup != nil {
-				cleanup()
-			}
 			continue
 		}
 		if runtimeHostServiceDescriptors != nil {
@@ -230,9 +224,6 @@ func registerProviderDevPublicHostServices(cfg *config.Config, manager *provider
 		registration := deps.PublicHostServices.RegisterVerified(name, providerDevHostServiceVerifier{manager: manager, provider: name}, hostServices...)
 		manager.AddCleanup(func() {
 			registration.Unregister()
-			if cleanup != nil {
-				cleanup()
-			}
 		})
 	}
 	return nil

@@ -33,10 +33,10 @@ const (
 	hostServiceTLSCAPEMEnv          = "GESTALT_HOST_SERVICE_TLS_CA_PEM"
 )
 
-func buildProviderHostServices(name string, deps Deps, extraHostServices ...runtimehost.HostService) ([]runtimehost.HostService, *appaccessservice.InvocationTokenManager, func(), error) {
+func buildProviderHostServices(name string, deps Deps, extraHostServices ...runtimehost.HostService) ([]runtimehost.HostService, *appaccessservice.InvocationTokenManager, error) {
 	invTokens, err := appaccessservice.NewInvocationTokenManager(deps.EncryptionKey)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	var hostServices []runtimehost.HostService
@@ -45,7 +45,7 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 		hostServices = append(hostServices, cacheHostService)
 	}
 	if s3HostService, ok, err := s3ServiceFromDeps(name, deps); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	} else if ok {
 		hostServices = append(hostServices, s3HostService)
 	}
@@ -61,7 +61,7 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
 	}
 	hostServices = append(hostServices, extraHostServices...)
-	return hostServices, invTokens, nil, nil
+	return hostServices, invTokens, nil
 }
 
 func appendRuntimeLogHostService(hostServices []runtimehost.HostService, runtimeConfig config.EffectiveRuntimePlacement, deps Deps, runtimePlan RuntimePlacementPlan) []runtimehost.HostService {

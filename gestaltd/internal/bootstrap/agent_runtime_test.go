@@ -3359,9 +3359,6 @@ func waitForAgentRuntimeCondition(t *testing.T, timeout time.Duration, fn func()
 
 func hostedAgentProviderPoolForTest(t *testing.T, provider coreagent.Provider) *hostedAgentProviderPool {
 	t.Helper()
-	if withCleanup, ok := provider.(*agentProviderWithCleanup); ok {
-		provider = withCleanup.Provider
-	}
 	tracked, ok := provider.(*agentProviderWithTracking)
 	if !ok {
 		t.Fatalf("agent provider type = %T, want *agentProviderWithTracking", provider)

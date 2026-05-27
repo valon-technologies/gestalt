@@ -1080,7 +1080,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		return nil, fmt.Errorf("wait for runtime session %q ready: %w", sessionID, err)
 	}
 
-	hostServices, invTokens, runtimeCleanup, err := buildProviderHostServices(name, deps)
+	hostServices, invTokens, err := buildProviderHostServices(name, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -1089,7 +1089,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	if err != nil {
 		return nil, err
 	}
-	cleanup = chainCleanup(launchCleanup, runtimeCleanup, publicHostServicesCleanup)
+	cleanup = chainCleanup(launchCleanup, publicHostServicesCleanup)
 	launchCleanup = nil
 	startEnv := maps.Clone(env)
 	startEnv = withRuntimeSessionEnv(startEnv, sessionID)

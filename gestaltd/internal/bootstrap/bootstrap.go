@@ -503,32 +503,6 @@ func (p *workflowProviderWithCleanup) WaitRuntimeWorkersReady(ctx context.Contex
 	return nil
 }
 
-type agentProviderWithCleanup struct {
-	coreagent.Provider
-	cleanup func()
-}
-
-func (p *agentProviderWithCleanup) Close() error {
-	var errs []error
-	if p != nil && p.Provider != nil {
-		if err := p.Provider.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if p != nil && p.cleanup != nil {
-		p.cleanup()
-	}
-	return errors.Join(errs...)
-}
-
-func (p *agentProviderWithCleanup) SupportsWorkspaceRequests() bool {
-	if p == nil || p.Provider == nil {
-		return false
-	}
-	workspaceProvider, ok := p.Provider.(coreagent.WorkspaceProvider)
-	return ok && workspaceProvider.SupportsWorkspaceRequests()
-}
-
 type agentProviderWithTracking struct {
 	delegate     coreagent.Provider
 	providerName string
@@ -1393,7 +1367,6 @@ func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories 
 	if err := errors.Join(workflowResult.err, agentResult.err); err != nil {
 		failPublishedWorkflowProviders(deps, workflowResult.publishedNames, err)
 		failPublishedAgentProviders(deps, agentResult.publishedNames, err)
-		failPendingStartupProviders(deps, err)
 		_ = closeWorkflows(workflowResult.providers...)
 		_ = closeAgents(agentResult.providers...)
 		return nil, nil, err
@@ -1717,7 +1690,7 @@ func buildNamedExternalCredentialsProvider(ctx context.Context, cfg *config.Conf
 			return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 		}
 	}
-	hostServices, _, _, err := buildProviderHostServices(logicalName, deps)
+	hostServices, _, err := buildProviderHostServices(logicalName, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 	}
@@ -1892,7 +1865,7 @@ func buildAuthorization(cfg *config.Config, factories *FactoryRegistry, deps Dep
 			return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 		}
 	}
-	hostServices, _, _, err := buildProviderHostServices("authorization", deps)
+	hostServices, _, err := buildProviderHostServices("authorization", deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 	}
@@ -1982,10 +1955,11 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 			return nil, fmt.Errorf("workflow provider: %w", err)
 		}
 	}
-	hostServices, _, cleanup, err := buildProviderHostServices(name, deps)
+	hostServices, _, err := buildProviderHostServices(name, deps)
 	if err != nil {
 		return nil, fmt.Errorf("workflow provider: %w", err)
 	}
+	var cleanup func()
 	defer func() {
 		if cleanup != nil {
 			cleanup()
@@ -2043,15 +2017,10 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 			proto.RegisterAgentHostServer(srv, agentservice.NewHostServerWithConnections(name, deps.AgentRuntime.ListTools, deps.AgentRuntime.ExecuteTool, deps.AgentRuntime.ResolveConnection))
 		},
 	}
-	hostServices, _, cleanup, err := buildProviderHostServices(name, deps, agentHostService)
+	hostServices, _, err := buildProviderHostServices(name, deps, agentHostService)
 	if err != nil {
 		return nil, fmt.Errorf("agent provider: %w", err)
 	}
-	defer func() {
-		if cleanup != nil {
-			cleanup()
-		}
-	}()
 	var (
 		provider    coreagent.Provider
 		providerErr error
@@ -2071,14 +2040,6 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 	tracked := &agentProviderWithTracking{
 		delegate:     provider,
 		providerName: name,
-	}
-	if cleanup != nil {
-		provider := &agentProviderWithCleanup{
-			Provider: tracked,
-			cleanup:  cleanup,
-		}
-		cleanup = nil
-		return provider, nil
 	}
 	return tracked, nil
 }
