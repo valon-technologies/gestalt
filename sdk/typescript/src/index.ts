@@ -110,7 +110,12 @@ export {
   type Subject,
   type SubjectInput,
 } from "./api.ts";
-export { type JsonObject, type JsonValue } from "./protocol.ts";
+export {
+  type JsonInput,
+  type JsonObject,
+  type JsonObjectInput,
+  type JsonValue,
+} from "./protocol.ts";
 export {
   type HTTPSubjectRequest,
   type HTTPSubjectResolutionContext,
