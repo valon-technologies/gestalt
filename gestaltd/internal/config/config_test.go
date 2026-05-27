@@ -4057,6 +4057,49 @@ server:
 		}
 	})
 
+	t.Run("accepts restart policy with host indexeddb only", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      runtime:
+          provider: hosted
+          pool:
+            minReadyInstances: 1
+            maxReadyInstances: 2
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 2m
+  indexeddb:
+    agent_state:
+      source:
+        path: ./providers/datastore/sqlite
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		entry := cfg.Providers.Agent["simple"]
+		if entry.IndexedDB != nil {
+			t.Fatalf("agent indexeddb = %#v, want host-level indexeddb only", entry.IndexedDB)
+		}
+		if entry.Runtime.Pool.RestartPolicy != RuntimePlacementRestartPolicyAlways {
+			t.Fatalf("runtime restartPolicy = %q, want %q", entry.Runtime.Pool.RestartPolicy, RuntimePlacementRestartPolicyAlways)
+		}
+	})
+
 	t.Run("accepts required lifecycle fields under agent runtime", func(t *testing.T) {
 		t.Parallel()
 
@@ -4414,33 +4457,6 @@ server:
   encryptionKey: server-key
 `,
 			want: "providers.agent.simple.runtime.pool.restartPolicy must be one of",
-		},
-		{
-			name: "rejects restart without agent indexeddb",
-			yaml: `
-providers:
-  agent:
-    simple:
-      source:
-        path: ./providers/agent/simple
-      runtime:
-          provider: hosted
-          pool:
-            minReadyInstances: 1
-            maxReadyInstances: 2
-            startupTimeout: 5m
-            healthCheckInterval: 30s
-            restartPolicy: always
-            drainTimeout: 2m
-runtime:
-  providers:
-    hosted:
-      source:
-        path: ./providers/runtime/modal
-server:
-  encryptionKey: server-key
-`,
-			want: `providers.agent.simple.runtime.pool.restartPolicy "always" requires providers.agent.simple.indexeddb as the provider persistence hook`,
 		},
 		{
 			name: "rejects lifecycle fields on runtime",

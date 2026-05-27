@@ -1200,6 +1200,8 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
+		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		prepared.Deps.AgentRuntime.FailPendingProviders(err)
 		return nil, err
 	}
 	closeAudit := true

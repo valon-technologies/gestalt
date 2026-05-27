@@ -1194,10 +1194,6 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 		launch.close()
 		return nil, fmt.Errorf("parse hosted agent runtime lifecycle policy: %w", err)
 	}
-	if policy.RestartPolicy == config.RuntimePlacementRestartPolicyAlways && entry.IndexedDB == nil {
-		launch.close()
-		return nil, fmt.Errorf("hosted agent runtime restart policy %q requires indexeddb persistence hook", config.RuntimePlacementRestartPolicyAlways)
-	}
 	hostServices = appendRuntimeLogHostService(hostServices, launch.runtimeConfig, deps, launch.runtimePlan)
 	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, launch.runtimePlan, launch.runtimeProvider)
 	if err != nil {

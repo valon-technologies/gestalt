@@ -1323,7 +1323,7 @@ func validateRuntimePlacementDockerConfigJSON(value string) error {
 }
 
 func validateRuntimePlacedAgentLifecyclePolicy(subject string, entry *ProviderEntry) error {
-	return validateRuntimePlacementLifecyclePolicy(subject, entry, true, "agent")
+	return validateRuntimePlacementLifecyclePolicy(subject, entry, "agent")
 }
 
 func validateRuntimePlacedWorkflowLifecyclePolicy(subject string, entry *ProviderEntry) error {
@@ -1334,7 +1334,7 @@ func validateRuntimePlacedWorkflowLifecyclePolicy(subject string, entry *Provide
 	if !runtimeCfg.LifecyclePolicyFieldsSet() {
 		return fmt.Errorf("config validation: %s.pool is required for runtime-placed workflow providers", runtimePath)
 	}
-	if err := validateRuntimePlacementLifecyclePolicy(subject, entry, false, "workflow"); err != nil {
+	if err := validateRuntimePlacementLifecyclePolicy(subject, entry, "workflow"); err != nil {
 		return err
 	}
 	lifecycle := runtimeCfg.lifecyclePolicyConfig()
@@ -1344,7 +1344,7 @@ func validateRuntimePlacedWorkflowLifecyclePolicy(subject string, entry *Provide
 	return nil
 }
 
-func validateRuntimePlacementLifecyclePolicy(subject string, entry *ProviderEntry, requireIndexedDB bool, providerKind string) error {
+func validateRuntimePlacementLifecyclePolicy(subject string, entry *ProviderEntry, providerKind string) error {
 	if entry == nil || !entry.UsesRuntimePlacement() {
 		return nil
 	}
@@ -1379,9 +1379,6 @@ func validateRuntimePlacementLifecyclePolicy(subject string, entry *ProviderEntr
 	case RuntimePlacementRestartPolicyAlways, RuntimePlacementRestartPolicyNever:
 	default:
 		return fmt.Errorf("config validation: %s.restartPolicy must be one of %q or %q", lifecycleSubject, RuntimePlacementRestartPolicyAlways, RuntimePlacementRestartPolicyNever)
-	}
-	if requireIndexedDB && lifecycle.RestartPolicy == RuntimePlacementRestartPolicyAlways && entry.IndexedDB == nil {
-		return fmt.Errorf("config validation: %s.restartPolicy %q requires %s.indexeddb as the provider persistence hook; runtime replacement does not make backend-local state durable", lifecycleSubject, RuntimePlacementRestartPolicyAlways, subject)
 	}
 	if _, err := runtimeCfg.LifecyclePolicy(); err != nil {
 		return fmt.Errorf("config validation: %s.%w", lifecycleSubject, err)
