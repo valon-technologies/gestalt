@@ -46,8 +46,8 @@ type RuntimePlacementPlan struct {
 	HostnameEgressDelivery    RuntimeHostnameEgressDelivery
 }
 
-func buildRuntimePlacementPlan(support runtimeprovider.Support, runtimeProvider runtimeprovider.Provider, deps Deps, requiresHostServiceAccess, requiresHostnameEgress bool) RuntimePlacementPlan {
-	resolved := runtimeResolvedBehavior(runtimeAdvertisedBehavior(support), runtimeHostServiceAccess(runtimeProvider, deps), deps)
+func buildRuntimePlacementPlan(support runtimeprovider.Support, deps Deps, requiresHostServiceAccess, requiresHostnameEgress bool) RuntimePlacementPlan {
+	resolved := runtimeResolvedBehavior(runtimeAdvertisedBehavior(support), runtimeHostServiceAccess(support, deps), deps)
 	return RuntimePlacementPlan{
 		Resolved:                  resolved,
 		RequiresHostServiceAccess: requiresHostServiceAccess,
@@ -56,12 +56,12 @@ func buildRuntimePlacementPlan(support runtimeprovider.Support, runtimeProvider 
 	}
 }
 
-func buildRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, support runtimeprovider.Support, runtimeProvider runtimeprovider.Provider) (RuntimePlacementPlan, error) {
+func buildRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, support runtimeprovider.Support) (RuntimePlacementPlan, error) {
 	requiresHostServiceAccess, requiresHostnameEgress, err := runtimeRequirementsForApp(pluginName, entry, deps)
 	if err != nil {
 		return RuntimePlacementPlan{}, err
 	}
-	return buildRuntimePlacementPlan(support, runtimeProvider, deps, requiresHostServiceAccess, requiresHostnameEgress), nil
+	return buildRuntimePlacementPlan(support, deps, requiresHostServiceAccess, requiresHostnameEgress), nil
 }
 
 func runtimeAdvertisedBehavior(support runtimeprovider.Support) RuntimeBehavior {
@@ -81,19 +81,14 @@ func runtimeResolvedBehavior(advertised RuntimeBehavior, hostServiceAccess Runti
 	return resolved
 }
 
-func runtimeHostServiceAccess(runtimeProvider runtimeprovider.Provider, deps Deps) RuntimeHostServiceAccess {
-	if runtimeSupportsDirectHostServices(runtimeProvider) {
+func runtimeHostServiceAccess(support runtimeprovider.Support, deps Deps) RuntimeHostServiceAccess {
+	if support.SupportsDirectHostServices {
 		return RuntimeHostServiceAccessDirect
 	}
 	if hostCanRelayRuntimeHostServices(deps) {
 		return RuntimeHostServiceAccessRelay
 	}
 	return RuntimeHostServiceAccessNone
-}
-
-func runtimeSupportsDirectHostServices(runtimeProvider runtimeprovider.Provider) bool {
-	direct, ok := runtimeProvider.(runtimeprovider.DirectHostServiceSupport)
-	return ok && direct.SupportsDirectHostServices()
 }
 
 func runtimeHostnameEgressDelivery(required bool, resolved RuntimeBehavior) RuntimeHostnameEgressDelivery {

@@ -222,7 +222,7 @@ func (p *turnLookupAgentProvider) GetTurn(context.Context, coreagent.GetTurnRequ
 func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := newAgentRuntime(&config.Config{})
+	runtime, err := newAgentRuntime(&config.Config{}, nil)
 	if err != nil {
 		t.Fatalf("newAgentRuntime() error = %v", err)
 	}
@@ -888,7 +888,7 @@ func TestAgentRuntimePingReportsPendingStartupProvidersUnavailable(t *testing.T)
 				"managed": {},
 			},
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("newAgentRuntime: %v", err)
 	}

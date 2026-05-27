@@ -1397,11 +1397,21 @@ func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories 
 	workflowResult := <-workflowCh
 	agentResult := <-agentCh
 	if err := errors.Join(workflowResult.err, agentResult.err); err != nil {
-		if workflowResult.err != nil && deps.AgentRuntime != nil {
-			deps.AgentRuntime.FailPendingProviders(workflowResult.err)
+		if deps.WorkflowRuntime != nil {
+			for name, entry := range cfg.Providers.Workflow {
+				if entry != nil {
+					deps.WorkflowRuntime.FailProvider(name, err)
+				}
+			}
+			deps.WorkflowRuntime.FailPendingProviders(err)
 		}
-		if agentResult.err != nil && deps.WorkflowRuntime != nil {
-			deps.WorkflowRuntime.FailPendingProviders(agentResult.err)
+		if deps.AgentRuntime != nil {
+			for name, entry := range cfg.Providers.Agent {
+				if entry != nil {
+					deps.AgentRuntime.FailProvider(name, err)
+				}
+			}
+			deps.AgentRuntime.FailPendingProviders(err)
 		}
 		_ = closeWorkflows(workflowResult.providers...)
 		_ = closeAgents(agentResult.providers...)
@@ -1450,6 +1460,7 @@ func buildConfiguredProviders[T any](
 	}
 
 	var providers []T
+	var published []string
 	var errs []error
 	for range pending {
 		result := <-results
@@ -1470,13 +1481,20 @@ func buildConfiguredProviders[T any](
 		if publish != nil {
 			publish(result.name, result.provider)
 		}
+		published = append(published, result.name)
 		providers = append(providers, result.provider)
 	}
 	if len(errs) > 0 {
+		err := errors.Join(errs...)
+		if failProvider != nil {
+			for _, name := range published {
+				failProvider(name, err)
+			}
+		}
 		if closeProviders != nil {
 			_ = closeProviders(providers...)
 		}
-		return nil, errors.Join(errs...)
+		return nil, err
 	}
 	return providers, nil
 }

@@ -1017,7 +1017,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		}
 		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
-	runtimePlan, err := buildRuntimePlan(name, entry, deps, runtimeSupport, runtimeProvider)
+	runtimePlan, err := buildRuntimePlan(name, entry, deps, runtimeSupport)
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -1258,7 +1258,7 @@ func prepareHostedAgentProviderLaunch(ctx context.Context, name string, entry *c
 		}
 		return nil, err
 	}
-	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, runtimeProvider, deps, requiresHostServiceAccess, requiresHostnameEgress)
+	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, requiresHostServiceAccess, requiresHostnameEgress)
 	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig)); err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()

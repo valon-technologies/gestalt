@@ -61,8 +61,10 @@ type agentToolResolver interface {
 	ResolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error)
 }
 
-func newAgentRuntime(cfg *config.Config, trackers ...*startupWaitTracker) (*agentRuntime, error) {
-	startupWaits := firstStartupWaitTracker(trackers...)
+func newAgentRuntime(cfg *config.Config, startupWaits *startupWaitTracker) (*agentRuntime, error) {
+	if startupWaits == nil {
+		startupWaits = newStartupWaitTracker()
+	}
 	runtime := &agentRuntime{
 		configuredProviders: map[string]struct{}{},
 		providers:           map[string]coreagent.Provider{},
@@ -83,15 +85,6 @@ func newAgentRuntime(cfg *config.Config, trackers ...*startupWaitTracker) (*agen
 		}
 	}
 	return runtime, nil
-}
-
-func firstStartupWaitTracker(trackers ...*startupWaitTracker) *startupWaitTracker {
-	for _, tracker := range trackers {
-		if tracker != nil {
-			return tracker
-		}
-	}
-	return newStartupWaitTracker()
 }
 
 func agentSessionStartConfigs(cfg *config.Config) map[string]*coreagent.SessionStartConfig {

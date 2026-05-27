@@ -43,13 +43,10 @@ const (
 )
 
 type Support struct {
-	CanHostApps              bool
-	EgressMode               EgressMode
-	SupportsPrepareWorkspace bool
-}
-
-type DirectHostServiceSupport interface {
-	SupportsDirectHostServices() bool
+	CanHostApps                bool
+	EgressMode                 EgressMode
+	SupportsPrepareWorkspace   bool
+	SupportsDirectHostServices bool
 }
 
 type Session struct {

@@ -79,14 +79,11 @@ func NewLocalProvider(opts ...LocalOption) *LocalProvider {
 
 func (p *LocalProvider) Support(context.Context) (Support, error) {
 	return Support{
-		CanHostApps:              true,
-		EgressMode:               EgressModeHostname,
-		SupportsPrepareWorkspace: true,
+		CanHostApps:                true,
+		EgressMode:                 EgressModeHostname,
+		SupportsPrepareWorkspace:   true,
+		SupportsDirectHostServices: true,
 	}, nil
-}
-
-func (p *LocalProvider) SupportsDirectHostServices() bool {
-	return true
 }
 
 func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest) (*Session, error) {

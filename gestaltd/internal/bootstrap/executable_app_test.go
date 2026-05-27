@@ -217,7 +217,11 @@ func newCapturingRuntime() *capturingRuntime {
 }
 
 func (r *capturingRuntime) Support(ctx context.Context) (runtimeprovider.Support, error) {
-	return r.provider.Support(ctx)
+	support, err := r.provider.Support(ctx)
+	if r.disableDirectHostServices {
+		support.SupportsDirectHostServices = false
+	}
+	return support, err
 }
 
 func (r *capturingRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
@@ -294,10 +298,6 @@ func (r *capturingRuntime) StartApp(ctx context.Context, req runtimeprovider.Sta
 	})
 	r.mu.Unlock()
 	return r.provider.StartApp(ctx, req)
-}
-
-func (r *capturingRuntime) SupportsDirectHostServices() bool {
-	return !r.disableDirectHostServices
 }
 
 func (r *capturingRuntime) Close() error {
@@ -1340,11 +1340,6 @@ func (r *slowStopRuntime) StopSession(ctx context.Context, req runtimeprovider.S
 
 func (r *slowStopRuntime) StartApp(ctx context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
 	return r.inner.StartApp(ctx, req)
-}
-
-func (r *slowStopRuntime) SupportsDirectHostServices() bool {
-	direct, ok := r.inner.(runtimeprovider.DirectHostServiceSupport)
-	return ok && direct.SupportsDirectHostServices()
 }
 
 func (r *slowStopRuntime) Close() error {

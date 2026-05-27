@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -52,6 +53,18 @@ func (providerBuildOrderingAgentProvider) CreateSession(_ context.Context, req c
 		Model:        req.Model,
 		CreatedBy:    req.CreatedBy,
 	}, nil
+}
+
+type closeRecordingAgentProvider struct {
+	providerBuildOrderingAgentProvider
+	closed *atomic.Bool
+}
+
+func (p closeRecordingAgentProvider) Close() error {
+	if p.closed != nil {
+		p.closed.Store(true)
+	}
+	return nil
 }
 
 func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.T) {
@@ -205,6 +218,39 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 	}
 	if !builderStarted.Load() {
 		t.Fatal("provider builder was not started")
+	}
+}
+
+func TestBuildConfiguredProvidersUnpublishesSuccessesOnPartialFailure(t *testing.T) {
+	t.Parallel()
+
+	closed := &atomic.Bool{}
+	runtime := &agentRuntime{providers: map[string]coreagent.Provider{}}
+	boom := errors.New("boom")
+	providers, err := buildConfiguredProviders(context.Background(), map[string]*config.ProviderEntry{
+		"ok":  {Source: config.ProviderSource{Path: "stub"}},
+		"bad": {Source: config.ProviderSource{Path: "stub"}},
+	}, func(_ context.Context, name string, _ *config.ProviderEntry) (coreagent.Provider, error) {
+		if name == "bad" {
+			return nil, boom
+		}
+		return closeRecordingAgentProvider{closed: closed}, nil
+	}, runtime.PublishProvider, func(name string, err error) {
+		runtime.FailProvider(name, err)
+	}, runtime.FailPendingProviders, closeAgents, func(name string, err error) error {
+		return fmt.Errorf("bootstrap: agent from resource %q: %w", name, err)
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("buildConfiguredProviders err = %v, want boom", err)
+	}
+	if len(providers) != 0 {
+		t.Fatalf("providers = %d, want none on partial failure", len(providers))
+	}
+	if !closed.Load() {
+		t.Fatal("successful provider was not closed after partial failure")
+	}
+	if _, err := runtime.ResolveProvider("ok"); err == nil {
+		t.Fatal("successful provider remained published after partial failure")
 	}
 }
 

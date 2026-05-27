@@ -97,7 +97,7 @@ func prepareHostedWorkflowProviderLaunch(ctx context.Context, name string, entry
 		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
 	requiresHostnameEgress := deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement()
-	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, runtimeProvider, deps, true, requiresHostnameEgress)
+	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, true, requiresHostnameEgress)
 	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig)); err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()

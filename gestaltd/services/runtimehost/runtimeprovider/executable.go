@@ -89,11 +89,9 @@ func (p *executableProvider) Support(ctx context.Context) (Support, error) {
 	if err != nil {
 		return Support{}, fmt.Errorf("get runtime support: %w", err)
 	}
-	return supportFromProto(resp), nil
-}
-
-func (p *executableProvider) SupportsDirectHostServices() bool {
-	return true
+	support := supportFromProto(resp)
+	support.SupportsDirectHostServices = true
+	return support, nil
 }
 
 func (p *executableProvider) StartSession(ctx context.Context, req StartSessionRequest) (*Session, error) {
