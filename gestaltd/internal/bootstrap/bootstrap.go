@@ -1393,6 +1393,7 @@ func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories 
 	if err := errors.Join(workflowResult.err, agentResult.err); err != nil {
 		failPublishedWorkflowProviders(deps, workflowResult.publishedNames, err)
 		failPublishedAgentProviders(deps, agentResult.publishedNames, err)
+		failPendingStartupProviders(deps, err)
 		_ = closeWorkflows(workflowResult.providers...)
 		_ = closeAgents(agentResult.providers...)
 		return nil, nil, err
