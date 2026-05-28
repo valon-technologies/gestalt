@@ -32,11 +32,6 @@ const (
 	ProviderKindAgent ProviderKind = "agent"
 	// ProviderKindExternalCredential serves the external-credential surface.
 	ProviderKindExternalCredential ProviderKind = "externalcredentials"
-	// ProviderKindExternalCredentialLegacy is accepted for providers built
-	// against older SDK releases.
-	//
-	// Deprecated: use ProviderKindExternalCredential.
-	ProviderKindExternalCredentialLegacy ProviderKind = "external_credential"
 	// ProviderKindRuntime serves hosted executable-runtime management.
 	ProviderKindRuntime ProviderKind = "runtime"
 )

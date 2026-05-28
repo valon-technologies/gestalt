@@ -11,6 +11,7 @@ import {
 import { dateFromTimestamp, timestampFromDate } from "./protocol.ts";
 import {
   createHostServiceGrpcTransport,
+  type HostServiceGrpcTransport,
   hostServiceMetadataInterceptors,
   parseHostServiceTarget,
   requireHostServiceTarget,
@@ -902,6 +903,7 @@ function compareBytes(left: Uint8Array, right: Uint8Array): number {
  */
 class IndexedDBImpl implements IndexedDB {
   private client: Client<typeof IndexedDBService>;
+  private readonly transport: HostServiceGrpcTransport;
 
   constructor(name?: string) {
     const { target, token } = requireHostServiceTarget("IndexedDB");
@@ -909,14 +911,14 @@ class IndexedDBImpl implements IndexedDB {
       parseHostServiceTarget("IndexedDB", target),
       hostServiceMetadataInterceptors(token, name?.trim() ?? ""),
     );
+    this.transport = transport;
     this.client = createClient(IndexedDBService, transport);
   }
 
-  /**
-   * Releases client resources. The current Connect transport has no explicit
-   * shutdown hook, so this is a lifecycle-compatible no-op.
-   */
-  close(): void {}
+  /** Releases client resources. */
+  close(): void {
+    this.transport.close();
+  }
 
   /**
    * Creates an object store.

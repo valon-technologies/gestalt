@@ -22,7 +22,6 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
@@ -33,7 +32,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
-	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -164,6 +162,7 @@ type Deps struct {
 	IndexedDBs            map[string]indexeddb.IndexedDB
 	IndexedDBDefs         map[string]*config.ProviderEntry
 	IndexedDBFactory      IndexedDBFactory
+	Caches                map[string]corecache.Cache
 	CacheDefs             map[string]*config.ProviderEntry
 	CacheFactory          CacheFactory
 	S3                    map[string]s3sdk.S3
@@ -229,6 +228,7 @@ type Result struct {
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
+	ExtraCaches           []corecache.Cache
 	S3                    map[string]s3sdk.S3
 	ExtraS3s              []s3sdk.S3
 	ExtraWorkflows        []coreworkflow.Provider
@@ -386,6 +386,7 @@ func (r *Result) Close(ctx context.Context) error {
 		CloseProviders(r.Providers),
 		r.Services.Close(),
 		closeIndexedDBs(r.ExtraIndexedDBs...),
+		closeCaches(r.ExtraCaches...),
 		closeS3s(r.ExtraS3s...),
 		closeWorkflows(r.ExtraWorkflows...),
 		closeAgents(r.ExtraAgents...),
@@ -502,32 +503,6 @@ func (p *workflowProviderWithCleanup) WaitRuntimeWorkersReady(ctx context.Contex
 		return workerProvider.WaitRuntimeWorkersReady(ctx)
 	}
 	return nil
-}
-
-type agentProviderWithCleanup struct {
-	coreagent.Provider
-	cleanup func()
-}
-
-func (p *agentProviderWithCleanup) Close() error {
-	var errs []error
-	if p != nil && p.Provider != nil {
-		if err := p.Provider.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if p != nil && p.cleanup != nil {
-		p.cleanup()
-	}
-	return errors.Join(errs...)
-}
-
-func (p *agentProviderWithCleanup) SupportsWorkspaceRequests() bool {
-	if p == nil || p.Provider == nil {
-		return false
-	}
-	workspaceProvider, ok := p.Provider.(coreagent.WorkspaceProvider)
-	return ok && workspaceProvider.SupportsWorkspaceRequests()
 }
 
 type agentProviderWithTracking struct {
@@ -700,10 +675,15 @@ type preparedCore struct {
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
+	ExtraCaches           []corecache.Cache
 	ExtraS3s              []s3sdk.S3
 	SecretManager         core.SecretManager
 	Telemetry             core.TelemetryProvider
 	Deps                  Deps
+	AppInvocation         *lazyInvoker
+	WorkflowManager       *lazyWorkflowManager
+	AgentManager          *lazyAgentManager
+	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 
 	runtimeRegistry *runtimeRegistry
 }
@@ -878,13 +858,22 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
+	pluginInvoker := newLazyInvoker()
+	workflowManager := newLazyWorkflowManager()
+	agentManager := newLazyAgentManager()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	deps.AppInvocation = pluginInvoker
+	deps.WorkflowManager = workflowManager
+	deps.AgentManager = agentManager
+	deps.PublicHostServices = publicHostServices
+
 	workflowRuntime, err := newWorkflowRuntime(cfg)
 	if err != nil {
 		return nil, err
 	}
 	workflowRuntime.InitProviderPlaceholders(cfg.Providers.Workflow)
 	deps.WorkflowRuntime = workflowRuntime
-	agentRuntime, err := newAgentRuntime(cfg)
+	agentRuntime, err := newAgentRuntime(cfg, workflowRuntime.StartupWaitTracker())
 	if err != nil {
 		return nil, err
 	}
@@ -948,6 +937,27 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		}
 	}()
 
+	hostCaches := make(map[string]corecache.Cache, len(cfg.Providers.Cache))
+	var extraCaches []corecache.Cache
+	for name, entry := range cfg.Providers.Cache {
+		if entry == nil {
+			continue
+		}
+		value, err := buildCache(entry, factories)
+		if err != nil {
+			_ = closeCaches(extraCaches...)
+			return nil, fmt.Errorf("bootstrap: cache from resource %q: %w", name, err)
+		}
+		hostCaches[name] = value
+		extraCaches = append(extraCaches, value)
+	}
+	closeExtraCaches := true
+	defer func() {
+		if closeExtraCaches {
+			_ = closeCaches(extraCaches...)
+		}
+	}()
+
 	hostS3s := make(map[string]s3sdk.S3, len(cfg.Providers.S3))
 	var extraS3s []s3sdk.S3
 	for name, entry := range cfg.Providers.S3 {
@@ -973,10 +983,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.Services = svc
 	deps.IndexedDBs = indexedDBs
 	deps.SelectedIndexedDBName = selectedIndexedDBName
-	deps.IndexedDBDefs = cfg.Providers.IndexedDB
-	deps.IndexedDBFactory = factories.IndexedDB
-	deps.CacheDefs = cfg.Providers.Cache
-	deps.CacheFactory = factories.Cache
+	deps.Caches = hostCaches
 	deps.S3 = hostS3s
 	closeExternalCredentialsOnError := true
 	defer func() {
@@ -1004,6 +1011,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	shutdownTelemetry = false
 	closeSvc = false
 	closeExtraStores = false
+	closeExtraCaches = false
 	closeExtraS3s = false
 	closeExternalCredentialsOnError = false
 	closeAuthorizationOnError = false
@@ -1014,10 +1022,15 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		AuthorizationProvider: authzProvider,
 		Services:              svc,
 		ExtraIndexedDBs:       extraIndexedDBs,
+		ExtraCaches:           extraCaches,
 		ExtraS3s:              extraS3s,
 		SecretManager:         sm,
 		Telemetry:             tp,
 		Deps:                  deps,
+		AppInvocation:         pluginInvoker,
+		WorkflowManager:       workflowManager,
+		AgentManager:          agentManager,
+		PublicHostServices:    publicHostServices,
 		runtimeRegistry:       runtimeRegistry,
 	}, nil
 }
@@ -1057,6 +1070,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		externalCredentialsCloseErr,
 		p.Services.Close(),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
+		closeCaches(p.ExtraCaches...),
 		closeS3s(p.ExtraS3s...),
 		closeSecretManager(p.SecretManager),
 		closeRuntimeRegistry(p.runtimeRegistry),
@@ -1079,45 +1093,50 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 
-	pluginInvoker := newLazyInvoker()
-	workflowManager := newLazyWorkflowManager()
-	agentManager := newLazyAgentManager()
+	pluginInvoker := prepared.AppInvocation
+	workflowManager := prepared.WorkflowManager
+	agentManager := prepared.AgentManager
 	workflowTools := newWorkflowSystemTools(workflowManager, prepared.Deps.WorkflowRuntime)
-	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	prepared.Deps.AppInvocation = pluginInvoker
-	prepared.Deps.WorkflowManager = workflowManager
-	prepared.Deps.AgentManager = agentManager
-	prepared.Deps.PublicHostServices = publicHostServices
+	publicHostServices := prepared.PublicHostServices
 
-	providers, providersReady, connAuthResolver, manualConnAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
+	providerBuilds, err := prepareProviderBuilds(cfg, factories, prepared.Deps)
 	if err != nil {
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
+	providers := providerBuilds.providers
+	var (
+		providersReady         <-chan struct{}
+		connAuthResolver       func() map[string]map[string]OAuthHandler
+		manualConnAuthResolver func() map[string]map[string]ManualTokenExchanger
+	)
 	closeProviders := true
 	defer func() {
 		if closeProviders {
-			<-providersReady
+			if providersReady != nil {
+				<-providersReady
+			}
 			_ = CloseProviders(providers)
 		}
 	}()
 
 	connMaps, err := BuildConnectionMaps(cfg)
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
 	connRuntime, err := BuildConnectionRuntime(cfg)
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
 	if err := ValidateConnectionRuntimeCredentials(ctx, prepared.Services.ExternalCredentials, connRuntime); err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
 	baseAuthz, err := authorization.New(config.AuthorizationStaticConfig(cfg.Authorization, cfg.Apps))
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
 	closeAuthz := true
@@ -1132,13 +1151,13 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			authorization.WithDynamicFragmentSource(prepared.Services.AuthzFragments),
 		)
 		if err != nil {
-			prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+			failPendingStartupProviders(prepared.Deps, err)
 			return nil, err
 		}
 	}
 	providerDevSessions, err := buildProviderDevManager(cfg, providers, prepared.Deps)
 	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
@@ -1152,6 +1171,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
+		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
 	closeAudit := true
@@ -1170,7 +1190,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
-		AppInvokes:        agentPluginInvokes(cfg),
 	}))
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:                     providers,
@@ -1181,14 +1200,20 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Authorizer:                    authz,
 		DefaultConnection:             connMaps.DefaultConnection,
 		CatalogConnection:             connMaps.APIConnection,
-		AppInvokes:                    agentPluginInvokes(cfg),
 		AgentConnections:              agentConnectionBindings(cfg),
 		SessionStart:                  agentSessionStartConfigs(cfg),
 		DefaultToolNarrowingThreshold: cfg.Server.Agent.DefaultToolNarrowingThreshold,
 	}))
 	prepared.Deps.AgentRuntime.SetToolSearcher(agentManager)
-	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
+	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
+	providersReady, connAuthResolver, manualConnAuthResolver, _ = providerBuilds.Start(ctx, prepared.Deps, buildProvider)
+	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
+		if providersReady != nil {
+			<-providersReady
+		}
+		_ = closeWorkflows(extraWorkflows...)
+		_ = closeAgents(extraAgents...)
 		return nil, err
 	}
 	closeWorkflowsOnError := true
@@ -1197,17 +1222,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			_ = closeWorkflows(extraWorkflows...)
 		}
 	}()
-	extraAgents, err := buildAgents(ctx, cfg, factories, prepared.Deps)
-	if err != nil {
-		return nil, err
-	}
 	closeAgentsOnError := true
 	defer func() {
 		if closeAgentsOnError {
 			_ = closeAgents(extraAgents...)
 		}
 	}()
-	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
 	workflowConfigTokens, err := appaccessservice.NewInvocationTokenManager(prepared.Deps.EncryptionKey)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: workflow config invocation tokens: %w", err)
@@ -1249,6 +1269,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AuthorizationProvider:        prepared.AuthorizationProvider,
 		Services:                     prepared.Services,
 		ExtraIndexedDBs:              prepared.ExtraIndexedDBs,
+		ExtraCaches:                  prepared.ExtraCaches,
 		S3:                           prepared.Deps.S3,
 		ExtraS3s:                     prepared.ExtraS3s,
 		ExtraWorkflows:               extraWorkflows,
@@ -1317,7 +1338,7 @@ func workflowConfigOnlyProvider(providerName string) workflowConfigProviderFilte
 }
 
 func waitRuntimeWorkflowProviderReady(ctx context.Context, runtime *workflowRuntime, providerName string) error {
-	provider, err := runtime.ResolveProvider(providerName)
+	_, provider, err := runtime.ResolveProvider(ctx, providerName)
 	if err != nil {
 		return err
 	}
@@ -1331,63 +1352,209 @@ func waitRuntimeWorkflowProviderReady(ctx context.Context, runtime *workflowRunt
 	return nil
 }
 
-func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, error) {
-	var extraWorkflows []coreworkflow.Provider
-	for name, entry := range cfg.Providers.Workflow {
+type configuredProviderBuilds[T any] struct {
+	providers      []T
+	publishedNames []string
+	err            error
+}
+
+func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, []coreagent.Provider, error) {
+	workflowCh := make(chan configuredProviderBuilds[coreworkflow.Provider], 1)
+	agentCh := make(chan configuredProviderBuilds[coreagent.Provider], 1)
+	go func() {
+		providers, publishedNames, err := buildWorkflows(ctx, cfg, factories, deps)
+		workflowCh <- configuredProviderBuilds[coreworkflow.Provider]{providers: providers, publishedNames: publishedNames, err: err}
+	}()
+	go func() {
+		providers, publishedNames, err := buildAgents(ctx, cfg, factories, deps)
+		agentCh <- configuredProviderBuilds[coreagent.Provider]{providers: providers, publishedNames: publishedNames, err: err}
+	}()
+
+	workflowResult := <-workflowCh
+	agentResult := <-agentCh
+	if err := errors.Join(workflowResult.err, agentResult.err); err != nil {
+		if agentResult.err != nil && deps.WorkflowRuntime != nil {
+			for _, name := range workflowResult.publishedNames {
+				deps.WorkflowRuntime.UnpublishProvider(name)
+			}
+			err = errors.Join(err, closeWorkflows(workflowResult.providers...))
+			workflowResult.providers = nil
+		}
+		if workflowResult.err != nil && deps.AgentRuntime != nil {
+			for _, name := range agentResult.publishedNames {
+				deps.AgentRuntime.UnpublishProvider(name)
+			}
+			err = errors.Join(err, closeAgents(agentResult.providers...))
+			agentResult.providers = nil
+		}
+		return workflowResult.providers, agentResult.providers, err
+	}
+	return workflowResult.providers, agentResult.providers, nil
+}
+
+func failPendingStartupProviders(deps Deps, err error) {
+	if deps.WorkflowRuntime != nil {
+		deps.WorkflowRuntime.FailPendingProviders(err)
+	}
+	if deps.AgentRuntime != nil {
+		deps.AgentRuntime.FailPendingProviders(err)
+	}
+}
+
+func buildConfiguredProviders[T any](
+	ctx context.Context,
+	entries map[string]*config.ProviderEntry,
+	build func(context.Context, string, *config.ProviderEntry) (T, error),
+	publish func(string, T),
+	failStartupProvider func(string, error),
+	unpublishProvider func(string),
+	failPending func(error),
+	closeProviders func(...T) error,
+	wrapErr func(string, error) error,
+) ([]T, []string, error) {
+	var pending []struct {
+		name  string
+		entry *config.ProviderEntry
+	}
+	for name, entry := range entries {
 		if entry == nil {
 			continue
 		}
-		value, err := buildWorkflow(ctx, name, entry, factories, deps)
-		if err != nil {
+		pending = append(pending, struct {
+			name  string
+			entry *config.ProviderEntry
+		}{name: name, entry: entry})
+	}
+	if len(pending) == 0 {
+		return nil, nil, nil
+	}
+	type buildResult struct {
+		name     string
+		provider T
+		err      error
+	}
+	results := make(chan buildResult, len(pending))
+	for _, item := range pending {
+		go func(name string, entry *config.ProviderEntry) {
+			provider, err := build(ctx, name, entry)
+			results <- buildResult{name: name, provider: provider, err: err}
+		}(item.name, item.entry)
+	}
+
+	var providers []T
+	var published []string
+	var errs []error
+	buildFailed := false
+	for range pending {
+		result := <-results
+		if result.err != nil {
+			if failStartupProvider != nil {
+				failStartupProvider(result.name, result.err)
+			}
+			if !buildFailed {
+				buildFailed = true
+				if failPending != nil {
+					failPending(result.err)
+				}
+				if unpublishProvider != nil {
+					for _, name := range published {
+						unpublishProvider(name)
+					}
+				}
+			}
+			if wrapErr != nil {
+				errs = append(errs, wrapErr(result.name, result.err))
+			} else {
+				errs = append(errs, result.err)
+			}
+			continue
+		}
+		if buildFailed {
+			if closeProviders != nil {
+				_ = closeProviders(result.provider)
+			}
+			continue
+		}
+		providers = append(providers, result.provider)
+		if publish != nil {
+			publish(result.name, result.provider)
+		}
+		published = append(published, result.name)
+	}
+	if len(errs) > 0 {
+		err := errors.Join(errs...)
+		if closeProviders != nil {
+			// Published providers were removed from the runtime on failure, but
+			// this builder still owns their local process/session resources.
+			_ = closeProviders(providers...)
+		}
+		return nil, nil, err
+	}
+	return providers, published, nil
+}
+
+func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, []string, error) {
+	return buildConfiguredProviders(ctx, cfg.Providers.Workflow,
+		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreworkflow.Provider, error) {
+			return buildWorkflow(ctx, name, entry, factories, deps)
+		},
+		func(name string, provider coreworkflow.Provider) {
 			if deps.WorkflowRuntime != nil {
-				deps.WorkflowRuntime.FailProvider(name, err)
+				deps.WorkflowRuntime.PublishProvider(name, provider)
+			}
+		},
+		func(name string, err error) {
+			if deps.WorkflowRuntime != nil {
+				deps.WorkflowRuntime.FailStartupProvider(name, err)
+			}
+		},
+		func(name string) {
+			if deps.WorkflowRuntime != nil {
+				deps.WorkflowRuntime.UnpublishProvider(name)
+			}
+		},
+		func(err error) {
+			if deps.WorkflowRuntime != nil {
 				deps.WorkflowRuntime.FailPendingProviders(err)
 			}
-			_ = closeWorkflows(extraWorkflows...)
-			return nil, fmt.Errorf("bootstrap: workflow from resource %q: %w", name, err)
-		}
-		if deps.WorkflowRuntime != nil {
-			deps.WorkflowRuntime.PublishProvider(name, value)
-		}
-		extraWorkflows = append(extraWorkflows, value)
-	}
-	return extraWorkflows, nil
+		},
+		closeWorkflows,
+		func(name string, err error) error {
+			return fmt.Errorf("bootstrap: workflow from resource %q: %w", name, err)
+		},
+	)
 }
 
-func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreagent.Provider, error) {
-	var extraAgents []coreagent.Provider
-	for name, entry := range cfg.Providers.Agent {
-		if entry == nil {
-			continue
-		}
-		value, err := buildAgent(ctx, name, entry, factories, deps)
-		if err != nil {
+func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreagent.Provider, []string, error) {
+	return buildConfiguredProviders(ctx, cfg.Providers.Agent,
+		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreagent.Provider, error) {
+			return buildAgent(ctx, name, entry, factories, deps)
+		},
+		func(name string, provider coreagent.Provider) {
 			if deps.AgentRuntime != nil {
-				deps.AgentRuntime.FailProvider(name)
+				deps.AgentRuntime.PublishProvider(name, provider)
 			}
-			_ = closeAgents(extraAgents...)
-			return nil, fmt.Errorf("bootstrap: agent from resource %q: %w", name, err)
-		}
-		if deps.AgentRuntime != nil {
-			deps.AgentRuntime.PublishProvider(name, value)
-		}
-		extraAgents = append(extraAgents, value)
-	}
-	return extraAgents, nil
-}
-
-func agentPluginInvokes(cfg *config.Config) map[string][]invocation.AppInvocationDependency {
-	if cfg == nil || len(cfg.Apps) == 0 {
-		return nil
-	}
-	out := make(map[string][]invocation.AppInvocationDependency, len(cfg.Apps))
-	for pluginName, entry := range cfg.Apps {
-		if entry == nil || len(entry.Invokes) == 0 {
-			continue
-		}
-		out[pluginName] = invocationconfig.AppInvocationDependencies(entry.Invokes)
-	}
-	return out
+		},
+		func(name string, err error) {
+			if deps.AgentRuntime != nil {
+				deps.AgentRuntime.FailStartupProvider(name, err)
+			}
+		},
+		func(name string) {
+			if deps.AgentRuntime != nil {
+				deps.AgentRuntime.UnpublishProvider(name)
+			}
+		},
+		func(err error) {
+			if deps.AgentRuntime != nil {
+				deps.AgentRuntime.FailPendingProviders(err)
+			}
+		},
+		closeAgents,
+		func(name string, err error) error {
+			return fmt.Errorf("bootstrap: agent from resource %q: %w", name, err)
+		},
+	)
 }
 
 func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.TelemetryProvider, error) {
@@ -1541,7 +1708,7 @@ func buildNamedExternalCredentialsProvider(ctx context.Context, cfg *config.Conf
 			return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 		}
 	}
-	hostServices, err := buildExternalCredentialsHostServices(logicalName, deps)
+	hostServices, _, err := buildProviderHostServices(logicalName, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 	}
@@ -1716,7 +1883,11 @@ func buildAuthorization(cfg *config.Config, factories *FactoryRegistry, deps Dep
 			return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 		}
 	}
-	provider, err := factories.Authorization(node, indexedDBServicesFromDeps(deps, indexeddbservice.ServerOptions{}, ""), deps)
+	hostServices, _, err := buildProviderHostServices("authorization", deps)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
+	}
+	provider, err := factories.Authorization(node, hostServices, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 	}
@@ -1790,6 +1961,7 @@ func buildS3(name string, entry *config.ProviderEntry, factories *FactoryRegistr
 }
 
 func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (coreworkflow.Provider, error) {
+	ctx = invocation.WithCallerProvider(ctx, invocation.ProviderKindWorkflow, name)
 	if entry == nil {
 		return nil, fmt.Errorf("workflow provider is required")
 	}
@@ -1801,9 +1973,9 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 			return nil, fmt.Errorf("workflow provider: %w", err)
 		}
 	}
-	var hostServices []runtimehost.HostService
-	if deps.AuthorizationProvider != nil {
-		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
+	hostServices, _, err := buildProviderHostServices(name, deps)
+	if err != nil {
+		return nil, fmt.Errorf("workflow provider: %w", err)
 	}
 	var cleanup func()
 	defer func() {
@@ -1811,18 +1983,6 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 			cleanup()
 		}
 	}()
-	effectiveIndexedDB, err := config.ResolveEffectiveWorkflowIndexedDB(name, entry, deps.IndexedDBDefs)
-	if err != nil {
-		return nil, fmt.Errorf("workflow provider: %w", err)
-	}
-	if effectiveIndexedDB.Enabled {
-		indexedDBServices, indexedDBCleanup, err := buildIndexedDBServices(name, name, effectiveIndexedDB, deps)
-		if err != nil {
-			return nil, fmt.Errorf("workflow provider: %w", err)
-		}
-		hostServices = append(hostServices, indexedDBServices...)
-		cleanup = chainCleanup(cleanup, indexedDBCleanup)
-	}
 	if !entry.UsesRuntimePlacement() {
 		publicWorkflowProviderHostServicesCleanup, err := registerPublicWorkflowProviderHostServices(name, hostServices, deps)
 		if err != nil {
@@ -1856,6 +2016,7 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 }
 
 func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (coreagent.Provider, error) {
+	ctx = invocation.WithCallerProvider(ctx, invocation.ProviderKindAgent, name)
 	if entry == nil {
 		return nil, fmt.Errorf("agent provider is required")
 	}
@@ -1867,30 +2028,16 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 			return nil, fmt.Errorf("agent provider: %w", err)
 		}
 	}
-	hostServices := []runtimehost.HostService{{
+	agentHostService := runtimehost.HostService{
 		Name:           "agent_host",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.AgentHost_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAgentHostServer(srv, agentservice.NewHostServerWithConnections(name, deps.AgentRuntime.ListTools, deps.AgentRuntime.ExecuteTool, deps.AgentRuntime.ResolveConnection))
 		},
-	}}
-	var cleanup func()
-	defer func() {
-		if cleanup != nil {
-			cleanup()
-		}
-	}()
-	effectiveIndexedDB, err := config.ResolveEffectiveAgentIndexedDB(name, entry, deps.IndexedDBDefs)
+	}
+	hostServices, _, err := buildProviderHostServices(name, deps, agentHostService)
 	if err != nil {
 		return nil, fmt.Errorf("agent provider: %w", err)
-	}
-	if effectiveIndexedDB.Enabled {
-		indexedDBServices, indexedDBCleanup, err := buildIndexedDBServices(name, name, effectiveIndexedDB, deps)
-		if err != nil {
-			return nil, fmt.Errorf("agent provider: %w", err)
-		}
-		hostServices = append(hostServices, indexedDBServices...)
-		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
 	var (
 		provider    coreagent.Provider
@@ -1911,14 +2058,6 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 	tracked := &agentProviderWithTracking{
 		delegate:     provider,
 		providerName: name,
-	}
-	if cleanup != nil {
-		provider := &agentProviderWithCleanup{
-			Provider: tracked,
-			cleanup:  cleanup,
-		}
-		cleanup = nil
-		return provider, nil
 	}
 	return tracked, nil
 }

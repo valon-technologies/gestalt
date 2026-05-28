@@ -39,7 +39,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		trigger := desiredEntry.trigger
 		target := workflowConfigTarget(trigger.Target)
 		appName := workflowConfigTargetLabel(target)
-		_, provider, err := runtime.ResolveProviderSelection(trigger.Provider)
+		_, provider, err := runtime.ResolveProvider(ctx, trigger.Provider)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
@@ -124,7 +124,7 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 		if !workflowConfigProviderIncluded(includeProvider, providerName) {
 			continue
 		}
-		provider, err := runtime.ResolveProvider(providerName)
+		_, provider, err := runtime.ResolveProvider(ctx, providerName)
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow event triggers requires provider %q: %w", providerName, err)
 		}

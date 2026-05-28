@@ -287,11 +287,13 @@ export interface CreateAgentProviderSessionRequest {
   subject?: Subject | undefined;
   sessionStart?: AgentSessionStartConfig | undefined;
   preparedWorkspace?: AgentPreparedWorkspace | undefined;
+  invocationToken: string;
 }
 
 export interface GetAgentProviderSessionRequest {
   sessionId: string;
   subject?: Subject | undefined;
+  invocationToken: string;
 }
 
 export interface ListAgentProviderSessionsRequest {
@@ -300,6 +302,7 @@ export interface ListAgentProviderSessionsRequest {
   state: AgentSessionState;
   limit: number;
   summaryOnly: boolean;
+  invocationToken: string;
 }
 
 export interface ListAgentProviderSessionsResponse {
@@ -312,6 +315,7 @@ export interface UpdateAgentProviderSessionRequest {
   state: AgentSessionState;
   metadata?: JsonObjectInput | undefined;
   subject?: Subject | undefined;
+  invocationToken: string;
 }
 
 export interface AgentTurn {
@@ -375,6 +379,7 @@ export interface CreateAgentProviderTurnRequest {
   modelOptions?: JsonObjectInput | undefined;
   runGrant: string;
   timeoutSeconds: number;
+  invocationToken: string;
 }
 
 export interface AgentTextOutput {
@@ -391,6 +396,7 @@ export type AgentOutput =
 export interface GetAgentProviderTurnRequest {
   turnId: string;
   subject?: Subject | undefined;
+  invocationToken: string;
 }
 
 export interface ListAgentProviderTurnsRequest {
@@ -400,6 +406,7 @@ export interface ListAgentProviderTurnsRequest {
   status: AgentExecutionStatus;
   limit: number;
   summaryOnly: boolean;
+  invocationToken: string;
 }
 
 export interface ListAgentProviderTurnsResponse {
@@ -410,6 +417,7 @@ export interface CancelAgentProviderTurnRequest {
   turnId: string;
   reason: string;
   subject?: Subject | undefined;
+  invocationToken: string;
 }
 
 export interface AgentTurnEvent {
@@ -429,6 +437,7 @@ export interface ListAgentProviderTurnEventsRequest {
   afterSeq: bigint;
   limit: number;
   subject?: Subject | undefined;
+  invocationToken: string;
 }
 
 export interface ListAgentProviderTurnEventsResponse {
@@ -452,11 +461,13 @@ export interface AgentInteraction {
 export interface GetAgentProviderInteractionRequest {
   interactionId: string;
   subject?: Subject | undefined;
+  invocationToken: string;
 }
 
 export interface ListAgentProviderInteractionsRequest {
   turnId: string;
   subject?: Subject | undefined;
+  invocationToken: string;
 }
 
 export interface ListAgentProviderInteractionsResponse {
@@ -467,6 +478,7 @@ export interface ResolveAgentProviderInteractionRequest {
   interactionId: string;
   resolution?: JsonObjectInput | undefined;
   subject?: Subject | undefined;
+  invocationToken: string;
 }
 
 export interface GetAgentProviderCapabilitiesRequest {}
@@ -830,6 +842,7 @@ function createAgentProviderSessionRequestFromProto(
       root: request.preparedWorkspace.root,
       cwd: request.preparedWorkspace.cwd,
     },
+    invocationToken: request.invocationToken,
   };
 }
 
@@ -839,6 +852,7 @@ function getAgentProviderSessionRequestFromProto(
   return {
     sessionId: request.sessionId,
     subject: agentSubjectFromProto(request.subject),
+    invocationToken: request.invocationToken,
   };
 }
 
@@ -851,6 +865,7 @@ function listAgentProviderSessionsRequestFromProto(
     state: request.state as AgentSessionState,
     limit: request.limit,
     summaryOnly: request.summaryOnly,
+    invocationToken: request.invocationToken,
   };
 }
 
@@ -863,6 +878,7 @@ function updateAgentProviderSessionRequestFromProto(
     state: request.state as AgentSessionState,
     metadata: optionalObjectFromStruct(request.metadata),
     subject: agentSubjectFromProto(request.subject),
+    invocationToken: request.invocationToken,
   };
 }
 
@@ -895,6 +911,7 @@ function createAgentProviderTurnRequestFromProto(
     modelOptions: optionalObjectFromStruct(request.modelOptions),
     runGrant: request.runGrant,
     timeoutSeconds: request.timeoutSeconds,
+    invocationToken: request.invocationToken,
   };
 }
 
@@ -904,6 +921,7 @@ function getAgentProviderTurnRequestFromProto(
   return {
     turnId: request.turnId,
     subject: agentSubjectFromProto(request.subject),
+    invocationToken: request.invocationToken,
   };
 }
 
@@ -917,6 +935,7 @@ function listAgentProviderTurnsRequestFromProto(
     status: request.status as AgentExecutionStatus,
     limit: request.limit,
     summaryOnly: request.summaryOnly,
+    invocationToken: request.invocationToken,
   };
 }
 
@@ -927,6 +946,7 @@ function cancelAgentProviderTurnRequestFromProto(
     turnId: request.turnId,
     reason: request.reason,
     subject: agentSubjectFromProto(request.subject),
+    invocationToken: request.invocationToken,
   };
 }
 
@@ -938,6 +958,7 @@ function listAgentProviderTurnEventsRequestFromProto(
     afterSeq: request.afterSeq,
     limit: request.limit,
     subject: agentSubjectFromProto(request.subject),
+    invocationToken: request.invocationToken,
   };
 }
 
@@ -947,6 +968,7 @@ function getAgentProviderInteractionRequestFromProto(
   return {
     interactionId: request.interactionId,
     subject: agentSubjectFromProto(request.subject),
+    invocationToken: request.invocationToken,
   };
 }
 
@@ -956,6 +978,7 @@ function listAgentProviderInteractionsRequestFromProto(
   return {
     turnId: request.turnId,
     subject: agentSubjectFromProto(request.subject),
+    invocationToken: request.invocationToken,
   };
 }
 
@@ -966,6 +989,7 @@ function resolveAgentProviderInteractionRequestFromProto(
     interactionId: request.interactionId,
     resolution: optionalObjectFromStruct(request.resolution),
     subject: agentSubjectFromProto(request.subject),
+    invocationToken: request.invocationToken,
   };
 }
 

@@ -44,7 +44,7 @@ func NewProviderServer(appName string, manager ManagerService, tokens *Invocatio
 
 func (s *ProviderServer) managerContext(ctx context.Context, tokenCtx appaccessservice.TokenContext) context.Context {
 	ctx = appaccessservice.RestoreTokenContext(ctx, tokenCtx, "")
-	return workflowmanager.WithCallerAppName(ctx, s.appName)
+	return workflowmanager.WithCallerAppName(ctx, tokenCtx.CallerApp())
 }
 
 func (s *ProviderServer) CreateDefinition(ctx context.Context, req *proto.CreateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
@@ -66,7 +66,7 @@ func (s *ProviderServer) CreateDefinition(ctx context.Context, req *proto.Create
 		ProviderName:   strings.TrimSpace(req.GetProviderName()),
 		Target:         target,
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
-		CallerAppName:  strings.TrimSpace(s.appName),
+		CallerAppName:  tokenCtx.CallerApp(),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -126,7 +126,7 @@ func (s *ProviderServer) UpdateDefinition(ctx context.Context, req *proto.Update
 	managed, err := s.manager.UpdateDefinition(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), definitionID, workflowmanager.DefinitionUpsert{
 		ProviderName:  strings.TrimSpace(req.GetProviderName()),
 		Target:        target,
-		CallerAppName: strings.TrimSpace(s.appName),
+		CallerAppName: tokenCtx.CallerApp(),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -186,7 +186,7 @@ func (s *ProviderServer) UpsertSchedule(ctx context.Context, req *proto.UpsertWo
 	if err != nil {
 		return nil, err
 	}
-	upsert.CallerAppName = strings.TrimSpace(s.appName)
+	upsert.CallerAppName = tokenCtx.CallerApp()
 	upsert.IdempotencyKey = strings.TrimSpace(req.GetIdempotencyKey())
 	upsert.DefinitionID = strings.TrimSpace(req.GetDefinitionId())
 	var managed *workflowmanager.ManagedSchedule
@@ -226,7 +226,7 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 		DefinitionID:   strings.TrimSpace(req.GetDefinitionId()),
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
 		WorkflowKey:    strings.TrimSpace(req.GetWorkflowKey()),
-		CallerAppName:  strings.TrimSpace(s.appName),
+		CallerAppName:  tokenCtx.CallerApp(),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -299,7 +299,7 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 		DefinitionID:   strings.TrimSpace(req.GetDefinitionId()),
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
 		Signal:         workflowSignalFromProto(req.GetSignal()),
-		CallerAppName:  strings.TrimSpace(s.appName),
+		CallerAppName:  tokenCtx.CallerApp(),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -436,7 +436,7 @@ func (s *ProviderServer) UpsertEventTrigger(ctx context.Context, req *proto.Upse
 	if err != nil {
 		return nil, err
 	}
-	upsert.CallerAppName = strings.TrimSpace(s.appName)
+	upsert.CallerAppName = tokenCtx.CallerApp()
 	upsert.IdempotencyKey = strings.TrimSpace(req.GetIdempotencyKey())
 	upsert.DefinitionID = strings.TrimSpace(req.GetDefinitionId())
 	var managed *workflowmanager.ManagedEventTrigger
@@ -571,7 +571,7 @@ func (s *ProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWor
 	}
 	published, err := s.manager.PublishEvent(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), workflowmanager.EventPublish{
 		ProviderName: strings.TrimSpace(req.GetProviderName()),
-		AppName:      strings.TrimSpace(s.appName),
+		AppName:      tokenCtx.CallerApp(),
 		Event:        event,
 	})
 	if err != nil {
@@ -585,9 +585,12 @@ func (s *ProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWor
 }
 
 func (s *ProviderServer) tokenContext(token string) (appaccessservice.TokenContext, error) {
-	tokenCtx, err := s.tokens.ResolveToken(token, s.appName)
+	tokenCtx, err := s.tokens.ResolveToken(token, "")
 	if err != nil {
 		return appaccessservice.TokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	if tokenCtx.CallerApp() == "" {
+		return appaccessservice.TokenContext{}, status.Error(codes.FailedPrecondition, "invocation token caller app is required")
 	}
 	return tokenCtx, nil
 }
@@ -596,7 +599,7 @@ func (s *ProviderServer) requireWorkflowGrant(tokenCtx appaccessservice.TokenCon
 	if tokenCtx.AllowsWorkflowManagerOperation(operation) {
 		return nil
 	}
-	return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q", operation, strings.TrimSpace(s.appName))
+	return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q", operation, tokenCtx.CallerApp())
 }
 
 func workflowManagerSignalOrStartMetricDims(req *proto.SignalOrStartWorkflowProviderRunRequest, managed *workflowmanager.ManagedRunSignal) observability.WorkflowMetricDims {

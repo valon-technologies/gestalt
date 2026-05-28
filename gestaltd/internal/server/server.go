@@ -15,7 +15,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -412,7 +411,6 @@ func New(cfg Config) (*Server, error) {
 		Authorizer:        cfg.Authorizer,
 		DefaultConnection: cfg.DefaultConnection,
 		CatalogConnection: cfg.CatalogConnection,
-		AppInvokes:        pluginInvokesFromProviderEntries(cfg.AppDefs),
 		Now:               now,
 	})
 	if noAuth || hasAnonymousAuthProvider(authProviders) {
@@ -444,23 +442,6 @@ func hasAnonymousAuthProvider(providers map[string]core.AuthenticationProvider) 
 		}
 	}
 	return false
-}
-
-func pluginInvokesFromProviderEntries(entries map[string]*config.ProviderEntry) map[string][]invocation.AppInvocationDependency {
-	if len(entries) == 0 {
-		return nil
-	}
-	out := make(map[string][]invocation.AppInvocationDependency, len(entries))
-	for pluginName, entry := range entries {
-		if entry == nil || len(entry.Invokes) == 0 {
-			continue
-		}
-		out[pluginName] = invocationconfig.AppInvocationDependencies(entry.Invokes)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

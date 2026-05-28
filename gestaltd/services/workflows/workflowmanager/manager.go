@@ -55,13 +55,12 @@ func callerAppNameFromContext(ctx context.Context) string {
 }
 
 type WorkflowControl interface {
-	ResolveProvider(name string) (coreworkflow.Provider, error)
-	ResolveProviderSelection(name string) (providerName string, provider coreworkflow.Provider, err error)
+	ResolveProvider(ctx context.Context, name string) (providerName string, provider coreworkflow.Provider, err error)
 	ProviderNames() []string
 }
 
 type AgentControl interface {
-	ResolveProviderSelection(name string) (providerName string, provider coreagent.Provider, err error)
+	ResolveProvider(ctx context.Context, name string) (providerName string, provider coreagent.Provider, err error)
 }
 
 type Service interface {
@@ -107,7 +106,6 @@ type Config struct {
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
-	AppInvokes        map[string][]invocation.AppInvocationDependency
 	Now               func() time.Time
 	Logger            *slog.Logger
 }
@@ -122,7 +120,6 @@ type Manager struct {
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
 	catalogConnection map[string]string
-	appInvokes        map[string][]invocation.AppInvocationDependency
 	now               func() time.Time
 	logger            *slog.Logger
 }
@@ -269,7 +266,6 @@ func New(cfg Config) *Manager {
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
-		appInvokes:        invocation.CloneAppInvocationDependencyMap(cfg.AppInvokes),
 		now:               now,
 		logger:            cfg.Logger,
 	}
@@ -420,7 +416,7 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 			providerSourcesExhausted[providerIndex] = true
 			continue
 		}
-		provider, err := m.resolveProviderByName(providerName)
+		_, provider, err := m.resolveProvider(ctx, providerName)
 		if err != nil {
 			return nil, err
 		}
@@ -898,7 +894,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 	publishedBy := workflowActorFromPrincipal(p)
 
 	if providerSelection != "" {
-		providerName, provider, err := m.resolveProviderSelection(providerSelection)
+		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
 		if err != nil {
 			return coreworkflow.Event{}, err
 		}
@@ -925,7 +921,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 		providerAudit := audit.clone()
 		providerAudit.setProvider(providerName)
 		providerAudit.setObjectTarget(workflowAuditTargetEvent, "", event.Type)
-		provider, err := m.resolveProviderByName(providerName)
+		_, provider, err := m.resolveProvider(ctx, providerName)
 		if err != nil {
 			providerAudit.finish(ctx, err)
 			return coreworkflow.Event{}, err

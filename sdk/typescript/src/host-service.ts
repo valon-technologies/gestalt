@@ -1,7 +1,7 @@
 import { connect } from "node:net";
 
 import type { Interceptor, Transport } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
+import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 
 export const ENV_HOST_SERVICE_SOCKET = "GESTALT_HOST_SERVICE_SOCKET";
 export const ENV_HOST_SERVICE_TOKEN = "GESTALT_HOST_SERVICE_TOKEN";
@@ -12,6 +12,10 @@ export const HOST_SERVICE_BINDING_HEADER = "x-gestalt-host-binding";
 export type HostServiceTransportOptions = {
   baseUrl: string;
   nodeOptions?: { path: string };
+};
+
+export type HostServiceGrpcTransport = Transport & {
+  close(): void;
 };
 
 export function parseHostServiceTarget(
@@ -83,18 +87,25 @@ export function hostServiceMetadataInterceptors(
 export function createHostServiceGrpcTransport(
   transportOptions: HostServiceTransportOptions,
   interceptors: Interceptor[] = [],
-): Transport {
-  return createGrpcTransport({
-    ...transportOptions,
-    ...(transportOptions.nodeOptions
-      ? {
-          nodeOptions: {
-            createConnection: () =>
-              connect({ path: transportOptions.nodeOptions!.path }),
-          },
-        }
-      : {}),
+): HostServiceGrpcTransport {
+  const nodeOptions = transportOptions.nodeOptions
+    ? {
+        createConnection: () =>
+          connect({ path: transportOptions.nodeOptions!.path }),
+      }
+    : undefined;
+  const sessionManager = new Http2SessionManager(
+    transportOptions.baseUrl,
+    undefined,
+    nodeOptions,
+  );
+  const transport = createGrpcTransport({
+    baseUrl: transportOptions.baseUrl,
+    sessionManager,
     interceptors,
+  });
+  return Object.assign(transport, {
+    close: () => sessionManager.abort(),
   });
 }
 

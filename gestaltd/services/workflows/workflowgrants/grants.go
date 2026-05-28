@@ -71,6 +71,10 @@ func SupportedOperations() []string {
 	return slices.Sorted(maps.Keys(supportedOperations))
 }
 
+func All() Grants {
+	return maps.Clone(supportedOperations)
+}
+
 func Clone(src Grants) Grants {
 	if src == nil {
 		return nil

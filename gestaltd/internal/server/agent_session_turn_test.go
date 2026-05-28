@@ -475,7 +475,7 @@ type stubAgentControl struct {
 	provider            coreagent.Provider
 }
 
-func (s *stubAgentControl) ResolveProviderSelection(name string) (string, coreagent.Provider, error) {
+func (s *stubAgentControl) ResolveProvider(ctx context.Context, name string) (string, coreagent.Provider, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = strings.TrimSpace(s.defaultProviderName)
@@ -484,13 +484,6 @@ func (s *stubAgentControl) ResolveProviderSelection(name string) (string, coreag
 		return "", nil, agentmanager.ErrAgentProviderRequired
 	}
 	return name, s.provider, nil
-}
-
-func (s *stubAgentControl) ResolveProvider(name string) (coreagent.Provider, error) {
-	if strings.TrimSpace(name) == "" || s.provider == nil {
-		return nil, agentmanager.NewAgentProviderNotAvailableError(name)
-	}
-	return s.provider, nil
 }
 
 func (s *stubAgentControl) ProviderNames() []string {

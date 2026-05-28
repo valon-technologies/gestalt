@@ -6,7 +6,6 @@ import {
   createClient,
   type Client,
   type ServiceImpl,
-  type Transport,
 } from "@connectrpc/connect";
 
 import {
@@ -29,6 +28,7 @@ import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import { dateFromTimestamp, timestampFromDate } from "./protocol.ts";
 import {
   createHostServiceGrpcTransport,
+  type HostServiceGrpcTransport,
   hostServiceMetadataInterceptors,
   parseHostServiceTarget,
   requireHostServiceTarget,
@@ -580,7 +580,7 @@ export function createS3Service(
  * ```
  */
 class S3Impl implements S3 {
-  private readonly transport: Transport;
+  private readonly transport: HostServiceGrpcTransport;
   private readonly client: Client<typeof S3Service>;
   private objectAccessClient?: Client<typeof S3ObjectAccessService>;
 
@@ -595,7 +595,9 @@ class S3Impl implements S3 {
   }
 
   /** Releases client resources. */
-  close(): void {}
+  close(): void {
+    this.transport.close();
+  }
 
   /** Returns a convenience helper for the latest version of an object. */
   object(key: string): S3Object {

@@ -2,15 +2,18 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
@@ -133,6 +136,75 @@ func (p startupTestWorkflowProvider) PublishEvent(_ context.Context, req corewor
 func (p startupTestWorkflowProvider) Ping(context.Context) error { return nil }
 func (p startupTestWorkflowProvider) Close() error               { return nil }
 
+func TestWorkflowRuntimeResolvePendingProviderWaitsForContext(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := newWorkflowRuntime(&config.Config{
+		Providers: config.ProvidersConfig{
+			Workflow: map[string]*config.ProviderEntry{
+				"temporal": {},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("newWorkflowRuntime: %v", err)
+	}
+	runtime.InitProviderPlaceholders(map[string]*config.ProviderEntry{
+		"temporal": {},
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, _, err := runtime.ResolveProvider(ctx, "temporal"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ResolveProvider error = %v, want context deadline", err)
+	}
+}
+
+func TestWorkflowRuntimeSkipsConfiguredProviderPublishAfterFailure(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Providers: config.ProvidersConfig{
+			Workflow: map[string]*config.ProviderEntry{
+				"temporal": {},
+			},
+		},
+	}
+	runtime, err := newWorkflowRuntime(cfg)
+	if err != nil {
+		t.Fatalf("newWorkflowRuntime: %v", err)
+	}
+	runtime.InitProviderPlaceholders(cfg.Providers.Workflow)
+	runtime.FailPendingProviders(errors.New("boom"))
+	runtime.PublishProvider("temporal", startupTestWorkflowProvider{})
+	if _, _, err := runtime.ResolveProvider(context.Background(), "temporal"); err == nil {
+		t.Fatal("configured provider was published after startup failure")
+	}
+}
+
+func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testing.T) {
+	t.Parallel()
+
+	hostServices, invTokens, err := buildProviderHostServices("metadata", Deps{
+		Services: &coredata.Services{
+			ExternalCredentials: coretesting.NewStubExternalCredentialProvider(),
+		},
+		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
+	})
+	if err != nil {
+		t.Fatalf("buildProviderHostServices: %v", err)
+	}
+	if invTokens == nil {
+		t.Fatal("invocation token manager is nil")
+	}
+
+	names := hostServiceNames(hostServices)
+	for _, want := range []string{"app", "workflow_provider", "agent_provider", "external_credentials", "authorization"} {
+		if !hasHostServiceName(names, want) {
+			t.Fatalf("provider host services missing %q: %v", want, names)
+		}
+	}
+}
+
 func TestBuildWorkflowRegistersIndexedDBPublicRelay(t *testing.T) {
 	t.Parallel()
 
@@ -141,8 +213,12 @@ func TestBuildWorkflowRegistersIndexedDBPublicRelay(t *testing.T) {
 		return startupTestWorkflowProvider{}, nil
 	}
 	deps := Deps{
-		BaseURL:       "https://gestalt.example.test",
-		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		BaseURL:               "https://gestalt.example.test",
+		EncryptionKey:         []byte("0123456789abcdef0123456789abcdef"),
+		SelectedIndexedDBName: "main",
+		IndexedDBs: map[string]indexeddb.IndexedDB{
+			"main": &coretesting.StubIndexedDB{},
+		},
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"main": {
 				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.2/provider-release.yaml"),
@@ -206,6 +282,14 @@ func hasHostServiceName(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func hostServiceNames(hostServices []runtimehost.HostService) []string {
+	names := make([]string, 0, len(hostServices))
+	for _, hostService := range hostServices {
+		names = append(names, hostService.Name)
+	}
+	return names
 }
 
 func (noopTelemetryProvider) Logger() *slog.Logger {

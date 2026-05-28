@@ -394,7 +394,7 @@ func (s *Server) listAgentProviders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defaultProvider := ""
-	if name, _, err := s.agent.ResolveProviderSelection(""); err == nil {
+	if name, _, err := s.agent.ResolveProvider(r.Context(), ""); err == nil {
 		defaultProvider = strings.TrimSpace(name)
 	}
 
@@ -409,7 +409,7 @@ func (s *Server) listAgentProviders(w http.ResponseWriter, r *http.Request) {
 			Name:    name,
 			Default: name == defaultProvider,
 		}
-		provider, err := s.agent.ResolveProvider(name)
+		_, provider, err := s.agent.ResolveProvider(r.Context(), name)
 		if err == nil && provider != nil {
 			if caps, err := provider.GetCapabilities(r.Context(), &proto.GetAgentProviderCapabilitiesRequest{}); err == nil {
 				info.Capabilities = agentProviderCapabilitiesInfoFromCore(caps)
@@ -439,7 +439,7 @@ func (s *Server) resolveAgentHarness(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	providerName, _, err := s.agent.ResolveProviderSelection(strings.TrimSpace(req.ProviderName))
+	providerName, _, err := s.agent.ResolveProvider(r.Context(), strings.TrimSpace(req.ProviderName))
 	if err != nil {
 		s.writeAgentManagerError(w, r, "provider", "", nil, err)
 		return

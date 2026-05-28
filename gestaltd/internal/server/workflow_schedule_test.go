@@ -31,7 +31,7 @@ type stubWorkflowControl struct {
 	providerErr         error
 }
 
-func (s *stubWorkflowControl) ResolveProviderSelection(name string) (string, coreworkflow.Provider, error) {
+func (s *stubWorkflowControl) ResolveProvider(_ context.Context, name string) (string, coreworkflow.Provider, error) {
 	if s.selectionErr != nil {
 		return "", nil, s.selectionErr
 	}
@@ -42,25 +42,17 @@ func (s *stubWorkflowControl) ResolveProviderSelection(name string) (string, cor
 	if name == "" {
 		return "", nil, errors.New("provider not found")
 	}
-	provider, err := s.ResolveProvider(name)
-	if err != nil {
-		return "", nil, err
-	}
-	return name, provider, nil
-}
-
-func (s *stubWorkflowControl) ResolveProvider(name string) (coreworkflow.Provider, error) {
 	if s.providerErr != nil {
-		return nil, s.providerErr
+		return "", nil, s.providerErr
 	}
 	if s.providers != nil {
 		provider, ok := s.providers[name]
 		if !ok {
-			return nil, errors.New("provider not found")
+			return "", nil, errors.New("provider not found")
 		}
-		return provider, nil
+		return name, provider, nil
 	}
-	return s.provider, nil
+	return name, s.provider, nil
 }
 
 func (s *stubWorkflowControl) ProviderNames() []string {

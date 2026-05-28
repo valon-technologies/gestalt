@@ -19,23 +19,17 @@ import (
 )
 
 type adminRuntimeProviderInfo struct {
-	Name    string                   `json:"name"`
-	Driver  string                   `json:"driver"`
-	Default bool                     `json:"default"`
-	Loaded  bool                     `json:"loaded"`
-	Profile *adminRuntimeProfilePair `json:"profile,omitempty"`
-	Error   string                   `json:"error,omitempty"`
-}
-
-type adminRuntimeProfilePair struct {
-	Advertised adminRuntimeProfile `json:"advertised"`
-	Effective  adminRuntimeProfile `json:"effective"`
+	Name    string               `json:"name"`
+	Driver  string               `json:"driver"`
+	Default bool                 `json:"default"`
+	Loaded  bool                 `json:"loaded"`
+	Profile *adminRuntimeProfile `json:"profile,omitempty"`
+	Error   string               `json:"error,omitempty"`
 }
 
 type adminRuntimeProfile struct {
-	CanHostApps       bool   `json:"canHostApps"`
-	HostServiceAccess string `json:"hostServiceAccess"`
-	EgressMode        string `json:"egressMode"`
+	CanHostApps bool   `json:"canHostApps"`
+	EgressMode  string `json:"egressMode"`
 }
 
 type adminRuntimeSessionInfo struct {
@@ -82,7 +76,8 @@ func (s *Server) listAdminRuntimeProviders(w http.ResponseWriter, r *http.Reques
 			Error:   strings.TrimSpace(snapshot.Error),
 		}
 		if snapshot.Loaded && snapshot.SupportLoaded {
-			row.Profile = adminRuntimeProfilePairFromSnapshot(snapshot)
+			profile := adminRuntimeProfileFromBootstrap(snapshot.Profile)
+			row.Profile = &profile
 		}
 		out = append(out, row)
 	}
@@ -201,18 +196,10 @@ func (s *Server) adminRuntimeSessions(r *http.Request, providerName string, req 
 	return s.pluginRuntimes.ListRuntimeSessions(r.Context(), providerName, req)
 }
 
-func adminRuntimeProfilePairFromSnapshot(snapshot *bootstrap.RuntimeProviderSnapshot) *adminRuntimeProfilePair {
-	return &adminRuntimeProfilePair{
-		Advertised: adminRuntimeProfileFromBootstrap(snapshot.Advertised),
-		Effective:  adminRuntimeProfileFromBootstrap(snapshot.Effective),
-	}
-}
-
-func adminRuntimeProfileFromBootstrap(behavior bootstrap.RuntimeBehavior) adminRuntimeProfile {
+func adminRuntimeProfileFromBootstrap(profile bootstrap.RuntimePlacementPlan) adminRuntimeProfile {
 	return adminRuntimeProfile{
-		CanHostApps:       behavior.CanHostApps,
-		HostServiceAccess: strings.TrimSpace(string(behavior.HostServiceAccess)),
-		EgressMode:        strings.TrimSpace(string(behavior.EgressMode)),
+		CanHostApps: profile.CanHostApps,
+		EgressMode:  strings.TrimSpace(string(profile.EgressMode)),
 	}
 }
 

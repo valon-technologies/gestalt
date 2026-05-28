@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, type Subprocess } from "bun";
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 
 import {
   ENV_HOST_SERVICE_SOCKET,
@@ -23,7 +23,7 @@ let harnessBinPath: string;
 let socketPath: string;
 let proc: Subprocess;
 let defaultTCPProc: Subprocess | undefined;
-let defaultClient: S3 | undefined;
+const activeClients = new Set<S3>();
 
 beforeAll(async () => {
   tmpDir = mkdtempSync(join(tmpdir(), "s3-transport-test-"));
@@ -116,7 +116,6 @@ async function startTCPHarness(expectToken?: string): Promise<{ proc: Subprocess
 afterAll(() => {
   proc?.kill();
   defaultTCPProc?.kill();
-  defaultClient = undefined;
   delete process.env[ENV_HOST_SERVICE_SOCKET];
   delete process.env[ENV_HOST_SERVICE_TOKEN];
   if (tmpDir) {
@@ -125,10 +124,21 @@ afterAll(() => {
 });
 
 describe("S3 transport", () => {
-  const client = (): S3 => defaultClient ??= new S3();
+  afterEach(() => {
+    for (const s3 of activeClients) {
+      s3.close();
+    }
+    activeClients.clear();
+  });
+
+  const client = (name?: string): S3 => {
+    const s3 = new S3(name);
+    activeClients.add(s3);
+    return s3;
+  };
 
   test("named socket env selects the requested binding", async () => {
-    const named = new S3("named");
+    const named = client("named");
     const object = named.object("hello.txt");
 
     await object.writeString("named binding", {
@@ -144,7 +154,7 @@ describe("S3 transport", () => {
     const previousTarget = process.env[envName];
     process.env[envName] = target;
     try {
-      const object = new S3("tcp").object("hello.txt");
+      const object = client("tcp").object("hello.txt");
       await object.writeString("tcp binding");
       expect(await object.text()).toBe("tcp binding");
     } finally {
@@ -167,7 +177,7 @@ describe("S3 transport", () => {
     process.env[envName] = target;
     process.env[tokenEnvName] = token;
     try {
-      const object = new S3("tcp-token").object("hello.txt");
+      const object = client("tcp-token").object("hello.txt");
       await object.writeString("token binding");
       expect(await object.text()).toBe("token binding");
     } finally {

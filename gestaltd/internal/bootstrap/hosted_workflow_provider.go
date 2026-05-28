@@ -48,7 +48,7 @@ func buildHostedWorkflowWorkerPool(ctx context.Context, name string, entry *conf
 		return nil, err
 	}
 	hostServices = appendRuntimeLogHostService(hostServices, launch.runtimeConfig, deps, launch.runtimePlan)
-	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, launch.runtimePlan, launch.runtimeProvider)
+	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, launch.runtimeProvider)
 	if err != nil {
 		launch.close()
 		return nil, err
@@ -96,9 +96,8 @@ func prepareHostedWorkflowProviderLaunch(ctx context.Context, name string, entry
 		}
 		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
-	requiresHostnameEgress := deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement()
-	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, true, requiresHostnameEgress)
-	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig)); err != nil {
+	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, runtimeRequiresHostnameEgress(entry, deps))
+	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig), deps); err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
 		}
@@ -208,18 +207,9 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 		workflowAllowedHosts = append([]string(nil), launch.allowedHosts...)
 	}
 	allowedHosts := hostedWorkflowAllowedHosts(workflowAllowedHosts, launch.runtimePlan)
-	bindingEnv, relayHost, err := mergeHostedRuntimeHostServiceRelayEnv(name, sessionID, hostServiceBindingDescriptorsFromConfigured(hostServices), deps)
+	startEnv, allowedHosts, err = applyHostedRuntimeHostServiceRelayEnv(name, sessionID, hostServices, launch.runtimePlan, deps, startEnv, allowedHosts)
 	if err != nil {
 		return nil, err
-	}
-	if len(bindingEnv) > 0 {
-		if startEnv == nil {
-			startEnv = make(map[string]string, len(bindingEnv))
-		}
-		maps.Copy(startEnv, bindingEnv)
-	}
-	if launch.runtimePlan.RequiresHostnameEgress {
-		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
 	}
 	egressPlan, err := buildHostedRuntimeEgressLaunchPlan(name, sessionID, deps.Egress.Policy(workflowAllowedHosts), allowedHosts, launch.runtimePlan, deps)
 	if err != nil {

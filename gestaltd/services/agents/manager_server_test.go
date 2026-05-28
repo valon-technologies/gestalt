@@ -191,7 +191,7 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 	}
 }
 
-func TestManagerServerCreateTurnFallsBackToPluginCallerApp(t *testing.T) {
+func TestManagerServerCreateTurnRequiresInvocationTokenCallerApp(t *testing.T) {
 	t.Parallel()
 
 	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-empty-caller-secret"))
@@ -219,8 +219,8 @@ func TestManagerServerCreateTurnFallsBackToPluginCallerApp(t *testing.T) {
 	if _, err := server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
 		SessionId:       "session-1",
 		InvocationToken: token,
-	}); err != nil {
-		t.Fatalf("CreateTurn: %v", err)
+	}); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("CreateTurn status = %s, want %s (err=%v)", status.Code(err), codes.FailedPrecondition, err)
 	}
 }
 

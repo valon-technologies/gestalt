@@ -14,7 +14,7 @@ func ServeAgentProvider(ctx context.Context, provider AgentProvider) error {
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindAgent, provider))
 		proto.RegisterAgentProviderServer(srv, agentProviderServer{provider: provider})
-	})
+	}, grpc.UnaryInterceptor(providerInvocationUnaryInterceptor))
 }
 
 type agentProviderServer struct {

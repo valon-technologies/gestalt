@@ -74,11 +74,25 @@ type ToolRefsContext struct {
 	Refs []coreagent.ToolRef
 }
 
+type ProviderKind string
+
+const (
+	ProviderKindApp      ProviderKind = "app"
+	ProviderKindWorkflow ProviderKind = "workflow"
+	ProviderKindAgent    ProviderKind = "agent"
+)
+
+type CallerProvider struct {
+	Kind ProviderKind
+	Name string
+}
+
 type invocationSurfaceCtxKey struct{}
 type httpBindingCtxKey struct{}
 type credentialCtxKey struct{}
 type externalIdentityCtxKey struct{}
 type agentExternalIdentityCtxKey struct{}
+type callerProviderCtxKey struct{}
 type accessCtxKey struct{}
 type hostCtxKey struct{}
 type workflowCtxKey struct{}
@@ -155,6 +169,22 @@ func AgentExternalIdentityContextFromContext(ctx context.Context) ExternalIdenti
 	identity.Type = strings.TrimSpace(identity.Type)
 	identity.ID = strings.TrimSpace(identity.ID)
 	return identity
+}
+
+func WithCallerProvider(ctx context.Context, kind ProviderKind, name string) context.Context {
+	kind = ProviderKind(strings.TrimSpace(string(kind)))
+	name = strings.TrimSpace(name)
+	if kind == "" || name == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, callerProviderCtxKey{}, CallerProvider{Kind: kind, Name: name})
+}
+
+func CallerProviderFromContext(ctx context.Context) CallerProvider {
+	caller, _ := ctx.Value(callerProviderCtxKey{}).(CallerProvider)
+	caller.Kind = ProviderKind(strings.TrimSpace(string(caller.Kind)))
+	caller.Name = strings.TrimSpace(caller.Name)
+	return caller
 }
 
 func WithExternalIdentityContext(ctx context.Context, identity ExternalIdentityContext) context.Context {

@@ -86,7 +86,8 @@ func (p *executableProvider) Support(ctx context.Context) (Support, error) {
 	if err != nil {
 		return Support{}, fmt.Errorf("get runtime support: %w", err)
 	}
-	return supportFromProto(resp), nil
+	support := supportFromProto(resp)
+	return support, nil
 }
 
 func (p *executableProvider) StartSession(ctx context.Context, req StartSessionRequest) (*Session, error) {
@@ -173,14 +174,14 @@ func (p *executableProvider) StopSession(ctx context.Context, req StopSessionReq
 	_, err := p.runtime.StopSession(ctx, &proto.StopRuntimeSessionRequest{
 		SessionId: req.SessionID,
 	})
-	if err != nil {
-		return fmt.Errorf("stop runtime session: %w", err)
-	}
 	p.mu.Lock()
 	delete(p.sessions, req.SessionID)
 	p.mu.Unlock()
 	if p.sessionLogs != nil {
 		_ = p.sessionLogs.MarkSessionStopped(ctx, p.name, req.SessionID, time.Now().UTC())
+	}
+	if err != nil {
+		return fmt.Errorf("stop runtime session: %w", err)
 	}
 	return nil
 }

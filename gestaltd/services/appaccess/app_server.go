@@ -18,23 +18,19 @@ import (
 type AppServer struct {
 	proto.UnimplementedAppServer
 
-	pluginName string
-	invoker    invocation.Invoker
-	tokens     *InvocationTokenManager
-	allowed    InvocationGrants
+	invoker invocation.Invoker
+	tokens  *InvocationTokenManager
 }
 
-func NewAppServer(pluginName string, deps []invocation.AppInvocationDependency, invoker invocation.Invoker, tokens *InvocationTokenManager) *AppServer {
+func NewAppServer(invoker invocation.Invoker, tokens *InvocationTokenManager) *AppServer {
 	return &AppServer{
-		pluginName: pluginName,
-		invoker:    invoker,
-		tokens:     tokens,
-		allowed:    InvocationDependencyGrants(deps),
+		invoker: invoker,
+		tokens:  tokens,
 	}
 }
 
-func NewServer(pluginName string, deps []invocation.AppInvocationDependency, invoker invocation.Invoker, tokens *InvocationTokenManager) proto.AppServer {
-	return NewAppServer(pluginName, deps, invoker, tokens)
+func NewServer(invoker invocation.Invoker, tokens *InvocationTokenManager) proto.AppServer {
+	return NewAppServer(invoker, tokens)
 }
 
 func (s *AppServer) ExchangeInvocationToken(_ context.Context, req *proto.ExchangeInvocationTokenRequest) (*proto.ExchangeInvocationTokenResponse, error) {
@@ -45,12 +41,8 @@ func (s *AppServer) ExchangeInvocationToken(_ context.Context, req *proto.Exchan
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	if len(grants) > 0 && !invocationGrantSubset(grants, s.allowed) {
-		return nil, status.Error(codes.PermissionDenied, "requested invocation grants exceed the plugin's declared invokes")
-	}
 	exchangedToken, err := s.tokens.ExchangeToken(
 		req.GetParentInvocationToken(),
-		s.pluginName,
 		grants,
 		time.Duration(req.GetTtlSeconds())*time.Second,
 	)
@@ -159,20 +151,6 @@ func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraph
 	}, nil
 }
 
-func (s *AppServer) allows(plugin, operation string) bool {
-	if s == nil {
-		return false
-	}
-	return allowsOperation(s.allowed, plugin, operation)
-}
-
-func (s *AppServer) allowsSurface(plugin, surface string) bool {
-	if s == nil {
-		return false
-	}
-	return allowsSurface(s.allowed, plugin, surface)
-}
-
 func (s *AppServer) tokenContextForInvoke(req *proto.AppInvokeRequest, targetApp, targetOperation string) (invocationTokenContext, error) {
 	invocationToken := strings.TrimSpace(req.GetInvocationToken())
 	if invocationToken == "" {
@@ -183,29 +161,21 @@ func (s *AppServer) tokenContextForInvoke(req *proto.AppInvokeRequest, targetApp
 		return invocationTokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	callerApp := strings.TrimSpace(tokenCtx.callerApp)
-	if callerApp == "" {
-		callerApp = strings.TrimSpace(s.pluginName)
-	}
-	sameCaller := callerApp == strings.TrimSpace(s.pluginName)
-	if !allowsOperation(tokenCtx.grants, targetApp, targetOperation) || (sameCaller && !s.allows(targetApp, targetOperation)) {
+	if !allowsOperation(tokenCtx.grants, targetApp, targetOperation) {
 		return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s", callerApp, targetApp, targetOperation)
-	}
-	credentialGrants := s.allowed
-	if !sameCaller {
-		credentialGrants = nil
 	}
 	credentialMode, err := appInvokeCredentialMode(req.GetCredentialMode())
 	if err != nil {
 		return invocationTokenContext{}, err
 	}
 	if credentialMode != "" {
-		if !appInvokeCredentialModeAllowed(credentialMode, tokenCtx.grants, credentialGrants, targetApp, targetOperation) {
+		if !appInvokeCredentialModeAllowed(credentialMode, tokenCtx.grants, targetApp, targetOperation) {
 			return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s with credential_mode %q", callerApp, targetApp, targetOperation, credentialMode)
 		}
 		tokenCtx.credentialModeOverride = credentialMode
 		return tokenCtx, nil
 	}
-	tokenCtx.credentialModeOverride = appInvokeCredentialModeOverride(tokenCtx.grants, credentialGrants, targetApp, targetOperation)
+	tokenCtx.credentialModeOverride = appInvokeCredentialModeOverride(tokenCtx.grants, targetApp, targetOperation)
 	return tokenCtx, nil
 }
 
@@ -219,11 +189,7 @@ func (s *AppServer) tokenContextForSurfaceInvoke(req *proto.AppInvokeGraphQLRequ
 		return invocationTokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	callerApp := strings.TrimSpace(tokenCtx.callerApp)
-	if callerApp == "" {
-		callerApp = strings.TrimSpace(s.pluginName)
-	}
-	sameCaller := callerApp == strings.TrimSpace(s.pluginName)
-	if !allowsSurface(tokenCtx.grants, targetApp, surface) || (sameCaller && !s.allowsSurface(targetApp, surface)) {
+	if !allowsSurface(tokenCtx.grants, targetApp, surface) {
 		return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s surface %q", callerApp, targetApp, surface)
 	}
 	return tokenCtx, nil
@@ -239,7 +205,7 @@ func appInvokeCredentialMode(raw string) (core.ConnectionMode, error) {
 	}
 }
 
-func appInvokeCredentialModeAllowed(mode core.ConnectionMode, tokenGrants, allowed InvocationGrants, appName, operation string) bool {
+func appInvokeCredentialModeAllowed(mode core.ConnectionMode, tokenGrants InvocationGrants, appName, operation string) bool {
 	mode = core.NormalizeOptionalConnectionMode(mode)
 	if mode == "" {
 		return true
@@ -247,17 +213,11 @@ func appInvokeCredentialModeAllowed(mode core.ConnectionMode, tokenGrants, allow
 	if tokenMode := operationCredentialMode(tokenGrants, appName, operation); tokenMode != "" {
 		return tokenMode == mode
 	}
-	if allowedMode := operationCredentialMode(allowed, appName, operation); allowedMode != "" {
-		return allowedMode == mode
-	}
-	return false
+	return allowsOperation(tokenGrants, appName, operation)
 }
 
-func appInvokeCredentialModeOverride(tokenGrants, allowed InvocationGrants, appName, operation string) core.ConnectionMode {
-	if tokenMode := operationCredentialMode(tokenGrants, appName, operation); tokenMode != "" {
-		return tokenMode
-	}
-	return operationCredentialMode(allowed, appName, operation)
+func appInvokeCredentialModeOverride(tokenGrants InvocationGrants, appName, operation string) core.ConnectionMode {
+	return operationCredentialMode(tokenGrants, appName, operation)
 }
 
 func prepareInvocationSelectors(ctx context.Context, tokenCtx invocationTokenContext, rawConnection, rawInstance string) (context.Context, string, error) {

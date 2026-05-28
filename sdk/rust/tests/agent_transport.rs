@@ -52,6 +52,7 @@ use tower::service_fn;
 #[derive(Default)]
 struct TestAgentProvider {
     configured_name: Mutex<String>,
+    invocation_tokens: Mutex<Vec<String>>,
 }
 
 #[derive(Default, Clone)]
@@ -120,6 +121,7 @@ impl AgentProvider for TestAgentProvider {
         &self,
         request: CreateAgentProviderSessionRequest,
     ) -> gestalt::Result<AgentSession> {
+        record_invocation_token(self, &request.invocation_token);
         Ok(AgentSession {
             id: request.session_id,
             provider_name: configured_name(self),
@@ -193,6 +195,7 @@ impl AgentProvider for TestAgentProvider {
         &self,
         request: CreateAgentProviderTurnRequest,
     ) -> gestalt::Result<AgentTurn> {
+        record_invocation_token(self, &request.invocation_token);
         Ok(AgentTurn {
             id: request.turn_id,
             session_id: request.session_id,
@@ -535,6 +538,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
             metadata: Some(helpers::struct_from_json(serde_json::json!({
                 "source": "rust-test"
             }))),
+            invocation_token: "session-token".to_string(),
             ..Default::default()
         })
         .await
@@ -604,6 +608,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
             output: Some(pb::AgentOutput {
                 kind: Some(pb::agent_output::Kind::Text(pb::AgentTextOutput {})),
             }),
+            invocation_token: "turn-token".to_string(),
             ..Default::default()
         })
         .await
@@ -722,6 +727,13 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
             .lock()
             .expect("configured_name lock"),
         "agent-runtime"
+    );
+    assert_eq!(
+        *provider
+            .invocation_tokens
+            .lock()
+            .expect("invocation_tokens lock"),
+        vec!["session-token".to_string(), "turn-token".to_string()]
     );
 
     serve_task.abort();
@@ -921,4 +933,12 @@ fn configured_name(provider: &TestAgentProvider) -> String {
         .lock()
         .expect("configured_name lock")
         .clone()
+}
+
+fn record_invocation_token(provider: &TestAgentProvider, token: &str) {
+    provider
+        .invocation_tokens
+        .lock()
+        .expect("invocation_tokens lock")
+        .push(token.to_string());
 }

@@ -320,23 +320,6 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	if err != nil {
 		t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
 	}
-	principalDeniedToken, err := tokens.MintRootTokenWithWorkflowGrants(
-		principal.WithPrincipal(context.Background(), &principal.Principal{
-			SubjectID: "user:restricted",
-			UserID:    "restricted",
-			Kind:      principal.KindUser,
-			Source:    principal.SourceSession,
-			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
-				{App: "simple"},
-			}),
-		}),
-		"slack",
-		nil,
-		workflowgrants.Grants{workflowgrants.OperationRunsSignalOrStart: {}},
-	)
-	if err != nil {
-		t.Fatalf("MintRootTokenWithWorkflowGrants(principal denied): %v", err)
-	}
 	authorizerDeniedToken, err := tokens.MintRootTokenWithWorkflowGrants(
 		principal.WithPrincipal(context.Background(), &principal.Principal{
 			SubjectID: "user:authorizer-denied",
@@ -408,20 +391,6 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	if status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("SignalOrStartRun invalid target = %v, want InvalidArgument", err)
 	}
-	principalDeniedKey := "slack:T123:C123:1712161832.000600"
-	_, err = client.SignalOrStartRun(context.Background(), &proto.SignalOrStartWorkflowProviderRunRequest{
-		ProviderName:    "local",
-		WorkflowKey:     principalDeniedKey,
-		IdempotencyKey:  "idem-principal-denied",
-		InvocationToken: principalDeniedToken,
-		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
-		Target: telemetryProtoAgentStepTarget([]*proto.AgentToolRef{
-			{App: "github", Operation: "reviewPullRequest"},
-		}),
-	})
-	if status.Code(err) != codes.NotFound {
-		t.Fatalf("SignalOrStartRun principal denied = %v, want NotFound", err)
-	}
 	authorizerDeniedKey := "slack:T123:C123:1712161833.000700"
 	_, err = client.SignalOrStartRun(context.Background(), &proto.SignalOrStartWorkflowProviderRunRequest{
 		ProviderName:    "local",
@@ -480,7 +449,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.workflows.manager.operation.duration", successAttrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", 1, failureAttrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", 1, untrustedFailureAttrs)
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", 2, notFoundFailureAttrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", 1, notFoundFailureAttrs)
 	untrustedProviderMetricAttrs := map[string]string{}
 	for key, value := range untrustedFailureAttrs {
 		untrustedProviderMetricAttrs[key] = value
@@ -498,12 +467,12 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	}
 
 	logOutput := logBuf.String()
-	for _, forbidden := range []string{failureKey, principalDeniedKey, authorizerDeniedKey} {
+	for _, forbidden := range []string{failureKey, authorizerDeniedKey} {
 		if strings.Contains(logOutput, forbidden) {
 			t.Fatalf("manager log contains raw workflow key %q", forbidden)
 		}
 	}
-	for _, forbidden := range []string{"idem-failure", "idem-principal-denied", "idem-authorizer-denied"} {
+	for _, forbidden := range []string{"idem-failure", "idem-authorizer-denied"} {
 		if strings.Contains(logOutput, forbidden) {
 			t.Fatalf("manager log contains raw idempotency key %q", forbidden)
 		}
@@ -513,13 +482,6 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"request_id_set": true,
 		"error_type":     "grpc_status",
 		"error_code":     "failed_precondition",
-	})
-	assertWorkflowManagerFailureLog(t, logOutput, principalDeniedKey, "authorize_target", map[string]any{
-		"level":                     "WARN",
-		"request_id_set":            true,
-		"error_type":                "not_found",
-		"workflow_target_component": "agent_tool_ref",
-		"authorization_decision":    "workflow_target_principal_operation_permission_denied",
 	})
 	assertWorkflowManagerFailureLog(t, logOutput, authorizerDeniedKey, "authorize_target", map[string]any{
 		"level":                     "WARN",
@@ -541,7 +503,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	)
 
 	auditOutput := auditBuf.String()
-	for _, forbidden := range []string{failureKey, principalDeniedKey, authorizerDeniedKey, "idem-failure", "idem-principal-denied", "idem-authorizer-denied", "provider echoed"} {
+	for _, forbidden := range []string{failureKey, authorizerDeniedKey, "idem-failure", "idem-authorizer-denied", "provider echoed"} {
 		if strings.Contains(auditOutput, forbidden) {
 			t.Fatalf("workflow audit contains raw sensitive value %q", forbidden)
 		}
@@ -573,24 +535,6 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"subject_id":           "user:user-123",
 		"subject_kind":         "user",
 		"workflow_target_kind": "steps",
-	})
-	assertWorkflowAuditLog(t, auditOutput, principalDeniedKey, map[string]any{
-		"level":                     "WARN",
-		"request_id_set":            true,
-		"source":                    "workflow_manager",
-		"provider":                  "local",
-		"operation":                 "workflow.run.signal_or_start",
-		"target_kind":               "workflow_run",
-		"allowed":                   false,
-		"error":                     "not_found",
-		"authorization_decision":    "workflow_target_principal_operation_permission_denied",
-		"caller_app":                "slack",
-		"subject_id":                "user:restricted",
-		"subject_kind":              "user",
-		"workflow_target_kind":      "steps",
-		"workflow_target_component": "agent_tool_ref",
-		"workflow_target_provider":  "github",
-		"workflow_target_operation": "reviewPullRequest",
 	})
 	assertWorkflowAuditLog(t, auditOutput, authorizerDeniedKey, map[string]any{
 		"level":                     "WARN",
@@ -817,11 +761,7 @@ type workflowManagerTelemetryControl struct {
 	provider coreworkflow.Provider
 }
 
-func (c workflowManagerTelemetryControl) ResolveProvider(string) (coreworkflow.Provider, error) {
-	return c.provider, nil
-}
-
-func (c workflowManagerTelemetryControl) ResolveProviderSelection(name string) (string, coreworkflow.Provider, error) {
+func (c workflowManagerTelemetryControl) ResolveProvider(_ context.Context, name string) (string, coreworkflow.Provider, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = "local"
@@ -835,7 +775,7 @@ func (workflowManagerTelemetryControl) ProviderNames() []string {
 
 type workflowManagerTelemetryAgentControl struct{}
 
-func (workflowManagerTelemetryAgentControl) ResolveProviderSelection(name string) (string, coreagent.Provider, error) {
+func (workflowManagerTelemetryAgentControl) ResolveProvider(_ context.Context, name string) (string, coreagent.Provider, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = "simple"
