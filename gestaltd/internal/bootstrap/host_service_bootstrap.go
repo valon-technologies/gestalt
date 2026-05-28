@@ -174,7 +174,7 @@ func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.
 	if v.provider == nil {
 		return fmt.Errorf("runtime provider is not configured")
 	}
-	session, err := v.provider.GetSession(ctx, runtimeprovider.GetSessionRequest{SessionID: sessionID})
+	session, err := v.provider.GetSession(ctx, &proto.GetRuntimeSessionRequest{SessionId: sessionID})
 	if err != nil {
 		return err
 	}
@@ -182,21 +182,21 @@ func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.
 		return fmt.Errorf("runtime session %q was not found", sessionID)
 	}
 	if expected := strings.TrimSpace(v.providerName); expected != "" {
-		if got := strings.TrimSpace(session.Metadata["provider_name"]); got != "" && got != expected {
+		if got := strings.TrimSpace(session.GetMetadata()["provider_name"]); got != "" && got != expected {
 			return fmt.Errorf("runtime session %q belongs to provider %q", sessionID, got)
 		}
 	}
-	if session.Lifecycle != nil && session.Lifecycle.ExpiresAt != nil {
-		expiresAt := session.Lifecycle.ExpiresAt.UTC()
+	if session.GetLifecycle().GetExpiresAt() != nil {
+		expiresAt := session.GetLifecycle().GetExpiresAt().AsTime().UTC()
 		if !time.Now().UTC().Before(expiresAt) {
 			return fmt.Errorf("runtime session %q expired at %s", sessionID, expiresAt.Format(time.RFC3339Nano))
 		}
 	}
-	switch session.State {
+	switch session.GetState() {
 	case runtimeprovider.SessionStatePending, runtimeprovider.SessionStateReady, runtimeprovider.SessionStateRunning:
 		return nil
 	default:
-		return fmt.Errorf("runtime session %q is %s", sessionID, session.State)
+		return fmt.Errorf("runtime session %q is %s", sessionID, session.GetState())
 	}
 }
 

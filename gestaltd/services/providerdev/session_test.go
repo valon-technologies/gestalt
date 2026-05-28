@@ -1212,7 +1212,10 @@ func TestRunDispatcherRetriesTransientPollError(t *testing.T) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			completed <- req
+			select {
+			case completed <- req:
+			default:
+			}
 			writeProviderDevTestJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		default:
 			http.NotFound(w, r)
@@ -1276,7 +1279,10 @@ func TestRunDispatcherRetriesHTTP2StreamCancelPollError(t *testing.T) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			completed <- req
+			select {
+			case completed <- req:
+			default:
+			}
 			writeProviderDevTestJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		default:
 			http.NotFound(w, r)

@@ -237,6 +237,7 @@ details. Those come from the deployment bindings.
       "time"
 
       gestalt "github.com/valon-technologies/gestalt/sdk/go"
+      proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
     )
 
     type Provider struct{}
@@ -331,13 +332,12 @@ details. Those come from the deployment bindings.
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
-      _, err = workflows.PublishEvent(ctx, gestalt.WorkflowPublishEvent{
-        Event: &gestalt.WorkflowEvent{
+      _, err = workflows.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
+        Event: &proto.WorkflowEvent{
           Type:            "workspace_review.report.generated",
           Source:          "workspace_review",
           Subject:         "nightly",
-          DataContentType: "application/json",
-          Data:            map[string]any{"reportUrl": access.URL},
+          Datacontenttype: "application/json",
         },
       })
       if err != nil {

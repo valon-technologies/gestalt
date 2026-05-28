@@ -5,8 +5,6 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // ServeAgentProvider starts a gRPC server for an [AgentProvider].
@@ -14,7 +12,7 @@ func ServeAgentProvider(ctx context.Context, provider AgentProvider) error {
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindAgent, provider))
 		proto.RegisterAgentProviderServer(srv, agentProviderServer{provider: provider})
-	}, grpc.UnaryInterceptor(providerInvocationUnaryInterceptor))
+	})
 }
 
 type agentProviderServer struct {
@@ -59,12 +57,6 @@ func (s agentProviderServer) UpdateSession(ctx context.Context, req *proto.Updat
 }
 
 func (s agentProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
-	if req == nil || req.GetOutput().GetKind() == nil {
-		return nil, status.Error(codes.InvalidArgument, "create turn output is required")
-	}
-	if structured := req.GetOutput().GetStructured(); structured != nil && structured.GetSchema() == nil {
-		return nil, status.Error(codes.InvalidArgument, "output.structured.schema is required")
-	}
 	turn, err := s.provider.CreateTurn(ctx, createAgentProviderTurnRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("agent create turn", err)

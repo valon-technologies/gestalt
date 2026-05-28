@@ -6,7 +6,6 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // BoundWorkflowTarget contains fields for constructing a
@@ -47,7 +46,7 @@ type WorkflowStepAgentTurn struct {
 	Prompt       WorkflowText
 	Messages     []WorkflowAgentMessage
 	Tools        []AgentToolRef
-	Output       AgentOutput
+	Output       *AgentOutput
 	ModelOptions any
 }
 
@@ -137,15 +136,6 @@ func boundWorkflowTargetFromProto(value *proto.BoundWorkflowTarget) BoundWorkflo
 		return BoundWorkflowTarget{}
 	}
 	return BoundWorkflowTarget{Steps: workflowStepsFromProto(value.GetSteps())}
-}
-
-// cloneBoundWorkflowTargetProto creates a copy of an existing workflow target
-// through the target input builder.
-func cloneBoundWorkflowTargetProto(value *proto.BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {
-	if value == nil {
-		return nil, nil
-	}
-	return boundWorkflowTargetToProto(boundWorkflowTargetFromProto(value))
 }
 
 func workflowStepsToProto(steps []WorkflowStep) ([]*proto.WorkflowStep, error) {
@@ -1056,20 +1046,6 @@ func cloneBoundWorkflowEventTriggerProto(value *proto.BoundWorkflowEventTrigger)
 		return nil, err
 	}
 	return boundWorkflowEventTriggerToProto(input)
-}
-
-func timestampFromNonZeroTime(value time.Time) *timestamppb.Timestamp {
-	if value.IsZero() {
-		return nil
-	}
-	return timestamppb.New(value)
-}
-
-func timestampFromOptionalTime(value *time.Time) *timestamppb.Timestamp {
-	if value == nil || value.IsZero() {
-		return nil
-	}
-	return timestamppb.New(*value)
 }
 
 func newOptionalBoundWorkflowTarget(input *BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {

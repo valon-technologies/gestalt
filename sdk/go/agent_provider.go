@@ -214,6 +214,7 @@ type AgentSession struct {
 }
 
 type CreateAgentProviderSessionRequest struct {
+	ProviderName      string
 	SessionID         string
 	IdempotencyKey    string
 	Model             string
@@ -223,6 +224,7 @@ type CreateAgentProviderSessionRequest struct {
 	Subject           *Subject
 	SessionStart      *AgentSessionStartConfig
 	PreparedWorkspace *AgentPreparedWorkspace
+	Workspace         *AgentWorkspace
 }
 
 type AgentSessionStartConfig struct {
@@ -250,11 +252,12 @@ type GetAgentProviderSessionRequest struct {
 }
 
 type ListAgentProviderSessionsRequest struct {
-	Subject     *Subject
-	SessionIDs  []string
-	State       AgentSessionState
-	Limit       int32
-	SummaryOnly bool
+	ProviderName string
+	Subject      *Subject
+	SessionIDs   []string
+	State        AgentSessionState
+	Limit        int32
+	SummaryOnly  bool
 }
 
 type ListAgentProviderSessionsResponse struct {
@@ -276,7 +279,7 @@ type AgentTurn struct {
 	Model         string
 	Status        AgentExecutionStatus
 	Messages      []AgentMessage
-	Output        AgentTurnOutput
+	Output        *AgentTurnOutput
 	StatusMessage string
 	CreatedBy     *AgentActor
 	CreatedAt     time.Time
@@ -321,7 +324,7 @@ type CreateAgentProviderTurnRequest struct {
 	Model          string
 	Messages       []AgentMessage
 	Tools          []ResolvedAgentTool
-	Output         AgentOutput
+	Output         *AgentOutput
 	Metadata       map[string]any
 	CreatedBy      *AgentActor
 	ExecutionRef   string
@@ -406,6 +409,7 @@ type ListAgentProviderInteractionsResponse struct {
 }
 
 type ResolveAgentProviderInteractionRequest struct {
+	TurnID        string
 	InteractionID string
 	Resolution    map[string]any
 	Subject       *Subject

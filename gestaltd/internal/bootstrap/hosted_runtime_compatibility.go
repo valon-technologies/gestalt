@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 const (
@@ -16,11 +16,11 @@ const (
 	hostedRuntimeMetadataTemplate      = "runtime.template"
 )
 
-func hostedRuntimeSessionCompatibilityReason(session *runtimeprovider.Session) string {
-	if session == nil || len(session.Metadata) == 0 {
+func hostedRuntimeSessionCompatibilityReason(session *proto.RuntimeSession) string {
+	if session == nil || len(session.GetMetadata()) == 0 {
 		return ""
 	}
-	metadata := session.Metadata
+	metadata := session.GetMetadata()
 	actual := strings.TrimSpace(metadata[hostedRuntimeMetadataActualImage])
 	current := strings.TrimSpace(metadata[hostedRuntimeMetadataCurrentImage])
 	expected := strings.TrimSpace(metadata[hostedRuntimeMetadataExpectedImage])

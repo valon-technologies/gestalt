@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 type RuntimeEgressMode string
@@ -32,21 +32,21 @@ type RuntimePlacementPlan struct {
 	HostnameEgressDelivery RuntimeHostnameEgressDelivery
 }
 
-func buildRuntimePlacementPlan(support runtimeprovider.Support, deps Deps, requiresHostnameEgress bool) RuntimePlacementPlan {
+func buildRuntimePlacementPlan(support *proto.RuntimeSupport, deps Deps, requiresHostnameEgress bool) RuntimePlacementPlan {
 	relayAvailable := hostCanRelayRuntimeHostServices(deps)
-	egressMode := runtimeEgressModeFromSupport(support.EgressMode)
+	egressMode := runtimeEgressModeFromSupport(support.GetEgressMode())
 	if egressMode == RuntimeEgressModeHostname && !relayAvailable {
 		egressMode = RuntimeEgressModeNone
 	}
 	return RuntimePlacementPlan{
-		CanHostApps:            support.CanHostApps,
+		CanHostApps:            support.GetCanHostApps(),
 		EgressMode:             egressMode,
 		RequiresHostnameEgress: requiresHostnameEgress,
 		HostnameEgressDelivery: runtimeHostnameEgressDelivery(requiresHostnameEgress, relayAvailable, egressMode),
 	}
 }
 
-func buildRuntimePlan(entry *config.ProviderEntry, deps Deps, support runtimeprovider.Support) RuntimePlacementPlan {
+func buildRuntimePlan(entry *config.ProviderEntry, deps Deps, support *proto.RuntimeSupport) RuntimePlacementPlan {
 	return buildRuntimePlacementPlan(support, deps, runtimeRequiresHostnameEgress(entry, deps))
 }
 
@@ -96,11 +96,11 @@ func (p RuntimePlacementPlan) Validate(label string, deps Deps) error {
 	return nil
 }
 
-func runtimeEgressModeFromSupport(src runtimeprovider.EgressMode) RuntimeEgressMode {
+func runtimeEgressModeFromSupport(src proto.RuntimeEgressMode) RuntimeEgressMode {
 	switch src {
-	case runtimeprovider.EgressModeHostname:
+	case proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME:
 		return RuntimeEgressModeHostname
-	case runtimeprovider.EgressModeCIDR:
+	case proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_CIDR:
 		return RuntimeEgressModeCIDR
 	default:
 		return RuntimeEgressModeNone

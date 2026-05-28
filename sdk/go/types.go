@@ -361,7 +361,16 @@ func copyAgentToolRefs(refs []AgentToolRef) []AgentToolRef {
 	}
 	out := make([]AgentToolRef, 0, len(refs))
 	for _, ref := range refs {
-		out = append(out, AgentToolRefFromRef(NewAgentToolRef(ref)))
+		copied := ref
+		if ref.RunAs != nil {
+			runAs := *ref.RunAs
+			copied.RunAs = &runAs
+		}
+		if ref.RunAsExternalIdentity != nil {
+			identity := *ref.RunAsExternalIdentity
+			copied.RunAsExternalIdentity = &identity
+		}
+		out = append(out, copied)
 	}
 	return out
 }

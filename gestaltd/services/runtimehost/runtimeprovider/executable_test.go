@@ -5,13 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 )
@@ -38,9 +38,8 @@ func TestExecutableProviderReadsRuntimeSupport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Support: %v", err)
 	}
-	want := Support{CanHostApps: true, EgressMode: EgressModeNone}
-	if !reflect.DeepEqual(support, want) {
-		t.Fatalf("Support = %#v, want %#v", support, want)
+	if !support.GetCanHostApps() || support.GetEgressMode() != proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_UNSPECIFIED {
+		t.Fatalf("Support = %#v, want can_host_apps with unspecified egress", support)
 	}
 }
 
@@ -70,7 +69,7 @@ func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing
 		_ = runtimeProvider.Close()
 	})
 
-	session, err := runtimeProvider.StartSession(ctx, StartSessionRequest{
+	session, err := runtimeProvider.StartSession(ctx, &proto.StartRuntimeSessionRequest{
 		AppName: "agent",
 		Metadata: map[string]string{
 			"provider_name": "agent",
@@ -83,8 +82,8 @@ func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing
 		t.Fatalf("StartSession: %v", err)
 	}
 
-	_, err = runtimeProvider.StartApp(ctx, StartAppRequest{
-		SessionID: session.ID,
+	_, err = runtimeProvider.StartApp(ctx, &proto.StartHostedAppRequest{
+		SessionId: session.GetId(),
 		AppName:   "agent",
 		Command:   "/bin/false",
 	})
@@ -107,7 +106,7 @@ func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing
 		t.Fatalf("StartApp error = %q, want stderr log entry", err)
 	}
 
-	logs, err := services.RuntimeSessionLogs.ListSessionLogs(ctx, "modal", session.ID, 0, 10)
+	logs, err := services.RuntimeSessionLogs.ListSessionLogs(ctx, "modal", session.GetId(), 0, 10)
 	if err != nil {
 		t.Fatalf("ListSessionLogs: %v", err)
 	}
@@ -143,15 +142,15 @@ func TestExecutableProviderForwardsStartAppWorkdir(t *testing.T) {
 		_ = runtimeProvider.Close()
 	})
 
-	session, err := runtimeProvider.StartSession(ctx, StartSessionRequest{
+	session, err := runtimeProvider.StartSession(ctx, &proto.StartRuntimeSessionRequest{
 		AppName: "agent",
 	})
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)
 	}
 
-	hosted, err := runtimeProvider.StartApp(ctx, StartAppRequest{
-		SessionID: session.ID,
+	hosted, err := runtimeProvider.StartApp(ctx, &proto.StartHostedAppRequest{
+		SessionId: session.GetId(),
 		AppName:   "agent",
 		Command:   "/bin/plugin",
 		Workdir:   "/tmp/provider-root",
@@ -241,9 +240,7 @@ func (p *runtimeProvider) Configure(context.Context, string, map[string]any) err
 }
 
 func (p *runtimeProvider) GetSupport(context.Context) (gestalt.RuntimeSupport, error) {
-	return gestalt.RuntimeSupport{
-		CanHostApps: true,
-	}, nil
+	return gestalt.RuntimeSupport{CanHostApps: true}, nil
 }
 
 func (p *runtimeProvider) StartSession(_ context.Context, req gestalt.StartRuntimeSessionRequest) (gestalt.RuntimeSession, error) {

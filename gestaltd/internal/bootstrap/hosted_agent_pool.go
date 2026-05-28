@@ -96,7 +96,7 @@ type hostedAgentPoolBackend struct {
 	provider         coreagent.Provider
 	runtimeProvider  runtimeprovider.Provider
 	runtimeSessionID string
-	runtimeSession   *runtimeprovider.Session
+	runtimeSession   *proto.RuntimeSession
 	startedAt        time.Time
 	runtimeDrainAt   *time.Time
 	forceCloseAt     *time.Time
@@ -298,15 +298,15 @@ func (p *hostedAgentProviderPool) prepareAgentWorkspace(ctx context.Context, bac
 		prepareCtx, cancel = context.WithTimeout(ctx, timeout)
 	}
 	defer cancel()
-	prepared, err := workspaceProvider.PrepareWorkspace(prepareCtx, runtimeprovider.PrepareWorkspaceRequest{
-		SessionID:      backend.runtimeSessionID,
-		AgentSessionID: req.GetSessionId(),
-		Workspace:      runtimeWorkspaceFromProto(req.GetWorkspace()),
+	prepared, err := workspaceProvider.PrepareWorkspace(prepareCtx, &proto.PrepareRuntimeWorkspaceRequest{
+		SessionId:      backend.runtimeSessionID,
+		AgentSessionId: req.GetSessionId(),
+		Workspace:      req.GetWorkspace(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("prepare hosted agent workspace: %w", err)
 	}
-	return validatePreparedAgentWorkspace(prepared)
+	return validatePreparedAgentWorkspace(prepared.GetWorkspace())
 }
 
 func (p *hostedAgentProviderPool) removeAgentWorkspace(ctx context.Context, backend *hostedAgentPoolBackend, agentSessionID string) error {
@@ -314,9 +314,9 @@ func (p *hostedAgentProviderPool) removeAgentWorkspace(ctx context.Context, back
 	if !ok {
 		return nil
 	}
-	return workspaceProvider.RemoveWorkspace(ctx, runtimeprovider.RemoveWorkspaceRequest{
-		SessionID:      backend.runtimeSessionID,
-		AgentSessionID: agentSessionID,
+	return workspaceProvider.RemoveWorkspace(ctx, &proto.RemoveRuntimeWorkspaceRequest{
+		SessionId:      backend.runtimeSessionID,
+		AgentSessionId: agentSessionID,
 	})
 }
 
@@ -379,30 +379,12 @@ func workspaceRepositoryAllowed(identity string, allowed []string) bool {
 	return false
 }
 
-func runtimeWorkspaceFromProto(workspace *proto.AgentWorkspace) *runtimeprovider.Workspace {
-	if workspace == nil {
-		return nil
-	}
-	out := &runtimeprovider.Workspace{
-		Checkouts: make([]runtimeprovider.WorkspaceGitCheckout, 0, len(workspace.GetCheckouts())),
-		CWD:       workspace.GetCwd(),
-	}
-	for _, checkout := range workspace.GetCheckouts() {
-		out.Checkouts = append(out.Checkouts, runtimeprovider.WorkspaceGitCheckout{
-			URL:  checkout.GetUrl(),
-			Ref:  checkout.GetRef(),
-			Path: checkout.GetPath(),
-		})
-	}
-	return out
-}
-
-func validatePreparedAgentWorkspace(workspace *runtimeprovider.PreparedWorkspace) (*proto.PreparedAgentWorkspace, error) {
+func validatePreparedAgentWorkspace(workspace *proto.PreparedAgentWorkspace) (*proto.PreparedAgentWorkspace, error) {
 	if workspace == nil {
 		return nil, fmt.Errorf("prepared workspace is required")
 	}
-	root := strings.TrimSpace(workspace.Root)
-	cwd := strings.TrimSpace(workspace.CWD)
+	root := strings.TrimSpace(workspace.GetRoot())
+	cwd := strings.TrimSpace(workspace.GetCwd())
 	if root == "" || cwd == "" {
 		return nil, fmt.Errorf("prepared workspace root and cwd are required")
 	}
@@ -1562,7 +1544,7 @@ func (p *hostedAgentProviderPool) healthLoop() {
 	}
 }
 
-func (p *hostedAgentProviderPool) refreshBackendRuntimeSession(backend *hostedAgentPoolBackend) (*runtimeprovider.Session, *time.Time, error) {
+func (p *hostedAgentProviderPool) refreshBackendRuntimeSession(backend *hostedAgentPoolBackend) (*proto.RuntimeSession, *time.Time, error) {
 	if backend == nil {
 		return nil, nil, fmt.Errorf("runtime instance is unavailable")
 	}
@@ -1579,7 +1561,7 @@ func (p *hostedAgentProviderPool) refreshBackendRuntimeSession(backend *hostedAg
 	}
 	ctx, cancel := context.WithTimeout(p.ctx, timeout)
 	defer cancel()
-	session, err := runtimeProvider.GetSession(ctx, runtimeprovider.GetSessionRequest{SessionID: sessionID})
+	session, err := runtimeProvider.GetSession(ctx, &proto.GetRuntimeSessionRequest{SessionId: sessionID})
 	if err != nil {
 		return nil, nil, fmt.Errorf("get runtime session %q: %w", sessionID, err)
 	}
@@ -1623,7 +1605,7 @@ func (p *hostedAgentProviderPool) ensureBackendFreshForNewWork(ctx context.Conte
 	return nil
 }
 
-func (p *hostedAgentProviderPool) refreshBackendRuntimeSessionWithContext(ctx context.Context, backend *hostedAgentPoolBackend, timeout time.Duration) (*runtimeprovider.Session, *time.Time, error) {
+func (p *hostedAgentProviderPool) refreshBackendRuntimeSessionWithContext(ctx context.Context, backend *hostedAgentPoolBackend, timeout time.Duration) (*proto.RuntimeSession, *time.Time, error) {
 	if backend == nil {
 		return nil, nil, fmt.Errorf("runtime instance is unavailable")
 	}
@@ -1639,7 +1621,7 @@ func (p *hostedAgentProviderPool) refreshBackendRuntimeSessionWithContext(ctx co
 	}
 	refreshCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	session, err := runtimeProvider.GetSession(refreshCtx, runtimeprovider.GetSessionRequest{SessionID: sessionID})
+	session, err := runtimeProvider.GetSession(refreshCtx, &proto.GetRuntimeSessionRequest{SessionId: sessionID})
 	if err != nil {
 		return nil, nil, fmt.Errorf("get runtime session %q: %w", sessionID, err)
 	}
@@ -1657,13 +1639,13 @@ func (p *hostedAgentProviderPool) refreshBackendRuntimeSessionWithContext(ctx co
 	return session, drainAt, nil
 }
 
-func (p *hostedAgentProviderPool) runtimeSessionRetirementReason(session *runtimeprovider.Session, drainAt *time.Time, now time.Time) string {
+func (p *hostedAgentProviderPool) runtimeSessionRetirementReason(session *proto.RuntimeSession, drainAt *time.Time, now time.Time) string {
 	if session == nil {
 		return ""
 	}
-	switch session.State {
+	switch session.GetState() {
 	case runtimeprovider.SessionStateFailed, runtimeprovider.SessionStateStopped:
-		return fmt.Sprintf("runtime session entered %q state", session.State)
+		return fmt.Sprintf("runtime session entered %q state", session.GetState())
 	}
 	if reason := hostedRuntimeSessionCompatibilityReason(session); reason != "" {
 		return reason
@@ -1677,11 +1659,11 @@ func (p *hostedAgentProviderPool) runtimeSessionRetirementReason(session *runtim
 	return fmt.Sprintf("runtime session reached drain deadline %s", drainAt.Format(time.RFC3339Nano))
 }
 
-func (p *hostedAgentProviderPool) runtimeSessionProactiveReplacementReason(backend *hostedAgentPoolBackend, session *runtimeprovider.Session, drainAt *time.Time, now time.Time) string {
+func (p *hostedAgentProviderPool) runtimeSessionProactiveReplacementReason(backend *hostedAgentPoolBackend, session *proto.RuntimeSession, drainAt *time.Time, now time.Time) string {
 	if session == nil {
 		return ""
 	}
-	switch session.State {
+	switch session.GetState() {
 	case runtimeprovider.SessionStateFailed, runtimeprovider.SessionStateStopped:
 		return ""
 	}
@@ -1719,17 +1701,18 @@ func (p *hostedAgentProviderPool) runtimeSessionReplacementLeadTime() time.Durat
 	return lead
 }
 
-func (p *hostedAgentProviderPool) runtimeSessionDrainAt(session *runtimeprovider.Session, now time.Time) *time.Time {
-	if session == nil || session.Lifecycle == nil {
+func (p *hostedAgentProviderPool) runtimeSessionDrainAt(session *proto.RuntimeSession, now time.Time) *time.Time {
+	lifecycle := session.GetLifecycle()
+	if lifecycle == nil {
 		return nil
 	}
 	var drainAt *time.Time
-	if session.Lifecycle.RecommendedDrainAt != nil {
-		recommended := session.Lifecycle.RecommendedDrainAt.UTC()
+	if lifecycle.GetRecommendedDrainAt() != nil {
+		recommended := lifecycle.GetRecommendedDrainAt().AsTime().UTC()
 		drainAt = &recommended
 	}
-	if session.Lifecycle.ExpiresAt != nil {
-		expiryDrain := p.runtimeSessionExpiryDrainAt(session.Lifecycle, now)
+	if lifecycle.GetExpiresAt() != nil {
+		expiryDrain := p.runtimeSessionExpiryDrainAt(lifecycle, now)
 		if drainAt == nil || expiryDrain.Before(*drainAt) {
 			drainAt = &expiryDrain
 		}
@@ -1737,12 +1720,12 @@ func (p *hostedAgentProviderPool) runtimeSessionDrainAt(session *runtimeprovider
 	return drainAt
 }
 
-func (p *hostedAgentProviderPool) runtimeSessionExpiryDrainAt(lifecycle *runtimeprovider.SessionLifecycle, now time.Time) time.Time {
-	expiresAt := lifecycle.ExpiresAt.UTC()
+func (p *hostedAgentProviderPool) runtimeSessionExpiryDrainAt(lifecycle *proto.RuntimeSessionLifecycle, now time.Time) time.Time {
+	expiresAt := lifecycle.GetExpiresAt().AsTime().UTC()
 	reserve := p.policy.StartupTimeout + p.policy.DrainTimeout + p.policy.HealthCheckInterval + hostedAgentRuntimeLifecycleSafetyMargin
 	drainAt := expiresAt.Add(-reserve).UTC()
-	if lifecycle.StartedAt != nil {
-		startedAt := lifecycle.StartedAt.UTC()
+	if lifecycle.GetStartedAt() != nil {
+		startedAt := lifecycle.GetStartedAt().AsTime().UTC()
 		lifetime := expiresAt.Sub(startedAt)
 		if lifetime > 0 {
 			minDrainAt := startedAt.Add(lifetime / 2).UTC()
@@ -1757,11 +1740,11 @@ func (p *hostedAgentProviderPool) runtimeSessionExpiryDrainAt(lifecycle *runtime
 	return drainAt
 }
 
-func runtimeSessionExpiresAt(session *runtimeprovider.Session) *time.Time {
-	if session == nil || session.Lifecycle == nil || session.Lifecycle.ExpiresAt == nil {
+func runtimeSessionExpiresAt(session *proto.RuntimeSession) *time.Time {
+	if session.GetLifecycle().GetExpiresAt() == nil {
 		return nil
 	}
-	expiresAt := session.Lifecycle.ExpiresAt.UTC()
+	expiresAt := session.GetLifecycle().GetExpiresAt().AsTime().UTC()
 	return &expiresAt
 }
 

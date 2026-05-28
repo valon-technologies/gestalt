@@ -1059,7 +1059,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		}
 		return nil, fmt.Errorf("start runtime session: %w", err)
 	}
-	sessionID := session.ID
+	sessionID := session.GetId()
 	stopSession := true
 	defer func() {
 		if !stopSession {
@@ -1105,23 +1105,21 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		maps.Copy(startEnv, egressPlan.Env)
 	}
 
-	hostedApp, err := runtimeProvider.StartApp(ctx, runtimeprovider.StartAppRequest{
-		SessionID: sessionID,
-		AppName:   name,
-		Command:   command,
-		Args:      args,
-		Workdir:   workdir,
-		Env:       startEnv,
-		Egress: runtimeprovider.RuntimeEgressPolicy{
-			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
-			DefaultAction: runtimeprovider.PolicyAction(deps.Egress.DefaultAction),
-		},
-		HostBinary: entry.HostBinary,
+	hostedApp, err := runtimeProvider.StartApp(ctx, &proto.StartHostedAppRequest{
+		SessionId:     sessionID,
+		AppName:       name,
+		Command:       command,
+		Args:          args,
+		Workdir:       workdir,
+		Env:           startEnv,
+		AllowedHosts:  egressPlan.RuntimeAllowedHosts,
+		DefaultAction: string(deps.Egress.DefaultAction),
+		HostBinary:    entry.HostBinary,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start hosted app: %w", err)
 	}
-	conn, err := runtimeprovider.DialHostedApp(ctx, hostedApp.DialTarget,
+	conn, err := runtimeprovider.DialHostedApp(ctx, hostedApp.GetDialTarget(),
 		runtimeprovider.WithProviderName(name),
 		runtimeprovider.WithTelemetry(deps.Telemetry),
 	)
@@ -1192,7 +1190,7 @@ type hostedAgentProviderInstance struct {
 	provider         coreagent.Provider
 	runtimeProvider  runtimeprovider.Provider
 	runtimeSessionID string
-	runtimeSession   *runtimeprovider.Session
+	runtimeSession   *proto.RuntimeSession
 }
 
 func (p *hostedAgentProviderLaunch) close() {
@@ -1309,7 +1307,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		}
 		return nil, fmt.Errorf("start agent runtime session: %w", err)
 	}
-	sessionID := session.ID
+	sessionID := session.GetId()
 	stopSession := true
 	closeOnFailure := closeRuntime
 	defer func() {
@@ -1362,25 +1360,23 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	}
 
 	phaseStarted = time.Now()
-	hostedApp, err := runtimeProvider.StartApp(ctx, runtimeprovider.StartAppRequest{
-		SessionID: sessionID,
-		AppName:   name,
-		Command:   launch.launch.command,
-		Args:      launch.launch.args,
-		Workdir:   cfg.Workdir,
-		Env:       startEnv,
-		Egress: runtimeprovider.RuntimeEgressPolicy{
-			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
-			DefaultAction: runtimeprovider.PolicyAction(deps.Egress.DefaultAction),
-		},
-		HostBinary: cfg.HostBinary,
+	hostedApp, err := runtimeProvider.StartApp(ctx, &proto.StartHostedAppRequest{
+		SessionId:     sessionID,
+		AppName:       name,
+		Command:       launch.launch.command,
+		Args:          launch.launch.args,
+		Workdir:       cfg.Workdir,
+		Env:           startEnv,
+		AllowedHosts:  egressPlan.RuntimeAllowedHosts,
+		DefaultAction: string(deps.Egress.DefaultAction),
+		HostBinary:    cfg.HostBinary,
 	})
 	recordHostedAgentRuntimeStartPhase(ctx, name, "plugin_start", phaseStarted, err)
 	if err != nil {
 		return nil, fmt.Errorf("start hosted agent provider: %w", err)
 	}
 	phaseStarted = time.Now()
-	conn, err := runtimeprovider.DialHostedAgent(ctx, hostedApp.DialTarget,
+	conn, err := runtimeprovider.DialHostedAgent(ctx, hostedApp.GetDialTarget(),
 		runtimeprovider.WithProviderName(name),
 		runtimeprovider.WithTelemetry(deps.Telemetry),
 	)
@@ -1542,7 +1538,7 @@ func hostedRuntimeLabel(runtimeConfig config.EffectiveRuntimePlacement) string {
 	return "hosted runtime"
 }
 
-func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig config.EffectiveRuntimePlacement) runtimeprovider.StartSessionRequest {
+func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig config.EffectiveRuntimePlacement) *proto.StartRuntimeSessionRequest {
 	metadata := maps.Clone(runtimeConfig.Metadata)
 	if metadata == nil {
 		metadata = map[string]string{}
@@ -1553,7 +1549,7 @@ func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig conf
 	if name != "" {
 		metadata["provider_name"] = name
 	}
-	return runtimeprovider.StartSessionRequest{
+	return &proto.StartRuntimeSessionRequest{
 		AppName:       name,
 		Template:      runtimeConfig.Template,
 		Image:         runtimeConfig.Image,
@@ -1562,12 +1558,12 @@ func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig conf
 	}
 }
 
-func hostedRuntimeImagePullAuth(auth *config.RuntimePlacementImagePullAuth) *runtimeprovider.ImagePullAuth {
+func hostedRuntimeImagePullAuth(auth *config.RuntimePlacementImagePullAuth) *proto.RuntimeImagePullAuth {
 	if auth == nil {
 		return nil
 	}
-	return &runtimeprovider.ImagePullAuth{
-		DockerConfigJSON: auth.DockerConfigJSON,
+	return &proto.RuntimeImagePullAuth{
+		DockerConfigJson: auth.DockerConfigJSON,
 	}
 }
 
@@ -1638,7 +1634,7 @@ func stopRuntimeSessionWithTimeout(runtimeProvider runtimeprovider.Provider, ses
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runtimeProvider.StopSession(ctx, runtimeprovider.StopSessionRequest{SessionID: sessionID})
+		done <- runtimeProvider.StopSession(ctx, &proto.StopRuntimeSessionRequest{SessionId: sessionID})
 	}()
 
 	select {
@@ -1649,17 +1645,17 @@ func stopRuntimeSessionWithTimeout(runtimeProvider runtimeprovider.Provider, ses
 	}
 }
 
-func waitForRuntimeSessionReady(ctx context.Context, runtimeProvider runtimeprovider.Provider, sessionID string) (*runtimeprovider.Session, error) {
+func waitForRuntimeSessionReady(ctx context.Context, runtimeProvider runtimeprovider.Provider, sessionID string) (*proto.RuntimeSession, error) {
 	for {
-		session, err := runtimeProvider.GetSession(ctx, runtimeprovider.GetSessionRequest{SessionID: sessionID})
+		session, err := runtimeProvider.GetSession(ctx, &proto.GetRuntimeSessionRequest{SessionId: sessionID})
 		if err != nil {
 			return nil, err
 		}
-		switch session.State {
+		switch session.GetState() {
 		case runtimeprovider.SessionStateReady, runtimeprovider.SessionStateRunning:
 			return session, nil
 		case runtimeprovider.SessionStateFailed, runtimeprovider.SessionStateStopped:
-			return nil, fmt.Errorf("session entered %q state", session.State)
+			return nil, fmt.Errorf("session entered %q state", session.GetState())
 		}
 
 		select {
