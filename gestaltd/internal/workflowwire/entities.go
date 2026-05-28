@@ -40,9 +40,20 @@ func EventToProto(event coreworkflow.Event) (*proto.WorkflowEvent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("workflow event data: %w", err)
 	}
-	extensions, err := workflowExtensionsToProto(event.Extensions)
-	if err != nil {
-		return nil, fmt.Errorf("workflow event extensions: %w", err)
+	extensions := make(map[string]*structpb.Value, len(event.Extensions))
+	for key, value := range event.Extensions {
+		if value == nil {
+			extensions[key] = structpb.NewNullValue()
+			continue
+		}
+		pbValue, err := protoutil.ValueFromAny(value)
+		if err != nil {
+			return nil, fmt.Errorf("workflow event extensions: %s: %w", key, err)
+		}
+		extensions[key] = pbValue
+	}
+	if len(extensions) == 0 {
+		extensions = nil
 	}
 	return &proto.WorkflowEvent{
 		Id:              event.ID,
@@ -61,10 +72,6 @@ func EventFromProto(event *proto.WorkflowEvent) (coreworkflow.Event, error) {
 	if event == nil {
 		return coreworkflow.Event{}, nil
 	}
-	extensions, err := workflowExtensionsFromProto(event.GetExtensions())
-	if err != nil {
-		return coreworkflow.Event{}, err
-	}
 	return coreworkflow.Event{
 		ID:              event.GetId(),
 		Source:          event.GetSource(),
@@ -74,7 +81,7 @@ func EventFromProto(event *proto.WorkflowEvent) (coreworkflow.Event, error) {
 		Time:            TimeFromProto(event.GetTime()),
 		DataContentType: event.GetDatacontenttype(),
 		Data:            protoutil.MapFromStruct(event.GetData()),
-		Extensions:      extensions,
+		Extensions:      workflowExtensionsFromProto(event.GetExtensions()),
 	}, nil
 }
 
@@ -437,28 +444,9 @@ func SignalRunResponseToProto(resp *coreworkflow.SignalRunResponse) (*proto.Sign
 	}, nil
 }
 
-func workflowExtensionsToProto(values map[string]any) (map[string]*structpb.Value, error) {
+func workflowExtensionsFromProto(values map[string]*structpb.Value) map[string]any {
 	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make(map[string]*structpb.Value, len(values))
-	for key, value := range values {
-		if value == nil {
-			out[key] = structpb.NewNullValue()
-			continue
-		}
-		pbValue, err := protoutil.ValueFromAny(value)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", key, err)
-		}
-		out[key] = pbValue
-	}
-	return out, nil
-}
-
-func workflowExtensionsFromProto(values map[string]*structpb.Value) (map[string]any, error) {
-	if len(values) == 0 {
-		return nil, nil
+		return nil
 	}
 	out := make(map[string]any, len(values))
 	for key, value := range values {
@@ -468,7 +456,7 @@ func workflowExtensionsFromProto(values map[string]*structpb.Value) (map[string]
 		}
 		out[key] = value.AsInterface()
 	}
-	return out, nil
+	return out
 }
 
 func TimeToProto(t *time.Time) *timestamppb.Timestamp {
