@@ -30,6 +30,7 @@ from ._catalog import catalog_to_proto
 from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
 from ._operations import INTERNAL_ERROR_MESSAGE
+from ._protocol import string_lists_from_proto_map
 from ._providers import (
     AgentProvider,
     AppProvider,
@@ -2209,8 +2210,8 @@ def _http_subject_request(request: Any) -> HTTPSubjectRequest:
         method=getattr(request, "method", ""),
         path=getattr(request, "path", ""),
         content_type=getattr(request, "content_type", ""),
-        headers=_string_lists_from_proto_map(getattr(request, "headers", {})),
-        query=_string_lists_from_proto_map(getattr(request, "query", {})),
+        headers=string_lists_from_proto_map(getattr(request, "headers", {})),
+        query=string_lists_from_proto_map(getattr(request, "query", {})),
         params=_message_to_dict(
             field_name="params",
             message=getattr(request, "params", None),
@@ -2221,13 +2222,6 @@ def _http_subject_request(request: Any) -> HTTPSubjectRequest:
         verified_subject=getattr(request, "verified_subject", ""),
         verified_claims=dict(getattr(request, "verified_claims", {})),
     )
-
-
-def _string_lists_from_proto_map(values: Any) -> dict[str, list[str]]:
-    return {
-        str(key): list(getattr(value, "values", ()))
-        for key, value in dict(values or {}).items()
-    }
 
 
 def _proto_string_lists(values: dict[str, list[str]]) -> dict[str, Any]:

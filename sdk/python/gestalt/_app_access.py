@@ -21,6 +21,7 @@ from ._protocol import (
     JsonObjectInput,
     _struct_from_normalized_object,
     json_from_native,
+    string_lists_from_proto_map,
 )
 
 pb: Any = _pb
@@ -325,20 +326,13 @@ def _with_app_relay_token(channel: grpc.Channel, token: str) -> grpc.Channel:
     return grpc.intercept_channel(channel, interceptor)
 
 
-def _string_lists_from_proto_map(values: Any) -> dict[str, list[str]]:
-    return {
-        str(key): list(getattr(value, "values", ()))
-        for key, value in dict(values or {}).items()
-    }
-
-
 def _response_from_proto(response: Any) -> Response[str]:
     return Response[str](
         status=int(response.status),
         body=cast(str, response.body),
         headers=cast(
             ResponseHeaders,
-            _string_lists_from_proto_map(getattr(response, "headers", {})),
+            string_lists_from_proto_map(getattr(response, "headers", {})),
         ),
     )
 
