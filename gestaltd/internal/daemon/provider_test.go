@@ -278,7 +278,7 @@ func TestProviderAttachCommandsUseOwnerAttachmentRoutes(t *testing.T) {
 	defer ts.Close()
 	remote := ts.URL + "/team-a"
 
-	listOut, err := runProviderCommandResult("", "attach", "list", "--remote", remote, "--remote-token", "owner-token")
+	listOut, err := runProviderCommandResult(t, "", "attach", "list", "--remote", remote, "--remote-token", "owner-token")
 	if err != nil {
 		t.Fatalf("provider attach list: %v\n%s", err, listOut)
 	}
@@ -288,7 +288,7 @@ func TestProviderAttachCommandsUseOwnerAttachmentRoutes(t *testing.T) {
 		}
 	}
 
-	showOut, err := runProviderCommandResult("", "attach", "show", "--remote", remote, "--remote-token", "owner-token", "attach-1")
+	showOut, err := runProviderCommandResult(t, "", "attach", "show", "--remote", remote, "--remote-token", "owner-token", "attach-1")
 	if err != nil {
 		t.Fatalf("provider attach show: %v\n%s", err, showOut)
 	}
@@ -298,7 +298,7 @@ func TestProviderAttachCommandsUseOwnerAttachmentRoutes(t *testing.T) {
 		}
 	}
 
-	detachOut, err := runProviderCommandResult("", "attach", "detach", "--remote", remote, "--remote-token", "owner-token", "attach-1")
+	detachOut, err := runProviderCommandResult(t, "", "attach", "detach", "--remote", remote, "--remote-token", "owner-token", "attach-1")
 	if err != nil {
 		t.Fatalf("provider attach detach: %v\n%s", err, detachOut)
 	}
@@ -400,7 +400,7 @@ func TestRun_ProviderCLIUsageAndErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			out, err := runProviderCommandResult("", tc.args...)
+			out, err := runProviderCommandResult(t, "", tc.args...)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error for provider %v, got output: %s", tc.args, out)

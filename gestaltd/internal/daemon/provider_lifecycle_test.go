@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -164,7 +163,7 @@ func TestE2EProviderAddExactSourceAndRejectsRepeatedConfig(t *testing.T) {
 		t.Fatalf("MetadataURL = %q", got)
 	}
 
-	out, err = runGestaltdResult("provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--config", otherCfgPath, "--repo", "local", "--name", "beta", "--no-lock")
+	out, err = runGestaltdResult(t, "provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--config", otherCfgPath, "--repo", "local", "--name", "beta", "--no-lock")
 	if err == nil {
 		t.Fatalf("provider add with repeated --config succeeded: %s", out)
 	}
@@ -180,7 +179,7 @@ func TestE2EProviderAddRejectsExistingName(t *testing.T) {
 	indexURL := writeProviderLifecycleIndex(t, dir)
 
 	runGestaltd(t, "provider", "repo", "add", "local", indexURL, "--config", cfgPath)
-	out, err := runGestaltdResult("provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--no-lock")
+	out, err := runGestaltdResult(t, "provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--no-lock")
 	if err == nil {
 		t.Fatalf("provider add duplicate succeeded: %s", out)
 	}
@@ -349,7 +348,7 @@ providers:
 	}
 
 	writeProviderLifecycleTestFile(t, filepath.Join(dir, operator.LockfileName), "not json")
-	out, err = runGestaltdResult("provider", "list", "--config", cfgPath)
+	out, err = runGestaltdResult(t, "provider", "list", "--config", cfgPath)
 	if err == nil {
 		t.Fatalf("provider list with corrupt lockfile succeeded: %s", out)
 	}
@@ -374,7 +373,7 @@ providers:
     secretstore:
       source: env
 `)
-	out, err := runGestaltdResult("provider", "remove", "alpha", "--config", cfgPath, "--no-lock")
+	out, err := runGestaltdResult(t, "provider", "remove", "alpha", "--config", cfgPath, "--no-lock")
 	if err == nil {
 		t.Fatalf("ambiguous provider remove succeeded: %s", out)
 	}
@@ -411,13 +410,13 @@ providers:
 `)
 	writeProviderLifecycleTestFile(t, otherCfgPath, "apiVersion: gestaltd.config/v6\n")
 
-	out, err := runGestaltdResult("provider", "upgrade", "alpha", "--version", "1.2.3", "--config", cfgPath, "--config", otherCfgPath)
+	out, err := runGestaltdResult(t, "provider", "upgrade", "alpha", "--version", "1.2.3", "--config", cfgPath, "--config", otherCfgPath)
 	if err == nil {
 		t.Fatalf("provider upgrade with repeated --config succeeded: %s", out)
 	}
 	assertContains(t, out, "only one --config")
 
-	out, err = runGestaltdResult("provider", "upgrade", "alpha", "--version", "1.2.3", "--config", cfgPath)
+	out, err = runGestaltdResult(t, "provider", "upgrade", "alpha", "--version", "1.2.3", "--config", cfgPath)
 	if err == nil {
 		t.Fatalf("ambiguous provider upgrade succeeded: %s", out)
 	}
@@ -520,7 +519,7 @@ func writeProviderLifecycleTestFile(t *testing.T, path, data string) {
 
 func runGestaltd(t *testing.T, args ...string) string {
 	t.Helper()
-	out, err := runGestaltdResult(args...)
+	out, err := runGestaltdResult(t, args...)
 	if err != nil {
 		t.Fatalf("gestaltd %s failed: %v\n%s", strings.Join(args, " "), err, out)
 	}
@@ -529,21 +528,23 @@ func runGestaltd(t *testing.T, args ...string) string {
 
 func runGestaltdWithEnv(t *testing.T, env []string, args ...string) string {
 	t.Helper()
-	out, err := runGestaltdResultWithEnv(env, args...)
+	out, err := runGestaltdResultWithEnv(t, env, args...)
 	if err != nil {
 		t.Fatalf("gestaltd %s failed: %v\n%s", strings.Join(args, " "), err, out)
 	}
 	return out
 }
 
-func runGestaltdResult(args ...string) (string, error) {
-	return runGestaltdResultWithEnv(nil, args...)
+func runGestaltdResult(t testing.TB, args ...string) (string, error) {
+	t.Helper()
+	return runGestaltdResultWithEnv(t, nil, args...)
 }
 
-func runGestaltdResultWithEnv(env []string, args ...string) (string, error) {
-	cmd := exec.Command(gestaltdBin, args...)
+func runGestaltdResultWithEnv(t testing.TB, env []string, args ...string) (string, error) {
+	t.Helper()
+	cmd := gestaltdCommand(t, args...)
 	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
+		cmd.Env = append(cmd.Env, env...)
 	}
 	out, err := cmd.CombinedOutput()
 	return string(out), err

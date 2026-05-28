@@ -18,11 +18,44 @@ import (
 )
 
 var (
-	gestaltdBin            string
-	appBin                 string
-	indexedDBBin           string
-	externalCredentialsBin string
+	testTmpDir string
+
+	gestaltdBinaryFixture = sync.OnceValues(func() (string, error) {
+		path := filepath.Join(testTmpDir, "gestaltd")
+		return path, buildTarget(".", "github.com/valon-technologies/gestalt/server/cmd/gestaltd", path)
+	})
+	providerAppBinaryFixture = sync.OnceValues(func() (string, error) {
+		path := filepath.Join(testTmpDir, "provider")
+		return path, buildGoFixtureBinary(testutil.MustExampleProviderAppPath(), path, "github.com/valon-technologies/gestalt/testdata/provider-go", `gestalt.ServeProvider(ctx, providerpkg.New(), providerpkg.Router.WithName("provider-go"))`)
+	})
+	indexedDBProviderBinaryFixture = sync.OnceValues(func() (string, error) {
+		path := filepath.Join(testTmpDir, "indexeddb-provider")
+		indexedDBSrcDir := filepath.Join(filepath.Dir(testutil.MustExampleProviderAppPath()), "provider-go-indexeddb")
+		return path, buildGoFixtureBinary(indexedDBSrcDir, path, "github.com/valon-technologies/gestalt/testdata/provider-go-indexeddb", "gestalt.ServeIndexedDBProvider(ctx, providerpkg.New())")
+	})
+	externalCredentialsProviderBinaryFixture = sync.OnceValues(func() (string, error) {
+		path := filepath.Join(testTmpDir, "external-credentials-provider")
+		externalCredentialsSrcDir, err := writeExternalCredentialsProviderFixture(testTmpDir)
+		if err != nil {
+			return path, fmt.Errorf("write external credentials fixture: %w", err)
+		}
+		return path, buildGoFixtureBinary(externalCredentialsSrcDir, path, "github.com/valon-technologies/gestalt/testdata/provider-go-externalcredentials", "gestalt.ServeExternalCredentialProvider(ctx, providerpkg.New())")
+	})
+	defaultProvidersDirFixture = sync.OnceValues(func() (string, error) {
+		path := filepath.Join(testTmpDir, "providers")
+		indexedDBBin, err := indexedDBProviderBinaryFixture()
+		if err != nil {
+			return path, fmt.Errorf("indexeddb provider: %w", err)
+		}
+		externalCredentialsBin, err := externalCredentialsProviderBinaryFixture()
+		if err != nil {
+			return path, fmt.Errorf("external credentials provider: %w", err)
+		}
+		return path, writeDefaultProvidersDir(testTmpDir, indexedDBBin, externalCredentialsBin)
+	})
 )
+
+type stringFixture func() (string, error)
 
 func TestMain(m *testing.M) {
 	tmpDir, err := os.MkdirTemp("", "gestaltd-e2e-*")
@@ -31,54 +64,9 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	gestaltdBin = filepath.Join(tmpDir, "gestaltd")
-	appBin = filepath.Join(tmpDir, "provider")
-	indexedDBBin = filepath.Join(tmpDir, "indexeddb-provider")
-	externalCredentialsBin = filepath.Join(tmpDir, "external-credentials-provider")
-	indexedDBSrcDir := filepath.Join(filepath.Dir(testutil.MustExampleProviderAppPath()), "provider-go-indexeddb")
-	externalCredentialsSrcDir, err := writeExternalCredentialsProviderFixture(tmpDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "write external credentials fixture: %v\n", err)
-		_ = os.RemoveAll(tmpDir)
-		os.Exit(1)
-	}
+	testTmpDir = tmpDir
 
-	var wg sync.WaitGroup
-	errs := make([]error, 4)
-	wg.Add(4)
-	go func() {
-		defer wg.Done()
-		errs[0] = buildTarget(".", "github.com/valon-technologies/gestalt/server/cmd/gestaltd", gestaltdBin)
-	}()
-	go func() {
-		defer wg.Done()
-		errs[1] = buildGoFixtureBinary(testutil.MustExampleProviderAppPath(), appBin, "github.com/valon-technologies/gestalt/testdata/provider-go", `gestalt.ServeProvider(ctx, providerpkg.New(), providerpkg.Router.WithName("provider-go"))`)
-	}()
-	go func() {
-		defer wg.Done()
-		errs[2] = buildGoFixtureBinary(indexedDBSrcDir, indexedDBBin, "github.com/valon-technologies/gestalt/testdata/provider-go-indexeddb", "gestalt.ServeIndexedDBProvider(ctx, providerpkg.New())")
-	}()
-	go func() {
-		defer wg.Done()
-		errs[3] = buildGoFixtureBinary(externalCredentialsSrcDir, externalCredentialsBin, "github.com/valon-technologies/gestalt/testdata/provider-go-externalcredentials", "gestalt.ServeExternalCredentialProvider(ctx, providerpkg.New())")
-	}()
-	wg.Wait()
-
-	for i, err := range errs {
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "build %d: %v\n", i, err)
-			_ = os.RemoveAll(tmpDir)
-			os.Exit(1)
-		}
-	}
-
-	defaultProvidersDir, err := writeDefaultProvidersDir(tmpDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "write default providers dir: %v\n", err)
-		_ = os.RemoveAll(tmpDir)
-		os.Exit(1)
-	}
-	if err := os.Setenv("GESTALT_PROVIDERS_DIR", defaultProvidersDir); err != nil {
+	if err := os.Setenv("GESTALT_PROVIDERS_DIR", filepath.Join(testTmpDir, "providers")); err != nil {
 		fmt.Fprintf(os.Stderr, "set GESTALT_PROVIDERS_DIR: %v\n", err)
 		_ = os.RemoveAll(tmpDir)
 		os.Exit(1)
@@ -87,6 +75,48 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	_ = os.RemoveAll(tmpDir)
 	os.Exit(code)
+}
+
+func gestaltdBinary(t testing.TB) string {
+	t.Helper()
+	return mustFixture(t, "gestaltd", gestaltdBinaryFixture)
+}
+
+func gestaltdCommand(t testing.TB, args ...string) *exec.Cmd {
+	t.Helper()
+	cmd := exec.Command(gestaltdBinary(t), args...)
+	providersDir := defaultProvidersDir(t)
+	cmd.Env = append(os.Environ(), "GESTALT_PROVIDERS_DIR="+providersDir)
+	return cmd
+}
+
+func providerAppBinary(t testing.TB) string {
+	t.Helper()
+	return mustFixture(t, "provider app", providerAppBinaryFixture)
+}
+
+func indexedDBProviderBinary(t testing.TB) string {
+	t.Helper()
+	return mustFixture(t, "indexeddb provider", indexedDBProviderBinaryFixture)
+}
+
+func externalCredentialsProviderBinary(t testing.TB) string {
+	t.Helper()
+	return mustFixture(t, "external credentials provider", externalCredentialsProviderBinaryFixture)
+}
+
+func defaultProvidersDir(t testing.TB) string {
+	t.Helper()
+	return mustFixture(t, "default providers", defaultProvidersDirFixture)
+}
+
+func mustFixture(t testing.TB, name string, fixture stringFixture) string {
+	t.Helper()
+	path, err := fixture()
+	if err != nil {
+		t.Fatalf("build %s fixture: %v", name, err)
+	}
+	return path
 }
 
 func buildTarget(dir, target, output string) error {
@@ -213,10 +243,10 @@ func writeExternalCredentialsProviderFixture(baseDir string) (string, error) {
 	return fixtureDir, nil
 }
 
-func writeDefaultProvidersDir(baseDir string) (string, error) {
+func writeDefaultProvidersDir(baseDir, indexedDBBin, externalCredentialsBin string) error {
 	providersDir := filepath.Join(baseDir, "providers")
 	if err := os.MkdirAll(providersDir, 0o755); err != nil {
-		return "", err
+		return err
 	}
 
 	if err := writeComponentProviderDir(filepath.Join(providersDir, "indexeddb", "relationaldb"), indexedDBBin, &providermanifestv1.Manifest{
@@ -226,7 +256,7 @@ func writeDefaultProvidersDir(baseDir string) (string, error) {
 		DisplayName: "Relational IndexedDB",
 		Spec:        &providermanifestv1.Spec{},
 	}); err != nil {
-		return "", err
+		return err
 	}
 
 	if err := writeComponentProviderDir(filepath.Join(providersDir, "externalcredentials", "default"), externalCredentialsBin, &providermanifestv1.Manifest{
@@ -236,16 +266,16 @@ func writeDefaultProvidersDir(baseDir string) (string, error) {
 		DisplayName: "Default External Credentials",
 		Spec:        &providermanifestv1.Spec{},
 	}); err != nil {
-		return "", err
+		return err
 	}
 	if err := writeLocalProviderReleaseMetadata(filepath.Join(providersDir, "externalcredentials", "default")); err != nil {
-		return "", err
+		return err
 	}
 
 	uiDir := filepath.Join(providersDir, "ui", "default")
 	distDir := filepath.Join(uiDir, "dist")
 	if err := os.MkdirAll(distDir, 0o755); err != nil {
-		return "", err
+		return err
 	}
 	if err := os.WriteFile(filepath.Join(distDir, "index.html"), []byte(`<!doctype html>
 <html>
@@ -258,10 +288,10 @@ func writeDefaultProvidersDir(baseDir string) (string, error) {
   </body>
 </html>
 `), 0o644); err != nil {
-		return "", err
+		return err
 	}
 	if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>Default Gestalt UI</html>\\n' > dist/index.html\n"), 0o755); err != nil {
-		return "", err
+		return err
 	}
 	if err := writeManifest(filepath.Join(uiDir, "manifest.yaml"), &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindUI,
@@ -274,10 +304,10 @@ func writeDefaultProvidersDir(baseDir string) (string, error) {
 		},
 		Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
 	}); err != nil {
-		return "", err
+		return err
 	}
 
-	return providersDir, nil
+	return nil
 }
 
 func writeComponentProviderDir(dir, binaryPath string, manifest *providermanifestv1.Manifest) error {

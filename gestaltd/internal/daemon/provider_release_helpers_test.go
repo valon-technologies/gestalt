@@ -53,7 +53,7 @@ func assertArtifactPlatform(t *testing.T, artifact providermanifestv1.Artifact, 
 func runProviderPackageAndReleaseCommand(t *testing.T, pluginDir string, args ...string) string {
 	t.Helper()
 
-	out, err := runProviderPackageAndReleaseCommandResult(pluginDir, args...)
+	out, err := runProviderPackageAndReleaseCommandResult(t, pluginDir, args...)
 	if err != nil {
 		t.Fatalf("provider package+release failed: %v\n%s", err, out)
 	}
@@ -63,24 +63,26 @@ func runProviderPackageAndReleaseCommand(t *testing.T, pluginDir string, args ..
 func runProviderPackageCommand(t *testing.T, pluginDir string, args ...string) string {
 	t.Helper()
 
-	out, err := runProviderPackageCommandResult(pluginDir, args...)
+	out, err := runProviderPackageCommandResult(t, pluginDir, args...)
 	if err != nil {
 		t.Fatalf("provider package failed: %v\n%s", err, out)
 	}
 	return string(out)
 }
 
-func runProviderCommandResult(pluginDir string, args ...string) ([]byte, error) {
+func runProviderCommandResult(t testing.TB, pluginDir string, args ...string) ([]byte, error) {
+	t.Helper()
 	cmdArgs := append([]string{"provider"}, args...)
-	cmd := exec.Command(gestaltdBin, cmdArgs...)
+	cmd := exec.Command(gestaltdBinary(t), cmdArgs...)
 	cmd.Dir = pluginDir
 	return cmd.CombinedOutput()
 }
 
 // runProviderPackageAndReleaseCommandResult keeps archive-creation tests focused
 // on their historical assertions while exercising the new two-step CLI.
-func runProviderPackageAndReleaseCommandResult(pluginDir string, args ...string) ([]byte, error) {
-	packageOut, err := runProviderPackageCommandResult(pluginDir, args...)
+func runProviderPackageAndReleaseCommandResult(t testing.TB, pluginDir string, args ...string) ([]byte, error) {
+	t.Helper()
+	packageOut, err := runProviderPackageCommandResult(t, pluginDir, args...)
 	if err != nil {
 		return packageOut, err
 	}
@@ -89,12 +91,13 @@ func runProviderPackageAndReleaseCommandResult(pluginDir string, args ...string)
 	if version != "" {
 		releaseArgs = append(releaseArgs, "--version", version)
 	}
-	releaseOut, err := runProviderCommandResult(pluginDir, releaseArgs...)
+	releaseOut, err := runProviderCommandResult(t, pluginDir, releaseArgs...)
 	return append(packageOut, releaseOut...), err
 }
 
-func runProviderPackageCommandResult(pluginDir string, args ...string) ([]byte, error) {
-	return runProviderCommandResult(pluginDir, append([]string{"package"}, args...)...)
+func runProviderPackageCommandResult(t testing.TB, pluginDir string, args ...string) ([]byte, error) {
+	t.Helper()
+	return runProviderCommandResult(t, pluginDir, append([]string{"package"}, args...)...)
 }
 
 func providerReleaseTestVersionAndOutput(args []string) (string, string) {

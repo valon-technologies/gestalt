@@ -28,7 +28,7 @@ func TestRun_ProviderPackageRequiresVersion(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
-	out, err := runProviderCommandResult(pluginDir, "package")
+	out, err := runProviderCommandResult(t, pluginDir, "package")
 	if err == nil {
 		t.Fatal("expected error when --version missing")
 	}
@@ -45,7 +45,7 @@ func TestRun_ProviderReleaseRejectsPackageOnlyFlags(t *testing.T) {
 		t.Run(flagName, func(t *testing.T) {
 			t.Parallel()
 
-			out, err := runProviderCommandResult(t.TempDir(), "release", flagName, "value")
+			out, err := runProviderCommandResult(t, t.TempDir(), "release", flagName, "value")
 			if err == nil {
 				t.Fatalf("expected %s rejection, got output: %s", flagName, out)
 			}
@@ -105,7 +105,7 @@ entrypoint:
 			}
 			writeTestFile(t, pluginDir, "manifest.yaml", []byte(tc.manifestYAML), 0644)
 
-			out, err := runProviderPackageAndReleaseCommandResult(pluginDir, "--version", "0.0.1-test")
+			out, err := runProviderPackageAndReleaseCommandResult(t, pluginDir, "--version", "0.0.1-test")
 			if err == nil {
 				t.Fatal("expected invalid manifest error")
 			}
@@ -129,7 +129,7 @@ func TestE2EProviderPackageAndReleaseBigquery(t *testing.T) {
 	const testVersion = "0.0.1-test"
 	const testPlatform = "linux/amd64"
 
-	cmd := exec.Command(gestaltdBin, "provider", "package",
+	cmd := exec.Command(gestaltdBinary(t), "provider", "package",
 		"--version", testVersion,
 		"--platform", testPlatform,
 		"--output", outputDir,
@@ -139,7 +139,7 @@ func TestE2EProviderPackageAndReleaseBigquery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provider package failed: %v\n%s", err, out)
 	}
-	cmd = exec.Command(gestaltdBin, "provider", "release",
+	cmd = exec.Command(gestaltdBinary(t), "provider", "release",
 		"--version", testVersion,
 		"--dist-dir", outputDir,
 	)

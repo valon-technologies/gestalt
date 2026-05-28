@@ -74,7 +74,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			out, err := exec.Command(gestaltdBin, tc.args...).CombinedOutput()
+			out, err := exec.Command(gestaltdBinary(t), tc.args...).CombinedOutput()
 			if err != nil {
 				t.Fatalf("gestaltd %s: %v\n%s", strings.Join(tc.args, " "), err, out)
 			}
@@ -159,11 +159,11 @@ packages:
 	}
 	indexURL := (&url.URL{Scheme: "file", Path: indexPath}).String()
 
-	out, err := exec.Command(gestaltdBin, "provider", "repo", "add", "local", indexURL, "--config", cfgPath).CombinedOutput()
+	out, err := exec.Command(gestaltdBinary(t), "provider", "repo", "add", "local", indexURL, "--config", cfgPath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("provider repo add failed: %v\n%s", err, out)
 	}
-	out, err = exec.Command(gestaltdBin, "provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--no-lock").CombinedOutput()
+	out, err = exec.Command(gestaltdBinary(t), "provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--no-lock").CombinedOutput()
 	if err != nil {
 		t.Fatalf("provider add failed: %v\n%s", err, out)
 	}
@@ -260,7 +260,7 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			out, err := exec.Command(gestaltdBin, tc.args...).CombinedOutput()
+			out, err := exec.Command(gestaltdBinary(t), tc.args...).CombinedOutput()
 			if err == nil {
 				t.Fatalf("expected gestaltd %s to fail, output: %s", strings.Join(tc.args, " "), out)
 			}

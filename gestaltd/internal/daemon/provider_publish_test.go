@@ -37,7 +37,7 @@ providerSnapshotRepositories:
 		t.Fatalf("write config: %v", err)
 	}
 
-	out, err := runProviderCommandResult(pluginDir,
+	out, err := runProviderCommandResult(t, pluginDir,
 		"publish",
 		"--config", configPath,
 		"--repo", "valon",
@@ -91,7 +91,7 @@ providerSnapshotRepositories:
 		t.Fatalf("write config: %v", err)
 	}
 
-	out, err := runProviderCommandResult(pluginDir,
+	out, err := runProviderCommandResult(t, pluginDir,
 		"publish",
 		"--config", configPath,
 		"--repo", "valon",
@@ -143,7 +143,7 @@ func TestRun_ProviderPublishRejectsShortRef(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newUIReleaseFixture(t, t.TempDir())
-	out, err := runProviderCommandResult(pluginDir,
+	out, err := runProviderCommandResult(t, pluginDir,
 		"publish",
 		"--repo", "valon",
 		"--manifest", filepath.Join(pluginDir, "manifest.json"),
@@ -163,7 +163,7 @@ func TestRun_ProviderPublishRejectsShortRef(t *testing.T) {
 func TestRun_ProviderPublishRejectsJSONFormatWithoutDryRun(t *testing.T) {
 	t.Parallel()
 
-	out, err := runProviderCommandResult(t.TempDir(),
+	out, err := runProviderCommandResult(t, t.TempDir(),
 		"publish",
 		"--repo", "valon",
 		"--format", "json",
@@ -232,7 +232,7 @@ exit 1
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("GCLOUD_CALLS", callsPath)
 
-	out, err := runProviderCommandResult(pluginDir,
+	out, err := runProviderCommandResult(t, pluginDir,
 		"publish",
 		"--config", configPath,
 		"--repo", "valon",
@@ -304,7 +304,7 @@ exit 1
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("GCLOUD_CALLS", callsPath)
 
-	out, err := runProviderCommandResult(pluginDir,
+	out, err := runProviderCommandResult(t, pluginDir,
 		"publish",
 		"--config", configPath,
 		"--repo", "valon",
@@ -375,7 +375,7 @@ exit 1
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("GCLOUD_CALLS", callsPath)
 
-	out, err := runProviderCommandResult(pluginDir,
+	out, err := runProviderCommandResult(t, pluginDir,
 		"publish",
 		"--config", configPath,
 		"--repo", "valon",

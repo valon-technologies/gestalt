@@ -40,7 +40,7 @@ providers:
 		t.Fatalf("write config: %v", err)
 	}
 
-	out, err := exec.Command(gestaltdBin, "agent", "launch", "--config", cfgPath, "--dry-run").CombinedOutput()
+	out, err := gestaltdCommand(t, "agent", "launch", "--config", cfgPath, "--dry-run").CombinedOutput()
 	if err != nil {
 		t.Fatalf("agent launch --dry-run failed: %v\n%s", err, out)
 	}
@@ -115,7 +115,7 @@ providers:
 		t.Fatalf("write config: %v", err)
 	}
 
-	out, err := exec.Command(gestaltdBin, "agent", "launch", "--config", cfgPath).CombinedOutput()
+	out, err := gestaltdCommand(t, "agent", "launch", "--config", cfgPath).CombinedOutput()
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
 		t.Fatalf("agent launch err = %v, want exit status 7\n%s", err, out)
@@ -159,7 +159,7 @@ providers:
 		t.Fatalf("write config: %v", err)
 	}
 
-	out, err := exec.Command(gestaltdBin, "agent", "doctor", "--config", cfgPath).CombinedOutput()
+	out, err := gestaltdCommand(t, "agent", "doctor", "--config", cfgPath).CombinedOutput()
 	if err == nil {
 		t.Fatalf("agent doctor unexpectedly succeeded:\n%s", out)
 	}
@@ -197,7 +197,7 @@ providers:
 		t.Fatalf("write config: %v", err)
 	}
 
-	cmd := exec.Command(gestaltdBin, "agent", "launch", "--config", cfgPath, "--dry-run")
+	cmd := gestaltdCommand(t, "agent", "launch", "--config", cfgPath, "--dry-run")
 	cmd.Env = withoutEnv(os.Environ(), missingEnv, "GESTALT_TEST_MISSING_UNSELECTED_HARNESS_ENV")
 	out, err := cmd.CombinedOutput()
 	if err == nil {

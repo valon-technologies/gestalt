@@ -199,7 +199,7 @@ func TestRun_ProviderPackageRejectsDeletedBuild(t *testing.T) {
 	}
 
 	pluginDir := newBuiltUIReleaseFixture(t, t.TempDir())
-	out, err := runProviderPackageAndReleaseCommandResult(pluginDir,
+	out, err := runProviderPackageAndReleaseCommandResult(t, pluginDir,
 		"--version", "0.0.3-legacy-build-ui",
 		"--output", t.TempDir(),
 	)
@@ -554,7 +554,7 @@ func TestRun_ProviderPackageRejectsOutputInsideUIAssetRoot(t *testing.T) {
 	pluginDir := newUIReleaseFixtureWithAssetRoot(t, t.TempDir(), "release-output")
 	outputDir := filepath.Join(pluginDir, "release-output", "nested")
 
-	out, err := runProviderPackageAndReleaseCommandResult(pluginDir, "--version", "1.0.0", "--output", outputDir)
+	out, err := runProviderPackageAndReleaseCommandResult(t, pluginDir, "--version", "1.0.0", "--output", outputDir)
 	if err == nil {
 		t.Fatalf("expected provider release to fail, got output: %s", out)
 	}
@@ -601,7 +601,7 @@ paths:
 	}
 	writeTestFile(t, pluginDir, providerpkg.StaticCatalogFile, []byte("name: release-test\noperations:\n  - id: generated_op\n    method: GET\n"), 0o644)
 
-	out, err := runProviderPackageAndReleaseCommandResult(pluginDir, "--version", "0.0.4-source.1", "--platform", runtime.GOOS+"/"+runtime.GOARCH, "--output", t.TempDir())
+	out, err := runProviderPackageAndReleaseCommandResult(t, pluginDir, "--version", "0.0.4-source.1", "--platform", runtime.GOOS+"/"+runtime.GOARCH, "--output", t.TempDir())
 	if err == nil {
 		t.Fatalf("expected provider release to fail, got output: %s", out)
 	}
@@ -700,7 +700,7 @@ func TestRun_ProviderPackageRejectsPrebuiltExecutableProvider(t *testing.T) {
 	outputDir := t.TempDir()
 	const testVersion = "0.0.5-test"
 
-	out, err := runProviderPackageAndReleaseCommandResult(pluginDir,
+	out, err := runProviderPackageAndReleaseCommandResult(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
@@ -718,7 +718,7 @@ func TestRun_ProviderPackageRejectsExplicitPlatformForPrebuiltProvider(t *testin
 	pluginDir := newPrebuiltProviderReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 
-	out, err := runProviderPackageAndReleaseCommandResult(pluginDir,
+	out, err := runProviderPackageAndReleaseCommandResult(t, pluginDir,
 		"--version", "0.0.5-platform-test",
 		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
@@ -740,7 +740,7 @@ func TestRun_ProviderPackageRejectsGoModuleWithoutBuildCommand(t *testing.T) {
 	outputDir := t.TempDir()
 	const testVersion = "0.0.6-test"
 
-	out, err := runProviderPackageAndReleaseCommandResult(pluginDir,
+	out, err := runProviderPackageAndReleaseCommandResult(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)

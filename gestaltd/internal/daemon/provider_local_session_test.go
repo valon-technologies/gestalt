@@ -12,6 +12,7 @@ import (
 func TestPrepareProviderLocalSessionSupportsDirectUITarget(t *testing.T) {
 	t.Parallel()
 
+	_ = defaultProvidersDir(t)
 	dir := t.TempDir()
 	mountedUI := setupMountedUIDir(t, dir)
 	setUIManifestSource(t, mountedUI.ManifestPath, "github.com/test/ui/roadmap.review")
@@ -58,6 +59,7 @@ func TestPrepareProviderLocalSessionSupportsDirectUITarget(t *testing.T) {
 func TestPrepareProviderLocalSessionAutoMountsSiblingUI(t *testing.T) {
 	t.Parallel()
 
+	_ = defaultProvidersDir(t)
 	dir := t.TempDir()
 	rootDir := filepath.Join(dir, "package")
 	appDir := setupAppDir(t, filepath.Join(rootDir, "app"))
@@ -114,6 +116,7 @@ func TestPrepareProviderLocalSessionAutoMountsSiblingUI(t *testing.T) {
 func TestPrepareProviderLocalSessionLeavesAppWithoutUIUnmounted(t *testing.T) {
 	t.Parallel()
 
+	_ = defaultProvidersDir(t)
 	dir := t.TempDir()
 	appDir := setupAppDir(t, dir)
 	setAppManifestSource(t, appDir, "github.com/test/apps/api-only")

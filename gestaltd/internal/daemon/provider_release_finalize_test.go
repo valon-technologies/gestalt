@@ -19,7 +19,7 @@ func TestRun_ProviderReleaseFinalizesArchivesWithoutSourceTree(t *testing.T) {
 	archiveName := platformArchiveNameForTest(releaseTestAppName, testVersion, runtime.GOOS, runtime.GOARCH)
 	writeProviderReleaseArchiveForTest(t, outputDir, archiveName, providerReleaseManifestForTest(testVersion, "Release Test", runtime.GOOS, runtime.GOARCH))
 
-	out, err := runProviderCommandResult(t.TempDir(), "release", "--dist-dir", outputDir, "--version", testVersion)
+	out, err := runProviderCommandResult(t, t.TempDir(), "release", "--dist-dir", outputDir, "--version", testVersion)
 	if err != nil {
 		t.Fatalf("provider release failed: %v\n%s", err, out)
 	}
