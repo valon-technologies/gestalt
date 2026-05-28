@@ -419,7 +419,6 @@ export {
   type AgentTurnEvent,
   type AgentTurnOutput,
   type AgentTurnStructuredOutput,
-  type AgentTurnTextOutput,
   type CancelAgentProviderTurnRequest,
   type CreateAgentProviderSessionRequest,
   type CreateAgentProviderTurnRequest,

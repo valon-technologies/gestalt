@@ -47,7 +47,6 @@ from gestalt import (
     AgentTurn,
     AgentTurnEvent,
     AgentTurnOutput,
-    AgentTurnTextOutput,
     Error,
     ListAgentProviderInteractionsResponse,
     ListAgentProviderSessionsResponse,
@@ -173,7 +172,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             status=AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
             messages=request.messages,
             output=AgentTurnOutput(
-                text=AgentTurnTextOutput(text="echo:Plan it"),
+                text="echo:Plan it",
             ),
             status_message="waiting for input",
             created_by=request.created_by,
@@ -188,7 +187,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             model="gpt-5.1",
             status=AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
             output=AgentTurnOutput(
-                text=AgentTurnTextOutput(text="echo:Plan it"),
+                text="echo:Plan it",
             ),
             status_message="waiting for input",
         )

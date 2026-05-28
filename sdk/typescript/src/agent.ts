@@ -334,17 +334,13 @@ export interface AgentTurn {
   executionRef?: string | undefined;
 }
 
-export interface AgentTurnTextOutput {
-  text?: string | undefined;
-}
-
 export interface AgentTurnStructuredOutput {
   text?: string | undefined;
   value?: JsonObjectInput | undefined;
 }
 
 export type AgentTurnOutput =
-  | { text: AgentTurnTextOutput; structured?: undefined }
+  | { text: string; structured?: undefined }
   | { text?: undefined; structured: AgentTurnStructuredOutput };
 
 export interface AgentTurnDisplay {

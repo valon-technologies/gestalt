@@ -391,34 +391,29 @@ class AgentTurn:
     execution_ref: str = ""
 
 
-@dataclass(slots=True)
-class AgentTurnTextOutput:
-    text: str = ""
-
-
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class AgentTurnStructuredOutput:
     text: str = ""
     value: JsonObjectInput | None = None
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class AgentTurnOutput:
-    text: AgentTurnTextOutput | Mapping[str, Any] | None = None
+    text: str | None = None
     structured: AgentTurnStructuredOutput | Mapping[str, Any] | None = None
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class AgentTextOutput:
     pass
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class AgentStructuredOutput:
     schema: JsonObjectInput
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class AgentOutput:
     text: AgentTextOutput | Mapping[str, Any] | None = None
     structured: AgentStructuredOutput | Mapping[str, Any] | None = None
@@ -905,7 +900,7 @@ def _agent_output_to_proto(value: AgentOutput | Mapping[str, Any] | None) -> Any
 def _agent_turn_output_from_proto(value: Any) -> AgentTurnOutput | None:
     kind = value.WhichOneof("output")
     if kind == "text":
-        return AgentTurnOutput(text=AgentTurnTextOutput(text=value.text.text))
+        return AgentTurnOutput(text=value.text.text)
     if kind == "structured":
         return AgentTurnOutput(
             structured=AgentTurnStructuredOutput(
@@ -927,8 +922,7 @@ def _agent_turn_output_to_proto(value: Any | None) -> tuple[str, Any] | None:
     if text_set == structured_set:
         raise ValueError("exactly one of output.text or output.structured is required")
     if text_set:
-        text = _coerce(output.text, AgentTurnTextOutput, "AgentTurnTextOutput")
-        return "text", pb.AgentTurnTextOutput(text=text.text)
+        return "text", pb.AgentTurnTextOutput(text=str(output.text or ""))
     if structured_set:
         structured = _coerce(
             output.structured, AgentTurnStructuredOutput, "AgentTurnStructuredOutput"

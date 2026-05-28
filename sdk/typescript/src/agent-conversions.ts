@@ -154,7 +154,7 @@ export function agentTurnOutputFromProto(
 ): AgentTurnOutput | undefined {
   switch (output.case) {
     case "text":
-      return { text: { text: output.value.text } };
+      return { text: output.value.text };
     case "structured":
       return {
         structured: {
@@ -182,7 +182,7 @@ export function agentTurnOutputToProto(
     return {
       case: "text",
       value: create(AgentTurnTextOutputSchema, {
-        text: output.text.text ?? "",
+        text: output.text ?? "",
       }),
     };
   }
