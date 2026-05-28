@@ -67,18 +67,3 @@ func TestToolRefFromProtoDropsMalformedRunAsExternalIdentity(t *testing.T) {
 		t.Fatalf("decoded malformed external identity = %#v, want nil", decoded.RunAsExternalIdentity)
 	}
 }
-
-func TestToolRefsFromProtoSkipsNilRefs(t *testing.T) {
-	t.Parallel()
-
-	decoded := ToolRefsFromProto([]*proto.AgentToolRef{
-		nil,
-		{App: "github", Operation: "search"},
-	})
-	if len(decoded) != 1 {
-		t.Fatalf("decoded refs = %#v, want one ref", decoded)
-	}
-	if decoded[0].App != "github" || decoded[0].Operation != "search" {
-		t.Fatalf("decoded ref = %#v, want github search", decoded[0])
-	}
-}

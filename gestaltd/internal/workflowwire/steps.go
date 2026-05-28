@@ -326,10 +326,6 @@ func workflowValueMapFromProto(values map[string]*proto.WorkflowValue) map[strin
 	if len(values) == 0 {
 		return nil
 	}
-	return workflowValueObjectMapFromProto(values)
-}
-
-func workflowValueObjectMapFromProto(values map[string]*proto.WorkflowValue) map[string]coreworkflow.Value {
 	out := make(map[string]coreworkflow.Value, len(values))
 	for key, value := range values {
 		out[key] = workflowValueFromProto(value)
@@ -413,7 +409,12 @@ func workflowValueFromProto(value *proto.WorkflowValue) coreworkflow.Value {
 	case *proto.WorkflowValue_Literal:
 		return coreworkflow.Value{Literal: protoutil.ValueToAny(typed.Literal), LiteralSet: true}
 	case *proto.WorkflowValue_Object:
-		return coreworkflow.Value{Object: workflowValueObjectMapFromProto(typed.Object.GetFields())}
+		fields := typed.Object.GetFields()
+		out := make(map[string]coreworkflow.Value, len(fields))
+		for key, value := range fields {
+			out[key] = workflowValueFromProto(value)
+		}
+		return coreworkflow.Value{Object: out}
 	case *proto.WorkflowValue_Array:
 		items := typed.Array.GetValues()
 		out := make([]coreworkflow.Value, 0, len(items))
