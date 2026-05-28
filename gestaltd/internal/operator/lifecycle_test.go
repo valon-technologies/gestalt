@@ -3062,38 +3062,38 @@ import gestalt
 import provider
 
 provider.app.configure_provider("example", {"prefix": "Hello"})
-status, body = provider.app.execute("echo", {
+result = provider.app.execute("echo", {
     "names": ["Ada", "Grace"],
     "metadata": {"role": "admin"},
     "filters": {"owner": "Ada"},
     "limit": 3,
 }, gestalt.Request())
-double_status, double_body = provider.app.execute("times_two", {
+double_result = provider.app.execute("times_two", {
     "value": 3,
 }, gestalt.Request())
-decode_status, decode_body = provider.app.execute("times_two", {
+decode_result = provider.app.execute("times_two", {
     "value": "oops",
 }, gestalt.Request())
-explode_status, explode_body = provider.app.execute("explode", {}, gestalt.Request())
-zero_status, zero_body = provider.app.execute("status_zero", {}, gestalt.Request())
-maybe_status, maybe_body = provider.app.execute("maybe_filters", {
+explode_result = provider.app.execute("explode", {}, gestalt.Request())
+zero_result = provider.app.execute("status_zero", {}, gestalt.Request())
+maybe_result = provider.app.execute("maybe_filters", {
     "owner": "Grace",
 }, gestalt.Request())
-list_status, list_body = provider.app.execute("list_items", {}, gestalt.Request())
+list_result = provider.app.execute("list_items", {}, gestalt.Request())
 session_catalog = provider.app.catalog_for_request(gestalt.Request(token="secret-token"))
 print(json.dumps({
-    "status": status,
-    "body": json.loads(body),
-    "double_status": double_status,
-    "double_body": json.loads(double_body),
-    "decode_status": decode_status,
-    "decode_body": json.loads(decode_body),
-    "explode_status": explode_status,
-    "explode_body": json.loads(explode_body),
-    "list_status": list_status,
-    "list_body": json.loads(list_body),
-    "maybe_status": maybe_status,
-    "maybe_body": json.loads(maybe_body),
+    "status": result.status,
+    "body": json.loads(result.body),
+    "double_status": double_result.status,
+    "double_body": json.loads(double_result.body),
+    "decode_status": decode_result.status,
+    "decode_body": json.loads(decode_result.body),
+    "explode_status": explode_result.status,
+    "explode_body": json.loads(explode_result.body),
+    "list_status": list_result.status,
+    "list_body": json.loads(list_result.body),
+    "maybe_status": maybe_result.status,
+    "maybe_body": json.loads(maybe_result.body),
     "supports_session_catalog": provider.app.supports_session_catalog(),
     "session_catalog": {
         "name": session_catalog.name if session_catalog else "",
@@ -3106,8 +3106,8 @@ print(json.dumps({
             for operation in (session_catalog.operations if session_catalog else [])
         ],
     },
-    "zero_status": zero_status,
-    "zero_body": json.loads(zero_body),
+    "zero_status": zero_result.status,
+    "zero_body": json.loads(zero_result.body),
 }, sort_keys=True))
 `), 0o644)
 
