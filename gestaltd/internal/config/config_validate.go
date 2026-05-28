@@ -2062,11 +2062,11 @@ func validateWorkflowsConfig(cfg *Config) error {
 			if err := validateWorkflowScheduleTarget(cfg, key, &schedule); err != nil {
 				return err
 			}
-			runAs, err := normalizeWorkflowRunAs("workflows.schedules."+key+".runAs", schedule.RunAs)
+			owner, err := normalizeWorkflowOwner("workflows.schedules."+key+".owner", schedule.Owner)
 			if err != nil {
 				return err
 			}
-			schedule.RunAs = runAs
+			schedule.Owner = owner
 			invokes, _, err := normalizeWorkflowExecutionInvokes(cfg, "workflows.schedules."+key+".invokes", schedule.Invokes)
 			if err != nil {
 				return err
@@ -2113,11 +2113,11 @@ func validateWorkflowsConfig(cfg *Config) error {
 			if err := validateWorkflowEventTriggerTarget(cfg, key, &trigger); err != nil {
 				return err
 			}
-			runAs, err := normalizeWorkflowRunAs("workflows.eventTriggers."+key+".runAs", trigger.RunAs)
+			owner, err := normalizeWorkflowOwner("workflows.eventTriggers."+key+".owner", trigger.Owner)
 			if err != nil {
 				return err
 			}
-			trigger.RunAs = runAs
+			trigger.Owner = owner
 			invokes, _, err := normalizeWorkflowExecutionInvokes(cfg, "workflows.eventTriggers."+key+".invokes", trigger.Invokes)
 			if err != nil {
 				return err
@@ -2179,37 +2179,28 @@ func validateWorkflowTargetApps(cfg *Config, path string, target *WorkflowTarget
 	return nil
 }
 
-func normalizeWorkflowRunAs(path string, runAs *WorkflowRunAsConfig) (*WorkflowRunAsConfig, error) {
-	if runAs == nil {
+func normalizeWorkflowOwner(path string, owner *WorkflowOwnerConfig) (*WorkflowOwnerConfig, error) {
+	if owner == nil {
 		return nil, nil
 	}
-	if runAs.Subject == nil {
+	if owner.Subject == nil {
 		return nil, fmt.Errorf("config validation: %s.subject is required", path)
 	}
-	subject := *runAs.Subject
-	subject.ID = strings.TrimSpace(subject.ID)
-	subject.Kind = strings.TrimSpace(subject.Kind)
-	subject.DisplayName = strings.TrimSpace(subject.DisplayName)
-	subject.AuthSource = strings.TrimSpace(subject.AuthSource)
-	if subject.AuthSource == "" {
-		subject.AuthSource = "config"
+	subject, err := core.NormalizeServiceAccountSubject(&core.RunAsSubject{
+		SubjectID:   owner.Subject.ID,
+		SubjectKind: owner.Subject.Kind,
+		DisplayName: owner.Subject.DisplayName,
+		AuthSource:  owner.Subject.AuthSource,
+	}, path+".subject")
+	if err != nil {
+		return nil, fmt.Errorf("config validation: %w", err)
 	}
-	if subject.ID == "" {
-		return nil, fmt.Errorf("config validation: %s.subject.id is required", path)
-	}
-	kind, _, ok := core.ParseSubjectID(subject.ID)
-	if !ok {
-		return nil, fmt.Errorf("config validation: %s.subject.id %q must be a fully-qualified service_account subject", path, subject.ID)
-	}
-	if kind != "service_account" {
-		return nil, fmt.Errorf("config validation: %s.subject.id %q must identify a service_account subject", path, subject.ID)
-	}
-	if subject.Kind == "" {
-		subject.Kind = kind
-	} else if subject.Kind != kind {
-		return nil, fmt.Errorf("config validation: %s.subject.kind %q must match subject.id kind %q", path, subject.Kind, kind)
-	}
-	return &WorkflowRunAsConfig{Subject: &subject}, nil
+	return &WorkflowOwnerConfig{Subject: &WorkflowOwnerSubjectConfig{
+		ID:          subject.SubjectID,
+		Kind:        subject.SubjectKind,
+		DisplayName: subject.DisplayName,
+		AuthSource:  subject.AuthSource,
+	}}, nil
 }
 
 func normalizeWorkflowExecutionInvokes(cfg *Config, path string, values []WorkflowInvokeConfig) ([]WorkflowInvokeConfig, []core.AccessPermission, error) {

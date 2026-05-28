@@ -1,6 +1,11 @@
 package core
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
+
+const SubjectKindServiceAccount = "service_account"
 
 // Actor identifies who performed an action without credential-scoping fields.
 type Actor struct {
@@ -48,6 +53,32 @@ func NormalizeRunAsSubject(subject *RunAsSubject) *RunAsSubject {
 		out.CredentialSubjectID = out.SubjectID
 	}
 	return out
+}
+
+func NormalizeServiceAccountSubject(subject *RunAsSubject, path string) (*RunAsSubject, error) {
+	out := NormalizeRunAsSubject(subject)
+	if out == nil {
+		return nil, fmt.Errorf("%s is required", path)
+	}
+	if out.AuthSource == "" {
+		out.AuthSource = "config"
+	}
+	if out.SubjectID == "" {
+		return nil, fmt.Errorf("%s.id is required", path)
+	}
+	kind, _, ok := ParseSubjectID(out.SubjectID)
+	if !ok {
+		return nil, fmt.Errorf("%s.id %q must be a fully-qualified service_account subject", path, out.SubjectID)
+	}
+	if kind != SubjectKindServiceAccount {
+		return nil, fmt.Errorf("%s.id %q must identify a service_account subject", path, out.SubjectID)
+	}
+	if out.SubjectKind == "" {
+		out.SubjectKind = kind
+	} else if out.SubjectKind != kind {
+		return nil, fmt.Errorf("%s.kind %q must match subject.id kind %q", path, out.SubjectKind, kind)
+	}
+	return out, nil
 }
 
 func RunAsSubjectsEqual(left, right *RunAsSubject) bool {

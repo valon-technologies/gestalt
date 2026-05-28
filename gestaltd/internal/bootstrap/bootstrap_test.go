@@ -5087,7 +5087,7 @@ func TestBootstrapAllowsConfiguredWorkflowScheduleCredentialModeNoneForUserCrede
 	}
 }
 
-func TestBootstrapConfiguredWorkflowScheduleRunAsAllowsUserCredentialedTarget(t *testing.T) {
+func TestBootstrapConfiguredWorkflowScheduleOwnerAllowsUserCredentialedTarget(t *testing.T) {
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
@@ -5103,8 +5103,8 @@ func TestBootstrapConfiguredWorkflowScheduleRunAsAllowsUserCredentialedTarget(t 
 		},
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.RunAs = &config.WorkflowRunAsConfig{
-		Subject: &config.WorkflowRunAsSubjectConfig{
+	nightly.Owner = &config.WorkflowOwnerConfig{
+		Subject: &config.WorkflowOwnerSubjectConfig{
 			ID:          " service_account:roadmap-sync ",
 			DisplayName: " Roadmap sync ",
 		},
@@ -5132,12 +5132,12 @@ func TestBootstrapConfiguredWorkflowScheduleRunAsAllowsUserCredentialedTarget(t 
 	}
 	got := recorder.upsertedSchedules[0]
 	requestedBy := workflowwire.ActorFromProto(got.GetRequestedBy())
-	if requestedBy.SubjectID != "system:config" || requestedBy.SubjectKind != "system" || requestedBy.AuthSource != "config" {
+	if requestedBy.SubjectID != "service_account:roadmap-sync" || requestedBy.SubjectKind != "service_account" || requestedBy.DisplayName != "Roadmap sync" || requestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", requestedBy)
 	}
 }
 
-func TestBootstrapRejectsConfiguredWorkflowScheduleRunAsUserSubject(t *testing.T) {
+func TestBootstrapConfiguredWorkflowScheduleOwnerChangeUpdatesManagedSchedule(t *testing.T) {
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
@@ -5152,8 +5152,62 @@ func TestBootstrapRejectsConfiguredWorkflowScheduleRunAsUserSubject(t *testing.T
 		},
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.RunAs = &config.WorkflowRunAsConfig{
-		Subject: &config.WorkflowRunAsSubjectConfig{ID: "user:ada"},
+	nightly.Owner = &config.WorkflowOwnerConfig{
+		Subject: &config.WorkflowOwnerSubjectConfig{ID: "service_account:roadmap-new"},
+	}
+	cfg.Workflows.Schedules["nightly_sync"] = nightly
+
+	recorder := &recordingWorkflowProvider{
+		getSchedule: &coreworkflow.Schedule{
+			ID:       workflowConfigScheduleID("nightly_sync"),
+			Cron:     "0 2 * * *",
+			Timezone: "UTC",
+			Target:   coreWorkflowAppStepTarget("roadmap", "sync"),
+			CreatedBy: coreworkflow.Actor{
+				SubjectID:   "service_account:roadmap-old",
+				SubjectKind: core.SubjectKindServiceAccount,
+				AuthSource:  "config",
+			},
+		},
+	}
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorder.upsertedSchedules) != 1 {
+		t.Fatalf("upserted schedules = %d, want 1", len(recorder.upsertedSchedules))
+	}
+	requestedBy := workflowwire.ActorFromProto(recorder.upsertedSchedules[0].GetRequestedBy())
+	if requestedBy.SubjectID != "service_account:roadmap-new" || requestedBy.SubjectKind != core.SubjectKindServiceAccount || requestedBy.AuthSource != "config" {
+		t.Fatalf("requestedBy = %#v", requestedBy)
+	}
+}
+
+func TestBootstrapRejectsConfiguredWorkflowScheduleOwnerUserSubject(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	nightly := cfg.Workflows.Schedules["nightly_sync"]
+	nightly.Owner = &config.WorkflowOwnerConfig{
+		Subject: &config.WorkflowOwnerSubjectConfig{ID: "user:ada"},
 	}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
 
@@ -5164,14 +5218,14 @@ func TestBootstrapRejectsConfiguredWorkflowScheduleRunAsUserSubject(t *testing.T
 
 	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
 	if err == nil {
-		t.Fatal("expected Bootstrap to reject user runAs subject")
+		t.Fatal("expected Bootstrap to reject user owner subject")
 	}
-	if !strings.Contains(err.Error(), `workflows.schedules.nightly_sync.runAs.subject.id "user:ada" must identify a service_account subject`) {
+	if !strings.Contains(err.Error(), `workflows.schedules.nightly_sync.owner.subject.id "user:ada" must identify a service_account subject`) {
 		t.Fatalf("Bootstrap error = %v", err)
 	}
 }
 
-func TestBootstrapAppliesConfiguredWorkflowSchedulesForRunAsConnectionOnUserDefaultApp(t *testing.T) {
+func TestBootstrapAppliesConfiguredWorkflowSchedulesForOwnerConnectionOnUserDefaultApp(t *testing.T) {
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
@@ -5193,8 +5247,8 @@ func TestBootstrapAppliesConfiguredWorkflowSchedulesForRunAsConnectionOnUserDefa
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
 	nightly.Target.Steps[0].App.Connection = "bot"
-	nightly.RunAs = &config.WorkflowRunAsConfig{
-		Subject: &config.WorkflowRunAsSubjectConfig{ID: "service_account:roadmap-sync"},
+	nightly.Owner = &config.WorkflowOwnerConfig{
+		Subject: &config.WorkflowOwnerSubjectConfig{ID: "service_account:roadmap-sync"},
 	}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
 
@@ -5896,7 +5950,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	assertWorkflowConfigTokenAllowsAppInvoke(t, workflowEncryptionKey, recorder.upsertedEventTriggerTokens[0], "slack", "conversations.history")
 }
 
-func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarget(t *testing.T) {
+func TestBootstrapConfiguredWorkflowEventTriggerOwnerAllowsUserCredentialedTarget(t *testing.T) {
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
@@ -5914,8 +5968,8 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 		},
 	})
 	trigger := cfg.Workflows.EventTriggers["task_updated"]
-	trigger.RunAs = &config.WorkflowRunAsConfig{
-		Subject: &config.WorkflowRunAsSubjectConfig{
+	trigger.Owner = &config.WorkflowOwnerConfig{
+		Subject: &config.WorkflowOwnerSubjectConfig{
 			ID:   "service_account:roadmap-events",
 			Kind: "service_account",
 		},
@@ -5945,7 +5999,7 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 	}
 	got := recorder.upsertedEventTriggers[0]
 	requestedBy := workflowwire.ActorFromProto(got.GetRequestedBy())
-	if requestedBy.SubjectID != "system:config" || requestedBy.SubjectKind != "system" || requestedBy.AuthSource != "config" {
+	if requestedBy.SubjectID != "service_account:roadmap-events" || requestedBy.SubjectKind != "service_account" || requestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", requestedBy)
 	}
 	if len(recorder.upsertedEventTriggerTokens) != 1 {
@@ -5954,6 +6008,64 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 	tokenPrincipal := requireWorkflowConfigTokenContext(t, workflowEncryptionKey, recorder.upsertedEventTriggerTokens[0]).Principal()
 	if tokenPrincipal == nil || tokenPrincipal.SubjectID != "service_account:roadmap-events" || tokenPrincipal.Kind != "service_account" || tokenPrincipal.CredentialSubjectID != "service_account:roadmap-events" || tokenPrincipal.AuthSource() != "config" {
 		t.Fatalf("token principal = %#v", tokenPrincipal)
+	}
+}
+
+func TestBootstrapConfiguredWorkflowEventTriggerOwnerChangeUpdatesManagedTrigger(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		EventTriggers: map[string]workflowFixtureEventTrigger{
+			"task_updated": {
+				Match: workflowFixtureEventMatch{
+					Type:   "task.updated",
+					Source: "roadmap",
+				},
+				Operation: "sync",
+			},
+		},
+	})
+	trigger := cfg.Workflows.EventTriggers["task_updated"]
+	trigger.Owner = &config.WorkflowOwnerConfig{
+		Subject: &config.WorkflowOwnerSubjectConfig{ID: "service_account:roadmap-events-new"},
+	}
+	cfg.Workflows.EventTriggers["task_updated"] = trigger
+
+	recorder := &recordingWorkflowProvider{
+		getEventTrigger: &coreworkflow.EventTrigger{
+			ID: workflowConfigEventTriggerID("task_updated"),
+			Match: coreworkflow.EventMatch{
+				Type:   "task.updated",
+				Source: "roadmap",
+			},
+			Target: coreWorkflowAppStepTarget("roadmap", "sync"),
+			CreatedBy: coreworkflow.Actor{
+				SubjectID:   "service_account:roadmap-events-old",
+				SubjectKind: core.SubjectKindServiceAccount,
+				AuthSource:  "config",
+			},
+		},
+	}
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorder.upsertedEventTriggers) != 1 {
+		t.Fatalf("upserted event triggers = %d, want 1", len(recorder.upsertedEventTriggers))
+	}
+	requestedBy := workflowwire.ActorFromProto(recorder.upsertedEventTriggers[0].GetRequestedBy())
+	if requestedBy.SubjectID != "service_account:roadmap-events-new" || requestedBy.SubjectKind != core.SubjectKindServiceAccount || requestedBy.AuthSource != "config" {
+		t.Fatalf("requestedBy = %#v", requestedBy)
 	}
 }
 

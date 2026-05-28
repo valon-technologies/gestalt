@@ -159,7 +159,7 @@ func parseAgentTurn(value any, path string) (*coreworkflow.AgentTurn, error) {
 	if err != nil {
 		return nil, err
 	}
-	tools, err := parseToolRefs(agentMap["tools"])
+	tools, err := parseToolRefs(agentMap["tools"], path+".tools")
 	if err != nil {
 		return nil, err
 	}
@@ -295,22 +295,22 @@ func parseMessages(value any, path string) ([]coreworkflow.AgentMessage, error) 
 	return out, nil
 }
 
-func parseToolRefs(value any) ([]coreagent.ToolRef, error) {
+func parseToolRefs(value any, path string) ([]coreagent.ToolRef, error) {
 	if value == nil {
 		return nil, nil
 	}
-	items, ok := value.([]any)
+	items, ok := asArray(value)
 	if !ok {
-		return nil, fmt.Errorf("%w: agent tools must be an array", ErrInvalid)
+		return nil, fmt.Errorf("%w: %s must be an array", ErrInvalid, path)
 	}
 	out := make([]coreagent.ToolRef, 0, len(items))
 	for i, item := range items {
 		refMap, ok := asMap(item)
 		if !ok {
-			return nil, fmt.Errorf("%w: agent tools[%d] must be an object", ErrInvalid, i)
+			return nil, fmt.Errorf("%w: %s[%d] must be an object", ErrInvalid, path, i)
 		}
-		path := fmt.Sprintf("agent tools[%d]", i)
-		if err := rejectUnknownKeys(refMap, path, "system", "app", "operation", "connection", "instance", "title", "description"); err != nil {
+		refPath := fmt.Sprintf("%s[%d]", path, i)
+		if err := rejectUnknownKeys(refMap, refPath, "system", "app", "operation", "connection", "instance", "title", "description"); err != nil {
 			return nil, err
 		}
 		out = append(out, coreagent.ToolRef{

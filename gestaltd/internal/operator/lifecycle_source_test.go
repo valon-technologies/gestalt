@@ -968,7 +968,7 @@ workflows:
               operation: ping
       cron: "* * * * *"
       paused: ${GESTALT_SCOPED_APP_DROPPED_WORKFLOW_BOOL_MISSING_ENV}
-      runAs:
+      owner:
         subject:
           id: test
           kind: test

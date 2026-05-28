@@ -41,6 +41,10 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		trigger := desiredEntry.trigger
 		target := workflowConfigTarget(trigger.Target)
 		appName := workflowConfigTargetLabel(target)
+		owner, err := workflowConfigOwnerSubject("workflows.eventTriggers."+desiredEntry.TriggerKey+".owner", trigger.Owner)
+		if err != nil {
+			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
+		}
 		_, provider, err := runtime.ResolveProvider(ctx, trigger.Provider)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
@@ -60,19 +64,15 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		default:
 			return fmt.Errorf("bootstrap: get workflow event trigger %q for app %q: %w", desiredEntry.TriggerID, appName, err)
 		}
-		runAs, err := workflowConfigRunAsSubject("workflows.eventTriggers."+desiredEntry.TriggerKey+".runAs", trigger.RunAs)
-		if err != nil {
-			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
-		}
 		permissions, err := workflowConfigExecutionPermissions(cfg, "workflows.eventTriggers."+desiredEntry.TriggerKey, trigger.Invokes)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
-		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs, permissions); err != nil {
+		if err := workflowConfigValidateExecutionTarget(cfg, target, owner, permissions); err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
 		executionPermissions := workflowConfigExecutionPermissionsForTarget(target, permissions)
-		providerCtx, err = workflowConfigInvocationContext(providerCtx, tokens, runAs, executionPermissions)
+		providerCtx, err = workflowConfigInvocationContext(providerCtx, tokens, owner, executionPermissions)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
@@ -85,7 +85,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 			Match:       workflowwire.EventMatchToProto(workflowConfigEventTriggerMatch(trigger)),
 			Target:      targetProto,
 			Paused:      trigger.Paused,
-			RequestedBy: workflowwire.ActorToProto(workflowConfigActor()),
+			RequestedBy: workflowwire.ActorToProto(workflowConfigOwnerActor(owner)),
 		}); err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
@@ -146,7 +146,7 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 			if err != nil {
 				return fmt.Errorf("bootstrap: decode workflow event trigger from provider %q: %w", providerName, err)
 			}
-			if trigger == nil || !isWorkflowConfigOwnedEventTrigger(trigger, workflowConfigTargetLabel(trigger.Target), trigger.ID) {
+			if trigger == nil || !isWorkflowConfigManagedEventTrigger(trigger, workflowConfigTargetLabel(trigger.Target)) {
 				continue
 			}
 			if _, ok := desiredByProviderTrigger[workflowConfigProviderObjectKey(providerName, trigger.ID)]; ok {
@@ -166,12 +166,18 @@ func isWorkflowConfigOwnedEventTrigger(existing *coreworkflow.EventTrigger, appN
 	if existing == nil {
 		return false
 	}
-	actor := workflowConfigActor()
 	return existing.ID == triggerID &&
 		workflowConfigTargetLabel(existing.Target) == appName &&
-		existing.CreatedBy.SubjectID == actor.SubjectID &&
-		existing.CreatedBy.SubjectKind == actor.SubjectKind &&
-		existing.CreatedBy.AuthSource == actor.AuthSource
+		isWorkflowConfigManagedActor(existing.CreatedBy)
+}
+
+func isWorkflowConfigManagedEventTrigger(existing *coreworkflow.EventTrigger, appName string) bool {
+	if existing == nil {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimSpace(existing.ID), coreworkflow.ConfigManagedSchedulePrefix) &&
+		workflowConfigTargetLabel(existing.Target) == appName &&
+		isWorkflowConfigManagedActor(existing.CreatedBy)
 }
 
 func workflowConfigEventTriggerMatch(trigger config.WorkflowEventTriggerConfig) coreworkflow.EventMatch {

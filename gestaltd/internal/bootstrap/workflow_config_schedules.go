@@ -50,6 +50,10 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		schedule := desiredEntry.schedule
 		target := workflowConfigTarget(schedule.Target)
 		appName := workflowConfigTargetLabel(target)
+		owner, err := workflowConfigOwnerSubject("workflows.schedules."+desiredEntry.ScheduleKey+".owner", schedule.Owner)
+		if err != nil {
+			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
+		}
 		_, provider, err := runtime.ResolveProvider(ctx, schedule.Provider)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
@@ -69,19 +73,15 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		default:
 			return fmt.Errorf("bootstrap: get workflow schedule %q for app %q: %w", desiredEntry.ScheduleID, appName, err)
 		}
-		runAs, err := workflowConfigRunAsSubject("workflows.schedules."+desiredEntry.ScheduleKey+".runAs", schedule.RunAs)
-		if err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
-		}
 		permissions, err := workflowConfigExecutionPermissions(cfg, "workflows.schedules."+desiredEntry.ScheduleKey, schedule.Invokes)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
-		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs, permissions); err != nil {
+		if err := workflowConfigValidateExecutionTarget(cfg, target, owner, permissions); err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
 		executionPermissions := workflowConfigExecutionPermissionsForTarget(target, permissions)
-		providerCtx, err = workflowConfigInvocationContext(providerCtx, tokens, runAs, executionPermissions)
+		providerCtx, err = workflowConfigInvocationContext(providerCtx, tokens, owner, executionPermissions)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
@@ -95,7 +95,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			Timezone:    schedule.Timezone,
 			Target:      targetProto,
 			Paused:      schedule.Paused,
-			RequestedBy: workflowwire.ActorToProto(workflowConfigActor()),
+			RequestedBy: workflowwire.ActorToProto(workflowConfigOwnerActor(owner)),
 		}); err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
@@ -167,7 +167,7 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 			if err != nil {
 				return fmt.Errorf("bootstrap: decode workflow schedule from provider %q: %w", providerName, err)
 			}
-			if schedule == nil || !isWorkflowConfigOwnedSchedule(schedule, workflowConfigTargetLabel(schedule.Target), schedule.ID) {
+			if schedule == nil || !isWorkflowConfigManagedSchedule(schedule, workflowConfigTargetLabel(schedule.Target)) {
 				continue
 			}
 			if _, ok := desiredByProviderSchedule[workflowConfigProviderObjectKey(providerName, schedule.ID)]; ok {
@@ -199,12 +199,18 @@ func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, appName, sch
 	if existing == nil {
 		return false
 	}
-	actor := workflowConfigActor()
 	return existing.ID == scheduleID &&
 		workflowConfigTargetLabel(existing.Target) == appName &&
-		existing.CreatedBy.SubjectID == actor.SubjectID &&
-		existing.CreatedBy.SubjectKind == actor.SubjectKind &&
-		existing.CreatedBy.AuthSource == actor.AuthSource
+		isWorkflowConfigManagedActor(existing.CreatedBy)
+}
+
+func isWorkflowConfigManagedSchedule(existing *coreworkflow.Schedule, appName string) bool {
+	if existing == nil {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimSpace(existing.ID), coreworkflow.ConfigManagedSchedulePrefix) &&
+		workflowConfigTargetLabel(existing.Target) == appName &&
+		isWorkflowConfigManagedActor(existing.CreatedBy)
 }
 
 func workflowConfigTargetLabel(target coreworkflow.Target) string {
@@ -228,26 +234,13 @@ func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Targ
 	return config.WorkflowTargetToCore(target)
 }
 
-func workflowConfigRunAsSubject(path string, runAs *config.WorkflowRunAsConfig) (*core.RunAsSubject, error) {
-	if runAs == nil {
+func workflowConfigOwnerSubject(path string, owner *config.WorkflowOwnerConfig) (*core.RunAsSubject, error) {
+	if owner == nil {
 		return nil, nil
 	}
-	subject := runAs.SubjectRef()
-	if subject == nil {
-		return nil, fmt.Errorf("config validation: %s.subject is required", path)
-	}
-	kind, _, ok := core.ParseSubjectID(subject.SubjectID)
-	if !ok {
-		return nil, fmt.Errorf("config validation: %s.subject.id %q must be a fully-qualified service_account subject", path, subject.SubjectID)
-	}
-	if kind != "service_account" {
-		return nil, fmt.Errorf("config validation: %s.subject.id %q must identify a service_account subject", path, subject.SubjectID)
-	}
-	if subject.SubjectKind != kind {
-		return nil, fmt.Errorf("config validation: %s.subject.kind %q must match subject.id kind %q", path, subject.SubjectKind, kind)
-	}
-	if subject.AuthSource == "" {
-		subject.AuthSource = "config"
+	subject, err := core.NormalizeServiceAccountSubject(owner.SubjectRef(), path+".subject")
+	if err != nil {
+		return nil, fmt.Errorf("config validation: %w", err)
 	}
 	return subject, nil
 }
@@ -370,11 +363,11 @@ func workflowMergeExecutionPermissions(groups ...[]core.AccessPermission) []core
 	return out
 }
 
-func workflowConfigInvocationContext(ctx context.Context, tokens *appaccessservice.InvocationTokenManager, runAs *core.RunAsSubject, permissions []core.AccessPermission) (context.Context, error) {
+func workflowConfigInvocationContext(ctx context.Context, tokens *appaccessservice.InvocationTokenManager, owner *core.RunAsSubject, permissions []core.AccessPermission) (context.Context, error) {
 	if tokens == nil {
 		return ctx, nil
 	}
-	tokenCtx := principal.WithPrincipal(ctx, workflowConfigPrincipal(runAs, permissions))
+	tokenCtx := principal.WithPrincipal(ctx, workflowConfigPrincipal(owner, permissions))
 	token, err := tokens.MintRootToken(tokenCtx, workflowConfigOwnerSubjectID(), workflowConfigInvocationGrants(permissions))
 	if err != nil {
 		return nil, fmt.Errorf("workflow config invocation token: %w", err)
@@ -382,19 +375,19 @@ func workflowConfigInvocationContext(ctx context.Context, tokens *appaccessservi
 	return appaccessservice.WithInvocationToken(ctx, token), nil
 }
 
-func workflowConfigPrincipal(runAs *core.RunAsSubject, permissions []core.AccessPermission) *principal.Principal {
+func workflowConfigPrincipal(owner *core.RunAsSubject, permissions []core.AccessPermission) *principal.Principal {
 	actor := workflowConfigActor()
 	subjectID := strings.TrimSpace(actor.SubjectID)
 	subjectKind := strings.TrimSpace(actor.SubjectKind)
 	credentialSubjectID := subjectID
 	displayName := strings.TrimSpace(actor.DisplayName)
 	authSource := strings.TrimSpace(actor.AuthSource)
-	if runAs := core.NormalizeRunAsSubject(runAs); runAs != nil {
-		subjectID = strings.TrimSpace(runAs.SubjectID)
-		subjectKind = strings.TrimSpace(runAs.SubjectKind)
-		credentialSubjectID = strings.TrimSpace(runAs.CredentialSubjectID)
-		displayName = strings.TrimSpace(runAs.DisplayName)
-		authSource = strings.TrimSpace(runAs.AuthSource)
+	if owner := core.NormalizeRunAsSubject(owner); owner != nil {
+		subjectID = strings.TrimSpace(owner.SubjectID)
+		subjectKind = strings.TrimSpace(owner.SubjectKind)
+		credentialSubjectID = strings.TrimSpace(owner.CredentialSubjectID)
+		displayName = strings.TrimSpace(owner.DisplayName)
+		authSource = strings.TrimSpace(owner.AuthSource)
 	}
 	compiled := principal.CompilePermissions(permissions)
 	value := &principal.Principal{
@@ -452,18 +445,44 @@ func workflowConfigActor() coreworkflow.Actor {
 	}
 }
 
+func workflowConfigOwnerActor(owner *core.RunAsSubject) coreworkflow.Actor {
+	owner = core.NormalizeRunAsSubject(owner)
+	if owner == nil {
+		return workflowConfigActor()
+	}
+	return coreworkflow.Actor{
+		SubjectID:   owner.SubjectID,
+		SubjectKind: owner.SubjectKind,
+		DisplayName: owner.DisplayName,
+		AuthSource:  owner.AuthSource,
+	}
+}
+
+func isWorkflowConfigManagedActor(actor coreworkflow.Actor) bool {
+	if actor.SubjectID == workflowConfigOwnerSubjectID() &&
+		actor.SubjectKind == "system" &&
+		actor.AuthSource == "config" {
+		return true
+	}
+	if actor.SubjectKind != core.SubjectKindServiceAccount || actor.AuthSource != "config" {
+		return false
+	}
+	kind, _, ok := core.ParseSubjectID(actor.SubjectID)
+	return ok && kind == core.SubjectKindServiceAccount
+}
+
 func workflowConfigScheduleID(scheduleKey string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(scheduleKey)))
 	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
 }
 
-func workflowConfigValidateExecutionTarget(cfg *config.Config, target coreworkflow.Target, runAs *core.RunAsSubject, _ []core.AccessPermission) error {
-	runAs = core.NormalizeRunAsSubject(runAs)
-	hasRunAs := runAs != nil
+func workflowConfigValidateExecutionTarget(cfg *config.Config, target coreworkflow.Target, owner *core.RunAsSubject, _ []core.AccessPermission) error {
+	owner = core.NormalizeRunAsSubject(owner)
+	hasOwner := owner != nil
 	for i := range target.Steps {
 		step := target.Steps[i]
 		if step.App != nil {
-			if err := workflowConfigValidateNoUserCredentialTarget(cfg, *step.App, hasRunAs); err != nil {
+			if err := workflowConfigValidateNoUserCredentialTarget(cfg, *step.App, hasOwner); err != nil {
 				return err
 			}
 		}
@@ -478,7 +497,7 @@ func workflowConfigValidateExecutionTarget(cfg *config.Config, target coreworkfl
 					Operation:  strings.TrimSpace(tool.Operation),
 					Connection: strings.TrimSpace(tool.Connection),
 					Instance:   strings.TrimSpace(tool.Instance),
-				}, hasRunAs); err != nil {
+				}, hasOwner); err != nil {
 					return err
 				}
 			}
@@ -487,14 +506,14 @@ func workflowConfigValidateExecutionTarget(cfg *config.Config, target coreworkfl
 	return nil
 }
 
-func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target coreworkflow.AppCall, hasRunAs bool) error {
+func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target coreworkflow.AppCall, hasOwner bool) error {
 	modeOverride := core.NormalizeOptionalConnectionMode(target.CredentialMode)
 	switch modeOverride {
 	case "":
 	case core.ConnectionModeNone:
 		return nil
 	case core.ConnectionModeUser:
-		if hasRunAs {
+		if hasOwner {
 			return nil
 		}
 		return fmt.Errorf("config-managed workflows do not support user-credentialed app %q", strings.TrimSpace(target.Name))
@@ -510,7 +529,7 @@ func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target cor
 	case core.ConnectionModeNone:
 		return nil
 	case core.ConnectionModeUser:
-		if hasRunAs {
+		if hasOwner {
 			return nil
 		}
 		return fmt.Errorf("config-managed workflows do not support user-credentialed app %q", appName)
