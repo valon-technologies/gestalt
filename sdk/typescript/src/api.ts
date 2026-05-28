@@ -90,7 +90,7 @@ export const responseBrand: unique symbol = Symbol("gestalt.response");
 export interface Response<T> {
   readonly [responseBrand]: true;
   status?: number;
-  headers?: ResponseHeaders;
+  headers: ResponseHeaders;
   body: T;
 }
 
@@ -100,16 +100,11 @@ export interface Response<T> {
 export type ResponseHeaders = Readonly<Record<string, string | readonly string[]>>;
 
 /**
- * Serialized HTTP response headers returned by the protocol runtime.
- */
-export type OperationResultHeaders = Record<string, string[]>;
-
-/**
  * Serialized operation result returned by the protocol runtime.
  */
 export interface OperationResult {
   status: number;
-  headers?: OperationResultHeaders;
+  headers: Record<string, string[]>;
   body: string;
 }
 
@@ -129,7 +124,7 @@ export function response<T>(
   return {
     [responseBrand]: true,
     status,
-    ...(headers === undefined ? {} : { headers }),
+    headers: headers ?? {},
     body,
   };
 }

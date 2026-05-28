@@ -11,7 +11,6 @@ import {
   errorMessage,
   type MaybePromise,
   type OperationResult,
-  type OperationResultHeaders,
   type Request,
   responseBrand,
   type Response,
@@ -132,16 +131,13 @@ export interface AppDefinitionOptions extends ProviderBaseOptions {
 }
 
 function normalizeResponseHeaders(
-  headers: ResponseHeaders | undefined,
-): OperationResultHeaders | undefined {
-  if (headers === undefined) {
-    return undefined;
-  }
-  const normalized: OperationResultHeaders = {};
+  headers: ResponseHeaders,
+): Record<string, string[]> {
+  const normalized: Record<string, string[]> = {};
   for (const [name, value] of Object.entries(headers)) {
     normalized[name] = Array.isArray(value) ? [...value] : [value];
   }
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
+  return normalized;
 }
 
 /**
@@ -373,17 +369,15 @@ export class AppProvider extends ProviderBase {
 
     try {
       const raw = await entry.handler(input, request);
-      const response = isResponse(raw)
-        ? raw
-        : { status: 200, headers: undefined, body: raw };
+      const response = isResponse(raw) ? raw : undefined;
+      const responseBody = response === undefined ? raw : response.body;
       const body = entry.output
-        ? entry.output.parse(response.body, "$response")
-        : response.body;
+        ? entry.output.parse(responseBody, "$response")
+        : responseBody;
 
-      const headers = normalizeResponseHeaders(response.headers);
       return {
-        status: response.status ?? 200,
-        ...(headers === undefined ? {} : { headers }),
+        status: response?.status ?? 200,
+        headers: response === undefined ? {} : normalizeResponseHeaders(response.headers),
         body: JSON.stringify(body),
       };
     } catch (error) {
@@ -519,6 +513,7 @@ function normalizeOperationInput(
 function errorResult(status: number, message: string): OperationResult {
   return {
     status,
+    headers: {},
     body: JSON.stringify({
       error: message,
     }),

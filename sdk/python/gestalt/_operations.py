@@ -34,9 +34,6 @@ class OperationResult:
     body: str
     headers: dict[str, list[str]] = field(default_factory=dict)
 
-    def __iter__(self) -> Any:
-        return iter((self.status, self.body))
-
 
 def inspect_handler(func: Any) -> tuple[Any, bool]:
     signature = inspect.signature(func)

@@ -96,7 +96,12 @@ import {
 import { CacheProvider, isCacheProvider } from "./cache.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "./catalog.ts";
-import { valueFromJson, type JsonInput } from "./protocol.ts";
+import {
+  stringListsFromProto,
+  stringListsToProto,
+  valueFromJson,
+  type JsonInput,
+} from "./protocol.ts";
 import {
   HTTPSubjectResolutionError,
   type HTTPSubjectRequest,
@@ -919,8 +924,8 @@ function providerHTTPSubjectRequest(
     method: request?.method ?? "",
     path: request?.path ?? "",
     contentType: request?.contentType ?? "",
-    headers: providerStringLists(request?.headers),
-    query: providerStringLists(request?.query),
+    headers: stringListsFromProto(request?.headers),
+    query: stringListsFromProto(request?.query),
     params: objectFromUnknown(request?.params),
     rawBody: new Uint8Array(request?.rawBody ?? new Uint8Array()),
     securityScheme: request?.securityScheme ?? "",
@@ -967,25 +972,11 @@ function providerConnectedToken(
   };
 }
 
-function providerStringLists(
-  input: Record<string, { values?: string[] }> | undefined,
-): Record<string, string[]> {
-  const output: Record<string, string[]> = {};
-  for (const [key, value] of Object.entries(input ?? {})) {
-    output[key] = [...(value.values ?? [])];
-  }
-  return output;
-}
-
 function operationResultToProto(result: OperationResult) {
-  const headers: Record<string, { values: string[] }> = {};
-  for (const [key, values] of Object.entries(result.headers ?? {})) {
-    headers[key] = { values: [...values] };
-  }
   return create(OperationResultSchema, {
     status: result.status,
     body: result.body,
-    ...(Object.keys(headers).length === 0 ? {} : { headers }),
+    headers: stringListsToProto(result.headers),
   });
 }
 
