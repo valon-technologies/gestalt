@@ -37,11 +37,9 @@ func writeOperationResult(w http.ResponseWriter, result *core.OperationResult) {
 		return
 	}
 
-	if result.Headers != nil {
-		for name, values := range result.Headers {
-			for _, value := range values {
-				w.Header().Add(name, value)
-			}
+	for name, values := range result.Headers {
+		for _, value := range values {
+			w.Header().Add(name, value)
 		}
 	}
 	w.WriteHeader(result.Status)
