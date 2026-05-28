@@ -208,7 +208,7 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 	}
 	return &core.OperationResult{
 		Status:  int(resp.GetStatus()),
-		Headers: mapStringLists(resp.GetHeaders()),
+		Headers: protoutil.StringListsFromProto(resp.GetHeaders()),
 		Body:    resp.GetBody(),
 	}, nil
 }

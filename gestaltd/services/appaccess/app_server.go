@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -96,7 +97,7 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 
 	return &proto.OperationResult{
 		Status:  int32(result.Status),
-		Headers: mapStringSlices(result.Headers),
+		Headers: protoutil.StringSlicesToProto(result.Headers),
 		Body:    result.Body,
 	}, nil
 }
@@ -148,22 +149,9 @@ func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraph
 
 	return &proto.OperationResult{
 		Status:  int32(result.Status),
-		Headers: mapStringSlices(result.Headers),
+		Headers: protoutil.StringSlicesToProto(result.Headers),
 		Body:    result.Body,
 	}, nil
-}
-
-func mapStringSlices[V ~map[string][]string](values V) map[string]*proto.StringList {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]*proto.StringList, len(values))
-	for key, item := range values {
-		copied := make([]string, len(item))
-		copy(copied, item)
-		out[key] = &proto.StringList{Values: copied}
-	}
-	return out
 }
 
 func (s *AppServer) tokenContextForInvoke(req *proto.AppInvokeRequest, targetApp, targetOperation string) (invocationTokenContext, error) {
