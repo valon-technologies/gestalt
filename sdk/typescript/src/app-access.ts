@@ -3,7 +3,11 @@ import { createClient, type Client } from "@connectrpc/connect";
 import { App as AppService } from "./internal/gen/v1/app_pb.ts";
 import type { OperationResult, Request } from "./api.ts";
 import type { ConnectionMode } from "./app.ts";
-import { structFromObject, type JsonObjectInput } from "./protocol.ts";
+import {
+  stringListsFromProto,
+  structFromObject,
+  type JsonObjectInput,
+} from "./protocol.ts";
 import {
   createHostServiceGrpcTransport,
   hostServiceMetadataInterceptors,
@@ -102,6 +106,7 @@ class AppImpl implements App {
     });
     return {
       status: response.status,
+      headers: stringListsFromProto(response.headers),
       body: response.body,
     };
   }
@@ -130,6 +135,7 @@ class AppImpl implements App {
     });
     return {
       status: response.status,
+      headers: stringListsFromProto(response.headers),
       body: response.body,
     };
   }

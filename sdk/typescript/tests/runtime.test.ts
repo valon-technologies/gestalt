@@ -1052,9 +1052,15 @@ export const app = defineApp({
         id: s.string(),
       }),
       handler() {
-        return response(201, {
-          id: "new-id",
-        });
+        return response(
+          201,
+          {
+            id: "new-id",
+          },
+          {
+            Location: "/items/new-id",
+          },
+        );
       },
     },
     {
@@ -1099,6 +1105,10 @@ export const app = defineApp({
       }),
     );
     expect(created.status).toBe(201);
+    expect(created.headers["Content-Type"]?.values).toEqual([
+      "application/json",
+    ]);
+    expect(created.headers["Location"]?.values).toEqual(["/items/new-id"]);
     expect(JSON.parse(created.body)).toEqual({
       id: "new-id",
     });

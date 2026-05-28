@@ -14,6 +14,7 @@ import {
   type Request,
   responseBrand,
   type Response,
+  type ResponseHeaders,
   type SubjectInput,
 } from "./api.ts";
 import {
@@ -29,6 +30,8 @@ import {
   type ProviderBaseOptions,
 } from "./provider.ts";
 import type { Schema } from "./schema.ts";
+
+const JSON_CONTENT_TYPE = "application/json";
 
 /**
  * How an app provider expects to authenticate or connect.
@@ -128,6 +131,24 @@ export interface AppDefinitionOptions extends ProviderBaseOptions {
   operations: Array<OperationDefinition<any, any>>;
   sessionCatalog?: SessionCatalogHandler;
 }
+
+function normalizeResponseHeaders(
+  headers?: ResponseHeaders,
+): Record<string, string[]> {
+  const normalized: Record<string, string[]> = {};
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    normalized[name] = Array.isArray(value) ? [...value] : [value];
+  }
+  if (
+    !Object.keys(normalized).some((name) =>
+      name.toLowerCase() === "content-type"
+    )
+  ) {
+    normalized["Content-Type"] = [JSON_CONTENT_TYPE];
+  }
+  return normalized;
+}
+
 /**
  * Normalizes an app operation definition.
  */
@@ -357,13 +378,15 @@ export class AppProvider extends ProviderBase {
 
     try {
       const raw = await entry.handler(input, request);
-      const response = isResponse(raw) ? raw : { status: 200, body: raw };
+      const response = isResponse(raw) ? raw : undefined;
+      const responseBody = response === undefined ? raw : response.body;
       const body = entry.output
-        ? entry.output.parse(response.body, "$response")
-        : response.body;
+        ? entry.output.parse(responseBody, "$response")
+        : responseBody;
 
       return {
-        status: response.status ?? 200,
+        status: response?.status ?? 200,
+        headers: normalizeResponseHeaders(response?.headers),
         body: JSON.stringify(body),
       };
     } catch (error) {
@@ -499,6 +522,7 @@ function normalizeOperationInput(
 function errorResult(status: number, message: string): OperationResult {
   return {
     status,
+    headers: normalizeResponseHeaders(),
     body: JSON.stringify({
       error: message,
     }),

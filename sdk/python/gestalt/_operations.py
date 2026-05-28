@@ -3,7 +3,7 @@ import dataclasses
 import inspect
 import traceback
 import types
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http import HTTPStatus
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
@@ -11,6 +11,7 @@ from ._api import Error, Request, Response
 from ._serialization import json_body
 
 INTERNAL_ERROR_MESSAGE = "internal error"
+JSON_CONTENT_TYPE = "application/json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,9 +33,7 @@ class OperationDefinition:
 class OperationResult:
     status: int
     body: str
-
-    def __iter__(self) -> Any:
-        return iter((self.status, self.body))
+    headers: dict[str, list[str]] = field(default_factory=dict)
 
 
 def inspect_handler(func: Any) -> tuple[Any, bool]:
@@ -87,11 +86,13 @@ def execute_operation(
         if isinstance(result, Response):
             status = HTTPStatus.OK if result.status is None else result.status
             body = result.body
+            headers = _json_headers(result.headers)
         else:
             status = HTTPStatus.OK
             body = result
+            headers = _json_headers(None)
 
-        return OperationResult(status=status, body=json_body(body))
+        return OperationResult(status=status, body=json_body(body), headers=headers)
     except Error as error:
         return _error_result(error.status, error.message)
     except Exception as error:
@@ -119,7 +120,27 @@ def run_sync(value: Any) -> Any:
 
 
 def _error_result(status: int, message: str) -> OperationResult:
-    return OperationResult(status=status, body=json_body({"error": message}))
+    return OperationResult(
+        status=status,
+        headers=_json_headers(None),
+        body=json_body({"error": message}),
+    )
+
+
+def _normalize_headers(headers: dict[str, Any] | None) -> dict[str, list[str]]:
+    if not headers:
+        return {}
+    normalized: dict[str, list[str]] = {}
+    for name, value in headers.items():
+        normalized[name] = list(value) if isinstance(value, (list, tuple)) else [value]
+    return normalized
+
+
+def _json_headers(headers: dict[str, Any] | None) -> dict[str, list[str]]:
+    normalized = _normalize_headers(headers)
+    if not any(name.lower() == "content-type" for name in normalized):
+        normalized["Content-Type"] = [JSON_CONTENT_TYPE]
+    return normalized
 
 
 def _normalize_input_type(annotation: Any) -> Any:

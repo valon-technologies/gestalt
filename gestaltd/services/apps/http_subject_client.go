@@ -72,27 +72,14 @@ func httpSubjectRequestProto(req *core.HTTPSubjectResolveRequest) (*proto.HTTPSu
 		Method:          req.Method,
 		Path:            req.Path,
 		ContentType:     req.ContentType,
-		Headers:         mapStringSlices(req.Headers),
-		Query:           mapStringSlices(req.Query),
+		Headers:         protoutil.StringSlicesToProto(req.Headers),
+		Query:           protoutil.StringSlicesToProto(req.Query),
 		Params:          params,
 		RawBody:         append([]byte(nil), req.RawBody...),
 		SecurityScheme:  req.SecurityScheme,
 		VerifiedSubject: req.VerifiedSubject,
 		VerifiedClaims:  cloneStringMap(req.VerifiedClaims),
 	}, nil
-}
-
-func mapStringSlices[V ~map[string][]string](values V) map[string]*proto.StringList {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]*proto.StringList, len(values))
-	for key, item := range values {
-		copied := make([]string, len(item))
-		copy(copied, item)
-		out[key] = &proto.StringList{Values: copied}
-	}
-	return out
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

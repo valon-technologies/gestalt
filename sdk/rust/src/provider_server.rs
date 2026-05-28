@@ -26,6 +26,8 @@ use crate::protocol;
 use crate::rpc_status::{require_protocol_version, rpc_status};
 use crate::{Provider, Router};
 
+const JSON_CONTENT_TYPE: &str = "application/json";
+
 #[derive(Clone)]
 /// gRPC integration-provider server used by the Rust runtime.
 pub struct ProviderServer<P> {
@@ -38,6 +40,8 @@ pub struct ProviderServer<P> {
 pub struct OperationResult {
     /// HTTP-style status code.
     pub status: u16,
+    /// HTTP response headers.
+    pub headers: BTreeMap<String, Vec<String>>,
     /// JSON-encoded response body.
     pub body: String,
 }
@@ -47,7 +51,11 @@ impl OperationResult {
     pub fn from_response<T: Serialize>(response: Response<T>) -> Self {
         let status = response.status.unwrap_or(200);
         match serde_json::to_string(&response.body) {
-            Ok(body) => Self { status, body },
+            Ok(body) => Self {
+                status,
+                headers: json_response_headers(response.headers),
+                body,
+            },
             Err(error) => {
                 eprintln!("internal error in Gestalt operation response: {error}");
                 Self::error(HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE)
@@ -69,9 +77,25 @@ impl OperationResult {
     pub fn error(status: u16, message: impl Into<String>) -> Self {
         Self {
             status,
+            headers: json_response_headers(BTreeMap::new()),
             body: serde_json::json!({ "error": message.into() }).to_string(),
         }
     }
+}
+
+fn json_response_headers(
+    mut headers: BTreeMap<String, Vec<String>>,
+) -> BTreeMap<String, Vec<String>> {
+    if !headers
+        .keys()
+        .any(|name| name.eq_ignore_ascii_case("content-type"))
+    {
+        headers.insert(
+            "Content-Type".to_owned(),
+            vec![JSON_CONTENT_TYPE.to_owned()],
+        );
+    }
+    headers
 }
 
 impl<P> ProviderServer<P> {
@@ -138,6 +162,7 @@ where
 
         Ok(GrpcResponse::new(ProtoOperationResult {
             status: i32::from(result.status),
+            headers: protocol::string_lists_to_proto(result.headers),
             body: result.body,
         }))
     }
@@ -425,23 +450,14 @@ fn http_subject_request(request: Option<&HttpSubjectRequest>) -> HTTPSubjectRequ
         method: request.method.clone(),
         path: request.path.clone(),
         content_type: request.content_type.clone(),
-        headers: string_lists(&request.headers),
-        query: string_lists(&request.query),
+        headers: protocol::string_lists_from_proto(&request.headers),
+        query: protocol::string_lists_from_proto(&request.query),
         params: object_map(request.params.clone()),
         raw_body: request.raw_body.clone(),
         security_scheme: request.security_scheme.clone(),
         verified_subject: request.verified_subject.clone(),
         verified_claims: request.verified_claims.clone(),
     }
-}
-
-fn string_lists(
-    values: &std::collections::BTreeMap<String, crate::generated::v1::StringList>,
-) -> std::collections::BTreeMap<String, Vec<String>> {
-    values
-        .iter()
-        .map(|(key, value)| (key.clone(), value.values.clone()))
-        .collect()
 }
 
 fn subject_to_proto(subject: Subject) -> SubjectContext {

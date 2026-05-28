@@ -67,8 +67,9 @@ func (r Request) Authorization() (sdkauthorization.Authorization, error) {
 // Response is the typed handler result marshaled into the provider response body.
 // A zero Status defaults to 200.
 type Response[T any] struct {
-	Status int
-	Body   T
+	Status  int
+	Headers http.Header
+	Body    T
 }
 
 // OK returns a typed JSON response with status 200.
@@ -131,7 +132,7 @@ func Register[P any, In any, Out any](
 			if err != nil {
 				return nil, newOperationError(http.StatusInternalServerError, fmt.Sprintf("marshal response for %q: %v", op.ID, err), err)
 			}
-			return &OperationResult{Status: status, Body: string(body)}, nil
+			return &OperationResult{Status: status, Headers: jsonResponseHeaders(resp.Headers), Body: string(body)}, nil
 		},
 	}
 }
@@ -330,6 +331,26 @@ func normalizeMethod(method string) string {
 		return http.MethodPost
 	}
 	return method
+}
+
+func jsonResponseHeaders(headers http.Header) http.Header {
+	out := headers.Clone()
+	if out == nil {
+		out = http.Header{}
+	}
+	if !hasHeader(out, "Content-Type") {
+		out.Set("Content-Type", "application/json")
+	}
+	return out
+}
+
+func hasHeader(headers http.Header, name string) bool {
+	for key := range headers {
+		if strings.EqualFold(key, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func jsonField(field reflect.StructField) (name string, omitempty, include bool) {

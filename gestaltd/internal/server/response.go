@@ -37,14 +37,11 @@ func writeOperationResult(w http.ResponseWriter, result *core.OperationResult) {
 		return
 	}
 
-	contentType := "application/json"
-	if result.Headers != nil {
-		if ct := result.Headers.Get("Content-Type"); ct != "" {
-			contentType = ct
+	for name, values := range result.Headers {
+		for _, value := range values {
+			w.Header().Add(name, value)
 		}
 	}
-
-	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(result.Status)
 	_, _ = w.Write([]byte(result.Body))
 }

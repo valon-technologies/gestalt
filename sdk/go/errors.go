@@ -152,8 +152,9 @@ func protectedOperationResult(operation string, fn func() (*OperationResult, err
 
 func operationResult(status int, message string) *OperationResult {
 	return &OperationResult{
-		Status: status,
-		Body:   operationErrorBody(message),
+		Status:  status,
+		Headers: jsonResponseHeaders(nil),
+		Body:    operationErrorBody(message),
 	}
 }
 

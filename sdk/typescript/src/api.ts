@@ -90,14 +90,21 @@ export const responseBrand: unique symbol = Symbol("gestalt.response");
 export interface Response<T> {
   readonly [responseBrand]: true;
   status?: number;
+  headers: ResponseHeaders;
   body: T;
 }
+
+/**
+ * HTTP response headers returned by an operation handler.
+ */
+export type ResponseHeaders = Readonly<Record<string, string | readonly string[]>>;
 
 /**
  * Serialized operation result returned by the protocol runtime.
  */
 export interface OperationResult {
   status: number;
+  headers: Record<string, string[]>;
   body: string;
 }
 
@@ -109,10 +116,15 @@ export type MaybePromise<T> = T | Promise<T>;
 /**
  * Wraps a handler result with an explicit status code.
  */
-export function response<T>(status: number, body: T): Response<T> {
+export function response<T>(
+  status: number,
+  body: T,
+  headers?: ResponseHeaders,
+): Response<T> {
   return {
     [responseBrand]: true,
     status,
+    headers: headers ?? {},
     body,
   };
 }
@@ -120,8 +132,8 @@ export function response<T>(status: number, body: T): Response<T> {
 /**
  * Wraps a handler result with the default `200` status code.
  */
-export function ok<T>(body: T): Response<T> {
-  return response(200, body);
+export function ok<T>(body: T, headers?: ResponseHeaders): Response<T> {
+  return response(200, body, headers);
 }
 
 /**

@@ -74,9 +74,12 @@ async fn executes_registered_operation() {
         .register(
             Operation::<EchoInput, EchoOutput>::new("echo").description("Echo the message"),
             |_: Arc<TestProvider>, input: EchoInput, _request: Request| async move {
-                Ok::<Response<EchoOutput>, std::convert::Infallible>(ok(EchoOutput {
-                    message: input.message,
-                }))
+                Ok::<Response<EchoOutput>, std::convert::Infallible>(
+                    ok(EchoOutput {
+                        message: input.message,
+                    })
+                    .with_header("Location", "/echo"),
+                )
             },
         )
         .expect("register operation");
@@ -91,6 +94,14 @@ async fn executes_registered_operation() {
         .await;
 
     assert_eq!(result.status, 200);
+    assert_eq!(
+        result.headers.get("Content-Type").map(Vec::as_slice),
+        Some(&["application/json".to_owned()][..])
+    );
+    assert_eq!(
+        result.headers.get("Location").map(Vec::as_slice),
+        Some(&["/echo".to_owned()][..])
+    );
     assert_eq!(result.body, r#"{"message":"hello"}"#);
 }
 

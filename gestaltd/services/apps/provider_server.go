@@ -52,8 +52,9 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 		return nil, status.Errorf(codes.Unknown, "execute: %v", err)
 	}
 	return &proto.OperationResult{
-		Status: int32(result.Status),
-		Body:   result.Body,
+		Status:  int32(result.Status),
+		Headers: protoutil.StringSlicesToProto(result.Headers),
+		Body:    result.Body,
 	}, nil
 }
 
@@ -124,25 +125,14 @@ func httpSubjectRequestFromProto(req *proto.HTTPSubjectRequest) *core.HTTPSubjec
 		Method:          req.GetMethod(),
 		Path:            req.GetPath(),
 		ContentType:     req.GetContentType(),
-		Headers:         mapStringLists(req.GetHeaders()),
-		Query:           mapStringLists(req.GetQuery()),
+		Headers:         protoutil.StringListsFromProto(req.GetHeaders()),
+		Query:           protoutil.StringListsFromProto(req.GetQuery()),
 		Params:          protoutil.MapFromStruct(req.GetParams()),
 		RawBody:         append([]byte(nil), req.GetRawBody()...),
 		SecurityScheme:  req.GetSecurityScheme(),
 		VerifiedSubject: req.GetVerifiedSubject(),
 		VerifiedClaims:  cloneStringMap(req.GetVerifiedClaims()),
 	}
-}
-
-func mapStringLists[V ~map[string]*proto.StringList](values V) map[string][]string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string][]string, len(values))
-	for key, value := range values {
-		out[key] = append([]string(nil), value.GetValues()...)
-	}
-	return out
 }
 
 func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) context.Context {

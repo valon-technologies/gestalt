@@ -115,7 +115,7 @@ func (p *execProvider) Configure(context.Context, string, map[string]any) error 
 
 func (p *execProvider) echo(_ context.Context, in execInput, req gestalt.Request) (gestalt.Response[execOutput], error) {
 	region, ok := req.ConnectionParam("region")
-	return gestalt.OK(execOutput{
+	resp := gestalt.OK(execOutput{
 		Echo:                in.Value,
 		Region:              region,
 		RegionPresent:       ok,
@@ -123,7 +123,9 @@ func (p *execProvider) echo(_ context.Context, in execInput, req gestalt.Request
 		SubjectKind:         req.Subject.Kind,
 		CredentialMode:      req.Credential.Mode,
 		CredentialSubjectID: req.Credential.SubjectID,
-	}), nil
+	})
+	resp.Headers = http.Header{"Location": []string{"/echo/" + in.Value}}
+	return resp, nil
 }
 
 func TestRouterOperationExecution(t *testing.T) {
@@ -155,6 +157,17 @@ func TestRouterOperationExecution(t *testing.T) {
 				return gestalt.Response[struct{}]{}, errors.New("boom")
 			},
 		),
+		gestalt.Register(
+			gestalt.Operation[struct{}, struct{}]{
+				ID:     "custom_content_type",
+				Method: http.MethodPost,
+			},
+			func(*execProvider, context.Context, struct{}, gestalt.Request) (gestalt.Response[struct{}], error) {
+				return gestalt.Response[struct{}]{
+					Headers: http.Header{"content-type": []string{"text/html"}},
+				}, nil
+			},
+		),
 	)
 
 	provider := &execProvider{}
@@ -166,6 +179,12 @@ func TestRouterOperationExecution(t *testing.T) {
 	}
 	if result.Status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+	if got := result.Headers.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type header = %q, want application/json", got)
+	}
+	if got := result.Headers.Get("Location"); got != "/echo/hello" {
+		t.Fatalf("Location header = %q, want /echo/hello", got)
 	}
 	if result.Body != `{"echo":"hello","region":"","region_present":false,"subject_id":"","subject_kind":"","credential_mode":"","credential_subject_id":""}` {
 		t.Fatalf("body = %q, want %q", result.Body, `{"echo":"hello","region":"","region_present":false,"subject_id":"","subject_kind":"","credential_mode":"","credential_subject_id":""}`)
@@ -187,6 +206,17 @@ func TestRouterOperationExecution(t *testing.T) {
 	}
 	if result.Body != `{"echo":"hello","region":"iad","region_present":true,"subject_id":"user:user-123","subject_kind":"user","credential_mode":"subject","credential_subject_id":"user:user-123"}` {
 		t.Fatalf("body with params = %q, want %q", result.Body, `{"echo":"hello","region":"iad","region_present":true,"subject_id":"user:user-123","subject_kind":"user","credential_mode":"subject","credential_subject_id":"user:user-123"}`)
+	}
+
+	result, err = router.Execute(ctx, provider, "custom_content_type", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute(custom_content_type): %v", err)
+	}
+	if got := result.Headers["content-type"]; len(got) != 1 || got[0] != "text/html" {
+		t.Fatalf("content-type header = %#v, want [text/html]", got)
+	}
+	if got := result.Headers["Content-Type"]; got != nil {
+		t.Fatalf("Content-Type header = %#v, want absent", got)
 	}
 
 	result, err = router.Execute(ctx, provider, "nonexistent", nil, "tok")

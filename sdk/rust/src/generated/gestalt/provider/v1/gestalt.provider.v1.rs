@@ -118,12 +118,14 @@ pub struct ProviderMetadata {
     pub max_protocol_version: i32,
 }
 /// OperationResult is the serialized result returned from an Execute call.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct OperationResult {
     #[prost(int32, tag = "1")]
     pub status: i32,
     #[prost(string, tag = "2")]
     pub body: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, message", tag = "3")]
+    pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, StringList>,
 }
 /// AppInvocationGrant describes one app operation grant minted into an
 /// exchanged invocation token.

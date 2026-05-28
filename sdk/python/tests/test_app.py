@@ -53,10 +53,16 @@ class AppOperationTests(unittest.TestCase):
 
         @app.operation
         def created() -> Response[dict[str, str]]:
-            return Response(status=201, body={"id": "abc"})
+            return Response(
+                status=201,
+                body={"id": "abc"},
+                headers={"Location": "/items/abc"},
+            )
 
         result = app.execute("created", {}, Request())
         self.assertEqual(result.status, 201)
+        self.assertEqual(result.headers["Content-Type"], ["application/json"])
+        self.assertEqual(result.headers["Location"], ["/items/abc"])
         self.assertEqual(json.loads(result.body), {"id": "abc"})
 
     def test_ok_helper(self) -> None:

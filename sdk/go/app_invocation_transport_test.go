@@ -70,7 +70,13 @@ func (h *pluginAppTransportHarness) Invoke(ctx context.Context, req *proto.AppIn
 	})
 	h.mu.Unlock()
 
-	return &proto.OperationResult{Status: 207, Body: "relay-ok"}, nil
+	return &proto.OperationResult{
+		Status: 207,
+		Headers: map[string]*proto.StringList{
+			"Location": &proto.StringList{Values: []string{"https://example.test/created"}},
+		},
+		Body: "relay-ok",
+	}, nil
 }
 
 func (h *pluginAppTransportHarness) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraphQLRequest) (*proto.OperationResult, error) {
@@ -91,7 +97,10 @@ func (h *pluginAppTransportHarness) InvokeGraphQL(ctx context.Context, req *prot
 	})
 	h.mu.Unlock()
 
-	return &proto.OperationResult{Status: 208, Body: "graphql-ok"}, nil
+	return &proto.OperationResult{
+		Status: 208,
+		Body:   "graphql-ok",
+	}, nil
 }
 
 func cloneStruct(src *structpb.Struct) *structpb.Struct {
@@ -143,6 +152,9 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	}
 	if result.Status != 207 || result.Body != "relay-ok" {
 		t.Fatalf("Invoke result = %+v, want status=207 body=relay-ok", result)
+	}
+	if got := result.Headers.Get("Location"); got != "https://example.test/created" {
+		t.Fatalf("Invoke Location header = %q, want https://example.test/created", got)
 	}
 	result, err = client.Invoke(context.Background(), "github", "get_issue", invokeOmitEmptyParams{
 		IssueNumber: 43,

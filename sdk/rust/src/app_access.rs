@@ -197,6 +197,7 @@ impl App {
 
         Ok(OperationResult {
             status,
+            headers: protocol::string_lists_from_proto(&response.headers),
             body: response.body,
         })
     }
@@ -251,6 +252,7 @@ impl App {
 
         Ok(OperationResult {
             status,
+            headers: protocol::string_lists_from_proto(&response.headers),
             body: response.body,
         })
     }

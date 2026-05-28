@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"time"
 
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -24,6 +25,30 @@ func MapFromStruct(s *structpb.Struct) map[string]any {
 		return nil
 	}
 	return s.AsMap()
+}
+
+func StringSlicesToProto[V ~map[string][]string](values V) map[string]*proto.StringList {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]*proto.StringList, len(values))
+	for key, item := range values {
+		copied := make([]string, len(item))
+		copy(copied, item)
+		out[key] = &proto.StringList{Values: copied}
+	}
+	return out
+}
+
+func StringListsFromProto[V ~map[string]*proto.StringList](values V) map[string][]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(values))
+	for key, value := range values {
+		out[key] = append([]string(nil), value.GetValues()...)
+	}
+	return out
 }
 
 func ValueToAny(v *structpb.Value) any {

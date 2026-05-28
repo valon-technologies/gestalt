@@ -125,6 +125,12 @@ impl ProtoApp for TestAppServer {
 
         Ok(GrpcResponse::new(OperationResult {
             status: 207,
+            headers: BTreeMap::from([(
+                "Location".to_string(),
+                generated::v1::StringList {
+                    values: vec!["https://example.test/created".to_string()],
+                },
+            )]),
             body: serde_json::json!({
                 "invocation_token": request.invocation_token,
                 "app": request.app,
@@ -159,6 +165,7 @@ impl ProtoApp for TestAppServer {
 
         Ok(GrpcResponse::new(OperationResult {
             status: 208,
+            headers: BTreeMap::new(),
             body: serde_json::json!({
                 "invocation_token": request.invocation_token,
                 "app": request.app,
@@ -211,6 +218,10 @@ async fn app_connects_over_unix_socket_and_sends_invocation_token() {
         .expect("invoke nested operation");
 
     assert_eq!(response.status, 207);
+    assert_eq!(
+        response.headers.get("Location"),
+        Some(&vec!["https://example.test/created".to_string()])
+    );
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&response.body).expect("parse response"),
         serde_json::json!({

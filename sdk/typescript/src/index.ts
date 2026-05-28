@@ -107,6 +107,7 @@ export {
   type OperationResult,
   type Request,
   type Response,
+  type ResponseHeaders,
   type Subject,
   type SubjectInput,
 } from "./api.ts";

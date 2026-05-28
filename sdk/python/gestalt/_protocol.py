@@ -90,6 +90,15 @@ def message_from_dict(value: Any, message: Any) -> Any:
     return message
 
 
+def string_lists_from_proto_map(values: Any) -> dict[str, list[str]]:
+    """Convert a protobuf map<string, StringList> into native lists."""
+
+    return {
+        str(key): list(getattr(value, "values", ()))
+        for key, value in dict(values or {}).items()
+    }
+
+
 def dataclass_mapping(value: Any) -> dict[str, Any] | None:
     """Return a shallow mapping of dataclass field names to values."""
 

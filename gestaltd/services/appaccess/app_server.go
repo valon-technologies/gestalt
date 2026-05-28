@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -95,8 +96,9 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 	}
 
 	return &proto.OperationResult{
-		Status: int32(result.Status),
-		Body:   result.Body,
+		Status:  int32(result.Status),
+		Headers: protoutil.StringSlicesToProto(result.Headers),
+		Body:    result.Body,
 	}, nil
 }
 
@@ -146,8 +148,9 @@ func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraph
 	}
 
 	return &proto.OperationResult{
-		Status: int32(result.Status),
-		Body:   result.Body,
+		Status:  int32(result.Status),
+		Headers: protoutil.StringSlicesToProto(result.Headers),
+		Body:    result.Body,
 	}, nil
 }
 

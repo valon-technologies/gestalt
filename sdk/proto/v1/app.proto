@@ -92,6 +92,7 @@ message ProviderMetadata {
 message OperationResult {
   int32 status = 1;
   string body = 2;
+  map<string, StringList> headers = 3;
 }
 
 // AppInvocationGrant describes one app operation grant minted into an

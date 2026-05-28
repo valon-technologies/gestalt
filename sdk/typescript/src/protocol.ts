@@ -69,6 +69,28 @@ export function jsonFromValue(value?: Value | undefined): JsonValue {
   return toJson(ValueSchema, value);
 }
 
+/** Converts a protobuf StringList map shape into native arrays. */
+export function stringListsFromProto(
+  input: Record<string, { values?: readonly string[] }> | undefined,
+): Record<string, string[]> {
+  const output: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(input ?? {})) {
+    output[key] = [...(value.values ?? [])];
+  }
+  return output;
+}
+
+/** Converts native string arrays into a protobuf StringList map shape. */
+export function stringListsToProto(
+  input: Record<string, readonly string[]>,
+): Record<string, { values: string[] }> {
+  const output: Record<string, { values: string[] }> = {};
+  for (const [key, values] of Object.entries(input)) {
+    output[key] = { values: [...values] };
+  }
+  return output;
+}
+
 /** Converts a valid JavaScript Date into a protobuf Timestamp message. */
 export function timestampFromDate(value: Date): Timestamp {
   const millis = value.getTime();

@@ -7,7 +7,7 @@ from urllib import parse as _urlparse
 
 import grpc
 
-from ._api import Response
+from ._api import Response, ResponseHeaders
 from ._gen.v1 import app_pb2 as _pb
 from ._gen.v1 import app_pb2_grpc as _pb_grpc
 from ._grpc_transport import (
@@ -21,6 +21,7 @@ from ._protocol import (
     JsonObjectInput,
     _struct_from_normalized_object,
     json_from_native,
+    string_lists_from_proto_map,
 )
 
 pb: Any = _pb
@@ -131,8 +132,7 @@ class _AppClient:
         if message is not None:
             request.params.CopyFrom(message)
 
-        response = self._stub.Invoke(request)
-        return Response(status=int(response.status), body=response.body)
+        return _response_from_proto(self._stub.Invoke(request))
 
     def invoke_graphql(
         self,
@@ -164,8 +164,7 @@ class _AppClient:
         if message is not None:
             request.variables.CopyFrom(message)
 
-        response = self._stub.InvokeGraphQL(request)
-        return Response(status=int(response.status), body=response.body)
+        return _response_from_proto(self._stub.InvokeGraphQL(request))
 
     def exchange_invocation_token(
         self,
@@ -325,6 +324,17 @@ def _with_app_relay_token(channel: grpc.Channel, token: str) -> grpc.Channel:
         return channel
     interceptor = _RelayTokenInterceptor(token)
     return grpc.intercept_channel(channel, interceptor)
+
+
+def _response_from_proto(response: Any) -> Response[str]:
+    return Response[str](
+        status=int(response.status),
+        body=cast(str, response.body),
+        headers=cast(
+            ResponseHeaders,
+            string_lists_from_proto_map(getattr(response, "headers", {})),
+        ),
+    )
 
 
 class _ClientCallDetails(grpc.ClientCallDetails):

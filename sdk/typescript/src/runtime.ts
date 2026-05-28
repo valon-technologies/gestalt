@@ -75,7 +75,7 @@ import {
 } from "./internal/gen/v1/runtime_pb.ts";
 import { S3 as S3Service } from "./internal/gen/v1/s3_pb.ts";
 import { WorkflowProvider as WorkflowProviderService } from "./internal/gen/v1/workflow_pb.ts";
-import { errorMessage, type Request } from "./api.ts";
+import { errorMessage, type OperationResult, type Request } from "./api.ts";
 import {
   AgentProvider,
   createAgentProviderService,
@@ -96,7 +96,12 @@ import {
 import { CacheProvider, isCacheProvider } from "./cache.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "./catalog.ts";
-import { valueFromJson, type JsonInput } from "./protocol.ts";
+import {
+  stringListsFromProto,
+  stringListsToProto,
+  valueFromJson,
+  type JsonInput,
+} from "./protocol.ts";
 import {
   HTTPSubjectResolutionError,
   type HTTPSubjectRequest,
@@ -579,8 +584,7 @@ export function createProviderService(
       });
     },
     async execute(request: ExecuteRequest) {
-      return create(
-        OperationResultSchema,
+      return operationResultToProto(
         await provider.execute(
           request.operation,
           objectFromUnknown(request.params),
@@ -920,8 +924,8 @@ function providerHTTPSubjectRequest(
     method: request?.method ?? "",
     path: request?.path ?? "",
     contentType: request?.contentType ?? "",
-    headers: providerStringLists(request?.headers),
-    query: providerStringLists(request?.query),
+    headers: stringListsFromProto(request?.headers),
+    query: stringListsFromProto(request?.query),
     params: objectFromUnknown(request?.params),
     rawBody: new Uint8Array(request?.rawBody ?? new Uint8Array()),
     securityScheme: request?.securityScheme ?? "",
@@ -968,14 +972,12 @@ function providerConnectedToken(
   };
 }
 
-function providerStringLists(
-  input: Record<string, { values?: string[] }> | undefined,
-): Record<string, string[]> {
-  const output: Record<string, string[]> = {};
-  for (const [key, value] of Object.entries(input ?? {})) {
-    output[key] = [...(value.values ?? [])];
-  }
-  return output;
+function operationResultToProto(result: OperationResult) {
+  return create(OperationResultSchema, {
+    status: result.status,
+    body: result.body,
+    headers: stringListsToProto(result.headers),
+  });
 }
 
 function providerRuntimeEntry(
