@@ -34,8 +34,9 @@ type AgentCreateTurn struct {
 	Model          string
 	Messages       []AgentMessage
 	ToolRefs       []AgentToolRef
+	ToolRefsSet    bool
 	ToolSource     AgentToolSourceMode
-	Output         AgentOutput
+	Output         *AgentOutput
 	Metadata       any
 	IdempotencyKey string
 	ModelOptions   any
@@ -156,7 +157,8 @@ func newAgentCreateTurnRequest(input AgentCreateTurn) (*proto.CreateAgentProvide
 		SessionId:      input.SessionID,
 		Model:          input.Model,
 		Messages:       messages,
-		ToolRefs:       agentToolRefPtrsToProto(agentToolRefsFromInputs(input.ToolRefs)),
+		ToolRefs:       agentToolRefsToProto(input.ToolRefs),
+		ToolRefsSet:    input.ToolRefsSet || len(input.ToolRefs) > 0,
 		ToolSource:     proto.AgentToolSourceMode(input.ToolSource),
 		Output:         output,
 		Metadata:       metadata,

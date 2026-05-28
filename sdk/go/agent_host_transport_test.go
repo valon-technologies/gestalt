@@ -103,7 +103,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	resp, err := client.ExecuteToolForTurn(context.Background(), gestalt.AgentHostExecuteToolInput{
+	resp, err := client.ExecuteTool(context.Background(), gestalt.AgentHostExecuteToolInput{
 		SessionID:      "session-1",
 		TurnID:         "turn-1",
 		ToolCallID:     "call-1",
@@ -118,7 +118,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if resp.Status != 207 || resp.Body != `{"ok":true}` {
 		t.Fatalf("response = %#v", resp)
 	}
-	listResp, err := client.ListToolsForTurn(context.Background(), gestalt.AgentHostListToolsInput{
+	listResp, err := client.ListTools(context.Background(), gestalt.AgentHostListToolsInput{
 		SessionID: "session-1",
 		TurnID:    "turn-1",
 		PageSize:  25,
@@ -132,7 +132,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if len(listResp.Tools) != 1 || listResp.Tools[0].ID != "tool-2" || listResp.Tools[0].MCPName != "slack__send_message" || listResp.NextPageToken != "next-page" {
 		t.Fatalf("list response = %#v", listResp)
 	}
-	connResp, err := client.ResolveConnectionForTurn(context.Background(), gestalt.AgentHostResolveConnectionInput{
+	connResp, err := client.ResolveConnection(context.Background(), gestalt.AgentHostResolveConnectionInput{
 		SessionID:  "session-1",
 		TurnID:     "turn-1",
 		Connection: "model",

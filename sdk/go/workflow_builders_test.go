@@ -150,17 +150,7 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 		},
 	}
 
-	copied := NewAgentToolRef(input)
-	input.RunAs.ID = "changed"
-	input.RunAsExternalIdentity.ID = "changed"
-	if copied.RunAs == nil || copied.RunAs.ID != "service_account:gestalt-support-notion" {
-		t.Fatalf("copied runAs = %#v, want independent copy", copied.RunAs)
-	}
-	if copied.RunAsExternalIdentity == nil || copied.RunAsExternalIdentity.ID != "valon-support" {
-		t.Fatalf("copied external identity = %#v, want independent copy", copied.RunAsExternalIdentity)
-	}
-
-	encoded := agentToolRefToProto(*copied)
+	encoded := agentToolRefToProto(input)
 	if got := encoded.GetRunAs().GetId(); got != "service_account:gestalt-support-notion" {
 		t.Fatalf("encoded runAs subject = %q", got)
 	}
@@ -193,7 +183,7 @@ func TestBoundWorkflowTargetAgentStepCopiesNativeFields(t *testing.T) {
 						Text: WorkflowText{Template: "brief"},
 					}},
 					Tools: []AgentToolRef{{App: "datadog", Operation: "queryLogs"}},
-					Output: AgentOutput{
+					Output: &AgentOutput{
 						Structured: &AgentStructuredOutput{Schema: map[string]any{"type": "object"}},
 					},
 					ModelOptions: map[string]any{"temperature": 0},
@@ -207,14 +197,13 @@ func TestBoundWorkflowTargetAgentStepCopiesNativeFields(t *testing.T) {
 					Provider: "agent",
 					Model:    "gpt-5.5",
 					Prompt:   WorkflowText{Template: "Open a PR"},
-					Output:   AgentOutput{Text: &AgentTextOutput{}},
 					Tools:    []AgentToolRef{{App: "github", Operation: "createPullRequest"}},
 				},
 				When: &WorkflowStepWhen{
 					Value: WorkflowValue{
 						StepOutput: &WorkflowStepOutputSource{
 							StepID: "diagnosis",
-							Path:   "agent.output.structured.value.actionableForPr",
+							Path:   "agent.structuredOutput.actionableForPr",
 						},
 					},
 					Equals: true,
@@ -234,7 +223,7 @@ func TestBoundWorkflowTargetAgentStepCopiesNativeFields(t *testing.T) {
 		t.Fatalf("agent step = %q/%q, want agent/gpt-5.5", agent.GetProvider(), agent.GetModel())
 	}
 	if got := agent.GetOutput().GetStructured().GetSchema().AsMap()["type"]; got != "object" {
-		t.Fatalf("response schema type = %#v, want object", got)
+		t.Fatalf("output schema type = %#v, want object", got)
 	}
 	if got := agent.GetTools()[0].GetApp(); got != "datadog" {
 		t.Fatalf("step tool ref app = %q, want datadog", got)

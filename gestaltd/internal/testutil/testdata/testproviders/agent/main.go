@@ -254,7 +254,7 @@ func (p *agentProvider) startTurn(
 	messages []gestalt.AgentMessage,
 	tools []gestalt.ResolvedAgentTool,
 	metadata map[string]any,
-	requestedOutput gestalt.AgentOutput,
+	requestedOutput *gestalt.AgentOutput,
 	createdBy *gestalt.AgentActor,
 	executionRef string,
 	runGrant string,
@@ -369,15 +369,15 @@ func (p *agentProvider) startTurn(
 			ExecutionRef: executionRef,
 		}
 	}
-	if requestedOutput.Structured != nil {
-		turn.Output = gestalt.AgentTurnOutput{
+	if requestedOutput != nil && requestedOutput.Structured != nil {
+		turn.Output = &gestalt.AgentTurnOutput{
 			Structured: &gestalt.AgentTurnStructuredOutput{
 				Text:  string(body),
 				Value: output,
 			},
 		}
 	} else {
-		turn.Output = gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: string(body)}}
+		turn.Output = &gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: string(body)}}
 	}
 	turn.Status = gestalt.AgentExecutionStatusSucceeded
 	if requireInteraction {
@@ -705,9 +705,12 @@ func cloneTurn(input *gestalt.AgentTurn) *gestalt.AgentTurn {
 	}
 }
 
-func cloneTurnOutput(input gestalt.AgentTurnOutput) gestalt.AgentTurnOutput {
+func cloneTurnOutput(input *gestalt.AgentTurnOutput) *gestalt.AgentTurnOutput {
+	if input == nil {
+		return nil
+	}
 	if input.Structured != nil {
-		return gestalt.AgentTurnOutput{
+		return &gestalt.AgentTurnOutput{
 			Structured: &gestalt.AgentTurnStructuredOutput{
 				Text:  input.Structured.Text,
 				Value: cloneMap(input.Structured.Value),
@@ -715,9 +718,9 @@ func cloneTurnOutput(input gestalt.AgentTurnOutput) gestalt.AgentTurnOutput {
 		}
 	}
 	if input.Text != nil {
-		return gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: input.Text.Text}}
+		return &gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: input.Text.Text}}
 	}
-	return gestalt.AgentTurnOutput{}
+	return &gestalt.AgentTurnOutput{}
 }
 
 func cloneTurnEvent(input *gestalt.AgentTurnEvent) *gestalt.AgentTurnEvent {

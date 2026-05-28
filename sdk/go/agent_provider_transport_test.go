@@ -8,8 +8,6 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -92,19 +90,23 @@ func (p *fullAgentProvider) UpdateSession(_ context.Context, req *gestalt.Update
 
 func (p *fullAgentProvider) CreateTurn(_ context.Context, req *gestalt.CreateAgentProviderTurnRequest) (*gestalt.AgentTurn, error) {
 	p.receivedTurnRequest = req
-	return &gestalt.AgentTurn{
-		ID:           req.TurnID,
-		SessionID:    req.SessionID,
-		ProviderName: p.configuredName,
-		Model:        req.Model,
-		Status:       gestalt.AgentExecutionStatusWaitingForInput,
-		Messages:     req.Messages,
-		Output: gestalt.AgentTurnOutput{
+	output := &gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: "echo:Plan it"}}
+	if req.Output != nil && req.Output.Structured != nil {
+		output = &gestalt.AgentTurnOutput{
 			Structured: &gestalt.AgentTurnStructuredOutput{
 				Text:  "echo:Plan it",
 				Value: req.Output.Structured.Schema,
 			},
-		},
+		}
+	}
+	return &gestalt.AgentTurn{
+		ID:            req.TurnID,
+		SessionID:     req.SessionID,
+		ProviderName:  p.configuredName,
+		Model:         req.Model,
+		Status:        gestalt.AgentExecutionStatusWaitingForInput,
+		Messages:      req.Messages,
+		Output:        output,
 		StatusMessage: "waiting for input",
 		CreatedBy:     req.CreatedBy,
 		CreatedAt:     time.Now(),
@@ -120,7 +122,7 @@ func (p *fullAgentProvider) GetTurn(_ context.Context, req *gestalt.GetAgentProv
 		ProviderName:  p.configuredName,
 		Model:         "gpt-5.1",
 		Status:        gestalt.AgentExecutionStatusRunning,
-		Output:        gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: "echo:Plan it"}},
+		Output:        &gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: "echo:Plan it"}},
 		StatusMessage: "running",
 		CreatedAt:     time.Now(),
 		StartedAt:     timePtr(time.Now()),
@@ -418,29 +420,11 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	if turn.GetStructured().GetValue().GetFields()["type"].GetStringValue() != "object" {
 		t.Fatalf("CreateTurn structured output = %+v, want native JSON round trip", turn.GetStructured())
 	}
-	if provider.receivedTurnRequest.Output.Structured == nil {
-		t.Fatalf("CreateTurn output.structured = nil, want structured output request")
+	if provider.receivedTurnRequest.Output == nil || provider.receivedTurnRequest.Output.Structured == nil {
+		t.Fatalf("CreateTurn output = %#v, want structured output", provider.receivedTurnRequest.Output)
 	}
-	_, err = agentClient.CreateTurn(rpcCtx, &proto.CreateAgentProviderTurnRequest{
-		TurnId:    "turn-missing-output",
-		SessionId: "session-1",
-		Messages:  []*proto.AgentMessage{{Role: "user", Text: "Plan it"}},
-	})
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("CreateTurn missing output error = %v, want InvalidArgument", err)
-	}
-	_, err = agentClient.CreateTurn(rpcCtx, &proto.CreateAgentProviderTurnRequest{
-		TurnId:    "turn-missing-schema",
-		SessionId: "session-1",
-		Messages:  []*proto.AgentMessage{{Role: "user", Text: "Plan it"}},
-		Output: &proto.AgentOutput{
-			Kind: &proto.AgentOutput_Structured{
-				Structured: &proto.AgentStructuredOutput{},
-			},
-		},
-	})
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("CreateTurn missing structured schema error = %v, want InvalidArgument", err)
+	if provider.receivedTurnRequest.Output.Structured.Schema["type"] != "object" {
+		t.Fatalf("CreateTurn output schema = %#v, want object", provider.receivedTurnRequest.Output.Structured.Schema)
 	}
 
 	fetchedTurn, err := agentClient.GetTurn(rpcCtx, &proto.GetAgentProviderTurnRequest{TurnId: "turn-1"})

@@ -90,7 +90,7 @@ func TestWorkflowFromContextDefaultsRunIdempotencyKey(t *testing.T) {
 	}
 
 	if started.Run == nil || started.Run.Status != WorkflowRunStatusValuePending {
-		t.Fatalf("started run status = %#v, want pending", started.Run)
+		t.Fatalf("started run status = %#v, want pending", started)
 	}
 	if signaled.Run == nil || signaled.Run.Status != WorkflowRunStatusValuePending {
 		t.Fatalf("signaled run status = %#v, want pending", signaled.Run)

@@ -8,13 +8,14 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 )
 
 type RuntimeInspector interface {
 	SnapshotRuntimes(ctx context.Context) ([]RuntimeProviderSnapshot, error)
-	ListRuntimeSessions(ctx context.Context, providerName string, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error)
+	ListRuntimeSessions(ctx context.Context, providerName string, req *proto.ListRuntimeSessionsRequest) (*proto.ListRuntimeSessionsResponse, error)
 	ListRuntimeSessionLogs(ctx context.Context, providerName, sessionID string, afterSeq int64, limit int) ([]runtimelogs.Record, error)
 }
 
@@ -95,7 +96,7 @@ func (r *runtimeRegistry) SnapshotRuntimes(ctx context.Context) ([]RuntimeProvid
 	return out, nil
 }
 
-func (r *runtimeRegistry) ListRuntimeSessions(ctx context.Context, providerName string, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+func (r *runtimeRegistry) ListRuntimeSessions(ctx context.Context, providerName string, req *proto.ListRuntimeSessionsRequest) (*proto.ListRuntimeSessionsResponse, error) {
 	providerName = strings.TrimSpace(providerName)
 	if r == nil || r.cfg == nil || providerName == "" {
 		return nil, ErrRuntimeProviderNotFound

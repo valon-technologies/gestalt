@@ -16,11 +16,8 @@ type agentHost struct {
 type AgentHostAPI interface {
 	Close() error
 	ExecuteTool(context.Context, AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error)
-	ExecuteToolForTurn(context.Context, AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error)
 	ListTools(context.Context, AgentHostListToolsInput) (*ListAgentToolsResponse, error)
-	ListToolsForTurn(context.Context, AgentHostListToolsInput) (*ListAgentToolsResponse, error)
 	ResolveConnection(context.Context, AgentHostResolveConnectionInput) (*ResolvedAgentConnection, error)
-	ResolveConnectionForTurn(context.Context, AgentHostResolveConnectionInput) (*ResolvedAgentConnection, error)
 }
 
 // AgentHostListToolsInput contains plain fields for listing tools available to
@@ -107,11 +104,6 @@ func (c *agentHost) ExecuteTool(ctx context.Context, input AgentHostExecuteToolI
 	return executeAgentToolResponseFromProto(resp), nil
 }
 
-// ExecuteToolForTurn executes a host tool using plain Go request fields.
-func (c *agentHost) ExecuteToolForTurn(ctx context.Context, input AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error) {
-	return c.ExecuteTool(ctx, input)
-}
-
 // ListTools lists host tools visible to the current agent request using plain
 // Go request fields.
 func (c *agentHost) ListTools(ctx context.Context, input AgentHostListToolsInput) (*ListAgentToolsResponse, error) {
@@ -129,11 +121,6 @@ func (c *agentHost) ListTools(ctx context.Context, input AgentHostListToolsInput
 	return listAgentToolsResponseFromProto(resp), nil
 }
 
-// ListToolsForTurn lists host tools using plain Go request fields.
-func (c *agentHost) ListToolsForTurn(ctx context.Context, input AgentHostListToolsInput) (*ListAgentToolsResponse, error) {
-	return c.ListTools(ctx, input)
-}
-
 // ResolveConnection resolves a configured agent connection for the current turn
 // using plain Go request fields.
 func (c *agentHost) ResolveConnection(ctx context.Context, input AgentHostResolveConnectionInput) (*ResolvedAgentConnection, error) {
@@ -148,10 +135,4 @@ func (c *agentHost) ResolveConnection(ctx context.Context, input AgentHostResolv
 		return nil, err
 	}
 	return resolvedAgentConnectionFromProto(resp), nil
-}
-
-// ResolveConnectionForTurn resolves an agent connection using plain Go request
-// fields.
-func (c *agentHost) ResolveConnectionForTurn(ctx context.Context, input AgentHostResolveConnectionInput) (*ResolvedAgentConnection, error) {
-	return c.ResolveConnection(ctx, input)
 }

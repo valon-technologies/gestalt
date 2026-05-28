@@ -63,8 +63,10 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
 )
 
@@ -203,13 +205,13 @@ type capturingRuntime struct {
 
 	mu                  sync.Mutex
 	cond                *sync.Cond
-	startRequests       []runtimeprovider.StartSessionRequest
-	startAppRequests    []runtimeprovider.StartAppRequest
+	startRequests       []*proto.StartRuntimeSessionRequest
+	startAppRequests    []*proto.StartHostedAppRequest
 	startTimes          []time.Time
-	getSessionRequests  chan runtimeprovider.GetSessionRequest
+	getSessionRequests  chan *proto.GetRuntimeSessionRequest
 	getSessionCalls     int
-	sessionLifecycles   map[string]*runtimeprovider.SessionLifecycle
-	lifecycleForSession func(index int) *runtimeprovider.SessionLifecycle
+	sessionLifecycles   map[string]*proto.RuntimeSessionLifecycle
+	lifecycleForSession func(index int) *proto.RuntimeSessionLifecycle
 	startErrForSession  func(index int) error
 	now                 func() time.Time
 	stopCount           atomic.Int32
@@ -221,19 +223,13 @@ func newCapturingRuntime() *capturingRuntime {
 	return r
 }
 
-func (r *capturingRuntime) Support(ctx context.Context) (runtimeprovider.Support, error) {
+func (r *capturingRuntime) Support(ctx context.Context) (*proto.RuntimeSupport, error) {
 	return r.provider.Support(ctx)
 }
 
-func (r *capturingRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
+func (r *capturingRuntime) StartSession(ctx context.Context, req *proto.StartRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	r.mu.Lock()
-	r.startRequests = append(r.startRequests, runtimeprovider.StartSessionRequest{
-		AppName:       req.AppName,
-		Template:      req.Template,
-		Image:         req.Image,
-		ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
-		Metadata:      cloneRuntimeMetadata(req.Metadata),
-	})
+	r.startRequests = append(r.startRequests, cloneStartRuntimeSessionRequest(req))
 	now := time.Now
 	if r.now != nil {
 		now = r.now
@@ -257,26 +253,26 @@ func (r *capturingRuntime) StartSession(ctx context.Context, req runtimeprovider
 		session.Lifecycle = cloneRuntimeSessionLifecycle(lifecycleForSession(index))
 		r.mu.Lock()
 		if r.sessionLifecycles == nil {
-			r.sessionLifecycles = map[string]*runtimeprovider.SessionLifecycle{}
+			r.sessionLifecycles = map[string]*proto.RuntimeSessionLifecycle{}
 		}
-		r.sessionLifecycles[session.ID] = cloneRuntimeSessionLifecycle(session.Lifecycle)
+		r.sessionLifecycles[session.GetId()] = cloneRuntimeSessionLifecycle(session.GetLifecycle())
 		r.mu.Unlock()
 	}
 	return session, nil
 }
 
-func (r *capturingRuntime) ListSessions(ctx context.Context, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+func (r *capturingRuntime) ListSessions(ctx context.Context, req *proto.ListRuntimeSessionsRequest) (*proto.ListRuntimeSessionsResponse, error) {
 	sessions, err := r.provider.ListSessions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	for i := range sessions.Sessions {
-		r.attachSessionLifecycle(&sessions.Sessions[i])
+	for _, session := range sessions.GetSessions() {
+		r.attachSessionLifecycle(session)
 	}
 	return sessions, nil
 }
 
-func (r *capturingRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
+func (r *capturingRuntime) GetSession(ctx context.Context, req *proto.GetRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	r.mu.Lock()
 	r.getSessionCalls++
 	r.cond.Broadcast()
@@ -296,22 +292,14 @@ func (r *capturingRuntime) GetSession(ctx context.Context, req runtimeprovider.G
 	return session, nil
 }
 
-func (r *capturingRuntime) StopSession(ctx context.Context, req runtimeprovider.StopSessionRequest) error {
+func (r *capturingRuntime) StopSession(ctx context.Context, req *proto.StopRuntimeSessionRequest) error {
 	r.stopCount.Add(1)
 	return r.provider.StopSession(ctx, req)
 }
 
-func (r *capturingRuntime) StartApp(ctx context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
+func (r *capturingRuntime) StartApp(ctx context.Context, req *proto.StartHostedAppRequest) (*proto.HostedApp, error) {
 	r.mu.Lock()
-	r.startAppRequests = append(r.startAppRequests, runtimeprovider.StartAppRequest{
-		SessionID:  req.SessionID,
-		AppName:    req.AppName,
-		Command:    req.Command,
-		Args:       slices.Clone(req.Args),
-		Env:        cloneRuntimeMetadata(req.Env),
-		Egress:     cloneRuntimeEgressPolicy(req.Egress),
-		HostBinary: req.HostBinary,
-	})
+	r.startAppRequests = append(r.startAppRequests, cloneStartHostedAppRequest(req))
 	r.mu.Unlock()
 	return r.provider.StartApp(ctx, req)
 }
@@ -320,18 +308,12 @@ func (r *capturingRuntime) Close() error {
 	return r.provider.Close()
 }
 
-func (r *capturingRuntime) startSessionRequests() []runtimeprovider.StartSessionRequest {
+func (r *capturingRuntime) startSessionRequests() []*proto.StartRuntimeSessionRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]runtimeprovider.StartSessionRequest, len(r.startRequests))
+	out := make([]*proto.StartRuntimeSessionRequest, len(r.startRequests))
 	for i, req := range r.startRequests {
-		out[i] = runtimeprovider.StartSessionRequest{
-			AppName:       req.AppName,
-			Template:      req.Template,
-			Image:         req.Image,
-			ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
-			Metadata:      cloneRuntimeMetadata(req.Metadata),
-		}
+		out[i] = cloneStartRuntimeSessionRequest(req)
 	}
 	return out
 }
@@ -389,76 +371,47 @@ func (r *capturingRuntime) waitGetSessionCalls(t *testing.T, count int) {
 	})
 }
 
-func cloneImagePullAuth(src *runtimeprovider.ImagePullAuth) *runtimeprovider.ImagePullAuth {
-	if src == nil {
-		return nil
-	}
-	return &runtimeprovider.ImagePullAuth{
-		DockerConfigJSON: src.DockerConfigJSON,
-	}
-}
-
 func (r *capturingRuntime) startSessionTimes() []time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]time.Time(nil), r.startTimes...)
 }
 
-func (r *capturingRuntime) startAppRequestsCopy() []runtimeprovider.StartAppRequest {
+func (r *capturingRuntime) startAppRequestsCopy() []*proto.StartHostedAppRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]runtimeprovider.StartAppRequest, len(r.startAppRequests))
+	out := make([]*proto.StartHostedAppRequest, len(r.startAppRequests))
 	for i, req := range r.startAppRequests {
-		out[i] = runtimeprovider.StartAppRequest{
-			SessionID:  req.SessionID,
-			AppName:    req.AppName,
-			Command:    req.Command,
-			Args:       slices.Clone(req.Args),
-			Env:        cloneRuntimeMetadata(req.Env),
-			Egress:     cloneRuntimeEgressPolicy(req.Egress),
-			HostBinary: req.HostBinary,
-		}
+		out[i] = cloneStartHostedAppRequest(req)
 	}
 	return out
 }
 
-func (r *capturingRuntime) attachSessionLifecycle(session *runtimeprovider.Session) {
-	if session == nil || session.ID == "" {
+func (r *capturingRuntime) attachSessionLifecycle(session *proto.RuntimeSession) {
+	if session == nil || session.GetId() == "" {
 		return
 	}
 	r.mu.Lock()
-	lifecycle := cloneRuntimeSessionLifecycle(r.sessionLifecycles[session.ID])
+	lifecycle := cloneRuntimeSessionLifecycle(r.sessionLifecycles[session.GetId()])
 	r.mu.Unlock()
 	session.Lifecycle = lifecycle
 }
 
-func cloneRuntimeSessionLifecycle(lifecycle *runtimeprovider.SessionLifecycle) *runtimeprovider.SessionLifecycle {
+func cloneRuntimeSessionLifecycle(lifecycle *proto.RuntimeSessionLifecycle) *proto.RuntimeSessionLifecycle {
 	if lifecycle == nil {
 		return nil
 	}
-	return &runtimeprovider.SessionLifecycle{
-		StartedAt:          cloneTestTime(lifecycle.StartedAt),
-		RecommendedDrainAt: cloneTestTime(lifecycle.RecommendedDrainAt),
-		ExpiresAt:          cloneTestTime(lifecycle.ExpiresAt),
-	}
-}
-
-func cloneTestTime(src *time.Time) *time.Time {
-	if src == nil {
-		return nil
-	}
-	out := src.UTC()
-	return &out
+	return gproto.Clone(lifecycle).(*proto.RuntimeSessionLifecycle)
 }
 
 type capturingBundleRuntime struct {
 	provider   *runtimeprovider.LocalProvider
-	support    runtimeprovider.Support
+	support    *proto.RuntimeSupport
 	fakeHosted bool
 
 	mu                sync.Mutex
-	startAppRequests  []runtimeprovider.StartAppRequest
-	sessionLifecycles map[string]*runtimeprovider.SessionLifecycle
+	startAppRequests  []*proto.StartHostedAppRequest
+	sessionLifecycles map[string]*proto.RuntimeSessionLifecycle
 	fakeApps          map[string]*fakeHostedAppServer
 }
 
@@ -471,18 +424,18 @@ type fakeHostedAppServer struct {
 func newCapturingBundleRuntime() *capturingBundleRuntime {
 	return &capturingBundleRuntime{
 		provider: runtimeprovider.NewLocalProvider(),
-		support: runtimeprovider.Support{
+		support: &proto.RuntimeSupport{
 			CanHostApps: true,
 		},
 		fakeApps: make(map[string]*fakeHostedAppServer),
 	}
 }
 
-func (r *capturingBundleRuntime) Support(context.Context) (runtimeprovider.Support, error) {
+func (r *capturingBundleRuntime) Support(context.Context) (*proto.RuntimeSupport, error) {
 	return r.support, nil
 }
 
-func (r *capturingBundleRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
+func (r *capturingBundleRuntime) StartSession(ctx context.Context, req *proto.StartRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	session, err := r.provider.StartSession(ctx, req)
 	if err != nil {
 		return nil, err
@@ -491,18 +444,18 @@ func (r *capturingBundleRuntime) StartSession(ctx context.Context, req runtimepr
 	return session, nil
 }
 
-func (r *capturingBundleRuntime) ListSessions(ctx context.Context, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+func (r *capturingBundleRuntime) ListSessions(ctx context.Context, req *proto.ListRuntimeSessionsRequest) (*proto.ListRuntimeSessionsResponse, error) {
 	sessions, err := r.provider.ListSessions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	for i := range sessions.Sessions {
-		r.attachSessionLifecycle(&sessions.Sessions[i])
+	for _, session := range sessions.GetSessions() {
+		r.attachSessionLifecycle(session)
 	}
 	return sessions, nil
 }
 
-func (r *capturingBundleRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
+func (r *capturingBundleRuntime) GetSession(ctx context.Context, req *proto.GetRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	session, err := r.provider.GetSession(ctx, req)
 	if err != nil {
 		return nil, err
@@ -511,22 +464,14 @@ func (r *capturingBundleRuntime) GetSession(ctx context.Context, req runtimeprov
 	return session, nil
 }
 
-func (r *capturingBundleRuntime) StopSession(ctx context.Context, req runtimeprovider.StopSessionRequest) error {
-	r.cleanupFakeHostedApp(req.SessionID)
+func (r *capturingBundleRuntime) StopSession(ctx context.Context, req *proto.StopRuntimeSessionRequest) error {
+	r.cleanupFakeHostedApp(req.GetSessionId())
 	return r.provider.StopSession(ctx, req)
 }
 
-func (r *capturingBundleRuntime) StartApp(ctx context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
+func (r *capturingBundleRuntime) StartApp(ctx context.Context, req *proto.StartHostedAppRequest) (*proto.HostedApp, error) {
 	r.mu.Lock()
-	r.startAppRequests = append(r.startAppRequests, runtimeprovider.StartAppRequest{
-		SessionID:  req.SessionID,
-		AppName:    req.AppName,
-		Command:    req.Command,
-		Args:       slices.Clone(req.Args),
-		Env:        cloneRuntimeMetadata(req.Env),
-		Egress:     cloneRuntimeEgressPolicy(req.Egress),
-		HostBinary: req.HostBinary,
-	})
+	r.startAppRequests = append(r.startAppRequests, cloneStartHostedAppRequest(req))
 	r.mu.Unlock()
 
 	if r.fakeHosted {
@@ -548,8 +493,8 @@ func (r *capturingBundleRuntime) Close() error {
 	return r.provider.Close()
 }
 
-func (r *capturingBundleRuntime) startFakeHostedApp(req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
-	env := cloneRuntimeMetadata(req.Env)
+func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppRequest) (*proto.HostedApp, error) {
+	env := cloneRuntimeMetadata(req.GetEnv())
 	dir, err := appservice.NewPluginTempDir("gstp-fake-")
 	if err != nil {
 		return nil, fmt.Errorf("create fake hosted app dir: %w", err)
@@ -563,12 +508,12 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req runtimeprovider.StartApp
 
 	srv := grpc.NewServer()
 	proto.RegisterAppProviderServer(srv, appservice.NewServer(&coretesting.StubIntegration{
-		N:        req.AppName,
+		N:        req.GetAppName(),
 		DN:       "Fake Hosted Plugin",
 		Desc:     "test-only fake hosted app",
 		ConnMode: core.ConnectionModeNone,
 		CatalogVal: &catalog.Catalog{
-			Name: req.AppName,
+			Name: req.GetAppName(),
 			Operations: []catalog.CatalogOperation{
 				{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
 				{
@@ -749,16 +694,16 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req runtimeprovider.StartApp
 	}()
 
 	r.mu.Lock()
-	r.fakeApps[req.SessionID] = &fakeHostedAppServer{
+	r.fakeApps[req.GetSessionId()] = &fakeHostedAppServer{
 		dir:      dir,
 		listener: lis,
 		server:   srv,
 	}
 	r.mu.Unlock()
-	return &runtimeprovider.HostedApp{
-		ID:         "fake-" + req.SessionID,
-		SessionID:  req.SessionID,
-		AppName:    req.AppName,
+	return &proto.HostedApp{
+		Id:         "fake-" + req.GetSessionId(),
+		SessionId:  req.GetSessionId(),
+		AppName:    req.GetAppName(),
 		DialTarget: "unix://" + socketPath,
 	}, nil
 }
@@ -1307,39 +1252,31 @@ func fakeHostedInvokePlugin(targetApp, targetOperation, invocationToken string, 
 	return envelope, nil
 }
 
-func (r *capturingBundleRuntime) startAppRequestsCopy() []runtimeprovider.StartAppRequest {
+func (r *capturingBundleRuntime) startAppRequestsCopy() []*proto.StartHostedAppRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]runtimeprovider.StartAppRequest, len(r.startAppRequests))
+	out := make([]*proto.StartHostedAppRequest, len(r.startAppRequests))
 	for i, req := range r.startAppRequests {
-		out[i] = runtimeprovider.StartAppRequest{
-			SessionID:  req.SessionID,
-			AppName:    req.AppName,
-			Command:    req.Command,
-			Args:       slices.Clone(req.Args),
-			Env:        cloneRuntimeMetadata(req.Env),
-			Egress:     cloneRuntimeEgressPolicy(req.Egress),
-			HostBinary: req.HostBinary,
-		}
+		out[i] = cloneStartHostedAppRequest(req)
 	}
 	return out
 }
 
-func (r *capturingBundleRuntime) setSessionLifecycle(sessionID string, lifecycle *runtimeprovider.SessionLifecycle) {
+func (r *capturingBundleRuntime) setSessionLifecycle(sessionID string, lifecycle *proto.RuntimeSessionLifecycle) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.sessionLifecycles == nil {
-		r.sessionLifecycles = make(map[string]*runtimeprovider.SessionLifecycle)
+		r.sessionLifecycles = make(map[string]*proto.RuntimeSessionLifecycle)
 	}
 	r.sessionLifecycles[sessionID] = cloneRuntimeSessionLifecycle(lifecycle)
 }
 
-func (r *capturingBundleRuntime) attachSessionLifecycle(session *runtimeprovider.Session) {
-	if session == nil || session.ID == "" {
+func (r *capturingBundleRuntime) attachSessionLifecycle(session *proto.RuntimeSession) {
+	if session == nil || session.GetId() == "" {
 		return
 	}
 	r.mu.Lock()
-	lifecycle := cloneRuntimeSessionLifecycle(r.sessionLifecycles[session.ID])
+	lifecycle := cloneRuntimeSessionLifecycle(r.sessionLifecycles[session.GetId()])
 	r.mu.Unlock()
 	session.Lifecycle = lifecycle
 }
@@ -1355,29 +1292,36 @@ func cloneRuntimeMetadata(values map[string]string) map[string]string {
 	return out
 }
 
-func cloneRuntimeEgressPolicy(policy runtimeprovider.RuntimeEgressPolicy) runtimeprovider.RuntimeEgressPolicy {
-	return runtimeprovider.RuntimeEgressPolicy{
-		AllowedHosts:  slices.Clone(policy.AllowedHosts),
-		DefaultAction: policy.DefaultAction,
+func cloneStartHostedAppRequest(req *proto.StartHostedAppRequest) *proto.StartHostedAppRequest {
+	if req == nil {
+		return nil
 	}
+	return gproto.Clone(req).(*proto.StartHostedAppRequest)
 }
 
-func assertStartAppEgressPolicy(t *testing.T, req runtimeprovider.StartAppRequest, allowedHosts []string, action runtimeprovider.PolicyAction) {
+func cloneStartRuntimeSessionRequest(req *proto.StartRuntimeSessionRequest) *proto.StartRuntimeSessionRequest {
+	if req == nil {
+		return nil
+	}
+	return gproto.Clone(req).(*proto.StartRuntimeSessionRequest)
+}
+
+func assertStartAppEgressPolicy(t *testing.T, req *proto.StartHostedAppRequest, allowedHosts []string, action egress.PolicyAction) {
 	t.Helper()
-	if got := req.Egress.AllowedHosts; !slices.Equal(got, allowedHosts) {
+	if got := req.GetAllowedHosts(); !slices.Equal(got, allowedHosts) {
 		t.Fatalf("StartApp egress allowed hosts = %#v, want %#v", got, allowedHosts)
 	}
-	if got := req.Egress.DefaultAction; got != action {
+	if got := req.GetDefaultAction(); got != string(action) {
 		t.Fatalf("StartApp egress default action = %q, want %q", got, action)
 	}
 }
 
-func assertStartAppRelayEnv(t *testing.T, req runtimeprovider.StartAppRequest, relayContext string) {
+func assertStartAppRelayEnv(t *testing.T, req *proto.StartHostedAppRequest, relayContext string) {
 	t.Helper()
-	if got := req.Env[runtimehost.HostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
+	if got := req.GetEnv()[runtimehost.HostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
 		t.Fatalf("StartApp env %s = %q, want tls:// public relay target for %s", runtimehost.HostServiceSocketEnv, got, relayContext)
 	}
-	if got := req.Env[runtimehost.HostServiceTokenEnv]; strings.TrimSpace(got) == "" {
+	if got := req.GetEnv()[runtimehost.HostServiceTokenEnv]; strings.TrimSpace(got) == "" {
 		t.Fatalf("StartApp env missing non-empty %s for %s", runtimehost.HostServiceTokenEnv, relayContext)
 	}
 }
@@ -1387,7 +1331,7 @@ type blockingStopRuntime struct {
 	stopCount atomic.Int32
 }
 
-func (r *blockingStopRuntime) StopSession(ctx context.Context, req runtimeprovider.StopSessionRequest) error {
+func (r *blockingStopRuntime) StopSession(ctx context.Context, req *proto.StopRuntimeSessionRequest) error {
 	r.stopCount.Add(1)
 	<-ctx.Done()
 	return ctx.Err()
@@ -1395,30 +1339,30 @@ func (r *blockingStopRuntime) StopSession(ctx context.Context, req runtimeprovid
 
 type staticCapabilityRuntime struct {
 	inner   runtimeprovider.Provider
-	support runtimeprovider.Support
+	support *proto.RuntimeSupport
 }
 
-func (r *staticCapabilityRuntime) Support(context.Context) (runtimeprovider.Support, error) {
+func (r *staticCapabilityRuntime) Support(context.Context) (*proto.RuntimeSupport, error) {
 	return r.support, nil
 }
 
-func (r *staticCapabilityRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
+func (r *staticCapabilityRuntime) StartSession(ctx context.Context, req *proto.StartRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	return r.inner.StartSession(ctx, req)
 }
 
-func (r *staticCapabilityRuntime) ListSessions(ctx context.Context, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+func (r *staticCapabilityRuntime) ListSessions(ctx context.Context, req *proto.ListRuntimeSessionsRequest) (*proto.ListRuntimeSessionsResponse, error) {
 	return r.inner.ListSessions(ctx, req)
 }
 
-func (r *staticCapabilityRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
+func (r *staticCapabilityRuntime) GetSession(ctx context.Context, req *proto.GetRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	return r.inner.GetSession(ctx, req)
 }
 
-func (r *staticCapabilityRuntime) StopSession(ctx context.Context, req runtimeprovider.StopSessionRequest) error {
+func (r *staticCapabilityRuntime) StopSession(ctx context.Context, req *proto.StopRuntimeSessionRequest) error {
 	return r.inner.StopSession(ctx, req)
 }
 
-func (r *staticCapabilityRuntime) StartApp(ctx context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
+func (r *staticCapabilityRuntime) StartApp(ctx context.Context, req *proto.StartHostedAppRequest) (*proto.HostedApp, error) {
 	return r.inner.StartApp(ctx, req)
 }
 
@@ -4157,7 +4101,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	testutil.CloseOnCleanup(t, relaySrv)
 
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -5810,23 +5754,23 @@ func TestRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *testing.
 		t.Fatalf("start session requests = %d, want 1", len(requests))
 	}
 	req := requests[0]
-	if req.AppName != "echoext" {
-		t.Fatalf("StartSession AppName = %q, want echoext", req.AppName)
+	if req.GetAppName() != "echoext" {
+		t.Fatalf("StartSession AppName = %q, want echoext", req.GetAppName())
 	}
-	if req.Template != "python-dev" {
-		t.Fatalf("StartSession Template = %q, want python-dev", req.Template)
+	if req.GetTemplate() != "python-dev" {
+		t.Fatalf("StartSession Template = %q, want python-dev", req.GetTemplate())
 	}
-	if req.Image != "ghcr.io/valon/gestalt-python-runtime:latest" {
-		t.Fatalf("StartSession Image = %q", req.Image)
+	if req.GetImage() != "ghcr.io/valon/gestalt-python-runtime:latest" {
+		t.Fatalf("StartSession Image = %q", req.GetImage())
 	}
-	if req.Metadata["tenant"] != "eng" {
-		t.Fatalf("StartSession Metadata[tenant] = %q, want eng", req.Metadata["tenant"])
+	if req.GetMetadata()["tenant"] != "eng" {
+		t.Fatalf("StartSession Metadata[tenant] = %q, want eng", req.GetMetadata()["tenant"])
 	}
-	if req.Metadata["provider_kind"] != "app" {
-		t.Fatalf("StartSession Metadata[provider_kind] = %q, want plugin", req.Metadata["provider_kind"])
+	if req.GetMetadata()["provider_kind"] != "app" {
+		t.Fatalf("StartSession Metadata[provider_kind] = %q, want plugin", req.GetMetadata()["provider_kind"])
 	}
-	if req.Metadata["provider_name"] != "echoext" {
-		t.Fatalf("StartSession Metadata[provider_name] = %q, want echoext", req.Metadata["provider_name"])
+	if req.GetMetadata()["provider_name"] != "echoext" {
+		t.Fatalf("StartSession Metadata[provider_name] = %q, want echoext", req.GetMetadata()["provider_name"])
 	}
 	if factoryContextValue != ctxSentinel {
 		t.Fatalf("runtime factory context value = %#v, want %#v", factoryContextValue, ctxSentinel)
@@ -5923,11 +5867,11 @@ func TestRuntimeStartsHostedCommandWithoutBundleStaging(t *testing.T) {
 		t.Fatalf("start app requests = %d, want 1", len(requests))
 	}
 	req := requests[0]
-	if req.Command != bin {
-		t.Fatalf("StartApp Command = %q, want configured command", req.Command)
+	if req.GetCommand() != bin {
+		t.Fatalf("StartApp Command = %q, want configured command", req.GetCommand())
 	}
-	if !slices.Equal(req.Args, []string{"provider"}) {
-		t.Fatalf("StartApp Args = %#v, want configured args", req.Args)
+	if !slices.Equal(req.GetArgs(), []string{"provider"}) {
+		t.Fatalf("StartApp Args = %#v, want configured args", req.GetArgs())
 	}
 
 	if err := CloseProviders(providers); err != nil {
@@ -5995,11 +5939,11 @@ func TestRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 		t.Fatalf("start app requests = %d, want 1", len(requests))
 	}
 	req := requests[0]
-	if req.Command != "./bin/gestalt-app-echo" {
-		t.Fatalf("StartApp Command = %q, want manifest image entrypoint", req.Command)
+	if req.GetCommand() != "./bin/gestalt-app-echo" {
+		t.Fatalf("StartApp Command = %q, want manifest image entrypoint", req.GetCommand())
 	}
-	if !slices.Equal(req.Args, []string{"--config", "/etc/gestalt/echo.yaml"}) {
-		t.Fatalf("StartApp Args = %#v, want manifest image args", req.Args)
+	if !slices.Equal(req.GetArgs(), []string{"--config", "/etc/gestalt/echo.yaml"}) {
+		t.Fatalf("StartApp Args = %#v, want manifest image args", req.GetArgs())
 	}
 }
 
@@ -6065,11 +6009,11 @@ func TestRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 		t.Fatalf("start app requests = %d, want 1", len(requests))
 	}
 	req := requests[0]
-	if req.Command != "./bin/gestalt-app-echo" {
-		t.Fatalf("StartApp Command = %q, want manifest template entrypoint", req.Command)
+	if req.GetCommand() != "./bin/gestalt-app-echo" {
+		t.Fatalf("StartApp Command = %q, want manifest template entrypoint", req.GetCommand())
 	}
-	if !slices.Equal(req.Args, []string{"--config", "/etc/gestalt/echo.yaml"}) {
-		t.Fatalf("StartApp Args = %#v, want manifest template args", req.Args)
+	if !slices.Equal(req.GetArgs(), []string{"--config", "/etc/gestalt/echo.yaml"}) {
+		t.Fatalf("StartApp Args = %#v, want manifest template args", req.GetArgs())
 	}
 }
 
@@ -6134,7 +6078,7 @@ func TestRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *tes
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -6213,7 +6157,7 @@ func TestRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *tes
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
 	assertStartAppRelayEnv(t, startRequests[0], runtimehost.HostServiceSocketEnv)
-	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
+	if allowedHosts := slices.Clone(startRequests[0].GetAllowedHosts()); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
@@ -6431,7 +6375,7 @@ func TestRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCapabi
 	}
 
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -6505,7 +6449,7 @@ func TestRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCapabi
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
 	assertStartAppRelayEnv(t, startRequests[0], "authorization")
-	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); len(allowedHosts) != 0 {
+	if allowedHosts := slices.Clone(startRequests[0].GetAllowedHosts()); len(allowedHosts) != 0 {
 		t.Fatalf("StartApp allowed hosts = %#v, want none when hostname egress enforcement is not required", allowedHosts)
 	}
 }
@@ -6522,7 +6466,7 @@ func TestRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapability
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -6610,7 +6554,7 @@ func TestRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapability
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
 	assertStartAppRelayEnv(t, startRequests[0], "indexeddb")
-	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
+	if allowedHosts := slices.Clone(startRequests[0].GetAllowedHosts()); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
@@ -6642,7 +6586,7 @@ func TestRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
@@ -6732,16 +6676,16 @@ func TestRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[runtimehost.HostServiceTokenEnv]; got == "" {
+	if got := startRequests[0].GetEnv()[runtimehost.HostServiceTokenEnv]; got == "" {
 		t.Fatal("StartApp env should include the host-service relay token")
 	}
-	if got := startRequests[0].Env[runtimehost.HostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
+	if got := startRequests[0].GetEnv()[runtimehost.HostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
 		t.Fatalf("StartApp env %s = %q, want tls relay target", runtimehost.HostServiceSocketEnv, got)
 	}
 
 	expiredAt := time.Now().Add(-time.Minute)
-	runtimeProvider.setSessionLifecycle(startRequests[0].SessionID, &runtimeprovider.SessionLifecycle{
-		ExpiresAt: &expiredAt,
+	runtimeProvider.setSessionLifecycle(startRequests[0].GetSessionId(), &proto.RuntimeSessionLifecycle{
+		ExpiresAt: timestamppb.New(expiredAt),
 	})
 	_, err = prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
 		"store": "tasks",
@@ -6765,7 +6709,7 @@ func TestRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapability(t *
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -6847,7 +6791,7 @@ func TestRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapability(t *
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
 	assertStartAppRelayEnv(t, startRequests[0], runtimehost.HostServiceSocketEnv)
-	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
+	if allowedHosts := slices.Clone(startRequests[0].GetAllowedHosts()); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
@@ -6878,7 +6822,7 @@ func TestRuntimePublicCacheRelayRoundTripsThroughHostedApp(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
@@ -6998,7 +6942,7 @@ func TestRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
@@ -7131,7 +7075,7 @@ func TestRuntimePublicAppInvocationRelayRoundTripsThroughHostedApp(t *testing.T)
 	}
 
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
@@ -7264,7 +7208,7 @@ func TestRuntimePublicAppInvocationRelayRoundTripsThroughHostedApp(t *testing.T)
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
 	assertStartAppRelayEnv(t, startRequests[0], "app")
-	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); len(allowedHosts) != 0 {
+	if allowedHosts := slices.Clone(startRequests[0].GetAllowedHosts()); len(allowedHosts) != 0 {
 		t.Fatalf("StartApp allowed hosts = %#v, want none when hostname egress enforcement is not required", allowedHosts)
 	}
 }
@@ -7281,7 +7225,7 @@ func TestRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelCapa
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -7356,7 +7300,7 @@ func TestRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelCapa
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
 	assertStartAppRelayEnv(t, startRequests[0], "workflow provider relay")
-	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
+	if allowedHosts := slices.Clone(startRequests[0].GetAllowedHosts()); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
@@ -7374,7 +7318,7 @@ func TestRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T) {
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := &staticCapabilityRuntime{
 		inner: runtimeprovider.NewLocalProvider(),
-		support: runtimeprovider.Support{
+		support: &proto.RuntimeSupport{
 			CanHostApps: true,
 		},
 	}
@@ -7426,7 +7370,7 @@ func TestRuntimeConfigRejectsMissingHostServiceRelay(t *testing.T) {
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := &staticCapabilityRuntime{
 		inner: runtimeprovider.NewLocalProvider(),
-		support: runtimeprovider.Support{
+		support: &proto.RuntimeSupport{
 			CanHostApps: true,
 		},
 	}
@@ -7531,13 +7475,13 @@ func TestRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[runtimehost.DefaultRuntimeSessionIDEnv]; got != startRequests[0].SessionID {
-		t.Fatalf("StartApp %s = %q, want session id %q", runtimehost.DefaultRuntimeSessionIDEnv, got, startRequests[0].SessionID)
+	if got := startRequests[0].GetEnv()[runtimehost.DefaultRuntimeSessionIDEnv]; got != startRequests[0].GetSessionId() {
+		t.Fatalf("StartApp %s = %q, want session id %q", runtimehost.DefaultRuntimeSessionIDEnv, got, startRequests[0].GetSessionId())
 	}
-	if got := startRequests[0].Env[runtimehost.HostServiceSocketEnv]; got != "tls://gestalt.example.test:443" {
+	if got := startRequests[0].GetEnv()[runtimehost.HostServiceSocketEnv]; got != "tls://gestalt.example.test:443" {
 		t.Fatalf("runtime log host relay target = %q, want public relay target", got)
 	}
-	if got := startRequests[0].Env[runtimehost.HostServiceTokenEnv]; got == "" {
+	if got := startRequests[0].GetEnv()[runtimehost.HostServiceTokenEnv]; got == "" {
 		t.Fatalf("StartApp env missing %s", runtimehost.HostServiceTokenEnv)
 	}
 }
@@ -7901,7 +7845,7 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -8064,7 +8008,7 @@ func TestRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing.T)
 		},
 	}
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -8175,7 +8119,7 @@ func TestRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapability
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -8222,8 +8166,8 @@ func TestRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapability
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	httpProxy := startRequests[0].Env["HTTP_PROXY"]
-	httpsProxy := startRequests[0].Env["HTTPS_PROXY"]
+	httpProxy := startRequests[0].GetEnv()["HTTP_PROXY"]
+	httpsProxy := startRequests[0].GetEnv()["HTTPS_PROXY"]
 	if httpProxy == "" {
 		t.Fatal("StartApp env should include HTTP_PROXY")
 	}
@@ -8246,7 +8190,7 @@ func TestRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapability
 	if parsed.User == nil {
 		t.Fatal("HTTP_PROXY should include relay credentials")
 	}
-	assertStartAppEgressPolicy(t, startRequests[0], []string{"api.github.com", "gestaltd.gestalt-runtime.svc.cluster.local"}, runtimeprovider.PolicyDeny)
+	assertStartAppEgressPolicy(t, startRequests[0], []string{"api.github.com", "gestaltd.gestalt-runtime.svc.cluster.local"}, egress.PolicyDeny)
 }
 
 func TestRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequired(t *testing.T) {
@@ -8261,7 +8205,7 @@ func TestRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequired(t *t
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -8306,10 +8250,10 @@ func TestRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequired(t *t
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env["HTTP_PROXY"]; got != "" {
+	if got := startRequests[0].GetEnv()["HTTP_PROXY"]; got != "" {
 		t.Fatalf("StartApp HTTP_PROXY = %q, want empty when hostname egress is not required", got)
 	}
-	if got := startRequests[0].Env["HTTPS_PROXY"]; got != "" {
+	if got := startRequests[0].GetEnv()["HTTPS_PROXY"]; got != "" {
 		t.Fatalf("StartApp HTTPS_PROXY = %q, want empty when hostname egress is not required", got)
 	}
 }
@@ -8326,7 +8270,7 @@ func TestRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *testing.T
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -8379,14 +8323,14 @@ func TestRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *testing.T
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env["HTTP_PROXY"]; !strings.Contains(got, "@gestalt.example.test") {
+	if got := startRequests[0].GetEnv()["HTTP_PROXY"]; !strings.Contains(got, "@gestalt.example.test") {
 		t.Fatalf("StartApp HTTP_PROXY = %q, want public egress proxy on gestalt.example.test", got)
 	}
-	if got := startRequests[0].Env["HTTPS_PROXY"]; !strings.Contains(got, "@gestalt.example.test") {
+	if got := startRequests[0].GetEnv()["HTTPS_PROXY"]; !strings.Contains(got, "@gestalt.example.test") {
 		t.Fatalf("StartApp HTTPS_PROXY = %q, want public egress proxy on gestalt.example.test", got)
 	}
 	assertStartAppRelayEnv(t, startRequests[0], "cache session binding relay")
-	assertStartAppEgressPolicy(t, startRequests[0], []string{"api.github.com", "gestalt.example.test"}, runtimeprovider.PolicyDeny)
+	assertStartAppEgressPolicy(t, startRequests[0], []string{"api.github.com", "gestalt.example.test"}, egress.PolicyDeny)
 }
 
 func TestRuntimePublicEgressProxyRoundTripsThroughHostedApp(t *testing.T) {
@@ -8415,7 +8359,7 @@ func TestRuntimePublicEgressProxyRoundTripsThroughHostedApp(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Hosted egress proxy roundtrip")
 	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = runtimeprovider.EgressModeHostname
+	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
@@ -8482,10 +8426,10 @@ func TestRuntimePublicEgressProxyRoundTripsThroughHostedApp(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env["HTTP_PROXY"]; got == "" {
+	if got := startRequests[0].GetEnv()["HTTP_PROXY"]; got == "" {
 		t.Fatal("StartApp env should include HTTP_PROXY")
 	}
-	if got := startRequests[0].Env["HTTPS_PROXY"]; got == "" {
+	if got := startRequests[0].GetEnv()["HTTPS_PROXY"]; got == "" {
 		t.Fatal("StartApp env should include HTTPS_PROXY")
 	}
 }
@@ -8503,7 +8447,7 @@ func TestRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t *testi
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := &staticCapabilityRuntime{
 		inner: runtimeprovider.NewLocalProvider(),
-		support: runtimeprovider.Support{
+		support: &proto.RuntimeSupport{
 			CanHostApps: true,
 		},
 	}
