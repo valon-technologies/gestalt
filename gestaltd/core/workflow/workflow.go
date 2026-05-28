@@ -10,6 +10,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 const ConfigManagedSchedulePrefix = "cfg_"
@@ -217,38 +218,6 @@ type Definition struct {
 	CreatedAt *time.Time
 }
 
-type CreateDefinitionRequest struct {
-	Target         Target
-	IdempotencyKey string
-	CreatedBy      Actor
-}
-
-type GetDefinitionRequest struct {
-	DefinitionID string
-}
-
-type UpdateDefinitionRequest struct {
-	DefinitionID string
-	Target       Target
-	RequestedBy  Actor
-}
-
-type DeleteDefinitionRequest struct {
-	DefinitionID string
-}
-
-type StartRunRequest struct {
-	Target         Target
-	IdempotencyKey string
-	WorkflowKey    string
-	CreatedBy      Actor
-	DefinitionID   string
-}
-
-type GetRunRequest struct {
-	RunID string
-}
-
 type ListRunsRequest struct {
 	PageSize  int
 	PageToken string
@@ -259,11 +228,6 @@ type ListRunsRequest struct {
 type ListRunsResponse struct {
 	Runs          []*Run
 	NextPageToken string
-}
-
-type CancelRunRequest struct {
-	RunID  string
-	Reason string
 }
 
 type Signal struct {
@@ -277,20 +241,6 @@ type Signal struct {
 	Sequence       int64
 }
 
-type SignalRunRequest struct {
-	RunID  string
-	Signal Signal
-}
-
-type SignalOrStartRunRequest struct {
-	WorkflowKey    string
-	Target         Target
-	IdempotencyKey string
-	CreatedBy      Actor
-	DefinitionID   string
-	Signal         Signal
-}
-
 type SignalRunResponse struct {
 	Run         *Run
 	Signal      Signal
@@ -298,91 +248,30 @@ type SignalRunResponse struct {
 	WorkflowKey string
 }
 
-type UpsertScheduleRequest struct {
-	ScheduleID   string
-	Cron         string
-	Timezone     string
-	Target       Target
-	Paused       bool
-	RequestedBy  Actor
-	DefinitionID string
-}
-
-type ListSchedulesRequest struct{}
-
-type GetScheduleRequest struct {
-	ScheduleID string
-}
-
-type DeleteScheduleRequest struct {
-	ScheduleID string
-}
-
-type PauseScheduleRequest struct {
-	ScheduleID string
-}
-
-type ResumeScheduleRequest struct {
-	ScheduleID string
-}
-
-type UpsertEventTriggerRequest struct {
-	TriggerID    string
-	Match        EventMatch
-	Target       Target
-	Paused       bool
-	RequestedBy  Actor
-	DefinitionID string
-}
-
-type ListEventTriggersRequest struct{}
-
-type GetEventTriggerRequest struct {
-	TriggerID string
-}
-
-type DeleteEventTriggerRequest struct {
-	TriggerID string
-}
-
-type PauseEventTriggerRequest struct {
-	TriggerID string
-}
-
-type ResumeEventTriggerRequest struct {
-	TriggerID string
-}
-
-type PublishEventRequest struct {
-	AppName     string
-	Event       Event
-	PublishedBy Actor
-}
-
 type Provider interface {
-	CreateDefinition(ctx context.Context, req CreateDefinitionRequest) (*Definition, error)
-	GetDefinition(ctx context.Context, req GetDefinitionRequest) (*Definition, error)
-	UpdateDefinition(ctx context.Context, req UpdateDefinitionRequest) (*Definition, error)
-	DeleteDefinition(ctx context.Context, req DeleteDefinitionRequest) error
-	StartRun(ctx context.Context, req StartRunRequest) (*Run, error)
-	GetRun(ctx context.Context, req GetRunRequest) (*Run, error)
-	ListRuns(ctx context.Context, req ListRunsRequest) (*ListRunsResponse, error)
-	CancelRun(ctx context.Context, req CancelRunRequest) (*Run, error)
-	SignalRun(ctx context.Context, req SignalRunRequest) (*SignalRunResponse, error)
-	SignalOrStartRun(ctx context.Context, req SignalOrStartRunRequest) (*SignalRunResponse, error)
-	UpsertSchedule(ctx context.Context, req UpsertScheduleRequest) (*Schedule, error)
-	GetSchedule(ctx context.Context, req GetScheduleRequest) (*Schedule, error)
-	ListSchedules(ctx context.Context, req ListSchedulesRequest) ([]*Schedule, error)
-	DeleteSchedule(ctx context.Context, req DeleteScheduleRequest) error
-	PauseSchedule(ctx context.Context, req PauseScheduleRequest) (*Schedule, error)
-	ResumeSchedule(ctx context.Context, req ResumeScheduleRequest) (*Schedule, error)
-	UpsertEventTrigger(ctx context.Context, req UpsertEventTriggerRequest) (*EventTrigger, error)
-	GetEventTrigger(ctx context.Context, req GetEventTriggerRequest) (*EventTrigger, error)
-	ListEventTriggers(ctx context.Context, req ListEventTriggersRequest) ([]*EventTrigger, error)
-	DeleteEventTrigger(ctx context.Context, req DeleteEventTriggerRequest) error
-	PauseEventTrigger(ctx context.Context, req PauseEventTriggerRequest) (*EventTrigger, error)
-	ResumeEventTrigger(ctx context.Context, req ResumeEventTriggerRequest) (*EventTrigger, error)
-	PublishEvent(ctx context.Context, req PublishEventRequest) (*Event, error)
+	CreateDefinition(ctx context.Context, req *proto.CreateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error)
+	GetDefinition(ctx context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error)
+	UpdateDefinition(ctx context.Context, req *proto.UpdateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error)
+	DeleteDefinition(ctx context.Context, req *proto.DeleteWorkflowProviderDefinitionRequest) error
+	StartRun(ctx context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error)
+	GetRun(ctx context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error)
+	ListRuns(ctx context.Context, req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error)
+	CancelRun(ctx context.Context, req *proto.CancelWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error)
+	SignalRun(ctx context.Context, req *proto.SignalWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error)
+	SignalOrStartRun(ctx context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error)
+	UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error)
+	GetSchedule(ctx context.Context, req *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error)
+	ListSchedules(ctx context.Context, req *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error)
+	DeleteSchedule(ctx context.Context, req *proto.DeleteWorkflowProviderScheduleRequest) error
+	PauseSchedule(ctx context.Context, req *proto.PauseWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error)
+	ResumeSchedule(ctx context.Context, req *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error)
+	UpsertEventTrigger(ctx context.Context, req *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error)
+	GetEventTrigger(ctx context.Context, req *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error)
+	ListEventTriggers(ctx context.Context, req *proto.ListWorkflowProviderEventTriggersRequest) (*proto.ListWorkflowProviderEventTriggersResponse, error)
+	DeleteEventTrigger(ctx context.Context, req *proto.DeleteWorkflowProviderEventTriggerRequest) error
+	PauseEventTrigger(ctx context.Context, req *proto.PauseWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error)
+	ResumeEventTrigger(ctx context.Context, req *proto.ResumeWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error)
+	PublishEvent(ctx context.Context, req *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error)
 	Ping(ctx context.Context) error
 	Close() error
 }

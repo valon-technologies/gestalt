@@ -10,6 +10,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
@@ -44,13 +46,21 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	audit.setProvider(providerName)
 	audit.setWorkflowTarget(target)
 
-	run, err := provider.StartRun(ctx, coreworkflow.StartRunRequest{
-		Target:         target,
+	targetProto, err := workflowwire.TargetToProto(target)
+	if err != nil {
+		return nil, err
+	}
+	runProto, err := provider.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{
+		Target:         targetProto,
 		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
 		WorkflowKey:    strings.TrimSpace(req.WorkflowKey),
-		CreatedBy:      workflowActorFromPrincipal(p),
-		DefinitionID:   strings.TrimSpace(req.DefinitionID),
+		CreatedBy:      workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
+		DefinitionId:   strings.TrimSpace(req.DefinitionID),
 	})
+	if err != nil {
+		return nil, err
+	}
+	run, err := workflowwire.RunFromProto(runProto)
 	if err != nil {
 		return nil, err
 	}
@@ -83,10 +93,14 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 	if value.Run != nil {
 		audit.setWorkflowTarget(value.Run.Target)
 	}
-	run, err := value.provider.CancelRun(ctx, coreworkflow.CancelRunRequest{
-		RunID:  strings.TrimSpace(runID),
+	runProto, err := value.provider.CancelRun(ctx, &proto.CancelWorkflowProviderRunRequest{
+		RunId:  strings.TrimSpace(runID),
 		Reason: strings.TrimSpace(reason),
 	})
+	if err != nil {
+		return nil, err
+	}
+	run, err := workflowwire.RunFromProto(runProto)
 	if err != nil {
 		return nil, err
 	}
@@ -121,10 +135,18 @@ func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req Run
 	if err != nil {
 		return nil, err
 	}
-	resp, err := value.provider.SignalRun(ctx, coreworkflow.SignalRunRequest{
-		RunID:  strings.TrimSpace(req.RunID),
-		Signal: signal,
+	signalProto, err := workflowwire.SignalToProto(signal)
+	if err != nil {
+		return nil, err
+	}
+	respProto, err := value.provider.SignalRun(ctx, &proto.SignalWorkflowProviderRunRequest{
+		RunId:  strings.TrimSpace(req.RunID),
+		Signal: signalProto,
 	})
+	if err != nil {
+		return nil, err
+	}
+	resp, err := workflowwire.SignalRunResponseFromProto(respProto)
 	if err != nil {
 		return nil, err
 	}
@@ -185,14 +207,26 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	}
 
 	phase = "provider_signal_or_start"
-	resp, err := provider.SignalOrStartRun(ctx, coreworkflow.SignalOrStartRunRequest{
+	targetProto, err := workflowwire.TargetToProto(target)
+	if err != nil {
+		return nil, err
+	}
+	signalProto, err := workflowwire.SignalToProto(signal)
+	if err != nil {
+		return nil, err
+	}
+	respProto, err := provider.SignalOrStartRun(ctx, &proto.SignalOrStartWorkflowProviderRunRequest{
 		WorkflowKey:    workflowKey,
-		Target:         target,
+		Target:         targetProto,
 		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
-		CreatedBy:      workflowActorFromPrincipal(p),
-		DefinitionID:   strings.TrimSpace(req.DefinitionID),
-		Signal:         signal,
+		CreatedBy:      workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
+		DefinitionId:   strings.TrimSpace(req.DefinitionID),
+		Signal:         signalProto,
 	})
+	if err != nil {
+		return nil, err
+	}
+	resp, err := workflowwire.SignalRunResponseFromProto(respProto)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +331,11 @@ func (m *Manager) findRun(ctx context.Context, runID, providerSelection string) 
 		if err != nil {
 			return nil, err
 		}
-		run, err := provider.GetRun(ctx, coreworkflow.GetRunRequest{RunID: runID})
+		runProto, err := provider.GetRun(ctx, &proto.GetWorkflowProviderRunRequest{RunId: runID})
+		if err != nil {
+			return nil, err
+		}
+		run, err := workflowwire.RunFromProto(runProto)
 		if err != nil {
 			return nil, err
 		}
@@ -310,7 +348,7 @@ func (m *Manager) findRun(ctx context.Context, runID, providerSelection string) 
 		if err != nil {
 			return nil, err
 		}
-		run, err := provider.GetRun(ctx, coreworkflow.GetRunRequest{RunID: runID})
+		runProto, err := provider.GetRun(ctx, &proto.GetWorkflowProviderRunRequest{RunId: runID})
 		if err != nil {
 			if isWorkflowProviderNotFound(err) {
 				continue
@@ -319,6 +357,10 @@ func (m *Manager) findRun(ctx context.Context, runID, providerSelection string) 
 				firstErr = err
 			}
 			continue
+		}
+		run, err := workflowwire.RunFromProto(runProto)
+		if err != nil {
+			return nil, err
 		}
 		if match != nil {
 			return nil, fmt.Errorf("%w: %s", ErrDuplicateWorkflowObjects, runID)

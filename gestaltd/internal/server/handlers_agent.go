@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -1220,27 +1221,7 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 }
 
 func agentToolRefsForCreateTurn(req agentTurnCreateRequest) []*proto.AgentToolRef {
-	return agentToolRefsToProto(agentToolRefsFromRequest(req.ToolRefs))
-}
-
-func agentToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make([]*proto.AgentToolRef, 0, len(refs))
-	for i := range refs {
-		ref := refs[i]
-		out = append(out, &proto.AgentToolRef{
-			System:      strings.TrimSpace(ref.System),
-			App:         strings.TrimSpace(ref.App),
-			Operation:   strings.TrimSpace(ref.Operation),
-			Connection:  strings.TrimSpace(ref.Connection),
-			Instance:    strings.TrimSpace(ref.Instance),
-			Title:       strings.TrimSpace(ref.Title),
-			Description: strings.TrimSpace(ref.Description),
-		})
-	}
-	return out
+	return agentwire.ToolRefsToProto(agentToolRefsFromRequest(req.ToolRefs))
 }
 
 func agentToolRefsToRequest(refs []coreagent.ToolRef) []agentToolRefRequest {

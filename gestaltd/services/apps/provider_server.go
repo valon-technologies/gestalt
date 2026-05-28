@@ -6,12 +6,11 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/agentwire"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
-	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -191,23 +190,9 @@ func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) cont
 		ctx = invocation.WithWorkflowContext(ctx, workflow.AsMap())
 	}
 	if reqCtx.GetToolRefsSet() {
-		ctx = invocation.WithToolRefsContext(ctx, requestToolRefsFromProto(reqCtx.GetToolRefs()))
+		ctx = invocation.WithToolRefsContext(ctx, agentwire.ToolRefsFromProto(reqCtx.GetToolRefs()))
 	}
 	return ctx
-}
-
-func requestToolRefsFromProto(refs []*proto.AgentToolRef) []coreagent.ToolRef {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make([]coreagent.ToolRef, 0, len(refs))
-	for _, ref := range refs {
-		if ref == nil {
-			continue
-		}
-		out = append(out, agentwire.ToolRefFromProto(ref))
-	}
-	return out
 }
 
 func principalFromProto(subject *proto.SubjectContext) *principal.Principal {

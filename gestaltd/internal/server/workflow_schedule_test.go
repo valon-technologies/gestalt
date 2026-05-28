@@ -19,8 +19,11 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 type stubWorkflowControl struct {
@@ -78,17 +81,17 @@ type memoryWorkflowProvider struct {
 	schedules            map[string]*coreworkflow.Schedule
 	triggers             map[string]*coreworkflow.EventTrigger
 	runs                 map[string]*coreworkflow.Run
-	publishEventReqs     []coreworkflow.PublishEventRequest
-	upsertReqs           []coreworkflow.UpsertScheduleRequest
-	upsertTriggerReqs    []coreworkflow.UpsertEventTriggerRequest
-	deleteReqs           []coreworkflow.DeleteScheduleRequest
-	deleteTriggerReqs    []coreworkflow.DeleteEventTriggerRequest
-	pauseReqs            []coreworkflow.PauseScheduleRequest
-	pauseTriggerReqs     []coreworkflow.PauseEventTriggerRequest
-	resumeReqs           []coreworkflow.ResumeScheduleRequest
-	resumeTriggerReqs    []coreworkflow.ResumeEventTriggerRequest
+	publishEventReqs     []*proto.PublishWorkflowProviderEventRequest
+	upsertReqs           []*proto.UpsertWorkflowProviderScheduleRequest
+	upsertTriggerReqs    []*proto.UpsertWorkflowProviderEventTriggerRequest
+	deleteReqs           []*proto.DeleteWorkflowProviderScheduleRequest
+	deleteTriggerReqs    []*proto.DeleteWorkflowProviderEventTriggerRequest
+	pauseReqs            []*proto.PauseWorkflowProviderScheduleRequest
+	pauseTriggerReqs     []*proto.PauseWorkflowProviderEventTriggerRequest
+	resumeReqs           []*proto.ResumeWorkflowProviderScheduleRequest
+	resumeTriggerReqs    []*proto.ResumeWorkflowProviderEventTriggerRequest
 	listRunReqs          []coreworkflow.ListRunsRequest
-	cancelReqs           []coreworkflow.CancelRunRequest
+	cancelReqs           []*proto.CancelWorkflowProviderRunRequest
 	nextUpsertErr        error
 	nextUpsertTriggerErr error
 	getErr               error
@@ -111,36 +114,36 @@ func newMemoryWorkflowProvider() *memoryWorkflowProvider {
 	}
 }
 
-func (p *memoryWorkflowProvider) CreateDefinition(_ context.Context, req coreworkflow.CreateDefinitionRequest) (*coreworkflow.Definition, error) {
-	id := strings.TrimSpace(req.IdempotencyKey)
+func (p *memoryWorkflowProvider) CreateDefinition(_ context.Context, req *proto.CreateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
+	id := strings.TrimSpace(req.GetIdempotencyKey())
 	if id == "" {
 		id = "definition"
 	}
-	definition := &coreworkflow.Definition{ID: id, Target: cloneWorkflowTarget(req.Target), CreatedBy: req.CreatedBy}
+	definition := &coreworkflow.Definition{ID: id, Target: cloneWorkflowTarget(workflowwire.TargetFromProto(req.GetTarget())), CreatedBy: workflowwire.ActorFromProto(req.GetCreatedBy())}
 	p.definitions[id] = definition
-	return cloneWorkflowDefinition(definition), nil
+	return workflowwire.DefinitionToProto(cloneWorkflowDefinition(definition))
 }
 
-func (p *memoryWorkflowProvider) GetDefinition(_ context.Context, req coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
-	definition := p.definitions[strings.TrimSpace(req.DefinitionID)]
+func (p *memoryWorkflowProvider) GetDefinition(_ context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
+	definition := p.definitions[strings.TrimSpace(req.GetDefinitionId())]
 	if definition == nil {
 		return nil, core.ErrNotFound
 	}
-	return cloneWorkflowDefinition(definition), nil
+	return workflowwire.DefinitionToProto(cloneWorkflowDefinition(definition))
 }
 
-func (p *memoryWorkflowProvider) UpdateDefinition(_ context.Context, req coreworkflow.UpdateDefinitionRequest) (*coreworkflow.Definition, error) {
-	id := strings.TrimSpace(req.DefinitionID)
+func (p *memoryWorkflowProvider) UpdateDefinition(_ context.Context, req *proto.UpdateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
+	id := strings.TrimSpace(req.GetDefinitionId())
 	if p.definitions[id] == nil {
 		return nil, core.ErrNotFound
 	}
-	definition := &coreworkflow.Definition{ID: id, Target: cloneWorkflowTarget(req.Target)}
+	definition := &coreworkflow.Definition{ID: id, Target: cloneWorkflowTarget(workflowwire.TargetFromProto(req.GetTarget()))}
 	p.definitions[id] = definition
-	return cloneWorkflowDefinition(definition), nil
+	return workflowwire.DefinitionToProto(cloneWorkflowDefinition(definition))
 }
 
-func (p *memoryWorkflowProvider) DeleteDefinition(_ context.Context, req coreworkflow.DeleteDefinitionRequest) error {
-	id := strings.TrimSpace(req.DefinitionID)
+func (p *memoryWorkflowProvider) DeleteDefinition(_ context.Context, req *proto.DeleteWorkflowProviderDefinitionRequest) error {
+	id := strings.TrimSpace(req.GetDefinitionId())
 	if p.definitions[id] == nil {
 		return core.ErrNotFound
 	}
@@ -148,239 +151,258 @@ func (p *memoryWorkflowProvider) DeleteDefinition(_ context.Context, req corewor
 	return nil
 }
 
-func (p *memoryWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
+func (p *memoryWorkflowProvider) StartRun(context.Context, *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (p *memoryWorkflowProvider) SignalRun(context.Context, coreworkflow.SignalRunRequest) (*coreworkflow.SignalRunResponse, error) {
+func (p *memoryWorkflowProvider) SignalRun(context.Context, *proto.SignalWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (p *memoryWorkflowProvider) SignalOrStartRun(context.Context, coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
+func (p *memoryWorkflowProvider) SignalOrStartRun(context.Context, *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (p *memoryWorkflowProvider) GetRun(_ context.Context, req coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
+func (p *memoryWorkflowProvider) GetRun(_ context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
 	if p.getRunErr != nil {
 		return nil, p.getRunErr
 	}
-	run, ok := p.runs[req.RunID]
+	run, ok := p.runs[req.GetRunId()]
 	if !ok || run == nil {
 		return nil, core.ErrNotFound
 	}
-	return cloneWorkflowRun(run), nil
+	return workflowwire.RunToProto(cloneWorkflowRun(run))
 }
 
-func (p *memoryWorkflowProvider) ListRuns(_ context.Context, req coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
-	p.listRunReqs = append(p.listRunReqs, req)
+func (p *memoryWorkflowProvider) ListRuns(_ context.Context, req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
+	status, err := workflowwire.RunStatusFromProto(req.GetStatus())
+	if err != nil {
+		return nil, err
+	}
+	coreReq := coreworkflow.ListRunsRequest{PageSize: int(req.GetPageSize()), PageToken: req.GetPageToken(), TargetApp: req.GetTargetApp(), Status: status}
+	p.listRunReqs = append(p.listRunReqs, coreReq)
 	if p.listRunsErr != nil {
 		return nil, p.listRunsErr
 	}
-	out := make([]*coreworkflow.Run, 0, len(p.runs))
+	out := &proto.ListWorkflowProviderRunsResponse{NextPageToken: p.listRunsNextPage}
 	for _, run := range p.runs {
 		if run != nil {
-			out = append(out, cloneWorkflowRun(run))
+			pb, err := workflowwire.RunToProto(cloneWorkflowRun(run))
+			if err != nil {
+				return nil, err
+			}
+			out.Runs = append(out.Runs, pb)
 		}
 	}
-	return &coreworkflow.ListRunsResponse{Runs: out, NextPageToken: p.listRunsNextPage}, nil
+	return out, nil
 }
 
-func (p *memoryWorkflowProvider) CancelRun(_ context.Context, req coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
+func (p *memoryWorkflowProvider) CancelRun(_ context.Context, req *proto.CancelWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
 	if p.cancelRunErr != nil {
 		return nil, p.cancelRunErr
 	}
-	run, ok := p.runs[req.RunID]
+	run, ok := p.runs[req.GetRunId()]
 	if !ok || run == nil {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	run.Status = coreworkflow.RunStatusCanceled
 	run.CompletedAt = &now
-	if reason := strings.TrimSpace(req.Reason); reason != "" {
+	if reason := strings.TrimSpace(req.GetReason()); reason != "" {
 		run.StatusMessage = reason
 	}
-	p.cancelReqs = append(p.cancelReqs, req)
-	return cloneWorkflowRun(run), nil
+	p.cancelReqs = append(p.cancelReqs, gproto.Clone(req).(*proto.CancelWorkflowProviderRunRequest))
+	return workflowwire.RunToProto(cloneWorkflowRun(run))
 }
 
-func (p *memoryWorkflowProvider) UpsertSchedule(_ context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
-	p.upsertReqs = append(p.upsertReqs, req)
+func (p *memoryWorkflowProvider) UpsertSchedule(_ context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	target := workflowwire.TargetFromProto(req.GetTarget())
+	p.upsertReqs = append(p.upsertReqs, gproto.Clone(req).(*proto.UpsertWorkflowProviderScheduleRequest))
 	if p.nextUpsertErr != nil {
 		err := p.nextUpsertErr
 		p.nextUpsertErr = nil
 		return nil, err
 	}
 	now := time.Now().UTC().Truncate(time.Second)
-	existing := p.schedules[req.ScheduleID]
+	existing := p.schedules[req.GetScheduleId()]
 	createdAt := &now
 	if existing != nil && existing.CreatedAt != nil {
 		createdAt = existing.CreatedAt
 	}
 	schedule := &coreworkflow.Schedule{
-		ID:           req.ScheduleID,
-		Cron:         req.Cron,
-		Timezone:     req.Timezone,
-		Target:       req.Target,
-		DefinitionID: req.DefinitionID,
-		Paused:       req.Paused,
-		CreatedBy:    req.RequestedBy,
+		ID:           req.GetScheduleId(),
+		Cron:         req.GetCron(),
+		Timezone:     req.GetTimezone(),
+		Target:       target,
+		DefinitionID: req.GetDefinitionId(),
+		Paused:       req.GetPaused(),
+		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
 		CreatedAt:    createdAt,
 		UpdatedAt:    &now,
 	}
-	p.schedules[req.ScheduleID] = cloneWorkflowSchedule(schedule)
-	return cloneWorkflowSchedule(schedule), nil
+	p.schedules[req.GetScheduleId()] = cloneWorkflowSchedule(schedule)
+	return workflowwire.ScheduleToProto(cloneWorkflowSchedule(schedule))
 }
 
-func (p *memoryWorkflowProvider) GetSchedule(_ context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
+func (p *memoryWorkflowProvider) GetSchedule(_ context.Context, req *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	if p.getErr != nil {
 		return nil, p.getErr
 	}
-	schedule, ok := p.schedules[req.ScheduleID]
+	schedule, ok := p.schedules[req.GetScheduleId()]
 	if !ok || schedule == nil {
 		return nil, core.ErrNotFound
 	}
-	return cloneWorkflowSchedule(schedule), nil
+	return workflowwire.ScheduleToProto(cloneWorkflowSchedule(schedule))
 }
 
-func (p *memoryWorkflowProvider) ListSchedules(_ context.Context, req coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
+func (p *memoryWorkflowProvider) ListSchedules(_ context.Context, req *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error) {
 	if p.listErr != nil {
 		return nil, p.listErr
 	}
-	out := make([]*coreworkflow.Schedule, 0, len(p.schedules))
+	out := &proto.ListWorkflowProviderSchedulesResponse{}
 	for _, schedule := range p.schedules {
 		if schedule != nil {
-			out = append(out, cloneWorkflowSchedule(schedule))
+			pb, err := workflowwire.ScheduleToProto(cloneWorkflowSchedule(schedule))
+			if err != nil {
+				return nil, err
+			}
+			out.Schedules = append(out.Schedules, pb)
 		}
 	}
 	return out, nil
 }
 
-func (p *memoryWorkflowProvider) DeleteSchedule(_ context.Context, req coreworkflow.DeleteScheduleRequest) error {
-	schedule, ok := p.schedules[req.ScheduleID]
+func (p *memoryWorkflowProvider) DeleteSchedule(_ context.Context, req *proto.DeleteWorkflowProviderScheduleRequest) error {
+	schedule, ok := p.schedules[req.GetScheduleId()]
 	if !ok || schedule == nil {
 		return core.ErrNotFound
 	}
-	delete(p.schedules, req.ScheduleID)
-	p.deleteReqs = append(p.deleteReqs, req)
+	delete(p.schedules, req.GetScheduleId())
+	p.deleteReqs = append(p.deleteReqs, gproto.Clone(req).(*proto.DeleteWorkflowProviderScheduleRequest))
 	return nil
 }
 
-func (p *memoryWorkflowProvider) PauseSchedule(_ context.Context, req coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
-	schedule, ok := p.schedules[req.ScheduleID]
+func (p *memoryWorkflowProvider) PauseSchedule(_ context.Context, req *proto.PauseWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	schedule, ok := p.schedules[req.GetScheduleId()]
 	if !ok || schedule == nil {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	schedule.Paused = true
 	schedule.UpdatedAt = &now
-	p.pauseReqs = append(p.pauseReqs, req)
-	return cloneWorkflowSchedule(schedule), nil
+	p.pauseReqs = append(p.pauseReqs, gproto.Clone(req).(*proto.PauseWorkflowProviderScheduleRequest))
+	return workflowwire.ScheduleToProto(cloneWorkflowSchedule(schedule))
 }
 
-func (p *memoryWorkflowProvider) ResumeSchedule(_ context.Context, req coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
-	schedule, ok := p.schedules[req.ScheduleID]
+func (p *memoryWorkflowProvider) ResumeSchedule(_ context.Context, req *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	schedule, ok := p.schedules[req.GetScheduleId()]
 	if !ok || schedule == nil {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	schedule.Paused = false
 	schedule.UpdatedAt = &now
-	p.resumeReqs = append(p.resumeReqs, req)
-	return cloneWorkflowSchedule(schedule), nil
+	p.resumeReqs = append(p.resumeReqs, gproto.Clone(req).(*proto.ResumeWorkflowProviderScheduleRequest))
+	return workflowwire.ScheduleToProto(cloneWorkflowSchedule(schedule))
 }
 
-func (p *memoryWorkflowProvider) UpsertEventTrigger(_ context.Context, req coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	p.upsertTriggerReqs = append(p.upsertTriggerReqs, req)
+func (p *memoryWorkflowProvider) UpsertEventTrigger(_ context.Context, req *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	match := workflowwire.EventMatchFromProto(req.GetMatch())
+	target := workflowwire.TargetFromProto(req.GetTarget())
+	p.upsertTriggerReqs = append(p.upsertTriggerReqs, gproto.Clone(req).(*proto.UpsertWorkflowProviderEventTriggerRequest))
 	if p.nextUpsertTriggerErr != nil {
 		err := p.nextUpsertTriggerErr
 		p.nextUpsertTriggerErr = nil
 		return nil, err
 	}
 	now := time.Now().UTC().Truncate(time.Second)
-	existing := p.triggers[req.TriggerID]
+	existing := p.triggers[req.GetTriggerId()]
 	createdAt := &now
 	if existing != nil && existing.CreatedAt != nil {
 		createdAt = existing.CreatedAt
 	}
 	trigger := &coreworkflow.EventTrigger{
-		ID:           req.TriggerID,
-		Match:        req.Match,
-		Target:       req.Target,
-		DefinitionID: req.DefinitionID,
-		Paused:       req.Paused,
-		CreatedBy:    req.RequestedBy,
+		ID:           req.GetTriggerId(),
+		Match:        match,
+		Target:       target,
+		DefinitionID: req.GetDefinitionId(),
+		Paused:       req.GetPaused(),
+		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
 		CreatedAt:    createdAt,
 		UpdatedAt:    &now,
 	}
-	p.triggers[req.TriggerID] = cloneWorkflowEventTrigger(trigger)
-	return cloneWorkflowEventTrigger(trigger), nil
+	p.triggers[req.GetTriggerId()] = cloneWorkflowEventTrigger(trigger)
+	return workflowwire.EventTriggerToProto(cloneWorkflowEventTrigger(trigger))
 }
 
-func (p *memoryWorkflowProvider) GetEventTrigger(_ context.Context, req coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+func (p *memoryWorkflowProvider) GetEventTrigger(_ context.Context, req *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
 	if p.getTriggerErr != nil {
 		return nil, p.getTriggerErr
 	}
-	trigger, ok := p.triggers[req.TriggerID]
+	trigger, ok := p.triggers[req.GetTriggerId()]
 	if !ok || trigger == nil {
 		return nil, core.ErrNotFound
 	}
-	return cloneWorkflowEventTrigger(trigger), nil
+	return workflowwire.EventTriggerToProto(cloneWorkflowEventTrigger(trigger))
 }
 
-func (p *memoryWorkflowProvider) ListEventTriggers(_ context.Context, _ coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
+func (p *memoryWorkflowProvider) ListEventTriggers(_ context.Context, _ *proto.ListWorkflowProviderEventTriggersRequest) (*proto.ListWorkflowProviderEventTriggersResponse, error) {
 	if p.listTriggersErr != nil {
 		return nil, p.listTriggersErr
 	}
-	out := make([]*coreworkflow.EventTrigger, 0, len(p.triggers))
+	out := &proto.ListWorkflowProviderEventTriggersResponse{}
 	for _, trigger := range p.triggers {
 		if trigger != nil {
-			out = append(out, cloneWorkflowEventTrigger(trigger))
+			pb, err := workflowwire.EventTriggerToProto(cloneWorkflowEventTrigger(trigger))
+			if err != nil {
+				return nil, err
+			}
+			out.Triggers = append(out.Triggers, pb)
 		}
 	}
 	return out, nil
 }
 
-func (p *memoryWorkflowProvider) DeleteEventTrigger(_ context.Context, req coreworkflow.DeleteEventTriggerRequest) error {
-	trigger, ok := p.triggers[req.TriggerID]
+func (p *memoryWorkflowProvider) DeleteEventTrigger(_ context.Context, req *proto.DeleteWorkflowProviderEventTriggerRequest) error {
+	trigger, ok := p.triggers[req.GetTriggerId()]
 	if !ok || trigger == nil {
 		return core.ErrNotFound
 	}
-	delete(p.triggers, req.TriggerID)
-	p.deleteTriggerReqs = append(p.deleteTriggerReqs, req)
+	delete(p.triggers, req.GetTriggerId())
+	p.deleteTriggerReqs = append(p.deleteTriggerReqs, gproto.Clone(req).(*proto.DeleteWorkflowProviderEventTriggerRequest))
 	return nil
 }
 
-func (p *memoryWorkflowProvider) PauseEventTrigger(_ context.Context, req coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	trigger, ok := p.triggers[req.TriggerID]
+func (p *memoryWorkflowProvider) PauseEventTrigger(_ context.Context, req *proto.PauseWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	trigger, ok := p.triggers[req.GetTriggerId()]
 	if !ok || trigger == nil {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	trigger.Paused = true
 	trigger.UpdatedAt = &now
-	p.pauseTriggerReqs = append(p.pauseTriggerReqs, req)
-	return cloneWorkflowEventTrigger(trigger), nil
+	p.pauseTriggerReqs = append(p.pauseTriggerReqs, gproto.Clone(req).(*proto.PauseWorkflowProviderEventTriggerRequest))
+	return workflowwire.EventTriggerToProto(cloneWorkflowEventTrigger(trigger))
 }
 
-func (p *memoryWorkflowProvider) ResumeEventTrigger(_ context.Context, req coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	trigger, ok := p.triggers[req.TriggerID]
+func (p *memoryWorkflowProvider) ResumeEventTrigger(_ context.Context, req *proto.ResumeWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	trigger, ok := p.triggers[req.GetTriggerId()]
 	if !ok || trigger == nil {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	trigger.Paused = false
 	trigger.UpdatedAt = &now
-	p.resumeTriggerReqs = append(p.resumeTriggerReqs, req)
-	return cloneWorkflowEventTrigger(trigger), nil
+	p.resumeTriggerReqs = append(p.resumeTriggerReqs, gproto.Clone(req).(*proto.ResumeWorkflowProviderEventTriggerRequest))
+	return workflowwire.EventTriggerToProto(cloneWorkflowEventTrigger(trigger))
 }
 
-func (p *memoryWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
+func (p *memoryWorkflowProvider) PublishEvent(_ context.Context, req *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
 	if p.publishEventErr != nil {
 		return nil, p.publishEventErr
 	}
-	req.Event = cloneWorkflowEvent(req.Event)
-	p.publishEventReqs = append(p.publishEventReqs, req)
-	return &req.Event, nil
+	p.publishEventReqs = append(p.publishEventReqs, gproto.Clone(req).(*proto.PublishWorkflowProviderEventRequest))
+	return req.GetEvent(), nil
 }
 
 func (p *memoryWorkflowProvider) Ping(context.Context) error { return nil }
@@ -524,17 +546,6 @@ func requireCoreWorkflowAgentStep(t *testing.T, target coreworkflow.Target) core
 	}
 	t.Fatalf("target agent step is missing: %#v", target)
 	return coreworkflow.Step{}
-}
-
-func cloneWorkflowEvent(event coreworkflow.Event) coreworkflow.Event {
-	cloned := event
-	cloned.Data = cloneMap(event.Data)
-	cloned.Extensions = cloneMap(event.Extensions)
-	if event.Time != nil {
-		value := *event.Time
-		cloned.Time = &value
-	}
-	return cloned
 }
 
 func cloneMap(src map[string]any) map[string]any {
@@ -735,10 +746,10 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
-	createUpsert := provider.upsertReqs[len(provider.upsertReqs)-1]
-	createUpsertApp := requireCoreWorkflowAppStep(t, createUpsert.Target)
+	createUpsertTarget := workflowwire.TargetFromProto(provider.upsertReqs[len(provider.upsertReqs)-1].GetTarget())
+	createUpsertApp := requireCoreWorkflowAppStep(t, createUpsertTarget)
 	if createUpsertApp.Name != "roadmap" || createUpsertApp.Operation != "sync" {
-		t.Fatalf("upsert target = %#v", createUpsert.Target)
+		t.Fatalf("upsert target = %#v", createUpsertTarget)
 	}
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
@@ -779,8 +790,8 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	if len(provider.upsertReqs) != 2 {
 		t.Fatalf("upsert requests after update = %d, want 2", len(provider.upsertReqs))
 	}
-	updateUpsert := provider.upsertReqs[len(provider.upsertReqs)-1]
-	updateUpsertApp := requireCoreWorkflowAppStep(t, updateUpsert.Target)
+	updateUpsertTarget := workflowwire.TargetFromProto(provider.upsertReqs[len(provider.upsertReqs)-1].GetTarget())
+	updateUpsertApp := requireCoreWorkflowAppStep(t, updateUpsertTarget)
 	if updateUpsertApp.Input.Object["mode"].Literal != "full" {
 		t.Fatalf("update target input = %#v", updateUpsertApp.Input)
 	}
@@ -895,7 +906,7 @@ func TestWorkflowScheduleAgentStepCreateAndList(t *testing.T) {
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
-	storedTarget := provider.upsertReqs[0].Target
+	storedTarget := workflowwire.TargetFromProto(provider.upsertReqs[0].GetTarget())
 	requireCoreWorkflowAgentStep(t, storedTarget)
 	storedApp := requireCoreWorkflowAppStep(t, storedTarget)
 	if storedApp.Name != "roadmap" || storedApp.Operation != "sync" {
@@ -1000,7 +1011,7 @@ func TestWorkflowScheduleAgentStepPreservesWorkflowSystemToolRefs(t *testing.T) 
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
-	storedTarget := provider.upsertReqs[0].Target
+	storedTarget := workflowwire.TargetFromProto(provider.upsertReqs[0].GetTarget())
 	storedStep := requireCoreWorkflowAgentStep(t, storedTarget)
 	if len(storedStep.Agent.ToolRefs) != 2 {
 		t.Fatalf("stored agent step = %#v", storedTarget)
@@ -1222,7 +1233,7 @@ func TestCreateWorkflowScheduleAllowsAuthorizedCatalogOperation(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, body)
 	}
-	if len(provider.upsertReqs) != 1 || requireCoreWorkflowAppStep(t, provider.upsertReqs[0].Target).Operation != "export" {
+	if len(provider.upsertReqs) != 1 || requireCoreWorkflowAppStep(t, workflowwire.TargetFromProto(provider.upsertReqs[0].GetTarget())).Operation != "export" {
 		t.Fatalf("upsert requests = %#v", provider.upsertReqs)
 	}
 }
@@ -1635,8 +1646,9 @@ func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
-	if requireCoreWorkflowAppStep(t, provider.upsertReqs[0].Target).Instance != "tenant-a" {
-		t.Fatalf("stored target = %#v, want resolved instance tenant-a", provider.upsertReqs[0].Target)
+	storedTarget := workflowwire.TargetFromProto(provider.upsertReqs[0].GetTarget())
+	if requireCoreWorkflowAppStep(t, storedTarget).Instance != "tenant-a" {
+		t.Fatalf("stored target = %#v, want resolved instance tenant-a", storedTarget)
 	}
 }
 
@@ -1828,8 +1840,9 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if len(basicProvider.upsertReqs) != 1 {
 		t.Fatalf("basic upsert requests = %d, want 1", len(basicProvider.upsertReqs))
 	}
-	if requireCoreWorkflowAppStep(t, basicProvider.upsertReqs[0].Target).Name != "roadmap" {
-		t.Fatalf("basic create target = %#v", basicProvider.upsertReqs[0].Target)
+	basicCreateTarget := workflowwire.TargetFromProto(basicProvider.upsertReqs[0].GetTarget())
+	if requireCoreWorkflowAppStep(t, basicCreateTarget).Name != "roadmap" {
+		t.Fatalf("basic create target = %#v", basicCreateTarget)
 	}
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
@@ -1883,7 +1896,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if len(advancedProvider.upsertReqs) != 1 {
 		t.Fatalf("advanced upsert requests = %d, want 1", len(advancedProvider.upsertReqs))
 	}
-	if len(basicProvider.deleteReqs) != 1 || basicProvider.deleteReqs[0].ScheduleID != created.ID {
+	if len(basicProvider.deleteReqs) != 1 || basicProvider.deleteReqs[0].GetScheduleId() != created.ID {
 		t.Fatalf("basic delete requests = %#v", basicProvider.deleteReqs)
 	}
 	if _, ok := basicProvider.schedules[created.ID]; ok {
@@ -2151,8 +2164,9 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	if len(basicProvider.upsertTriggerReqs) != 1 {
 		t.Fatalf("basic trigger upsert requests = %d, want 1", len(basicProvider.upsertTriggerReqs))
 	}
-	if requireCoreWorkflowAppStep(t, basicProvider.upsertTriggerReqs[0].Target).Name != "roadmap" {
-		t.Fatalf("basic create target = %#v", basicProvider.upsertTriggerReqs[0].Target)
+	basicCreateTarget := workflowwire.TargetFromProto(basicProvider.upsertTriggerReqs[0].GetTarget())
+	if requireCoreWorkflowAppStep(t, basicCreateTarget).Name != "roadmap" {
+		t.Fatalf("basic create target = %#v", basicCreateTarget)
 	}
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/event-triggers/", nil)
@@ -2202,7 +2216,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	if len(advancedProvider.upsertTriggerReqs) != 1 {
 		t.Fatalf("advanced trigger upsert requests = %d, want 1", len(advancedProvider.upsertTriggerReqs))
 	}
-	if len(basicProvider.deleteTriggerReqs) != 1 || basicProvider.deleteTriggerReqs[0].TriggerID != created.ID {
+	if len(basicProvider.deleteTriggerReqs) != 1 || basicProvider.deleteTriggerReqs[0].GetTriggerId() != created.ID {
 		t.Fatalf("basic delete trigger requests = %#v", basicProvider.deleteTriggerReqs)
 	}
 	if _, ok := basicProvider.triggers[created.ID]; ok {
@@ -2328,7 +2342,7 @@ func TestWorkflowEventTriggerAgentThenAppStepsCreateAndList(t *testing.T) {
 	if len(provider.upsertTriggerReqs) != 1 {
 		t.Fatalf("upsert trigger requests = %d, want 1", len(provider.upsertTriggerReqs))
 	}
-	storedTarget := provider.upsertTriggerReqs[0].Target
+	storedTarget := workflowwire.TargetFromProto(provider.upsertTriggerReqs[0].GetTarget())
 	requireCoreWorkflowAgentStep(t, storedTarget)
 	storedApp := requireCoreWorkflowAppStep(t, storedTarget)
 	if storedApp.Name != "roadmap" || storedApp.Operation != "sync" {
@@ -2792,18 +2806,20 @@ func TestWorkflowEventPublishFansOutAcrossWorkflowProviders(t *testing.T) {
 		if len(provider.publishEventReqs) != 1 {
 			t.Fatalf("%s publish requests = %d, want 1", name, len(provider.publishEventReqs))
 		}
-		if got := provider.publishEventReqs[0].AppName; got != "" {
+		if got := provider.publishEventReqs[0].GetAppName(); got != "" {
 			t.Fatalf("%s publish app = %q, want empty global publish", name, got)
 		}
 		for _, publishReq := range provider.publishEventReqs {
-			if publishReq.Event.ID != body.Event.ID || publishReq.Event.SpecVersion != "1.0" || publishReq.Event.Time == nil || !publishReq.Event.Time.Equal(*body.Event.Time) {
-				t.Fatalf("%s publish event = %#v, response = %#v", name, publishReq.Event, body.Event)
+			publishedAt := publishReq.GetEvent().GetTime().AsTime()
+			if publishReq.GetEvent().GetId() != body.Event.ID || publishReq.GetEvent().GetSpecVersion() != "1.0" || publishReq.GetEvent().GetTime() == nil || !publishedAt.Equal(*body.Event.Time) {
+				t.Fatalf("%s publish event = %#v, response = %#v", name, publishReq.GetEvent(), body.Event)
 			}
-			if publishReq.PublishedBy.SubjectID != principal.UserSubjectID(user.ID) ||
-				publishReq.PublishedBy.SubjectKind != "user" ||
-				publishReq.PublishedBy.DisplayName != "Ada" ||
-				publishReq.PublishedBy.AuthSource != "session" {
-				t.Fatalf("%s published_by = %#v, want publishing user actor", name, publishReq.PublishedBy)
+			publishedBy := publishReq.GetPublishedBy()
+			if publishedBy.GetSubjectId() != principal.UserSubjectID(user.ID) ||
+				publishedBy.GetSubjectKind() != "user" ||
+				publishedBy.GetDisplayName() != "Ada" ||
+				publishedBy.GetAuthSource() != "session" {
+				t.Fatalf("%s published_by = %#v, want publishing user actor", name, publishedBy)
 			}
 		}
 	}

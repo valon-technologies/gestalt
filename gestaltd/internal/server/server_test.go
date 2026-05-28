@@ -40,7 +40,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -693,50 +692,6 @@ func (i *relayTestInvoker) snapshot() relayTestInvokerCall {
 		idempotencyKey: i.idempotencyKey,
 		params:         maps.Clone(i.params),
 	}
-}
-
-type relayTestWorkflowProvider struct {
-	*memoryWorkflowProvider
-
-	mu               sync.Mutex
-	signalOrStartReq coreworkflow.SignalOrStartRunRequest
-}
-
-func newRelayTestWorkflowProvider() *relayTestWorkflowProvider {
-	return &relayTestWorkflowProvider{
-		memoryWorkflowProvider: newMemoryWorkflowProvider(),
-	}
-}
-
-func (p *relayTestWorkflowProvider) SignalOrStartRun(_ context.Context, req coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
-	p.mu.Lock()
-	p.signalOrStartReq = req
-	p.mu.Unlock()
-	now := time.Now().UTC()
-	signal := req.Signal
-	if signal.ID == "" {
-		signal.ID = "signal-1"
-	}
-	return &coreworkflow.SignalRunResponse{
-		Run: &coreworkflow.Run{
-			ID:           "workflow-run-1",
-			Status:       coreworkflow.RunStatusRunning,
-			WorkflowKey:  req.WorkflowKey,
-			Target:       req.Target,
-			DefinitionID: req.DefinitionID,
-			CreatedAt:    &now,
-			StartedAt:    &now,
-		},
-		Signal:      signal,
-		StartedRun:  true,
-		WorkflowKey: req.WorkflowKey,
-	}, nil
-}
-
-func (p *relayTestWorkflowProvider) signalOrStartRequest() coreworkflow.SignalOrStartRunRequest {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.signalOrStartReq
 }
 
 type relayTestSessionVerifier struct {

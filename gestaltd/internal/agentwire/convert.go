@@ -5,8 +5,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
 )
 
 func MessageToProto(message coreagent.Message) (*proto.AgentMessage, error) {
@@ -153,6 +153,9 @@ func ToolRefsFromProto(refs []*proto.AgentToolRef) []coreagent.ToolRef {
 	}
 	out := make([]coreagent.ToolRef, 0, len(refs))
 	for _, ref := range refs {
+		if ref == nil {
+			continue
+		}
 		out = append(out, ToolRefFromProto(ref))
 	}
 	return out

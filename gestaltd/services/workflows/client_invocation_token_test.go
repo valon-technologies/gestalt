@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"google.golang.org/grpc"
@@ -81,15 +82,19 @@ func TestRemoteWorkflowForwardsRestoredInvocationToken(t *testing.T) {
 
 	calls := map[string]func() error{
 		"StartRun": func() error {
-			_, err := workflow.StartRun(ctx, coreworkflow.StartRunRequest{Target: target})
+			targetProto, err := workflowwire.TargetToProto(target)
+			if err != nil {
+				return err
+			}
+			_, err = workflow.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{Target: targetProto})
 			return err
 		},
 		"ListSchedules": func() error {
-			_, err := workflow.ListSchedules(ctx, coreworkflow.ListSchedulesRequest{})
+			_, err := workflow.ListSchedules(ctx, &proto.ListWorkflowProviderSchedulesRequest{})
 			return err
 		},
 		"PublishEvent": func() error {
-			_, err := workflow.PublishEvent(ctx, coreworkflow.PublishEventRequest{Event: coreworkflow.Event{Type: "issue.created"}})
+			_, err := workflow.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{Event: &proto.WorkflowEvent{Type: "issue.created"}})
 			return err
 		},
 	}

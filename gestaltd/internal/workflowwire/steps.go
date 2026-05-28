@@ -1,4 +1,4 @@
-package workflows
+package workflowwire
 
 import (
 	"fmt"
@@ -7,11 +7,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentwire"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
 )
 
-func workflowTargetToProto(target coreworkflow.Target) (*proto.BoundWorkflowTarget, error) {
+func TargetToProto(target coreworkflow.Target) (*proto.BoundWorkflowTarget, error) {
 	steps, err := workflowStepsToProto(target.Steps)
 	if err != nil {
 		return nil, err
@@ -19,7 +20,7 @@ func workflowTargetToProto(target coreworkflow.Target) (*proto.BoundWorkflowTarg
 	return &proto.BoundWorkflowTarget{Steps: steps}, nil
 }
 
-func workflowTargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Target {
+func TargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Target {
 	if target == nil {
 		return coreworkflow.Target{}
 	}
@@ -64,7 +65,7 @@ func workflowStepToProto(step coreworkflow.Step) (*proto.WorkflowStep, error) {
 	if err != nil {
 		return nil, fmt.Errorf("when: %w", err)
 	}
-	metadata, err := structFromMap(step.Metadata)
+	metadata, err := protoutil.StructFromMap(step.Metadata)
 	if err != nil {
 		return nil, fmt.Errorf("metadata: %w", err)
 	}
@@ -100,7 +101,7 @@ func workflowStepFromProto(step *proto.WorkflowStep) coreworkflow.Step {
 		Inputs:         workflowValueMapFromProto(step.GetInputs()),
 		When:           workflowStepWhenFromProto(step.GetWhen()),
 		TimeoutSeconds: int(step.GetTimeoutSeconds()),
-		Metadata:       mapFromStruct(step.GetMetadata()),
+		Metadata:       protoutil.MapFromStruct(step.GetMetadata()),
 	}
 	if step.GetApp() != nil {
 		out.App = workflowStepAppCallFromProto(step.GetApp())
@@ -155,7 +156,7 @@ func workflowStepAgentTurnToProto(target *coreworkflow.AgentTurn) (*proto.Workfl
 	if err != nil {
 		return nil, fmt.Errorf("output: %w", err)
 	}
-	modelOptions, err := structFromMap(target.ModelOptions)
+	modelOptions, err := protoutil.StructFromMap(target.ModelOptions)
 	if err != nil {
 		return nil, fmt.Errorf("model_options: %w", err)
 	}
@@ -183,7 +184,7 @@ func workflowStepAgentTurnFromProto(target *proto.WorkflowStepAgentTurn) *corewo
 		Messages:     workflowAgentMessagesFromProto(target.GetMessages()),
 		ToolRefs:     agentwire.ToolRefsFromProto(target.GetTools()),
 		Output:       workflowAgentOutputFromProto(target.GetOutput()),
-		ModelOptions: mapFromStruct(target.GetModelOptions()),
+		ModelOptions: protoutil.MapFromStruct(target.GetModelOptions()),
 	}
 }
 
@@ -194,7 +195,7 @@ func workflowAgentOutputToProto(output coreagent.Output) (*proto.AgentOutput, er
 		return nil, fmt.Errorf("exactly one of output.text or output.structured is required")
 	}
 	if output.Structured != nil {
-		schema, err := structFromMap(output.Structured.Schema)
+		schema, err := protoutil.StructFromMap(output.Structured.Schema)
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +217,7 @@ func workflowAgentOutputFromProto(output *proto.AgentOutput) coreagent.Output {
 	}
 	if structured := output.GetStructured(); structured != nil {
 		return coreagent.Output{
-			Structured: &coreagent.StructuredOutput{Schema: mapFromStruct(structured.GetSchema())},
+			Structured: &coreagent.StructuredOutput{Schema: protoutil.MapFromStruct(structured.GetSchema())},
 		}
 	}
 	if output.GetText() != nil {
@@ -232,7 +233,7 @@ func workflowAgentMessagesToProto(messages []coreworkflow.AgentMessage) ([]*prot
 	out := make([]*proto.WorkflowAgentMessage, 0, len(messages))
 	for i := range messages {
 		message := messages[i]
-		metadata, err := structFromMap(message.Metadata)
+		metadata, err := protoutil.StructFromMap(message.Metadata)
 		if err != nil {
 			return nil, fmt.Errorf("messages[%d].metadata: %w", i, err)
 		}
@@ -257,7 +258,7 @@ func workflowAgentMessagesFromProto(messages []*proto.WorkflowAgentMessage) []co
 		out = append(out, coreworkflow.AgentMessage{
 			Role:     strings.TrimSpace(message.GetRole()),
 			Text:     workflowTextFromProto(message.GetText()),
-			Metadata: mapFromStruct(message.GetMetadata()),
+			Metadata: protoutil.MapFromStruct(message.GetMetadata()),
 		})
 	}
 	return out
@@ -288,7 +289,7 @@ func workflowStepWhenToProto(when *coreworkflow.StepWhen) (*proto.WorkflowStepWh
 	if err != nil {
 		return nil, fmt.Errorf("value: %w", err)
 	}
-	equals, err := protoValueFromAny(when.Equals)
+	equals, err := protoutil.ValueFromAny(when.Equals)
 	if err != nil {
 		return nil, fmt.Errorf("equals: %w", err)
 	}
@@ -301,7 +302,7 @@ func workflowStepWhenFromProto(when *proto.WorkflowStepWhen) *coreworkflow.StepW
 	}
 	return &coreworkflow.StepWhen{
 		Value:     workflowValueFromProto(when.GetValue()),
-		Equals:    protoValueToAny(when.GetEquals()),
+		Equals:    protoutil.ValueToAny(when.GetEquals()),
 		EqualsSet: when.Equals != nil,
 	}
 }
@@ -367,7 +368,7 @@ func workflowValueToProto(value coreworkflow.Value) (*proto.WorkflowValue, error
 	}
 	switch {
 	case value.LiteralSet:
-		literal, err := protoValueFromAny(value.Literal)
+		literal, err := protoutil.ValueFromAny(value.Literal)
 		if err != nil {
 			return nil, err
 		}
@@ -410,7 +411,7 @@ func workflowValueFromProto(value *proto.WorkflowValue) coreworkflow.Value {
 	}
 	switch typed := value.GetKind().(type) {
 	case *proto.WorkflowValue_Literal:
-		return coreworkflow.Value{Literal: protoValueToAny(typed.Literal), LiteralSet: true}
+		return coreworkflow.Value{Literal: protoutil.ValueToAny(typed.Literal), LiteralSet: true}
 	case *proto.WorkflowValue_Object:
 		return coreworkflow.Value{Object: workflowValueObjectMapFromProto(typed.Object.GetFields())}
 	case *proto.WorkflowValue_Array:
