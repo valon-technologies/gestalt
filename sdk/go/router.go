@@ -338,10 +338,19 @@ func jsonResponseHeaders(headers http.Header) http.Header {
 	if out == nil {
 		out = http.Header{}
 	}
-	if out.Get("Content-Type") == "" {
+	if !hasHeader(out, "Content-Type") {
 		out.Set("Content-Type", "application/json")
 	}
 	return out
+}
+
+func hasHeader(headers http.Header, name string) bool {
+	for key := range headers {
+		if strings.EqualFold(key, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func jsonField(field reflect.StructField) (name string, omitempty, include bool) {

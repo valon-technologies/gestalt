@@ -237,6 +237,35 @@ func TestRouterOperationExecution(t *testing.T) {
 	}
 }
 
+func TestRouterOperationExecutionPreservesNonCanonicalContentType(t *testing.T) {
+	t.Parallel()
+
+	router := gestalt.MustRouter(
+		gestalt.Register(
+			gestalt.Operation[struct{}, struct{}]{
+				ID:     "custom_content_type",
+				Method: http.MethodPost,
+			},
+			func(*execProvider, context.Context, struct{}, gestalt.Request) (gestalt.Response[struct{}], error) {
+				return gestalt.Response[struct{}]{
+					Headers: http.Header{"content-type": []string{"text/html"}},
+				}, nil
+			},
+		),
+	)
+
+	result, err := router.Execute(context.Background(), &execProvider{}, "custom_content_type", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got := result.Headers["content-type"]; len(got) != 1 || got[0] != "text/html" {
+		t.Fatalf("content-type header = %#v, want [text/html]", got)
+	}
+	if got := result.Headers["Content-Type"]; got != nil {
+		t.Fatalf("Content-Type header = %#v, want absent", got)
+	}
+}
+
 func TestRouterCatalogName(t *testing.T) {
 	t.Parallel()
 
