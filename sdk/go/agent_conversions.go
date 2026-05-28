@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -28,18 +29,6 @@ func agentMessagesFromProto(values []*proto.AgentMessage) []AgentMessage {
 	out := make([]AgentMessage, 0, len(values))
 	for _, value := range values {
 		out = append(out, agentMessageFromProto(value))
-	}
-	return out
-}
-
-func agentMessagePtrsFromProto(values []*proto.AgentMessage) []*AgentMessage {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]*AgentMessage, 0, len(values))
-	for _, value := range values {
-		native := agentMessageFromProto(value)
-		out = append(out, &native)
 	}
 	return out
 }
@@ -141,6 +130,23 @@ func agentMessagePartToProto(value AgentMessagePart) (*proto.AgentMessagePart, e
 		ToolResult: toolResult,
 		ImageRef:   agentMessagePartImageRefToProto(value.ImageRef),
 	}, nil
+}
+
+func inferAgentMessagePartType(input AgentMessagePart) AgentMessagePartType {
+	switch {
+	case input.ToolCall != nil:
+		return AgentMessagePartTypeToolCall
+	case input.ToolResult != nil:
+		return AgentMessagePartTypeToolResult
+	case input.ImageRef != nil:
+		return AgentMessagePartTypeImageRef
+	case input.JSON != nil:
+		return AgentMessagePartTypeJSON
+	case strings.TrimSpace(input.Text) != "":
+		return AgentMessagePartTypeText
+	default:
+		return AgentMessagePartTypeUnspecified
+	}
 }
 
 func agentMessagePartToolCallFromProto(value *proto.AgentMessagePartToolCall) *AgentMessagePartToolCall {
@@ -330,18 +336,6 @@ func agentToolRefsFromProto(values []*proto.AgentToolRef) []AgentToolRef {
 	return out
 }
 
-func agentToolRefPtrsFromProto(values []*proto.AgentToolRef) []*AgentToolRef {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]*AgentToolRef, 0, len(values))
-	for _, value := range values {
-		native := agentToolRefFromProto(value)
-		out = append(out, &native)
-	}
-	return out
-}
-
 func agentToolRefToProto(value AgentToolRef) *proto.AgentToolRef {
 	return &proto.AgentToolRef{
 		App:                   value.App,
@@ -374,20 +368,6 @@ func externalIdentityToProto(value *ExternalIdentity) *proto.ExternalIdentityCon
 		Type: value.Type,
 		Id:   value.ID,
 	}
-}
-
-func agentToolRefPtrsToProto(values []*AgentToolRef) []*proto.AgentToolRef {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]*proto.AgentToolRef, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		out = append(out, agentToolRefToProto(*value))
-	}
-	return out
 }
 
 func agentToolRefsToProto(values []AgentToolRef) []*proto.AgentToolRef {
@@ -423,16 +403,33 @@ func agentProviderCapabilitiesToProto(value *AgentProviderCapabilities) *proto.A
 	}
 }
 
-func agentOutputToProto(value AgentOutput) (*proto.AgentOutput, error) {
-	textSet := value.Text != nil
-	structuredSet := value.Structured != nil
-	if textSet == structuredSet {
-		return nil, fmt.Errorf("exactly one of output.text or output.structured is required")
+func agentOutputFromProto(value *proto.AgentOutput) *AgentOutput {
+	if value == nil || value.GetKind() == nil {
+		return nil
 	}
-	if value.Structured != nil {
-		if len(value.Structured.Schema) == 0 {
-			return nil, fmt.Errorf("output.structured.schema is required")
+	if value.GetText() != nil {
+		return &AgentOutput{Text: &AgentTextOutput{}}
+	}
+	if structured := value.GetStructured(); structured != nil {
+		return &AgentOutput{
+			Structured: &AgentStructuredOutput{
+				Schema: mapFromStruct(structured.GetSchema()),
+			},
 		}
+	}
+	return nil
+}
+
+func agentOutputToProto(value *AgentOutput) (*proto.AgentOutput, error) {
+	if value == nil {
+		return nil, nil
+	}
+	switch {
+	case value.Text != nil && value.Structured != nil:
+		return nil, fmt.Errorf("agent output cannot set both text and structured")
+	case value.Text != nil:
+		return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}, nil
+	case value.Structured != nil:
 		schema, err := structFromAny(value.Structured.Schema)
 		if err != nil {
 			return nil, err
@@ -442,74 +439,54 @@ func agentOutputToProto(value AgentOutput) (*proto.AgentOutput, error) {
 				Structured: &proto.AgentStructuredOutput{Schema: schema},
 			},
 		}, nil
+	default:
+		return nil, nil
 	}
-	if value.Text != nil {
-		return &proto.AgentOutput{
-			Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}},
-		}, nil
-	}
-	return nil, fmt.Errorf("exactly one of output.text or output.structured is required")
 }
 
-func agentOutputFromProto(value *proto.AgentOutput) AgentOutput {
-	if value == nil {
-		return AgentOutput{}
-	}
-	if structured := value.GetStructured(); structured != nil {
-		return AgentOutput{
-			Structured: &AgentStructuredOutput{Schema: mapFromStruct(structured.GetSchema())},
-		}
-	}
-	if value.GetText() != nil {
-		return AgentOutput{Text: &AgentTextOutput{}}
-	}
-	return AgentOutput{}
-}
-
-func setAgentTurnOutputProto(turn *proto.AgentTurn, value AgentTurnOutput) error {
-	if turn == nil {
+func agentTurnOutputFromProto(value *proto.AgentTurn) *AgentTurnOutput {
+	if value == nil || value.GetOutput() == nil {
 		return nil
 	}
-	textSet := value.Text != nil
-	structuredSet := value.Structured != nil
-	if textSet && structuredSet {
-		return fmt.Errorf("exactly one of output.text or output.structured is required")
-	}
-	if value.Structured != nil {
-		structuredValue, err := structFromAny(value.Structured.Value)
-		if err != nil {
-			return err
-		}
-		turn.Output = &proto.AgentTurn_Structured{
-			Structured: &proto.AgentTurnStructuredOutput{
-				Text:  value.Structured.Text,
-				Value: structuredValue,
-			},
-		}
-		return nil
-	}
-	if value.Text != nil {
-		turn.Output = &proto.AgentTurn_Text{Text: &proto.AgentTurnTextOutput{Text: value.Text.Text}}
-	}
-	return nil
-}
-
-func agentTurnOutputFromProto(value *proto.AgentTurn) AgentTurnOutput {
-	if value == nil {
-		return AgentTurnOutput{}
+	if text := value.GetText(); text != nil {
+		return &AgentTurnOutput{Text: &AgentTurnTextOutput{Text: text.GetText()}}
 	}
 	if structured := value.GetStructured(); structured != nil {
-		return AgentTurnOutput{
+		return &AgentTurnOutput{
 			Structured: &AgentTurnStructuredOutput{
 				Text:  structured.GetText(),
 				Value: mapFromStruct(structured.GetValue()),
 			},
 		}
 	}
-	if text := value.GetText(); text != nil {
-		return AgentTurnOutput{Text: &AgentTurnTextOutput{Text: text.GetText()}}
+	return nil
+}
+
+func applyAgentTurnOutputToProto(out *proto.AgentTurn, value *AgentTurnOutput) error {
+	if value == nil {
+		return nil
 	}
-	return AgentTurnOutput{}
+	switch {
+	case value.Text != nil && value.Structured != nil:
+		return fmt.Errorf("agent turn output cannot set both text and structured")
+	case value.Text != nil:
+		out.Output = &proto.AgentTurn_Text{Text: &proto.AgentTurnTextOutput{Text: value.Text.Text}}
+		return nil
+	case value.Structured != nil:
+		output, err := structFromAny(value.Structured.Value)
+		if err != nil {
+			return err
+		}
+		out.Output = &proto.AgentTurn_Structured{
+			Structured: &proto.AgentTurnStructuredOutput{
+				Text:  value.Structured.Text,
+				Value: output,
+			},
+		}
+		return nil
+	default:
+		return nil
+	}
 }
 
 func agentSessionToProto(value *AgentSession) (*proto.AgentSession, error) {
@@ -594,6 +571,7 @@ func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSe
 		return &CreateAgentProviderSessionRequest{}
 	}
 	return &CreateAgentProviderSessionRequest{
+		ProviderName:      req.GetProviderName(),
 		SessionID:         req.GetSessionId(),
 		IdempotencyKey:    req.GetIdempotencyKey(),
 		Model:             req.GetModel(),
@@ -603,6 +581,7 @@ func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSe
 		Subject:           subjectFromProto(req.GetSubject()),
 		SessionStart:      agentSessionStartConfigFromProto(req.GetSessionStart()),
 		PreparedWorkspace: agentPreparedWorkspaceFromProto(req.GetPreparedWorkspace()),
+		Workspace:         agentWorkspaceFromProto(req.GetWorkspace()),
 	}
 }
 
@@ -657,11 +636,12 @@ func listAgentProviderSessionsRequestFromProto(req *proto.ListAgentProviderSessi
 		return &ListAgentProviderSessionsRequest{}
 	}
 	return &ListAgentProviderSessionsRequest{
-		Subject:     subjectFromProto(req.GetSubject()),
-		SessionIDs:  append([]string(nil), req.GetSessionIds()...),
-		State:       AgentSessionState(req.GetState()),
-		Limit:       req.GetLimit(),
-		SummaryOnly: req.GetSummaryOnly(),
+		ProviderName: req.GetProviderName(),
+		Subject:      subjectFromProto(req.GetSubject()),
+		SessionIDs:   append([]string(nil), req.GetSessionIds()...),
+		State:        AgentSessionState(req.GetState()),
+		Limit:        req.GetLimit(),
+		SummaryOnly:  req.GetSummaryOnly(),
 	}
 }
 
@@ -697,7 +677,7 @@ func agentTurnToProto(value *AgentTurn) (*proto.AgentTurn, error) {
 	if err != nil {
 		return nil, err
 	}
-	turn := &proto.AgentTurn{
+	out := &proto.AgentTurn{
 		Id:            value.ID,
 		SessionId:     value.SessionID,
 		ProviderName:  value.ProviderName,
@@ -711,10 +691,10 @@ func agentTurnToProto(value *AgentTurn) (*proto.AgentTurn, error) {
 		CompletedAt:   timestampFromOptionalTime(value.CompletedAt),
 		ExecutionRef:  value.ExecutionRef,
 	}
-	if err := setAgentTurnOutputProto(turn, value.Output); err != nil {
+	if err := applyAgentTurnOutputToProto(out, value.Output); err != nil {
 		return nil, err
 	}
-	return turn, nil
+	return out, nil
 }
 
 func agentTurnsToProto(values []AgentTurn) ([]*proto.AgentTurn, error) {
@@ -1114,6 +1094,7 @@ func resolveAgentProviderInteractionRequestFromProto(req *proto.ResolveAgentProv
 		return &ResolveAgentProviderInteractionRequest{}
 	}
 	return &ResolveAgentProviderInteractionRequest{
+		TurnID:        req.GetTurnId(),
 		InteractionID: req.GetInteractionId(),
 		Resolution:    mapFromStruct(req.GetResolution()),
 		Subject:       subjectFromProto(req.GetSubject()),

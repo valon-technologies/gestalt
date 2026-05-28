@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"google.golang.org/grpc/codes"
@@ -110,27 +111,27 @@ func (s *Server) listAdminRuntimeProviderSessions(w http.ResponseWriter, r *http
 		return
 	}
 	if resp == nil {
-		resp = &runtimeprovider.ListSessionsResponse{}
+		resp = &proto.ListRuntimeSessionsResponse{}
 	}
-	out := make([]adminRuntimeSessionInfo, 0, len(resp.Sessions))
-	for _, session := range resp.Sessions {
+	out := make([]adminRuntimeSessionInfo, 0, len(resp.GetSessions()))
+	for _, session := range resp.GetSessions() {
 		out = append(out, adminRuntimeSessionInfo{
-			ID:    strings.TrimSpace(session.ID),
-			State: strings.TrimSpace(string(session.State)),
+			ID:    strings.TrimSpace(session.GetId()),
+			State: strings.TrimSpace(session.GetState()),
 			App:   adminRuntimeSessionApp(session),
 		})
 	}
 	writeJSON(w, http.StatusOK, adminRuntimeSessionListResponse{
 		Sessions:      out,
-		NextPageToken: strings.TrimSpace(resp.NextPageToken),
+		NextPageToken: strings.TrimSpace(resp.GetNextPageToken()),
 	})
 }
 
-func adminRuntimeSessionApp(session runtimeprovider.Session) string {
-	if app := strings.TrimSpace(session.Metadata["app"]); app != "" {
+func adminRuntimeSessionApp(session *proto.RuntimeSession) string {
+	if app := strings.TrimSpace(session.GetMetadata()["app"]); app != "" {
 		return app
 	}
-	return strings.TrimSpace(session.Metadata["provider_name"])
+	return strings.TrimSpace(session.GetMetadata()["provider_name"])
 }
 
 func (s *Server) listAdminRuntimeProviderSessionLogs(w http.ResponseWriter, r *http.Request) {
@@ -189,7 +190,7 @@ func (s *Server) adminRuntimeSnapshots(r *http.Request) ([]bootstrap.RuntimeProv
 	return s.pluginRuntimes.SnapshotRuntimes(r.Context())
 }
 
-func (s *Server) adminRuntimeSessions(r *http.Request, providerName string, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+func (s *Server) adminRuntimeSessions(r *http.Request, providerName string, req *proto.ListRuntimeSessionsRequest) (*proto.ListRuntimeSessionsResponse, error) {
 	if s.pluginRuntimes == nil {
 		return nil, bootstrap.ErrRuntimeProviderNotFound
 	}
@@ -210,19 +211,19 @@ const (
 	maxAdminRuntimeLogLimit            = 1000
 )
 
-func adminRuntimeSessionListRequestFromQuery(w http.ResponseWriter, r *http.Request) (runtimeprovider.ListSessionsRequest, bool) {
+func adminRuntimeSessionListRequestFromQuery(w http.ResponseWriter, r *http.Request) (*proto.ListRuntimeSessionsRequest, bool) {
 	rawPageSize := queryValue(r.URL.Query(), "pageSize", "page_size")
 	pageToken := strings.TrimSpace(queryValue(r.URL.Query(), "pageToken", "page_token"))
 	pageSize, ok := parseOptionalIntQuery(w, rawPageSize, "pageSize")
 	if !ok {
-		return runtimeprovider.ListSessionsRequest{}, false
+		return nil, false
 	}
 	if pageSize < 0 {
 		writeError(w, http.StatusBadRequest, "pageSize must be non-negative")
-		return runtimeprovider.ListSessionsRequest{}, false
+		return nil, false
 	}
 	if rawPageSize == "" && pageToken != "" {
-		return runtimeprovider.ListSessionsRequest{PageToken: pageToken}, true
+		return &proto.ListRuntimeSessionsRequest{PageToken: pageToken}, true
 	}
 	if pageSize == 0 {
 		pageSize = defaultAdminRuntimeSessionPageSize
@@ -230,8 +231,8 @@ func adminRuntimeSessionListRequestFromQuery(w http.ResponseWriter, r *http.Requ
 	if pageSize > maxAdminRuntimeSessionPageSize {
 		pageSize = maxAdminRuntimeSessionPageSize
 	}
-	return runtimeprovider.ListSessionsRequest{
-		PageSize:  pageSize,
+	return &proto.ListRuntimeSessionsRequest{
+		PageSize:  int32(pageSize),
 		PageToken: pageToken,
 	}, true
 }

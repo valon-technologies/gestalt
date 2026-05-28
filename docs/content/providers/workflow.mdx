@@ -478,7 +478,6 @@ definition do not silently change existing automation.
                 Source:          "slack",
                 Subject:         "route:knowledge-ingest",
                 DataContentType: "application/json",
-                Data:            map[string]any{"event": slackEvent},
             },
         })
         if err != nil {
@@ -815,8 +814,8 @@ production provider should implement every method in the protocol table.
         }, nil
     }
 
-    func (p *Provider) PublishEvent(context.Context, *gestalt.PublishWorkflowProviderEventRequest) error {
-        return nil
+    func (p *Provider) PublishEvent(context.Context, *gestalt.PublishWorkflowProviderEventRequest) (*gestalt.WorkflowEvent, error) {
+        return &gestalt.WorkflowEvent{ID: "workflow:event-1"}, nil
     }
     ```
   </Tabs.Tab>

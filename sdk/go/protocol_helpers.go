@@ -130,6 +130,20 @@ func timePtrFromTimestamp(value *timestamppb.Timestamp) (*time.Time, error) {
 	return &out, nil
 }
 
+func timestampFromNonZeroTime(value time.Time) *timestamppb.Timestamp {
+	if value.IsZero() {
+		return nil
+	}
+	return timestamppb.New(value)
+}
+
+func timestampFromOptionalTime(value *time.Time) *timestamppb.Timestamp {
+	if value == nil || value.IsZero() {
+		return nil
+	}
+	return timestamppb.New(*value)
+}
+
 func normalizeJSONObject(value any, path string) (map[string]any, error) {
 	normalized, err := normalizeJSONValue(reflect.ValueOf(value), path, map[uintptr]string{})
 	if err != nil {

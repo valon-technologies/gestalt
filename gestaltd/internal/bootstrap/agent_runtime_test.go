@@ -34,6 +34,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
 )
 
@@ -248,23 +249,6 @@ func mustTestProtoStruct(t *testing.T, fields map[string]any) *structpb.Struct {
 	out, err := structpb.NewStruct(fields)
 	if err != nil {
 		t.Fatalf("structpb.NewStruct() error = %v", err)
-	}
-	return out
-}
-
-func testAgentMessagesToProto(t *testing.T, messages []coreagent.Message) []*proto.AgentMessage {
-	t.Helper()
-	out := make([]*proto.AgentMessage, 0, len(messages))
-	for _, message := range messages {
-		var metadata *structpb.Struct
-		if message.Metadata != nil {
-			metadata = mustTestProtoStruct(t, message.Metadata)
-		}
-		out = append(out, &proto.AgentMessage{
-			Role:     message.Role,
-			Text:     message.Text,
-			Metadata: metadata,
-		})
 	}
 	return out
 }
@@ -488,11 +472,11 @@ func (p *workspaceAgentProvider) Ping(context.Context) error {
 type workspaceRuntimeProvider struct {
 	*runtimeprovider.LocalProvider
 	supportPrepareWorkspace bool
-	prepareWorkspace        func(context.Context, runtimeprovider.PrepareWorkspaceRequest) (*runtimeprovider.PreparedWorkspace, error)
-	removeWorkspaceReqs     []runtimeprovider.RemoveWorkspaceRequest
+	prepareWorkspace        func(context.Context, *proto.PrepareRuntimeWorkspaceRequest) (*proto.PrepareRuntimeWorkspaceResponse, error)
+	removeWorkspaceReqs     []*proto.RemoveRuntimeWorkspaceRequest
 }
 
-func (p *workspaceRuntimeProvider) Support(ctx context.Context) (runtimeprovider.Support, error) {
+func (p *workspaceRuntimeProvider) Support(ctx context.Context) (*proto.RuntimeSupport, error) {
 	support, err := p.LocalProvider.Support(ctx)
 	if err != nil {
 		return support, err
@@ -501,14 +485,14 @@ func (p *workspaceRuntimeProvider) Support(ctx context.Context) (runtimeprovider
 	return support, nil
 }
 
-func (p *workspaceRuntimeProvider) PrepareWorkspace(ctx context.Context, req runtimeprovider.PrepareWorkspaceRequest) (*runtimeprovider.PreparedWorkspace, error) {
+func (p *workspaceRuntimeProvider) PrepareWorkspace(ctx context.Context, req *proto.PrepareRuntimeWorkspaceRequest) (*proto.PrepareRuntimeWorkspaceResponse, error) {
 	if p.prepareWorkspace != nil {
 		return p.prepareWorkspace(ctx, req)
 	}
 	return p.LocalProvider.PrepareWorkspace(ctx, req)
 }
 
-func (p *workspaceRuntimeProvider) RemoveWorkspace(ctx context.Context, req runtimeprovider.RemoveWorkspaceRequest) error {
+func (p *workspaceRuntimeProvider) RemoveWorkspace(ctx context.Context, req *proto.RemoveRuntimeWorkspaceRequest) error {
 	p.removeWorkspaceReqs = append(p.removeWorkspaceReqs, req)
 	return p.LocalProvider.RemoveWorkspace(ctx, req)
 }
@@ -562,8 +546,8 @@ func TestHostedAgentPoolPreparesWorkspaceBeforeProviderCreate(t *testing.T) {
 	if strings.TrimSpace(string(data)) != "workspace fixture" {
 		t.Fatalf("README = %q", data)
 	}
-	if got := pool.sessionBackend("agent-session-1"); got == nil || got.runtimeSessionID != runtimeSession.ID {
-		t.Fatalf("session backend = %#v, want runtime session %q", got, runtimeSession.ID)
+	if got := pool.sessionBackend("agent-session-1"); got == nil || got.runtimeSessionID != runtimeSession.GetId() {
+		t.Fatalf("session backend = %#v, want runtime session %q", got, runtimeSession.GetId())
 	}
 }
 
@@ -665,7 +649,7 @@ func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepar
 	if prepared == nil {
 		t.Fatal("provider did not receive prepared workspace")
 	}
-	runtimeProvider.prepareWorkspace = func(context.Context, runtimeprovider.PrepareWorkspaceRequest) (*runtimeprovider.PreparedWorkspace, error) {
+	runtimeProvider.prepareWorkspace = func(context.Context, *proto.PrepareRuntimeWorkspaceRequest) (*proto.PrepareRuntimeWorkspaceResponse, error) {
 		return nil, errors.New("prepare should not run for idempotent replay")
 	}
 	second, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
@@ -757,8 +741,8 @@ func TestHostedAgentPoolCleansPreparedWorkspaceAfterValidationFailure(t *testing
 	defer cancel()
 	repo := createAgentRuntimeWorkspaceRepo(t)
 	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
-	runtimeProvider.prepareWorkspace = func(context.Context, runtimeprovider.PrepareWorkspaceRequest) (*runtimeprovider.PreparedWorkspace, error) {
-		return &runtimeprovider.PreparedWorkspace{Root: "/tmp/gestalt-workspace-root", CWD: "/tmp/outside-workspace"}, nil
+	runtimeProvider.prepareWorkspace = func(context.Context, *proto.PrepareRuntimeWorkspaceRequest) (*proto.PrepareRuntimeWorkspaceResponse, error) {
+		return &proto.PrepareRuntimeWorkspaceResponse{Workspace: &proto.PreparedAgentWorkspace{Root: "/tmp/gestalt-workspace-root", Cwd: "/tmp/outside-workspace"}}, nil
 	}
 	agentProvider := &workspaceAgentProvider{supportPreparedWorkspace: true}
 	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
@@ -832,7 +816,7 @@ func TestHostedAgentPoolCleansPreparedWorkspaceWhenSessionArchived(t *testing.T)
 	}
 }
 
-func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, runtimeProvider runtimeprovider.Provider, runtimeSession *runtimeprovider.Session, allowedRepos ...string) *hostedAgentProviderPool {
+func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, runtimeProvider runtimeprovider.Provider, runtimeSession *proto.RuntimeSession, allowedRepos ...string) *hostedAgentProviderPool {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	return &hostedAgentProviderPool{
@@ -851,20 +835,20 @@ func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, 
 		policy:              config.RuntimePlacementLifecyclePolicy{MaxReadyInstances: 1},
 		ctx:                 ctx,
 		cancel:              cancel,
-		backends:            []*hostedAgentPoolBackend{{id: 1, provider: agentProvider, runtimeProvider: runtimeProvider, runtimeSessionID: runtimeSession.ID, runtimeSession: runtimeSession, liveTurns: map[string]struct{}{}}},
+		backends:            []*hostedAgentPoolBackend{{id: 1, provider: agentProvider, runtimeProvider: runtimeProvider, runtimeSessionID: runtimeSession.GetId(), runtimeSession: runtimeSession, liveTurns: map[string]struct{}{}}},
 		sessionBackends:     map[string]*hostedAgentPoolBackend{},
 		turnBackends:        map[string]*hostedAgentPoolBackend{},
 		interactionBackends: map[string]*hostedAgentPoolBackend{},
 	}
 }
 
-func startWorkspaceRuntimeSession(t *testing.T, ctx context.Context, supportsWorkspace bool) (*workspaceRuntimeProvider, *runtimeprovider.Session) {
+func startWorkspaceRuntimeSession(t *testing.T, ctx context.Context, supportsWorkspace bool) (*workspaceRuntimeProvider, *proto.RuntimeSession) {
 	t.Helper()
 	runtimeProvider := &workspaceRuntimeProvider{
 		LocalProvider:           runtimeprovider.NewLocalProvider(),
 		supportPrepareWorkspace: supportsWorkspace,
 	}
-	session, err := runtimeProvider.StartSession(ctx, runtimeprovider.StartSessionRequest{AppName: "agent"})
+	session, err := runtimeProvider.StartSession(ctx, &proto.StartRuntimeSessionRequest{AppName: "agent"})
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)
 	}
@@ -1087,8 +1071,8 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 	if req.ImagePullAuth == nil {
 		t.Fatal("StartSession ImagePullAuth is nil")
 	}
-	if req.ImagePullAuth.DockerConfigJSON != `{"auths":{"ghcr.io":{"username":"ghcr-user","password":"ghcr-token"}}}` {
-		t.Fatalf("StartSession ImagePullAuth.DockerConfigJSON = %q", req.ImagePullAuth.DockerConfigJSON)
+	if req.ImagePullAuth.DockerConfigJson != `{"auths":{"ghcr.io":{"username":"ghcr-user","password":"ghcr-token"}}}` {
+		t.Fatalf("StartSession ImagePullAuth.DockerConfigJson = %q", req.ImagePullAuth.DockerConfigJson)
 	}
 	if req.Metadata["tenant"] != "eng" {
 		t.Fatalf("StartSession Metadata[tenant] = %q, want eng", req.Metadata["tenant"])
@@ -1447,16 +1431,16 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 	runtimeProvider.now = clock.Now
 	var drainMu sync.Mutex
 	var firstDrainAt time.Time
-	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
+	runtimeProvider.lifecycleForSession = func(index int) *proto.RuntimeSessionLifecycle {
 		startedAt := clock.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
-		lifecycle := &runtimeprovider.SessionLifecycle{
-			StartedAt: &startedAt,
-			ExpiresAt: &expiresAt,
+		lifecycle := &proto.RuntimeSessionLifecycle{
+			StartedAt: timestamppb.New(startedAt),
+			ExpiresAt: timestamppb.New(expiresAt),
 		}
 		if index == 1 {
 			recommendedDrainAt := startedAt.Add(500 * time.Millisecond)
-			lifecycle.RecommendedDrainAt = &recommendedDrainAt
+			lifecycle.RecommendedDrainAt = timestamppb.New(recommendedDrainAt)
 			drainMu.Lock()
 			firstDrainAt = recommendedDrainAt
 			drainMu.Unlock()
@@ -1564,16 +1548,16 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 	clock := newHostedAgentPoolManualClock(time.Now().UTC())
 	runtimeProvider := newCapturingRuntime()
 	runtimeProvider.now = clock.Now
-	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
+	runtimeProvider.lifecycleForSession = func(index int) *proto.RuntimeSessionLifecycle {
 		startedAt := clock.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
-		lifecycle := &runtimeprovider.SessionLifecycle{
-			StartedAt: &startedAt,
-			ExpiresAt: &expiresAt,
+		lifecycle := &proto.RuntimeSessionLifecycle{
+			StartedAt: timestamppb.New(startedAt),
+			ExpiresAt: timestamppb.New(expiresAt),
 		}
 		if index == 1 {
 			recommendedDrainAt := startedAt.Add(8 * time.Second)
-			lifecycle.RecommendedDrainAt = &recommendedDrainAt
+			lifecycle.RecommendedDrainAt = timestamppb.New(recommendedDrainAt)
 		}
 		return lifecycle
 	}
@@ -1674,12 +1658,12 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	releaseReplacement := make(chan struct{})
 	replacementStarted := make(chan struct{})
 	var replacementStartedOnce sync.Once
-	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
+	runtimeProvider.lifecycleForSession = func(index int) *proto.RuntimeSessionLifecycle {
 		startedAt := clock.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
-		lifecycle := &runtimeprovider.SessionLifecycle{
-			StartedAt: &startedAt,
-			ExpiresAt: &expiresAt,
+		lifecycle := &proto.RuntimeSessionLifecycle{
+			StartedAt: timestamppb.New(startedAt),
+			ExpiresAt: timestamppb.New(expiresAt),
 		}
 		return lifecycle
 	}
@@ -1766,7 +1750,7 @@ func markCapturingRuntimeBackendsDrainingSoon(runtimeProvider *capturingRuntime,
 	runtimeProvider.mu.Lock()
 	defer runtimeProvider.mu.Unlock()
 	if runtimeProvider.sessionLifecycles == nil {
-		runtimeProvider.sessionLifecycles = map[string]*runtimeprovider.SessionLifecycle{}
+		runtimeProvider.sessionLifecycles = map[string]*proto.RuntimeSessionLifecycle{}
 	}
 	for _, backend := range backends {
 		if backend == nil || backend.runtimeSessionID == "" {
@@ -1774,9 +1758,9 @@ func markCapturingRuntimeBackendsDrainingSoon(runtimeProvider *capturingRuntime,
 		}
 		lifecycle := cloneRuntimeSessionLifecycle(runtimeProvider.sessionLifecycles[backend.runtimeSessionID])
 		if lifecycle == nil {
-			lifecycle = &runtimeprovider.SessionLifecycle{}
+			lifecycle = &proto.RuntimeSessionLifecycle{}
 		}
-		lifecycle.RecommendedDrainAt = &drainAt
+		lifecycle.RecommendedDrainAt = timestamppb.New(drainAt)
 		runtimeProvider.sessionLifecycles[backend.runtimeSessionID] = lifecycle
 	}
 }
@@ -1788,10 +1772,10 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 	clock := newHostedAgentPoolManualClock(time.Now().UTC())
 	runtimeProvider := newCapturingRuntime()
 	runtimeProvider.now = clock.Now
-	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
+	runtimeProvider.lifecycleForSession = func(index int) *proto.RuntimeSessionLifecycle {
 		expiresAt := clock.Now().UTC().Add(5 * time.Minute)
-		return &runtimeprovider.SessionLifecycle{
-			ExpiresAt: &expiresAt,
+		return &proto.RuntimeSessionLifecycle{
+			ExpiresAt: timestamppb.New(expiresAt),
 		}
 	}
 	factories := NewFactoryRegistry()
@@ -1859,7 +1843,7 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 	runtimeProvider.now = clock.Now
 	var expiryMu sync.Mutex
 	var firstExpiresAt time.Time
-	runtimeProvider.lifecycleForSession = func(index int) *runtimeprovider.SessionLifecycle {
+	runtimeProvider.lifecycleForSession = func(index int) *proto.RuntimeSessionLifecycle {
 		expiresAt := clock.Now().UTC().Add(time.Hour)
 		if index == 1 {
 			expiresAt = clock.Now().UTC().Add(2 * time.Second)
@@ -1867,8 +1851,8 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 			firstExpiresAt = expiresAt
 			expiryMu.Unlock()
 		}
-		return &runtimeprovider.SessionLifecycle{
-			ExpiresAt: &expiresAt,
+		return &proto.RuntimeSessionLifecycle{
+			ExpiresAt: timestamppb.New(expiresAt),
 		}
 	}
 	factories := NewFactoryRegistry()
@@ -2362,10 +2346,18 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	}
 
 	turn, err := agents[0].CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		TurnId:       "turn-1",
-		SessionId:    "session-1",
-		Model:        "gpt-test",
-		Messages:     testAgentMessagesToProto(t, []coreagent.Message{{Role: "user", Text: "Plan it"}}),
+		TurnId:    "turn-1",
+		SessionId: "session-1",
+		Model:     "gpt-test",
+		Messages: []*proto.AgentMessage{{
+			Role: "user",
+			Text: "Plan it",
+			Parts: []*proto.AgentMessagePart{{
+				Type: proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT,
+				Text: "Plan it",
+			}},
+			Metadata: mustTestProtoStruct(t, map[string]any{"priority": "high"}),
+		}},
 		ExecutionRef: "exec-turn-1",
 		Output:       agentRuntimeTextOutput(),
 	})
@@ -2390,6 +2382,9 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	}
 	if fetchedTurn == nil || fetchedTurn.Status != coreagent.ExecutionStatusSucceeded || fetchedTurn.Output.Text == nil || fetchedTurn.Output.Text.Text == "" {
 		t.Fatalf("GetTurn = %#v, want succeeded turn with output", fetchedTurn)
+	}
+	if len(fetchedTurn.Messages) != 1 || fetchedTurn.Messages[0].Metadata["priority"] != "high" || len(fetchedTurn.Messages[0].Parts) != 1 || fetchedTurn.Messages[0].Parts[0].Type != coreagent.MessagePartTypeText {
+		t.Fatalf("GetTurn messages = %#v, want metadata and text part preserved", fetchedTurn.Messages)
 	}
 
 	turnEvents, err := agents[0].ListTurnEvents(context.Background(), &proto.ListAgentProviderTurnEventsRequest{
@@ -2430,10 +2425,10 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[runtimehost.HostServiceSocketEnv]; got != wantRelayTarget {
+	if got := startRequests[0].GetEnv()[runtimehost.HostServiceSocketEnv]; got != wantRelayTarget {
 		t.Fatalf("agent host relay target = %q, want %q", got, wantRelayTarget)
 	}
-	if got := startRequests[0].Env[runtimehost.HostServiceTokenEnv]; strings.TrimSpace(got) == "" {
+	if got := startRequests[0].GetEnv()[runtimehost.HostServiceTokenEnv]; strings.TrimSpace(got) == "" {
 		t.Fatalf("StartApp env missing %s", runtimehost.HostServiceTokenEnv)
 	}
 
@@ -3754,11 +3749,11 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("start app requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[runtimehost.HostServiceSocketEnv]; got != "tls://"+relaySrv.Listener.Addr().String() {
+	if got := startRequests[0].GetEnv()[runtimehost.HostServiceSocketEnv]; got != "tls://"+relaySrv.Listener.Addr().String() {
 		t.Fatalf("StartApp env %s = %q, want tls relay target", runtimehost.HostServiceSocketEnv, got)
 	}
-	if got := startRequests[0].Env[runtimehost.HostServiceTokenEnv]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartApp env missing %s: %#v", runtimehost.HostServiceTokenEnv, startRequests[0].Env)
+	if got := startRequests[0].GetEnv()[runtimehost.HostServiceTokenEnv]; strings.TrimSpace(got) == "" {
+		t.Fatalf("StartApp env missing %s: %#v", runtimehost.HostServiceTokenEnv, startRequests[0].GetEnv())
 	}
 }
 
@@ -3927,7 +3922,7 @@ func TestAgentRuntimeConfigRejectsMissingHostServiceRelay(t *testing.T) {
 	bin := buildAgentProviderBinary(t)
 	runtimeProvider := &staticCapabilityRuntime{
 		inner: newCapturingRuntime(),
-		support: runtimeprovider.Support{
+		support: &proto.RuntimeSupport{
 			CanHostApps: true,
 		},
 	}

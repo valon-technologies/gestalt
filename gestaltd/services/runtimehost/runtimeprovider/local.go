@@ -18,6 +18,7 @@ import (
 	"time"
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -38,7 +39,7 @@ type LocalProvider struct {
 type localSession struct {
 	id       string
 	rootDir  string
-	state    SessionState
+	state    string
 	metadata map[string]string
 	app      *localApp
 	logSeq   uint64
@@ -77,15 +78,15 @@ func NewLocalProvider(opts ...LocalOption) *LocalProvider {
 	return p
 }
 
-func (p *LocalProvider) Support(context.Context) (Support, error) {
-	return Support{
+func (p *LocalProvider) Support(context.Context) (*proto.RuntimeSupport, error) {
+	return &proto.RuntimeSupport{
 		CanHostApps:              true,
-		EgressMode:               EgressModeHostname,
+		EgressMode:               proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME,
 		SupportsPrepareWorkspace: true,
 	}, nil
 }
 
-func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest) (*Session, error) {
+func (p *LocalProvider) StartSession(_ context.Context, req *proto.StartRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	if p == nil {
 		return nil, fmt.Errorf("runtime provider is not configured")
 	}
@@ -106,7 +107,7 @@ func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest)
 		id:       sessionID,
 		rootDir:  rootDir,
 		state:    SessionStateReady,
-		metadata: cloneStringMap(req.Metadata),
+		metadata: cloneStringMap(req.GetMetadata()),
 	}
 	if session.metadata == nil {
 		session.metadata = map[string]string{}
@@ -124,7 +125,7 @@ func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest)
 	return cloneSession(session), nil
 }
 
-func (p *LocalProvider) ListSessions(_ context.Context, req ListSessionsRequest) (*ListSessionsResponse, error) {
+func (p *LocalProvider) ListSessions(_ context.Context, req *proto.ListRuntimeSessionsRequest) (*proto.ListRuntimeSessionsResponse, error) {
 	if p == nil {
 		return nil, fmt.Errorf("runtime provider is not configured")
 	}
@@ -140,40 +141,40 @@ func (p *LocalProvider) ListSessions(_ context.Context, req ListSessionsRequest)
 		sessionIDs = append(sessionIDs, sessionID)
 	}
 	slices.Sort(sessionIDs)
-	pageIDs, nextPageToken, err := PaginateSortedSessionIDs(sessionIDs, req)
+	pageIDs, nextPageToken, err := paginateSortedSessionIDs(sessionIDs, req)
 	if err != nil {
 		return nil, err
 	}
 
-	out := make([]Session, 0, len(pageIDs))
+	out := make([]*proto.RuntimeSession, 0, len(pageIDs))
 	for _, sessionID := range pageIDs {
 		session := cloneSession(p.sessions[sessionID])
 		if session == nil {
 			continue
 		}
-		out = append(out, *session)
+		out = append(out, session)
 	}
-	return &ListSessionsResponse{
+	return &proto.ListRuntimeSessionsResponse{
 		Sessions:      out,
 		NextPageToken: nextPageToken,
 	}, nil
 }
 
-func (p *LocalProvider) GetSession(_ context.Context, req GetSessionRequest) (*Session, error) {
+func (p *LocalProvider) GetSession(_ context.Context, req *proto.GetRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	if p == nil {
 		return nil, fmt.Errorf("runtime provider is not configured")
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	session, err := p.sessionLocked(req.SessionID)
+	session, err := p.sessionLocked(req.GetSessionId())
 	if err != nil {
 		return nil, err
 	}
 	return cloneSession(session), nil
 }
 
-func (p *LocalProvider) StopSession(_ context.Context, req StopSessionRequest) error {
+func (p *LocalProvider) StopSession(_ context.Context, req *proto.StopRuntimeSessionRequest) error {
 	if p == nil {
 		return nil
 	}
@@ -182,9 +183,9 @@ func (p *LocalProvider) StopSession(_ context.Context, req StopSessionRequest) e
 	var rootDir string
 
 	p.mu.Lock()
-	session, ok := p.sessions[req.SessionID]
+	session, ok := p.sessions[req.GetSessionId()]
 	if ok {
-		delete(p.sessions, req.SessionID)
+		delete(p.sessions, req.GetSessionId())
 		if session.app != nil {
 			app = session.app.process
 		}
@@ -204,30 +205,30 @@ func (p *LocalProvider) StopSession(_ context.Context, req StopSessionRequest) e
 		}
 	}
 	if p.sessionLogs != nil {
-		_ = p.sessionLogs.MarkSessionStopped(context.Background(), p.runtimeProviderName, req.SessionID, time.Now().UTC())
+		_ = p.sessionLogs.MarkSessionStopped(context.Background(), p.runtimeProviderName, req.GetSessionId(), time.Now().UTC())
 	}
 	return errors.Join(errs...)
 }
 
-func (p *LocalProvider) PrepareWorkspace(ctx context.Context, req PrepareWorkspaceRequest) (*PreparedWorkspace, error) {
+func (p *LocalProvider) PrepareWorkspace(ctx context.Context, req *proto.PrepareRuntimeWorkspaceRequest) (*proto.PrepareRuntimeWorkspaceResponse, error) {
 	if p == nil {
 		return nil, fmt.Errorf("runtime provider is not configured")
 	}
-	if err := validateWorkspaceID(req.AgentSessionID); err != nil {
+	if err := validateWorkspaceID(req.GetAgentSessionId()); err != nil {
 		return nil, fmt.Errorf("agent session id: %w", err)
 	}
-	workspace, err := normalizeRuntimeWorkspace(req.Workspace)
+	workspace, err := normalizeRuntimeWorkspace(req.GetWorkspace())
 	if err != nil {
 		return nil, err
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	session, err := p.sessionLocked(req.SessionID)
+	session, err := p.sessionLocked(req.GetSessionId())
 	if err != nil {
 		return nil, err
 	}
-	root := filepath.Join(session.rootDir, "workspaces", req.AgentSessionID)
+	root := filepath.Join(session.rootDir, "workspaces", req.GetAgentSessionId())
 	spec, err := json.Marshal(workspace)
 	if err != nil {
 		return nil, fmt.Errorf("marshal workspace spec: %w", err)
@@ -235,9 +236,13 @@ func (p *LocalProvider) PrepareWorkspace(ctx context.Context, req PrepareWorkspa
 	marker := filepath.Join(root, ".gestalt-workspace.json")
 	if existing, err := os.ReadFile(marker); err == nil {
 		if !bytes.Equal(existing, spec) {
-			return nil, fmt.Errorf("workspace for agent session %q was already prepared with a different spec", req.AgentSessionID)
+			return nil, fmt.Errorf("workspace for agent session %q was already prepared with a different spec", req.GetAgentSessionId())
 		}
-		return preparedLocalWorkspace(root, workspace.CWD)
+		prepared, err := preparedLocalWorkspace(root, workspace.CWD)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.PrepareRuntimeWorkspaceResponse{Workspace: prepared}, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("read workspace marker: %w", err)
 	}
@@ -262,48 +267,48 @@ func (p *LocalProvider) PrepareWorkspace(ctx context.Context, req PrepareWorkspa
 		_ = os.RemoveAll(root)
 		return nil, fmt.Errorf("write workspace marker: %w", err)
 	}
-	return prepared, nil
+	return &proto.PrepareRuntimeWorkspaceResponse{Workspace: prepared}, nil
 }
 
-func (p *LocalProvider) RemoveWorkspace(_ context.Context, req RemoveWorkspaceRequest) error {
+func (p *LocalProvider) RemoveWorkspace(_ context.Context, req *proto.RemoveRuntimeWorkspaceRequest) error {
 	if p == nil {
 		return nil
 	}
-	if err := validateWorkspaceID(req.AgentSessionID); err != nil {
+	if err := validateWorkspaceID(req.GetAgentSessionId()); err != nil {
 		return fmt.Errorf("agent session id: %w", err)
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	session, err := p.sessionLocked(req.SessionID)
+	session, err := p.sessionLocked(req.GetSessionId())
 	if err != nil {
 		return err
 	}
-	return os.RemoveAll(filepath.Join(session.rootDir, "workspaces", req.AgentSessionID))
+	return os.RemoveAll(filepath.Join(session.rootDir, "workspaces", req.GetAgentSessionId()))
 }
 
-func (p *LocalProvider) StartApp(ctx context.Context, req StartAppRequest) (*HostedApp, error) {
+func (p *LocalProvider) StartApp(ctx context.Context, req *proto.StartHostedAppRequest) (*proto.HostedApp, error) {
 	if p == nil {
 		return nil, fmt.Errorf("runtime provider is not configured")
 	}
-	if req.Command == "" {
+	if req.GetCommand() == "" {
 		return nil, fmt.Errorf("app command is required")
 	}
 
 	p.mu.Lock()
-	session, err := p.sessionLocked(req.SessionID)
+	session, err := p.sessionLocked(req.GetSessionId())
 	if err != nil {
 		p.mu.Unlock()
 		return nil, err
 	}
 	if session.app != nil {
 		p.mu.Unlock()
-		return nil, fmt.Errorf("runtime session %q already has a running app", req.SessionID)
+		return nil, fmt.Errorf("runtime session %q already has a running app", req.GetSessionId())
 	}
 	session.state = SessionStateRunning
 	rootDir := session.rootDir
 	p.mu.Unlock()
 
-	env := cloneStringMap(req.Env)
+	env := cloneStringMap(req.GetEnv())
 	if env == nil {
 		env = map[string]string{}
 	}
@@ -311,40 +316,40 @@ func (p *LocalProvider) StartApp(ctx context.Context, req StartAppRequest) (*Hos
 	stdout := io.Writer(nil)
 	stderr := io.Writer(nil)
 	if p.sessionLogs != nil {
-		stdout = newSessionLogWriter(p.sessionLogs, p.runtimeProviderName, req.SessionID, runtimelogs.StreamStdout, &session.logSeq)
-		stderr = newSessionLogWriter(p.sessionLogs, p.runtimeProviderName, req.SessionID, runtimelogs.StreamStderr, &session.logSeq)
-		_, _ = p.sessionLogs.AppendSessionLogs(context.Background(), p.runtimeProviderName, req.SessionID, []runtimelogs.AppendEntry{{
+		stdout = newSessionLogWriter(p.sessionLogs, p.runtimeProviderName, req.GetSessionId(), runtimelogs.StreamStdout, &session.logSeq)
+		stderr = newSessionLogWriter(p.sessionLogs, p.runtimeProviderName, req.GetSessionId(), runtimelogs.StreamStderr, &session.logSeq)
+		_, _ = p.sessionLogs.AppendSessionLogs(context.Background(), p.runtimeProviderName, req.GetSessionId(), []runtimelogs.AppendEntry{{
 			SourceSeq:  int64(atomic.AddUint64(&session.logSeq, 1)),
 			Stream:     runtimelogs.StreamRuntime,
-			Message:    fmt.Sprintf("starting app %q", req.AppName),
+			Message:    fmt.Sprintf("starting app %q", req.GetAppName()),
 			ObservedAt: time.Now().UTC(),
 		}})
 	}
 
 	process, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
-		Command: req.Command,
-		Args:    req.Args,
-		Workdir: req.Workdir,
+		Command: req.GetCommand(),
+		Args:    req.GetArgs(),
+		Workdir: req.GetWorkdir(),
 		Env:     env,
 		Egress: egress.Policy{
-			AllowedHosts:  append([]string(nil), req.Egress.AllowedHosts...),
-			DefaultAction: egress.PolicyAction(req.Egress.DefaultAction),
+			AllowedHosts:  append([]string(nil), req.GetAllowedHosts()...),
+			DefaultAction: egress.PolicyAction(req.GetDefaultAction()),
 		},
-		HostBinary:   req.HostBinary,
+		HostBinary:   req.GetHostBinary(),
 		SocketDir:    rootDir,
-		ProviderName: req.AppName,
+		ProviderName: req.GetAppName(),
 		Telemetry:    p.telemetry,
 		Stdout:       stdout,
 		Stderr:       stderr,
 	})
 	if err != nil {
 		p.mu.Lock()
-		if session, ok := p.sessions[req.SessionID]; ok {
+		if session, ok := p.sessions[req.GetSessionId()]; ok {
 			session.state = SessionStateFailed
 		}
 		p.mu.Unlock()
 		if p.sessionLogs != nil {
-			_, _ = p.sessionLogs.AppendSessionLogs(context.Background(), p.runtimeProviderName, req.SessionID, []runtimelogs.AppendEntry{{
+			_, _ = p.sessionLogs.AppendSessionLogs(context.Background(), p.runtimeProviderName, req.GetSessionId(), []runtimelogs.AppendEntry{{
 				SourceSeq:  int64(atomic.AddUint64(&session.logSeq, 1)),
 				Stream:     runtimelogs.StreamRuntime,
 				Message:    err.Error(),
@@ -356,22 +361,22 @@ func (p *LocalProvider) StartApp(ctx context.Context, req StartAppRequest) (*Hos
 
 	hostedApp := &localApp{
 		id:      p.newID("app"),
-		name:    req.AppName,
+		name:    req.GetAppName(),
 		process: process,
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	session, err = p.sessionLocked(req.SessionID)
+	session, err = p.sessionLocked(req.GetSessionId())
 	if err != nil {
 		_ = process.Close()
 		return nil, err
 	}
 	session.app = hostedApp
 	session.state = SessionStateRunning
-	return &HostedApp{
-		ID:         hostedApp.id,
-		SessionID:  session.id,
+	return &proto.HostedApp{
+		Id:         hostedApp.id,
+		SessionId:  session.id,
 		AppName:    hostedApp.name,
 		DialTarget: "unix://" + filepath.Join(rootDir, "app.sock"),
 	}, nil
@@ -396,7 +401,7 @@ func (p *LocalProvider) Close() error {
 
 	var firstErr error
 	for _, sessionID := range sessionIDs {
-		if err := p.StopSession(context.Background(), StopSessionRequest{SessionID: sessionID}); err != nil && firstErr == nil {
+		if err := p.StopSession(context.Background(), &proto.StopRuntimeSessionRequest{SessionId: sessionID}); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
@@ -419,19 +424,19 @@ func (p *LocalProvider) sessionLocked(sessionID string) (*localSession, error) {
 	return session, nil
 }
 
-func normalizeRuntimeWorkspace(src *Workspace) (*coreagent.Workspace, error) {
+func normalizeRuntimeWorkspace(src *proto.AgentWorkspace) (*coreagent.Workspace, error) {
 	if src == nil {
 		return nil, fmt.Errorf("workspace is required")
 	}
 	workspace := &coreagent.Workspace{
-		Checkouts: make([]coreagent.WorkspaceGitCheckout, 0, len(src.Checkouts)),
-		CWD:       src.CWD,
+		Checkouts: make([]coreagent.WorkspaceGitCheckout, 0, len(src.GetCheckouts())),
+		CWD:       src.GetCwd(),
 	}
-	for _, checkout := range src.Checkouts {
+	for _, checkout := range src.GetCheckouts() {
 		workspace.Checkouts = append(workspace.Checkouts, coreagent.WorkspaceGitCheckout{
-			URL:  checkout.URL,
-			Ref:  checkout.Ref,
-			Path: checkout.Path,
+			URL:  checkout.GetUrl(),
+			Ref:  checkout.GetRef(),
+			Path: checkout.GetPath(),
 		})
 	}
 	normalized, err := coreagent.NormalizeWorkspace(workspace)
@@ -494,7 +499,7 @@ func runLocalGit(ctx context.Context, dir string, args ...string) error {
 	return nil
 }
 
-func preparedLocalWorkspace(root string, cwd string) (*PreparedWorkspace, error) {
+func preparedLocalWorkspace(root string, cwd string) (*proto.PreparedAgentWorkspace, error) {
 	rootReal, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return nil, fmt.Errorf("resolve workspace root: %w", err)
@@ -510,7 +515,7 @@ func preparedLocalWorkspace(root string, cwd string) (*PreparedWorkspace, error)
 	if !localPathWithin(rootReal, cwdReal) {
 		return nil, fmt.Errorf("workspace cwd escapes workspace root")
 	}
-	return &PreparedWorkspace{Root: rootReal, CWD: cwdReal}, nil
+	return &proto.PreparedAgentWorkspace{Root: rootReal, Cwd: cwdReal}, nil
 }
 
 func localWorkspaceChild(root string, rel string) (string, error) {
@@ -529,12 +534,12 @@ func localPathWithin(parent string, child string) bool {
 	return rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func cloneSession(session *localSession) *Session {
+func cloneSession(session *localSession) *proto.RuntimeSession {
 	if session == nil {
 		return nil
 	}
-	return &Session{
-		ID:       session.id,
+	return &proto.RuntimeSession{
+		Id:       session.id,
 		State:    session.state,
 		Metadata: cloneStringMap(session.metadata),
 	}

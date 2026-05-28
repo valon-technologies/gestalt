@@ -405,6 +405,7 @@ import (
 	"context"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 type Provider struct {
@@ -423,72 +424,72 @@ func (p *Provider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *Provider) StartRun(context.Context, *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-	return &gestalt.BoundWorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
+func (p *Provider) StartRun(context.Context, *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+	return &proto.BoundWorkflowRun{Id: "generated-run", Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING}, nil
 }
 
-func (p *Provider) GetRun(context.Context, *gestalt.GetWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-	return &gestalt.BoundWorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
+func (p *Provider) GetRun(context.Context, *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+	return &proto.BoundWorkflowRun{Id: "generated-run", Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING}, nil
 }
 
-func (p *Provider) ListRuns(context.Context, *gestalt.ListWorkflowProviderRunsRequest) (*gestalt.ListWorkflowProviderRunsResponse, error) {
-	return &gestalt.ListWorkflowProviderRunsResponse{}, nil
+func (p *Provider) ListRuns(context.Context, *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
+	return &proto.ListWorkflowProviderRunsResponse{}, nil
 }
 
-func (p *Provider) CancelRun(context.Context, *gestalt.CancelWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-	return &gestalt.BoundWorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValueCanceled}, nil
+func (p *Provider) CancelRun(context.Context, *proto.CancelWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+	return &proto.BoundWorkflowRun{Id: "generated-run", Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED}, nil
 }
 
-func (p *Provider) UpsertSchedule(context.Context, *gestalt.UpsertWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule"}, nil
+func (p *Provider) UpsertSchedule(context.Context, *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	return &proto.BoundWorkflowSchedule{Id: "generated-schedule"}, nil
 }
 
-func (p *Provider) GetSchedule(context.Context, *gestalt.GetWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule"}, nil
+func (p *Provider) GetSchedule(context.Context, *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	return &proto.BoundWorkflowSchedule{Id: "generated-schedule"}, nil
 }
 
-func (p *Provider) ListSchedules(context.Context, *gestalt.ListWorkflowProviderSchedulesRequest) (*gestalt.ListWorkflowProviderSchedulesResponse, error) {
-	return &gestalt.ListWorkflowProviderSchedulesResponse{}, nil
+func (p *Provider) ListSchedules(context.Context, *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error) {
+	return &proto.ListWorkflowProviderSchedulesResponse{}, nil
 }
 
-func (p *Provider) DeleteSchedule(context.Context, *gestalt.DeleteWorkflowProviderScheduleRequest) error {
+func (p *Provider) DeleteSchedule(context.Context, *proto.DeleteWorkflowProviderScheduleRequest) error {
 	return nil
 }
 
-func (p *Provider) PauseSchedule(context.Context, *gestalt.PauseWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule", Paused: true}, nil
+func (p *Provider) PauseSchedule(context.Context, *proto.PauseWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	return &proto.BoundWorkflowSchedule{Id: "generated-schedule", Paused: true}, nil
 }
 
-func (p *Provider) ResumeSchedule(context.Context, *gestalt.ResumeWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule"}, nil
+func (p *Provider) ResumeSchedule(context.Context, *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	return &proto.BoundWorkflowSchedule{Id: "generated-schedule"}, nil
 }
 
-func (p *Provider) UpsertEventTrigger(context.Context, *gestalt.UpsertWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
+func (p *Provider) UpsertEventTrigger(context.Context, *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	return &proto.BoundWorkflowEventTrigger{Id: "generated-trigger"}, nil
 }
 
-func (p *Provider) GetEventTrigger(context.Context, *gestalt.GetWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
+func (p *Provider) GetEventTrigger(context.Context, *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	return &proto.BoundWorkflowEventTrigger{Id: "generated-trigger"}, nil
 }
 
-func (p *Provider) ListEventTriggers(context.Context, *gestalt.ListWorkflowProviderEventTriggersRequest) (*gestalt.ListWorkflowProviderEventTriggersResponse, error) {
-	return &gestalt.ListWorkflowProviderEventTriggersResponse{}, nil
+func (p *Provider) ListEventTriggers(context.Context, *proto.ListWorkflowProviderEventTriggersRequest) (*proto.ListWorkflowProviderEventTriggersResponse, error) {
+	return &proto.ListWorkflowProviderEventTriggersResponse{}, nil
 }
 
-func (p *Provider) DeleteEventTrigger(context.Context, *gestalt.DeleteWorkflowProviderEventTriggerRequest) error {
+func (p *Provider) DeleteEventTrigger(context.Context, *proto.DeleteWorkflowProviderEventTriggerRequest) error {
 	return nil
 }
 
-func (p *Provider) PauseEventTrigger(context.Context, *gestalt.PauseWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger", Paused: true}, nil
+func (p *Provider) PauseEventTrigger(context.Context, *proto.PauseWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	return &proto.BoundWorkflowEventTrigger{Id: "generated-trigger", Paused: true}, nil
 }
 
-func (p *Provider) ResumeEventTrigger(context.Context, *gestalt.ResumeWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
+func (p *Provider) ResumeEventTrigger(context.Context, *proto.ResumeWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	return &proto.BoundWorkflowEventTrigger{Id: "generated-trigger"}, nil
 }
 
-func (p *Provider) PublishEvent(context.Context, *gestalt.PublishWorkflowProviderEventRequest) (*gestalt.WorkflowEvent, error) {
-	return &gestalt.WorkflowEvent{ID: "generated-event"}, nil
+func (p *Provider) PublishEvent(context.Context, *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
+	return &proto.WorkflowEvent{Id: "generated-event"}, nil
 }
 `
 }

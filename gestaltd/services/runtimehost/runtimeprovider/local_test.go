@@ -12,23 +12,24 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 )
 
 func TestPaginateSortedSessionIDsContinuesWithTokenPageSizeWhenPageSizeOmitted(t *testing.T) {
 	t.Parallel()
 
-	first, token, err := PaginateSortedSessionIDs([]string{"a", "b", "c", "d", "e"}, ListSessionsRequest{PageSize: 2})
+	first, token, err := paginateSortedSessionIDs([]string{"a", "b", "c", "d", "e"}, &proto.ListRuntimeSessionsRequest{PageSize: 2})
 	if err != nil {
-		t.Fatalf("PaginateSortedSessionIDs(first): %v", err)
+		t.Fatalf("paginateSortedSessionIDs(first): %v", err)
 	}
 	if !reflect.DeepEqual(first, []string{"a", "b"}) || token == "" {
 		t.Fatalf("first page = %v token=%q, want first two ids and token", first, token)
 	}
 
-	second, nextToken, err := PaginateSortedSessionIDs([]string{"a", "b", "c", "d", "e"}, ListSessionsRequest{PageToken: token})
+	second, nextToken, err := paginateSortedSessionIDs([]string{"a", "b", "c", "d", "e"}, &proto.ListRuntimeSessionsRequest{PageToken: token})
 	if err != nil {
-		t.Fatalf("PaginateSortedSessionIDs(second): %v", err)
+		t.Fatalf("paginateSortedSessionIDs(second): %v", err)
 	}
 	if !reflect.DeepEqual(second, []string{"c", "d"}) || nextToken == "" {
 		t.Fatalf("second page = %v token=%q, want next two ids and token", second, nextToken)
@@ -47,7 +48,7 @@ func TestLocalProviderCapturesRuntimeSessionLogsOnPluginStartupFailure(t *testin
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	session, err := runtime.StartSession(ctx, StartSessionRequest{
+	session, err := runtime.StartSession(ctx, &proto.StartRuntimeSessionRequest{
 		AppName: "log-test",
 		Metadata: map[string]string{
 			"provider_name": "log-test",
@@ -60,8 +61,8 @@ func TestLocalProviderCapturesRuntimeSessionLogsOnPluginStartupFailure(t *testin
 		t.Fatalf("StartSession: %v", err)
 	}
 
-	_, err = runtime.StartApp(ctx, StartAppRequest{
-		SessionID: session.ID,
+	_, err = runtime.StartApp(ctx, &proto.StartHostedAppRequest{
+		SessionId: session.GetId(),
 		AppName:   "log-test",
 		Command:   "/bin/sh",
 		Args: []string{
@@ -76,15 +77,15 @@ func TestLocalProviderCapturesRuntimeSessionLogsOnPluginStartupFailure(t *testin
 		t.Fatalf("StartApp error = %q, want startup failure", err)
 	}
 
-	gotSession, err := runtime.GetSession(ctx, GetSessionRequest{SessionID: session.ID})
+	gotSession, err := runtime.GetSession(ctx, &proto.GetRuntimeSessionRequest{SessionId: session.GetId()})
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
-	if gotSession.State != SessionStateFailed {
-		t.Fatalf("session state = %q, want %q", gotSession.State, SessionStateFailed)
+	if gotSession.GetState() != SessionStateFailed {
+		t.Fatalf("session state = %q, want %q", gotSession.GetState(), SessionStateFailed)
 	}
 
-	logs, err := services.RuntimeSessionLogs.ListSessionLogs(ctx, "local", session.ID, 0, 100)
+	logs, err := services.RuntimeSessionLogs.ListSessionLogs(ctx, "local", session.GetId(), 0, 100)
 	if err != nil {
 		t.Fatalf("ListSessionLogs: %v", err)
 	}
@@ -110,7 +111,7 @@ func TestLocalProviderCapturesRuntimeSessionLogsOnPluginStartupFailure(t *testin
 		t.Fatalf("stderr logs = %q, want stderr payload", got)
 	}
 
-	tail, err := services.RuntimeSessionLogs.TailSessionLogs(ctx, "local", session.ID, 2)
+	tail, err := services.RuntimeSessionLogs.TailSessionLogs(ctx, "local", session.GetId(), 2)
 	if err != nil {
 		t.Fatalf("TailSessionLogs: %v", err)
 	}
@@ -121,10 +122,10 @@ func TestLocalProviderCapturesRuntimeSessionLogsOnPluginStartupFailure(t *testin
 		t.Fatalf("TailSessionLogs seqs = [%d %d], want ascending order", tail[0].Seq, tail[1].Seq)
 	}
 
-	if err := runtime.StopSession(ctx, StopSessionRequest{SessionID: session.ID}); err != nil {
+	if err := runtime.StopSession(ctx, &proto.StopRuntimeSessionRequest{SessionId: session.GetId()}); err != nil {
 		t.Fatalf("StopSession: %v", err)
 	}
-	retained, err := services.RuntimeSessionLogs.ListSessionLogs(ctx, "local", session.ID, 0, 100)
+	retained, err := services.RuntimeSessionLogs.ListSessionLogs(ctx, "local", session.GetId(), 0, 100)
 	if err != nil {
 		t.Fatalf("ListSessionLogs after stop: %v", err)
 	}
@@ -144,18 +145,18 @@ func TestLocalProviderPreparesGitWorkspaceAndCleansUpWithSession(t *testing.T) {
 	t.Cleanup(func() {
 		_ = runtime.Close()
 	})
-	session, err := runtime.StartSession(ctx, StartSessionRequest{AppName: "workspace-test"})
+	session, err := runtime.StartSession(ctx, &proto.StartRuntimeSessionRequest{AppName: "workspace-test"})
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)
 	}
 
-	req := PrepareWorkspaceRequest{
-		SessionID:      session.ID,
-		AgentSessionID: "agent-session-1",
-		Workspace: &Workspace{
-			CWD: "app",
-			Checkouts: []WorkspaceGitCheckout{{
-				URL:  "file://" + filepath.ToSlash(repo),
+	req := &proto.PrepareRuntimeWorkspaceRequest{
+		SessionId:      session.GetId(),
+		AgentSessionId: "agent-session-1",
+		Workspace: &proto.AgentWorkspace{
+			Cwd: "app",
+			Checkouts: []*proto.AgentWorkspaceGitCheckout{{
+				Url:  "file://" + filepath.ToSlash(repo),
 				Path: "app",
 			}},
 		},
@@ -164,13 +165,13 @@ func TestLocalProviderPreparesGitWorkspaceAndCleansUpWithSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareWorkspace: %v", err)
 	}
-	if prepared.Root == "" || prepared.CWD == "" {
+	if prepared.GetWorkspace().GetRoot() == "" || prepared.GetWorkspace().GetCwd() == "" {
 		t.Fatalf("prepared workspace = %#v", prepared)
 	}
-	if !filepath.IsAbs(prepared.Root) || !filepath.IsAbs(prepared.CWD) {
+	if !filepath.IsAbs(prepared.GetWorkspace().GetRoot()) || !filepath.IsAbs(prepared.GetWorkspace().GetCwd()) {
 		t.Fatalf("prepared workspace paths must be absolute: %#v", prepared)
 	}
-	data, err := os.ReadFile(filepath.Join(prepared.CWD, "README.md"))
+	data, err := os.ReadFile(filepath.Join(prepared.GetWorkspace().GetCwd(), "README.md"))
 	if err != nil {
 		t.Fatalf("read checkout README: %v", err)
 	}
@@ -182,26 +183,29 @@ func TestLocalProviderPreparesGitWorkspaceAndCleansUpWithSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareWorkspace retry: %v", err)
 	}
-	if again.CWD != prepared.CWD || again.Root != prepared.Root {
+	if again.GetWorkspace().GetCwd() != prepared.GetWorkspace().GetCwd() || again.GetWorkspace().GetRoot() != prepared.GetWorkspace().GetRoot() {
 		t.Fatalf("prepared retry = %#v, want %#v", again, prepared)
 	}
 
-	different := req
-	different.Workspace = &Workspace{
-		CWD: "other",
-		Checkouts: []WorkspaceGitCheckout{{
-			URL:  "file://" + filepath.ToSlash(repo),
-			Path: "other",
-		}},
+	different := &proto.PrepareRuntimeWorkspaceRequest{
+		SessionId:      req.GetSessionId(),
+		AgentSessionId: req.GetAgentSessionId(),
+		Workspace: &proto.AgentWorkspace{
+			Cwd: "other",
+			Checkouts: []*proto.AgentWorkspaceGitCheckout{{
+				Url:  "file://" + filepath.ToSlash(repo),
+				Path: "other",
+			}},
+		},
 	}
 	if _, err := runtime.PrepareWorkspace(ctx, different); err == nil || !strings.Contains(err.Error(), "different spec") {
 		t.Fatalf("PrepareWorkspace with different spec error = %v, want different spec", err)
 	}
 
-	if err := runtime.StopSession(ctx, StopSessionRequest{SessionID: session.ID}); err != nil {
+	if err := runtime.StopSession(ctx, &proto.StopRuntimeSessionRequest{SessionId: session.GetId()}); err != nil {
 		t.Fatalf("StopSession: %v", err)
 	}
-	if _, err := os.Stat(prepared.Root); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(prepared.GetWorkspace().GetRoot()); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("workspace root stat error = %v, want not exist", err)
 	}
 }
@@ -215,18 +219,18 @@ func TestLocalProviderRejectsSchemeLessGitWorkspaceURL(t *testing.T) {
 	t.Cleanup(func() {
 		_ = runtime.Close()
 	})
-	session, err := runtime.StartSession(ctx, StartSessionRequest{AppName: "workspace-test"})
+	session, err := runtime.StartSession(ctx, &proto.StartRuntimeSessionRequest{AppName: "workspace-test"})
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)
 	}
 
-	_, err = runtime.PrepareWorkspace(ctx, PrepareWorkspaceRequest{
-		SessionID:      session.ID,
-		AgentSessionID: "agent-session-1",
-		Workspace: &Workspace{
-			CWD: "app",
-			Checkouts: []WorkspaceGitCheckout{{
-				URL:  "github.com/valon-technologies/app",
+	_, err = runtime.PrepareWorkspace(ctx, &proto.PrepareRuntimeWorkspaceRequest{
+		SessionId:      session.GetId(),
+		AgentSessionId: "agent-session-1",
+		Workspace: &proto.AgentWorkspace{
+			Cwd: "app",
+			Checkouts: []*proto.AgentWorkspaceGitCheckout{{
+				Url:  "github.com/valon-technologies/app",
 				Path: "app",
 			}},
 		},
@@ -245,12 +249,12 @@ func TestLocalProviderRejectsTraversalWorkspaceID(t *testing.T) {
 	t.Cleanup(func() {
 		_ = runtime.Close()
 	})
-	session, err := runtime.StartSession(ctx, StartSessionRequest{AppName: "workspace-test"})
+	session, err := runtime.StartSession(ctx, &proto.StartRuntimeSessionRequest{AppName: "workspace-test"})
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)
 	}
 	for _, id := range []string{".", "..", "nested/path"} {
-		if err := runtime.RemoveWorkspace(ctx, RemoveWorkspaceRequest{SessionID: session.ID, AgentSessionID: id}); err == nil {
+		if err := runtime.RemoveWorkspace(ctx, &proto.RemoveRuntimeWorkspaceRequest{SessionId: session.GetId(), AgentSessionId: id}); err == nil {
 			t.Fatalf("RemoveWorkspace(%q) succeeded, want invalid id", id)
 		}
 	}

@@ -5,13 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 )
@@ -38,9 +38,8 @@ func TestExecutableProviderReadsRuntimeSupport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Support: %v", err)
 	}
-	want := Support{CanHostApps: true, EgressMode: EgressModeNone}
-	if !reflect.DeepEqual(support, want) {
-		t.Fatalf("Support = %#v, want %#v", support, want)
+	if !support.GetCanHostApps() || support.GetEgressMode() != proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_UNSPECIFIED {
+		t.Fatalf("Support = %#v, want can_host_apps with unspecified egress", support)
 	}
 }
 
@@ -70,7 +69,7 @@ func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing
 		_ = runtimeProvider.Close()
 	})
 
-	session, err := runtimeProvider.StartSession(ctx, StartSessionRequest{
+	session, err := runtimeProvider.StartSession(ctx, &proto.StartRuntimeSessionRequest{
 		AppName: "agent",
 		Metadata: map[string]string{
 			"provider_name": "agent",
@@ -83,8 +82,8 @@ func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing
 		t.Fatalf("StartSession: %v", err)
 	}
 
-	_, err = runtimeProvider.StartApp(ctx, StartAppRequest{
-		SessionID: session.ID,
+	_, err = runtimeProvider.StartApp(ctx, &proto.StartHostedAppRequest{
+		SessionId: session.GetId(),
 		AppName:   "agent",
 		Command:   "/bin/false",
 	})
@@ -107,7 +106,7 @@ func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing
 		t.Fatalf("StartApp error = %q, want stderr log entry", err)
 	}
 
-	logs, err := services.RuntimeSessionLogs.ListSessionLogs(ctx, "modal", session.ID, 0, 10)
+	logs, err := services.RuntimeSessionLogs.ListSessionLogs(ctx, "modal", session.GetId(), 0, 10)
 	if err != nil {
 		t.Fatalf("ListSessionLogs: %v", err)
 	}
@@ -143,15 +142,15 @@ func TestExecutableProviderForwardsStartAppWorkdir(t *testing.T) {
 		_ = runtimeProvider.Close()
 	})
 
-	session, err := runtimeProvider.StartSession(ctx, StartSessionRequest{
+	session, err := runtimeProvider.StartSession(ctx, &proto.StartRuntimeSessionRequest{
 		AppName: "agent",
 	})
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)
 	}
 
-	hosted, err := runtimeProvider.StartApp(ctx, StartAppRequest{
-		SessionID: session.ID,
+	hosted, err := runtimeProvider.StartApp(ctx, &proto.StartHostedAppRequest{
+		SessionId: session.GetId(),
 		AppName:   "agent",
 		Command:   "/bin/plugin",
 		Workdir:   "/tmp/provider-root",
@@ -223,38 +222,37 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type runtimeProvider struct {
 	mu       sync.Mutex
-	sessions map[string]gestalt.RuntimeSession
+	sessions map[string]*proto.RuntimeSession
 }
 
 func newRuntimeProvider() *runtimeProvider {
-	return &runtimeProvider{sessions: make(map[string]gestalt.RuntimeSession)}
+	return &runtimeProvider{sessions: make(map[string]*proto.RuntimeSession)}
 }
 
 func (p *runtimeProvider) Configure(context.Context, string, map[string]any) error {
 	return nil
 }
 
-func (p *runtimeProvider) GetSupport(context.Context) (gestalt.RuntimeSupport, error) {
-	return gestalt.RuntimeSupport{
-		CanHostApps: true,
-	}, nil
+func (p *runtimeProvider) GetSupport(context.Context) (*proto.RuntimeSupport, error) {
+	return &proto.RuntimeSupport{CanHostApps: true}, nil
 }
 
-func (p *runtimeProvider) StartSession(_ context.Context, req gestalt.StartRuntimeSessionRequest) (gestalt.RuntimeSession, error) {
-	sessionID := strings.TrimSpace(req.AppName) + "-session"
+func (p *runtimeProvider) StartSession(_ context.Context, req *proto.StartRuntimeSessionRequest) (*proto.RuntimeSession, error) {
+	sessionID := strings.TrimSpace(req.GetAppName()) + "-session"
 	if sessionID == "-session" {
 		sessionID = "runtime-session"
 	}
-	session := gestalt.RuntimeSession{
-		ID:       sessionID,
+	session := &proto.RuntimeSession{
+		Id:       sessionID,
 		State:    "ready",
-		Metadata: req.Metadata,
+		Metadata: req.GetMetadata(),
 	}
 	p.mu.Lock()
 	p.sessions[sessionID] = session
@@ -262,62 +260,62 @@ func (p *runtimeProvider) StartSession(_ context.Context, req gestalt.StartRunti
 	return session, nil
 }
 
-func (p *runtimeProvider) GetSession(_ context.Context, sessionID string) (gestalt.RuntimeSession, error) {
+func (p *runtimeProvider) GetSession(_ context.Context, req *proto.GetRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	session, ok := p.sessions[strings.TrimSpace(sessionID)]
+	session, ok := p.sessions[strings.TrimSpace(req.GetSessionId())]
 	if !ok {
-		return gestalt.RuntimeSession{}, status.Error(codes.NotFound, "session not found")
+		return nil, status.Error(codes.NotFound, "session not found")
 	}
 	return session, nil
 }
 
-func (p *runtimeProvider) ListSessions(_ context.Context, req gestalt.ListRuntimeSessionsRequest) (gestalt.ListRuntimeSessionsResponse, error) {
+func (p *runtimeProvider) ListSessions(_ context.Context, req *proto.ListRuntimeSessionsRequest) (*proto.ListRuntimeSessionsResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	sessions := make([]gestalt.RuntimeSession, 0, len(p.sessions))
+	sessions := make([]*proto.RuntimeSession, 0, len(p.sessions))
 	for _, session := range p.sessions {
 		sessions = append(sessions, session)
 	}
-	return gestalt.ListRuntimeSessionsResponse{
+	return &proto.ListRuntimeSessionsResponse{
 		Sessions:      sessions,
-		NextPageToken: req.PageToken,
+		NextPageToken: req.GetPageToken(),
 	}, nil
 }
 
-func (p *runtimeProvider) StopSession(_ context.Context, sessionID string) error {
+func (p *runtimeProvider) StopSession(_ context.Context, req *proto.StopRuntimeSessionRequest) error {
 	p.mu.Lock()
-	delete(p.sessions, strings.TrimSpace(sessionID))
+	delete(p.sessions, strings.TrimSpace(req.GetSessionId()))
 	p.mu.Unlock()
 	return nil
 }
 
-func (p *runtimeProvider) StartApp(ctx context.Context, req gestalt.StartHostedAppRequest) (gestalt.HostedApp, error) {
-	if req.AppName == "host-services" {
-		socket := strings.TrimSpace(req.Env[gestalt.EnvHostServiceSocket])
+func (p *runtimeProvider) StartApp(ctx context.Context, req *proto.StartHostedAppRequest) (*proto.HostedApp, error) {
+	if req.GetAppName() == "host-services" {
+		socket := strings.TrimSpace(req.GetEnv()[gestalt.EnvHostServiceSocket])
 		if socket == "" {
-			return gestalt.HostedApp{}, status.Error(codes.FailedPrecondition, "host service socket missing")
+			return nil, status.Error(codes.FailedPrecondition, "host service socket missing")
 		}
-		return gestalt.HostedApp{
-			ID:         "hosted-" + req.AppName,
-			SessionID:  req.SessionID,
-			AppName:    req.AppName,
+		return &proto.HostedApp{
+			Id:         "hosted-" + req.GetAppName(),
+			SessionId:  req.GetSessionId(),
+			AppName:    req.GetAppName(),
 			DialTarget: "host-service://" + socket,
 		}, nil
 	}
-	if req.Workdir != "" {
-		return gestalt.HostedApp{
-			ID:         "hosted-" + req.AppName,
-			SessionID:  req.SessionID,
-			AppName:    req.AppName,
-			DialTarget: "workdir://" + req.Workdir,
+	if req.GetWorkdir() != "" {
+		return &proto.HostedApp{
+			Id:         "hosted-" + req.GetAppName(),
+			SessionId:  req.GetSessionId(),
+			AppName:    req.GetAppName(),
+			DialTarget: "workdir://" + req.GetWorkdir(),
 		}, nil
 	}
 	host, err := gestalt.RuntimeLogHost()
 	if err == nil {
 		defer func() { _ = host.Close() }()
 		now := time.Now().UTC()
-		_ = host.AppendLogs(ctx, req.SessionID, []gestalt.RuntimeLogEntry{
+		_ = host.AppendLogs(ctx, req.GetSessionId(), []gestalt.RuntimeLogEntry{
 			{
 				Stream:     gestalt.RuntimeLogStreamRuntime,
 				Message:    "runtime boot",
@@ -338,7 +336,7 @@ func (p *runtimeProvider) StartApp(ctx context.Context, req gestalt.StartHostedA
 			},
 		})
 	}
-	return gestalt.HostedApp{}, status.Error(codes.Internal, "runtime start failed")
+	return nil, status.Error(codes.Internal, "runtime start failed")
 }
 
 func main() {

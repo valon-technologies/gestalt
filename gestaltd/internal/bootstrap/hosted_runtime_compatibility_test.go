@@ -7,13 +7,13 @@ import (
 	"time"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 func TestHostedRuntimeSessionCompatibilityReasonDetectsImageMismatch(t *testing.T) {
 	t.Parallel()
 
-	session := &runtimeprovider.Session{Metadata: map[string]string{
+	session := &proto.RuntimeSession{Metadata: map[string]string{
 		hostedRuntimeMetadataTemplate:     "agent-runtime",
 		hostedRuntimeMetadataCurrentImage: "runtime@sha256:current",
 		hostedRuntimeMetadataActualImage:  "runtime@sha256:old",
@@ -29,7 +29,7 @@ func TestHostedRuntimeSessionCompatibilityReasonDetectsImageMismatch(t *testing.
 func TestHostedRuntimeSessionCompatibilityReasonTreatsMissingMetadataAsCompatible(t *testing.T) {
 	t.Parallel()
 
-	if reason := hostedRuntimeSessionCompatibilityReason(&runtimeprovider.Session{}); reason != "" {
+	if reason := hostedRuntimeSessionCompatibilityReason(&proto.RuntimeSession{}); reason != "" {
 		t.Fatalf("reason = %q, want compatible", reason)
 	}
 }
@@ -76,8 +76,8 @@ func TestHostedWorkflowWorkerKnownStaleSessionIsNotReady(t *testing.T) {
 	}
 }
 
-func staleRuntimeSessionForTest() *runtimeprovider.Session {
-	return &runtimeprovider.Session{Metadata: map[string]string{
+func staleRuntimeSessionForTest() *proto.RuntimeSession {
+	return &proto.RuntimeSession{Metadata: map[string]string{
 		hostedRuntimeMetadataTemplate:     "agent-runtime",
 		hostedRuntimeMetadataCurrentImage: "runtime@sha256:current",
 		hostedRuntimeMetadataActualImage:  "runtime@sha256:old",

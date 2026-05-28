@@ -58,9 +58,8 @@
 // [SecretsProvider], [WorkflowProvider], [AgentProvider], and
 // [RuntimeProvider].
 //
-// Workflow and agent helpers include [NewAgentMessage] and [NewAgentToolRef].
-// Workflow structs use native Go values at provider boundaries; SDK adapters
-// own transport conversion.
+// Workflow and agent provider surfaces use native Go structs. The SDK owns the
+// generated provider protocol conversion at the transport boundary.
 //
 // Host-service capabilities include [Cache], [Workflow], [AgentHost],
 // [Agent], [Authorization], and [App].
@@ -90,10 +89,9 @@
 // Agent, Authorization, and App. Apps use
 // [IndexedDB] and [S3] for datastore and object storage bindings.
 //
-// AgentHost includes plain Go helper methods such as ExecuteToolForTurn,
-// ListToolsForTurn, and ResolveConnectionForTurn. Native SDK structs accept
-// time.Time values and JSON-compatible maps or structs, so provider code can
-// keep transport serialization at the SDK boundary.
+// Workflow, Agent, and AgentHost use native Go request and response structs at
+// provider boundaries. Generated protocol messages stay inside the SDK
+// transport adapter.
 //
 // See https://gestaltd.ai/reference/sdk for the SDK overview.
 // See https://gestaltd.ai/providers/apps for the typed app authoring flow.

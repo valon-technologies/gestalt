@@ -69,7 +69,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	"github.com/valon-technologies/gestalt/server/services/ui"
 	"github.com/valon-technologies/gestalt/server/services/ui/adminui"
@@ -553,8 +552,8 @@ func (r *recordingExternalCredentialProvider) lookupCalls() int64 {
 type staticRuntimeInspector struct {
 	mu              sync.Mutex
 	snapshots       []bootstrap.RuntimeProviderSnapshot
-	sessions        map[string]*runtimeprovider.ListSessionsResponse
-	sessionRequests map[string]runtimeprovider.ListSessionsRequest
+	sessions        map[string]*proto.ListRuntimeSessionsResponse
+	sessionRequests map[string]*proto.ListRuntimeSessionsRequest
 	logs            []runtimelogs.Record
 	err             error
 }
@@ -574,7 +573,7 @@ func (s *staticRuntimeInspector) SnapshotRuntimes(context.Context) ([]bootstrap.
 	return out, nil
 }
 
-func (s *staticRuntimeInspector) ListRuntimeSessions(_ context.Context, providerName string, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+func (s *staticRuntimeInspector) ListRuntimeSessions(_ context.Context, providerName string, req *proto.ListRuntimeSessionsRequest) (*proto.ListRuntimeSessionsResponse, error) {
 	if s == nil {
 		return nil, bootstrap.ErrRuntimeProviderNotFound
 	}
@@ -583,9 +582,9 @@ func (s *staticRuntimeInspector) ListRuntimeSessions(_ context.Context, provider
 	}
 	s.mu.Lock()
 	if s.sessionRequests == nil {
-		s.sessionRequests = map[string]runtimeprovider.ListSessionsRequest{}
+		s.sessionRequests = map[string]*proto.ListRuntimeSessionsRequest{}
 	}
-	s.sessionRequests[providerName] = req
+	s.sessionRequests[providerName] = gproto.Clone(req).(*proto.ListRuntimeSessionsRequest)
 	s.mu.Unlock()
 	resp := s.sessions[providerName]
 	if resp == nil {
@@ -596,18 +595,7 @@ func (s *staticRuntimeInspector) ListRuntimeSessions(_ context.Context, provider
 		}
 		return nil, bootstrap.ErrRuntimeProviderNotFound
 	}
-	out := &runtimeprovider.ListSessionsResponse{
-		Sessions:      make([]runtimeprovider.Session, 0, len(resp.Sessions)),
-		NextPageToken: resp.NextPageToken,
-	}
-	for _, session := range resp.Sessions {
-		out.Sessions = append(out.Sessions, runtimeprovider.Session{
-			ID:       session.ID,
-			State:    session.State,
-			Metadata: maps.Clone(session.Metadata),
-		})
-	}
-	return out, nil
+	return gproto.Clone(resp).(*proto.ListRuntimeSessionsResponse), nil
 }
 
 func (s *staticRuntimeInspector) ListRuntimeSessionLogs(_ context.Context, _ string, _ string, afterSeq int64, limit int) ([]runtimelogs.Record, error) {
@@ -4610,12 +4598,12 @@ func TestAdminAPI_RuntimeProviderSessions(t *testing.T) {
 			Driver: config.RuntimeProviderDriver("modal"),
 			Loaded: true,
 		}},
-		sessions: map[string]*runtimeprovider.ListSessionsResponse{
+		sessions: map[string]*proto.ListRuntimeSessionsResponse{
 			"modal": {
 				NextPageToken: "next-page",
-				Sessions: []runtimeprovider.Session{{
-					ID:    "session-1",
-					State: runtimeprovider.SessionStateRunning,
+				Sessions: []*proto.RuntimeSession{{
+					Id:    "session-1",
+					State: "running",
 					Metadata: map[string]string{
 						"provider_name": "support",
 						"owner":         "support-platform",
@@ -4657,8 +4645,8 @@ func TestAdminAPI_RuntimeProviderSessions(t *testing.T) {
 	if got := session["id"]; got != "session-1" {
 		t.Fatalf("runtime provider sessions[0].id = %v, want session-1", got)
 	}
-	if got := session["state"]; got != string(runtimeprovider.SessionStateRunning) {
-		t.Fatalf("runtime provider sessions[0].state = %v, want %q", got, runtimeprovider.SessionStateRunning)
+	if got := session["state"]; got != "running" {
+		t.Fatalf("runtime provider sessions[0].state = %v, want %q", got, "running")
 	}
 	if got := session["app"]; got != "support" {
 		t.Fatalf("runtime provider sessions[0].app = %v, want support", got)
@@ -4672,10 +4660,10 @@ func TestAdminAPI_RuntimeProviderSessions(t *testing.T) {
 	inspector.mu.Lock()
 	listReq := inspector.sessionRequests["modal"]
 	inspector.mu.Unlock()
-	if got, want := listReq.PageSize, 200; got != want {
+	if got, want := listReq.GetPageSize(), int32(200); got != want {
 		t.Fatalf("runtime provider sessions pageSize = %d, want %d", got, want)
 	}
-	if got, want := listReq.PageToken, "next-in"; got != want {
+	if got, want := listReq.GetPageToken(), "next-in"; got != want {
 		t.Fatalf("runtime provider sessions pageToken = %q, want %q", got, want)
 	}
 }
@@ -4732,7 +4720,7 @@ func TestAdminAPI_RuntimeProviderSessionsForwardsTokenWithoutDefaultPageSize(t *
 			Driver: config.RuntimeProviderDriver("modal"),
 			Loaded: true,
 		}},
-		sessions: map[string]*runtimeprovider.ListSessionsResponse{
+		sessions: map[string]*proto.ListRuntimeSessionsResponse{
 			"modal": {},
 		},
 	}

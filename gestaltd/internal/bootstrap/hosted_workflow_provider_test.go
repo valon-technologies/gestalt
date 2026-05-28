@@ -102,10 +102,10 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		t.Fatalf("StartApp requests after StartWorkflowProviders = %d, want 2 workers", len(startRequests))
 	}
 	workerReq := startRequests[0]
-	if got := workerReq.Env[runtimehost.HostServiceSocketEnv]; got != "tcp://127.0.0.1:8080" {
+	if got := workerReq.GetEnv()[runtimehost.HostServiceSocketEnv]; got != "tcp://127.0.0.1:8080" {
 		t.Fatalf("worker env %s = %q, want public relay target", runtimehost.HostServiceSocketEnv, got)
 	}
-	if got := workerReq.Env[runtimehost.HostServiceTokenEnv]; got == "" {
+	if got := workerReq.GetEnv()[runtimehost.HostServiceTokenEnv]; got == "" {
 		t.Fatalf("worker env missing %s", runtimehost.HostServiceTokenEnv)
 	}
 	sessions := runtimeProvider.startSessionRequestsCopy()
@@ -699,8 +699,8 @@ type recordingHostedWorkflowRuntime struct {
 	t        *testing.T
 
 	mu               sync.Mutex
-	startRequests    []runtimeprovider.StartSessionRequest
-	startAppRequests []runtimeprovider.StartAppRequest
+	startRequests    []*proto.StartRuntimeSessionRequest
+	startAppRequests []*proto.StartHostedAppRequest
 	servers          map[string]*recordingHostedWorkflowServer
 	closeCalls       atomic.Int32
 }
@@ -711,7 +711,7 @@ type blockingStartSessionWorkflowRuntime struct {
 	once    sync.Once
 }
 
-func (r *blockingStartSessionWorkflowRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
+func (r *blockingStartSessionWorkflowRuntime) StartSession(ctx context.Context, req *proto.StartRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	r.once.Do(func() {
 		close(r.started)
 	})
@@ -725,7 +725,7 @@ type staleSessionWorkflowRuntime struct {
 	once    sync.Once
 }
 
-func (r *staleSessionWorkflowRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
+func (r *staleSessionWorkflowRuntime) StartSession(ctx context.Context, req *proto.StartRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	session, err := r.recordingHostedWorkflowRuntime.StartSession(ctx, req)
 	if err == nil {
 		r.once.Do(func() {
@@ -735,7 +735,7 @@ func (r *staleSessionWorkflowRuntime) StartSession(ctx context.Context, req runt
 	return session, err
 }
 
-func (r *staleSessionWorkflowRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
+func (r *staleSessionWorkflowRuntime) GetSession(ctx context.Context, req *proto.GetRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	session, err := r.recordingHostedWorkflowRuntime.GetSession(ctx, req)
 	if err != nil {
 		return nil, err
@@ -881,50 +881,36 @@ func newRecordingHostedWorkflowRuntime(t *testing.T) *recordingHostedWorkflowRun
 	}
 }
 
-func (r *recordingHostedWorkflowRuntime) Support(context.Context) (runtimeprovider.Support, error) {
-	return runtimeprovider.Support{
+func (r *recordingHostedWorkflowRuntime) Support(context.Context) (*proto.RuntimeSupport, error) {
+	return &proto.RuntimeSupport{
 		CanHostApps: true,
-		EgressMode:  runtimeprovider.EgressModeHostname,
+		EgressMode:  proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME,
 	}, nil
 }
 
-func (r *recordingHostedWorkflowRuntime) StartSession(ctx context.Context, req runtimeprovider.StartSessionRequest) (*runtimeprovider.Session, error) {
+func (r *recordingHostedWorkflowRuntime) StartSession(ctx context.Context, req *proto.StartRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	r.mu.Lock()
-	r.startRequests = append(r.startRequests, runtimeprovider.StartSessionRequest{
-		AppName:       req.AppName,
-		Template:      req.Template,
-		Image:         req.Image,
-		ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
-		Metadata:      cloneRuntimeMetadata(req.Metadata),
-	})
+	r.startRequests = append(r.startRequests, cloneStartRuntimeSessionRequest(req))
 	r.mu.Unlock()
 	return r.provider.StartSession(ctx, req)
 }
 
-func (r *recordingHostedWorkflowRuntime) ListSessions(ctx context.Context, req runtimeprovider.ListSessionsRequest) (*runtimeprovider.ListSessionsResponse, error) {
+func (r *recordingHostedWorkflowRuntime) ListSessions(ctx context.Context, req *proto.ListRuntimeSessionsRequest) (*proto.ListRuntimeSessionsResponse, error) {
 	return r.provider.ListSessions(ctx, req)
 }
 
-func (r *recordingHostedWorkflowRuntime) GetSession(ctx context.Context, req runtimeprovider.GetSessionRequest) (*runtimeprovider.Session, error) {
+func (r *recordingHostedWorkflowRuntime) GetSession(ctx context.Context, req *proto.GetRuntimeSessionRequest) (*proto.RuntimeSession, error) {
 	return r.provider.GetSession(ctx, req)
 }
 
-func (r *recordingHostedWorkflowRuntime) StopSession(ctx context.Context, req runtimeprovider.StopSessionRequest) error {
-	r.cleanupServer(req.SessionID)
+func (r *recordingHostedWorkflowRuntime) StopSession(ctx context.Context, req *proto.StopRuntimeSessionRequest) error {
+	r.cleanupServer(req.GetSessionId())
 	return r.provider.StopSession(ctx, req)
 }
 
-func (r *recordingHostedWorkflowRuntime) StartApp(_ context.Context, req runtimeprovider.StartAppRequest) (*runtimeprovider.HostedApp, error) {
+func (r *recordingHostedWorkflowRuntime) StartApp(_ context.Context, req *proto.StartHostedAppRequest) (*proto.HostedApp, error) {
 	r.mu.Lock()
-	r.startAppRequests = append(r.startAppRequests, runtimeprovider.StartAppRequest{
-		SessionID:  req.SessionID,
-		AppName:    req.AppName,
-		Command:    req.Command,
-		Args:       slices.Clone(req.Args),
-		Env:        cloneRuntimeMetadata(req.Env),
-		Egress:     cloneRuntimeEgressPolicy(req.Egress),
-		HostBinary: req.HostBinary,
-	})
+	r.startAppRequests = append(r.startAppRequests, cloneStartHostedAppRequest(req))
 	r.mu.Unlock()
 
 	dir, err := runtimehost.NewPluginTempDir("gst-workflow-runtime-*")
@@ -946,17 +932,17 @@ func (r *recordingHostedWorkflowRuntime) StartApp(_ context.Context, req runtime
 	}()
 
 	r.mu.Lock()
-	r.servers[req.SessionID] = workflowServer
+	r.servers[req.GetSessionId()] = workflowServer
 	r.mu.Unlock()
 	r.t.Cleanup(func() {
 		grpcServer.Stop()
 		_ = lis.Close()
 		_ = os.RemoveAll(dir)
 	})
-	return &runtimeprovider.HostedApp{
-		ID:         "fake-" + req.SessionID,
-		SessionID:  req.SessionID,
-		AppName:    req.AppName,
+	return &proto.HostedApp{
+		Id:         "fake-" + req.GetSessionId(),
+		SessionId:  req.GetSessionId(),
+		AppName:    req.GetAppName(),
 		DialTarget: "unix://" + socketPath,
 	}, nil
 }
@@ -975,36 +961,22 @@ func (r *recordingHostedWorkflowRuntime) Close() error {
 	return r.provider.Close()
 }
 
-func (r *recordingHostedWorkflowRuntime) startSessionRequestsCopy() []runtimeprovider.StartSessionRequest {
+func (r *recordingHostedWorkflowRuntime) startSessionRequestsCopy() []*proto.StartRuntimeSessionRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]runtimeprovider.StartSessionRequest, len(r.startRequests))
+	out := make([]*proto.StartRuntimeSessionRequest, len(r.startRequests))
 	for i, req := range r.startRequests {
-		out[i] = runtimeprovider.StartSessionRequest{
-			AppName:       req.AppName,
-			Template:      req.Template,
-			Image:         req.Image,
-			ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
-			Metadata:      cloneRuntimeMetadata(req.Metadata),
-		}
+		out[i] = cloneStartRuntimeSessionRequest(req)
 	}
 	return out
 }
 
-func (r *recordingHostedWorkflowRuntime) startAppRequestsCopy() []runtimeprovider.StartAppRequest {
+func (r *recordingHostedWorkflowRuntime) startAppRequestsCopy() []*proto.StartHostedAppRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]runtimeprovider.StartAppRequest, len(r.startAppRequests))
+	out := make([]*proto.StartHostedAppRequest, len(r.startAppRequests))
 	for i, req := range r.startAppRequests {
-		out[i] = runtimeprovider.StartAppRequest{
-			SessionID:  req.SessionID,
-			AppName:    req.AppName,
-			Command:    req.Command,
-			Args:       slices.Clone(req.Args),
-			Env:        cloneRuntimeMetadata(req.Env),
-			Egress:     cloneRuntimeEgressPolicy(req.Egress),
-			HostBinary: req.HostBinary,
-		}
+		out[i] = cloneStartHostedAppRequest(req)
 	}
 	return out
 }

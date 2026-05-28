@@ -9,11 +9,14 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type agentProvider struct {
@@ -21,18 +24,18 @@ type agentProvider struct {
 
 	mu             sync.Mutex
 	configuredName string
-	sessions       map[string]*gestalt.AgentSession
-	turns          map[string]*gestalt.AgentTurn
-	turnEvents     map[string][]*gestalt.AgentTurnEvent
-	interactions   map[string]*gestalt.AgentInteraction
+	sessions       map[string]*proto.AgentSession
+	turns          map[string]*proto.AgentTurn
+	turnEvents     map[string][]*proto.AgentTurnEvent
+	interactions   map[string]*proto.AgentInteraction
 }
 
 func newAgentProvider() *agentProvider {
 	return &agentProvider{
-		sessions:     make(map[string]*gestalt.AgentSession),
-		turns:        make(map[string]*gestalt.AgentTurn),
-		turnEvents:   make(map[string][]*gestalt.AgentTurnEvent),
-		interactions: make(map[string]*gestalt.AgentInteraction),
+		sessions:     make(map[string]*proto.AgentSession),
+		turns:        make(map[string]*proto.AgentTurn),
+		turnEvents:   make(map[string][]*proto.AgentTurnEvent),
+		interactions: make(map[string]*proto.AgentInteraction),
 	}
 }
 
@@ -43,200 +46,181 @@ func (p *agentProvider) Configure(_ context.Context, name string, _ map[string]a
 	return nil
 }
 
-func (p *agentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
+func (p *agentProvider) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	session := p.createOrUpdateSessionLocked(
-		strings.TrimSpace(req.SessionID),
-		strings.TrimSpace(req.Model),
-		strings.TrimSpace(req.ClientRef),
-		req.CreatedBy,
-		req.Metadata,
+		strings.TrimSpace(req.GetSessionId()),
+		strings.TrimSpace(req.GetModel()),
+		strings.TrimSpace(req.GetClientRef()),
+		req.GetCreatedBy(),
+		req.GetMetadata(),
 	)
 	return cloneSession(session), nil
 }
 
-func (p *agentProvider) GetSession(_ context.Context, req *gestalt.GetAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
+func (p *agentProvider) GetSession(_ context.Context, req *proto.GetAgentProviderSessionRequest) (*proto.AgentSession, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	session, ok := p.sessions[strings.TrimSpace(req.SessionID)]
+	session, ok := p.sessions[strings.TrimSpace(req.GetSessionId())]
 	if !ok {
 		return nil, status.Error(codes.NotFound, "session not found")
 	}
 	return cloneSession(session), nil
 }
 
-func (p *agentProvider) ListSessions(context.Context, *gestalt.ListAgentProviderSessionsRequest) (*gestalt.ListAgentProviderSessionsResponse, error) {
+func (p *agentProvider) ListSessions(context.Context, *proto.ListAgentProviderSessionsRequest) (*proto.ListAgentProviderSessionsResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return &gestalt.ListAgentProviderSessionsResponse{Sessions: sortedSessions(p.sessions)}, nil
+	return &proto.ListAgentProviderSessionsResponse{Sessions: sortedSessions(p.sessions)}, nil
 }
 
-func (p *agentProvider) UpdateSession(_ context.Context, req *gestalt.UpdateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
+func (p *agentProvider) UpdateSession(_ context.Context, req *proto.UpdateAgentProviderSessionRequest) (*proto.AgentSession, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	sessionID := strings.TrimSpace(req.SessionID)
+	sessionID := strings.TrimSpace(req.GetSessionId())
 	session, ok := p.sessions[sessionID]
 	if !ok {
 		return nil, status.Error(codes.NotFound, "session not found")
 	}
-	if clientRef := strings.TrimSpace(req.ClientRef); clientRef != "" {
+	if clientRef := strings.TrimSpace(req.GetClientRef()); clientRef != "" {
 		session.ClientRef = clientRef
 	}
-	if state := req.State; state != gestalt.AgentSessionStateUnspecified {
+	if state := req.GetState(); state != proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED {
 		session.State = state
 	}
-	if req.Metadata != nil {
-		session.Metadata = cloneMap(req.Metadata)
+	if req.GetMetadata() != nil {
+		session.Metadata = cloneStruct(req.GetMetadata())
 	}
-	session.UpdatedAt = time.Now()
+	session.UpdatedAt = timestamppb.Now()
 	return cloneSession(session), nil
 }
 
-func (p *agentProvider) CreateTurn(ctx context.Context, req *gestalt.CreateAgentProviderTurnRequest) (*gestalt.AgentTurn, error) {
-	turn, _, err := p.startTurn(
-		ctx,
-		strings.TrimSpace(req.TurnID),
-		strings.TrimSpace(req.SessionID),
-		strings.TrimSpace(req.Model),
-		req.Messages,
-		req.Tools,
-		req.Metadata,
-		req.Output,
-		req.CreatedBy,
-		strings.TrimSpace(req.ExecutionRef),
-		strings.TrimSpace(req.RunGrant),
-	)
+func (p *agentProvider) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+	turn, _, err := p.startTurn(ctx, req)
 	return turn, err
 }
 
-func (p *agentProvider) GetTurn(_ context.Context, req *gestalt.GetAgentProviderTurnRequest) (*gestalt.AgentTurn, error) {
+func (p *agentProvider) GetTurn(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*proto.AgentTurn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	turn, ok := p.turns[strings.TrimSpace(req.TurnID)]
+	turn, ok := p.turns[strings.TrimSpace(req.GetTurnId())]
 	if !ok {
 		return nil, status.Error(codes.NotFound, "turn not found")
 	}
 	return cloneTurn(turn), nil
 }
 
-func (p *agentProvider) ListTurns(_ context.Context, req *gestalt.ListAgentProviderTurnsRequest) (*gestalt.ListAgentProviderTurnsResponse, error) {
+func (p *agentProvider) ListTurns(_ context.Context, req *proto.ListAgentProviderTurnsRequest) (*proto.ListAgentProviderTurnsResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	sessionID := strings.TrimSpace(req.SessionID)
-	turns := make([]gestalt.AgentTurn, 0, len(p.turns))
+	sessionID := strings.TrimSpace(req.GetSessionId())
+	turns := make([]*proto.AgentTurn, 0, len(p.turns))
 	for _, turn := range p.turns {
-		if sessionID == "" || turn.SessionID == sessionID {
-			if cloned := cloneTurn(turn); cloned != nil {
-				turns = append(turns, *cloned)
-			}
+		if sessionID == "" || turn.GetSessionId() == sessionID {
+			turns = append(turns, cloneTurn(turn))
 		}
 	}
-	sort.Slice(turns, func(i, j int) bool { return turns[i].ID < turns[j].ID })
-	return &gestalt.ListAgentProviderTurnsResponse{Turns: turns}, nil
+	sort.Slice(turns, func(i, j int) bool { return turns[i].GetId() < turns[j].GetId() })
+	return &proto.ListAgentProviderTurnsResponse{Turns: turns}, nil
 }
 
-func (p *agentProvider) CancelTurn(_ context.Context, req *gestalt.CancelAgentProviderTurnRequest) (*gestalt.AgentTurn, error) {
+func (p *agentProvider) CancelTurn(_ context.Context, req *proto.CancelAgentProviderTurnRequest) (*proto.AgentTurn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	turnID := strings.TrimSpace(req.TurnID)
+	turnID := strings.TrimSpace(req.GetTurnId())
 	turn, ok := p.turns[turnID]
 	if !ok {
 		return nil, status.Error(codes.NotFound, "turn not found")
 	}
-	now := time.Now()
-	turn.Status = gestalt.AgentExecutionStatusCanceled
-	turn.StatusMessage = strings.TrimSpace(req.Reason)
-	turn.CompletedAt = &now
+	turn.Status = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED
+	turn.StatusMessage = strings.TrimSpace(req.GetReason())
+	turn.CompletedAt = timestamppb.Now()
 	p.appendTurnEventLocked(turnID, "turn.canceled", map[string]any{
-		"reason": turn.StatusMessage,
+		"reason": turn.GetStatusMessage(),
 	})
 	return cloneTurn(turn), nil
 }
 
-func (p *agentProvider) ListTurnEvents(_ context.Context, req *gestalt.ListAgentProviderTurnEventsRequest) (*gestalt.ListAgentProviderTurnEventsResponse, error) {
+func (p *agentProvider) ListTurnEvents(_ context.Context, req *proto.ListAgentProviderTurnEventsRequest) (*proto.ListAgentProviderTurnEventsResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	events := p.turnEvents[strings.TrimSpace(req.TurnID)]
-	out := make([]gestalt.AgentTurnEvent, 0, len(events))
-	afterSeq := req.AfterSeq
-	limit := int(req.Limit)
+	events := p.turnEvents[strings.TrimSpace(req.GetTurnId())]
+	out := make([]*proto.AgentTurnEvent, 0, len(events))
+	afterSeq := req.GetAfterSeq()
+	limit := int(req.GetLimit())
 	for _, event := range events {
-		if event.Seq <= afterSeq {
+		if event.GetSeq() <= afterSeq {
 			continue
 		}
-		if cloned := cloneTurnEvent(event); cloned != nil {
-			out = append(out, *cloned)
-		}
+		out = append(out, cloneTurnEvent(event))
 		if limit > 0 && len(out) >= limit {
 			break
 		}
 	}
-	return &gestalt.ListAgentProviderTurnEventsResponse{Events: out}, nil
+	return &proto.ListAgentProviderTurnEventsResponse{Events: out}, nil
 }
 
-func (p *agentProvider) GetInteraction(_ context.Context, req *gestalt.GetAgentProviderInteractionRequest) (*gestalt.AgentInteraction, error) {
+func (p *agentProvider) GetInteraction(_ context.Context, req *proto.GetAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	interaction, ok := p.interactions[strings.TrimSpace(req.InteractionID)]
+	interaction, ok := p.interactions[strings.TrimSpace(req.GetInteractionId())]
 	if !ok {
 		return nil, status.Error(codes.NotFound, "interaction not found")
 	}
 	return cloneInteraction(interaction), nil
 }
 
-func (p *agentProvider) ListInteractions(_ context.Context, req *gestalt.ListAgentProviderInteractionsRequest) (*gestalt.ListAgentProviderInteractionsResponse, error) {
+func (p *agentProvider) ListInteractions(_ context.Context, req *proto.ListAgentProviderInteractionsRequest) (*proto.ListAgentProviderInteractionsResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	turnID := strings.TrimSpace(req.TurnID)
-	interactions := make([]gestalt.AgentInteraction, 0, len(p.interactions))
+	turnID := strings.TrimSpace(req.GetTurnId())
+	interactions := make([]*proto.AgentInteraction, 0, len(p.interactions))
 	for _, interaction := range p.interactions {
-		if turnID == "" || interaction.TurnID == turnID {
-			if cloned := cloneInteraction(interaction); cloned != nil {
-				interactions = append(interactions, *cloned)
-			}
+		if turnID == "" || interaction.GetTurnId() == turnID {
+			interactions = append(interactions, cloneInteraction(interaction))
 		}
 	}
-	sort.Slice(interactions, func(i, j int) bool { return interactions[i].ID < interactions[j].ID })
-	return &gestalt.ListAgentProviderInteractionsResponse{Interactions: interactions}, nil
+	sort.Slice(interactions, func(i, j int) bool { return interactions[i].GetId() < interactions[j].GetId() })
+	return &proto.ListAgentProviderInteractionsResponse{Interactions: interactions}, nil
 }
 
-func (p *agentProvider) ResolveInteraction(_ context.Context, req *gestalt.ResolveAgentProviderInteractionRequest) (*gestalt.AgentInteraction, error) {
+func (p *agentProvider) ResolveInteraction(_ context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	interactionID := strings.TrimSpace(req.InteractionID)
+	interactionID := strings.TrimSpace(req.GetInteractionId())
 	interaction, ok := p.interactions[interactionID]
 	if !ok {
 		return nil, status.Error(codes.NotFound, "interaction not found")
 	}
-	if interaction.State != gestalt.AgentInteractionStatePending {
+	if interaction.GetState() != proto.AgentInteractionState_AGENT_INTERACTION_STATE_PENDING {
 		return nil, status.Error(codes.FailedPrecondition, "interaction is not pending")
 	}
-	now := time.Now()
-	interaction.State = gestalt.AgentInteractionStateResolved
-	interaction.Resolution = cloneMap(req.Resolution)
-	interaction.ResolvedAt = &now
-	turn, ok := p.turns[interaction.TurnID]
+	now := timestamppb.Now()
+	interaction.State = proto.AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED
+	interaction.Resolution = cloneStruct(req.GetResolution())
+	interaction.ResolvedAt = now
+	turn, ok := p.turns[interaction.GetTurnId()]
 	if !ok {
 		return nil, status.Error(codes.NotFound, "turn not found")
 	}
-	turn.Status = gestalt.AgentExecutionStatusSucceeded
+	turn.Status = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED
 	turn.StatusMessage = interactionID
-	turn.CompletedAt = &now
-	p.appendTurnEventLocked(interaction.TurnID, "interaction.resolved", map[string]any{
+	turn.CompletedAt = now
+	p.appendTurnEventLocked(interaction.GetTurnId(), "interaction.resolved", map[string]any{
 		"interaction_id": interactionID,
 	})
-	p.appendTurnEventLocked(interaction.TurnID, "assistant.completed", map[string]any{
+	p.appendTurnEventLocked(interaction.GetTurnId(), "assistant.completed", map[string]any{
 		"interaction_id": interactionID,
 	})
-	p.appendTurnEventLocked(interaction.TurnID, "turn.completed", map[string]any{
+	p.appendTurnEventLocked(interaction.GetTurnId(), "turn.completed", map[string]any{
 		"interaction_id": interactionID,
 	})
 	return cloneInteraction(interaction), nil
 }
 
-func (p *agentProvider) GetCapabilities(context.Context, *gestalt.GetAgentProviderCapabilitiesRequest) (*gestalt.AgentProviderCapabilities, error) {
-	return &gestalt.AgentProviderCapabilities{
+func (p *agentProvider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
+	return &proto.AgentProviderCapabilities{
 		StreamingText:      true,
 		ToolCalls:          true,
 		ParallelToolCalls:  true,
@@ -246,25 +230,20 @@ func (p *agentProvider) GetCapabilities(context.Context, *gestalt.GetAgentProvid
 	}, nil
 }
 
-func (p *agentProvider) startTurn(
-	ctx context.Context,
-	turnID string,
-	sessionID string,
-	model string,
-	messages []gestalt.AgentMessage,
-	tools []gestalt.ResolvedAgentTool,
-	metadata map[string]any,
-	requestedOutput gestalt.AgentOutput,
-	createdBy *gestalt.AgentActor,
-	executionRef string,
-	runGrant string,
-) (*gestalt.AgentTurn, *gestalt.AgentInteraction, error) {
+func (p *agentProvider) startTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, *proto.AgentInteraction, error) {
+	turnID := strings.TrimSpace(req.GetTurnId())
 	if turnID == "" {
 		turnID = "agent-turn-1"
 	}
+	sessionID := strings.TrimSpace(req.GetSessionId())
 	if sessionID == "" {
 		sessionID = "session-" + turnID
 	}
+	model := strings.TrimSpace(req.GetModel())
+	toolID := firstAgentToolID(req.GetTools())
+	metadata := structMap(req.GetMetadata())
+	executionRef := strings.TrimSpace(req.GetExecutionRef())
+	runGrant := strings.TrimSpace(req.GetRunGrant())
 
 	providerName := p.providerName()
 	output := map[string]any{
@@ -276,21 +255,21 @@ func (p *agentProvider) startTurn(
 		requireInteraction, _ = metadata["requireInteraction"].(bool)
 	}
 
-	now := time.Now()
+	now := timestamppb.Now()
 	p.mu.Lock()
-	session := p.createOrUpdateSessionLocked(sessionID, model, "", createdBy, nil)
-	session.LastTurnAt = &now
+	session := p.createOrUpdateSessionLocked(sessionID, model, "", req.GetCreatedBy(), nil)
+	session.LastTurnAt = now
 	session.UpdatedAt = now
-	turn := &gestalt.AgentTurn{
-		ID:           turnID,
-		SessionID:    sessionID,
+	turn := &proto.AgentTurn{
+		Id:           turnID,
+		SessionId:    sessionID,
 		ProviderName: providerName,
 		Model:        model,
-		Status:       gestalt.AgentExecutionStatusRunning,
-		Messages:     cloneMessages(messages),
-		CreatedBy:    cloneActor(createdBy),
+		Status:       proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING,
+		Messages:     cloneMessages(req.GetMessages()),
+		CreatedBy:    cloneActor(req.GetCreatedBy()),
 		CreatedAt:    now,
-		StartedAt:    &now,
+		StartedAt:    now,
 		ExecutionRef: executionRef,
 	}
 	p.turns[turnID] = turn
@@ -299,7 +278,7 @@ func (p *agentProvider) startTurn(
 	})
 	p.mu.Unlock()
 
-	if len(tools) > 0 {
+	if toolID != "" {
 		host, err := gestalt.AgentHost()
 		if err != nil {
 			output["host_error"] = err.Error()
@@ -310,20 +289,22 @@ func (p *agentProvider) startTurn(
 				}
 			}()
 
-			resp, err := host.ExecuteTool(ctx, gestalt.AgentHostExecuteToolInput{
-				SessionID:      sessionID,
-				TurnID:         turnID,
-				ToolCallID:     "call-1",
-				ToolID:         tools[0].ID,
-				Arguments:      map[string]any{"taskId": "task-123"},
-				RunGrant:       runGrant,
-				IdempotencyKey: " tool-call-key-1 ",
-			})
+			arguments, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
 			if err != nil {
 				output["tool_error"] = err.Error()
+			} else if resp, err := host.ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
+				SessionId:      sessionID,
+				TurnId:         turnID,
+				ToolCallId:     "call-1",
+				ToolId:         toolID,
+				Arguments:      arguments,
+				RunGrant:       runGrant,
+				IdempotencyKey: " tool-call-key-1 ",
+			}); err != nil {
+				output["tool_error"] = err.Error()
 			} else {
-				output["tool_status"] = resp.Status
-				output["tool_body"] = resp.Body
+				output["tool_status"] = resp.GetStatus()
+				output["tool_body"] = resp.GetBody()
 			}
 			output["event_emitted"] = true
 		}
@@ -336,9 +317,9 @@ func (p *agentProvider) startTurn(
 		interactionRequest = map[string]any{"provider_name": providerName}
 	}
 
-	if !requireInteraction && len(messages) > 0 && output["tool_status"] == nil {
-		last := messages[len(messages)-1]
-		if text := strings.TrimSpace(last.Text); text != "" {
+	if !requireInteraction && len(req.GetMessages()) > 0 && output["tool_status"] == nil {
+		last := req.GetMessages()[len(req.GetMessages())-1]
+		if text := strings.TrimSpace(last.GetText()); text != "" {
 			output["echo"] = text
 		}
 	}
@@ -351,40 +332,40 @@ func (p *agentProvider) startTurn(
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	session = p.createOrUpdateSessionLocked(sessionID, model, "", createdBy, nil)
-	session.LastTurnAt = &now
+	session = p.createOrUpdateSessionLocked(sessionID, model, "", req.GetCreatedBy(), nil)
+	session.LastTurnAt = now
 	session.UpdatedAt = now
 
 	turn = p.turns[turnID]
 	if turn == nil {
-		turn = &gestalt.AgentTurn{
-			ID:           turnID,
-			SessionID:    sessionID,
+		turn = &proto.AgentTurn{
+			Id:           turnID,
+			SessionId:    sessionID,
 			ProviderName: providerName,
 			Model:        model,
-			Messages:     cloneMessages(messages),
-			CreatedBy:    cloneActor(createdBy),
+			Messages:     cloneMessages(req.GetMessages()),
+			CreatedBy:    cloneActor(req.GetCreatedBy()),
 			CreatedAt:    now,
-			StartedAt:    &now,
+			StartedAt:    now,
 			ExecutionRef: executionRef,
 		}
 	}
-	if requestedOutput.Structured != nil {
-		turn.Output = gestalt.AgentTurnOutput{
-			Structured: &gestalt.AgentTurnStructuredOutput{
+	if req.GetOutput().GetStructured() != nil {
+		turn.Output = &proto.AgentTurn_Structured{
+			Structured: &proto.AgentTurnStructuredOutput{
 				Text:  string(body),
-				Value: output,
+				Value: structFromMap(output),
 			},
 		}
 	} else {
-		turn.Output = gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: string(body)}}
+		turn.Output = &proto.AgentTurn_Text{Text: &proto.AgentTurnTextOutput{Text: string(body)}}
 	}
-	turn.Status = gestalt.AgentExecutionStatusSucceeded
+	turn.Status = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED
 	if requireInteraction {
-		turn.Status = gestalt.AgentExecutionStatusWaitingForInput
+		turn.Status = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT
 		turn.StatusMessage = "waiting for input"
 	} else {
-		turn.CompletedAt = &now
+		turn.CompletedAt = now
 	}
 
 	p.turns[turnID] = turn
@@ -392,22 +373,22 @@ func (p *agentProvider) startTurn(
 		p.appendTurnEventLocked(turnID, "agent.test", map[string]any{"provider_name": providerName})
 	}
 
-	var interaction *gestalt.AgentInteraction
+	var interaction *proto.AgentInteraction
 	if requireInteraction {
-		interaction = &gestalt.AgentInteraction{
-			ID:        "interaction-" + turnID,
-			TurnID:    turnID,
-			SessionID: sessionID,
-			Type:      gestalt.AgentInteractionTypeApproval,
-			State:     gestalt.AgentInteractionStatePending,
+		interaction = &proto.AgentInteraction{
+			Id:        "interaction-" + turnID,
+			TurnId:    turnID,
+			SessionId: sessionID,
+			Type:      proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL,
+			State:     proto.AgentInteractionState_AGENT_INTERACTION_STATE_PENDING,
 			Title:     "Approve action",
 			Prompt:    "Continue the agent turn?",
-			Request:   cloneMap(interactionRequest),
+			Request:   structFromMap(interactionRequest),
 			CreatedAt: now,
 		}
-		p.interactions[interaction.ID] = cloneInteraction(interaction)
+		p.interactions[interaction.GetId()] = cloneInteraction(interaction)
 		p.appendTurnEventLocked(turnID, "interaction.requested", map[string]any{
-			"interaction_id": interaction.ID,
+			"interaction_id": interaction.GetId(),
 			"session_id":     sessionID,
 		})
 	} else {
@@ -426,9 +407,9 @@ func (p *agentProvider) createOrUpdateSessionLocked(
 	sessionID string,
 	model string,
 	clientRef string,
-	createdBy *gestalt.AgentActor,
-	metadata map[string]any,
-) *gestalt.AgentSession {
+	createdBy *proto.AgentActor,
+	metadata *structpb.Struct,
+) *proto.AgentSession {
 	if sessionID == "" {
 		sessionID = "agent-session-1"
 	}
@@ -440,19 +421,19 @@ func (p *agentProvider) createOrUpdateSessionLocked(
 			existing.ClientRef = clientRef
 		}
 		if metadata != nil {
-			existing.Metadata = cloneMap(metadata)
+			existing.Metadata = cloneStruct(metadata)
 		}
-		existing.UpdatedAt = time.Now()
+		existing.UpdatedAt = timestamppb.Now()
 		return existing
 	}
-	now := time.Now()
-	session := &gestalt.AgentSession{
-		ID:           sessionID,
+	now := timestamppb.Now()
+	session := &proto.AgentSession{
+		Id:           sessionID,
 		ProviderName: p.providerNameLocked(""),
 		Model:        model,
 		ClientRef:    clientRef,
-		State:        gestalt.AgentSessionStateActive,
-		Metadata:     cloneMap(metadata),
+		State:        proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
+		Metadata:     cloneStruct(metadata),
 		CreatedBy:    cloneActor(createdBy),
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -463,74 +444,74 @@ func (p *agentProvider) createOrUpdateSessionLocked(
 
 func (p *agentProvider) appendTurnEventLocked(turnID, eventType string, data map[string]any) {
 	events := p.turnEvents[turnID]
-	event := &gestalt.AgentTurnEvent{
-		ID:         fmt.Sprintf("%s-event-%d", turnID, len(events)+1),
-		TurnID:     turnID,
+	event := &proto.AgentTurnEvent{
+		Id:         fmt.Sprintf("%s-event-%d", turnID, len(events)+1),
+		TurnId:     turnID,
 		Seq:        int64(len(events) + 1),
 		Type:       eventType,
 		Source:     p.providerNameLocked(""),
 		Visibility: "private",
-		Data:       cloneMap(data),
+		Data:       structFromMap(data),
 		Display:    turnEventDisplay(eventType, data),
-		CreatedAt:  time.Now(),
+		CreatedAt:  timestamppb.Now(),
 	}
 	p.turnEvents[turnID] = append(events, event)
 }
 
-func turnEventDisplay(eventType string, data map[string]any) *gestalt.AgentTurnDisplay {
+func turnEventDisplay(eventType string, data map[string]any) *proto.AgentTurnDisplay {
 	switch eventType {
 	case "turn.started":
-		return &gestalt.AgentTurnDisplay{
+		return &proto.AgentTurnDisplay{
 			Kind:  "status",
 			Phase: "started",
 			Label: "turn",
 			Text:  "provider turn started",
 		}
 	case "agent.test":
-		return &gestalt.AgentTurnDisplay{
+		return &proto.AgentTurnDisplay{
 			Kind:  "status",
 			Phase: "completed",
 			Label: "provider event",
 			Text:  displayString(data, "provider_name"),
 		}
 	case "interaction.requested":
-		return &gestalt.AgentTurnDisplay{
+		return &proto.AgentTurnDisplay{
 			Kind:  "interaction",
 			Phase: "requested",
 			Label: "approval",
 			Ref:   displayString(data, "interaction_id"),
-			Input: displayValue(data),
+			Input: valueFromAny(data),
 		}
 	case "interaction.resolved":
-		return &gestalt.AgentTurnDisplay{
+		return &proto.AgentTurnDisplay{
 			Kind:   "interaction",
 			Phase:  "resolved",
 			Label:  "approval",
 			Ref:    displayString(data, "interaction_id"),
-			Output: displayValue(data),
+			Output: valueFromAny(data),
 		}
 	case "assistant.completed":
-		return &gestalt.AgentTurnDisplay{
+		return &proto.AgentTurnDisplay{
 			Kind:   "text",
 			Phase:  "completed",
 			Text:   "provider assistant completed",
 			Format: "markdown",
 		}
 	case "turn.completed":
-		return &gestalt.AgentTurnDisplay{
+		return &proto.AgentTurnDisplay{
 			Kind:   "status",
 			Phase:  "completed",
 			Label:  "turn",
 			Text:   "provider turn completed",
-			Output: displayValue(data),
+			Output: valueFromAny(data),
 		}
 	case "turn.canceled":
-		return &gestalt.AgentTurnDisplay{
+		return &proto.AgentTurnDisplay{
 			Kind:  "status",
 			Phase: "canceled",
 			Label: "turn",
 			Text:  displayString(data, "reason"),
-			Error: displayValue(data),
+			Error: valueFromAny(data),
 		}
 	default:
 		return nil
@@ -543,13 +524,6 @@ func displayString(data map[string]any, key string) string {
 	}
 	value, _ := data[key].(string)
 	return strings.TrimSpace(value)
-}
-
-func displayValue(value any) any {
-	if data, ok := value.(map[string]any); ok {
-		return cloneMap(data)
-	}
-	return value
 }
 
 func (p *agentProvider) providerName() string {
@@ -568,249 +542,110 @@ func (p *agentProvider) providerNameLocked(fallback string) string {
 	return "agent-provider"
 }
 
-func sortedSessions(input map[string]*gestalt.AgentSession) []gestalt.AgentSession {
+func sortedSessions(input map[string]*proto.AgentSession) []*proto.AgentSession {
 	ids := make([]string, 0, len(input))
 	for id := range input {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	out := make([]gestalt.AgentSession, 0, len(ids))
+	out := make([]*proto.AgentSession, 0, len(ids))
 	for _, id := range ids {
-		if session := cloneSession(input[id]); session != nil {
-			out = append(out, *session)
-		}
+		out = append(out, cloneSession(input[id]))
 	}
 	return out
 }
 
-func cloneMessages(input []gestalt.AgentMessage) []gestalt.AgentMessage {
+func structMap(input *structpb.Struct) map[string]any {
+	if input == nil {
+		return nil
+	}
+	return input.AsMap()
+}
+
+func structFromMap(input map[string]any) *structpb.Struct {
 	if len(input) == 0 {
 		return nil
 	}
-	out := make([]gestalt.AgentMessage, 0, len(input))
+	out, err := structpb.NewStruct(input)
+	if err != nil {
+		panic(err)
+	}
+	return out
+}
+
+func valueFromAny(input any) *structpb.Value {
+	if input == nil {
+		return nil
+	}
+	out, err := structpb.NewValue(input)
+	if err != nil {
+		panic(err)
+	}
+	return out
+}
+
+func firstAgentToolID(input []*proto.ResolvedAgentTool) string {
+	for _, tool := range input {
+		if id := strings.TrimSpace(tool.GetId()); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+func cloneSession(input *proto.AgentSession) *proto.AgentSession {
+	if input == nil {
+		return nil
+	}
+	return gproto.Clone(input).(*proto.AgentSession)
+}
+
+func cloneTurn(input *proto.AgentTurn) *proto.AgentTurn {
+	if input == nil {
+		return nil
+	}
+	return gproto.Clone(input).(*proto.AgentTurn)
+}
+
+func cloneTurnEvent(input *proto.AgentTurnEvent) *proto.AgentTurnEvent {
+	if input == nil {
+		return nil
+	}
+	return gproto.Clone(input).(*proto.AgentTurnEvent)
+}
+
+func cloneInteraction(input *proto.AgentInteraction) *proto.AgentInteraction {
+	if input == nil {
+		return nil
+	}
+	return gproto.Clone(input).(*proto.AgentInteraction)
+}
+
+func cloneStruct(input *structpb.Struct) *structpb.Struct {
+	if input == nil {
+		return nil
+	}
+	return gproto.Clone(input).(*structpb.Struct)
+}
+
+func cloneActor(input *proto.AgentActor) *proto.AgentActor {
+	if input == nil {
+		return nil
+	}
+	return gproto.Clone(input).(*proto.AgentActor)
+}
+
+func cloneMessages(input []*proto.AgentMessage) []*proto.AgentMessage {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make([]*proto.AgentMessage, 0, len(input))
 	for _, message := range input {
-		out = append(out, cloneMessage(message))
-	}
-	return out
-}
-
-func cloneMessage(input gestalt.AgentMessage) gestalt.AgentMessage {
-	return gestalt.AgentMessage{
-		Role:     input.Role,
-		Text:     input.Text,
-		Parts:    cloneMessageParts(input.Parts),
-		Metadata: cloneMap(input.Metadata),
-	}
-}
-
-func cloneMessageParts(input []gestalt.AgentMessagePart) []gestalt.AgentMessagePart {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make([]gestalt.AgentMessagePart, 0, len(input))
-	for _, part := range input {
-		out = append(out, gestalt.AgentMessagePart{
-			Type:       part.Type,
-			Text:       part.Text,
-			JSON:       cloneMap(part.JSON),
-			ToolCall:   cloneToolCall(part.ToolCall),
-			ToolResult: cloneToolResult(part.ToolResult),
-			ImageRef:   cloneImageRef(part.ImageRef),
-		})
-	}
-	return out
-}
-
-func cloneToolCall(input *gestalt.AgentMessagePartToolCall) *gestalt.AgentMessagePartToolCall {
-	if input == nil {
-		return nil
-	}
-	return &gestalt.AgentMessagePartToolCall{
-		ID:        input.ID,
-		ToolID:    input.ToolID,
-		Arguments: cloneMap(input.Arguments),
-	}
-}
-
-func cloneToolResult(input *gestalt.AgentMessagePartToolResult) *gestalt.AgentMessagePartToolResult {
-	if input == nil {
-		return nil
-	}
-	return &gestalt.AgentMessagePartToolResult{
-		ToolCallID: input.ToolCallID,
-		Status:     input.Status,
-		Content:    input.Content,
-		Output:     cloneMap(input.Output),
-	}
-}
-
-func cloneImageRef(input *gestalt.AgentMessagePartImageRef) *gestalt.AgentMessagePartImageRef {
-	if input == nil {
-		return nil
-	}
-	return &gestalt.AgentMessagePartImageRef{
-		URI:      input.URI,
-		MimeType: input.MimeType,
-	}
-}
-
-func cloneActor(input *gestalt.AgentActor) *gestalt.AgentActor {
-	if input == nil {
-		return nil
-	}
-	return &gestalt.AgentActor{
-		SubjectID:   input.SubjectID,
-		SubjectKind: input.SubjectKind,
-		DisplayName: input.DisplayName,
-		AuthSource:  input.AuthSource,
-	}
-}
-
-func cloneSession(input *gestalt.AgentSession) *gestalt.AgentSession {
-	if input == nil {
-		return nil
-	}
-	return &gestalt.AgentSession{
-		ID:           input.ID,
-		ProviderName: input.ProviderName,
-		Model:        input.Model,
-		ClientRef:    input.ClientRef,
-		State:        input.State,
-		Metadata:     cloneMap(input.Metadata),
-		CreatedBy:    cloneActor(input.CreatedBy),
-		CreatedAt:    input.CreatedAt,
-		UpdatedAt:    input.UpdatedAt,
-		LastTurnAt:   cloneTime(input.LastTurnAt),
-	}
-}
-
-func cloneTurn(input *gestalt.AgentTurn) *gestalt.AgentTurn {
-	if input == nil {
-		return nil
-	}
-	return &gestalt.AgentTurn{
-		ID:            input.ID,
-		SessionID:     input.SessionID,
-		ProviderName:  input.ProviderName,
-		Model:         input.Model,
-		Status:        input.Status,
-		Messages:      cloneMessages(input.Messages),
-		Output:        cloneTurnOutput(input.Output),
-		StatusMessage: input.StatusMessage,
-		CreatedBy:     cloneActor(input.CreatedBy),
-		CreatedAt:     input.CreatedAt,
-		StartedAt:     cloneTime(input.StartedAt),
-		CompletedAt:   cloneTime(input.CompletedAt),
-		ExecutionRef:  input.ExecutionRef,
-	}
-}
-
-func cloneTurnOutput(input gestalt.AgentTurnOutput) gestalt.AgentTurnOutput {
-	if input.Structured != nil {
-		return gestalt.AgentTurnOutput{
-			Structured: &gestalt.AgentTurnStructuredOutput{
-				Text:  input.Structured.Text,
-				Value: cloneMap(input.Structured.Value),
-			},
+		if message != nil {
+			out = append(out, gproto.Clone(message).(*proto.AgentMessage))
 		}
 	}
-	if input.Text != nil {
-		return gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: input.Text.Text}}
-	}
-	return gestalt.AgentTurnOutput{}
-}
-
-func cloneTurnEvent(input *gestalt.AgentTurnEvent) *gestalt.AgentTurnEvent {
-	if input == nil {
-		return nil
-	}
-	return &gestalt.AgentTurnEvent{
-		ID:         input.ID,
-		TurnID:     input.TurnID,
-		Seq:        input.Seq,
-		Type:       input.Type,
-		Source:     input.Source,
-		Visibility: input.Visibility,
-		Data:       cloneMap(input.Data),
-		CreatedAt:  input.CreatedAt,
-		Display:    cloneDisplay(input.Display),
-	}
-}
-
-func cloneInteraction(input *gestalt.AgentInteraction) *gestalt.AgentInteraction {
-	if input == nil {
-		return nil
-	}
-	return &gestalt.AgentInteraction{
-		ID:         input.ID,
-		Type:       input.Type,
-		State:      input.State,
-		Title:      input.Title,
-		Prompt:     input.Prompt,
-		Request:    cloneMap(input.Request),
-		Resolution: cloneMap(input.Resolution),
-		CreatedAt:  input.CreatedAt,
-		ResolvedAt: cloneTime(input.ResolvedAt),
-		TurnID:     input.TurnID,
-		SessionID:  input.SessionID,
-	}
-}
-
-func cloneDisplay(input *gestalt.AgentTurnDisplay) *gestalt.AgentTurnDisplay {
-	if input == nil {
-		return nil
-	}
-	return &gestalt.AgentTurnDisplay{
-		Kind:      input.Kind,
-		Phase:     input.Phase,
-		Text:      input.Text,
-		Label:     input.Label,
-		Ref:       input.Ref,
-		ParentRef: input.ParentRef,
-		Input:     cloneAny(input.Input),
-		Output:    cloneAny(input.Output),
-		Error:     cloneAny(input.Error),
-		Action:    input.Action,
-		Format:    input.Format,
-		Language:  input.Language,
-	}
-}
-
-func cloneAny(input any) any {
-	switch data := input.(type) {
-	case map[string]any:
-		return cloneMap(data)
-	case []any:
-		if len(data) == 0 {
-			return nil
-		}
-		out := make([]any, 0, len(data))
-		for _, value := range data {
-			out = append(out, cloneAny(value))
-		}
-		return out
-	default:
-		return input
-	}
-}
-
-func cloneMap(input map[string]any) map[string]any {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(input))
-	for key, value := range input {
-		out[key] = cloneAny(value)
-	}
 	return out
-}
-
-func cloneTime(input *time.Time) *time.Time {
-	if input == nil {
-		return nil
-	}
-	value := *input
-	return &value
 }
 
 func main() {
