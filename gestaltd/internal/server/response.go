@@ -44,9 +44,6 @@ func writeOperationResult(w http.ResponseWriter, result *core.OperationResult) {
 			}
 		}
 	}
-	if w.Header().Get("Content-Type") == "" {
-		w.Header().Set("Content-Type", "application/json")
-	}
 	w.WriteHeader(result.Status)
 	_, _ = w.Write([]byte(result.Body))
 }

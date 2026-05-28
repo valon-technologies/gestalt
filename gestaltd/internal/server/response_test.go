@@ -40,7 +40,7 @@ func TestWriteOperationResultForwardsHeaders(t *testing.T) {
 	}
 }
 
-func TestWriteOperationResultDefaultsContentType(t *testing.T) {
+func TestWriteOperationResultDoesNotInventHeaders(t *testing.T) {
 	t.Parallel()
 
 	rec := httptest.NewRecorder()
@@ -49,7 +49,7 @@ func TestWriteOperationResultDefaultsContentType(t *testing.T) {
 		Body:   `{}`,
 	})
 
-	if got := rec.Result().Header.Get("Content-Type"); got != "application/json" {
-		t.Fatalf("Content-Type = %q, want application/json", got)
+	if got := rec.Result().Header.Get("Content-Type"); got != "" {
+		t.Fatalf("Content-Type = %q, want empty", got)
 	}
 }
