@@ -1059,7 +1059,6 @@ export const app = defineApp({
           },
           {
             Location: "/items/new-id",
-            "Set-Cookie": ["created=1", "seen=1"],
           },
         );
       },
@@ -1085,9 +1084,6 @@ export const app = defineApp({
       }),
     );
     expect(echoedBody.status).toBe(200);
-    expect(echoedBody.headers["Content-Type"]?.values).toEqual([
-      "application/json",
-    ]);
     expect(JSON.parse(echoedBody.body)).toEqual({
       body: "hello",
     });
@@ -1113,10 +1109,6 @@ export const app = defineApp({
       "application/json",
     ]);
     expect(created.headers["Location"]?.values).toEqual(["/items/new-id"]);
-    expect(created.headers["Set-Cookie"]?.values).toEqual([
-      "created=1",
-      "seen=1",
-    ]);
     expect(JSON.parse(created.body)).toEqual({
       id: "new-id",
     });

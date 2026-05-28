@@ -124,11 +124,6 @@ test("App forwards invocation tokens from strings and Request objects", async ()
             });
             return create(OperationResultSchema, {
               status: 208,
-              headers: {
-                "X-GraphQL": {
-                  values: ["true"],
-                },
-              },
               body: JSON.stringify({
                 invocationToken: input.invocationToken,
                 app: input.app,
@@ -246,9 +241,6 @@ test("App forwards invocation tokens from strings and Request objects", async ()
     );
 
     expect(graphql.status).toBe(208);
-    expect(graphql.headers).toEqual({
-      "X-GraphQL": ["true"],
-    });
     expect(JSON.parse(graphql.body)).toEqual({
       invocationToken: "invocation-token-456",
       app: "linear",

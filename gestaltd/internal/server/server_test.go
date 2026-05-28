@@ -13933,7 +13933,15 @@ func TestSubjectAuthorization_ExecuteOperation_UsesSubjectCredentialAndSessionSe
 			N:        "svc",
 			ConnMode: core.ConnectionModeUser,
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+				return &core.OperationResult{
+					Status: http.StatusOK,
+					Headers: http.Header{
+						"Content-Type": []string{"application/json"},
+						"Location":     []string{"/svc/run"},
+						"Set-Cookie":   []string{"a=1", "b=2"},
+					},
+					Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token),
+				}, nil
 			},
 		},
 		catalog: serverTestCatalog("svc", []catalog.CatalogOperation{
@@ -13975,6 +13983,12 @@ func TestSubjectAuthorization_ExecuteOperation_UsesSubjectCredentialAndSessionSe
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if got := resp.Header.Get("Location"); got != "/svc/run" {
+		t.Fatalf("Location = %q, want /svc/run", got)
+	}
+	if got := resp.Header.Values("Set-Cookie"); !reflect.DeepEqual(got, []string{"a=1", "b=2"}) {
+		t.Fatalf("Set-Cookie = %#v, want %#v", got, []string{"a=1", "b=2"})
 	}
 	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {

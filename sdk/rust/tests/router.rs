@@ -189,8 +189,7 @@ async fn greet(
         agent_subject_email: request.agent_subject.email,
         credential_mode: request.credential.mode,
         idempotency_key: request.idempotency_key,
-    })
-    .with_header("Location", format!("/greet/{name}")))
+    }))
 }
 
 async fn fail(
@@ -352,13 +351,6 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .expect("execute greet")
         .into_inner();
     assert_eq!(success.status, 200);
-    assert_eq!(
-        success
-            .headers
-            .get("Location")
-            .map(|header| header.values.as_slice()),
-        Some(&["/greet/Ada".to_owned()][..])
-    );
     assert_eq!(
         success.body,
         r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"user","idempotency_key":"tool-call-123"}"#

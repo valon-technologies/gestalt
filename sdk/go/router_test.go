@@ -157,6 +157,17 @@ func TestRouterOperationExecution(t *testing.T) {
 				return gestalt.Response[struct{}]{}, errors.New("boom")
 			},
 		),
+		gestalt.Register(
+			gestalt.Operation[struct{}, struct{}]{
+				ID:     "custom_content_type",
+				Method: http.MethodPost,
+			},
+			func(*execProvider, context.Context, struct{}, gestalt.Request) (gestalt.Response[struct{}], error) {
+				return gestalt.Response[struct{}]{
+					Headers: http.Header{"content-type": []string{"text/html"}},
+				}, nil
+			},
+		),
 	)
 
 	provider := &execProvider{}
@@ -197,6 +208,17 @@ func TestRouterOperationExecution(t *testing.T) {
 		t.Fatalf("body with params = %q, want %q", result.Body, `{"echo":"hello","region":"iad","region_present":true,"subject_id":"user:user-123","subject_kind":"user","credential_mode":"subject","credential_subject_id":"user:user-123"}`)
 	}
 
+	result, err = router.Execute(ctx, provider, "custom_content_type", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute(custom_content_type): %v", err)
+	}
+	if got := result.Headers["content-type"]; len(got) != 1 || got[0] != "text/html" {
+		t.Fatalf("content-type header = %#v, want [text/html]", got)
+	}
+	if got := result.Headers["Content-Type"]; got != nil {
+		t.Fatalf("Content-Type header = %#v, want absent", got)
+	}
+
 	result, err = router.Execute(ctx, provider, "nonexistent", nil, "tok")
 	if err != nil {
 		t.Fatalf("Execute(nonexistent): %v", err)
@@ -234,35 +256,6 @@ func TestRouterOperationExecution(t *testing.T) {
 	}
 	if result.Status != http.StatusInternalServerError {
 		t.Fatalf("nil router status = %d, want %d", result.Status, http.StatusInternalServerError)
-	}
-}
-
-func TestRouterOperationExecutionPreservesNonCanonicalContentType(t *testing.T) {
-	t.Parallel()
-
-	router := gestalt.MustRouter(
-		gestalt.Register(
-			gestalt.Operation[struct{}, struct{}]{
-				ID:     "custom_content_type",
-				Method: http.MethodPost,
-			},
-			func(*execProvider, context.Context, struct{}, gestalt.Request) (gestalt.Response[struct{}], error) {
-				return gestalt.Response[struct{}]{
-					Headers: http.Header{"content-type": []string{"text/html"}},
-				}, nil
-			},
-		),
-	)
-
-	result, err := router.Execute(context.Background(), &execProvider{}, "custom_content_type", nil, "tok")
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if got := result.Headers["content-type"]; len(got) != 1 || got[0] != "text/html" {
-		t.Fatalf("content-type header = %#v, want [text/html]", got)
-	}
-	if got := result.Headers["Content-Type"]; got != nil {
-		t.Fatalf("Content-Type header = %#v, want absent", got)
 	}
 }
 

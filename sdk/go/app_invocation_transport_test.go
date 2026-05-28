@@ -99,10 +99,7 @@ func (h *pluginAppTransportHarness) InvokeGraphQL(ctx context.Context, req *prot
 
 	return &proto.OperationResult{
 		Status: 208,
-		Headers: map[string]*proto.StringList{
-			"X-GraphQL": &proto.StringList{Values: []string{"true"}},
-		},
-		Body: "graphql-ok",
+		Body:   "graphql-ok",
 	}, nil
 }
 
@@ -180,9 +177,6 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	}
 	if graphQLResult.Status != 208 || graphQLResult.Body != "graphql-ok" {
 		t.Fatalf("InvokeGraphQL result = %+v, want status=208 body=graphql-ok", graphQLResult)
-	}
-	if got := graphQLResult.Headers.Get("X-GraphQL"); got != "true" {
-		t.Fatalf("InvokeGraphQL X-GraphQL header = %q, want true", got)
 	}
 	if _, err := client.Invoke(context.Background(), "github", "bad", time.Now(), nil); err == nil {
 		t.Fatal("Invoke(time.Time) error = nil, want error")

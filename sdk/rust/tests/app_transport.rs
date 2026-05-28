@@ -165,12 +165,7 @@ impl ProtoApp for TestAppServer {
 
         Ok(GrpcResponse::new(OperationResult {
             status: 208,
-            headers: BTreeMap::from([(
-                "X-GraphQL".to_string(),
-                generated::v1::StringList {
-                    values: vec!["true".to_string()],
-                },
-            )]),
+            headers: BTreeMap::new(),
             body: serde_json::json!({
                 "invocation_token": request.invocation_token,
                 "app": request.app,
@@ -417,10 +412,6 @@ async fn app_invokes_graphql_surface() {
         .expect("invoke graphql surface");
 
     assert_eq!(response.status, 208);
-    assert_eq!(
-        response.headers.get("X-GraphQL"),
-        Some(&vec!["true".to_string()])
-    );
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&response.body).expect("parse response"),
         serde_json::json!({

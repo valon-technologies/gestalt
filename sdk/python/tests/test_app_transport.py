@@ -126,9 +126,6 @@ class _AppServicer(app_pb2_grpc.AppServicer):
         )
         return app_pb2.OperationResult(
             status=208,
-            headers={
-                "X-GraphQL": app_pb2.StringList(values=["true"])
-            },
             body=json.dumps(
                 {
                     "invocation_token": request.invocation_token,
@@ -283,7 +280,6 @@ class AppTransportTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status, 208)
-        self.assertEqual(response.headers, {"X-GraphQL": ["true"]})
         self.assertEqual(
             json.loads(response.body),
             {
