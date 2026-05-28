@@ -29,7 +29,7 @@ from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
-from ._operations import INTERNAL_ERROR_MESSAGE
+from ._operations import INTERNAL_ERROR_MESSAGE, JSON_CONTENT_TYPE
 from ._protocol import string_lists_from_proto_map
 from ._providers import (
     AgentProvider,
@@ -1608,7 +1608,13 @@ def _provider_servicer(*, app: App) -> Any:
                 traceback.print_exception(error)
                 status = HTTPStatus.INTERNAL_SERVER_ERROR
                 body = json_body({"error": INTERNAL_ERROR_MESSAGE})
-                return app_pb2.OperationResult(status=status, body=body)
+                return app_pb2.OperationResult(
+                    status=status,
+                    body=body,
+                    headers=_proto_string_lists(
+                        {"Content-Type": [JSON_CONTENT_TYPE]}
+                    ),
+                )
             return app_pb2.OperationResult(
                 status=result.status,
                 body=result.body,

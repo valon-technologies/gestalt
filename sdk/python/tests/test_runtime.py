@@ -711,6 +711,10 @@ class MainEntrypointTests(unittest.TestCase):
         )
 
         self.assertEqual(execute_response.status, 500)
+        self.assertEqual(
+            execute_response.headers["Content-Type"].values,
+            ["application/json"],
+        )
         self.assertEqual(json.loads(execute_response.body), {"error": "internal error"})
 
     def test_provider_servicer_rejects_missing_session_catalog_support(self) -> None:
