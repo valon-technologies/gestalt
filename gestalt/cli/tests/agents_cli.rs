@@ -289,7 +289,7 @@ fn test_cli_creates_agent_turn_from_input() {
         "modelOptions":{"temperature":0.2},
         "output":{
             "structured":{
-                "responseSchema":{
+                "schema":{
                     "type":"object",
                     "properties":{"summary":{"type":"string"}},
                     "required":["summary"]

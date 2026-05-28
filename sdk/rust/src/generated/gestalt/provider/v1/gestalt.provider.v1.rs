@@ -907,7 +907,7 @@ pub struct AgentTextOutput {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentStructuredOutput {
     #[prost(message, optional, tag = "1")]
-    pub response_schema: ::core::option::Option<::prost_types::Struct>,
+    pub schema: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentOutput {

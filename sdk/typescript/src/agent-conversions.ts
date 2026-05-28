@@ -101,12 +101,12 @@ export function agentOutputFromProto(
     case "text":
       return { text: {} };
     case "structured":
-      if (output.kind.value.responseSchema === undefined) {
-        throw new Error("output.structured.response_schema is required");
+      if (output.kind.value.schema === undefined) {
+        throw new Error("output.structured.schema is required");
       }
       return {
         structured: {
-          responseSchema: optionalObjectFromStruct(output.kind.value.responseSchema) ?? {},
+          schema: optionalObjectFromStruct(output.kind.value.schema) ?? {},
         },
       };
     default:
@@ -134,14 +134,14 @@ export function agentOutputToProto(
     };
   }
   if (structuredSet) {
-    if (output.structured.responseSchema === undefined) {
-      throw new Error("output.structured.response_schema is required");
+    if (output.structured.schema === undefined) {
+      throw new Error("output.structured.schema is required");
     }
     return {
       kind: {
         case: "structured",
         value: create(AgentStructuredOutputSchema, {
-          responseSchema: optionalStruct(output.structured.responseSchema),
+          schema: optionalStruct(output.structured.schema),
         }),
       },
     };

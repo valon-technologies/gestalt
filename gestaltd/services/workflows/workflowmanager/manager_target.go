@@ -236,7 +236,7 @@ func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Pri
 		return coreworkflow.AgentTurn{}, err
 	}
 	if target.Output.Structured != nil {
-		target.Output.Structured.ResponseSchema = maps.Clone(target.Output.Structured.ResponseSchema)
+		target.Output.Structured.Schema = maps.Clone(target.Output.Structured.Schema)
 	}
 	target.ModelOptions = maps.Clone(target.ModelOptions)
 	return target, nil
@@ -251,17 +251,17 @@ func validateWorkflowAgentOutput(output coreagent.Output) error {
 	if output.Structured == nil {
 		return nil
 	}
-	schema := output.Structured.ResponseSchema
+	schema := output.Structured.Schema
 	if len(schema) == 0 {
-		return fmt.Errorf("%w: workflow target agent output.structured.responseSchema must be a non-empty JSON schema object with type %q", invocation.ErrInvalidInvocation, "object")
+		return fmt.Errorf("%w: workflow target agent output.structured.schema must be a non-empty JSON schema object with type %q", invocation.ErrInvalidInvocation, "object")
 	}
 	rawType, ok := schema["type"]
 	if !ok {
-		return fmt.Errorf("%w: workflow target agent output.structured.responseSchema.type must be %q", invocation.ErrInvalidInvocation, "object")
+		return fmt.Errorf("%w: workflow target agent output.structured.schema.type must be %q", invocation.ErrInvalidInvocation, "object")
 	}
 	typeValue, ok := rawType.(string)
 	if !ok || strings.TrimSpace(typeValue) != "object" {
-		return fmt.Errorf("%w: workflow target agent output.structured.responseSchema.type must be %q", invocation.ErrInvalidInvocation, "object")
+		return fmt.Errorf("%w: workflow target agent output.structured.schema.type must be %q", invocation.ErrInvalidInvocation, "object")
 	}
 	return nil
 }

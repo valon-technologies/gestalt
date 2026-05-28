@@ -341,7 +341,7 @@ type AgentOutput struct {
 type AgentTextOutput struct{}
 
 type AgentStructuredOutput struct {
-	ResponseSchema map[string]any
+	Schema map[string]any
 }
 
 type GetAgentProviderTurnRequest struct {

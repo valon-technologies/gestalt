@@ -430,16 +430,16 @@ func agentOutputToProto(value AgentOutput) (*proto.AgentOutput, error) {
 		return nil, fmt.Errorf("exactly one of output.text or output.structured is required")
 	}
 	if value.Structured != nil {
-		if len(value.Structured.ResponseSchema) == 0 {
-			return nil, fmt.Errorf("output.structured.response_schema is required")
+		if len(value.Structured.Schema) == 0 {
+			return nil, fmt.Errorf("output.structured.schema is required")
 		}
-		responseSchema, err := structFromAny(value.Structured.ResponseSchema)
+		schema, err := structFromAny(value.Structured.Schema)
 		if err != nil {
 			return nil, err
 		}
 		return &proto.AgentOutput{
 			Kind: &proto.AgentOutput_Structured{
-				Structured: &proto.AgentStructuredOutput{ResponseSchema: responseSchema},
+				Structured: &proto.AgentStructuredOutput{Schema: schema},
 			},
 		}, nil
 	}
@@ -457,7 +457,7 @@ func agentOutputFromProto(value *proto.AgentOutput) AgentOutput {
 	}
 	if structured := value.GetStructured(); structured != nil {
 		return AgentOutput{
-			Structured: &AgentStructuredOutput{ResponseSchema: mapFromStruct(structured.GetResponseSchema())},
+			Structured: &AgentStructuredOutput{Schema: mapFromStruct(structured.GetSchema())},
 		}
 	}
 	if value.GetText() != nil {

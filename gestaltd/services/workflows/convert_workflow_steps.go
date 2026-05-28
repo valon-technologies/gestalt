@@ -194,13 +194,13 @@ func workflowAgentOutputToProto(output coreagent.Output) (*proto.AgentOutput, er
 		return nil, fmt.Errorf("exactly one of output.text or output.structured is required")
 	}
 	if output.Structured != nil {
-		responseSchema, err := structFromMap(output.Structured.ResponseSchema)
+		schema, err := structFromMap(output.Structured.Schema)
 		if err != nil {
 			return nil, err
 		}
 		return &proto.AgentOutput{
 			Kind: &proto.AgentOutput_Structured{
-				Structured: &proto.AgentStructuredOutput{ResponseSchema: responseSchema},
+				Structured: &proto.AgentStructuredOutput{Schema: schema},
 			},
 		}, nil
 	}
@@ -216,7 +216,7 @@ func workflowAgentOutputFromProto(output *proto.AgentOutput) coreagent.Output {
 	}
 	if structured := output.GetStructured(); structured != nil {
 		return coreagent.Output{
-			Structured: &coreagent.StructuredOutput{ResponseSchema: mapFromStruct(structured.GetResponseSchema())},
+			Structured: &coreagent.StructuredOutput{Schema: mapFromStruct(structured.GetSchema())},
 		}
 	}
 	if output.GetText() != nil {

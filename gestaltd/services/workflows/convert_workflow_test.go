@@ -114,7 +114,7 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 					Messages:     []coreworkflow.AgentMessage{{Role: "system", Text: coreworkflow.Text{Template: "Use concise replies."}}},
 					ToolRefs:     []coreagent.ToolRef{{App: "datadog", Operation: "queryLogs"}},
 					Output: coreagent.Output{
-						Structured: &coreagent.StructuredOutput{ResponseSchema: map[string]any{
+						Structured: &coreagent.StructuredOutput{Schema: map[string]any{
 							"type":       "object",
 							"properties": map[string]any{"actionableForPr": map[string]any{"type": "boolean"}},
 						}},
@@ -154,7 +154,7 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("workflowTargetToProto: %v", err)
 	}
-	if got := target.GetSteps()[0].GetAgent().GetOutput().GetStructured().GetResponseSchema().AsMap()["type"]; got != "object" {
+	if got := target.GetSteps()[0].GetAgent().GetOutput().GetStructured().GetSchema().AsMap()["type"]; got != "object" {
 		t.Fatalf("step response schema = %#v, want object", got)
 	}
 	if got := target.GetSteps()[2].GetWhen().GetEquals().GetBoolValue(); got != true {

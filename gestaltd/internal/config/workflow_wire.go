@@ -145,7 +145,7 @@ func WorkflowAgentOutputToCore(output *WorkflowAgentOutputConfig) coreagent.Outp
 	if output.Structured != nil {
 		return coreagent.Output{
 			Structured: &coreagent.StructuredOutput{
-				ResponseSchema: maps.Clone(output.Structured.ResponseSchema),
+				Schema: maps.Clone(output.Structured.Schema),
 			},
 		}
 	}

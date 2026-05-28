@@ -884,7 +884,7 @@ type WorkflowAgentOutputConfig struct {
 type WorkflowAgentTextOutputConfig struct{}
 
 type WorkflowAgentStructuredOutputConfig struct {
-	ResponseSchema map[string]any `yaml:"responseSchema,omitempty"`
+	Schema map[string]any `yaml:"schema,omitempty"`
 }
 
 type WorkflowAgentMessage struct {

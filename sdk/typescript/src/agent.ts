@@ -381,7 +381,7 @@ export interface AgentTextOutput {
 }
 
 export interface AgentStructuredOutput {
-  responseSchema: JsonObjectInput;
+  schema: JsonObjectInput;
 }
 
 export type AgentOutput =

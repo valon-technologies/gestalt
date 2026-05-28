@@ -482,7 +482,7 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
                 if request.HasField("output")
                 else "",
                 "has_structured_schema": request.output.structured.HasField(
-                    "response_schema"
+                    "schema"
                 )
                 if request.HasField("output")
                 and request.output.WhichOneof("kind") == "structured"
@@ -1216,7 +1216,7 @@ class AgentTransportTests(unittest.TestCase):
                     tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
                     output=agent_pb2.AgentOutput(
                         structured=agent_pb2.AgentStructuredOutput(
-                            response_schema={"type": "object"},
+                            schema={"type": "object"},
                         ),
                     ),
                 )
@@ -1425,7 +1425,7 @@ class AgentTransportTests(unittest.TestCase):
                     tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
                     output=AgentOutput(
                         structured=AgentStructuredOutput(
-                            response_schema={"type": "object"},
+                            schema={"type": "object"},
                         ),
                     ),
                     metadata={"request": "native"},
@@ -1480,21 +1480,21 @@ class AgentTransportTests(unittest.TestCase):
                         output=AgentOutput(
                             text=AgentTextOutput(),
                             structured=AgentStructuredOutput(
-                                response_schema={"type": "object"}
+                                schema={"type": "object"}
                             ),
                         ),
                     )
                 )
             with self.assertRaisesRegex(
                 ValueError,
-                "output.structured.response_schema is required",
+                "output.structured.schema is required",
             ):
                 manager.create_turn(
                     AgentCreateTurn(
                         session_id="session-managed-1",
                         messages=[AgentMessage(role="user", text="Summarize this")],
                         output=AgentOutput(
-                            structured={"response_schema": None},
+                            structured={"schema": None},
                         ),
                     )
                 )

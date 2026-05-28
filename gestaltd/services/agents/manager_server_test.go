@@ -163,8 +163,8 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 			if req.GetOutput().GetStructured() == nil {
 				t.Fatal("output.structured = nil, want structured output request")
 			}
-			if req.GetOutput().GetStructured().GetResponseSchema().AsMap()["type"] != "object" {
-				t.Fatalf("response schema = %#v, want object schema", req.GetOutput().GetStructured().GetResponseSchema())
+			if req.GetOutput().GetStructured().GetSchema().AsMap()["type"] != "object" {
+				t.Fatalf("response schema = %#v, want object schema", req.GetOutput().GetStructured().GetSchema())
 			}
 			return &coreagent.Turn{
 				ID:        "turn-1",
@@ -183,7 +183,7 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 		InvocationToken: token,
 		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
 		Output: &proto.AgentOutput{Kind: &proto.AgentOutput_Structured{
-			Structured: &proto.AgentStructuredOutput{ResponseSchema: schema},
+			Structured: &proto.AgentStructuredOutput{Schema: schema},
 		}},
 	})
 	if err != nil {

@@ -1351,18 +1351,6 @@ func setAppManifestSource(t *testing.T, appDir, source string) {
 	writeManifestFile(t, appDir, manifest)
 }
 
-func setAppManifestDisplayName(t *testing.T, manifestPath, displayName string) {
-	t.Helper()
-
-	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		t.Fatalf("ReadSourceManifestFile(%s): %v", manifestPath, err)
-	}
-	manifest.Kind = providermanifestv1.KindApp
-	manifest.DisplayName = displayName
-	writeManifestFile(t, filepath.Dir(manifestPath), manifest)
-}
-
 func setUIManifestSource(t *testing.T, manifestPath, source string) {
 	t.Helper()
 
@@ -1395,33 +1383,6 @@ func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 		Build: &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"go.mod", "go.sum", "auth.go", "cmd", "build.sh"},
-		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
-	})
-	return providerDir
-}
-
-func setupAuthorizationProviderDir(t *testing.T, baseDir, name string) string {
-	t.Helper()
-
-	providerDir := filepath.Join(baseDir, "authorization", name)
-	if err := os.MkdirAll(providerDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
-	}
-	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/authorization/"+name)), 0o644)
-	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
-	writeTestFile(t, providerDir, "authorization.go", []byte(httpSubjectAuthorizationProviderSource(name)), 0o644)
-	artifactRel := ".gestalt/build/authorization-provider"
-	writeGoComponentBuildFixture(t, providerDir, "example.com/providers/authorization/"+name, providermanifestv1.KindAuthorization, artifactRel)
-	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindAuthorization,
-		Source:      "github.com/test/providers/authorization/" + name,
-		Version:     "0.0.1-alpha.1",
-		DisplayName: "Test Authorization " + name,
-		Spec:        &providermanifestv1.Spec{},
-		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"sh", "./build.sh"},
-			Inputs:  []string{"go.mod", "go.sum", "authorization.go", "cmd", "build.sh"},
 		},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	})
@@ -1581,101 +1542,6 @@ func authProviderSource(name string) string {
 	return source
 }
 
-func httpSubjectAuthorizationProviderSource(name string) string {
-	displayName := name
-	if name != "" {
-		displayName = strings.ToUpper(name[:1]) + name[1:]
-	}
-	return fmt.Sprintf(`package authorization
-
-import (
-	"context"
-
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-)
-
-type Provider struct{}
-
-func New() *Provider { return &Provider{} }
-
-func (p *Provider) Configure(context.Context, string, map[string]any) error { return nil }
-
-func (p *Provider) Metadata() gestalt.ProviderMetadata {
-	return gestalt.ProviderMetadata{
-		Kind:        gestalt.ProviderKindAuthorization,
-		Name:        %q,
-		DisplayName: %q,
-	}
-}
-
-func (p *Provider) Evaluate(_ context.Context, _ *gestalt.AccessEvaluationRequest) (*gestalt.AccessDecision, error) {
-	return &gestalt.AccessDecision{Allowed: true, ModelId: "model-v1"}, nil
-}
-
-func (p *Provider) EvaluateMany(_ context.Context, req *gestalt.AccessEvaluationsRequest) (*gestalt.AccessEvaluationsResponse, error) {
-	decisions := make([]*gestalt.AccessDecision, 0, len(req.GetRequests()))
-	for range req.GetRequests() {
-		decisions = append(decisions, &gestalt.AccessDecision{Allowed: true, ModelId: "model-v1"})
-	}
-	return &gestalt.AccessEvaluationsResponse{Decisions: decisions}, nil
-}
-
-func (p *Provider) SearchResources(_ context.Context, _ *gestalt.ResourceSearchRequest) (*gestalt.ResourceSearchResponse, error) {
-	return &gestalt.ResourceSearchResponse{ModelId: "model-v1"}, nil
-}
-
-func (p *Provider) SearchSubjects(_ context.Context, req *gestalt.SubjectSearchRequest) (*gestalt.SubjectSearchResponse, error) {
-	resource := req.GetResource()
-	if resource != nil && resource.GetType() == "slack_identity" && resource.GetId() == "team:T123:user:U456" {
-		return &gestalt.SubjectSearchResponse{
-			Subjects: []*gestalt.AuthorizationSubject{{
-				Type: "user",
-				Id:   "user:slack-user",
-			}},
-			ModelId: "model-v1",
-		}, nil
-	}
-	return &gestalt.SubjectSearchResponse{ModelId: "model-v1"}, nil
-}
-
-func (p *Provider) SearchActions(_ context.Context, _ *gestalt.ActionSearchRequest) (*gestalt.ActionSearchResponse, error) {
-	return &gestalt.ActionSearchResponse{
-		Actions: []*gestalt.AuthorizationAction{{Name: "invoke"}},
-		ModelId: "model-v1",
-	}, nil
-}
-
-func (p *Provider) GetMetadata(context.Context) (*gestalt.AuthorizationMetadata, error) {
-	return &gestalt.AuthorizationMetadata{
-		Capabilities:  []string{"evaluate", "relationships", "models"},
-		ActiveModelId: "model-v1",
-	}, nil
-}
-
-func (p *Provider) ReadRelationships(_ context.Context, _ *gestalt.ReadRelationshipsRequest) (*gestalt.ReadRelationshipsResponse, error) {
-	return &gestalt.ReadRelationshipsResponse{ModelId: "model-v1"}, nil
-}
-
-func (p *Provider) WriteRelationships(context.Context, *gestalt.WriteRelationshipsRequest) error { return nil }
-
-func (p *Provider) GetActiveModel(context.Context) (*gestalt.GetActiveModelResponse, error) {
-	return &gestalt.GetActiveModelResponse{
-		Model: &gestalt.AuthorizationModelRef{Id: "model-v1", Version: "v1"},
-	}, nil
-}
-
-func (p *Provider) ListModels(_ context.Context, _ *gestalt.ListModelsRequest) (*gestalt.ListModelsResponse, error) {
-	return &gestalt.ListModelsResponse{
-		Models: []*gestalt.AuthorizationModelRef{{Id: "model-v1", Version: "v1"}},
-	}, nil
-}
-
-func (p *Provider) WriteModel(context.Context, *gestalt.WriteModelRequest) (*gestalt.AuthorizationModelRef, error) {
-	return &gestalt.AuthorizationModelRef{Id: "model-v2", Version: "v2"}, nil
-}
-`, name, displayName)
-}
-
 func componentProviderManifestPath(t *testing.T, providerDir string) string {
 	t.Helper()
 
@@ -1755,13 +1621,6 @@ func releasePortHoldersAndStart(t *testing.T, holders []net.Listener, start func
 		}
 	}
 	start()
-}
-
-func startCommandAfterReleasingPort(t *testing.T, holder net.Listener, cmd *exec.Cmd, baseURL string) {
-	t.Helper()
-	releasePortHoldersAndStart(t, []net.Listener{holder}, func() {
-		startCommandAndWaitReady(t, cmd, baseURL)
-	})
 }
 
 func setupIndexedDBProviderDir(t *testing.T, baseDir string) string {
@@ -2119,64 +1978,6 @@ providers:
 	return cfgPath
 }
 
-func startGestaltdWithConfigsAndArgs(t *testing.T, cfgPaths []string, args []string, requiredPath string) string {
-	t.Helper()
-	if len(cfgPaths) == 0 {
-		t.Fatal("startGestaltdWithConfigsAndArgs requires at least one config path")
-	}
-
-	port, holder := reservePort(t)
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-
-	primaryCfgPath := cfgPaths[0]
-	cfgBytes, err := os.ReadFile(primaryCfgPath)
-	if err != nil {
-		t.Fatalf("read config: %v", err)
-	}
-	cfg := strings.Replace(string(cfgBytes), "port: 0", fmt.Sprintf("port: %d", port), 1)
-	cfg = strings.Replace(cfg, "baseUrl: "+e2eLoopbackBaseURL(0), "baseUrl: "+baseURL, 1)
-	if !strings.Contains(cfg, "server:\n  baseUrl:") {
-		cfg = strings.Replace(cfg, "server:\n", "server:\n  baseUrl: "+baseURL+"\n", 1)
-	}
-	if err := os.WriteFile(primaryCfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	for _, cfgPath := range cfgPaths {
-		args = append(args, "--config", cfgPath)
-	}
-	cmd := exec.Command(gestaltdBin, args...)
-	releasePortHoldersAndStart(t, []net.Listener{holder}, func() {
-		if requiredPath != "" {
-			startCommandAndWaitReadyAndFile(t, cmd, baseURL, requiredPath)
-		} else {
-			startCommandAndWaitReady(t, cmd, baseURL)
-		}
-	})
-	return baseURL
-}
-
-func startGestaltdWithConfigs(t *testing.T, cfgPaths []string, locked bool) string {
-	t.Helper()
-	args := []string{"serve"}
-	if locked {
-		args = append(args, "--locked")
-	}
-	return startGestaltdWithConfigsAndArgs(t, cfgPaths, args, "")
-}
-
-func startCommandAndWaitReady(t *testing.T, cmd *exec.Cmd, baseURL string) {
-	t.Helper()
-
-	startCommandAndWaitReadyWithOutput(t, cmd, baseURL, nil)
-}
-
-func startCommandAndWaitReadyWithOutput(t *testing.T, cmd *exec.Cmd, baseURL string, output io.Writer) {
-	t.Helper()
-
-	startCommandAndWaitReadyForURLsWithOutput(t, cmd, []string{baseURL}, output)
-}
-
 func startCommandAndWaitReadyForURLs(t *testing.T, cmd *exec.Cmd, baseURLs []string) {
 	t.Helper()
 
@@ -2247,106 +2048,6 @@ func startCommandAndWaitReadyForURLsWithOutput(t *testing.T, cmd *exec.Cmd, base
 			}
 		}
 	}
-}
-
-func startCommandAndWaitReadyAndFile(t *testing.T, cmd *exec.Cmd, baseURL, requiredPath string) {
-	t.Helper()
-
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start gestaltd: %v", err)
-	}
-
-	exited := make(chan struct{})
-	go func() {
-		_ = cmd.Wait()
-		close(exited)
-	}()
-	t.Cleanup(func() {
-		if cmd.Process == nil {
-			return
-		}
-		_ = cmd.Process.Signal(syscall.SIGTERM)
-		select {
-		case <-exited:
-		case <-time.After(15 * time.Second):
-			_ = cmd.Process.Kill()
-			<-exited
-		}
-	})
-
-	client := &http.Client{Timeout: 2 * time.Second}
-	tick := time.NewTicker(250 * time.Millisecond)
-	defer tick.Stop()
-	timeout := time.After(60 * time.Second)
-	for {
-		select {
-		case <-exited:
-			t.Fatal("gestaltd exited before becoming ready")
-		case <-timeout:
-			t.Fatalf("gestaltd did not become ready and write %s within 60 seconds", requiredPath)
-		case <-tick.C:
-			if _, err := os.Stat(requiredPath); err != nil {
-				continue
-			}
-			resp, err := client.Get(baseURL + "/ready")
-			if err == nil {
-				_ = resp.Body.Close()
-				if resp.StatusCode == http.StatusOK {
-					return
-				}
-			}
-		}
-	}
-}
-
-func waitForHTTPBody(t *testing.T, client *http.Client, url, wantBody string) string {
-	t.Helper()
-
-	tick := time.NewTicker(250 * time.Millisecond)
-	defer tick.Stop()
-	timeout := time.After(60 * time.Second)
-	var lastStatus int
-	var lastBody string
-	var lastErr error
-	for {
-		select {
-		case <-timeout:
-			if lastErr != nil {
-				t.Fatalf("GET %s did not become ready within 60 seconds; last error: %v", url, lastErr)
-			}
-			t.Fatalf("GET %s did not return expected body within 60 seconds; last status=%d body=%s", url, lastStatus, lastBody)
-		case <-tick.C:
-			resp, err := client.Get(url)
-			if err != nil {
-				lastErr = err
-				continue
-			}
-			body, readErr := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			if readErr != nil {
-				lastErr = readErr
-				continue
-			}
-			lastErr = nil
-			lastStatus = resp.StatusCode
-			lastBody = string(body)
-			if resp.StatusCode == http.StatusOK && strings.Contains(lastBody, wantBody) {
-				return lastBody
-			}
-		}
-	}
-}
-
-func startGestaltdWithConfig(t *testing.T, cfgPath string) string {
-	t.Helper()
-	return startGestaltdWithConfigs(t, []string{cfgPath}, false)
-}
-
-func startGestaltd(t *testing.T, dir string, mountedUI *mountedUITestConfig) string {
-	t.Helper()
-	return startGestaltdWithConfig(t, writeServeConfig(t, dir, 0, mountedUI))
 }
 
 func e2eLoopbackBaseURL(port int) string {

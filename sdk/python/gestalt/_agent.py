@@ -415,7 +415,7 @@ class AgentTextOutput:
 
 @dataclass(slots=True)
 class AgentStructuredOutput:
-    response_schema: JsonObjectInput
+    schema: JsonObjectInput
 
 
 @dataclass(slots=True)
@@ -865,11 +865,11 @@ def _agent_output_from_proto(value: Any) -> AgentOutput | None:
     if kind == "text":
         return AgentOutput(text=AgentTextOutput())
     if kind == "structured":
-        if not has_field(value.structured, "response_schema"):
-            raise ValueError("output.structured.response_schema is required")
+        if not has_field(value.structured, "schema"):
+            raise ValueError("output.structured.schema is required")
         return AgentOutput(
             structured=AgentStructuredOutput(
-                response_schema=struct_to_dict(value.structured.response_schema)
+                schema=struct_to_dict(value.structured.schema)
             )
         )
     return None
@@ -895,10 +895,10 @@ def _agent_output_to_proto(value: AgentOutput | Mapping[str, Any] | None) -> Any
     structured = _coerce(
         output.structured, AgentStructuredOutput, "AgentStructuredOutput"
     )
-    if structured.response_schema is None:
-        raise ValueError("output.structured.response_schema is required")
+    if structured.schema is None:
+        raise ValueError("output.structured.schema is required")
     proto = pb.AgentOutput(structured=pb.AgentStructuredOutput())
-    proto.structured.response_schema.CopyFrom(struct_from_dict(structured.response_schema))
+    proto.structured.schema.CopyFrom(struct_from_dict(structured.schema))
     return proto
 
 

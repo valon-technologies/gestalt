@@ -147,7 +147,7 @@ test("agent and app workflow steps round-trip through copy helpers", () => {
           prompt: "Diagnose the alert.",
           messages: [{ role: "system", text: "Use concise replies." }],
           tools: [{ app: "datadog", operation: "queryLogs" }],
-          output: { structured: { responseSchema: { type: "object" } } },
+          output: { structured: { schema: { type: "object" } } },
           modelOptions: { temperature: 0 },
         },
         timeoutSeconds: 45,
@@ -182,7 +182,7 @@ test("agent and app workflow steps round-trip through copy helpers", () => {
 
   const copied = boundWorkflowTargetFromTarget(target);
   const copiedSteps = copied.steps ?? [];
-  expect(copiedSteps[0]?.agent?.output?.structured?.responseSchema).toEqual({ type: "object" });
+  expect(copiedSteps[0]?.agent?.output?.structured?.schema).toEqual({ type: "object" });
   expect(copiedSteps[1]?.when?.value?.kind).toEqual({
     case: "stepOutput",
     value: {

@@ -208,7 +208,7 @@ type Output struct {
 type TextOutput struct{}
 
 type StructuredOutput struct {
-	ResponseSchema map[string]any
+	Schema map[string]any
 }
 
 type TurnOutput struct {

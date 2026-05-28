@@ -230,41 +230,6 @@ func agentTurnFromProto(turn *proto.AgentTurn) (*coreagent.Turn, error) {
 	}, nil
 }
 
-func agentOutputToProto(output coreagent.Output) (*proto.AgentOutput, error) {
-	if output.Structured != nil {
-		responseSchema, err := structFromMap(output.Structured.ResponseSchema)
-		if err != nil {
-			return nil, err
-		}
-		return &proto.AgentOutput{
-			Kind: &proto.AgentOutput_Structured{
-				Structured: &proto.AgentStructuredOutput{ResponseSchema: responseSchema},
-			},
-		}, nil
-	}
-	if output.Text != nil {
-		return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}, nil
-	}
-	return nil, nil
-}
-
-func agentOutputFromProto(output *proto.AgentOutput) coreagent.Output {
-	if output == nil {
-		return coreagent.Output{}
-	}
-	if structured := output.GetStructured(); structured != nil {
-		return coreagent.Output{
-			Structured: &coreagent.StructuredOutput{
-				ResponseSchema: mapFromStruct(structured.GetResponseSchema()),
-			},
-		}
-	}
-	if output.GetText() != nil {
-		return coreagent.Output{Text: &coreagent.TextOutput{}}
-	}
-	return coreagent.Output{}
-}
-
 func setAgentTurnOutputProto(turn *proto.AgentTurn, output coreagent.TurnOutput) error {
 	if turn == nil {
 		return nil

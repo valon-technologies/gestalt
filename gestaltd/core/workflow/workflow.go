@@ -440,8 +440,14 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 			if len(agent.ToolRefs) == 0 {
 				agent.ToolRefs = nil
 			}
-			if agent.Output.Structured != nil && len(agent.Output.Structured.ResponseSchema) == 0 {
-				agent.Output.Structured.ResponseSchema = nil
+			if agent.Output.Structured != nil {
+				structured := *agent.Output.Structured
+				if len(structured.Schema) == 0 {
+					structured.Schema = nil
+				} else {
+					structured.Schema = cloneLiteral(structured.Schema).(map[string]any)
+				}
+				agent.Output.Structured = &structured
 			}
 			if len(agent.ModelOptions) == 0 {
 				agent.ModelOptions = nil

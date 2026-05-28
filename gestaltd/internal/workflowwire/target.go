@@ -217,14 +217,14 @@ func parseAgentOutput(value any, path string) (coreagent.Output, error) {
 	if !ok {
 		return coreagent.Output{}, fmt.Errorf("%w: %s.structured must be an object", ErrInvalid, path)
 	}
-	if err := rejectUnknownKeys(structuredMap, path+".structured", "responseSchema"); err != nil {
+	if err := rejectUnknownKeys(structuredMap, path+".structured", "schema"); err != nil {
 		return coreagent.Output{}, err
 	}
-	responseSchema, err := objectArg(structuredMap, "responseSchema", path+".structured")
+	schema, err := objectArg(structuredMap, "schema", path+".structured")
 	if err != nil {
 		return coreagent.Output{}, err
 	}
-	return coreagent.Output{Structured: &coreagent.StructuredOutput{ResponseSchema: responseSchema}}, nil
+	return coreagent.Output{Structured: &coreagent.StructuredOutput{Schema: schema}}, nil
 }
 
 func parseStepWhen(value any, path string) (*coreworkflow.StepWhen, error) {
@@ -391,7 +391,7 @@ func encodeAgentTurn(agent coreworkflow.AgentTurn) map[string]any {
 	if agent.Output.Structured != nil {
 		value["output"] = map[string]any{
 			"structured": map[string]any{
-				"responseSchema": mapDeepClone(agent.Output.Structured.ResponseSchema),
+				"schema": mapDeepClone(agent.Output.Structured.Schema),
 			},
 		}
 	}

@@ -102,7 +102,7 @@ func (p *fullAgentProvider) CreateTurn(_ context.Context, req *gestalt.CreateAge
 		Output: gestalt.AgentTurnOutput{
 			Structured: &gestalt.AgentTurnStructuredOutput{
 				Text:  "echo:Plan it",
-				Value: req.Output.Structured.ResponseSchema,
+				Value: req.Output.Structured.Schema,
 			},
 		},
 		StatusMessage: "waiting for input",
@@ -389,7 +389,7 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 		}},
 		Output: &proto.AgentOutput{
 			Kind: &proto.AgentOutput_Structured{
-				Structured: &proto.AgentStructuredOutput{ResponseSchema: mustStruct(t, map[string]any{"type": "object"})},
+				Structured: &proto.AgentStructuredOutput{Schema: mustStruct(t, map[string]any{"type": "object"})},
 			},
 		},
 		Metadata:     mustStruct(t, map[string]any{"requireInteraction": true}),

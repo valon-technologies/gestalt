@@ -3304,7 +3304,7 @@ func agentOutputFromProto(output *proto.AgentOutput) coreagent.Output {
 	if structured := output.GetStructured(); structured != nil {
 		return coreagent.Output{
 			Structured: &coreagent.StructuredOutput{
-				ResponseSchema: protoutil.MapFromStruct(structured.GetResponseSchema()),
+				Schema: protoutil.MapFromStruct(structured.GetSchema()),
 			},
 		}
 	}
@@ -3321,24 +3321,24 @@ func validateAgentOutput(output coreagent.Output) error {
 		return fmt.Errorf("%w: exactly one of output.text or output.structured is required", invocation.ErrInvalidInvocation)
 	}
 	if output.Structured != nil {
-		if err := validateAgentResponseSchema(output.Structured.ResponseSchema); err != nil {
+		if err := validateAgentSchema(output.Structured.Schema); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateAgentResponseSchema(schema map[string]any) error {
+func validateAgentSchema(schema map[string]any) error {
 	if len(schema) == 0 {
-		return fmt.Errorf("%w: output.structured.responseSchema must be a non-empty JSON schema object with type %q", invocation.ErrInvalidInvocation, "object")
+		return fmt.Errorf("%w: output.structured.schema must be a non-empty JSON schema object with type %q", invocation.ErrInvalidInvocation, "object")
 	}
 	rawType, ok := schema["type"]
 	if !ok {
-		return fmt.Errorf("%w: output.structured.responseSchema.type must be %q", invocation.ErrInvalidInvocation, "object")
+		return fmt.Errorf("%w: output.structured.schema.type must be %q", invocation.ErrInvalidInvocation, "object")
 	}
 	typeValue, ok := rawType.(string)
 	if !ok || strings.TrimSpace(typeValue) != "object" {
-		return fmt.Errorf("%w: output.structured.responseSchema.type must be %q", invocation.ErrInvalidInvocation, "object")
+		return fmt.Errorf("%w: output.structured.schema.type must be %q", invocation.ErrInvalidInvocation, "object")
 	}
 	return nil
 }
@@ -3360,7 +3360,7 @@ func validateAgentTurnOutput(requested coreagent.Output, turn *coreagent.Turn) e
 		if turn.Output.Structured == nil {
 			return fmt.Errorf("agent provider returned successful turn without structured output")
 		}
-		if err := validateAgentStructuredValue(requested.Structured.ResponseSchema, turn.Output.Structured.Value); err != nil {
+		if err := validateAgentStructuredValue(requested.Structured.Schema, turn.Output.Structured.Value); err != nil {
 			return fmt.Errorf("agent provider returned invalid structured output: %w", err)
 		}
 	}

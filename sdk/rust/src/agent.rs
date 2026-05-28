@@ -690,7 +690,7 @@ pub struct AgentTextOutput {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentStructuredOutput {
-    pub response_schema: AgentJson,
+    pub schema: AgentJson,
 }
 
 impl AgentOutput {
@@ -702,7 +702,7 @@ impl AgentOutput {
     /// Requests a structured turn with the supplied JSON Schema object.
     pub fn structured_schema<T: Serialize>(schema: T) -> ProviderResult<Self> {
         Ok(Self::Structured(AgentStructuredOutput {
-            response_schema: protocol::json_from_serializable(schema)?,
+            schema: protocol::json_from_serializable(schema)?,
         }))
     }
 }
@@ -1571,7 +1571,7 @@ pub(crate) fn agent_output_to_proto(
         Some(AgentOutput::Structured(output)) => Ok(Some(pb::AgentOutput {
             kind: Some(pb::agent_output::Kind::Structured(
                 pb::AgentStructuredOutput {
-                    response_schema: Some(protocol::struct_from_json(output.response_schema)?),
+                    schema: Some(protocol::struct_from_json(output.schema)?),
                 },
             )),
         })),
@@ -1585,11 +1585,10 @@ pub(crate) fn agent_output_from_proto(
     match value.and_then(|output| output.kind) {
         Some(pb::agent_output::Kind::Text(_)) => Ok(Some(AgentOutput::Text(AgentTextOutput {}))),
         Some(pb::agent_output::Kind::Structured(output)) => {
-            let response_schema = json_from_struct(output.response_schema).ok_or_else(|| {
-                crate::Error::bad_request("output.structured.response_schema is required")
-            })?;
+            let schema = json_from_struct(output.schema)
+                .ok_or_else(|| crate::Error::bad_request("output.structured.schema is required"))?;
             Ok(Some(AgentOutput::Structured(AgentStructuredOutput {
-                response_schema,
+                schema,
             })))
         }
         None => Ok(None),

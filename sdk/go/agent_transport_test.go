@@ -185,7 +185,7 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 		}},
 		ToolSource: gestalt.AgentToolSourceModeMCPCatalog,
 		Output: gestalt.AgentOutput{
-			Structured: &gestalt.AgentStructuredOutput{ResponseSchema: map[string]any{"type": "object"}},
+			Structured: &gestalt.AgentStructuredOutput{Schema: map[string]any{"type": "object"}},
 		},
 		Metadata:     map[string]any{"request": "native"},
 		ModelOptions: map[string]any{"temperature": 0},
@@ -215,7 +215,7 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	if got.GetToolRefs()[0].GetApp() != "github" || got.GetToolRefs()[0].GetConnection() != "default" {
 		t.Fatalf("tool refs = %#v", got.GetToolRefs())
 	}
-	if schema := got.GetOutput().GetStructured().GetResponseSchema().AsMap(); schema["type"] != "object" {
+	if schema := got.GetOutput().GetStructured().GetSchema().AsMap(); schema["type"] != "object" {
 		t.Fatalf("response schema = %#v", schema)
 	}
 }

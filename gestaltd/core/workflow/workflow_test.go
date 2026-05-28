@@ -1,6 +1,10 @@
 package workflow
 
-import "testing"
+import (
+	"testing"
+
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+)
 
 func TestCloneValueDeepClonesLiteralReferenceTypes(t *testing.T) {
 	t.Parallel()
@@ -82,5 +86,29 @@ func TestTargetsEqualNormalizesNestedEmptyWorkflowValues(t *testing.T) {
 	}
 	if leftFingerprint != rightFingerprint {
 		t.Fatalf("fingerprints differ: left %s right %s", leftFingerprint, rightFingerprint)
+	}
+}
+
+func TestTargetFingerprintNormalizesStructuredOutputWithoutMutatingInput(t *testing.T) {
+	t.Parallel()
+
+	target := Target{Steps: []Step{{
+		ID: "agent",
+		Agent: &AgentTurn{
+			Output: coreagent.Output{
+				Structured: &coreagent.StructuredOutput{Schema: map[string]any{}},
+			},
+		},
+	}}}
+
+	if _, err := TargetFingerprint(target); err != nil {
+		t.Fatalf("TargetFingerprint(): %v", err)
+	}
+
+	if target.Steps[0].Agent.Output.Structured == nil {
+		t.Fatal("structured output was cleared on source target")
+	}
+	if target.Steps[0].Agent.Output.Structured.Schema == nil {
+		t.Fatal("structured output schema was cleared on source target")
 	}
 }

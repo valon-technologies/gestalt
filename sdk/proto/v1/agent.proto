@@ -307,7 +307,7 @@ message CreateAgentProviderTurnRequest {
 message AgentTextOutput {}
 
 message AgentStructuredOutput {
-  google.protobuf.Struct response_schema = 1;
+  google.protobuf.Struct schema = 1;
 }
 
 message AgentOutput {

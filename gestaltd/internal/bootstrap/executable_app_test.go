@@ -2112,6 +2112,9 @@ func cloneAgentTurn(src *coreagent.Turn) *coreagent.Turn {
 	}
 	dst := *src
 	dst.Messages = append([]coreagent.Message(nil), src.Messages...)
+	if src.Output.Text != nil {
+		dst.Output.Text = &coreagent.TurnTextOutput{Text: src.Output.Text.Text}
+	}
 	if src.Output.Structured != nil {
 		dst.Output.Structured = &coreagent.TurnStructuredOutput{
 			Text:  src.Output.Structured.Text,
@@ -2216,7 +2219,9 @@ func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
 			}
 			agent.ToolRefs = slices.Clone(agent.ToolRefs)
 			if agent.Output.Structured != nil {
-				agent.Output.Structured.ResponseSchema = maps.Clone(agent.Output.Structured.ResponseSchema)
+				structured := *agent.Output.Structured
+				structured.Schema = maps.Clone(structured.Schema)
+				agent.Output.Structured = &structured
 			}
 			agent.ModelOptions = maps.Clone(agent.ModelOptions)
 			step.Agent = &agent

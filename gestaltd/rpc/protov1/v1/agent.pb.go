@@ -2598,10 +2598,10 @@ func (*AgentTextOutput) Descriptor() ([]byte, []int) {
 }
 
 type AgentStructuredOutput struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	ResponseSchema *structpb.Struct       `protobuf:"bytes,1,opt,name=response_schema,json=responseSchema,proto3" json:"response_schema,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Schema        *structpb.Struct       `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AgentStructuredOutput) Reset() {
@@ -2634,9 +2634,9 @@ func (*AgentStructuredOutput) Descriptor() ([]byte, []int) {
 	return file_v1_agent_proto_rawDescGZIP(), []int{28}
 }
 
-func (x *AgentStructuredOutput) GetResponseSchema() *structpb.Struct {
+func (x *AgentStructuredOutput) GetSchema() *structpb.Struct {
 	if x != nil {
-		return x.ResponseSchema
+		return x.Schema
 	}
 	return nil
 }
@@ -4253,9 +4253,9 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x06output\x18\x15 \x01(\v2 .gestalt.provider.v1.AgentOutputR\x06outputJ\x04\b\t\x10\n" +
 	"J\x04\b\x0f\x10\x10R\x10provider_optionsR\n" +
 	"tool_grant\"\x11\n" +
-	"\x0fAgentTextOutput\"Y\n" +
-	"\x15AgentStructuredOutput\x12@\n" +
-	"\x0fresponse_schema\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x0eresponseSchema\"\x9f\x01\n" +
+	"\x0fAgentTextOutput\"H\n" +
+	"\x15AgentStructuredOutput\x12/\n" +
+	"\x06schema\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x06schema\"\x9f\x01\n" +
 	"\vAgentOutput\x12:\n" +
 	"\x04text\x18\x01 \x01(\v2$.gestalt.provider.v1.AgentTextOutputH\x00R\x04text\x12L\n" +
 	"\n" +
@@ -4585,7 +4585,7 @@ var file_v1_agent_proto_depIdxs = []int32{
 	59,  // 58: gestalt.provider.v1.CreateAgentProviderTurnRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
 	57,  // 59: gestalt.provider.v1.CreateAgentProviderTurnRequest.model_options:type_name -> google.protobuf.Struct
 	35,  // 60: gestalt.provider.v1.CreateAgentProviderTurnRequest.output:type_name -> gestalt.provider.v1.AgentOutput
-	57,  // 61: gestalt.provider.v1.AgentStructuredOutput.response_schema:type_name -> google.protobuf.Struct
+	57,  // 61: gestalt.provider.v1.AgentStructuredOutput.schema:type_name -> google.protobuf.Struct
 	33,  // 62: gestalt.provider.v1.AgentOutput.text:type_name -> gestalt.provider.v1.AgentTextOutput
 	34,  // 63: gestalt.provider.v1.AgentOutput.structured:type_name -> gestalt.provider.v1.AgentStructuredOutput
 	59,  // 64: gestalt.provider.v1.GetAgentProviderTurnRequest.subject:type_name -> gestalt.provider.v1.SubjectContext

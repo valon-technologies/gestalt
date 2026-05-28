@@ -499,7 +499,9 @@ func cloneWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
 			agent.Messages = slices.Clone(agent.Messages)
 			agent.ToolRefs = slices.Clone(agent.ToolRefs)
 			if agent.Output.Structured != nil {
-				agent.Output.Structured.ResponseSchema = cloneMap(agent.Output.Structured.ResponseSchema)
+				structured := *agent.Output.Structured
+				structured.Schema = cloneMap(structured.Schema)
+				agent.Output.Structured = &structured
 			}
 			agent.ModelOptions = cloneMap(agent.ModelOptions)
 			step.Agent = &agent

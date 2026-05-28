@@ -130,8 +130,8 @@ func workflowSystemToolAgentOutputSchema() map[string]any {
 			"type":                 "object",
 			"additionalProperties": false,
 		},
-		"structured": workflowSystemToolObjectSchema([]string{"responseSchema"}, map[string]any{
-			"responseSchema": map[string]any{"type": "object"},
+		"structured": workflowSystemToolObjectSchema([]string{"schema"}, map[string]any{
+			"schema": map[string]any{"type": "object"},
 		}),
 	})
 	schema["oneOf"] = []any{

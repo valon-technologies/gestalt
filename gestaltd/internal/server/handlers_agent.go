@@ -167,7 +167,7 @@ type agentOutputRequestPresence struct {
 type agentTextOutputRequest struct{}
 
 type agentStructuredOutputRequest struct {
-	ResponseSchema map[string]any `json:"responseSchema,omitempty"`
+	Schema map[string]any `json:"schema,omitempty"`
 }
 
 type agentTurnCancelRequest struct {
@@ -1513,7 +1513,7 @@ func agentOutputFromRequest(output *agentOutputRequest, presence *agentOutputReq
 		}
 		return coreagent.Output{
 			Structured: &coreagent.StructuredOutput{
-				ResponseSchema: maps.Clone(output.Structured.ResponseSchema),
+				Schema: maps.Clone(output.Structured.Schema),
 			},
 		}, nil
 	}
@@ -1528,13 +1528,13 @@ func agentOutputFromRequest(output *agentOutputRequest, presence *agentOutputReq
 
 func agentOutputToProto(output coreagent.Output) (*proto.AgentOutput, error) {
 	if output.Structured != nil {
-		responseSchema, err := agentStructFromMap(output.Structured.ResponseSchema)
+		schema, err := agentStructFromMap(output.Structured.Schema)
 		if err != nil {
-			return nil, fmt.Errorf("invalid output.structured.responseSchema: %v", err)
+			return nil, fmt.Errorf("invalid output.structured.schema: %v", err)
 		}
 		return &proto.AgentOutput{
 			Kind: &proto.AgentOutput_Structured{
-				Structured: &proto.AgentStructuredOutput{ResponseSchema: responseSchema},
+				Structured: &proto.AgentStructuredOutput{Schema: schema},
 			},
 		}, nil
 	}
@@ -1548,7 +1548,7 @@ func agentOutputRequestFromCore(output coreagent.Output) *agentOutputRequest {
 	if output.Structured != nil {
 		return &agentOutputRequest{
 			Structured: &agentStructuredOutputRequest{
-				ResponseSchema: maps.Clone(output.Structured.ResponseSchema),
+				Schema: maps.Clone(output.Structured.Schema),
 			},
 		}
 	}

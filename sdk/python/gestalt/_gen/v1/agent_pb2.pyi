@@ -507,9 +507,9 @@ class AgentTextOutput(_message.Message):
 
 class AgentStructuredOutput(_message.Message):
     __slots__ = ()
-    RESPONSE_SCHEMA_FIELD_NUMBER: _ClassVar[int]
-    response_schema: _struct_pb2.Struct
-    def __init__(self, response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    schema: _struct_pb2.Struct
+    def __init__(self, schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class AgentOutput(_message.Message):
     __slots__ = ()

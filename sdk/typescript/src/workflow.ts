@@ -2616,7 +2616,7 @@ function workflowAgentOutputInputFromOutput(
   if (input.structured !== undefined) {
     return {
       structured: {
-        responseSchema: jsonObjectClone(input.structured.responseSchema),
+        schema: jsonObjectClone(input.structured.schema),
       },
     };
   }

@@ -952,6 +952,9 @@ func cloneTurn(src *coreagent.Turn) *coreagent.Turn {
 	}
 	dst := *src
 	dst.Messages = append([]coreagent.Message(nil), src.Messages...)
+	if src.Output.Text != nil {
+		dst.Output.Text = &coreagent.TurnTextOutput{Text: src.Output.Text.Text}
+	}
 	if src.Output.Structured != nil {
 		dst.Output.Structured = &coreagent.TurnStructuredOutput{
 			Text:  src.Output.Structured.Text,
@@ -1629,11 +1632,11 @@ func TestAgentCreateTurnAcceptsNoneToolSourceWithStructuredOutput(t *testing.T) 
 		}
 	}
 
-	createTurn("structured none", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"responseSchema":{"type":"object","properties":{"score":{"type":"number"}}}}}}`, http.StatusCreated)
+	createTurn("structured none", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"schema":{"type":"object","properties":{"score":{"type":"number"}}}}}}`, http.StatusCreated)
 	createTurn("null output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":null}`, http.StatusBadRequest)
-	createTurn("ambiguous output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":{},"structured":{"responseSchema":{"type":"object"}}}}`, http.StatusBadRequest)
-	createTurn("ambiguous null text output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":null,"structured":{"responseSchema":{"type":"object"}}}}`, http.StatusBadRequest)
-	createTurn("empty schema", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"responseSchema":{}}}}`, http.StatusBadRequest)
+	createTurn("ambiguous output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":{},"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
+	createTurn("ambiguous null text output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":null,"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
+	createTurn("empty schema", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"schema":{}}}}`, http.StatusBadRequest)
 	createTurn("none with tools", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","toolRefs":[{"app":"docs"}],"output":{"text":{}}}`, http.StatusBadRequest)
 
 	turnRequests := provider.capturedTurnRequests()
@@ -1650,8 +1653,8 @@ func TestAgentCreateTurnAcceptsNoneToolSourceWithStructuredOutput(t *testing.T) 
 	if req.GetOutput().GetStructured() == nil {
 		t.Fatal("provider turn output.structured = nil, want structured output request")
 	}
-	if req.GetOutput().GetStructured().GetResponseSchema().AsMap()["type"] != "object" {
-		t.Fatalf("provider turn response schema = %#v, want object schema", req.GetOutput().GetStructured().GetResponseSchema())
+	if req.GetOutput().GetStructured().GetSchema().AsMap()["type"] != "object" {
+		t.Fatalf("provider turn response schema = %#v, want object schema", req.GetOutput().GetStructured().GetSchema())
 	}
 }
 

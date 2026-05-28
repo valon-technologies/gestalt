@@ -809,7 +809,7 @@ async fn agent_create_turn_accepts_native_values() {
         panic!("output = {output:?}, want structured");
     };
     assert_eq!(
-        support_protocol::json_from_struct(output.response_schema.as_ref().unwrap()),
+        support_protocol::json_from_struct(output.schema.as_ref().unwrap()),
         serde_json::json!({ "type": "object" })
     );
     assert_eq!(

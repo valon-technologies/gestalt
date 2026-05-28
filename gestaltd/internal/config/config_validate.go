@@ -2400,17 +2400,17 @@ func validateWorkflowAgentOutputConfig(path string, output *WorkflowAgentOutputC
 	if output.Structured == nil {
 		return nil
 	}
-	schema := output.Structured.ResponseSchema
+	schema := output.Structured.Schema
 	if len(schema) == 0 {
-		return fmt.Errorf("config validation: %s.structured.responseSchema must be a non-empty JSON schema object with type %q", path, "object")
+		return fmt.Errorf("config validation: %s.structured.schema must be a non-empty JSON schema object with type %q", path, "object")
 	}
 	rawType, ok := schema["type"]
 	if !ok {
-		return fmt.Errorf("config validation: %s.structured.responseSchema.type must be %q", path, "object")
+		return fmt.Errorf("config validation: %s.structured.schema.type must be %q", path, "object")
 	}
 	typeValue, ok := rawType.(string)
 	if !ok || strings.TrimSpace(typeValue) != "object" {
-		return fmt.Errorf("config validation: %s.structured.responseSchema.type must be %q", path, "object")
+		return fmt.Errorf("config validation: %s.structured.schema.type must be %q", path, "object")
 	}
 	return nil
 }

@@ -62,8 +62,8 @@ func (s agentProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAg
 	if req == nil || req.GetOutput().GetKind() == nil {
 		return nil, status.Error(codes.InvalidArgument, "create turn output is required")
 	}
-	if structured := req.GetOutput().GetStructured(); structured != nil && structured.GetResponseSchema() == nil {
-		return nil, status.Error(codes.InvalidArgument, "output.structured.response_schema is required")
+	if structured := req.GetOutput().GetStructured(); structured != nil && structured.GetSchema() == nil {
+		return nil, status.Error(codes.InvalidArgument, "output.structured.schema is required")
 	}
 	turn, err := s.provider.CreateTurn(ctx, createAgentProviderTurnRequestFromProto(req))
 	if err != nil {

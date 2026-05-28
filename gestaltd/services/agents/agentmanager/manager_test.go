@@ -110,7 +110,7 @@ func agentStructuredOutputProto(t testing.TB, schema map[string]any) *proto.Agen
 	t.Helper()
 	return &proto.AgentOutput{
 		Kind: &proto.AgentOutput_Structured{
-			Structured: &proto.AgentStructuredOutput{ResponseSchema: mustProtoStruct(t, schema)},
+			Structured: &proto.AgentStructuredOutput{Schema: mustProtoStruct(t, schema)},
 		},
 	}
 }
@@ -1905,8 +1905,8 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 				t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
 			}
 			got := alpha.createTurnReqs[0]
-			if tt.req.GetOutput().GetStructured() != nil && got.GetOutput().GetStructured().GetResponseSchema().AsMap()["type"] != "object" {
-				t.Fatalf("CreateTurn response schema = %#v, want object schema", got.GetOutput().GetStructured().GetResponseSchema())
+			if tt.req.GetOutput().GetStructured() != nil && got.GetOutput().GetStructured().GetSchema().AsMap()["type"] != "object" {
+				t.Fatalf("CreateTurn response schema = %#v, want object schema", got.GetOutput().GetStructured().GetSchema())
 			}
 			if tt.req.GetOutput().GetText() != nil && got.GetOutput().GetText() == nil {
 				t.Fatal("CreateTurn output.text = nil, want text output request")

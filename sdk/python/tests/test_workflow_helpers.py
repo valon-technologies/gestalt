@@ -186,7 +186,7 @@ class WorkflowHelperTests(unittest.TestCase):
                         ],
                         output=gestalt.AgentOutput(
                             structured=gestalt.AgentStructuredOutput(
-                                response_schema={"type": "object"}
+                                schema={"type": "object"}
                             )
                         ),
                         model_options={"temperature": 0},
@@ -225,7 +225,7 @@ class WorkflowHelperTests(unittest.TestCase):
         copied = gestalt.bound_workflow_target_input_from_target(target)
         self.assertIsInstance(copied.steps[0].agent.messages[0], gestalt.WorkflowAgentMessage)
         self.assertEqual(
-            copied.steps[0].agent.output.structured.response_schema["type"],
+            copied.steps[0].agent.output.structured.schema["type"],
             "object",
         )
         self.assertEqual(
