@@ -112,16 +112,33 @@ func workflowSystemToolAppCallSchema(nameDescription string) map[string]any {
 }
 
 func workflowSystemToolAgentTurnSchema() map[string]any {
-	return workflowSystemToolObjectSchema([]string{}, map[string]any{
-		"provider":       workflowSystemToolStringSchema("Agent provider name."),
-		"model":          workflowSystemToolStringSchema("Agent model."),
-		"sessionKey":     workflowSystemToolStringSchema("Agent session key."),
-		"prompt":         map[string]any{},
-		"messages":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-		"tools":          map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "Agent tool references. If omitted, the created workflow agent inherits the current agent turn's tool references."},
-		"responseSchema": map[string]any{"type": "object"},
-		"modelOptions":   map[string]any{"type": "object"},
+	return workflowSystemToolObjectSchema([]string{"output"}, map[string]any{
+		"provider":     workflowSystemToolStringSchema("Agent provider name."),
+		"model":        workflowSystemToolStringSchema("Agent model."),
+		"sessionKey":   workflowSystemToolStringSchema("Agent session key."),
+		"prompt":       map[string]any{},
+		"messages":     map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+		"tools":        map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "Agent tool references. If omitted, the created workflow agent inherits the current agent turn's tool references."},
+		"output":       workflowSystemToolAgentOutputSchema(),
+		"modelOptions": map[string]any{"type": "object"},
 	})
+}
+
+func workflowSystemToolAgentOutputSchema() map[string]any {
+	schema := workflowSystemToolObjectSchema([]string{}, map[string]any{
+		"text": map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+		},
+		"structured": workflowSystemToolObjectSchema([]string{"schema"}, map[string]any{
+			"schema": map[string]any{"type": "object"},
+		}),
+	})
+	schema["oneOf"] = []any{
+		map[string]any{"required": []string{"text"}},
+		map[string]any{"required": []string{"structured"}},
+	}
+	return schema
 }
 
 func workflowSystemToolStepWhenSchema() map[string]any {

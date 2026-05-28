@@ -308,9 +308,10 @@ impl AgentTurnRenderer {
 
     fn finish_turn(&mut self, turn: &AgentTurnInfo) -> Result<()> {
         self.finish_assistant_line();
+        let output_text = turn.output_text();
         match turn.status.as_str() {
-            "succeeded" if !self.saw_assistant_output && !turn.output_text.is_empty() => {
-                println!("{} {}", self.label("assistant>"), turn.output_text);
+            "succeeded" if !self.saw_assistant_output && !output_text.is_empty() => {
+                println!("{} {}", self.label("assistant>"), output_text);
                 self.saw_assistant_output = true;
             }
             "failed" if !turn.status_message.is_empty() => {
@@ -322,7 +323,7 @@ impl AgentTurnRenderer {
             _ => {}
         }
         if !self.saw_structured_output
-            && let Some(structured_output) = turn.structured_output.as_ref()
+            && let Some(structured_output) = turn.structured_output()
         {
             println!(
                 "{} {}",

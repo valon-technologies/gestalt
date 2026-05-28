@@ -8,6 +8,8 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -91,19 +93,23 @@ func (p *fullAgentProvider) UpdateSession(_ context.Context, req *gestalt.Update
 func (p *fullAgentProvider) CreateTurn(_ context.Context, req *gestalt.CreateAgentProviderTurnRequest) (*gestalt.AgentTurn, error) {
 	p.receivedTurnRequest = req
 	return &gestalt.AgentTurn{
-		ID:               req.TurnID,
-		SessionID:        req.SessionID,
-		ProviderName:     p.configuredName,
-		Model:            req.Model,
-		Status:           gestalt.AgentExecutionStatusWaitingForInput,
-		Messages:         req.Messages,
-		OutputText:       "echo:Plan it",
-		StructuredOutput: req.ResponseSchema,
-		StatusMessage:    "waiting for input",
-		CreatedBy:        req.CreatedBy,
-		CreatedAt:        time.Now(),
-		StartedAt:        timePtr(time.Now()),
-		ExecutionRef:     req.ExecutionRef,
+		ID:           req.TurnID,
+		SessionID:    req.SessionID,
+		ProviderName: p.configuredName,
+		Model:        req.Model,
+		Status:       gestalt.AgentExecutionStatusWaitingForInput,
+		Messages:     req.Messages,
+		Output: gestalt.AgentTurnOutput{
+			Structured: &gestalt.AgentTurnStructuredOutput{
+				Text:  "echo:Plan it",
+				Value: req.Output.Structured.Schema,
+			},
+		},
+		StatusMessage: "waiting for input",
+		CreatedBy:     req.CreatedBy,
+		CreatedAt:     time.Now(),
+		StartedAt:     timePtr(time.Now()),
+		ExecutionRef:  req.ExecutionRef,
 	}, nil
 }
 
@@ -114,7 +120,7 @@ func (p *fullAgentProvider) GetTurn(_ context.Context, req *gestalt.GetAgentProv
 		ProviderName:  p.configuredName,
 		Model:         "gpt-5.1",
 		Status:        gestalt.AgentExecutionStatusRunning,
-		OutputText:    "echo:Plan it",
+		Output:        gestalt.AgentTurnOutput{Text: &gestalt.AgentTurnTextOutput{Text: "echo:Plan it"}},
 		StatusMessage: "running",
 		CreatedAt:     time.Now(),
 		StartedAt:     timePtr(time.Now()),
@@ -229,7 +235,6 @@ func (p *fullAgentProvider) GetCapabilities(context.Context, *gestalt.GetAgentPr
 	return &gestalt.AgentProviderCapabilities{
 		StreamingText:             true,
 		ToolCalls:                 true,
-		StructuredOutput:          true,
 		Interactions:              true,
 		BoundedListHydration:      true,
 		SupportedToolSources:      []gestalt.AgentToolSourceMode{gestalt.AgentToolSourceModeMCPCatalog, gestalt.AgentToolSourceModeNone},
@@ -382,10 +387,14 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 			Description:      "Look up context",
 			ParametersSchema: mustStruct(t, map[string]any{"type": "object"}),
 		}},
-		ResponseSchema: mustStruct(t, map[string]any{"type": "object"}),
-		Metadata:       mustStruct(t, map[string]any{"requireInteraction": true}),
-		CreatedBy:      session.GetCreatedBy(),
-		ExecutionRef:   "exec-turn-1",
+		Output: &proto.AgentOutput{
+			Kind: &proto.AgentOutput_Structured{
+				Structured: &proto.AgentStructuredOutput{Schema: mustStruct(t, map[string]any{"type": "object"})},
+			},
+		},
+		Metadata:     mustStruct(t, map[string]any{"requireInteraction": true}),
+		CreatedBy:    session.GetCreatedBy(),
+		ExecutionRef: "exec-turn-1",
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "slack",
 			Operation: "chat.postMessage",
@@ -406,11 +415,32 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	if len(turn.GetMessages()) != 1 || len(turn.GetMessages()[0].GetParts()) != 2 {
 		t.Fatalf("CreateTurn messages = %+v, want message parts round trip", turn.GetMessages())
 	}
-	if turn.GetStructuredOutput().GetFields()["type"].GetStringValue() != "object" {
-		t.Fatalf("CreateTurn structured_output = %+v, want native JSON round trip", turn.GetStructuredOutput())
+	if turn.GetStructured().GetValue().GetFields()["type"].GetStringValue() != "object" {
+		t.Fatalf("CreateTurn structured output = %+v, want native JSON round trip", turn.GetStructured())
 	}
-	if !provider.receivedTurnRequest.ResponseSchemaSet {
-		t.Fatalf("CreateTurn ResponseSchemaSet = false, want true for present response_schema")
+	if provider.receivedTurnRequest.Output.Structured == nil {
+		t.Fatalf("CreateTurn output.structured = nil, want structured output request")
+	}
+	_, err = agentClient.CreateTurn(rpcCtx, &proto.CreateAgentProviderTurnRequest{
+		TurnId:    "turn-missing-output",
+		SessionId: "session-1",
+		Messages:  []*proto.AgentMessage{{Role: "user", Text: "Plan it"}},
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("CreateTurn missing output error = %v, want InvalidArgument", err)
+	}
+	_, err = agentClient.CreateTurn(rpcCtx, &proto.CreateAgentProviderTurnRequest{
+		TurnId:    "turn-missing-schema",
+		SessionId: "session-1",
+		Messages:  []*proto.AgentMessage{{Role: "user", Text: "Plan it"}},
+		Output: &proto.AgentOutput{
+			Kind: &proto.AgentOutput_Structured{
+				Structured: &proto.AgentStructuredOutput{},
+			},
+		},
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("CreateTurn missing structured schema error = %v, want InvalidArgument", err)
 	}
 
 	fetchedTurn, err := agentClient.GetTurn(rpcCtx, &proto.GetAgentProviderTurnRequest{TurnId: "turn-1"})
@@ -479,7 +509,7 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCapabilities: %v", err)
 	}
-	if !capabilities.GetStreamingText() || !capabilities.GetToolCalls() || !capabilities.GetStructuredOutput() || len(capabilities.GetSupportedToolSources()) != 2 {
+	if !capabilities.GetStreamingText() || !capabilities.GetToolCalls() || len(capabilities.GetSupportedToolSources()) != 2 {
 		t.Fatalf("GetCapabilities = %+v, want streaming text and tool calls", capabilities)
 	}
 	if capabilities.GetSupportedToolSources()[1] != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {

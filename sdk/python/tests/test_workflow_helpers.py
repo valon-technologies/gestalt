@@ -90,7 +90,7 @@ class WorkflowHelperTests(unittest.TestCase):
                 "result": gestalt.WorkflowValue(
                     step_output=gestalt.WorkflowStepOutputSource(
                         step_id="diagnosis",
-                        path="agent.structuredOutput.actionableForPr",
+                        path="agent.output.structured.value.actionableForPr",
                     )
                 ),
             }
@@ -184,7 +184,11 @@ class WorkflowHelperTests(unittest.TestCase):
                                 operation="queryLogs",
                             )
                         ],
-                        response_schema={"type": "object"},
+                        output=gestalt.AgentOutput(
+                            structured=gestalt.AgentStructuredOutput(
+                                schema={"type": "object"}
+                            )
+                        ),
                         model_options={"temperature": 0},
                     ),
                     timeout_seconds=45,
@@ -195,6 +199,7 @@ class WorkflowHelperTests(unittest.TestCase):
                     agent=gestalt.WorkflowStepAgentTurn(
                         provider="claude",
                         prompt="Open a PR.",
+                        output=gestalt.AgentOutput(text=gestalt.AgentTextOutput()),
                         tools=[
                             gestalt.AgentToolRef(
                                 app="github",
@@ -206,7 +211,7 @@ class WorkflowHelperTests(unittest.TestCase):
                         value=gestalt.WorkflowValue(
                             step_output=gestalt.WorkflowStepOutputSource(
                                 step_id="diagnosis",
-                                path="agent.structuredOutput.actionableForPr",
+                                path="agent.output.structured.value.actionableForPr",
                             )
                         ),
                         equals=True,
@@ -219,10 +224,13 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(target.steps[1].when.equals.bool_value, True)
         copied = gestalt.bound_workflow_target_input_from_target(target)
         self.assertIsInstance(copied.steps[0].agent.messages[0], gestalt.WorkflowAgentMessage)
-        self.assertEqual(copied.steps[0].agent.response_schema["type"], "object")
+        self.assertEqual(
+            copied.steps[0].agent.output.structured.schema["type"],
+            "object",
+        )
         self.assertEqual(
             copied.steps[1].when.value.step_output.path,
-            "agent.structuredOutput.actionableForPr",
+            "agent.output.structured.value.actionableForPr",
         )
 
     def test_workflow_evaluates_templates_and_paths(self) -> None:
@@ -269,6 +277,7 @@ class WorkflowHelperTests(unittest.TestCase):
                     agent=gestalt.WorkflowStepAgentTurn(
                         provider="openai",
                         model="gpt-5.5",
+                        output=gestalt.AgentOutput(text=gestalt.AgentTextOutput()),
                         model_options={"temperature": 0},
                     ),
                 )

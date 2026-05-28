@@ -980,12 +980,14 @@ test("buildProviderBinary compiles a runnable agent provider executable", async 
             text: "Check build smoke test",
           },
         ],
+        output: { kind: { case: "text", value: {} } },
       }),
     );
     expect(turn.id).toBe("turn-1");
     expect(turn.model).toBe("gpt-test");
     expect(turn.status).toBe(AgentExecutionStatus.SUCCEEDED);
-    expect(turn.outputText).toBe("echo:Check build smoke test");
+    expect(turn.output.case).toBe("text");
+    expect(turn.output.value?.text).toBe("echo:Check build smoke test");
   } finally {
     if (child) {
       await stopProcess(child);

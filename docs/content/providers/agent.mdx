@@ -136,16 +136,20 @@ Create a turn inside that session:
   ],
   "toolRefs": [
     {
-      "appName": "roadmap",
+      "app": "roadmap",
       "operation": "sync"
     }
   ],
-  "responseSchema": {
-    "type": "object",
-    "properties": {
-      "summary": { "type": "string" }
-    },
-    "required": ["summary"]
+  "output": {
+    "structured": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "summary": { "type": "string" }
+        },
+        "required": ["summary"]
+      }
+    }
   }
 }
 ```

@@ -16,22 +16,23 @@ use generated::v1::{
     AgentExecutionStatus, AgentInteraction, AgentInteractionState as ProtoAgentInteractionState,
     AgentInteractionType, AgentMessagePartType, AgentProviderCapabilities, AgentSession,
     AgentSessionState as ProtoAgentSessionState, AgentToolSourceMode as ProtoAgentToolSourceMode,
-    AgentTurn, AgentTurnEvent, CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
-    CreateAgentProviderTurnRequest, GetAgentProviderCapabilitiesRequest,
-    GetAgentProviderInteractionRequest, GetAgentProviderSessionRequest,
-    GetAgentProviderTurnRequest, ListAgentProviderInteractionsRequest,
-    ListAgentProviderInteractionsResponse, ListAgentProviderSessionsRequest,
-    ListAgentProviderSessionsResponse, ListAgentProviderTurnEventsRequest,
-    ListAgentProviderTurnEventsResponse, ListAgentProviderTurnsRequest,
-    ListAgentProviderTurnsResponse, ResolveAgentProviderInteractionRequest,
-    UpdateAgentProviderSessionRequest,
+    AgentTurn, AgentTurnEvent, AgentTurnTextOutput, CancelAgentProviderTurnRequest,
+    CreateAgentProviderSessionRequest, CreateAgentProviderTurnRequest,
+    GetAgentProviderCapabilitiesRequest, GetAgentProviderInteractionRequest,
+    GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
+    ListAgentProviderInteractionsRequest, ListAgentProviderInteractionsResponse,
+    ListAgentProviderSessionsRequest, ListAgentProviderSessionsResponse,
+    ListAgentProviderTurnEventsRequest, ListAgentProviderTurnEventsResponse,
+    ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse,
+    ResolveAgentProviderInteractionRequest, UpdateAgentProviderSessionRequest,
 };
 use gestalt::{
     Agent, AgentCancelTurn, AgentCreateSession, AgentCreateTurn, AgentGetSession, AgentGetTurn,
     AgentInteractionState, AgentListInteractions, AgentListSessions, AgentListTurnEvents,
     AgentListTurns, AgentMessage, AgentMessagePart,
-    AgentMessagePartType as NativeAgentMessagePartType, AgentResolveInteraction, AgentSessionState,
-    AgentToolRef, AgentToolSourceMode, AgentUpdateSession, ExternalIdentity, Request, Subject,
+    AgentMessagePartType as NativeAgentMessagePartType, AgentOutput, AgentResolveInteraction,
+    AgentSessionState, AgentToolRef, AgentToolSourceMode, AgentUpdateSession, ExternalIdentity,
+    Request, Subject,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -193,7 +194,11 @@ impl ProtoAgentProvider for TestAgentServer {
             model: request.model,
             status: AgentExecutionStatus::WaitingForInput as i32,
             messages: request.messages,
-            output_text: "echo:Summarize this".to_string(),
+            output: Some(generated::v1::agent_turn::Output::Text(
+                AgentTurnTextOutput {
+                    text: "echo:Summarize this".to_string(),
+                },
+            )),
             status_message: "waiting for input".to_string(),
             created_at: Some(helpers::timestamp_now()),
             started_at: Some(helpers::timestamp_now()),
@@ -221,7 +226,11 @@ impl ProtoAgentProvider for TestAgentServer {
             provider_name: "openai".to_string(),
             model: "gpt-5.1".to_string(),
             status: AgentExecutionStatus::Succeeded as i32,
-            output_text: "done".to_string(),
+            output: Some(generated::v1::agent_turn::Output::Text(
+                AgentTurnTextOutput {
+                    text: "done".to_string(),
+                },
+            )),
             status_message: "completed".to_string(),
             created_at: Some(helpers::timestamp_now()),
             started_at: Some(helpers::timestamp_now()),
@@ -509,7 +518,12 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
                 ..Default::default()
             }],
             tool_source: AgentToolSourceMode::McpCatalog,
-            ..Default::default()
+            output: AgentOutput::text(),
+            tool_refs: Vec::new(),
+            metadata: None,
+            idempotency_key: String::new(),
+            model_options: None,
+            timeout_seconds: 0,
         })
         .await
         .expect("create turn");
@@ -733,10 +747,12 @@ async fn agent_create_turn_accepts_native_values() {
                 ..Default::default()
             }],
             tool_source: AgentToolSourceMode::McpCatalog,
-            response_schema: Some(serde_json::json!({ "type": "object" })),
+            output: AgentOutput::structured_schema(serde_json::json!({ "type": "object" }))
+                .expect("structured output"),
             metadata: Some(serde_json::json!({ "request": "native" })),
+            idempotency_key: String::new(),
             model_options: Some(serde_json::json!({ "temperature": 0 })),
-            ..Default::default()
+            timeout_seconds: 0,
         })
         .await
         .expect("create turn");
@@ -786,8 +802,14 @@ async fn agent_create_turn_accepts_native_values() {
         .expect("tool ref run_as_external_identity");
     assert_eq!(external_identity.r#type, "github_app_installation");
     assert_eq!(external_identity.id, "repo:valon/toolshed");
+    let output = request.output.as_ref().expect("output");
+    let generated::v1::agent_output::Kind::Structured(output) =
+        output.kind.as_ref().expect("output kind")
+    else {
+        panic!("output = {output:?}, want structured");
+    };
     assert_eq!(
-        support_protocol::json_from_struct(request.response_schema.as_ref().unwrap()),
+        support_protocol::json_from_struct(output.schema.as_ref().unwrap()),
         serde_json::json!({ "type": "object" })
     );
     assert_eq!(

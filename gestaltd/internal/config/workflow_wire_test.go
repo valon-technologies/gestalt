@@ -7,7 +7,7 @@ func TestWorkflowTargetToCoreClonesMutableMaps(t *testing.T) {
 
 	stepMetadata := map[string]any{"step": "original"}
 	messageMetadata := map[string]any{"message": "original"}
-	responseSchema := map[string]any{"schema": "original"}
+	schema := map[string]any{"schema": "original"}
 	modelOptions := map[string]any{"option": "original"}
 
 	target := WorkflowTargetToCore(&WorkflowTargetConfig{
@@ -19,15 +19,17 @@ func TestWorkflowTargetToCoreClonesMutableMaps(t *testing.T) {
 					Role:     "user",
 					Metadata: messageMetadata,
 				}},
-				ResponseSchema: responseSchema,
-				ModelOptions:   modelOptions,
+				Output: &WorkflowAgentOutputConfig{
+					Structured: &WorkflowAgentStructuredOutputConfig{Schema: schema},
+				},
+				ModelOptions: modelOptions,
 			},
 		}},
 	})
 
 	target.Steps[0].Metadata["step"] = "mutated"
 	target.Steps[0].Agent.Messages[0].Metadata["message"] = "mutated"
-	target.Steps[0].Agent.ResponseSchema["schema"] = "mutated"
+	target.Steps[0].Agent.Output.Structured.Schema["schema"] = "mutated"
 	target.Steps[0].Agent.ModelOptions["option"] = "mutated"
 
 	if stepMetadata["step"] != "original" {
@@ -36,8 +38,8 @@ func TestWorkflowTargetToCoreClonesMutableMaps(t *testing.T) {
 	if messageMetadata["message"] != "original" {
 		t.Fatalf("message metadata shares map with core target: %v", messageMetadata)
 	}
-	if responseSchema["schema"] != "original" {
-		t.Fatalf("response schema shares map with core target: %v", responseSchema)
+	if schema["schema"] != "original" {
+		t.Fatalf("response schema shares map with core target: %v", schema)
 	}
 	if modelOptions["option"] != "original" {
 		t.Fatalf("model options shares map with core target: %v", modelOptions)

@@ -43,7 +43,7 @@ message WorkflowStepAgentTurn {
   WorkflowText prompt = 4;
   repeated WorkflowAgentMessage messages = 5;
   repeated AgentToolRef tools = 6;
-  google.protobuf.Struct response_schema = 7;
+  AgentOutput output = 7;
   google.protobuf.Struct model_options = 8;
 }
 

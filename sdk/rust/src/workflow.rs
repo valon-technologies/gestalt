@@ -8,7 +8,8 @@ use tonic::codegen::async_trait;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::agent::{
-    AgentToolRef, agent_tool_ref_from_proto, agent_tool_ref_to_proto, new_agent_tool_ref,
+    AgentOutput, AgentToolRef, agent_output_from_proto, agent_output_to_proto,
+    agent_tool_ref_from_proto, agent_tool_ref_to_proto, new_agent_tool_ref,
 };
 use crate::api::RuntimeMetadata;
 use crate::error::Result as ProviderResult;
@@ -101,7 +102,7 @@ pub struct WorkflowStepAppCall {
     pub credential_mode: String,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct WorkflowStepAgentTurn {
     pub provider: String,
     pub model: String,
@@ -109,7 +110,7 @@ pub struct WorkflowStepAgentTurn {
     pub prompt: Option<WorkflowText>,
     pub messages: Vec<WorkflowAgentMessage>,
     pub tools: Vec<AgentToolRef>,
-    pub response_schema: Option<WorkflowJson>,
+    pub output: AgentOutput,
     pub model_options: Option<WorkflowJson>,
 }
 
@@ -367,9 +368,15 @@ impl WorkflowValue {
 }
 
 impl WorkflowStepAgentTurn {
-    /// Sets the response schema from any JSON-object-like serializable value.
-    pub fn with_response_schema<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
-        self.response_schema = Some(protocol::json_from_serializable(value)?);
+    /// Requests an unstructured text agent turn.
+    pub fn with_text_output(mut self) -> Self {
+        self.output = AgentOutput::text();
+        self
+    }
+
+    /// Requests a structured agent turn with the supplied JSON Schema object.
+    pub fn with_structured_output_schema<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
+        self.output = AgentOutput::structured_schema(value)?;
         Ok(self)
     }
 
@@ -797,7 +804,7 @@ pub fn new_workflow_step_agent_turn(
             .map(new_workflow_agent_message)
             .collect(),
         tools: input.tools.into_iter().map(new_agent_tool_ref).collect(),
-        response_schema: input.response_schema,
+        output: input.output,
         model_options: input.model_options,
     })
 }
@@ -827,10 +834,7 @@ fn workflow_step_agent_turn_to_proto(
             .into_iter()
             .map(agent_tool_ref_to_proto)
             .collect(),
-        response_schema: input
-            .response_schema
-            .map(protocol::struct_from_json)
-            .transpose()?,
+        output: agent_output_to_proto(Some(input.output))?,
         model_options: input
             .model_options
             .map(protocol::struct_from_json)
@@ -838,8 +842,10 @@ fn workflow_step_agent_turn_to_proto(
     })
 }
 
-fn workflow_step_agent_turn_from_proto(input: pb::WorkflowStepAgentTurn) -> WorkflowStepAgentTurn {
-    WorkflowStepAgentTurn {
+fn workflow_step_agent_turn_from_proto(
+    input: pb::WorkflowStepAgentTurn,
+) -> ProviderResult<WorkflowStepAgentTurn> {
+    Ok(WorkflowStepAgentTurn {
         provider: input.provider,
         model: input.model,
         session_key: input.session_key,
@@ -854,12 +860,10 @@ fn workflow_step_agent_turn_from_proto(input: pb::WorkflowStepAgentTurn) -> Work
             .into_iter()
             .map(agent_tool_ref_from_proto)
             .collect(),
-        response_schema: input
-            .response_schema
-            .as_ref()
-            .map(protocol::json_from_struct),
+        output: agent_output_from_proto(input.output)?
+            .ok_or_else(|| crate::Error::bad_request("workflow agent output is required"))?,
         model_options: input.model_options.as_ref().map(protocol::json_from_struct),
-    }
+    })
 }
 
 /// Creates a workflow step condition.
@@ -943,7 +947,7 @@ fn workflow_step_from_proto(input: pb::WorkflowStep) -> ProviderResult<WorkflowS
             WorkflowStepAction::App(workflow_step_app_call_from_proto(value)?)
         }
         Some(Action::Agent(value)) => {
-            WorkflowStepAction::Agent(workflow_step_agent_turn_from_proto(value))
+            WorkflowStepAction::Agent(workflow_step_agent_turn_from_proto(value)?)
         }
     };
     Ok(WorkflowStep {

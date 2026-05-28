@@ -298,13 +298,13 @@ impl AgentUiState {
 
     pub(super) fn finish_turn(&mut self, turn: &AgentTurnInfo) {
         let terminal = is_terminal_turn_status(turn.status.as_str());
+        let output_text = turn.output_text();
         match turn.status.as_str() {
-            "succeeded" if !turn.output_text.is_empty() => {
+            "succeeded" if !output_text.is_empty() => {
                 if !self.assistant_buffer.is_empty() {
-                    let output_text = turn.output_text.clone();
-                    self.complete_assistant(&output_text);
+                    self.complete_assistant(output_text);
                 } else if !self.saw_assistant_output {
-                    self.push_assistant(turn.output_text.clone());
+                    self.push_assistant(output_text.to_string());
                 }
             }
             "failed" if !turn.status_message.is_empty() => {
@@ -320,7 +320,7 @@ impl AgentUiState {
             self.finish_running_tool_activities(&format!("turn {}", turn.status));
         }
         if !self.saw_structured_output
-            && let Some(structured_output) = turn.structured_output.as_ref()
+            && let Some(structured_output) = turn.structured_output()
             && let Ok(text) = pretty_json(structured_output)
             && terminal
         {

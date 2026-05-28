@@ -498,7 +498,11 @@ func cloneWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
 			agent := *step.Agent
 			agent.Messages = slices.Clone(agent.Messages)
 			agent.ToolRefs = slices.Clone(agent.ToolRefs)
-			agent.ResponseSchema = cloneMap(agent.ResponseSchema)
+			if agent.Output.Structured != nil {
+				structured := *agent.Output.Structured
+				structured.Schema = cloneMap(structured.Schema)
+				agent.Output.Structured = &structured
+			}
 			agent.ModelOptions = cloneMap(agent.ModelOptions)
 			step.Agent = &agent
 		}
@@ -868,7 +872,7 @@ func TestWorkflowScheduleAgentStepCreateAndList(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"steps":[{"id":"agent","agent":{"provider":"managed","model":"deep","prompt":"Send the status summary","tools":[{"app":"roadmap","operation":"sync"}]},"timeoutSeconds":90},{"id":"reply","app":{"name":"roadmap","operation":"sync","input":{"object":{"format":{"literal":"plain"},"text":{"stepOutput":{"stepId":"agent","path":"agent.text"}},"ref":{"signalPayload":"reply_ref"}}}}}]}}`)
+	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"steps":[{"id":"agent","agent":{"provider":"managed","model":"deep","prompt":"Send the status summary","output":{"text":{}},"tools":[{"app":"roadmap","operation":"sync"}]},"timeoutSeconds":90},{"id":"reply","app":{"name":"roadmap","operation":"sync","input":{"object":{"format":{"literal":"plain"},"text":{"stepOutput":{"stepId":"agent","path":"agent.output.text.text"}},"ref":{"signalPayload":"reply_ref"}}}}}]}}`)
 	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", createBody)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -974,7 +978,7 @@ func TestWorkflowScheduleAgentStepPreservesWorkflowSystemToolRefs(t *testing.T) 
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"steps":[{"id":"agent","agent":{"provider":"managed","model":"deep","prompt":"Manage schedules","tools":[{"system":"workflow","operation":"schedules.list"},{"app":"roadmap","operation":"sync"}]}}]}}`)
+	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"steps":[{"id":"agent","agent":{"provider":"managed","model":"deep","prompt":"Manage schedules","output":{"text":{}},"tools":[{"system":"workflow","operation":"schedules.list"},{"app":"roadmap","operation":"sync"}]}}]}}`)
 	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", createBody)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -2304,7 +2308,7 @@ func TestWorkflowEventTriggerAgentThenAppStepsCreateAndList(t *testing.T) {
 	createReq, _ := http.NewRequest(
 		http.MethodPost,
 		ts.URL+"/api/v1/workflow/event-triggers/",
-		bytes.NewBufferString(`{"provider":"basic","match":{"type":"slack.message.created","source":"slack","subject":"thread"},"target":{"steps":[{"id":"agent","agent":{"provider":"managed","model":"deep","prompt":"Reply to the Slack thread"}},{"id":"reply","app":{"name":"roadmap","operation":"sync","input":{"object":{"format":{"literal":"final"},"text":{"stepOutput":{"stepId":"agent","path":"agent.text"}},"thread_ts":{"signalPayload":"extensions.slack_thread_ts"}}}}}]}}`),
+		bytes.NewBufferString(`{"provider":"basic","match":{"type":"slack.message.created","source":"slack","subject":"thread"},"target":{"steps":[{"id":"agent","agent":{"provider":"managed","model":"deep","prompt":"Reply to the Slack thread","output":{"text":{}}}},{"id":"reply","app":{"name":"roadmap","operation":"sync","input":{"object":{"format":{"literal":"final"},"text":{"stepOutput":{"stepId":"agent","path":"agent.output.text.text"}},"thread_ts":{"signalPayload":"extensions.slack_thread_ts"}}}}}]}}`),
 	)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})

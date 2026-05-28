@@ -214,21 +214,63 @@ func agentTurnFromProto(turn *proto.AgentTurn) (*coreagent.Turn, error) {
 		return nil, err
 	}
 	return &coreagent.Turn{
-		ID:               turn.GetId(),
-		SessionID:        turn.GetSessionId(),
-		ProviderName:     turn.GetProviderName(),
-		Model:            turn.GetModel(),
-		Status:           status,
-		Messages:         agentMessagesFromProto(turn.GetMessages()),
-		OutputText:       turn.GetOutputText(),
-		StructuredOutput: mapFromStruct(turn.GetStructuredOutput()),
-		StatusMessage:    turn.GetStatusMessage(),
-		CreatedBy:        agentActorFromProto(turn.GetCreatedBy()),
-		CreatedAt:        timeFromProto(turn.GetCreatedAt()),
-		StartedAt:        timeFromProto(turn.GetStartedAt()),
-		CompletedAt:      timeFromProto(turn.GetCompletedAt()),
-		ExecutionRef:     turn.GetExecutionRef(),
+		ID:            turn.GetId(),
+		SessionID:     turn.GetSessionId(),
+		ProviderName:  turn.GetProviderName(),
+		Model:         turn.GetModel(),
+		Status:        status,
+		Messages:      agentMessagesFromProto(turn.GetMessages()),
+		Output:        agentTurnOutputFromProto(turn),
+		StatusMessage: turn.GetStatusMessage(),
+		CreatedBy:     agentActorFromProto(turn.GetCreatedBy()),
+		CreatedAt:     timeFromProto(turn.GetCreatedAt()),
+		StartedAt:     timeFromProto(turn.GetStartedAt()),
+		CompletedAt:   timeFromProto(turn.GetCompletedAt()),
+		ExecutionRef:  turn.GetExecutionRef(),
 	}, nil
+}
+
+func setAgentTurnOutputProto(turn *proto.AgentTurn, output coreagent.TurnOutput) error {
+	if turn == nil {
+		return nil
+	}
+	textSet := output.Text != nil
+	structuredSet := output.Structured != nil
+	if textSet && structuredSet {
+		return fmt.Errorf("exactly one of output.text or output.structured is required")
+	}
+	if output.Structured != nil {
+		value, err := structFromMap(output.Structured.Value)
+		if err != nil {
+			return err
+		}
+		turn.Output = &proto.AgentTurn_Structured{
+			Structured: &proto.AgentTurnStructuredOutput{Text: output.Structured.Text, Value: value},
+		}
+		return nil
+	}
+	if output.Text != nil {
+		turn.Output = &proto.AgentTurn_Text{Text: &proto.AgentTurnTextOutput{Text: output.Text.Text}}
+	}
+	return nil
+}
+
+func agentTurnOutputFromProto(turn *proto.AgentTurn) coreagent.TurnOutput {
+	if turn == nil {
+		return coreagent.TurnOutput{}
+	}
+	if structured := turn.GetStructured(); structured != nil {
+		return coreagent.TurnOutput{
+			Structured: &coreagent.TurnStructuredOutput{
+				Text:  structured.GetText(),
+				Value: mapFromStruct(structured.GetValue()),
+			},
+		}
+	}
+	if text := turn.GetText(); text != nil {
+		return coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: text.GetText()}}
+	}
+	return coreagent.TurnOutput{}
 }
 
 func agentTurnEventFromProto(event *proto.AgentTurnEvent) *coreagent.TurnEvent {
@@ -341,26 +383,24 @@ func agentTurnToProto(turn *coreagent.Turn) (*proto.AgentTurn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("agent turn messages: %w", err)
 	}
-	structuredOutput, err := structFromMap(turn.StructuredOutput)
-	if err != nil {
-		return nil, fmt.Errorf("agent turn structured output: %w", err)
+	out := &proto.AgentTurn{
+		Id:            turn.ID,
+		SessionId:     turn.SessionID,
+		ProviderName:  turn.ProviderName,
+		Model:         turn.Model,
+		Status:        agentExecutionStatusToProto(turn.Status),
+		Messages:      messages,
+		StatusMessage: turn.StatusMessage,
+		CreatedBy:     agentActorToProto(turn.CreatedBy),
+		CreatedAt:     timeToProto(turn.CreatedAt),
+		StartedAt:     timeToProto(turn.StartedAt),
+		CompletedAt:   timeToProto(turn.CompletedAt),
+		ExecutionRef:  turn.ExecutionRef,
 	}
-	return &proto.AgentTurn{
-		Id:               turn.ID,
-		SessionId:        turn.SessionID,
-		ProviderName:     turn.ProviderName,
-		Model:            turn.Model,
-		Status:           agentExecutionStatusToProto(turn.Status),
-		Messages:         messages,
-		OutputText:       turn.OutputText,
-		StructuredOutput: structuredOutput,
-		StatusMessage:    turn.StatusMessage,
-		CreatedBy:        agentActorToProto(turn.CreatedBy),
-		CreatedAt:        timeToProto(turn.CreatedAt),
-		StartedAt:        timeToProto(turn.StartedAt),
-		CompletedAt:      timeToProto(turn.CompletedAt),
-		ExecutionRef:     turn.ExecutionRef,
-	}, nil
+	if err := setAgentTurnOutputProto(out, turn.Output); err != nil {
+		return nil, fmt.Errorf("agent turn output: %w", err)
+	}
+	return out, nil
 }
 
 func turnEventsToProto(values []*coreagent.TurnEvent) []*proto.AgentTurnEvent {
@@ -405,7 +445,6 @@ func agentProviderCapabilitiesFromProto(value *proto.AgentProviderCapabilities) 
 		StreamingText:             value.GetStreamingText(),
 		ToolCalls:                 value.GetToolCalls(),
 		ParallelToolCalls:         value.GetParallelToolCalls(),
-		StructuredOutput:          value.GetStructuredOutput(),
 		Interactions:              value.GetInteractions(),
 		ResumableTurns:            value.GetResumableTurns(),
 		ReasoningSummaries:        value.GetReasoningSummaries(),

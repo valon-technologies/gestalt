@@ -227,7 +227,7 @@ gestalt agent turns cancel <turn-id> --reason "operator requested"
 gestalt agent turns events list <turn-id> --after 0 --limit 100
 gestalt agent turns events stream <turn-id> --after 100
 
-# advanced fields such as responseSchema, metadata, or modelOptions
+# advanced fields such as structured output, metadata, or modelOptions
 # go through --input, which also accepts "-" for stdin:
 cat <<'JSON' | gestalt --format json agent turns create session-1 --input -
 {
@@ -236,14 +236,18 @@ cat <<'JSON' | gestalt --format json agent turns create session-1 --input -
     {"role": "user", "text": "Summarize the roadmap risk."}
   ],
   "toolRefs": [
-    {"appName": "roadmap", "operation": "sync"}
+    {"app": "roadmap", "operation": "sync"}
   ],
-  "responseSchema": {
-    "type": "object",
-    "properties": {
-      "summary": {"type": "string"}
-    },
-    "required": ["summary"]
+  "output": {
+    "structured": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "summary": {"type": "string"}
+        },
+        "required": ["summary"]
+      }
+    }
   }
 }
 JSON

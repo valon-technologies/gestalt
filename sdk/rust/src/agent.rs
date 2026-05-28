@@ -504,7 +504,6 @@ pub struct AgentProviderCapabilities {
     pub streaming_text: bool,
     pub tool_calls: bool,
     pub parallel_tool_calls: bool,
-    pub structured_output: bool,
     pub interactions: bool,
     pub resumable_turns: bool,
     pub reasoning_summaries: bool,
@@ -618,14 +617,30 @@ pub struct AgentTurn {
     pub model: String,
     pub status: AgentExecutionStatus,
     pub messages: Vec<AgentMessage>,
-    pub output_text: String,
-    pub structured_output: Option<AgentJson>,
+    pub output: Option<AgentTurnOutput>,
     pub status_message: String,
     pub created_by: Option<AgentActor>,
     pub created_at: Option<SystemTime>,
     pub started_at: Option<SystemTime>,
     pub completed_at: Option<SystemTime>,
     pub execution_ref: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AgentTurnOutput {
+    Text(AgentTurnTextOutput),
+    Structured(AgentTurnStructuredOutput),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AgentTurnTextOutput {
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AgentTurnStructuredOutput {
+    pub text: String,
+    pub value: Option<AgentJson>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -644,7 +659,7 @@ pub struct AgentTurnDisplay {
     pub language: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CreateAgentProviderTurnRequest {
     pub turn_id: String,
     pub session_id: String,
@@ -652,7 +667,7 @@ pub struct CreateAgentProviderTurnRequest {
     pub model: String,
     pub messages: Vec<AgentMessage>,
     pub tools: Vec<ResolvedAgentTool>,
-    pub response_schema: Option<AgentJson>,
+    pub output: AgentOutput,
     pub metadata: Option<AgentJson>,
     pub created_by: Option<AgentActor>,
     pub execution_ref: String,
@@ -662,6 +677,34 @@ pub struct CreateAgentProviderTurnRequest {
     pub model_options: Option<AgentJson>,
     pub run_grant: String,
     pub timeout_seconds: i32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AgentOutput {
+    Text(AgentTextOutput),
+    Structured(AgentStructuredOutput),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AgentTextOutput {}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentStructuredOutput {
+    pub schema: AgentJson,
+}
+
+impl AgentOutput {
+    /// Requests an unstructured text turn.
+    pub fn text() -> Self {
+        Self::Text(AgentTextOutput {})
+    }
+
+    /// Requests a structured turn with the supplied JSON Schema object.
+    pub fn structured_schema<T: Serialize>(schema: T) -> ProviderResult<Self> {
+        Ok(Self::Structured(AgentStructuredOutput {
+            schema: protocol::json_from_serializable(schema)?,
+        }))
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1437,8 +1480,7 @@ fn turn_to_proto(value: AgentTurn) -> ProviderResult<pb::AgentTurn> {
             .into_iter()
             .map(message_to_proto)
             .collect::<ProviderResult<Vec<_>>>()?,
-        output_text: value.output_text,
-        structured_output: struct_from_json(value.structured_output)?,
+        output: agent_turn_output_to_proto(value.output)?,
         status_message: value.status_message,
         created_by: agent_actor_to_proto(value.created_by),
         created_at: timestamp_from_time(value.created_at),
@@ -1456,8 +1498,7 @@ pub(crate) fn turn_from_proto(value: pb::AgentTurn) -> ProviderResult<AgentTurn>
         model: value.model,
         status: AgentExecutionStatus::try_from(value.status)?,
         messages: value.messages.into_iter().map(message_from_proto).collect(),
-        output_text: value.output_text,
-        structured_output: json_from_struct(value.structured_output),
+        output: agent_turn_output_from_proto(value.output)?,
         status_message: value.status_message,
         created_by: agent_actor_from_proto(value.created_by),
         created_at: time_from_timestamp(value.created_at)?,
@@ -1482,6 +1523,81 @@ fn display_to_proto(value: AgentTurnDisplay) -> pb::AgentTurnDisplay {
         format: value.format,
         language: value.language,
     }
+}
+
+fn agent_turn_output_to_proto(
+    value: Option<AgentTurnOutput>,
+) -> ProviderResult<Option<pb::agent_turn::Output>> {
+    match value {
+        Some(AgentTurnOutput::Text(output)) => Ok(Some(pb::agent_turn::Output::Text(
+            pb::AgentTurnTextOutput { text: output.text },
+        ))),
+        Some(AgentTurnOutput::Structured(output)) => Ok(Some(pb::agent_turn::Output::Structured(
+            pb::AgentTurnStructuredOutput {
+                text: output.text,
+                value: struct_from_json(output.value)?,
+            },
+        ))),
+        None => Ok(None),
+    }
+}
+
+fn agent_turn_output_from_proto(
+    value: Option<pb::agent_turn::Output>,
+) -> ProviderResult<Option<AgentTurnOutput>> {
+    match value {
+        Some(pb::agent_turn::Output::Text(output)) => {
+            Ok(Some(AgentTurnOutput::Text(AgentTurnTextOutput {
+                text: output.text,
+            })))
+        }
+        Some(pb::agent_turn::Output::Structured(output)) => Ok(Some(AgentTurnOutput::Structured(
+            AgentTurnStructuredOutput {
+                text: output.text,
+                value: json_from_struct(output.value),
+            },
+        ))),
+        None => Ok(None),
+    }
+}
+
+pub(crate) fn agent_output_to_proto(
+    value: Option<AgentOutput>,
+) -> ProviderResult<Option<pb::AgentOutput>> {
+    match value {
+        Some(AgentOutput::Text(_)) => Ok(Some(pb::AgentOutput {
+            kind: Some(pb::agent_output::Kind::Text(pb::AgentTextOutput {})),
+        })),
+        Some(AgentOutput::Structured(output)) => Ok(Some(pb::AgentOutput {
+            kind: Some(pb::agent_output::Kind::Structured(
+                pb::AgentStructuredOutput {
+                    schema: Some(protocol::struct_from_json(output.schema)?),
+                },
+            )),
+        })),
+        None => Ok(None),
+    }
+}
+
+pub(crate) fn agent_output_from_proto(
+    value: Option<pb::AgentOutput>,
+) -> ProviderResult<Option<AgentOutput>> {
+    match value.and_then(|output| output.kind) {
+        Some(pb::agent_output::Kind::Text(_)) => Ok(Some(AgentOutput::Text(AgentTextOutput {}))),
+        Some(pb::agent_output::Kind::Structured(output)) => {
+            let schema = json_from_struct(output.schema)
+                .ok_or_else(|| crate::Error::bad_request("output.structured.schema is required"))?;
+            Ok(Some(AgentOutput::Structured(AgentStructuredOutput {
+                schema,
+            })))
+        }
+        None => Ok(None),
+    }
+}
+
+fn required_agent_output_from_proto(value: Option<pb::AgentOutput>) -> ProviderResult<AgentOutput> {
+    agent_output_from_proto(value)?
+        .ok_or_else(|| crate::Error::bad_request("create turn output is required"))
 }
 
 fn event_to_proto(value: AgentTurnEvent) -> ProviderResult<pb::AgentTurnEvent> {
@@ -1566,7 +1682,6 @@ fn capabilities_to_proto(value: AgentProviderCapabilities) -> pb::AgentProviderC
         streaming_text: value.streaming_text,
         tool_calls: value.tool_calls,
         parallel_tool_calls: value.parallel_tool_calls,
-        structured_output: value.structured_output,
         interactions: value.interactions,
         resumable_turns: value.resumable_turns,
         reasoning_summaries: value.reasoning_summaries,
@@ -1621,8 +1736,8 @@ fn create_session_request_from_proto(
 
 fn create_turn_request_from_proto(
     value: pb::CreateAgentProviderTurnRequest,
-) -> CreateAgentProviderTurnRequest {
-    CreateAgentProviderTurnRequest {
+) -> ProviderResult<CreateAgentProviderTurnRequest> {
+    Ok(CreateAgentProviderTurnRequest {
         turn_id: value.turn_id,
         session_id: value.session_id,
         idempotency_key: value.idempotency_key,
@@ -1638,7 +1753,7 @@ fn create_turn_request_from_proto(
                 parameters_schema: json_from_struct(tool.parameters_schema),
             })
             .collect(),
-        response_schema: json_from_struct(value.response_schema),
+        output: required_agent_output_from_proto(value.output)?,
         metadata: json_from_struct(value.metadata),
         created_by: agent_actor_from_proto(value.created_by),
         execution_ref: value.execution_ref,
@@ -1652,7 +1767,7 @@ fn create_turn_request_from_proto(
         model_options: json_from_struct(value.model_options),
         run_grant: value.run_grant,
         timeout_seconds: value.timeout_seconds,
-    }
+    })
 }
 
 fn execute_tool_response_from_proto(
@@ -1981,7 +2096,10 @@ where
     ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
         let turn = self
             .provider
-            .create_turn(create_turn_request_from_proto(request.into_inner()))
+            .create_turn(
+                create_turn_request_from_proto(request.into_inner())
+                    .map_err(|error| rpc_status("agent create turn", error))?,
+            )
             .await
             .map_err(|error| rpc_status("agent create turn", error))?;
         Ok(GrpcResponse::new(

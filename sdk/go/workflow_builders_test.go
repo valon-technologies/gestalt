@@ -192,9 +192,11 @@ func TestBoundWorkflowTargetAgentStepCopiesNativeFields(t *testing.T) {
 						Role: "system",
 						Text: WorkflowText{Template: "brief"},
 					}},
-					Tools:          []AgentToolRef{{App: "datadog", Operation: "queryLogs"}},
-					ResponseSchema: map[string]any{"type": "object"},
-					ModelOptions:   map[string]any{"temperature": 0},
+					Tools: []AgentToolRef{{App: "datadog", Operation: "queryLogs"}},
+					Output: AgentOutput{
+						Structured: &AgentStructuredOutput{Schema: map[string]any{"type": "object"}},
+					},
+					ModelOptions: map[string]any{"temperature": 0},
 				},
 				TimeoutSeconds: 45,
 				Metadata:       map[string]any{"kind": "diagnosis"},
@@ -205,13 +207,14 @@ func TestBoundWorkflowTargetAgentStepCopiesNativeFields(t *testing.T) {
 					Provider: "agent",
 					Model:    "gpt-5.5",
 					Prompt:   WorkflowText{Template: "Open a PR"},
+					Output:   AgentOutput{Text: &AgentTextOutput{}},
 					Tools:    []AgentToolRef{{App: "github", Operation: "createPullRequest"}},
 				},
 				When: &WorkflowStepWhen{
 					Value: WorkflowValue{
 						StepOutput: &WorkflowStepOutputSource{
 							StepID: "diagnosis",
-							Path:   "agent.structuredOutput.actionableForPr",
+							Path:   "agent.output.structured.value.actionableForPr",
 						},
 					},
 					Equals: true,
@@ -230,7 +233,7 @@ func TestBoundWorkflowTargetAgentStepCopiesNativeFields(t *testing.T) {
 	if agent.GetProvider() != "agent" || agent.GetModel() != "gpt-5.5" {
 		t.Fatalf("agent step = %q/%q, want agent/gpt-5.5", agent.GetProvider(), agent.GetModel())
 	}
-	if got := agent.GetResponseSchema().AsMap()["type"]; got != "object" {
+	if got := agent.GetOutput().GetStructured().GetSchema().AsMap()["type"]; got != "object" {
 		t.Fatalf("response schema type = %#v, want object", got)
 	}
 	if got := agent.GetTools()[0].GetApp(); got != "datadog" {

@@ -127,9 +127,8 @@ class AgentCreateTurn:
     model: str = ""
     messages: Sequence[Any] | None = None
     tool_refs: Sequence[Any] | None = None
-    tool_refs_set: bool = False
     tool_source: int = AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
-    response_schema: Any | None = None
+    output: Any | None = None
     metadata: Any | None = None
     idempotency_key: str = ""
     model_options: Any | None = None
@@ -280,7 +279,6 @@ class AgentProviderCapabilities:
     streaming_text: bool = False
     tool_calls: bool = False
     parallel_tool_calls: bool = False
-    structured_output: bool = False
     interactions: bool = False
     resumable_turns: bool = False
     reasoning_summaries: bool = False
@@ -384,14 +382,46 @@ class AgentTurn:
     model: str = ""
     status: int = AGENT_EXECUTION_STATUS_UNSPECIFIED
     messages: Iterable[AgentMessage | Mapping[str, Any]] = field(default_factory=list)
-    output_text: str = ""
-    structured_output: JsonObjectInput | None = None
+    output: "AgentTurnOutput | Mapping[str, Any] | None" = None
     status_message: str = ""
     created_by: AgentActor | Mapping[str, Any] | None = None
     created_at: TimestampInput = None
     started_at: TimestampInput = None
     completed_at: TimestampInput = None
     execution_ref: str = ""
+
+
+@dataclass(slots=True)
+class AgentTurnTextOutput:
+    text: str = ""
+
+
+@dataclass(slots=True)
+class AgentTurnStructuredOutput:
+    text: str = ""
+    value: JsonObjectInput | None = None
+
+
+@dataclass(slots=True)
+class AgentTurnOutput:
+    text: AgentTurnTextOutput | Mapping[str, Any] | None = None
+    structured: AgentTurnStructuredOutput | Mapping[str, Any] | None = None
+
+
+@dataclass(slots=True)
+class AgentTextOutput:
+    pass
+
+
+@dataclass(slots=True)
+class AgentStructuredOutput:
+    schema: JsonObjectInput
+
+
+@dataclass(slots=True)
+class AgentOutput:
+    text: AgentTextOutput | Mapping[str, Any] | None = None
+    structured: AgentStructuredOutput | Mapping[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -426,7 +456,7 @@ class CreateAgentProviderTurnRequest:
     model: str = ""
     messages: Iterable[AgentMessage] = field(default_factory=list)
     tools: Iterable[ResolvedAgentTool] = field(default_factory=list)
-    response_schema: JsonObject | None = None
+    output: AgentOutput | Mapping[str, Any] | None = None
     metadata: JsonObject | None = None
     created_by: AgentActor | None = None
     execution_ref: str = ""
@@ -683,6 +713,8 @@ def update_agent_provider_session_request_from_proto(
 def create_agent_provider_turn_request_from_proto(
     request: Any,
 ) -> CreateAgentProviderTurnRequest:
+    if not has_field(request, "output"):
+        raise ValueError("create turn output is required")
     return CreateAgentProviderTurnRequest(
         turn_id=request.turn_id,
         session_id=request.session_id,
@@ -690,9 +722,7 @@ def create_agent_provider_turn_request_from_proto(
         model=request.model,
         messages=[agent_message_from_proto(message) for message in request.messages],
         tools=[resolved_agent_tool_from_proto(tool) for tool in request.tools],
-        response_schema=struct_to_dict(request.response_schema)
-        if has_field(request, "response_schema")
-        else None,
+        output=_required_agent_output_from_proto(request.output),
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
         else None,
@@ -830,6 +860,86 @@ def list_agent_provider_sessions_response_to_proto(
     )
 
 
+def _agent_output_from_proto(value: Any) -> AgentOutput | None:
+    kind = value.WhichOneof("kind")
+    if kind == "text":
+        return AgentOutput(text=AgentTextOutput())
+    if kind == "structured":
+        if not has_field(value.structured, "schema"):
+            raise ValueError("output.structured.schema is required")
+        return AgentOutput(
+            structured=AgentStructuredOutput(
+                schema=struct_to_dict(value.structured.schema)
+            )
+        )
+    return None
+
+
+def _required_agent_output_from_proto(value: Any) -> AgentOutput:
+    output = _agent_output_from_proto(value)
+    if output is None:
+        raise ValueError("create turn output is required")
+    return output
+
+
+def _agent_output_to_proto(value: AgentOutput | Mapping[str, Any] | None) -> Any:
+    if value is None:
+        raise ValueError("agent output is required")
+    output = _coerce(value, AgentOutput, "AgentOutput")
+    text_set = output.text is not None
+    structured_set = output.structured is not None
+    if text_set == structured_set:
+        raise ValueError("exactly one of output.text or output.structured is required")
+    if text_set:
+        return pb.AgentOutput(text=pb.AgentTextOutput())
+    structured = _coerce(
+        output.structured, AgentStructuredOutput, "AgentStructuredOutput"
+    )
+    if structured.schema is None:
+        raise ValueError("output.structured.schema is required")
+    proto = pb.AgentOutput(structured=pb.AgentStructuredOutput())
+    proto.structured.schema.CopyFrom(struct_from_dict(structured.schema))
+    return proto
+
+
+def _agent_turn_output_from_proto(value: Any) -> AgentTurnOutput | None:
+    kind = value.WhichOneof("output")
+    if kind == "text":
+        return AgentTurnOutput(text=AgentTurnTextOutput(text=value.text.text))
+    if kind == "structured":
+        return AgentTurnOutput(
+            structured=AgentTurnStructuredOutput(
+                text=value.structured.text,
+                value=struct_to_dict(value.structured.value)
+                if has_field(value.structured, "value")
+                else None,
+            )
+        )
+    return None
+
+
+def _agent_turn_output_to_proto(value: Any | None) -> tuple[str, Any] | None:
+    if value is None:
+        return None
+    output = _coerce(value, AgentTurnOutput, "AgentTurnOutput")
+    text_set = output.text is not None
+    structured_set = output.structured is not None
+    if text_set == structured_set:
+        raise ValueError("exactly one of output.text or output.structured is required")
+    if text_set:
+        text = _coerce(output.text, AgentTurnTextOutput, "AgentTurnTextOutput")
+        return "text", pb.AgentTurnTextOutput(text=text.text)
+    if structured_set:
+        structured = _coerce(
+            output.structured, AgentTurnStructuredOutput, "AgentTurnStructuredOutput"
+        )
+        proto = pb.AgentTurnStructuredOutput(text=structured.text)
+        if structured.value is not None:
+            proto.value.CopyFrom(struct_from_dict(structured.value))
+        return "structured", proto
+    return None
+
+
 def agent_turn_to_proto(value: AgentTurn | Mapping[str, Any]) -> Any:
     turn = _coerce(value, AgentTurn, "AgentTurn")
     out = pb.AgentTurn(
@@ -839,11 +949,13 @@ def agent_turn_to_proto(value: AgentTurn | Mapping[str, Any]) -> Any:
         model=turn.model,
         status=_int_field(turn.status),
         messages=[agent_message_to_proto(message) for message in turn.messages],
-        output_text=turn.output_text,
         status_message=turn.status_message,
         execution_ref=turn.execution_ref,
     )
-    _copy_struct(out, "structured_output", turn.structured_output)
+    output = _agent_turn_output_to_proto(turn.output)
+    if output is not None:
+        field, message = output
+        getattr(out, field).CopyFrom(message)
     _copy_message(out, "created_by", agent_actor_to_proto(turn.created_by))
     _copy_timestamp(out, "created_at", turn.created_at)
     _copy_timestamp(out, "started_at", turn.started_at)
@@ -935,7 +1047,6 @@ def agent_provider_capabilities_to_proto(
         streaming_text=capabilities.streaming_text,
         tool_calls=capabilities.tool_calls,
         parallel_tool_calls=capabilities.parallel_tool_calls,
-        structured_output=capabilities.structured_output,
         interactions=capabilities.interactions,
         resumable_turns=capabilities.resumable_turns,
         reasoning_summaries=capabilities.reasoning_summaries,
@@ -1267,10 +1378,7 @@ def agent_turn_from_proto(value: Any) -> AgentTurn:
         model=value.model,
         status=_int_field(value.status),
         messages=[agent_message_from_proto(message) for message in value.messages],
-        output_text=value.output_text,
-        structured_output=struct_to_dict(value.structured_output)
-        if has_field(value, "structured_output")
-        else None,
+        output=_agent_turn_output_from_proto(value),
         status_message=value.status_message,
         created_by=agent_actor_from_proto(value.created_by)
         if has_field(value, "created_by")
@@ -2063,6 +2171,8 @@ def _agent_update_session_request(
 
 def _agent_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.CreateAgentProviderTurnRequest):
+        if not has_field(value, "output"):
+            raise ValueError("create turn output is required")
         return _copy(value)
     data = _data(value, kwargs)
     request = pb.CreateAgentProviderTurnRequest(
@@ -2072,14 +2182,11 @@ def _agent_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
         tool_refs=[
             _agent_tool_ref_value(item) for item in (data.get("tool_refs") or [])
         ],
-        tool_refs_set=data.get("tool_refs_set", False)
-        or bool(data.get("tool_refs") or []),
         tool_source=data.get("tool_source", AGENT_TOOL_SOURCE_MODE_UNSPECIFIED),
         idempotency_key=data.get("idempotency_key", ""),
         timeout_seconds=data.get("timeout_seconds", 0),
     )
-    if data.get("response_schema") is not None:
-        request.response_schema.CopyFrom(struct_from_dict(data["response_schema"]))
+    request.output.CopyFrom(_agent_output_to_proto(data.get("output")))
     if data.get("metadata") is not None:
         request.metadata.CopyFrom(struct_from_dict(data["metadata"]))
     if data.get("model_options") is not None:

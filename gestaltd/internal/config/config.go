@@ -866,14 +866,25 @@ type WorkflowStepAppCallConfig struct {
 }
 
 type WorkflowStepAgentConfig struct {
-	Provider       string                 `yaml:"provider,omitempty"`
-	Model          string                 `yaml:"model,omitempty"`
-	SessionKey     string                 `yaml:"sessionKey,omitempty"`
-	Prompt         WorkflowTextConfig     `yaml:"prompt,omitempty"`
-	Messages       []WorkflowAgentMessage `yaml:"messages,omitempty"`
-	Tools          []WorkflowAgentToolRef `yaml:"tools,omitempty"`
-	ResponseSchema map[string]any         `yaml:"responseSchema,omitempty"`
-	ModelOptions   map[string]any         `yaml:"modelOptions,omitempty"`
+	Provider     string                     `yaml:"provider,omitempty"`
+	Model        string                     `yaml:"model,omitempty"`
+	SessionKey   string                     `yaml:"sessionKey,omitempty"`
+	Prompt       WorkflowTextConfig         `yaml:"prompt,omitempty"`
+	Messages     []WorkflowAgentMessage     `yaml:"messages,omitempty"`
+	Tools        []WorkflowAgentToolRef     `yaml:"tools,omitempty"`
+	Output       *WorkflowAgentOutputConfig `yaml:"output,omitempty"`
+	ModelOptions map[string]any             `yaml:"modelOptions,omitempty"`
+}
+
+type WorkflowAgentOutputConfig struct {
+	Text       *WorkflowAgentTextOutputConfig       `yaml:"text,omitempty"`
+	Structured *WorkflowAgentStructuredOutputConfig `yaml:"structured,omitempty"`
+}
+
+type WorkflowAgentTextOutputConfig struct{}
+
+type WorkflowAgentStructuredOutputConfig struct {
+	Schema map[string]any `yaml:"schema,omitempty"`
 }
 
 type WorkflowAgentMessage struct {

@@ -71,6 +71,10 @@ func testWorkflowAgentStepTarget(agent coreworkflow.AgentTurn) coreworkflow.Targ
 	}}}
 }
 
+func testWorkflowAgentTextOutput() coreagent.Output {
+	return coreagent.Output{Text: &coreagent.TextOutput{}}
+}
+
 func requireWorkflowAppStep(t *testing.T, target coreworkflow.Target, stepIndex int) *coreworkflow.AppCall {
 	t.Helper()
 	if len(target.Steps) <= stepIndex || target.Steps[stepIndex].App == nil {
@@ -882,6 +886,7 @@ func TestSignalOrStartRunResolvesDeclaredAppCredentialModes(t *testing.T) {
 				Agent: &coreworkflow.AgentTurn{
 					ProviderName: "simple",
 					Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+					Output:       testWorkflowAgentTextOutput(),
 					ToolRefs: []coreagent.ToolRef{
 						{App: "github", Operation: "bot.commitFiles"},
 						{App: "github", Operation: "bot.openPullRequest"},
@@ -980,6 +985,7 @@ func TestSignalOrStartRunRejectsStepWhenMissingEquals(t *testing.T) {
 				Agent: &coreworkflow.AgentTurn{
 					ProviderName: "simple",
 					Prompt:       coreworkflow.Text{Template: "Diagnose the alert."},
+					Output:       testWorkflowAgentTextOutput(),
 				},
 			},
 			{
@@ -987,12 +993,13 @@ func TestSignalOrStartRunRejectsStepWhenMissingEquals(t *testing.T) {
 				Agent: &coreworkflow.AgentTurn{
 					ProviderName: "simple",
 					Prompt:       coreworkflow.Text{Template: "Open a PR."},
+					Output:       testWorkflowAgentTextOutput(),
 				},
 				When: &coreworkflow.StepWhen{
 					Value: coreworkflow.Value{
 						StepOutput: &coreworkflow.StepOutputSource{
 							StepID: "diagnosis",
-							Path:   "structured_output.actionable_for_pr",
+							Path:   "agent.output.structured.value.actionable_for_pr",
 						},
 					},
 				},
@@ -1034,6 +1041,7 @@ func TestSignalOrStartRunRejectsStepWhenMissingValue(t *testing.T) {
 				Agent: &coreworkflow.AgentTurn{
 					ProviderName: "simple",
 					Prompt:       coreworkflow.Text{Template: "Diagnose the alert."},
+					Output:       testWorkflowAgentTextOutput(),
 				},
 			},
 			{
@@ -1041,6 +1049,7 @@ func TestSignalOrStartRunRejectsStepWhenMissingValue(t *testing.T) {
 				Agent: &coreworkflow.AgentTurn{
 					ProviderName: "simple",
 					Prompt:       coreworkflow.Text{Template: "Open a PR."},
+					Output:       testWorkflowAgentTextOutput(),
 				},
 				When: &coreworkflow.StepWhen{
 					Equals:    nil,
@@ -1168,6 +1177,7 @@ func TestSignalOrStartRunRejectsAgentStepWithoutPromptOrMessages(t *testing.T) {
 			ID: "agent",
 			Agent: &coreworkflow.AgentTurn{
 				ProviderName: "simple",
+				Output:       testWorkflowAgentTextOutput(),
 			},
 		}}},
 	})
@@ -1358,6 +1368,7 @@ func TestSignalOrStartRunRejectsDeniedTargetPermissionsBeforeEnqueue(t *testing.
 		Target: testWorkflowAgentStepTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
 			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+			Output:       testWorkflowAgentTextOutput(),
 			ToolRefs: []coreagent.ToolRef{
 				{App: "github", Operation: "bot.admin"},
 			},
@@ -1407,6 +1418,7 @@ func TestSignalOrStartRunRejectsUnauthorizedAgentProvider(t *testing.T) {
 		Target: testWorkflowAgentStepTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
 			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+			Output:       testWorkflowAgentTextOutput(),
 		}),
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	})
@@ -1458,6 +1470,7 @@ func TestSignalOrStartRunRejectsRuntimeDeniedAgentProvider(t *testing.T) {
 		Target: testWorkflowAgentStepTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
 			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+			Output:       testWorkflowAgentTextOutput(),
 		}),
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	})
@@ -1481,6 +1494,7 @@ func TestSignalRunUsesCurrentPrincipalForTargetValidation(t *testing.T) {
 	target := testWorkflowAgentStepTarget(coreworkflow.AgentTurn{
 		ProviderName: "simple",
 		Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+		Output:       testWorkflowAgentTextOutput(),
 		ToolRefs: []coreagent.ToolRef{
 			{App: "github", Operation: "bot.openPullRequest"},
 		},
@@ -1534,7 +1548,7 @@ func TestCreateScheduleIdempotencyKeyIsScopedByCallerApp(t *testing.T) {
 		ProviderName:   "local",
 		Cron:           "*/5 * * * *",
 		Timezone:       "UTC",
-		Target:         testWorkflowAgentStepTarget(coreworkflow.AgentTurn{ProviderName: "simple", Prompt: coreworkflow.Text{Template: "Sync roadmap."}}),
+		Target:         testWorkflowAgentStepTarget(coreworkflow.AgentTurn{ProviderName: "simple", Prompt: coreworkflow.Text{Template: "Sync roadmap."}, Output: testWorkflowAgentTextOutput()}),
 		IdempotencyKey: "same-operation-key",
 	}
 

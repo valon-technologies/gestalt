@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
@@ -150,23 +151,23 @@ func workflowStepAgentTurnToProto(target *coreworkflow.AgentTurn) (*proto.Workfl
 	if err != nil {
 		return nil, err
 	}
-	responseSchema, err := structFromMap(target.ResponseSchema)
+	output, err := workflowAgentOutputToProto(target.Output)
 	if err != nil {
-		return nil, fmt.Errorf("response_schema: %w", err)
+		return nil, fmt.Errorf("output: %w", err)
 	}
 	modelOptions, err := structFromMap(target.ModelOptions)
 	if err != nil {
 		return nil, fmt.Errorf("model_options: %w", err)
 	}
 	return &proto.WorkflowStepAgentTurn{
-		Provider:       target.ProviderName,
-		Model:          target.Model,
-		SessionKey:     target.SessionKey,
-		Prompt:         workflowTextToProto(target.Prompt),
-		Messages:       messages,
-		Tools:          agentwire.ToolRefsToProto(target.ToolRefs),
-		ResponseSchema: responseSchema,
-		ModelOptions:   modelOptions,
+		Provider:     target.ProviderName,
+		Model:        target.Model,
+		SessionKey:   target.SessionKey,
+		Prompt:       workflowTextToProto(target.Prompt),
+		Messages:     messages,
+		Tools:        agentwire.ToolRefsToProto(target.ToolRefs),
+		Output:       output,
+		ModelOptions: modelOptions,
 	}, nil
 }
 
@@ -175,15 +176,53 @@ func workflowStepAgentTurnFromProto(target *proto.WorkflowStepAgentTurn) *corewo
 		return nil
 	}
 	return &coreworkflow.AgentTurn{
-		ProviderName:   strings.TrimSpace(target.GetProvider()),
-		Model:          strings.TrimSpace(target.GetModel()),
-		SessionKey:     strings.TrimSpace(target.GetSessionKey()),
-		Prompt:         workflowTextFromProto(target.GetPrompt()),
-		Messages:       workflowAgentMessagesFromProto(target.GetMessages()),
-		ToolRefs:       agentwire.ToolRefsFromProto(target.GetTools()),
-		ResponseSchema: mapFromStruct(target.GetResponseSchema()),
-		ModelOptions:   mapFromStruct(target.GetModelOptions()),
+		ProviderName: strings.TrimSpace(target.GetProvider()),
+		Model:        strings.TrimSpace(target.GetModel()),
+		SessionKey:   strings.TrimSpace(target.GetSessionKey()),
+		Prompt:       workflowTextFromProto(target.GetPrompt()),
+		Messages:     workflowAgentMessagesFromProto(target.GetMessages()),
+		ToolRefs:     agentwire.ToolRefsFromProto(target.GetTools()),
+		Output:       workflowAgentOutputFromProto(target.GetOutput()),
+		ModelOptions: mapFromStruct(target.GetModelOptions()),
 	}
+}
+
+func workflowAgentOutputToProto(output coreagent.Output) (*proto.AgentOutput, error) {
+	textSet := output.Text != nil
+	structuredSet := output.Structured != nil
+	if textSet == structuredSet {
+		return nil, fmt.Errorf("exactly one of output.text or output.structured is required")
+	}
+	if output.Structured != nil {
+		schema, err := structFromMap(output.Structured.Schema)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.AgentOutput{
+			Kind: &proto.AgentOutput_Structured{
+				Structured: &proto.AgentStructuredOutput{Schema: schema},
+			},
+		}, nil
+	}
+	if output.Text != nil {
+		return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}, nil
+	}
+	return nil, fmt.Errorf("exactly one of output.text or output.structured is required")
+}
+
+func workflowAgentOutputFromProto(output *proto.AgentOutput) coreagent.Output {
+	if output == nil {
+		return coreagent.Output{}
+	}
+	if structured := output.GetStructured(); structured != nil {
+		return coreagent.Output{
+			Structured: &coreagent.StructuredOutput{Schema: mapFromStruct(structured.GetSchema())},
+		}
+	}
+	if output.GetText() != nil {
+		return coreagent.Output{Text: &coreagent.TextOutput{}}
+	}
+	return coreagent.Output{}
 }
 
 func workflowAgentMessagesToProto(messages []coreworkflow.AgentMessage) ([]*proto.WorkflowAgentMessage, error) {

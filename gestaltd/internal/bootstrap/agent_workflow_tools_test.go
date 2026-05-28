@@ -312,6 +312,7 @@ func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Diagnose the Datadog alert.",
+					"output":   map[string]any{"text": map[string]any{}},
 					"tools": []any{
 						map[string]any{"app": "datadog", "operation": "queryLogs"},
 					},
@@ -391,6 +392,37 @@ func TestWorkflowSystemToolStartRunSchemaMatchesV1Contract(t *testing.T) {
 	if _, ok := targetTargetProps["steps"]; !ok {
 		t.Fatalf("runs.start target schema missing steps: %#v", targetTargetProps)
 	}
+	steps, ok := targetTargetProps["steps"].(map[string]any)
+	if !ok {
+		t.Fatalf("runs.start steps schema = %#v", targetTargetProps["steps"])
+	}
+	items, ok := steps["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("runs.start step item schema = %#v", steps["items"])
+	}
+	stepProps, ok := items["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("runs.start step properties = %#v", items["properties"])
+	}
+	agent, ok := stepProps["agent"].(map[string]any)
+	if !ok {
+		t.Fatalf("runs.start step agent schema = %#v", stepProps["agent"])
+	}
+	agentRequired, ok := agent["required"].([]string)
+	if !ok || len(agentRequired) != 1 || agentRequired[0] != "output" {
+		t.Fatalf("runs.start agent required = %#v, want output", agent["required"])
+	}
+	agentProps, ok := agent["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("runs.start agent properties = %#v", agent["properties"])
+	}
+	output, ok := agentProps["output"].(map[string]any)
+	if !ok {
+		t.Fatalf("runs.start agent output schema = %#v", agentProps["output"])
+	}
+	if branches, ok := output["oneOf"].([]any); !ok || len(branches) != 2 {
+		t.Fatalf("runs.start agent output oneOf = %#v, want text and structured branches", output["oneOf"])
+	}
 	definitionBranch, ok := branches[1].(map[string]any)
 	if !ok {
 		t.Fatalf("definition branch = %#v", branches[1])
@@ -438,6 +470,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Sync the roadmap and open the needed code changes.",
+					"output":   map[string]any{"text": map[string]any{}},
 					"tools": []any{
 						map[string]any{"app": "roadmap", "operation": "sync"},
 						map[string]any{"system": coreagent.SystemToolWorkflow, "operation": workflowSystemToolSchedulesCreate},
@@ -584,6 +617,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionWithInheritedAgentToolRe
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Sync the roadmap and post an update.",
+					"output":   map[string]any{"text": map[string]any{}},
 				},
 			}),
 		},
@@ -653,6 +687,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithInheritedAgentToolRefs
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Sync the roadmap.",
+					"output":   map[string]any{"text": map[string]any{}},
 				},
 			}),
 		},
@@ -726,6 +761,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithGrantedCallerToolRefs(
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Open a GitHub pull request.",
+					"output":   map[string]any{"text": map[string]any{}},
 				},
 			}),
 		},
@@ -784,6 +820,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithExplicitEmptyAgentTool
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Run without tools.",
+					"output":   map[string]any{"text": map[string]any{}},
 					"tools":    []any{},
 				},
 			}),
@@ -840,6 +877,7 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T)
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Sync the roadmap.",
+					"output":   map[string]any{"text": map[string]any{}},
 				},
 			}),
 		},
@@ -874,6 +912,7 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T)
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Sync the roadmap and summarize changes.",
+					"output":   map[string]any{"text": map[string]any{}},
 				},
 			}),
 		},
@@ -982,6 +1021,7 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesSchedule(t *testing.T) {
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Sync the roadmap.",
+					"output":   map[string]any{"text": map[string]any{}},
 				},
 			}),
 		},
@@ -1295,6 +1335,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUngrantedDefinitionTarget(t *testi
 					"agent": map[string]any{
 						"provider": "managed",
 						"prompt":   "Create another cron.",
+						"output":   map[string]any{"text": map[string]any{}},
 						"tools": []any{
 							map[string]any{"system": coreagent.SystemToolWorkflow, "operation": workflowSystemToolSchedulesCreate},
 						},
@@ -1447,6 +1488,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 					"agent": map[string]any{
 						"provider": "managed",
 						"prompt":   "Sync roadmap",
+						"output":   map[string]any{"text": map[string]any{}},
 						"tools": []any{
 							map[string]any{
 								"app":            "roadmap",
@@ -1467,6 +1509,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 					"agent": map[string]any{
 						"provider": "managed",
 						"prompt":   "Sync roadmap",
+						"output":   map[string]any{"text": map[string]any{}},
 						"toolRefs": []any{
 							map[string]any{"app": "roadmap", "operation": "sync"},
 						},
@@ -1540,6 +1583,7 @@ func TestWorkflowSystemToolTrustedAgentProviderChecksAllAgentSteps(t *testing.T)
 			Agent: &coreworkflow.AgentTurn{
 				ProviderName: "managed",
 				Prompt:       coreworkflow.Text{Template: "first"},
+				Output:       coreagent.Output{Text: &coreagent.TextOutput{}},
 			},
 		},
 		{
@@ -1547,6 +1591,7 @@ func TestWorkflowSystemToolTrustedAgentProviderChecksAllAgentSteps(t *testing.T)
 			Agent: &coreworkflow.AgentTurn{
 				ProviderName: "other",
 				Prompt:       coreworkflow.Text{Template: "second"},
+				Output:       coreagent.Output{Text: &coreagent.TextOutput{}},
 			},
 		},
 	}}

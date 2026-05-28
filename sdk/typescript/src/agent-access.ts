@@ -13,9 +13,11 @@ import {
 import type { Request } from "./api.ts";
 import {
   agentActorFromProto,
+  agentOutputToProto,
   agentMessageFromProto,
   agentMessageToProto,
   agentToolRefToProto,
+  agentTurnOutputFromProto,
   agentTurnDisplayFromProto,
 } from "./agent-conversions.ts";
 import {
@@ -25,6 +27,7 @@ import {
   AgentSessionState,
   AgentToolSourceMode,
   type AgentInteraction,
+  type AgentOutput,
   type AgentMessage,
   type AgentSession,
   type AgentToolRef,
@@ -95,9 +98,8 @@ export interface AgentCreateTurn {
   model?: string | undefined;
   messages?: readonly AgentMessage[] | undefined;
   toolRefs?: readonly AgentToolRef[] | undefined;
-  toolRefsSet?: boolean | undefined;
   toolSource?: AgentToolSourceMode | undefined;
-  responseSchema?: JsonObjectInput | undefined;
+  output: AgentOutput;
   metadata?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
   modelOptions?: JsonObjectInput | undefined;
@@ -254,9 +256,8 @@ class AgentImpl implements Agent {
         model: request.model ?? "",
         messages: request.messages?.map(agentMessageToProto) ?? [],
         toolRefs: request.toolRefs?.map(agentToolRefToProto) ?? [],
-        toolRefsSet: request.toolRefsSet ?? (request.toolRefs !== undefined && request.toolRefs.length > 0),
         toolSource: request.toolSource ?? AgentToolSourceMode.UNSPECIFIED,
-        responseSchema: optionalStruct(request.responseSchema),
+        output: agentOutputToProto(request.output),
         metadata: optionalStruct(request.metadata),
         idempotencyKey: request.idempotencyKey ?? "",
         invocationToken: this.invocationToken,
@@ -389,8 +390,7 @@ function agentTurnFromProto(turn: ProtoAgentTurn): AgentTurn {
     model: turn.model,
     status: turn.status as AgentExecutionStatus,
     messages: turn.messages.map(agentMessageFromProto),
-    outputText: turn.outputText,
-    structuredOutput: optionalObjectFromStruct(turn.structuredOutput),
+    output: agentTurnOutputFromProto(turn.output),
     statusMessage: turn.statusMessage,
     createdBy: agentActorFromProto(turn.createdBy),
     createdAt: optionalDate(turn.createdAt),

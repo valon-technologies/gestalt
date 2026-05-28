@@ -2382,6 +2382,36 @@ func validateWorkflowStepAgentConfig(cfg *Config, path string, agent *WorkflowSt
 	if err := validateWorkflowAgentToolsConfig(cfg, path+".tools", agent.Tools); err != nil {
 		return err
 	}
+	if err := validateWorkflowAgentOutputConfig(path+".output", agent.Output); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateWorkflowAgentOutputConfig(path string, output *WorkflowAgentOutputConfig) error {
+	if output == nil {
+		return fmt.Errorf("config validation: %s is required", path)
+	}
+	textSet := output.Text != nil
+	structuredSet := output.Structured != nil
+	if textSet == structuredSet {
+		return fmt.Errorf("config validation: exactly one of %s.text or %s.structured is required", path, path)
+	}
+	if output.Structured == nil {
+		return nil
+	}
+	schema := output.Structured.Schema
+	if len(schema) == 0 {
+		return fmt.Errorf("config validation: %s.structured.schema must be a non-empty JSON schema object with type %q", path, "object")
+	}
+	rawType, ok := schema["type"]
+	if !ok {
+		return fmt.Errorf("config validation: %s.structured.schema.type must be %q", path, "object")
+	}
+	typeValue, ok := rawType.(string)
+	if !ok || strings.TrimSpace(typeValue) != "object" {
+		return fmt.Errorf("config validation: %s.structured.schema.type must be %q", path, "object")
+	}
 	return nil
 }
 

@@ -102,6 +102,19 @@ func mustAgentMessages(t testing.TB, messages []coreagent.Message) []*proto.Agen
 	return out
 }
 
+func agentTextOutputProto() *proto.AgentOutput {
+	return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}
+}
+
+func agentStructuredOutputProto(t testing.TB, schema map[string]any) *proto.AgentOutput {
+	t.Helper()
+	return &proto.AgentOutput{
+		Kind: &proto.AgentOutput_Structured{
+			Structured: &proto.AgentStructuredOutput{Schema: mustProtoStruct(t, schema)},
+		},
+	}
+}
+
 type routeCountingAgentControl struct {
 	defaultName string
 	names       []string
@@ -149,6 +162,8 @@ type routeCountingAgentProvider struct {
 	listSessionReqs   []*proto.ListAgentProviderSessionsRequest
 	listTurnReqs      []*proto.ListAgentProviderTurnsRequest
 	turnIDOverride    string
+	createTurnStatus  coreagent.ExecutionStatus
+	createTurnOutput  coreagent.TurnOutput
 	cancelStatus      coreagent.ExecutionStatus
 	getSessionErr     error
 	listSessionsErr   error
@@ -273,13 +288,18 @@ func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req *proto.Cr
 	if strings.TrimSpace(p.turnIDOverride) != "" {
 		turnID = p.turnIDOverride
 	}
+	status := p.createTurnStatus
+	if status == "" {
+		status = coreagent.ExecutionStatusRunning
+	}
 	turn := &coreagent.Turn{
 		ID:           turnID,
 		SessionID:    req.GetSessionId(),
 		ProviderName: p.name,
 		Model:        req.GetModel(),
-		Status:       coreagent.ExecutionStatusRunning,
+		Status:       status,
 		Messages:     agentwire.MessagesFromProto(req.GetMessages()),
+		Output:       p.createTurnOutput,
 		CreatedBy:    agentTestActorFromProto(req.GetCreatedBy()),
 		ExecutionRef: req.GetExecutionRef(),
 	}
@@ -797,6 +817,7 @@ func TestManagerGetTurnContinuesAfterProviderUnavailable(t *testing.T) {
 		SessionID:    session.ID,
 		ProviderName: "alpha",
 		Status:       coreagent.ExecutionStatusSucceeded,
+		Output:       coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "done"}},
 		CreatedBy:    coreagent.Actor{SubjectID: principal.UserSubjectID("user-1")},
 	}
 	alpha.sessions[session.ID] = session
@@ -842,6 +863,7 @@ func TestManagerVisibleNonOwnedSessionReadsButCannotWrite(t *testing.T) {
 	turn, err := manager.CreateTurn(context.Background(), owner, &proto.CreateAgentProviderTurnRequest{
 		SessionId: session.ID,
 		Model:     "test-model",
+		Output:    agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -856,7 +878,7 @@ func TestManagerVisibleNonOwnedSessionReadsButCannotWrite(t *testing.T) {
 	if _, err := manager.UpdateSession(context.Background(), viewer, &proto.UpdateAgentProviderSessionRequest{SessionId: session.ID, ClientRef: "viewer-edit"}); !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("UpdateSession as visible non-owner error = %v, want not found", err)
 	}
-	if _, err := manager.CreateTurn(context.Background(), viewer, &proto.CreateAgentProviderTurnRequest{SessionId: session.ID, Model: "test-model"}); !errors.Is(err, ErrAgentSessionNotFound) {
+	if _, err := manager.CreateTurn(context.Background(), viewer, &proto.CreateAgentProviderTurnRequest{SessionId: session.ID, Model: "test-model", Output: agentTextOutputProto()}); !errors.Is(err, ErrAgentSessionNotFound) {
 		t.Fatalf("CreateTurn as visible non-owner error = %v, want session not found", err)
 	}
 	if _, err := manager.CancelTurn(context.Background(), viewer, &proto.CancelAgentProviderTurnRequest{TurnId: turn.ID, Reason: "viewer-cancel"}); !errors.Is(err, core.ErrNotFound) {
@@ -902,6 +924,7 @@ func TestManagerCreateTurnAcceptsProviderOwnedIDForIdempotentReplay(t *testing.T
 		SessionId:      session.ID,
 		IdempotencyKey: "turn-replay",
 		Model:          "test-model",
+		Output:         agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1081,6 +1104,7 @@ func TestManagerListTurnsReturnsCapabilityErrorWhenCapabilityReadUnavailable(t *
 		SessionId: session.ID,
 		Model:     "test-model",
 		Messages:  mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "hello"}}),
+		Output:    agentTextOutputProto(),
 	}); err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
@@ -1129,6 +1153,7 @@ func TestManagerCreateTurnLeavesToolSourceUnsetWhenNoToolsRequested(t *testing.T
 		SessionId: session.ID,
 		Model:     "test-model",
 		Tools:     []*proto.ResolvedAgentTool{{Id: "spoofed-tool", Name: "spoofed_tool"}},
+		Output:    agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1180,6 +1205,7 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
 		SessionId: session.ID,
 		Model:     "test-model",
+		Output:    agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1242,6 +1268,7 @@ func TestManagerCreateTurnNarrowsImplicitDefaultCatalogRefsForLargeMentionedProv
 		SessionId: session.ID,
 		Model:     "test-model",
 		Messages:  mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}}),
+		Output:    agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1306,6 +1333,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardForSmallCatalogs(t *testing.T) {
 		SessionId: session.ID,
 		Model:     "test-model",
 		Messages:  mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}}),
+		Output:    agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1345,6 +1373,7 @@ func TestManagerCreateTurnDoesNotEnumerateCatalogsWhenNoProviderMentionMatches(t
 		SessionId: session.ID,
 		Model:     "test-model",
 		Messages:  mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my tickets"}}),
+		Output:    agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1387,6 +1416,7 @@ func TestManagerCreateTurnDoesNotStemProviderMentionsForImplicitNarrowing(t *tes
 		SessionId: session.ID,
 		Model:     "test-model",
 		Messages:  mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "open a doc"}}),
+		Output:    agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1432,6 +1462,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardForCallerAppDefaults(t *testing.T
 		SessionId: session.ID,
 		Model:     "test-model",
 		Messages:  mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}}),
+		Output:    agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1494,6 +1525,7 @@ func TestManagerCreateTurnNarrowsFromLatestUserTextOnly(t *testing.T) {
 				Metadata: map[string]any{"provider": "linear"},
 			},
 		}),
+		Output: agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1539,6 +1571,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderCannotBeProb
 		SessionId: session.ID,
 		Model:     "test-model",
 		Messages:  mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}}),
+		Output:    agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1588,6 +1621,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderUnavailable(
 		SessionId: session.ID,
 		Model:     "test-model",
 		Messages:  mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}}),
+		Output:    agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1639,6 +1673,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderHasNoVisible
 		SessionId: session.ID,
 		Model:     "test-model",
 		Messages:  mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me linear"}}),
+		Output:    agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1674,6 +1709,7 @@ func TestManagerCreateTurnHonorsExplicitCatalogSourceWithNoToolRefs(t *testing.T
 		SessionId:  session.ID,
 		Model:      "test-model",
 		ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+		Output:     agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1698,7 +1734,6 @@ func TestManagerCreateTurnHonorsNoneToolSource(t *testing.T) {
 
 	alpha := newRouteCountingAgentProvider("alpha")
 	alpha.capabilities = &coreagent.ProviderCapabilities{
-		StructuredOutput: true,
 		SupportedToolSources: []coreagent.ToolSourceMode{
 			coreagent.ToolSourceModeNone,
 		},
@@ -1728,6 +1763,7 @@ func TestManagerCreateTurnHonorsNoneToolSource(t *testing.T) {
 		SessionId:  session.ID,
 		Model:      "test-model",
 		ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
+		Output:     agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1770,48 +1806,32 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 		{
 			name: "valid schema forwards presence",
 			caps: &coreagent.ProviderCapabilities{
-				StructuredOutput: true,
 				SupportedToolSources: []coreagent.ToolSourceMode{
 					coreagent.ToolSourceModeNone,
 				},
 			},
 			req: &proto.CreateAgentProviderTurnRequest{
-				ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
-				ResponseSchema: mustProtoStruct(t, map[string]any{"type": "object"}),
+				ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
+				Output:     agentStructuredOutputProto(t, map[string]any{"type": "object"}),
 			},
 			wantCreated: true,
 		},
 		{
 			name: "empty schema is invalid when present",
 			caps: &coreagent.ProviderCapabilities{
-				StructuredOutput: true,
 				SupportedToolSources: []coreagent.ToolSourceMode{
 					coreagent.ToolSourceModeNone,
 				},
 			},
 			req: &proto.CreateAgentProviderTurnRequest{
-				ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
-				ResponseSchema: &structpb.Struct{},
+				ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
+				Output:     agentStructuredOutputProto(t, map[string]any{}),
 			},
 			wantErr: invocation.ErrInvalidInvocation,
 		},
 		{
-			name: "provider must advertise structured output",
-			caps: &coreagent.ProviderCapabilities{
-				SupportedToolSources: []coreagent.ToolSourceMode{
-					coreagent.ToolSourceModeNone,
-				},
-			},
-			req: &proto.CreateAgentProviderTurnRequest{
-				ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
-				ResponseSchema: mustProtoStruct(t, map[string]any{"type": "object"}),
-			},
-			wantErr: ErrAgentStructuredOutputUnsupported,
-		},
-		{
 			name: "none source rejects tool refs",
 			caps: &coreagent.ProviderCapabilities{
-				StructuredOutput: true,
 				SupportedToolSources: []coreagent.ToolSourceMode{
 					coreagent.ToolSourceModeNone,
 				},
@@ -1819,8 +1839,22 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 			req: &proto.CreateAgentProviderTurnRequest{
 				ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
 				ToolRefs:   []*proto.AgentToolRef{{App: "docs"}},
+				Output:     agentTextOutputProto(),
 			},
 			wantErr: invocation.ErrInvalidInvocation,
+		},
+		{
+			name: "text output is valid",
+			caps: &coreagent.ProviderCapabilities{
+				SupportedToolSources: []coreagent.ToolSourceMode{
+					coreagent.ToolSourceModeNone,
+				},
+			},
+			req: &proto.CreateAgentProviderTurnRequest{
+				ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
+				Output:     agentTextOutputProto(),
+			},
+			wantCreated: true,
 		},
 	}
 	for _, tt := range tests {
@@ -1871,8 +1905,11 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 				t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
 			}
 			got := alpha.createTurnReqs[0]
-			if got.GetResponseSchema().AsMap()["type"] != "object" {
-				t.Fatalf("CreateTurn response schema = %#v, want object schema", got.GetResponseSchema())
+			if tt.req.GetOutput().GetStructured() != nil && got.GetOutput().GetStructured().GetSchema().AsMap()["type"] != "object" {
+				t.Fatalf("CreateTurn response schema = %#v, want object schema", got.GetOutput().GetStructured().GetSchema())
+			}
+			if tt.req.GetOutput().GetText() != nil && got.GetOutput().GetText() == nil {
+				t.Fatal("CreateTurn output.text = nil, want text output request")
 			}
 		})
 	}
@@ -1906,6 +1943,7 @@ func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testin
 		SessionId:   session.ID,
 		Model:       "test-model",
 		ToolRefsSet: true,
+		Output:      agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1941,6 +1979,51 @@ func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testin
 	}
 }
 
+func TestManagerRejectsAmbiguousSuccessfulTurnOutput(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	alpha.capabilities = &coreagent.ProviderCapabilities{
+		SupportedToolSources: []coreagent.ToolSourceMode{
+			coreagent.ToolSourceModeNone,
+		},
+	}
+	alpha.createTurnStatus = coreagent.ExecutionStatusSucceeded
+	alpha.createTurnOutput = coreagent.TurnOutput{
+		Text:       &coreagent.TurnTextOutput{Text: "plain"},
+		Structured: &coreagent.TurnStructuredOutput{Text: "plain", Value: map[string]any{"summary": "plain"}},
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		RunGrants: newAgentManagerTestRunGrants(t),
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		SessionId:  session.ID,
+		Model:      "test-model",
+		ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
+		Output:     agentTextOutputProto(),
+	})
+	if err == nil {
+		t.Fatal("CreateTurn error = nil, want ambiguous successful output error")
+	}
+}
+
 func TestManagerCancelTurnRevokesRunGrantWithoutBootstrapWrapper(t *testing.T) {
 	t.Parallel()
 
@@ -1968,6 +2051,7 @@ func TestManagerCancelTurnRevokesRunGrantWithoutBootstrapWrapper(t *testing.T) {
 	turn, err := manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
 		SessionId: session.ID,
 		Model:     "test-model",
+		Output:    agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -2025,6 +2109,7 @@ func TestManagerCancelTurnRevokesExecutionRefGrantWithoutBootstrapWrapper(t *tes
 		SessionId:      session.ID,
 		IdempotencyKey: "provider-owned-turn",
 		Model:          "test-model",
+		Output:         agentTextOutputProto(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -2623,6 +2708,7 @@ func TestManagerCreateTurnAppliesExplicitInvokeRunAsToProviderAndRunGrant(t *tes
 		Model:       "test-model",
 		ToolSource:  proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
 		ToolRefsSet: true,
+		Output:      agentTextOutputProto(),
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "notion",
 			Operation: "search",

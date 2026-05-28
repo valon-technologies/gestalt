@@ -232,9 +232,38 @@ func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Pri
 	if err := validateWorkflowAgentToolRefs(target.ToolRefs); err != nil {
 		return coreworkflow.AgentTurn{}, err
 	}
-	target.ResponseSchema = maps.Clone(target.ResponseSchema)
+	if err := validateWorkflowAgentOutput(target.Output); err != nil {
+		return coreworkflow.AgentTurn{}, err
+	}
+	if target.Output.Structured != nil {
+		target.Output.Structured.Schema = maps.Clone(target.Output.Structured.Schema)
+	}
 	target.ModelOptions = maps.Clone(target.ModelOptions)
 	return target, nil
+}
+
+func validateWorkflowAgentOutput(output coreagent.Output) error {
+	textSet := output.Text != nil
+	structuredSet := output.Structured != nil
+	if textSet == structuredSet {
+		return fmt.Errorf("%w: exactly one of workflow target agent output.text or output.structured is required", invocation.ErrInvalidInvocation)
+	}
+	if output.Structured == nil {
+		return nil
+	}
+	schema := output.Structured.Schema
+	if len(schema) == 0 {
+		return fmt.Errorf("%w: workflow target agent output.structured.schema must be a non-empty JSON schema object with type %q", invocation.ErrInvalidInvocation, "object")
+	}
+	rawType, ok := schema["type"]
+	if !ok {
+		return fmt.Errorf("%w: workflow target agent output.structured.schema.type must be %q", invocation.ErrInvalidInvocation, "object")
+	}
+	typeValue, ok := rawType.(string)
+	if !ok || strings.TrimSpace(typeValue) != "object" {
+		return fmt.Errorf("%w: workflow target agent output.structured.schema.type must be %q", invocation.ErrInvalidInvocation, "object")
+	}
+	return nil
 }
 
 func (m *Manager) normalizeWorkflowAppStepCredentialMode(mode core.ConnectionMode, callerAppName, appName, operation string) (core.ConnectionMode, error) {

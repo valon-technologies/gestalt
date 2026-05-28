@@ -13,10 +13,11 @@ use crate::generated::v1::{
 };
 use crate::{
     agent::{
-        AgentExecutionStatus, AgentInteraction, AgentMessage, AgentSession, AgentSessionState,
-        AgentToolRef, AgentToolSourceMode, AgentTurn, AgentTurnEvent, AgentWorkspace,
-        event_from_proto, interaction_from_proto, new_agent_messages, new_agent_tool_refs,
-        new_agent_workspace, session_from_proto, turn_from_proto,
+        AgentExecutionStatus, AgentInteraction, AgentMessage, AgentOutput, AgentSession,
+        AgentSessionState, AgentToolRef, AgentToolSourceMode, AgentTurn, AgentTurnEvent,
+        AgentWorkspace, agent_output_to_proto, event_from_proto, interaction_from_proto,
+        new_agent_messages, new_agent_tool_refs, new_agent_workspace, session_from_proto,
+        turn_from_proto,
     },
     env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN},
     protocol,
@@ -110,31 +111,12 @@ pub struct AgentCreateTurn {
     pub model: String,
     pub messages: Vec<AgentMessage>,
     pub tool_refs: Vec<AgentToolRef>,
-    pub tool_refs_set: bool,
     pub tool_source: AgentToolSourceMode,
-    pub response_schema: Option<serde_json::Value>,
+    pub output: AgentOutput,
     pub metadata: Option<serde_json::Value>,
     pub idempotency_key: String,
     pub model_options: Option<serde_json::Value>,
     pub timeout_seconds: i32,
-}
-
-impl Default for AgentCreateTurn {
-    fn default() -> Self {
-        Self {
-            session_id: String::new(),
-            model: String::new(),
-            messages: Vec::new(),
-            tool_refs: Vec::new(),
-            tool_refs_set: false,
-            tool_source: AgentToolSourceMode::Unspecified,
-            response_schema: None,
-            metadata: None,
-            idempotency_key: String::new(),
-            model_options: None,
-            timeout_seconds: 0,
-        }
-    }
 }
 
 /// Input for fetching an agent turn.
@@ -318,13 +300,9 @@ pub(crate) fn new_agent_create_turn_request(
         session_id: input.session_id,
         model: input.model,
         messages: new_agent_messages(input.messages)?,
-        tool_refs_set: input.tool_refs_set || !input.tool_refs.is_empty(),
         tool_refs: new_agent_tool_refs(input.tool_refs),
         tool_source: input.tool_source.as_i32(),
-        response_schema: input
-            .response_schema
-            .map(protocol::struct_from_json)
-            .transpose()?,
+        output: agent_output_to_proto(Some(input.output))?,
         metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
         idempotency_key: input.idempotency_key,
         invocation_token: String::new(),
