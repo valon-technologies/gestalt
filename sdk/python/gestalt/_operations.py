@@ -11,6 +11,7 @@ from ._api import Error, Request, Response
 from ._serialization import json_body
 
 INTERNAL_ERROR_MESSAGE = "internal error"
+JSON_CONTENT_TYPE = "application/json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,11 +86,11 @@ def execute_operation(
         if isinstance(result, Response):
             status = HTTPStatus.OK if result.status is None else result.status
             body = result.body
-            headers = _normalize_headers(result.headers)
+            headers = _json_headers(result.headers)
         else:
             status = HTTPStatus.OK
             body = result
-            headers = {}
+            headers = _json_headers(None)
 
         return OperationResult(status=status, body=json_body(body), headers=headers)
     except Error as error:
@@ -119,7 +120,11 @@ def run_sync(value: Any) -> Any:
 
 
 def _error_result(status: int, message: str) -> OperationResult:
-    return OperationResult(status=status, body=json_body({"error": message}))
+    return OperationResult(
+        status=status,
+        headers=_json_headers(None),
+        body=json_body({"error": message}),
+    )
 
 
 def _normalize_headers(headers: dict[str, Any] | None) -> dict[str, list[str]]:
@@ -128,6 +133,13 @@ def _normalize_headers(headers: dict[str, Any] | None) -> dict[str, list[str]]:
     normalized: dict[str, list[str]] = {}
     for name, value in headers.items():
         normalized[name] = list(value) if isinstance(value, (list, tuple)) else [value]
+    return normalized
+
+
+def _json_headers(headers: dict[str, Any] | None) -> dict[str, list[str]]:
+    normalized = _normalize_headers(headers)
+    if not any(name.lower() == "content-type" for name in normalized):
+        normalized["Content-Type"] = [JSON_CONTENT_TYPE]
     return normalized
 
 

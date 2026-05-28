@@ -26,6 +26,8 @@ use crate::protocol;
 use crate::rpc_status::{require_protocol_version, rpc_status};
 use crate::{Provider, Router};
 
+const JSON_CONTENT_TYPE: &str = "application/json";
+
 #[derive(Clone)]
 /// gRPC integration-provider server used by the Rust runtime.
 pub struct ProviderServer<P> {
@@ -51,7 +53,7 @@ impl OperationResult {
         match serde_json::to_string(&response.body) {
             Ok(body) => Self {
                 status,
-                headers: response.headers,
+                headers: json_response_headers(response.headers),
                 body,
             },
             Err(error) => {
@@ -75,10 +77,25 @@ impl OperationResult {
     pub fn error(status: u16, message: impl Into<String>) -> Self {
         Self {
             status,
-            headers: BTreeMap::new(),
+            headers: json_response_headers(BTreeMap::new()),
             body: serde_json::json!({ "error": message.into() }).to_string(),
         }
     }
+}
+
+fn json_response_headers(
+    mut headers: BTreeMap<String, Vec<String>>,
+) -> BTreeMap<String, Vec<String>> {
+    if !headers
+        .keys()
+        .any(|name| name.eq_ignore_ascii_case("content-type"))
+    {
+        headers.insert(
+            "Content-Type".to_owned(),
+            vec![JSON_CONTENT_TYPE.to_owned()],
+        );
+    }
+    headers
 }
 
 impl<P> ProviderServer<P> {

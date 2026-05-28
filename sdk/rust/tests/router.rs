@@ -95,6 +95,10 @@ async fn executes_registered_operation() {
 
     assert_eq!(result.status, 200);
     assert_eq!(
+        result.headers.get("Content-Type").map(Vec::as_slice),
+        Some(&["application/json".to_owned()][..])
+    );
+    assert_eq!(
         result.headers.get("Location").map(Vec::as_slice),
         Some(&["/echo".to_owned()][..])
     );

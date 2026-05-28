@@ -31,6 +31,8 @@ import {
 } from "./provider.ts";
 import type { Schema } from "./schema.ts";
 
+const JSON_CONTENT_TYPE = "application/json";
+
 /**
  * How an app provider expects to authenticate or connect.
  */
@@ -131,11 +133,18 @@ export interface AppDefinitionOptions extends ProviderBaseOptions {
 }
 
 function normalizeResponseHeaders(
-  headers: ResponseHeaders,
+  headers?: ResponseHeaders,
 ): Record<string, string[]> {
   const normalized: Record<string, string[]> = {};
-  for (const [name, value] of Object.entries(headers)) {
+  for (const [name, value] of Object.entries(headers ?? {})) {
     normalized[name] = Array.isArray(value) ? [...value] : [value];
+  }
+  if (
+    !Object.keys(normalized).some((name) =>
+      name.toLowerCase() === "content-type"
+    )
+  ) {
+    normalized["Content-Type"] = [JSON_CONTENT_TYPE];
   }
   return normalized;
 }
@@ -377,7 +386,7 @@ export class AppProvider extends ProviderBase {
 
       return {
         status: response?.status ?? 200,
-        headers: response === undefined ? {} : normalizeResponseHeaders(response.headers),
+        headers: normalizeResponseHeaders(response?.headers),
         body: JSON.stringify(body),
       };
     } catch (error) {
@@ -513,7 +522,7 @@ function normalizeOperationInput(
 function errorResult(status: number, message: string): OperationResult {
   return {
     status,
-    headers: {},
+    headers: normalizeResponseHeaders(),
     body: JSON.stringify({
       error: message,
     }),

@@ -1085,6 +1085,9 @@ export const app = defineApp({
       }),
     );
     expect(echoedBody.status).toBe(200);
+    expect(echoedBody.headers["Content-Type"]?.values).toEqual([
+      "application/json",
+    ]);
     expect(JSON.parse(echoedBody.body)).toEqual({
       body: "hello",
     });
@@ -1106,6 +1109,9 @@ export const app = defineApp({
       }),
     );
     expect(created.status).toBe(201);
+    expect(created.headers["Content-Type"]?.values).toEqual([
+      "application/json",
+    ]);
     expect(created.headers["Location"]?.values).toEqual(["/items/new-id"]);
     expect(created.headers["Set-Cookie"]?.values).toEqual([
       "created=1",

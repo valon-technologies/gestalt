@@ -132,7 +132,7 @@ func Register[P any, In any, Out any](
 			if err != nil {
 				return nil, newOperationError(http.StatusInternalServerError, fmt.Sprintf("marshal response for %q: %v", op.ID, err), err)
 			}
-			return &OperationResult{Status: status, Headers: resp.Headers.Clone(), Body: string(body)}, nil
+			return &OperationResult{Status: status, Headers: jsonResponseHeaders(resp.Headers), Body: string(body)}, nil
 		},
 	}
 }
@@ -331,6 +331,17 @@ func normalizeMethod(method string) string {
 		return http.MethodPost
 	}
 	return method
+}
+
+func jsonResponseHeaders(headers http.Header) http.Header {
+	out := headers.Clone()
+	if out == nil {
+		out = http.Header{}
+	}
+	if out.Get("Content-Type") == "" {
+		out.Set("Content-Type", "application/json")
+	}
+	return out
 }
 
 func jsonField(field reflect.StructField) (name string, omitempty, include bool) {

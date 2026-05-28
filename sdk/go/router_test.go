@@ -169,6 +169,9 @@ func TestRouterOperationExecution(t *testing.T) {
 	if result.Status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
 	}
+	if got := result.Headers.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type header = %q, want application/json", got)
+	}
 	if got := result.Headers.Get("Location"); got != "/echo/hello" {
 		t.Fatalf("Location header = %q, want /echo/hello", got)
 	}

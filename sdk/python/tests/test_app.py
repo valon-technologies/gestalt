@@ -44,6 +44,7 @@ class AppOperationTests(unittest.TestCase):
 
         result = app.execute("greet", {"name": "world", "count": 3}, Request())
         self.assertEqual(result.status, 200)
+        self.assertEqual(result.headers["Content-Type"], ["application/json"])
         body = json.loads(result.body)
         self.assertEqual(body["message"], "hello world x3")
 
@@ -61,6 +62,7 @@ class AppOperationTests(unittest.TestCase):
 
         result = app.execute("created", {}, Request())
         self.assertEqual(result.status, 201)
+        self.assertEqual(result.headers["Content-Type"], ["application/json"])
         self.assertEqual(result.headers["Location"], ["/items/abc"])
         self.assertEqual(result.headers["Set-Cookie"], ["a=1", "b=2"])
         self.assertEqual(json.loads(result.body), {"id": "abc"})
