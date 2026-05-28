@@ -52,8 +52,9 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 		return nil, status.Errorf(codes.Unknown, "execute: %v", err)
 	}
 	return &proto.OperationResult{
-		Status: int32(result.Status),
-		Body:   result.Body,
+		Status:  int32(result.Status),
+		Headers: mapStringSlices(result.Headers),
+		Body:    result.Body,
 	}, nil
 }
 

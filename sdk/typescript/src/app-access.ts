@@ -1,8 +1,9 @@
 import { createClient, type Client } from "@connectrpc/connect";
 
 import { App as AppService } from "./internal/gen/v1/app_pb.ts";
-import type { OperationResult, Request } from "./api.ts";
+import type { OperationResult, OperationResultHeaders, Request } from "./api.ts";
 import type { ConnectionMode } from "./app.ts";
+import type { StringList } from "./internal/gen/v1/app_pb.ts";
 import { structFromObject, type JsonObjectInput } from "./protocol.ts";
 import {
   createHostServiceGrpcTransport,
@@ -100,8 +101,10 @@ class AppImpl implements App {
       idempotencyKey: options?.idempotencyKey?.trim() ?? "",
       credentialMode: options?.credentialMode?.trim() ?? "",
     });
+    const headers = operationResultHeaders(response.headers);
     return {
       status: response.status,
+      ...(headers === undefined ? {} : { headers }),
       body: response.body,
     };
   }
@@ -128,8 +131,10 @@ class AppImpl implements App {
       instance: options?.instance ?? "",
       idempotencyKey: options?.idempotencyKey?.trim() ?? "",
     });
+    const headers = operationResultHeaders(response.headers);
     return {
       status: response.status,
+      ...(headers === undefined ? {} : { headers }),
       body: response.body,
     };
   }
@@ -162,6 +167,19 @@ class AppImpl implements App {
 }
 
 export const App = AppImpl;
+
+function operationResultHeaders(
+  headers: { [key: string]: StringList } | undefined,
+): OperationResultHeaders | undefined {
+  if (headers === undefined || Object.keys(headers).length === 0) {
+    return undefined;
+  }
+  const normalized: OperationResultHeaders = {};
+  for (const [name, list] of Object.entries(headers)) {
+    normalized[name] = [...list.values];
+  }
+  return normalized;
+}
 
 function normalizeInvocationToken(requestOrToken: Request | string): string {
   const invocationToken =

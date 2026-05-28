@@ -36,6 +36,8 @@ FIELD_DESCRIPTION_KEY: Final[str] = "description"
 FIELD_REQUIRED_KEY: Final[str] = "required"
 
 T = TypeVar("T")
+ResponseHeaderValue = str | list[str] | tuple[str, ...]
+ResponseHeaders = dict[str, ResponseHeaderValue]
 
 
 @dataclasses.dataclass(slots=True)
@@ -148,12 +150,13 @@ class Response(Generic[T]):
 
     status: int | None
     body: T
+    headers: ResponseHeaders | None = None
 
 
-def OK(body: T) -> Response[T]:
+def OK(body: T, headers: ResponseHeaders | None = None) -> Response[T]:
     """Wrap ``body`` in a success response with status ``200 OK``."""
 
-    return Response(status=HTTPStatus.OK, body=body)
+    return Response(status=HTTPStatus.OK, body=body, headers=headers)
 
 
 class Error(Exception):

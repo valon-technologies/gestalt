@@ -132,7 +132,11 @@ class _AppClient:
             request.params.CopyFrom(message)
 
         response = self._stub.Invoke(request)
-        return Response(status=int(response.status), body=response.body)
+        return Response(
+            status=int(response.status),
+            body=response.body,
+            headers=_string_lists_from_proto_map(getattr(response, "headers", {})),
+        )
 
     def invoke_graphql(
         self,
@@ -165,7 +169,11 @@ class _AppClient:
             request.variables.CopyFrom(message)
 
         response = self._stub.InvokeGraphQL(request)
-        return Response(status=int(response.status), body=response.body)
+        return Response(
+            status=int(response.status),
+            body=response.body,
+            headers=_string_lists_from_proto_map(getattr(response, "headers", {})),
+        )
 
     def exchange_invocation_token(
         self,
@@ -325,6 +333,13 @@ def _with_app_relay_token(channel: grpc.Channel, token: str) -> grpc.Channel:
         return channel
     interceptor = _RelayTokenInterceptor(token)
     return grpc.intercept_channel(channel, interceptor)
+
+
+def _string_lists_from_proto_map(values: Any) -> dict[str, list[str]]:
+    return {
+        str(key): list(getattr(value, "values", ()))
+        for key, value in dict(values or {}).items()
+    }
 
 
 class _ClientCallDetails(grpc.ClientCallDetails):

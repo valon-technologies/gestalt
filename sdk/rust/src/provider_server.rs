@@ -38,6 +38,8 @@ pub struct ProviderServer<P> {
 pub struct OperationResult {
     /// HTTP-style status code.
     pub status: u16,
+    /// HTTP response headers.
+    pub headers: BTreeMap<String, Vec<String>>,
     /// JSON-encoded response body.
     pub body: String,
 }
@@ -47,7 +49,11 @@ impl OperationResult {
     pub fn from_response<T: Serialize>(response: Response<T>) -> Self {
         let status = response.status.unwrap_or(200);
         match serde_json::to_string(&response.body) {
-            Ok(body) => Self { status, body },
+            Ok(body) => Self {
+                status,
+                headers: response.headers,
+                body,
+            },
             Err(error) => {
                 eprintln!("internal error in Gestalt operation response: {error}");
                 Self::error(HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE)
@@ -69,6 +75,7 @@ impl OperationResult {
     pub fn error(status: u16, message: impl Into<String>) -> Self {
         Self {
             status,
+            headers: BTreeMap::new(),
             body: serde_json::json!({ "error": message.into() }).to_string(),
         }
     }
@@ -138,6 +145,7 @@ where
 
         Ok(GrpcResponse::new(ProtoOperationResult {
             status: i32::from(result.status),
+            headers: string_lists_to_proto(result.headers),
             body: result.body,
         }))
     }
@@ -441,6 +449,15 @@ fn string_lists(
     values
         .iter()
         .map(|(key, value)| (key.clone(), value.values.clone()))
+        .collect()
+}
+
+fn string_lists_to_proto(
+    values: BTreeMap<String, Vec<String>>,
+) -> BTreeMap<String, crate::generated::v1::StringList> {
+    values
+        .into_iter()
+        .map(|(key, values)| (key, crate::generated::v1::StringList { values }))
         .collect()
 }
 

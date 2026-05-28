@@ -75,7 +75,7 @@ import {
 } from "./internal/gen/v1/runtime_pb.ts";
 import { S3 as S3Service } from "./internal/gen/v1/s3_pb.ts";
 import { WorkflowProvider as WorkflowProviderService } from "./internal/gen/v1/workflow_pb.ts";
-import { errorMessage, type Request } from "./api.ts";
+import { errorMessage, type OperationResult, type Request } from "./api.ts";
 import {
   AgentProvider,
   createAgentProviderService,
@@ -579,8 +579,7 @@ export function createProviderService(
       });
     },
     async execute(request: ExecuteRequest) {
-      return create(
-        OperationResultSchema,
+      return operationResultToProto(
         await provider.execute(
           request.operation,
           objectFromUnknown(request.params),
@@ -976,6 +975,18 @@ function providerStringLists(
     output[key] = [...(value.values ?? [])];
   }
   return output;
+}
+
+function operationResultToProto(result: OperationResult) {
+  const headers: Record<string, { values: string[] }> = {};
+  for (const [key, values] of Object.entries(result.headers ?? {})) {
+    headers[key] = { values: [...values] };
+  }
+  return create(OperationResultSchema, {
+    status: result.status,
+    body: result.body,
+    ...(Object.keys(headers).length === 0 ? {} : { headers }),
+  });
 }
 
 function providerRuntimeEntry(

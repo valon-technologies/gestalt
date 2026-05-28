@@ -141,11 +141,20 @@ class ProviderMetadata(_message.Message):
 
 class OperationResult(_message.Message):
     __slots__ = ()
+    class HeadersEntry(_message.Message):
+        __slots__ = ()
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: StringList
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[_Union[StringList, _Mapping]] = ...) -> None: ...
     STATUS_FIELD_NUMBER: _ClassVar[int]
     BODY_FIELD_NUMBER: _ClassVar[int]
+    HEADERS_FIELD_NUMBER: _ClassVar[int]
     status: int
     body: str
-    def __init__(self, status: _Optional[int] = ..., body: _Optional[str] = ...) -> None: ...
+    headers: _containers.MessageMap[str, StringList]
+    def __init__(self, status: _Optional[int] = ..., body: _Optional[str] = ..., headers: _Optional[_Mapping[str, StringList]] = ...) -> None: ...
 
 class AppInvocationGrant(_message.Message):
     __slots__ = ()

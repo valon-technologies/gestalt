@@ -207,8 +207,9 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 		return nil, err
 	}
 	return &core.OperationResult{
-		Status: int(resp.GetStatus()),
-		Body:   resp.GetBody(),
+		Status:  int(resp.GetStatus()),
+		Headers: mapStringLists(resp.GetHeaders()),
+		Body:    resp.GetBody(),
 	}, nil
 }
 

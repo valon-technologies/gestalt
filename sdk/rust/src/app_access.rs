@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use hyper_util::rt::TokioIo;
@@ -197,6 +198,7 @@ impl App {
 
         Ok(OperationResult {
             status,
+            headers: string_lists(&response.headers),
             body: response.body,
         })
     }
@@ -251,6 +253,7 @@ impl App {
 
         Ok(OperationResult {
             status,
+            headers: string_lists(&response.headers),
             body: response.body,
         })
     }
@@ -463,4 +466,13 @@ fn serializable_to_optional_struct<T: Serialize>(
 ) -> std::result::Result<Option<prost_types::Struct>, AppError> {
     let value = protocol::json_value_from_serializable(value)?;
     json_to_optional_struct(value, field_name)
+}
+
+fn string_lists(
+    values: &BTreeMap<String, crate::generated::v1::StringList>,
+) -> BTreeMap<String, Vec<String>> {
+    values
+        .iter()
+        .map(|(key, value)| (key.clone(), value.values.clone()))
+        .collect()
 }

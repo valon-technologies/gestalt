@@ -115,7 +115,7 @@ func (p *execProvider) Configure(context.Context, string, map[string]any) error 
 
 func (p *execProvider) echo(_ context.Context, in execInput, req gestalt.Request) (gestalt.Response[execOutput], error) {
 	region, ok := req.ConnectionParam("region")
-	return gestalt.OK(execOutput{
+	resp := gestalt.OK(execOutput{
 		Echo:                in.Value,
 		Region:              region,
 		RegionPresent:       ok,
@@ -123,7 +123,9 @@ func (p *execProvider) echo(_ context.Context, in execInput, req gestalt.Request
 		SubjectKind:         req.Subject.Kind,
 		CredentialMode:      req.Credential.Mode,
 		CredentialSubjectID: req.Credential.SubjectID,
-	}), nil
+	})
+	resp.Headers = http.Header{"Location": []string{"/echo/" + in.Value}}
+	return resp, nil
 }
 
 func TestRouterOperationExecution(t *testing.T) {
@@ -166,6 +168,9 @@ func TestRouterOperationExecution(t *testing.T) {
 	}
 	if result.Status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+	if got := result.Headers.Get("Location"); got != "/echo/hello" {
+		t.Fatalf("Location header = %q, want /echo/hello", got)
 	}
 	if result.Body != `{"echo":"hello","region":"","region_present":false,"subject_id":"","subject_kind":"","credential_mode":"","credential_subject_id":""}` {
 		t.Fatalf("body = %q, want %q", result.Body, `{"echo":"hello","region":"","region_present":false,"subject_id":"","subject_kind":"","credential_mode":"","credential_subject_id":""}`)

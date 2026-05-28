@@ -105,8 +105,10 @@ export {
   type Credential,
   type ExternalIdentity,
   type OperationResult,
+  type OperationResultHeaders,
   type Request,
   type Response,
+  type ResponseHeaders,
   type Subject,
   type SubjectInput,
 } from "./api.ts";

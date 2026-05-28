@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -150,8 +151,9 @@ type Host struct {
 
 // OperationResult is the serialized result returned by the provider runtime.
 type OperationResult struct {
-	Status int
-	Body   string
+	Status  int
+	Headers http.Header
+	Body    string
 }
 
 type connectionParamsKey struct{}

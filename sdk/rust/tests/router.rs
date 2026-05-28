@@ -74,9 +74,12 @@ async fn executes_registered_operation() {
         .register(
             Operation::<EchoInput, EchoOutput>::new("echo").description("Echo the message"),
             |_: Arc<TestProvider>, input: EchoInput, _request: Request| async move {
-                Ok::<Response<EchoOutput>, std::convert::Infallible>(ok(EchoOutput {
-                    message: input.message,
-                }))
+                Ok::<Response<EchoOutput>, std::convert::Infallible>(
+                    ok(EchoOutput {
+                        message: input.message,
+                    })
+                    .with_header("Location", "/echo"),
+                )
             },
         )
         .expect("register operation");
@@ -91,6 +94,10 @@ async fn executes_registered_operation() {
         .await;
 
     assert_eq!(result.status, 200);
+    assert_eq!(
+        result.headers.get("Location").map(Vec::as_slice),
+        Some(&["/echo".to_owned()][..])
+    );
     assert_eq!(result.body, r#"{"message":"hello"}"#);
 }
 
@@ -178,7 +185,8 @@ async fn greet(
         agent_subject_email: request.agent_subject.email,
         credential_mode: request.credential.mode,
         idempotency_key: request.idempotency_key,
-    }))
+    })
+    .with_header("Location", format!("/greet/{name}")))
 }
 
 async fn fail(
@@ -340,6 +348,13 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .expect("execute greet")
         .into_inner();
     assert_eq!(success.status, 200);
+    assert_eq!(
+        success
+            .headers
+            .get("Location")
+            .map(|header| header.values.as_slice()),
+        Some(&["/greet/Ada".to_owned()][..])
+    );
     assert_eq!(
         success.body,
         r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"user","idempotency_key":"tool-call-123"}"#

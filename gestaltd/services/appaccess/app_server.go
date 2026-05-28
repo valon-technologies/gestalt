@@ -95,8 +95,9 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 	}
 
 	return &proto.OperationResult{
-		Status: int32(result.Status),
-		Body:   result.Body,
+		Status:  int32(result.Status),
+		Headers: mapStringSlices(result.Headers),
+		Body:    result.Body,
 	}, nil
 }
 
@@ -146,9 +147,23 @@ func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraph
 	}
 
 	return &proto.OperationResult{
-		Status: int32(result.Status),
-		Body:   result.Body,
+		Status:  int32(result.Status),
+		Headers: mapStringSlices(result.Headers),
+		Body:    result.Body,
 	}, nil
+}
+
+func mapStringSlices[V ~map[string][]string](values V) map[string]*proto.StringList {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]*proto.StringList, len(values))
+	for key, item := range values {
+		copied := make([]string, len(item))
+		copy(copied, item)
+		out[key] = &proto.StringList{Values: copied}
+	}
+	return out
 }
 
 func (s *AppServer) tokenContextForInvoke(req *proto.AppInvokeRequest, targetApp, targetOperation string) (invocationTokenContext, error) {

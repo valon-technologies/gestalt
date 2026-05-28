@@ -196,6 +196,8 @@ pub struct HTTPSubjectRequest {
 pub struct Response<T> {
     /// Optional explicit HTTP-style status code.
     pub status: Option<u16>,
+    /// HTTP response headers returned by the handler.
+    pub headers: BTreeMap<String, Vec<String>>,
     /// Typed response body returned by the handler.
     pub body: T,
 }
@@ -205,8 +207,18 @@ impl<T> Response<T> {
     pub fn new(status: u16, body: T) -> Self {
         Self {
             status: Some(status),
+            headers: BTreeMap::new(),
             body,
         }
+    }
+
+    /// Adds one HTTP response header value.
+    pub fn with_header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.headers
+            .entry(name.into())
+            .or_default()
+            .push(value.into());
+        self
     }
 }
 

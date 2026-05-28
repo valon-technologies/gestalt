@@ -168,7 +168,20 @@ func httpHeaderFromProto(values map[string]*proto.StringList) http.Header {
 	}
 	out := make(http.Header, len(values))
 	for key, value := range values {
-		out[key] = append([]string(nil), value.GetValues()...)
+		for _, item := range value.GetValues() {
+			out.Add(key, item)
+		}
+	}
+	return out
+}
+
+func httpHeaderToProto(values http.Header) map[string]*proto.StringList {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]*proto.StringList, len(values))
+	for key, value := range values {
+		out[key] = &proto.StringList{Values: append([]string(nil), value...)}
 	}
 	return out
 }
@@ -265,8 +278,9 @@ func operationResultProto(result *OperationResult) *proto.OperationResult {
 		return nil
 	}
 	return &proto.OperationResult{
-		Status: int32(result.Status),
-		Body:   result.Body,
+		Status:  int32(result.Status),
+		Headers: httpHeaderToProto(result.Headers),
+		Body:    result.Body,
 	}
 }
 

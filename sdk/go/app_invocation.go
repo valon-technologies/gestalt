@@ -135,8 +135,9 @@ func (c *appClient) Invoke(ctx context.Context, app, operation string, params an
 		return nil, err
 	}
 	return &OperationResult{
-		Status: int(resp.GetStatus()),
-		Body:   resp.GetBody(),
+		Status:  int(resp.GetStatus()),
+		Headers: httpHeaderFromProto(resp.GetHeaders()),
+		Body:    resp.GetBody(),
 	}, nil
 }
 
@@ -179,8 +180,9 @@ func (c *appClient) InvokeGraphQL(ctx context.Context, app, document string, var
 		return nil, err
 	}
 	return &OperationResult{
-		Status: int(resp.GetStatus()),
-		Body:   resp.GetBody(),
+		Status:  int(resp.GetStatus()),
+		Headers: httpHeaderFromProto(resp.GetHeaders()),
+		Body:    resp.GetBody(),
 	}, nil
 }
 

@@ -67,8 +67,9 @@ func (r Request) Authorization() (sdkauthorization.Authorization, error) {
 // Response is the typed handler result marshaled into the provider response body.
 // A zero Status defaults to 200.
 type Response[T any] struct {
-	Status int
-	Body   T
+	Status  int
+	Headers http.Header
+	Body    T
 }
 
 // OK returns a typed JSON response with status 200.
@@ -131,7 +132,7 @@ func Register[P any, In any, Out any](
 			if err != nil {
 				return nil, newOperationError(http.StatusInternalServerError, fmt.Sprintf("marshal response for %q: %v", op.ID, err), err)
 			}
-			return &OperationResult{Status: status, Body: string(body)}, nil
+			return &OperationResult{Status: status, Headers: resp.Headers.Clone(), Body: string(body)}, nil
 		},
 	}
 }

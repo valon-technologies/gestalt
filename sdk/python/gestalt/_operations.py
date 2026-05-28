@@ -3,7 +3,7 @@ import dataclasses
 import inspect
 import traceback
 import types
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http import HTTPStatus
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
@@ -32,6 +32,7 @@ class OperationDefinition:
 class OperationResult:
     status: int
     body: str
+    headers: dict[str, list[str]] = field(default_factory=dict)
 
     def __iter__(self) -> Any:
         return iter((self.status, self.body))
@@ -87,11 +88,13 @@ def execute_operation(
         if isinstance(result, Response):
             status = HTTPStatus.OK if result.status is None else result.status
             body = result.body
+            headers = _normalize_headers(result.headers)
         else:
             status = HTTPStatus.OK
             body = result
+            headers = {}
 
-        return OperationResult(status=status, body=json_body(body))
+        return OperationResult(status=status, body=json_body(body), headers=headers)
     except Error as error:
         return _error_result(error.status, error.message)
     except Exception as error:
@@ -120,6 +123,15 @@ def run_sync(value: Any) -> Any:
 
 def _error_result(status: int, message: str) -> OperationResult:
     return OperationResult(status=status, body=json_body({"error": message}))
+
+
+def _normalize_headers(headers: dict[str, Any] | None) -> dict[str, list[str]]:
+    if not headers:
+        return {}
+    normalized: dict[str, list[str]] = {}
+    for name, value in headers.items():
+        normalized[name] = list(value) if isinstance(value, (list, tuple)) else [value]
+    return normalized
 
 
 def _normalize_input_type(annotation: Any) -> Any:

@@ -11,9 +11,11 @@ import {
   errorMessage,
   type MaybePromise,
   type OperationResult,
+  type OperationResultHeaders,
   type Request,
   responseBrand,
   type Response,
+  type ResponseHeaders,
   type SubjectInput,
 } from "./api.ts";
 import {
@@ -128,6 +130,20 @@ export interface AppDefinitionOptions extends ProviderBaseOptions {
   operations: Array<OperationDefinition<any, any>>;
   sessionCatalog?: SessionCatalogHandler;
 }
+
+function normalizeResponseHeaders(
+  headers: ResponseHeaders | undefined,
+): OperationResultHeaders | undefined {
+  if (headers === undefined) {
+    return undefined;
+  }
+  const normalized: OperationResultHeaders = {};
+  for (const [name, value] of Object.entries(headers)) {
+    normalized[name] = Array.isArray(value) ? [...value] : [value];
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 /**
  * Normalizes an app operation definition.
  */
@@ -357,13 +373,17 @@ export class AppProvider extends ProviderBase {
 
     try {
       const raw = await entry.handler(input, request);
-      const response = isResponse(raw) ? raw : { status: 200, body: raw };
+      const response = isResponse(raw)
+        ? raw
+        : { status: 200, headers: undefined, body: raw };
       const body = entry.output
         ? entry.output.parse(response.body, "$response")
         : response.body;
 
+      const headers = normalizeResponseHeaders(response.headers);
       return {
         status: response.status ?? 200,
+        ...(headers === undefined ? {} : { headers }),
         body: JSON.stringify(body),
       };
     } catch (error) {

@@ -1608,7 +1608,11 @@ def _provider_servicer(*, app: App) -> Any:
                 status = HTTPStatus.INTERNAL_SERVER_ERROR
                 body = json_body({"error": INTERNAL_ERROR_MESSAGE})
                 return app_pb2.OperationResult(status=status, body=body)
-            return app_pb2.OperationResult(status=result.status, body=result.body)
+            return app_pb2.OperationResult(
+                status=result.status,
+                body=result.body,
+                headers=_proto_string_lists(result.headers),
+            )
 
         def ResolveHTTPSubject(self, request: Any, context: Any) -> Any:
             if not app.supports_http_subject():
@@ -2223,6 +2227,13 @@ def _string_lists_from_proto_map(values: Any) -> dict[str, list[str]]:
     return {
         str(key): list(getattr(value, "values", ()))
         for key, value in dict(values or {}).items()
+    }
+
+
+def _proto_string_lists(values: dict[str, list[str]]) -> dict[str, Any]:
+    return {
+        key: app_pb2.StringList(values=list(items))
+        for key, items in values.items()
     }
 
 
