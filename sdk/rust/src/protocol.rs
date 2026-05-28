@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use prost_types::{ListValue, value::Kind};
@@ -8,6 +9,7 @@ use serde::ser::{
     SerializeTuple, SerializeTupleStruct, SerializeTupleVariant,
 };
 
+use crate::generated::v1::StringList;
 use crate::{Error, Result};
 
 const NANOS_PER_SECOND: i128 = 1_000_000_000;
@@ -112,6 +114,24 @@ pub(crate) fn system_time_from_timestamp(value: &Timestamp) -> Result<SystemTime
             .checked_sub(duration)
             .ok_or_else(|| Error::bad_request("protobuf Timestamp seconds out of range"))
     }
+}
+
+pub(crate) fn string_lists_from_proto(
+    values: &BTreeMap<String, StringList>,
+) -> BTreeMap<String, Vec<String>> {
+    values
+        .iter()
+        .map(|(key, value)| (key.clone(), value.values.clone()))
+        .collect()
+}
+
+pub(crate) fn string_lists_to_proto(
+    values: BTreeMap<String, Vec<String>>,
+) -> BTreeMap<String, StringList> {
+    values
+        .into_iter()
+        .map(|(key, values)| (key, StringList { values }))
+        .collect()
 }
 
 fn duration_to_nanos(duration: Duration) -> i128 {

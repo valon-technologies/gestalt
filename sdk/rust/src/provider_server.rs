@@ -145,7 +145,7 @@ where
 
         Ok(GrpcResponse::new(ProtoOperationResult {
             status: i32::from(result.status),
-            headers: string_lists_to_proto(result.headers),
+            headers: protocol::string_lists_to_proto(result.headers),
             body: result.body,
         }))
     }
@@ -433,32 +433,14 @@ fn http_subject_request(request: Option<&HttpSubjectRequest>) -> HTTPSubjectRequ
         method: request.method.clone(),
         path: request.path.clone(),
         content_type: request.content_type.clone(),
-        headers: string_lists(&request.headers),
-        query: string_lists(&request.query),
+        headers: protocol::string_lists_from_proto(&request.headers),
+        query: protocol::string_lists_from_proto(&request.query),
         params: object_map(request.params.clone()),
         raw_body: request.raw_body.clone(),
         security_scheme: request.security_scheme.clone(),
         verified_subject: request.verified_subject.clone(),
         verified_claims: request.verified_claims.clone(),
     }
-}
-
-fn string_lists(
-    values: &std::collections::BTreeMap<String, crate::generated::v1::StringList>,
-) -> std::collections::BTreeMap<String, Vec<String>> {
-    values
-        .iter()
-        .map(|(key, value)| (key.clone(), value.values.clone()))
-        .collect()
-}
-
-fn string_lists_to_proto(
-    values: BTreeMap<String, Vec<String>>,
-) -> BTreeMap<String, crate::generated::v1::StringList> {
-    values
-        .into_iter()
-        .map(|(key, values)| (key, crate::generated::v1::StringList { values }))
-        .collect()
 }
 
 fn subject_to_proto(subject: Subject) -> SubjectContext {
