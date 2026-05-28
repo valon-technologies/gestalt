@@ -235,7 +235,7 @@ function turnOutputForRequest(
       },
     };
   }
-  return { text: { text } };
+  return { text };
 }
 
 function turnOutputForExistingTurn(turn: AgentTurn, text: string): AgentTurnOutput {
@@ -247,7 +247,7 @@ function turnOutputForExistingTurn(turn: AgentTurn, text: string): AgentTurnOutp
       },
     };
   }
-  return { text: { text } };
+  return { text };
 }
 
 async function cancelCanonicalTurn(request: {

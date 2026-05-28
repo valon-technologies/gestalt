@@ -88,7 +88,6 @@ _AGENT_PROTOCOL_EXPORTS = (
     "AgentTurnEvent",
     "AgentTurnOutput",
     "AgentTurnStructuredOutput",
-    "AgentTurnTextOutput",
     "CancelAgentProviderTurnRequest",
     "CreateAgentProviderSessionRequest",
     "CreateAgentProviderTurnRequest",
