@@ -10,6 +10,8 @@ import (
 )
 
 func TestWriteOperationResultForwardsHeaders(t *testing.T) {
+	t.Parallel()
+
 	headers := http.Header{}
 	headers.Set("Content-Type", "text/plain")
 	headers.Set("Location", "/next")
@@ -39,6 +41,8 @@ func TestWriteOperationResultForwardsHeaders(t *testing.T) {
 }
 
 func TestWriteOperationResultDefaultsContentType(t *testing.T) {
+	t.Parallel()
+
 	rec := httptest.NewRecorder()
 	writeOperationResult(rec, &core.OperationResult{
 		Status: http.StatusOK,
