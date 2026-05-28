@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 func TestManagerServerMissingOrEmptyWorkflowGrantsDenyWorkflowManagerMethods(t *testing.T) {
@@ -117,7 +118,7 @@ func TestManagerServerPublishEventThreadsCallerAppToSelectedProvider(t *testing.
 	if len(selected.publishReqs) != 1 {
 		t.Fatalf("selected publish requests = %d, want 1", len(selected.publishReqs))
 	}
-	if got := selected.publishReqs[0].AppName; got != "valonSats" {
+	if got := selected.publishReqs[0].GetAppName(); got != "valonSats" {
 		t.Fatalf("selected publish app = %q, want valonSats", got)
 	}
 	if len(other.publishReqs) != 0 {
@@ -177,7 +178,7 @@ func TestManagerServerPublishEventThreadsCallerAppToFanoutProviders(t *testing.T
 		if len(provider.publishReqs) != 1 {
 			t.Fatalf("%s publish requests = %d, want 1", name, len(provider.publishReqs))
 		}
-		if got := provider.publishReqs[0].AppName; got != "valonSats" {
+		if got := provider.publishReqs[0].GetAppName(); got != "valonSats" {
 			t.Fatalf("%s publish app = %q, want valonSats", name, got)
 		}
 	}
@@ -224,7 +225,7 @@ func TestWorkflowManagerPublishEventSelectedProviderPreservesBlankApp(t *testing
 	if len(selected.publishReqs) != 1 {
 		t.Fatalf("selected publish requests = %d, want 1", len(selected.publishReqs))
 	}
-	if got := selected.publishReqs[0].AppName; got != "" {
+	if got := selected.publishReqs[0].GetAppName(); got != "" {
 		t.Fatalf("selected publish app = %q, want empty", got)
 	}
 }
@@ -316,15 +317,18 @@ func (c managerServerWorkflowControl) ProviderNames() []string {
 
 type recordingWorkflowProvider struct {
 	coreworkflow.Provider
-	publishReqs []coreworkflow.PublishEventRequest
+	publishReqs []*proto.PublishWorkflowProviderEventRequest
 	publishedID string
 }
 
-func (p *recordingWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
-	p.publishReqs = append(p.publishReqs, req)
-	event := req.Event
-	if p.publishedID != "" {
-		event.ID = p.publishedID
+func (p *recordingWorkflowProvider) PublishEvent(_ context.Context, req *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
+	p.publishReqs = append(p.publishReqs, gproto.Clone(req).(*proto.PublishWorkflowProviderEventRequest))
+	event := &proto.WorkflowEvent{}
+	if req.GetEvent() != nil {
+		event = gproto.Clone(req.GetEvent()).(*proto.WorkflowEvent)
 	}
-	return &event, nil
+	if p.publishedID != "" {
+		event.Id = p.publishedID
+	}
+	return event, nil
 }

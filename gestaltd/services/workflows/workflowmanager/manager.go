@@ -17,6 +17,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
@@ -440,10 +442,10 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 				break
 			}
 			seenProviderTokens[providerPageToken] = struct{}{}
-			resp, err := provider.ListRuns(ctx, coreworkflow.ListRunsRequest{
-				PageSize:  pageSize,
+			resp, err := provider.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{
+				PageSize:  int32(pageSize),
 				PageToken: providerPageToken,
-				Status:    req.Status,
+				Status:    workflowwire.RunStatusToProto(req.Status),
 				TargetApp: strings.TrimSpace(req.TargetApp),
 			})
 			if err != nil {
@@ -460,13 +462,17 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 				break
 			}
 
-			nextProviderToken := strings.TrimSpace(resp.NextPageToken)
-			for rawIndex, run := range resp.Runs {
+			nextProviderToken := strings.TrimSpace(resp.GetNextPageToken())
+			for rawIndex, runProto := range resp.GetRuns() {
 				if rawIndex < providerOffset {
 					continue
 				}
-				if run == nil {
+				if runProto == nil {
 					continue
+				}
+				run, err := workflowwire.RunFromProto(runProto)
+				if err != nil {
+					return nil, err
 				}
 				runID := strings.TrimSpace(run.ID)
 				if runID != "" {
@@ -504,7 +510,7 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 					ProviderOffset: rawIndex + 1,
 					SkipRunIDs:     cloneWorkflowRunSkipIDs(state.SkipRunIDs),
 				}
-				if rawIndex+1 >= len(resp.Runs) {
+				if rawIndex+1 >= len(resp.GetRuns()) {
 					if nextProviderToken == "" {
 						resume = workflowRunProviderPageState{ProviderName: providerName, Exhausted: true}
 					} else {
@@ -899,16 +905,24 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 			return coreworkflow.Event{}, err
 		}
 		audit.setProvider(providerName)
-		published, err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
+		eventProto, err := workflowwire.EventToProto(event)
+		if err != nil {
+			return coreworkflow.Event{}, err
+		}
+		publishedProto, err := provider.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
 			AppName:     appName,
-			Event:       event,
-			PublishedBy: publishedBy,
+			Event:       eventProto,
+			PublishedBy: workflowwire.ActorToProto(publishedBy),
 		})
 		if err != nil {
 			return coreworkflow.Event{}, err
 		}
-		if published != nil {
-			return *published, nil
+		if publishedProto != nil {
+			published, err := workflowwire.EventFromProto(publishedProto)
+			if err != nil {
+				return coreworkflow.Event{}, err
+			}
+			return published, nil
 		}
 		return event, nil
 	}
@@ -926,10 +940,15 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 			providerAudit.finish(ctx, err)
 			return coreworkflow.Event{}, err
 		}
-		_, err = provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
+		eventProto, err := workflowwire.EventToProto(event)
+		if err != nil {
+			providerAudit.finish(ctx, err)
+			return coreworkflow.Event{}, err
+		}
+		_, err = provider.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
 			AppName:     appName,
-			Event:       event,
-			PublishedBy: publishedBy,
+			Event:       eventProto,
+			PublishedBy: workflowwire.ActorToProto(publishedBy),
 		})
 		if err != nil {
 			providerAudit.finish(ctx, err)

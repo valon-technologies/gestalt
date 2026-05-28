@@ -7,8 +7,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
 )
 
 func agentExecutionStatusFromProto(status proto.AgentExecutionStatus) (coreagent.ExecutionStatus, error) {
@@ -88,7 +88,7 @@ func listedAgentToolToProto(tool coreagent.ListedTool) *proto.ListedAgentTool {
 		InputSchema:  tool.InputSchemaJSON,
 		OutputSchema: tool.OutputSchemaJSON,
 		Annotations:  operationAnnotationsToProto(tool.Annotations),
-		Ref:          agentToolRefToProto(tool.Ref),
+		Ref:          agentwire.ToolRefToProto(tool.Ref),
 	}
 }
 
@@ -101,10 +101,6 @@ func listedAgentToolsToProto(tools []coreagent.ListedTool) []*proto.ListedAgentT
 		out = append(out, listedAgentToolToProto(tools[i]))
 	}
 	return out
-}
-
-func agentToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
-	return agentwire.ToolRefToProto(ref)
 }
 
 func agentToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {

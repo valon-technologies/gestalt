@@ -6,7 +6,8 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
@@ -38,11 +39,19 @@ func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, 
 	audit.setProvider(providerName)
 	audit.setWorkflowTarget(target)
 
-	definition, err := provider.CreateDefinition(ctx, coreworkflow.CreateDefinitionRequest{
-		Target:         target,
+	targetProto, err := workflowwire.TargetToProto(target)
+	if err != nil {
+		return nil, err
+	}
+	definitionProto, err := provider.CreateDefinition(ctx, &proto.CreateWorkflowProviderDefinitionRequest{
+		Target:         targetProto,
 		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
-		CreatedBy:      workflowActorFromPrincipal(p),
+		CreatedBy:      workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
 	})
+	if err != nil {
+		return nil, err
+	}
+	definition, err := workflowwire.DefinitionFromProto(definitionProto)
 	if err != nil {
 		return nil, err
 	}
@@ -91,11 +100,19 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 	}
 	audit.setProvider(providerName)
 	audit.setWorkflowTarget(target)
-	definition, err := provider.UpdateDefinition(ctx, coreworkflow.UpdateDefinitionRequest{
-		DefinitionID: strings.TrimSpace(definitionID),
-		Target:       target,
-		RequestedBy:  workflowActorFromPrincipal(p),
+	targetProto, err := workflowwire.TargetToProto(target)
+	if err != nil {
+		return nil, err
+	}
+	definitionProto, err := provider.UpdateDefinition(ctx, &proto.UpdateWorkflowProviderDefinitionRequest{
+		DefinitionId: strings.TrimSpace(definitionID),
+		Target:       targetProto,
+		RequestedBy:  workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
 	})
+	if err != nil {
+		return nil, err
+	}
+	definition, err := workflowwire.DefinitionFromProto(definitionProto)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +134,7 @@ func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, 
 	if existing.Definition != nil {
 		audit.setWorkflowTarget(existing.Definition.Target)
 	}
-	return existing.provider.DeleteDefinition(ctx, coreworkflow.DeleteDefinitionRequest{DefinitionID: strings.TrimSpace(definitionID)})
+	return existing.provider.DeleteDefinition(ctx, &proto.DeleteWorkflowProviderDefinitionRequest{DefinitionId: strings.TrimSpace(definitionID)})
 }
 
 func (m *Manager) findDefinition(ctx context.Context, definitionID, providerSelection string) (*ManagedDefinition, error) {
@@ -130,7 +147,11 @@ func (m *Manager) findDefinition(ctx context.Context, definitionID, providerSele
 		if err != nil {
 			return nil, err
 		}
-		definition, err := provider.GetDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: definitionID})
+		definitionProto, err := provider.GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: definitionID})
+		if err != nil {
+			return nil, err
+		}
+		definition, err := workflowwire.DefinitionFromProto(definitionProto)
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +165,7 @@ func (m *Manager) findDefinition(ctx context.Context, definitionID, providerSele
 		if err != nil {
 			return nil, err
 		}
-		definition, err := provider.GetDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: definitionID})
+		definitionProto, err := provider.GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: definitionID})
 		if err != nil {
 			if isWorkflowProviderNotFound(err) {
 				continue
@@ -153,6 +174,10 @@ func (m *Manager) findDefinition(ctx context.Context, definitionID, providerSele
 				firstErr = err
 			}
 			continue
+		}
+		definition, err := workflowwire.DefinitionFromProto(definitionProto)
+		if err != nil {
+			return nil, err
 		}
 		if match != nil {
 			return nil, fmt.Errorf("%w: %s", ErrDuplicateWorkflowObjects, definitionID)

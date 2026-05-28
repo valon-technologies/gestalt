@@ -8,13 +8,12 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/agentwire"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
-	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"google.golang.org/grpc/codes"
@@ -398,7 +397,7 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 		out.Workflow = value
 	}
 	if toolRefs := invocation.ToolRefsContextFromContext(ctx); toolRefs.Set {
-		out.ToolRefs = requestToolRefsToProto(toolRefs.Refs)
+		out.ToolRefs = agentwire.ToolRefsToProto(toolRefs.Refs)
 		out.ToolRefsSet = true
 	}
 
@@ -430,17 +429,6 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 		return nil, nil
 	}
 	return &out, nil
-}
-
-func requestToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make([]*proto.AgentToolRef, 0, len(refs))
-	for i := range refs {
-		out = append(out, agentwire.ToolRefToProto(refs[i]))
-	}
-	return out
 }
 
 func normalizePublicBaseURL(baseURL string) string {

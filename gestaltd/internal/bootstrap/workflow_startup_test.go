@@ -23,7 +23,7 @@ import (
 )
 
 type startupTestWorkflowProvider struct {
-	listRuns func(context.Context, coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error)
+	*noopWorkflowProvider
 }
 
 type startableStartupTestWorkflowProvider struct {
@@ -37,104 +37,6 @@ func (p *startableStartupTestWorkflowProvider) Start(context.Context) error {
 }
 
 type noopTelemetryProvider struct{}
-
-func (p startupTestWorkflowProvider) CreateDefinition(context.Context, coreworkflow.CreateDefinitionRequest) (*coreworkflow.Definition, error) {
-	return &coreworkflow.Definition{}, nil
-}
-
-func (p startupTestWorkflowProvider) GetDefinition(context.Context, coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
-	return &coreworkflow.Definition{}, nil
-}
-
-func (p startupTestWorkflowProvider) UpdateDefinition(context.Context, coreworkflow.UpdateDefinitionRequest) (*coreworkflow.Definition, error) {
-	return &coreworkflow.Definition{}, nil
-}
-
-func (p startupTestWorkflowProvider) DeleteDefinition(context.Context, coreworkflow.DeleteDefinitionRequest) error {
-	return nil
-}
-
-func (p startupTestWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
-	return &coreworkflow.Run{}, nil
-}
-
-func (p startupTestWorkflowProvider) GetRun(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
-	return &coreworkflow.Run{}, nil
-}
-
-func (p startupTestWorkflowProvider) ListRuns(ctx context.Context, req coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
-	if p.listRuns != nil {
-		return p.listRuns(ctx, req)
-	}
-	return &coreworkflow.ListRunsResponse{}, nil
-}
-
-func (p startupTestWorkflowProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
-	return &coreworkflow.Run{}, nil
-}
-
-func (p startupTestWorkflowProvider) SignalRun(context.Context, coreworkflow.SignalRunRequest) (*coreworkflow.SignalRunResponse, error) {
-	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
-}
-
-func (p startupTestWorkflowProvider) SignalOrStartRun(context.Context, coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
-	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
-}
-
-func (p startupTestWorkflowProvider) UpsertSchedule(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
-	return &coreworkflow.Schedule{}, nil
-}
-
-func (p startupTestWorkflowProvider) GetSchedule(context.Context, coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
-	return &coreworkflow.Schedule{}, nil
-}
-
-func (p startupTestWorkflowProvider) ListSchedules(context.Context, coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
-	return nil, nil
-}
-
-func (p startupTestWorkflowProvider) DeleteSchedule(context.Context, coreworkflow.DeleteScheduleRequest) error {
-	return nil
-}
-
-func (p startupTestWorkflowProvider) PauseSchedule(context.Context, coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
-	return &coreworkflow.Schedule{}, nil
-}
-
-func (p startupTestWorkflowProvider) ResumeSchedule(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
-	return &coreworkflow.Schedule{}, nil
-}
-
-func (p startupTestWorkflowProvider) UpsertEventTrigger(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	return &coreworkflow.EventTrigger{}, nil
-}
-
-func (p startupTestWorkflowProvider) GetEventTrigger(context.Context, coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	return &coreworkflow.EventTrigger{}, nil
-}
-
-func (p startupTestWorkflowProvider) ListEventTriggers(context.Context, coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
-	return nil, nil
-}
-
-func (p startupTestWorkflowProvider) DeleteEventTrigger(context.Context, coreworkflow.DeleteEventTriggerRequest) error {
-	return nil
-}
-
-func (p startupTestWorkflowProvider) PauseEventTrigger(context.Context, coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	return &coreworkflow.EventTrigger{}, nil
-}
-
-func (p startupTestWorkflowProvider) ResumeEventTrigger(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	return &coreworkflow.EventTrigger{}, nil
-}
-
-func (p startupTestWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
-	return &req.Event, nil
-}
-
-func (p startupTestWorkflowProvider) Ping(context.Context) error { return nil }
-func (p startupTestWorkflowProvider) Close() error               { return nil }
 
 func TestWorkflowRuntimeResolvePendingProviderWaitsForContext(t *testing.T) {
 	t.Parallel()

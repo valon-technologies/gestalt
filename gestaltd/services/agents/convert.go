@@ -3,7 +3,7 @@ package agents
 import (
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

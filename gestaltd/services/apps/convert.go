@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
 
 	"google.golang.org/protobuf/types/known/structpb"
 )

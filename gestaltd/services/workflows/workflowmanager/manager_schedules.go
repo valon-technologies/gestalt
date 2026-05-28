@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
@@ -26,16 +28,20 @@ func (m *Manager) ListSchedules(ctx context.Context, p *principal.Principal) ([]
 		if err != nil {
 			return nil, err
 		}
-		schedules, err := provider.ListSchedules(ctx, coreworkflow.ListSchedulesRequest{})
+		resp, err := provider.ListSchedules(ctx, &proto.ListWorkflowProviderSchedulesRequest{})
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
 			continue
 		}
-		for _, schedule := range schedules {
-			if schedule == nil {
+		for _, scheduleProto := range resp.GetSchedules() {
+			if scheduleProto == nil {
 				continue
+			}
+			schedule, err := workflowwire.ScheduleFromProto(scheduleProto)
+			if err != nil {
+				return nil, err
 			}
 			managed := &ManagedSchedule{ProviderName: providerName, Schedule: schedule, provider: provider}
 			if !m.scheduleAccessible(ctx, p, managed) {
@@ -122,15 +128,23 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 	}
 	audit.setProvider(providerName)
 	audit.setWorkflowTarget(target)
-	schedule, err := provider.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{
-		ScheduleID:   scheduleID,
+	targetProto, err := workflowwire.TargetToProto(target)
+	if err != nil {
+		return nil, err
+	}
+	scheduleProto, err := provider.UpsertSchedule(ctx, &proto.UpsertWorkflowProviderScheduleRequest{
+		ScheduleId:   scheduleID,
 		Cron:         strings.TrimSpace(req.Cron),
 		Timezone:     strings.TrimSpace(req.Timezone),
-		Target:       target,
+		Target:       targetProto,
 		Paused:       req.Paused,
-		RequestedBy:  workflowActorFromPrincipal(p),
-		DefinitionID: strings.TrimSpace(req.DefinitionID),
+		RequestedBy:  workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
+		DefinitionId: strings.TrimSpace(req.DefinitionID),
 	})
+	if err != nil {
+		return nil, err
+	}
+	schedule, err := workflowwire.ScheduleFromProto(scheduleProto)
 	if err != nil {
 		return nil, err
 	}
@@ -192,21 +206,29 @@ func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, sc
 	}
 	audit.setProvider(nextProviderName)
 	audit.setWorkflowTarget(target)
-	schedule, err := nextProvider.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{
-		ScheduleID:   strings.TrimSpace(existing.Schedule.ID),
+	targetProto, err := workflowwire.TargetToProto(target)
+	if err != nil {
+		return nil, err
+	}
+	scheduleProto, err := nextProvider.UpsertSchedule(ctx, &proto.UpsertWorkflowProviderScheduleRequest{
+		ScheduleId:   strings.TrimSpace(existing.Schedule.ID),
 		Cron:         strings.TrimSpace(req.Cron),
 		Timezone:     strings.TrimSpace(req.Timezone),
-		Target:       target,
+		Target:       targetProto,
 		Paused:       req.Paused,
-		RequestedBy:  workflowActorFromPrincipal(p),
-		DefinitionID: strings.TrimSpace(req.DefinitionID),
+		RequestedBy:  workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
+		DefinitionId: strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
 		return nil, err
 	}
+	schedule, err := workflowwire.ScheduleFromProto(scheduleProto)
+	if err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(existing.ProviderName) != nextProviderName {
-		if err := existing.provider.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{ScheduleID: strings.TrimSpace(existing.Schedule.ID)}); err != nil && !isWorkflowProviderNotFound(err) {
-			_ = nextProvider.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{ScheduleID: strings.TrimSpace(existing.Schedule.ID)})
+		if err := existing.provider.DeleteSchedule(ctx, &proto.DeleteWorkflowProviderScheduleRequest{ScheduleId: strings.TrimSpace(existing.Schedule.ID)}); err != nil && !isWorkflowProviderNotFound(err) {
+			_ = nextProvider.DeleteSchedule(ctx, &proto.DeleteWorkflowProviderScheduleRequest{ScheduleId: strings.TrimSpace(existing.Schedule.ID)})
 			return nil, err
 		}
 	}
@@ -233,7 +255,7 @@ func (m *Manager) DeleteSchedule(ctx context.Context, p *principal.Principal, sc
 	if value.Schedule != nil {
 		audit.setWorkflowTarget(value.Schedule.Target)
 	}
-	return value.provider.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{ScheduleID: strings.TrimSpace(value.Schedule.ID)})
+	return value.provider.DeleteSchedule(ctx, &proto.DeleteWorkflowProviderScheduleRequest{ScheduleId: strings.TrimSpace(value.Schedule.ID)})
 }
 
 func (m *Manager) PauseSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (out *ManagedSchedule, err error) {
@@ -260,12 +282,16 @@ func (m *Manager) updateSchedulePaused(ctx context.Context, p *principal.Princip
 	if err != nil {
 		return nil, err
 	}
-	var schedule *coreworkflow.Schedule
+	var scheduleProto *proto.BoundWorkflowSchedule
 	if paused {
-		schedule, err = value.provider.PauseSchedule(ctx, coreworkflow.PauseScheduleRequest{ScheduleID: strings.TrimSpace(value.Schedule.ID)})
+		scheduleProto, err = value.provider.PauseSchedule(ctx, &proto.PauseWorkflowProviderScheduleRequest{ScheduleId: strings.TrimSpace(value.Schedule.ID)})
 	} else {
-		schedule, err = value.provider.ResumeSchedule(ctx, coreworkflow.ResumeScheduleRequest{ScheduleID: strings.TrimSpace(value.Schedule.ID)})
+		scheduleProto, err = value.provider.ResumeSchedule(ctx, &proto.ResumeWorkflowProviderScheduleRequest{ScheduleId: strings.TrimSpace(value.Schedule.ID)})
 	}
+	if err != nil {
+		return nil, err
+	}
+	schedule, err := workflowwire.ScheduleFromProto(scheduleProto)
 	if err != nil {
 		return nil, err
 	}
@@ -284,16 +310,20 @@ func (m *Manager) ListEventTriggers(ctx context.Context, p *principal.Principal)
 		if err != nil {
 			return nil, err
 		}
-		triggers, err := provider.ListEventTriggers(ctx, coreworkflow.ListEventTriggersRequest{})
+		resp, err := provider.ListEventTriggers(ctx, &proto.ListWorkflowProviderEventTriggersRequest{})
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
 			continue
 		}
-		for _, trigger := range triggers {
-			if trigger == nil {
+		for _, triggerProto := range resp.GetTriggers() {
+			if triggerProto == nil {
 				continue
+			}
+			trigger, err := workflowwire.EventTriggerFromProto(triggerProto)
+			if err != nil {
+				return nil, err
 			}
 			managed := &ManagedEventTrigger{ProviderName: providerName, Trigger: trigger, provider: provider}
 			if !m.eventTriggerAccessible(ctx, p, managed) {
@@ -384,14 +414,22 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 	}
 	audit.setProvider(providerName)
 	audit.setWorkflowTarget(target)
-	trigger, err := provider.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{
-		TriggerID:    triggerID,
-		Match:        match,
-		Target:       target,
+	targetProto, err := workflowwire.TargetToProto(target)
+	if err != nil {
+		return nil, err
+	}
+	triggerProto, err := provider.UpsertEventTrigger(ctx, &proto.UpsertWorkflowProviderEventTriggerRequest{
+		TriggerId:    triggerID,
+		Match:        workflowwire.EventMatchToProto(match),
+		Target:       targetProto,
 		Paused:       req.Paused,
-		RequestedBy:  workflowActorFromPrincipal(p),
-		DefinitionID: strings.TrimSpace(req.DefinitionID),
+		RequestedBy:  workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
+		DefinitionId: strings.TrimSpace(req.DefinitionID),
 	})
+	if err != nil {
+		return nil, err
+	}
+	trigger, err := workflowwire.EventTriggerFromProto(triggerProto)
 	if err != nil {
 		return nil, err
 	}
@@ -454,20 +492,28 @@ func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal
 	}
 	audit.setProvider(nextProviderName)
 	audit.setWorkflowTarget(target)
-	trigger, err := nextProvider.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{
-		TriggerID:    strings.TrimSpace(existing.Trigger.ID),
-		Match:        match,
-		Target:       target,
+	targetProto, err := workflowwire.TargetToProto(target)
+	if err != nil {
+		return nil, err
+	}
+	triggerProto, err := nextProvider.UpsertEventTrigger(ctx, &proto.UpsertWorkflowProviderEventTriggerRequest{
+		TriggerId:    strings.TrimSpace(existing.Trigger.ID),
+		Match:        workflowwire.EventMatchToProto(match),
+		Target:       targetProto,
 		Paused:       req.Paused,
-		RequestedBy:  workflowActorFromPrincipal(p),
-		DefinitionID: strings.TrimSpace(req.DefinitionID),
+		RequestedBy:  workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
+		DefinitionId: strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
 		return nil, err
 	}
+	trigger, err := workflowwire.EventTriggerFromProto(triggerProto)
+	if err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(existing.ProviderName) != nextProviderName {
-		if err := existing.provider.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{TriggerID: strings.TrimSpace(existing.Trigger.ID)}); err != nil && !isWorkflowProviderNotFound(err) {
-			_ = nextProvider.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{TriggerID: strings.TrimSpace(existing.Trigger.ID)})
+		if err := existing.provider.DeleteEventTrigger(ctx, &proto.DeleteWorkflowProviderEventTriggerRequest{TriggerId: strings.TrimSpace(existing.Trigger.ID)}); err != nil && !isWorkflowProviderNotFound(err) {
+			_ = nextProvider.DeleteEventTrigger(ctx, &proto.DeleteWorkflowProviderEventTriggerRequest{TriggerId: strings.TrimSpace(existing.Trigger.ID)})
 			return nil, err
 		}
 	}
@@ -494,7 +540,7 @@ func (m *Manager) DeleteEventTrigger(ctx context.Context, p *principal.Principal
 	if value.Trigger != nil {
 		audit.setWorkflowTarget(value.Trigger.Target)
 	}
-	return value.provider.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{TriggerID: strings.TrimSpace(value.Trigger.ID)})
+	return value.provider.DeleteEventTrigger(ctx, &proto.DeleteWorkflowProviderEventTriggerRequest{TriggerId: strings.TrimSpace(value.Trigger.ID)})
 }
 
 func (m *Manager) PauseEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (out *ManagedEventTrigger, err error) {
@@ -521,12 +567,16 @@ func (m *Manager) updateEventTriggerPaused(ctx context.Context, p *principal.Pri
 	if err != nil {
 		return nil, err
 	}
-	var trigger *coreworkflow.EventTrigger
+	var triggerProto *proto.BoundWorkflowEventTrigger
 	if paused {
-		trigger, err = value.provider.PauseEventTrigger(ctx, coreworkflow.PauseEventTriggerRequest{TriggerID: strings.TrimSpace(value.Trigger.ID)})
+		triggerProto, err = value.provider.PauseEventTrigger(ctx, &proto.PauseWorkflowProviderEventTriggerRequest{TriggerId: strings.TrimSpace(value.Trigger.ID)})
 	} else {
-		trigger, err = value.provider.ResumeEventTrigger(ctx, coreworkflow.ResumeEventTriggerRequest{TriggerID: strings.TrimSpace(value.Trigger.ID)})
+		triggerProto, err = value.provider.ResumeEventTrigger(ctx, &proto.ResumeWorkflowProviderEventTriggerRequest{TriggerId: strings.TrimSpace(value.Trigger.ID)})
 	}
+	if err != nil {
+		return nil, err
+	}
+	trigger, err := workflowwire.EventTriggerFromProto(triggerProto)
 	if err != nil {
 		return nil, err
 	}
@@ -544,7 +594,11 @@ func (m *Manager) findSchedule(ctx context.Context, scheduleID, providerSelectio
 		if err != nil {
 			return nil, err
 		}
-		schedule, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{ScheduleID: scheduleID})
+		scheduleProto, err := provider.GetSchedule(ctx, &proto.GetWorkflowProviderScheduleRequest{ScheduleId: scheduleID})
+		if err != nil {
+			return nil, err
+		}
+		schedule, err := workflowwire.ScheduleFromProto(scheduleProto)
 		if err != nil {
 			return nil, err
 		}
@@ -557,7 +611,7 @@ func (m *Manager) findSchedule(ctx context.Context, scheduleID, providerSelectio
 		if err != nil {
 			return nil, err
 		}
-		schedule, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{ScheduleID: scheduleID})
+		scheduleProto, err := provider.GetSchedule(ctx, &proto.GetWorkflowProviderScheduleRequest{ScheduleId: scheduleID})
 		if err != nil {
 			if isWorkflowProviderNotFound(err) {
 				continue
@@ -566,6 +620,10 @@ func (m *Manager) findSchedule(ctx context.Context, scheduleID, providerSelectio
 				firstErr = err
 			}
 			continue
+		}
+		schedule, err := workflowwire.ScheduleFromProto(scheduleProto)
+		if err != nil {
+			return nil, err
 		}
 		if match != nil {
 			return nil, fmt.Errorf("%w: %s", ErrDuplicateWorkflowObjects, scheduleID)
@@ -591,7 +649,11 @@ func (m *Manager) findEventTrigger(ctx context.Context, triggerID, providerSelec
 		if err != nil {
 			return nil, err
 		}
-		trigger, err := provider.GetEventTrigger(ctx, coreworkflow.GetEventTriggerRequest{TriggerID: triggerID})
+		triggerProto, err := provider.GetEventTrigger(ctx, &proto.GetWorkflowProviderEventTriggerRequest{TriggerId: triggerID})
+		if err != nil {
+			return nil, err
+		}
+		trigger, err := workflowwire.EventTriggerFromProto(triggerProto)
 		if err != nil {
 			return nil, err
 		}
@@ -604,7 +666,7 @@ func (m *Manager) findEventTrigger(ctx context.Context, triggerID, providerSelec
 		if err != nil {
 			return nil, err
 		}
-		trigger, err := provider.GetEventTrigger(ctx, coreworkflow.GetEventTriggerRequest{TriggerID: triggerID})
+		triggerProto, err := provider.GetEventTrigger(ctx, &proto.GetWorkflowProviderEventTriggerRequest{TriggerId: triggerID})
 		if err != nil {
 			if isWorkflowProviderNotFound(err) {
 				continue
@@ -613,6 +675,10 @@ func (m *Manager) findEventTrigger(ctx context.Context, triggerID, providerSelec
 				firstErr = err
 			}
 			continue
+		}
+		trigger, err := workflowwire.EventTriggerFromProto(triggerProto)
+		if err != nil {
+			return nil, err
 		}
 		if match != nil {
 			return nil, fmt.Errorf("%w: %s", ErrDuplicateWorkflowObjects, triggerID)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -255,7 +256,7 @@ func (s *ProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflo
 	}
 	managed, err := s.manager.SignalRun(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), workflowmanager.RunSignal{
 		RunID:  runID,
-		Signal: workflowSignalFromProto(req.GetSignal()),
+		Signal: workflowwire.SignalFromProto(req.GetSignal()),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -298,7 +299,7 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 		Target:         target,
 		DefinitionID:   strings.TrimSpace(req.GetDefinitionId()),
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
-		Signal:         workflowSignalFromProto(req.GetSignal()),
+		Signal:         workflowwire.SignalFromProto(req.GetSignal()),
 		CallerAppName:  tokenCtx.CallerApp(),
 	})
 	if err != nil {
@@ -565,7 +566,7 @@ func (s *ProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWor
 	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventsPublish); err != nil {
 		return nil, err
 	}
-	event, err := workflowEventFromProto(req.GetEvent())
+	event, err := workflowwire.EventFromProto(req.GetEvent())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "event: %v", err)
 	}
@@ -577,7 +578,7 @@ func (s *ProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWor
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
-	out, err := workflowEventToProto(published)
+	out, err := workflowwire.EventToProto(published)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "encode workflow event: %v", err)
 	}
@@ -635,6 +636,26 @@ func workflowProtoTargetKind(target *proto.BoundWorkflowTarget) string {
 	return observability.WorkflowTargetKindUnknown
 }
 
+func workflowRunStatusFromCore(run *coreworkflow.Run) string {
+	if run == nil {
+		return observability.WorkflowRunStatusUnknown
+	}
+	switch run.Status {
+	case coreworkflow.RunStatusPending:
+		return observability.WorkflowRunStatusPending
+	case coreworkflow.RunStatusRunning:
+		return observability.WorkflowRunStatusRunning
+	case coreworkflow.RunStatusSucceeded:
+		return observability.WorkflowRunStatusSucceeded
+	case coreworkflow.RunStatusFailed:
+		return observability.WorkflowRunStatusFailed
+	case coreworkflow.RunStatusCanceled:
+		return observability.WorkflowRunStatusCanceled
+	default:
+		return observability.WorkflowRunStatusUnknown
+	}
+}
+
 func workflowManagerScheduleUpsert(
 	providerName string,
 	cron string,
@@ -668,7 +689,7 @@ func workflowManagerTargetProtoIsSet(targetProto *proto.BoundWorkflowTarget) boo
 }
 
 func workflowManagerTarget(targetProto *proto.BoundWorkflowTarget) (coreworkflow.Target, error) {
-	target := workflowTargetFromProto(targetProto)
+	target := workflowwire.TargetFromProto(targetProto)
 	if len(target.Steps) == 0 {
 		return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.steps is required")
 	}
@@ -686,7 +707,7 @@ func workflowManagerEventTriggerUpsert(
 	if err != nil {
 		return workflowmanager.EventTriggerUpsert{}, err
 	}
-	match := workflowEventMatchFromProto(matchProto)
+	match := workflowwire.EventMatchFromProto(matchProto)
 	if strings.TrimSpace(match.Type) == "" {
 		return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "match.type is required")
 	}

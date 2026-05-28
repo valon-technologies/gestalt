@@ -1,4 +1,4 @@
-package workflows
+package workflowwire
 
 import (
 	"testing"
@@ -7,12 +7,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func protoValueFromAnyMust(value any) *structpb.Value {
-	out, err := protoValueFromAny(value)
+	out, err := protoutil.ValueFromAny(value)
 	if err != nil {
 		panic(err)
 	}
@@ -22,7 +24,7 @@ func protoValueFromAnyMust(value any) *structpb.Value {
 func TestWorkflowTargetToProtoUsesAppStep(t *testing.T) {
 	t.Parallel()
 
-	target, err := workflowTargetToProto(coreworkflow.Target{
+	target, err := TargetToProto(coreworkflow.Target{
 		Steps: []coreworkflow.Step{{
 			ID: "refresh",
 			App: &coreworkflow.AppCall{
@@ -58,7 +60,7 @@ func TestWorkflowTargetToProtoUsesAppStep(t *testing.T) {
 func TestWorkflowTargetFromProtoAcceptsStepAppFields(t *testing.T) {
 	t.Parallel()
 
-	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
+	target := TargetFromProto(&proto.BoundWorkflowTarget{
 		Steps: []*proto.WorkflowStep{{
 			Id: " refresh ",
 			Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{
@@ -100,7 +102,7 @@ func TestWorkflowTargetFromProtoAcceptsStepAppFields(t *testing.T) {
 func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	target, err := workflowTargetToProto(coreworkflow.Target{
+	target, err := TargetToProto(coreworkflow.Target{
 		Steps: []coreworkflow.Step{
 			{
 				ID: "diagnosis",
@@ -161,7 +163,7 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 		t.Fatalf("step when equals = %v, want true", got)
 	}
 
-	roundTrip := workflowTargetFromProto(target)
+	roundTrip := TargetFromProto(target)
 	if len(roundTrip.Steps) != 3 {
 		t.Fatalf("round trip steps = %#v", roundTrip.Steps)
 	}
@@ -188,7 +190,7 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 func TestWorkflowTargetFromProtoPreservesEmptyStepApp(t *testing.T) {
 	t.Parallel()
 
-	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
+	target := TargetFromProto(&proto.BoundWorkflowTarget{
 		Steps: []*proto.WorkflowStep{{Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{}}}},
 	})
 	if len(target.Steps) != 1 || target.Steps[0].App == nil {
@@ -227,11 +229,33 @@ func TestWorkflowValueProtoRoundTripPreservesEmptyCollections(t *testing.T) {
 	}
 }
 
+func TestWorkflowEventToProtoEncodesNilExtensionAsNullValue(t *testing.T) {
+	t.Parallel()
+
+	event, err := EventToProto(coreworkflow.Event{
+		ID:          "event-1",
+		Source:      "test",
+		SpecVersion: "1.0",
+		Type:        "demo.created",
+		Extensions:  map[string]any{"missing": nil},
+	})
+	if err != nil {
+		t.Fatalf("EventToProto: %v", err)
+	}
+	extension := event.GetExtensions()["missing"]
+	if extension == nil || extension.GetNullValue() != structpb.NullValue_NULL_VALUE {
+		t.Fatalf("nil extension = %#v, want protobuf null value", extension)
+	}
+	if _, err := protojson.Marshal(event); err != nil {
+		t.Fatalf("marshal event with nil extension: %v", err)
+	}
+}
+
 func TestWorkflowRunTriggerToProtoPrefersScheduleOverManual(t *testing.T) {
 	t.Parallel()
 
 	scheduledFor := time.Date(2026, time.April, 15, 12, 30, 0, 0, time.UTC)
-	trigger, err := workflowRunTriggerToProto(coreworkflow.RunTrigger{
+	trigger, err := RunTriggerToProto(coreworkflow.RunTrigger{
 		Manual: true,
 		Schedule: &coreworkflow.ScheduleTrigger{
 			ScheduleID:   "sched-1",

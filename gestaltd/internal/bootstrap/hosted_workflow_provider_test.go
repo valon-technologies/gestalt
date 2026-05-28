@@ -17,10 +17,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"google.golang.org/grpc"
+	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -587,6 +589,7 @@ func workflowConfigTestAgentStepTarget() *config.WorkflowTargetConfig {
 			ID: "main",
 			Agent: &config.WorkflowStepAgentConfig{
 				Prompt: config.WorkflowTextConfig{Template: "summarize"},
+				Output: &config.WorkflowAgentOutputConfig{Text: &config.WorkflowAgentTextOutputConfig{}},
 			},
 		}},
 	}
@@ -759,7 +762,7 @@ func (p *notifyingRuntimeWorkflowControlProvider) WaitRuntimeWorkersReady(contex
 	return nil
 }
 
-func (p *notifyingRuntimeWorkflowControlProvider) UpsertSchedule(ctx context.Context, req workflow.UpsertScheduleRequest) (*workflow.Schedule, error) {
+func (p *notifyingRuntimeWorkflowControlProvider) UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	schedule, err := p.recordingWorkflowControlProvider.UpsertSchedule(ctx, req)
 	if err == nil {
 		p.once.Do(func() {
@@ -786,72 +789,80 @@ func (p *blockingRuntimeWorkflowControlProvider) WaitRuntimeWorkersReady(ctx con
 type recordingWorkflowControlProvider struct {
 	noopWorkflowProvider
 	schedules             map[string]*workflow.Schedule
-	upsertedSchedules     []workflow.UpsertScheduleRequest
+	upsertedSchedules     []*proto.UpsertWorkflowProviderScheduleRequest
 	eventTriggers         map[string]*workflow.EventTrigger
-	upsertedEventTriggers []workflow.UpsertEventTriggerRequest
+	upsertedEventTriggers []*proto.UpsertWorkflowProviderEventTriggerRequest
 }
 
-func (p *recordingWorkflowControlProvider) GetSchedule(_ context.Context, req workflow.GetScheduleRequest) (*workflow.Schedule, error) {
-	if schedule := p.schedules[req.ScheduleID]; schedule != nil {
-		return cloneWorkflowSchedule(schedule), nil
+func (p *recordingWorkflowControlProvider) GetSchedule(_ context.Context, req *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	if schedule := p.schedules[req.GetScheduleId()]; schedule != nil {
+		return workflowwire.ScheduleToProto(cloneWorkflowSchedule(schedule))
 	}
 	return nil, core.ErrNotFound
 }
 
-func (p *recordingWorkflowControlProvider) UpsertSchedule(_ context.Context, req workflow.UpsertScheduleRequest) (*workflow.Schedule, error) {
-	p.upsertedSchedules = append(p.upsertedSchedules, req)
+func (p *recordingWorkflowControlProvider) UpsertSchedule(_ context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	p.upsertedSchedules = append(p.upsertedSchedules, gproto.Clone(req).(*proto.UpsertWorkflowProviderScheduleRequest))
 	if p.schedules == nil {
 		p.schedules = map[string]*workflow.Schedule{}
 	}
 	schedule := &workflow.Schedule{
-		ID:           req.ScheduleID,
-		Cron:         req.Cron,
-		Timezone:     req.Timezone,
-		Target:       req.Target,
-		Paused:       req.Paused,
-		CreatedBy:    req.RequestedBy,
-		DefinitionID: req.DefinitionID,
+		ID:           req.GetScheduleId(),
+		Cron:         req.GetCron(),
+		Timezone:     req.GetTimezone(),
+		Target:       workflowwire.TargetFromProto(req.GetTarget()),
+		Paused:       req.GetPaused(),
+		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
+		DefinitionID: req.GetDefinitionId(),
 	}
-	p.schedules[req.ScheduleID] = schedule
-	return cloneWorkflowSchedule(schedule), nil
+	p.schedules[req.GetScheduleId()] = schedule
+	return workflowwire.ScheduleToProto(cloneWorkflowSchedule(schedule))
 }
 
-func (p *recordingWorkflowControlProvider) ListSchedules(context.Context, workflow.ListSchedulesRequest) ([]*workflow.Schedule, error) {
-	out := make([]*workflow.Schedule, 0, len(p.schedules))
+func (p *recordingWorkflowControlProvider) ListSchedules(context.Context, *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error) {
+	out := &proto.ListWorkflowProviderSchedulesResponse{}
 	for _, schedule := range p.schedules {
-		out = append(out, cloneWorkflowSchedule(schedule))
+		pb, err := workflowwire.ScheduleToProto(cloneWorkflowSchedule(schedule))
+		if err != nil {
+			return nil, err
+		}
+		out.Schedules = append(out.Schedules, pb)
 	}
 	return out, nil
 }
 
-func (p *recordingWorkflowControlProvider) GetEventTrigger(_ context.Context, req workflow.GetEventTriggerRequest) (*workflow.EventTrigger, error) {
-	if trigger := p.eventTriggers[req.TriggerID]; trigger != nil {
-		return cloneWorkflowEventTrigger(trigger), nil
+func (p *recordingWorkflowControlProvider) GetEventTrigger(_ context.Context, req *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	if trigger := p.eventTriggers[req.GetTriggerId()]; trigger != nil {
+		return workflowwire.EventTriggerToProto(cloneWorkflowEventTrigger(trigger))
 	}
 	return nil, core.ErrNotFound
 }
 
-func (p *recordingWorkflowControlProvider) UpsertEventTrigger(_ context.Context, req workflow.UpsertEventTriggerRequest) (*workflow.EventTrigger, error) {
-	p.upsertedEventTriggers = append(p.upsertedEventTriggers, req)
+func (p *recordingWorkflowControlProvider) UpsertEventTrigger(_ context.Context, req *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	p.upsertedEventTriggers = append(p.upsertedEventTriggers, gproto.Clone(req).(*proto.UpsertWorkflowProviderEventTriggerRequest))
 	if p.eventTriggers == nil {
 		p.eventTriggers = map[string]*workflow.EventTrigger{}
 	}
 	trigger := &workflow.EventTrigger{
-		ID:           req.TriggerID,
-		Match:        req.Match,
-		Target:       req.Target,
-		Paused:       req.Paused,
-		CreatedBy:    req.RequestedBy,
-		DefinitionID: req.DefinitionID,
+		ID:           req.GetTriggerId(),
+		Match:        workflowwire.EventMatchFromProto(req.GetMatch()),
+		Target:       workflowwire.TargetFromProto(req.GetTarget()),
+		Paused:       req.GetPaused(),
+		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
+		DefinitionID: req.GetDefinitionId(),
 	}
-	p.eventTriggers[req.TriggerID] = trigger
-	return cloneWorkflowEventTrigger(trigger), nil
+	p.eventTriggers[req.GetTriggerId()] = trigger
+	return workflowwire.EventTriggerToProto(cloneWorkflowEventTrigger(trigger))
 }
 
-func (p *recordingWorkflowControlProvider) ListEventTriggers(context.Context, workflow.ListEventTriggersRequest) ([]*workflow.EventTrigger, error) {
-	out := make([]*workflow.EventTrigger, 0, len(p.eventTriggers))
+func (p *recordingWorkflowControlProvider) ListEventTriggers(context.Context, *proto.ListWorkflowProviderEventTriggersRequest) (*proto.ListWorkflowProviderEventTriggersResponse, error) {
+	out := &proto.ListWorkflowProviderEventTriggersResponse{}
 	for _, trigger := range p.eventTriggers {
-		out = append(out, cloneWorkflowEventTrigger(trigger))
+		pb, err := workflowwire.EventTriggerToProto(cloneWorkflowEventTrigger(trigger))
+		if err != nil {
+			return nil, err
+		}
+		out.Triggers = append(out.Triggers, pb)
 	}
 	return out, nil
 }

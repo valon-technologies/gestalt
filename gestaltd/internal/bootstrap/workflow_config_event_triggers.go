@@ -11,6 +11,8 @@ import (
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
@@ -44,11 +46,13 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
 		providerCtx := invocation.WithWorkflowContextString(ctx, "app", appName)
-		existing, err := provider.GetEventTrigger(providerCtx, coreworkflow.GetEventTriggerRequest{
-			TriggerID: desiredEntry.TriggerID,
-		})
+		existingProto, err := provider.GetEventTrigger(providerCtx, &proto.GetWorkflowProviderEventTriggerRequest{TriggerId: desiredEntry.TriggerID})
 		switch {
 		case err == nil:
+			existing, existingErr := workflowwire.EventTriggerFromProto(existingProto)
+			if existingErr != nil {
+				return fmt.Errorf("bootstrap: decode workflow event trigger %q for app %q: %w", desiredEntry.TriggerID, appName, existingErr)
+			}
 			if !isWorkflowConfigOwnedEventTrigger(existing, appName, desiredEntry.TriggerID) {
 				return fmt.Errorf("bootstrap: workflow event trigger %q for app %q conflicts with existing unmanaged trigger id %q", desiredEntry.TriggerKey, appName, desiredEntry.TriggerID)
 			}
@@ -72,12 +76,16 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
-		if _, err := provider.UpsertEventTrigger(providerCtx, coreworkflow.UpsertEventTriggerRequest{
-			TriggerID:   desiredEntry.TriggerID,
-			Match:       workflowConfigEventTriggerMatch(trigger),
-			Target:      target,
+		targetProto, err := workflowwire.TargetToProto(target)
+		if err != nil {
+			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
+		}
+		if _, err := provider.UpsertEventTrigger(providerCtx, &proto.UpsertWorkflowProviderEventTriggerRequest{
+			TriggerId:   desiredEntry.TriggerID,
+			Match:       workflowwire.EventMatchToProto(workflowConfigEventTriggerMatch(trigger)),
+			Target:      targetProto,
 			Paused:      trigger.Paused,
-			RequestedBy: workflowConfigActor(),
+			RequestedBy: workflowwire.ActorToProto(workflowConfigActor()),
 		}); err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
@@ -128,12 +136,16 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow event triggers requires provider %q: %w", providerName, err)
 		}
-		triggers, err := provider.ListEventTriggers(ctx, coreworkflow.ListEventTriggersRequest{})
+		resp, err := provider.ListEventTriggers(ctx, &proto.ListWorkflowProviderEventTriggersRequest{})
 		if err != nil {
 			workflowLogSkippedConfigWorkflowCleanup(ctx, "event_triggers", providerName, err)
 			continue
 		}
-		for _, trigger := range triggers {
+		for _, triggerProto := range resp.GetTriggers() {
+			trigger, err := workflowwire.EventTriggerFromProto(triggerProto)
+			if err != nil {
+				return fmt.Errorf("bootstrap: decode workflow event trigger from provider %q: %w", providerName, err)
+			}
 			if trigger == nil || !isWorkflowConfigOwnedEventTrigger(trigger, workflowConfigTargetLabel(trigger.Target), trigger.ID) {
 				continue
 			}
@@ -142,7 +154,7 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 			}
 			appName := workflowConfigTargetLabel(trigger.Target)
 			providerCtx := invocation.WithWorkflowContextString(ctx, "app", appName)
-			if err := provider.DeleteEventTrigger(providerCtx, coreworkflow.DeleteEventTriggerRequest{TriggerID: trigger.ID}); err != nil && !isWorkflowObjectNotFound(err) {
+			if err := provider.DeleteEventTrigger(providerCtx, &proto.DeleteWorkflowProviderEventTriggerRequest{TriggerId: trigger.ID}); err != nil && !isWorkflowObjectNotFound(err) {
 				return fmt.Errorf("bootstrap: delete workflow event trigger %q for app %q: %w", trigger.ID, appName, err)
 			}
 		}

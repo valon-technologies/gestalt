@@ -14,6 +14,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -53,11 +55,13 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
 		providerCtx := invocation.WithWorkflowContextString(ctx, "app", appName)
-		existing, err := provider.GetSchedule(providerCtx, coreworkflow.GetScheduleRequest{
-			ScheduleID: desiredEntry.ScheduleID,
-		})
+		existingProto, err := provider.GetSchedule(providerCtx, &proto.GetWorkflowProviderScheduleRequest{ScheduleId: desiredEntry.ScheduleID})
 		switch {
 		case err == nil:
+			existing, existingErr := workflowwire.ScheduleFromProto(existingProto)
+			if existingErr != nil {
+				return fmt.Errorf("bootstrap: decode workflow schedule %q for app %q: %w", desiredEntry.ScheduleID, appName, existingErr)
+			}
 			if !isWorkflowConfigOwnedSchedule(existing, appName, desiredEntry.ScheduleID) {
 				return fmt.Errorf("bootstrap: workflow schedule %q for app %q conflicts with existing unmanaged schedule id %q", desiredEntry.ScheduleKey, appName, desiredEntry.ScheduleID)
 			}
@@ -81,13 +85,17 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
-		if _, err := provider.UpsertSchedule(providerCtx, coreworkflow.UpsertScheduleRequest{
-			ScheduleID:  desiredEntry.ScheduleID,
+		targetProto, err := workflowwire.TargetToProto(target)
+		if err != nil {
+			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
+		}
+		if _, err := provider.UpsertSchedule(providerCtx, &proto.UpsertWorkflowProviderScheduleRequest{
+			ScheduleId:  desiredEntry.ScheduleID,
 			Cron:        schedule.Cron,
 			Timezone:    schedule.Timezone,
-			Target:      target,
+			Target:      targetProto,
 			Paused:      schedule.Paused,
-			RequestedBy: workflowConfigActor(),
+			RequestedBy: workflowwire.ActorToProto(workflowConfigActor()),
 		}); err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
@@ -149,12 +157,16 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow schedules requires provider %q: %w", providerName, err)
 		}
-		schedules, err := provider.ListSchedules(ctx, coreworkflow.ListSchedulesRequest{})
+		resp, err := provider.ListSchedules(ctx, &proto.ListWorkflowProviderSchedulesRequest{})
 		if err != nil {
 			workflowLogSkippedConfigWorkflowCleanup(ctx, "schedules", providerName, err)
 			continue
 		}
-		for _, schedule := range schedules {
+		for _, scheduleProto := range resp.GetSchedules() {
+			schedule, err := workflowwire.ScheduleFromProto(scheduleProto)
+			if err != nil {
+				return fmt.Errorf("bootstrap: decode workflow schedule from provider %q: %w", providerName, err)
+			}
 			if schedule == nil || !isWorkflowConfigOwnedSchedule(schedule, workflowConfigTargetLabel(schedule.Target), schedule.ID) {
 				continue
 			}
@@ -163,7 +175,7 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 			}
 			appName := workflowConfigTargetLabel(schedule.Target)
 			providerCtx := invocation.WithWorkflowContextString(ctx, "app", appName)
-			if err := provider.DeleteSchedule(providerCtx, coreworkflow.DeleteScheduleRequest{ScheduleID: schedule.ID}); err != nil && !isWorkflowObjectNotFound(err) {
+			if err := provider.DeleteSchedule(providerCtx, &proto.DeleteWorkflowProviderScheduleRequest{ScheduleId: schedule.ID}); err != nil && !isWorkflowObjectNotFound(err) {
 				return fmt.Errorf("bootstrap: delete workflow schedule %q for app %q: %w", schedule.ID, appName, err)
 			}
 		}
