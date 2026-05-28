@@ -432,6 +432,12 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 	return &out, nil
 }
 
+// RequestContextProto converts the invocation context used by app providers into
+// the protobuf request context carried on Execute requests.
+func RequestContextProto(ctx context.Context, publicBaseURL string) (*proto.RequestContext, error) {
+	return requestContextProto(ctx, publicBaseURL)
+}
+
 func normalizePublicBaseURL(baseURL string) string {
 	return strings.TrimRight(strings.TrimSpace(baseURL), "/")
 }

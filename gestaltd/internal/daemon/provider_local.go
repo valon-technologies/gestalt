@@ -26,6 +26,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -267,6 +268,9 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 			return err
 		}
 		processes = append(processes, process)
+		if err := startRemoteDevProvider(ctx, process.Integration(), sessionProvider.Name, sessionProvider.Config); err != nil {
+			return fmt.Errorf("start local provider apps.%s for remote attach: %w", target.Name, err)
+		}
 		providerClients[target.Name] = process.Integration()
 	}
 
@@ -278,6 +282,25 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		"config_files", configPaths,
 	)
 	return client.RunDispatcher(ctx, attachID, providerClients, providerdev.WithUIHandlers(localUIHandlers))
+}
+
+func startRemoteDevProvider(ctx context.Context, client proto.AppProviderClient, name string, config map[string]any) error {
+	cfg, err := protoutil.StructFromMap(config)
+	if err != nil {
+		return fmt.Errorf("encode provider config: %w", err)
+	}
+	resp, err := client.StartProvider(ctx, &proto.StartProviderRequest{
+		Name:            name,
+		Config:          cfg,
+		ProtocolVersion: proto.CurrentProtocolVersion,
+	})
+	if err != nil {
+		return err
+	}
+	if v := resp.GetProtocolVersion(); v != proto.CurrentProtocolVersion {
+		return fmt.Errorf("provider responded with protocol version %d, host requires %d", v, proto.CurrentProtocolVersion)
+	}
+	return nil
 }
 
 func resolveProviderRemoteAttachToken(opts providerLocalCommandOptions) string {

@@ -107,13 +107,11 @@ type indexedDBSessionRecord struct {
 }
 
 type storedTarget struct {
-	Name      string                        `json:"name"`
-	Source    string                        `json:"source,omitempty"`
-	Spec      appservice.StaticProviderSpec `json:"spec"`
-	Config    map[string]any                `json:"config,omitempty"`
-	ConfigSet bool                          `json:"configSet,omitempty"`
-	UI        bool                          `json:"ui,omitempty"`
-	UIPath    string                        `json:"uiPath,omitempty"`
+	Name   string                        `json:"name"`
+	Source string                        `json:"source,omitempty"`
+	Spec   appservice.StaticProviderSpec `json:"spec"`
+	UI     bool                          `json:"ui,omitempty"`
+	UIPath string                        `json:"uiPath,omitempty"`
 }
 
 type indexedDBCallRecord struct {
@@ -192,18 +190,12 @@ func (s *indexedDBSessionStore) createSession(ctx context.Context, owner, id, di
 	stored := make([]storedTarget, 0, len(targets))
 	for i := range targets {
 		target := targets[i]
-		var storedConfig map[string]any
-		if target.ConfigSet {
-			storedConfig = cloneAnyMap(target.Config)
-		}
 		stored = append(stored, storedTarget{
-			Name:      target.Name,
-			Source:    target.Source,
-			Spec:      target.Spec,
-			Config:    storedConfig,
-			ConfigSet: target.ConfigSet,
-			UI:        target.UI,
-			UIPath:    target.UIPath,
+			Name:   target.Name,
+			Source: target.Source,
+			Spec:   target.Spec,
+			UI:     target.UI,
+			UIPath: target.UIPath,
 		})
 	}
 	targetsJSON, err := json.Marshal(stored)
@@ -1172,13 +1164,11 @@ func (r indexedDBSessionRecord) attachmentInfo() AttachmentInfo {
 
 func (t storedTarget) target() Target {
 	return Target{
-		Name:      t.Name,
-		Source:    t.Source,
-		Spec:      t.Spec,
-		Config:    cloneAnyMap(t.Config),
-		ConfigSet: t.ConfigSet,
-		UI:        t.UI,
-		UIPath:    t.UIPath,
+		Name:   t.Name,
+		Source: t.Source,
+		Spec:   t.Spec,
+		UI:     t.UI,
+		UIPath: t.UIPath,
 	}
 }
 

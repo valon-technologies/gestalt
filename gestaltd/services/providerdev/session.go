@@ -26,14 +26,14 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	"google.golang.org/grpc"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -61,7 +61,6 @@ type Target struct {
 	Source     string
 	Spec       appservice.StaticProviderSpec
 	Config     map[string]any
-	ConfigSet  bool
 	UI         bool
 	UIPath     string
 	RuntimeEnv RuntimeEnvBuilder
@@ -103,6 +102,7 @@ type CreateSessionProvider struct {
 	Source string            `json:"source,omitempty"`
 	UI     bool              `json:"ui,omitempty"`
 	UIPath string            `json:"uiPath,omitempty"`
+	Config map[string]any    `json:"config,omitempty"`
 }
 
 type CreateAttachAuthorizationResponse struct {
@@ -343,6 +343,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 			Source: target.Source,
 			UI:     target.UI,
 			UIPath: target.UIPath,
+			Config: cloneAnyMap(target.Config),
 		})
 	}
 
@@ -396,6 +397,7 @@ func (m *Manager) createSharedSession(ctx context.Context, owner, sessionID, dis
 			Source: target.Source,
 			UI:     target.UI,
 			UIPath: target.UIPath,
+			Config: cloneAnyMap(target.Config),
 		})
 	}
 	if err := m.shared.createSession(ctx, owner, sessionID, dispatcherSecretHash, targets, time.Now()); err != nil {
@@ -647,7 +649,6 @@ func (m *Manager) resolveAttachTargets(requestedProviders []AttachProvider) ([]T
 		target.Spec = buildAttachSpec(remoteTarget.Spec, requested.Spec)
 		if requested.Config != nil {
 			target.Config = cloneAnyMap(*requested.Config)
-			target.ConfigSet = true
 		}
 		target.UI = requested.UI
 		targets = append(targets, target)
@@ -899,7 +900,6 @@ func (m *Manager) ResolveProviderOverride(ctx context.Context, p *principal.Prin
 		if !ok {
 			return nil, false, nil
 		}
-		target = m.hydrateSharedTarget(target)
 		attached := m.sharedTarget(session.id, target)
 		prov, err := attached.providerForSession(ctx, &sharedSession{id: session.id, owner: owner, store: m.shared}, providerName)
 		if err != nil {
@@ -926,28 +926,6 @@ func (m *Manager) ResolveProviderOverride(ctx context.Context, p *principal.Prin
 		return prov, true, nil
 	}
 	return nil, false, nil
-}
-
-func (m *Manager) hydrateSharedTarget(target Target) Target {
-	if m == nil {
-		return target
-	}
-	m.mu.RLock()
-	base, ok := m.targets[target.Name]
-	m.mu.RUnlock()
-	if !ok {
-		return target
-	}
-	if target.Source == "" {
-		target.Source = base.Source
-	}
-	if target.UIPath == "" {
-		target.UIPath = base.UIPath
-	}
-	if !target.ConfigSet {
-		target.Config = cloneAnyMap(base.Config)
-	}
-	return target
 }
 
 func (m *Manager) ServeUIAsset(ctx context.Context, p *principal.Principal, providerName string, req UIAssetRequest) (*UIAssetResponse, bool, error) {
@@ -1516,7 +1494,7 @@ type providerDevSession interface {
 	invoke(ctx context.Context, providerName, method string, req gproto.Message, resp gproto.Message) error
 }
 
-func (t *attachedTarget) providerForSession(ctx context.Context, session providerDevSession, providerName string) (core.Provider, error) {
+func (t *attachedTarget) providerForSession(_ context.Context, session providerDevSession, providerName string) (core.Provider, error) {
 	t.providerMu.Lock()
 	defer t.providerMu.Unlock()
 	if t.closed {
@@ -1526,83 +1504,95 @@ func (t *attachedTarget) providerForSession(ctx context.Context, session provide
 		return t.provider, nil
 	}
 
-	client := &sessionProviderClient{session: session, provider: providerName}
-	prov, err := appservice.NewRemote(ctx, client, t.target.Spec, t.target.Config)
-	if err != nil {
-		return nil, err
-	}
-	t.provider = &attachProvider{Provider: prov, policyCatalog: t.target.Spec.Catalog}
+	t.provider = &devTunnelProvider{session: session, provider: providerName, spec: t.target.Spec}
 	return t.provider, nil
 }
 
-type attachProvider struct {
-	core.Provider
-	policyCatalog *catalog.Catalog
+type devTunnelProvider struct {
+	session  providerDevSession
+	provider string
+	spec     appservice.StaticProviderSpec
 }
 
-func (p *attachProvider) Catalog() *catalog.Catalog {
-	if p == nil || p.Provider == nil {
+func (p *devTunnelProvider) Name() string        { return p.spec.Name }
+func (p *devTunnelProvider) DisplayName() string { return p.spec.DisplayName }
+func (p *devTunnelProvider) Description() string { return p.spec.Description }
+
+func (p *devTunnelProvider) ConnectionMode() core.ConnectionMode {
+	if p.spec.ConnectionMode == "" {
+		return core.ConnectionModeSubject
+	}
+	return core.NormalizeConnectionMode(p.spec.ConnectionMode)
+}
+
+func (p *devTunnelProvider) AuthTypes() []string { return p.spec.AuthTypes }
+
+func (p *devTunnelProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return p.spec.ConnectionParams
+}
+
+func (p *devTunnelProvider) CredentialFields() []core.CredentialFieldDef {
+	return p.spec.CredentialFields
+}
+
+func (p *devTunnelProvider) DiscoveryConfig() *core.DiscoveryConfig { return p.spec.DiscoveryConfig }
+
+func (p *devTunnelProvider) ConnectionForOperation(string) string { return "" }
+
+func (p *devTunnelProvider) Catalog() *catalog.Catalog {
+	if p.spec.Catalog == nil {
 		return nil
 	}
-	return buildAttachCatalog(p.policyCatalog, p.Provider.Catalog())
+	cat := p.spec.Catalog.Clone()
+	if cat.Name == "" {
+		cat.Name = p.spec.Name
+	}
+	if cat.DisplayName == "" {
+		cat.DisplayName = p.spec.DisplayName
+	}
+	if cat.Description == "" {
+		cat.Description = p.spec.Description
+	}
+	if p.spec.IconSVG != "" {
+		cat.IconSVG = p.spec.IconSVG
+	}
+	for i := range cat.Operations {
+		if cat.Operations[i].Transport == "" {
+			cat.Operations[i].Transport = catalog.TransportApp
+		}
+	}
+	return cat
 }
 
-func (p *attachProvider) SupportsSessionCatalog() bool {
-	return p != nil && p.Provider != nil && core.SupportsSessionCatalog(p.Provider)
-}
-
-func (p *attachProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	if p == nil || p.Provider == nil {
-		return nil, core.ErrSessionCatalogUnsupported
-	}
-	cat, scoped, err := core.CatalogForRequest(ctx, p.Provider, token)
-	if !scoped {
-		return nil, core.WrapSessionCatalogUnsupported(core.ErrSessionCatalogUnsupported)
-	}
+func (p *devTunnelProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
+	msg, err := protoutil.StructFromMap(params)
 	if err != nil {
 		return nil, err
 	}
-	if cat == nil {
-		return nil, nil
+	reqCtx, err := appservice.RequestContextProto(ctx, "")
+	if err != nil {
+		return nil, err
 	}
-	return buildAttachCatalog(p.policyCatalog, cat), nil
-}
-
-func (p *attachProvider) SupportsPostConnect() bool {
-	return p != nil && p.Provider != nil && core.SupportsPostConnect(p.Provider)
-}
-
-func (p *attachProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	if p == nil || p.Provider == nil {
-		return nil, core.ErrPostConnectUnsupported
+	req := &proto.ExecuteRequest{
+		Operation:        operation,
+		Params:           msg,
+		Token:            token,
+		ConnectionParams: core.ConnectionParams(ctx),
+		IdempotencyKey:   invocation.IdempotencyKeyFromContext(ctx),
+		Context:          reqCtx,
 	}
-	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
-	if !supported {
-		return nil, core.ErrPostConnectUnsupported
+	if meta := invocation.MetaFromContext(ctx); meta != nil {
+		req.InvocationId = meta.RequestID
 	}
-	return metadata, err
-}
-
-func (p *attachProvider) SupportsHTTPSubject() bool {
-	return p != nil && p.Provider != nil && core.SupportsHTTPSubject(p.Provider)
-}
-
-func (p *attachProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
-	if p == nil || p.Provider == nil {
-		return nil, nil
+	resp := &proto.OperationResult{}
+	if err := p.session.invoke(ctx, p.provider, "Execute", req, resp); err != nil {
+		return nil, err
 	}
-	subject, _, err := core.ResolveHTTPSubject(ctx, p.Provider, req)
-	return subject, err
-}
-
-func (p *attachProvider) Close() error {
-	if p == nil || p.Provider == nil {
-		return nil
-	}
-	if c, ok := p.Provider.(interface{ Close() error }); ok {
-		return c.Close()
-	}
-	return nil
+	return &core.OperationResult{
+		Status:  int(resp.GetStatus()),
+		Headers: protoutil.StringListsFromProto(resp.GetHeaders()),
+		Body:    resp.GetBody(),
+	}, nil
 }
 
 func (t *attachedTarget) close() error {
@@ -1623,47 +1613,6 @@ func (t *attachedTarget) close() error {
 		t.env.Cleanup()
 	}
 	return errors.Join(errs...)
-}
-
-type sessionProviderClient struct {
-	session  providerDevSession
-	provider string
-}
-
-func (c *sessionProviderClient) GetMetadata(ctx context.Context, req *emptypb.Empty, _ ...grpc.CallOption) (*proto.ProviderMetadata, error) {
-	resp := &proto.ProviderMetadata{}
-	err := c.session.invoke(ctx, c.provider, "GetMetadata", req, resp)
-	return resp, err
-}
-
-func (c *sessionProviderClient) StartProvider(ctx context.Context, req *proto.StartProviderRequest, _ ...grpc.CallOption) (*proto.StartProviderResponse, error) {
-	resp := &proto.StartProviderResponse{}
-	err := c.session.invoke(ctx, c.provider, "StartProvider", req, resp)
-	return resp, err
-}
-
-func (c *sessionProviderClient) Execute(ctx context.Context, req *proto.ExecuteRequest, _ ...grpc.CallOption) (*proto.OperationResult, error) {
-	resp := &proto.OperationResult{}
-	err := c.session.invoke(ctx, c.provider, "Execute", req, resp)
-	return resp, err
-}
-
-func (c *sessionProviderClient) ResolveHTTPSubject(ctx context.Context, req *proto.ResolveHTTPSubjectRequest, _ ...grpc.CallOption) (*proto.ResolveHTTPSubjectResponse, error) {
-	resp := &proto.ResolveHTTPSubjectResponse{}
-	err := c.session.invoke(ctx, c.provider, "ResolveHTTPSubject", req, resp)
-	return resp, err
-}
-
-func (c *sessionProviderClient) GetSessionCatalog(ctx context.Context, req *proto.GetSessionCatalogRequest, _ ...grpc.CallOption) (*proto.GetSessionCatalogResponse, error) {
-	resp := &proto.GetSessionCatalogResponse{}
-	err := c.session.invoke(ctx, c.provider, "GetSessionCatalog", req, resp)
-	return resp, err
-}
-
-func (c *sessionProviderClient) PostConnect(ctx context.Context, req *proto.PostConnectRequest, _ ...grpc.CallOption) (*proto.PostConnectResponse, error) {
-	resp := &proto.PostConnectResponse{}
-	err := c.session.invoke(ctx, c.provider, "PostConnect", req, resp)
-	return resp, err
 }
 
 type Client struct {
@@ -1771,7 +1720,7 @@ func (c Client) GetAttachment(ctx context.Context, attachID string) (*Attachment
 	return &out, nil
 }
 
-func (c Client) Poll(ctx context.Context, sessionID string) (*PollResponse, bool, error) {
+func (c Client) poll(ctx context.Context, sessionID string) (*PollResponse, bool, error) {
 	path := PathAttachments + "/" + url.PathEscape(sessionID) + "/poll"
 	var out PollResponse
 	statusCode, err := c.doJSONStatus(ctx, http.MethodGet, path, nil, &out)
@@ -1784,7 +1733,7 @@ func (c Client) Poll(ctx context.Context, sessionID string) (*PollResponse, bool
 	return &out, true, nil
 }
 
-func (c Client) Complete(ctx context.Context, sessionID, callID string, req CompleteCallRequest) error {
+func (c Client) complete(ctx context.Context, sessionID, callID string, req CompleteCallRequest) error {
 	path := PathAttachments + "/" + url.PathEscape(sessionID) + "/calls/" + url.PathEscape(callID)
 	return c.doJSON(ctx, http.MethodPost, path, req, nil)
 }
@@ -1805,7 +1754,7 @@ func (c Client) RunDispatcher(ctx context.Context, sessionID string, providers m
 	retryAttempt := 0
 	var retryStarted time.Time
 	for {
-		call, ok, err := c.Poll(ctx, sessionID)
+		call, ok, err := c.poll(ctx, sessionID)
 		if err != nil {
 			if dispatcherContextDone(ctx) {
 				return nil
@@ -1842,7 +1791,7 @@ func (c Client) RunDispatcher(ctx context.Context, sessionID string, providers m
 			continue
 		}
 		req := c.dispatchCall(ctx, call, providers, cfg)
-		if err := c.Complete(ctx, sessionID, call.CallID, req); err != nil {
+		if err := c.complete(ctx, sessionID, call.CallID, req); err != nil {
 			if dispatcherContextDone(ctx) {
 				return nil
 			}
@@ -2012,70 +1961,18 @@ func dispatchProviderDevUIRequest(ctx context.Context, handler http.Handler, pay
 }
 
 func dispatchProviderRPC(ctx context.Context, client proto.AppProviderClient, method string, payload []byte) ([]byte, error) {
-	switch method {
-	case "GetMetadata":
-		req := &emptypb.Empty{}
-		if err := gproto.Unmarshal(payload, req); err != nil {
-			return nil, err
-		}
-		resp, err := client.GetMetadata(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return gproto.Marshal(resp)
-	case "StartProvider":
-		req := &proto.StartProviderRequest{}
-		if err := gproto.Unmarshal(payload, req); err != nil {
-			return nil, err
-		}
-		resp, err := client.StartProvider(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return gproto.Marshal(resp)
-	case "Execute":
-		req := &proto.ExecuteRequest{}
-		if err := gproto.Unmarshal(payload, req); err != nil {
-			return nil, err
-		}
-		resp, err := client.Execute(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return gproto.Marshal(resp)
-	case "ResolveHTTPSubject":
-		req := &proto.ResolveHTTPSubjectRequest{}
-		if err := gproto.Unmarshal(payload, req); err != nil {
-			return nil, err
-		}
-		resp, err := client.ResolveHTTPSubject(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return gproto.Marshal(resp)
-	case "GetSessionCatalog":
-		req := &proto.GetSessionCatalogRequest{}
-		if err := gproto.Unmarshal(payload, req); err != nil {
-			return nil, err
-		}
-		resp, err := client.GetSessionCatalog(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return gproto.Marshal(resp)
-	case "PostConnect":
-		req := &proto.PostConnectRequest{}
-		if err := gproto.Unmarshal(payload, req); err != nil {
-			return nil, err
-		}
-		resp, err := client.PostConnect(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return gproto.Marshal(resp)
-	default:
+	if method != "Execute" {
 		return nil, status.Errorf(codes.Unimplemented, "provider dev method %q is not supported", method)
 	}
+	req := &proto.ExecuteRequest{}
+	if err := gproto.Unmarshal(payload, req); err != nil {
+		return nil, err
+	}
+	resp, err := client.Execute(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return gproto.Marshal(resp)
 }
 
 func (c Client) doJSON(ctx context.Context, method, path string, in any, out any) error {

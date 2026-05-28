@@ -20,9 +20,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -34,18 +36,7 @@ import (
 func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	t.Parallel()
 
-	local := &recordingIntegrationClient{
-		supportsSessionCatalog: true,
-		sessionCatalog: &proto.Catalog{
-			Name: "roadmap",
-			Operations: []*proto.CatalogOperation{{
-				Id:             "echo",
-				Transport:      catalog.TransportApp,
-				AllowedRoles:   []string{"viewer"},
-				RequiredScopes: []string{"local.session.scope"},
-			}},
-		},
-	}
+	local := &recordingIntegrationClient{}
 	spec := appservice.StaticProviderSpec{
 		Name:           "roadmap",
 		DisplayName:    "Roadmap",
@@ -114,6 +105,7 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	if got := session.Providers[0].Env["CUSTOM_PROVIDER_ENV"]; got != "tls://gestalt.example.test:443" {
 		t.Fatalf("runtime env = %q, want relay target", got)
 	}
+	startRecordingIntegrationClient(t, local, session.Providers[0].Name, session.Providers[0].Config)
 
 	dispatchCtx, dispatchCancel := context.WithCancel(context.Background())
 	defer dispatchCancel()
@@ -126,6 +118,8 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 
 	resolveCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	resolveCtx = principal.WithPrincipal(resolveCtx, p)
+	resolveCtx = invocation.WithAccessContext(resolveCtx, invocation.AccessContext{Policy: "remote.policy", Role: "admin"})
 	prov, ok, err := manager.ResolveProviderOverride(resolveCtx, p, "roadmap")
 	if err != nil {
 		t.Fatalf("ResolveProviderOverride: %v", err)
@@ -146,26 +140,21 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	if got := cat.Operations[0].RequiredScopes; len(got) != 1 || got[0] != "remote.scope" {
 		t.Fatalf("Catalog RequiredScopes = %#v, want remote [remote.scope]", got)
 	}
-	sessionCat, attempted, err := core.CatalogForRequest(resolveCtx, prov, "remote-token")
-	if err != nil {
-		t.Fatalf("CatalogForRequest: %v", err)
-	}
-	if !attempted {
-		t.Fatal("CatalogForRequest attempted = false, want true")
-	}
-	if got := sessionCat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "admin" {
-		t.Fatalf("session Catalog AllowedRoles = %#v, want remote [admin]", got)
-	}
-	if got := sessionCat.Operations[0].RequiredScopes; len(got) != 1 || got[0] != "remote.scope" {
-		t.Fatalf("session Catalog RequiredScopes = %#v, want remote [remote.scope]", got)
-	}
-
 	result, err := prov.Execute(resolveCtx, "echo", map[string]any{"message": "hello"}, "remote-token")
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if result.Body != `{"message":"hello","operation":"echo","token":"remote-token"}` {
 		t.Fatalf("Execute body = %s", result.Body)
+	}
+	local.mu.Lock()
+	executeCtx := local.lastExecuteContext
+	local.mu.Unlock()
+	if executeCtx.GetSubject().GetId() != "user:user-123" {
+		t.Fatalf("Execute context subject = %#v, want user:user-123", executeCtx.GetSubject())
+	}
+	if executeCtx.GetAccess().GetRole() != "admin" || executeCtx.GetAccess().GetPolicy() != "remote.policy" {
+		t.Fatalf("Execute context access = %#v, want admin remote.policy", executeCtx.GetAccess())
 	}
 
 	uiResp, ok, err := manager.ServeUIAsset(resolveCtx, p, "roadmap", UIAssetRequest{
@@ -230,9 +219,17 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	}
 
 	local.mu.Lock()
+	metadataCalls := local.metadataCalls
+	startCalls := local.startCalls
 	startName := local.startName
 	startConfig := fmt.Sprint(local.startConfig)
 	local.mu.Unlock()
+	if metadataCalls != 0 {
+		t.Fatalf("GetMetadata calls = %d, want 0", metadataCalls)
+	}
+	if startCalls != 1 {
+		t.Fatalf("StartProvider calls = %d, want exactly local startup call", startCalls)
+	}
 	if startName != "roadmap" {
 		t.Fatalf("StartProvider name = %q, want roadmap", startName)
 	}
@@ -248,61 +245,6 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("dispatcher did not stop")
-	}
-}
-
-func TestAttachProviderSkipsSessionCatalogWhenRemoteMetadataReportsNoSupport(t *testing.T) {
-	t.Parallel()
-
-	local := &recordingIntegrationClient{
-		sessionCatalog: &proto.Catalog{
-			Name: "roadmap",
-			Operations: []*proto.CatalogOperation{{
-				Id:        "echo",
-				Transport: catalog.TransportApp,
-			}},
-		},
-	}
-	spec := appservice.StaticProviderSpec{
-		Name:           "roadmap",
-		DisplayName:    "Roadmap",
-		ConnectionMode: core.ConnectionModeUser,
-		Catalog: &catalog.Catalog{
-			Name: "roadmap",
-			Operations: []catalog.CatalogOperation{{
-				ID:        "echo",
-				Transport: catalog.TransportApp,
-			}},
-		},
-	}
-	remote, err := appservice.NewRemote(context.Background(), local, spec, nil)
-	if err != nil {
-		t.Fatalf("NewRemote: %v", err)
-	}
-	prov := &attachProvider{
-		Provider:      remote,
-		policyCatalog: spec.Catalog,
-	}
-
-	if core.SupportsSessionCatalog(prov) {
-		t.Fatal("expected attach provider to report no session catalog support")
-	}
-	cat, attempted, err := core.CatalogForRequest(context.Background(), prov, "tok")
-	if err != nil {
-		t.Fatalf("CatalogForRequest: %v", err)
-	}
-	if attempted {
-		t.Fatal("expected core.CatalogForRequest to report no attempt")
-	}
-	if cat != nil {
-		t.Fatalf("CatalogForRequest catalog = %#v, want nil", cat)
-	}
-
-	local.mu.Lock()
-	calls := local.sessionCatalogCalls
-	local.mu.Unlock()
-	if calls != 0 {
-		t.Fatalf("GetSessionCatalog calls = %d, want 0", calls)
 	}
 }
 
@@ -391,6 +333,12 @@ func TestIndexedDBAttachmentStateDispatchesAcrossManagers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
+	if len(session.Providers) != 1 {
+		t.Fatalf("session providers = %#v, want start payload", session.Providers)
+	}
+	local := &recordingIntegrationClient{}
+	startRecordingIntegrationClient(t, local, session.Providers[0].Name, session.Providers[0].Config)
+	dispatchClient.DispatcherSecret = session.DispatcherSecret
 	record, err := db.ObjectStore(indexedDBAttachmentStore).Get(ctx, session.AttachID)
 	if err != nil {
 		t.Fatalf("load shared attachment: %v", err)
@@ -420,8 +368,6 @@ func TestIndexedDBAttachmentStateDispatchesAcrossManagers(t *testing.T) {
 	dispatchCtx, dispatchCancel := context.WithCancel(context.Background())
 	defer dispatchCancel()
 	dispatchDone := make(chan error, 1)
-	local := &recordingIntegrationClient{}
-	dispatchClient.DispatcherSecret = session.DispatcherSecret
 	go func() {
 		dispatchDone <- dispatchClient.RunDispatcher(dispatchCtx, session.AttachID, map[string]proto.AppProviderClient{
 			"roadmap": local,
@@ -459,7 +405,7 @@ func TestIndexedDBAttachmentStateDispatchesAcrossManagers(t *testing.T) {
 		t.Fatalf("StartProvider calls = %d, want 1 cached shared provider", startCalls)
 	}
 	if !strings.Contains(startConfig, "remote:true") {
-		t.Fatalf("StartProvider config = %s, want remote:true rehydrated from replica config", startConfig)
+		t.Fatalf("StartProvider config = %s, want remote:true from start payload", startConfig)
 	}
 
 	dispatchCancel()
@@ -1786,22 +1732,39 @@ func writeProviderDevTestError(w http.ResponseWriter, err error) {
 	http.Error(w, err.Error(), code)
 }
 
+func startRecordingIntegrationClient(t *testing.T, client *recordingIntegrationClient, name string, config map[string]any) {
+	t.Helper()
+	cfg, err := protoutil.StructFromMap(config)
+	if err != nil {
+		t.Fatalf("encode provider config: %v", err)
+	}
+	resp, err := client.StartProvider(context.Background(), &proto.StartProviderRequest{
+		Name:            name,
+		Config:          cfg,
+		ProtocolVersion: proto.CurrentProtocolVersion,
+	})
+	if err != nil {
+		t.Fatalf("StartProvider: %v", err)
+	}
+	if v := resp.GetProtocolVersion(); v != proto.CurrentProtocolVersion {
+		t.Fatalf("StartProvider protocol = %d, want %d", v, proto.CurrentProtocolVersion)
+	}
+}
+
 type recordingIntegrationClient struct {
-	mu                     sync.Mutex
-	metadataCalls          int
-	startCalls             int
-	sessionCatalogCalls    int
-	startName              string
-	startConfig            map[string]any
-	supportsSessionCatalog bool
-	sessionCatalog         *proto.Catalog
+	mu                 sync.Mutex
+	metadataCalls      int
+	startCalls         int
+	startName          string
+	startConfig        map[string]any
+	lastExecuteContext *proto.RequestContext
 }
 
 func (c *recordingIntegrationClient) GetMetadata(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ProviderMetadata, error) {
 	c.mu.Lock()
 	c.metadataCalls++
 	c.mu.Unlock()
-	return &proto.ProviderMetadata{SupportsSessionCatalog: c.supportsSessionCatalog}, nil
+	return &proto.ProviderMetadata{}, nil
 }
 
 func (c *recordingIntegrationClient) StartProvider(_ context.Context, req *proto.StartProviderRequest, _ ...grpc.CallOption) (*proto.StartProviderResponse, error) {
@@ -1816,6 +1779,9 @@ func (c *recordingIntegrationClient) StartProvider(_ context.Context, req *proto
 }
 
 func (c *recordingIntegrationClient) Execute(_ context.Context, req *proto.ExecuteRequest, _ ...grpc.CallOption) (*proto.OperationResult, error) {
+	c.mu.Lock()
+	c.lastExecuteContext = req.GetContext()
+	c.mu.Unlock()
 	params := req.GetParams().AsMap()
 	body := fmt.Sprintf(`{"message":%q,"operation":%q,"token":%q}`, params["message"], req.GetOperation(), req.GetToken())
 	return &proto.OperationResult{Status: http.StatusOK, Body: body}, nil
@@ -1826,13 +1792,7 @@ func (c *recordingIntegrationClient) ResolveHTTPSubject(context.Context, *proto.
 }
 
 func (c *recordingIntegrationClient) GetSessionCatalog(context.Context, *proto.GetSessionCatalogRequest, ...grpc.CallOption) (*proto.GetSessionCatalogResponse, error) {
-	c.mu.Lock()
-	c.sessionCatalogCalls++
-	c.mu.Unlock()
-	if !c.supportsSessionCatalog {
-		return nil, status.Error(codes.Unimplemented, "session catalog is not implemented")
-	}
-	return &proto.GetSessionCatalogResponse{Catalog: c.sessionCatalog}, nil
+	return nil, status.Error(codes.Unimplemented, "session catalog is not implemented")
 }
 
 func (c *recordingIntegrationClient) PostConnect(context.Context, *proto.PostConnectRequest, ...grpc.CallOption) (*proto.PostConnectResponse, error) {
