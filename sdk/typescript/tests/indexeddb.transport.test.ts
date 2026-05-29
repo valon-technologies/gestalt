@@ -564,4 +564,26 @@ describe("IndexedDB transport", () => {
     await os.add({ id: "dup-1", data: "first" });
     await expect(os.add({ id: "dup-1", data: "second" })).rejects.toThrow(AlreadyExistsError);
   });
+
+  test("error mapping: duplicate object store throws AlreadyExistsError", async () => {
+    const local = new IndexedDB("schema");
+    (local as any).client = {
+      createObjectStore: async () => {
+        throw Object.assign(new Error("store already exists"), { code: 6 });
+      },
+    };
+
+    await expect(local.createObjectStore("dupe")).rejects.toThrow(AlreadyExistsError);
+  });
+
+  test("error mapping: deleting missing object store throws NotFoundError", async () => {
+    const local = new IndexedDB("schema");
+    (local as any).client = {
+      deleteObjectStore: async () => {
+        throw Object.assign(new Error("store not found"), { code: 5 });
+      },
+    };
+
+    await expect(local.deleteObjectStore("missing")).rejects.toThrow(NotFoundError);
+  });
 });

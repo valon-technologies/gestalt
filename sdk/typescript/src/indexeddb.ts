@@ -927,23 +927,25 @@ class IndexedDBImpl implements IndexedDB {
     name: string,
     schema?: ObjectStoreSchema,
   ): Promise<ObjectStore> {
-    await this.client.createObjectStore({
-      name,
-      schema: {
-        indexes: (schema?.indexes ?? []).map((idx) => ({
-          name: idx.name,
-          keyPath: idx.keyPath,
-          unique: idx.unique ?? false,
-        })),
-        columns: (schema?.columns ?? []).map((col) => ({
-          name: col.name,
-          type: col.type ?? ColumnType.String,
-          primaryKey: col.primaryKey ?? false,
-          notNull: col.notNull ?? false,
-          unique: col.unique ?? false,
-        })),
-      },
-    });
+    await rpc(() =>
+      this.client.createObjectStore({
+        name,
+        schema: {
+          indexes: (schema?.indexes ?? []).map((idx) => ({
+            name: idx.name,
+            keyPath: idx.keyPath,
+            unique: idx.unique ?? false,
+          })),
+          columns: (schema?.columns ?? []).map((col) => ({
+            name: col.name,
+            type: col.type ?? ColumnType.String,
+            primaryKey: col.primaryKey ?? false,
+            notNull: col.notNull ?? false,
+            unique: col.unique ?? false,
+          })),
+        },
+      }),
+    );
     return this.objectStore(name);
   }
 
@@ -951,7 +953,7 @@ class IndexedDBImpl implements IndexedDB {
    * Deletes an object store.
    */
   async deleteObjectStore(name: string): Promise<void> {
-    await this.client.deleteObjectStore({ name });
+    await rpc(() => this.client.deleteObjectStore({ name }));
   }
 
   /**
