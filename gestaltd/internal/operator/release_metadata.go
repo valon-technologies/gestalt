@@ -181,7 +181,7 @@ func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, meta
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", nil, fmt.Errorf("unexpected status %d fetching provider release metadata from %s", resp.StatusCode, resolvedMetadataLocation)
+		return nil, "", nil, providerReleaseMetadataStatusError(metadataLocation, resp.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, providerReleaseMetadataMaxBytes+1))
 	if err != nil {
@@ -275,7 +275,7 @@ func resolveProviderReleaseMetadataLocation(ctx context.Context, client *http.Cl
 func parseGitHubReleaseLocation(location string) (gitHubReleaseLocation, bool, error) {
 	parsed, err := url.Parse(strings.TrimSpace(location))
 	if err != nil {
-		return gitHubReleaseLocation{}, false, err
+		return gitHubReleaseLocation{}, false, fmt.Errorf("source.githubRelease is invalid: %w", err)
 	}
 	if parsed.Scheme != "github-release" {
 		return gitHubReleaseLocation{}, false, nil
@@ -286,12 +286,12 @@ func parseGitHubReleaseLocation(location string) (gitHubReleaseLocation, bool, e
 	}
 	repo, err = url.PathUnescape(repo)
 	if err != nil {
-		return gitHubReleaseLocation{}, false, fmt.Errorf("decode github release repo: %w", err)
+		return gitHubReleaseLocation{}, false, fmt.Errorf("source.githubRelease is invalid: %w", err)
 	}
 	tag := strings.TrimSpace(parsed.Query().Get("tag"))
 	asset := strings.TrimSpace(parsed.Query().Get("asset"))
 	if repo == "" || tag == "" || asset == "" {
-		return gitHubReleaseLocation{}, false, fmt.Errorf("github release source must include repo, tag, and asset")
+		return gitHubReleaseLocation{}, false, fmt.Errorf("source.githubRelease is invalid: repo, tag, and asset are required")
 	}
 	return gitHubReleaseLocation{
 		Repo:  repo,
@@ -318,15 +318,15 @@ func resolveGitHubReleaseAssetURL(ctx context.Context, client *http.Client, ref 
 		return req, nil
 	})
 	if err != nil {
-		return "", nil, fmt.Errorf("resolve github release %s@%s: %w", ref.Repo, ref.Tag, err)
+		return "", nil, fmt.Errorf("resolve release metadata source: source %s: %w", ref.location(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", nil, fmt.Errorf("unexpected status %d resolving github release %s@%s", resp.StatusCode, ref.Repo, ref.Tag)
+		return "", nil, releaseMetadataSourceStatusError(ref.location(), resp.StatusCode)
 	}
 	var release gitHubReleaseByTagResponse
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return "", nil, fmt.Errorf("decode github release %s@%s: %w", ref.Repo, ref.Tag, err)
+		return "", nil, fmt.Errorf("release metadata source response could not be decoded: source %s: %w", ref.location(), err)
 	}
 	assetURLs := make(map[string]string, len(release.Assets))
 	metadataAssetURL := ""
@@ -342,9 +342,41 @@ func resolveGitHubReleaseAssetURL(ctx context.Context, client *http.Client, ref 
 		}
 	}
 	if metadataAssetURL == "" {
-		return "", nil, fmt.Errorf("github release %s@%s does not contain asset %q", ref.Repo, ref.Tag, ref.Asset)
+		return "", nil, fmt.Errorf("release metadata source is missing configured asset %q: source %s; ensure the asset exists in the release", ref.Asset, ref.location())
 	}
 	return metadataAssetURL, assetURLs, nil
+}
+
+func (r gitHubReleaseLocation) location() string {
+	return (&url.URL{
+		Scheme: "github-release",
+		Host:   "github.com",
+		Path:   "/" + strings.TrimSpace(r.Repo),
+		RawQuery: url.Values{
+			"asset": []string{strings.TrimSpace(r.Asset)},
+			"tag":   []string{strings.TrimSpace(r.Tag)},
+		}.Encode(),
+	}).String()
+}
+
+func releaseMetadataSourceStatusError(source string, status int) error {
+	return metadataSourceStatusError("release metadata source", "lookup", source, status)
+}
+
+func providerReleaseMetadataStatusError(source string, status int) error {
+	return metadataSourceStatusError("provider-release metadata", "fetch", source, status)
+}
+
+func metadataSourceStatusError(subject, action, source string, status int) error {
+	source = strings.TrimSpace(source)
+	switch status {
+	case http.StatusNotFound:
+		return fmt.Errorf("%s was not found: source %s, status %d; ensure the configured source exists and is accessible", subject, source, status)
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return fmt.Errorf("%s is not accessible: source %s, status %d; ensure source.auth.token has access or use an accessible source", subject, source, status)
+	default:
+		return fmt.Errorf("%s %s failed: source %s, status %d", subject, action, source, status)
+	}
 }
 
 func providerReleaseArchives(metadataURL string, metadata *providerReleaseMetadata, gitHubReleaseAssets map[string]string) (map[string]LockArchive, error) {

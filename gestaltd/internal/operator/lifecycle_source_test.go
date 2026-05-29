@@ -4183,6 +4183,279 @@ func TestSourceAppMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	}
 }
 
+func writeSourceDiagnosticConfig(t *testing.T, dir, artifactsDir string, lines ...string) string {
+	t.Helper()
+	if artifactsDir == "" {
+		artifactsDir = filepath.Join(dir, "prepared-artifacts")
+	}
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := "apiVersion: " + config.ConfigAPIVersion + "\n" +
+		requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) +
+		strings.Join(lines, "\n") + "\n" +
+		strings.Join([]string{
+			"server:",
+			"  providers:",
+			"    indexeddb: sqlite",
+			"  artifactsDir: " + artifactsDir,
+			"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return configPath
+}
+
+func requireDiagnosticError(t *testing.T, op string, err error, wants ...string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("%s: expected error, got nil", op)
+	}
+	for _, want := range wants {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("%s error = %v, want substring %q", op, err, want)
+		}
+	}
+}
+
+func TestPrepareAtPathRendersProviderReleaseMetadataStatusSnippet(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	metadataPath := "/providers/alpha/provider-release.yaml"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != metadataPath {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "metadata unavailable", http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	configPath := writeSourceDiagnosticConfig(t, dir, "",
+		"apps:",
+		"  alpha:",
+		"    source: "+srv.URL+metadataPath,
+	)
+
+	_, err := NewLifecycle().PrepareAtPath(configPath)
+	requireDiagnosticError(t, "PrepareAtPath", err,
+		"provider-release metadata is not accessible",
+		"status 403",
+		"apps.alpha.source",
+		configPath+":",
+		"> ",
+		"source: "+srv.URL+metadataPath,
+	)
+}
+
+func TestPrepareAtPathRendersPackageIndexSourceSnippet(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	indexPath := "/provider-index.yaml"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != indexPath {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "index unavailable", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	configPath := writeSourceDiagnosticConfig(t, dir, "",
+		"providerRepositories:",
+		"  mirror:",
+		"    url: "+srv.URL+indexPath,
+		"apps:",
+		"  alpha:",
+		"    source:",
+		"      repo: mirror",
+		"      package: github.com/acme/providers/apps/alpha",
+		"      version: ^1.0.0",
+	)
+
+	_, err := NewLifecycle().PrepareAtPath(configPath)
+	requireDiagnosticError(t, "PrepareAtPath", err,
+		"provider package source could not be resolved",
+		"unexpected status 404 fetching provider repository index",
+		"apps.alpha.source",
+		configPath+":",
+		"> ",
+		"source:",
+		"package: github.com/acme/providers/apps/alpha",
+	)
+}
+
+func TestSyncAtPathRendersLockedArchiveDownloadSnippet(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const (
+		packageSource = "github.com/acme/providers/alpha"
+		version       = "1.2.3"
+	)
+	archiveFile := buildV2Archive(t, dir, packageSource, version, "alpha-binary")
+	archiveData, err := os.ReadFile(archiveFile)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSHA := sha256.Sum256(archiveData)
+	archiveAvailable := atomic.Bool{}
+	archiveAvailable.Store(true)
+
+	metadataPath := "/providers/alpha/provider-release.yaml"
+	archivePath := "/providers/alpha/alpha.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindApp,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Version:       version,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   strings.TrimPrefix(archivePath, "/providers/alpha/"),
+						SHA256: hex.EncodeToString(archiveSHA[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				t.Errorf("marshal metadata: %v", err)
+				http.Error(w, "marshal metadata", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case archivePath:
+			if !archiveAvailable.Load() {
+				http.Error(w, "archive unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/gzip")
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := writeSourceDiagnosticConfig(t, dir, artifactsDir,
+		"apps:",
+		"  alpha:",
+		"    source: "+srv.URL+metadataPath,
+	)
+
+	lc := NewLifecycle()
+	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")); err != nil {
+		t.Fatalf("remove prepared provider: %v", err)
+	}
+	archiveAvailable.Store(false)
+
+	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	requireDiagnosticError(t, "SyncAtPathsWithStatePaths", err,
+		"provider archive could not be downloaded",
+		"status 503",
+		"apps.alpha.source",
+		configPath+":",
+		"> ",
+		"source: "+srv.URL+metadataPath,
+	)
+}
+
+func TestPrepareAtPathRendersHostProviderReleaseMetadataSnippet(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	metadataPath := "/providers/remote/provider-release.yaml"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != metadataPath {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "metadata unavailable", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	source := srv.URL + metadataPath
+	configKey := string(config.HostProviderKindExternalCredentials)
+	configPath := writeSourceDiagnosticConfig(t, dir, "",
+		"  "+configKey+":",
+		"    remote:",
+		"      source: "+source,
+	)
+
+	_, err := NewLifecycle().PrepareAtPath(configPath)
+	requireDiagnosticError(t, "PrepareAtPath", err,
+		"provider-release metadata was not found",
+		"providers."+configKey+".remote.source",
+		configPath+":",
+		"> ",
+		"source: "+source,
+	)
+}
+
+func TestPrepareAtPathRendersReleaseMetadataSourceSnippet(t *testing.T) {
+	t.Parallel()
+
+	const (
+		repo  = "valon-technologies/toolshed"
+		tag   = "apps/alpha/v1.2.3"
+		asset = "provider-release.yaml"
+	)
+	dir := t.TempDir()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		escapedPath := r.URL.EscapedPath()
+		if escapedPath != "/repos/valon-technologies/toolshed/releases/tags/"+url.PathEscape(tag) && r.URL.Path != "/repos/valon-technologies/toolshed/releases/tags/"+tag {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"assets":[]}`))
+	}))
+	defer srv.Close()
+	baseURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse server url: %v", err)
+	}
+	serverClient := srv.Client()
+	client := &http.Client{
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			clone := req.Clone(req.Context())
+			clone.URL.Scheme = baseURL.Scheme
+			clone.URL.Host = baseURL.Host
+			clone.Host = baseURL.Host
+			return serverClient.Transport.RoundTrip(clone)
+		}),
+	}
+
+	configPath := writeSourceDiagnosticConfig(t, dir, "",
+		"apps:",
+		"  alpha:",
+		"    source:",
+		"      githubRelease:",
+		"        repo: "+repo,
+		"        tag: "+tag,
+		"        asset: "+asset,
+	)
+
+	_, err = NewLifecycle().WithHTTPClient(client).PrepareAtPath(configPath)
+	requireDiagnosticError(t, "PrepareAtPath", err,
+		`release metadata source is missing configured asset "provider-release.yaml"`,
+		"apps.alpha.source",
+		configPath+":",
+		"> ",
+		"githubRelease:",
+	)
+}
+
 func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -4414,7 +4687,7 @@ func TestMaterializeLockedComponent_AllowsGenericDeclarativeTelemetryAndAuditPac
 				Source: config.NewMetadataSource("https://example.invalid/github-com-acme-providers-declarative/v1.0.0/provider-release.yaml"),
 			}
 			destDir := filepath.Join(dir, kind)
-			if err := lc.materializeLockedComponent(context.Background(), lifecyclePaths{}, kind, "default", providerEntry, entry, destDir); err != nil {
+			if err := lc.materializeLockedComponent(context.Background(), lifecyclePaths{}, kind, "default", providerEntry, entry, destDir, providerLockSourcePath(kind, "default")); err != nil {
 				t.Fatalf("materializeLockedComponent: %v", err)
 			}
 			install, err := inspectPreparedInstall(destDir)

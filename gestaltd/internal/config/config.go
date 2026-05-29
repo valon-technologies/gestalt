@@ -2442,7 +2442,8 @@ func Load(path string) (*Config, error) {
 }
 
 func LoadPaths(paths []string) (*Config, error) {
-	return loadWithLookupPaths(paths, os.LookupEnv, false)
+	cfg, err := loadWithLookupPaths(paths, os.LookupEnv, false)
+	return cfg, RenderDiagnosticError(paths, err)
 }
 
 func LoadWithLookup(path string, lookup func(string) (string, bool)) (*Config, error) {
@@ -2450,7 +2451,8 @@ func LoadWithLookup(path string, lookup func(string) (string, bool)) (*Config, e
 }
 
 func LoadWithLookupPaths(paths []string, lookup func(string) (string, bool)) (*Config, error) {
-	return loadWithLookupPaths(paths, lookup, false)
+	cfg, err := loadWithLookupPaths(paths, lookup, false)
+	return cfg, RenderDiagnosticError(paths, err)
 }
 
 func LoadAllowMissingEnv(path string) (*Config, error) {
@@ -2458,7 +2460,8 @@ func LoadAllowMissingEnv(path string) (*Config, error) {
 }
 
 func LoadAllowMissingEnvPaths(paths []string) (*Config, error) {
-	return loadWithLookupPaths(paths, os.LookupEnv, true)
+	cfg, err := loadWithLookupPaths(paths, os.LookupEnv, true)
+	return cfg, RenderDiagnosticError(paths, err)
 }
 
 // LoadPartialAllowMissingEnvPaths loads config for commands that inspect a
@@ -2467,14 +2470,16 @@ func LoadAllowMissingEnvPaths(paths []string) (*Config, error) {
 // structural validation so unrelated deployment-only entries with missing
 // local env vars do not block the caller.
 func LoadPartialAllowMissingEnvPaths(paths []string) (*Config, error) {
-	return loadWithLookupPathsValidation(paths, os.LookupEnv, true, false)
+	cfg, err := loadWithLookupPathsValidation(paths, os.LookupEnv, true, false)
+	return cfg, RenderDiagnosticError(paths, err)
 }
 
 // LoadPartialPreserveMissingEnvPaths is like LoadPartialAllowMissingEnvPaths,
 // but preserves unresolved environment placeholders so callers can project a
 // local subset first, then reject missing env only in the retained config.
 func LoadPartialPreserveMissingEnvPaths(paths []string) (*Config, error) {
-	return loadWithLookupPathsMode(paths, os.LookupEnv, envMissingPreserve, "", false, false, false)
+	cfg, err := loadWithLookupPathsMode(paths, os.LookupEnv, envMissingPreserve, "", false, false, false)
+	return cfg, RenderDiagnosticError(paths, err)
 }
 
 // LoadAppScopePreserveMissingEnvPaths projects the merged YAML before typed
@@ -2483,18 +2488,19 @@ func LoadPartialPreserveMissingEnvPaths(paths []string) (*Config, error) {
 func LoadAppScopePreserveMissingEnvPaths(paths []string, apps []string) (*Config, error) {
 	root, err := loadMergedConfigRoot(paths, os.LookupEnv, envMissingPreserve, "")
 	if err != nil {
-		return nil, err
+		return nil, RenderDiagnosticError(paths, err)
 	}
 	if err := NormalizeConfigSecretRefs(&root); err != nil {
-		return nil, err
+		return nil, RenderDiagnosticError(paths, err)
 	}
 	if err := applyAppScopeNode(&root, apps); err != nil {
-		return nil, err
+		return nil, RenderDiagnosticError(paths, err)
 	}
 	if err := validateNoMissingEnvRefsInNode(&root); err != nil {
-		return nil, err
+		return nil, RenderDiagnosticError(paths, err)
 	}
-	return loadConfigFromRoot(paths, root, false, false)
+	cfg, err := loadConfigFromRoot(paths, root, false, false)
+	return cfg, RenderDiagnosticError(paths, err)
 }
 
 func validateNoMissingEnvRefsInNode(node *yaml.Node) error {

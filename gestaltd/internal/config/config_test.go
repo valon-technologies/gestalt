@@ -5422,6 +5422,110 @@ apps:
 	}
 }
 
+func TestLoadRendersSourceAuthTokenDiagnosticSnippet(t *testing.T) {
+	t.Parallel()
+
+	configPath := mustWriteRawConfigFile(t, `
+apiVersion: gestaltd.config/v6
+providers:
+apps:
+  external:
+    source:
+      url: https://example.com/providers/external/provider-release.yaml
+      auth:
+        token: ${GESTALT_EMPTY_SOURCE_AUTH_TOKEN:-}
+`)
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("Load: expected error, got nil")
+	}
+	for _, want := range []string{
+		"config validation: apps.external.source.auth.token: source.auth.token is empty",
+		configPath + ":9:",
+		">  9 |         token: ${GESTALT_EMPTY_SOURCE_AUTH_TOKEN:-}",
+		"|                ^",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Load error = %v, want substring %q", err, want)
+		}
+	}
+}
+
+func TestLoadRendersDiagnosticFromLastOverlay(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	basePath := filepath.Join(dir, "base.yaml")
+	overridePath := filepath.Join(dir, "override.yaml")
+	if err := os.WriteFile(basePath, []byte(`
+apiVersion: gestaltd.config/v6
+providers:
+apps:
+  external:
+    source:
+      url: https://example.com/providers/external/provider-release.yaml
+`), 0o644); err != nil {
+		t.Fatalf("write base config: %v", err)
+	}
+	if err := os.WriteFile(overridePath, []byte(`
+apiVersion: gestaltd.config/v6
+apps:
+  external:
+    source:
+      auth:
+        token: ${GESTALT_EMPTY_SOURCE_AUTH_TOKEN:-}
+`), 0o644); err != nil {
+		t.Fatalf("write override config: %v", err)
+	}
+
+	_, err := LoadPaths([]string{basePath, overridePath})
+	if err == nil {
+		t.Fatal("LoadPaths: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), overridePath+":7:") {
+		t.Fatalf("LoadPaths error = %v, want override snippet", err)
+	}
+	if strings.Contains(err.Error(), basePath+":") {
+		t.Fatalf("LoadPaths error = %v, did not expect base snippet", err)
+	}
+}
+
+func TestTransformSourceAuthTokensReturnsDiagnosticPath(t *testing.T) {
+	configPath := mustWriteRawConfigFile(t, `
+apiVersion: gestaltd.config/v6
+providers:
+apps:
+  external:
+    source:
+      url: https://example.com/providers/external/provider-release.yaml
+      auth:
+        token: ${SOURCE_TOKEN}
+`)
+	t.Setenv("SOURCE_TOKEN", "placeholder")
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	err = TransformSourceAuthTokens(cfg, func(string) (string, error) {
+		return "", fmt.Errorf("resolved to empty value")
+	})
+	if err == nil {
+		t.Fatal("TransformSourceAuthTokens: expected error, got nil")
+	}
+	err = RenderDiagnosticError([]string{configPath}, err)
+	for _, want := range []string{
+		"apps.external.source.auth.token: source.auth.token could not be resolved: resolved to empty value",
+		configPath + ":9:",
+		">  9 |         token: ${SOURCE_TOKEN}",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("TransformSourceAuthTokens error = %v, want substring %q", err, want)
+		}
+	}
+}
+
 func TestLoadConfigRequiresAPIVersion(t *testing.T) {
 	t.Parallel()
 

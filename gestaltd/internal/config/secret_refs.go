@@ -235,54 +235,57 @@ func TransformSourceAuthTokens(cfg *Config, transform ConfigStringTransformer) e
 	if cfg == nil {
 		return nil
 	}
-	transformEntry := func(entry *ProviderEntry) error {
+	transformEntry := func(path []string, entry *ProviderEntry) error {
 		if entry == nil || entry.Source.Auth == nil {
 			return nil
 		}
 		next, err := transform(entry.Source.Auth.Token)
 		if err != nil {
-			return err
+			return WrapDiagnosticError(path, "source.auth.token could not be resolved", err)
 		}
 		entry.Source.Auth.Token = next
 		return nil
 	}
-	for _, entry := range cfg.Apps {
-		if err := transformEntry(entry); err != nil {
+	for name, entry := range cfg.Apps {
+		if err := transformEntry(ProviderSourceFieldPath("app", name, "auth", "token"), entry); err != nil {
 			return err
 		}
 	}
-	for _, entry := range cfg.Runtime.Providers {
+	for name, entry := range cfg.Runtime.Providers {
 		if entry == nil {
 			continue
 		}
-		if err := transformEntry(&entry.ProviderEntry); err != nil {
+		if err := transformEntry(ProviderSourceFieldPath("runtime", name, "auth", "token"), &entry.ProviderEntry); err != nil {
 			return err
 		}
 	}
-	for _, entries := range []map[string]*ProviderEntry{
-		cfg.Providers.Authentication,
-		cfg.Providers.Authorization,
-		cfg.Providers.ExternalCredentials,
-		cfg.Providers.Secrets,
-		cfg.Providers.Telemetry,
-		cfg.Providers.Audit,
-		cfg.Providers.IndexedDB,
-		cfg.Providers.Cache,
-		cfg.Providers.S3,
-		cfg.Providers.Workflow,
-		cfg.Providers.Agent,
+	for _, group := range []struct {
+		kind    string
+		entries map[string]*ProviderEntry
+	}{
+		{"authentication", cfg.Providers.Authentication},
+		{"authorization", cfg.Providers.Authorization},
+		{"externalCredentials", cfg.Providers.ExternalCredentials},
+		{"secrets", cfg.Providers.Secrets},
+		{"telemetry", cfg.Providers.Telemetry},
+		{"audit", cfg.Providers.Audit},
+		{"indexeddb", cfg.Providers.IndexedDB},
+		{"cache", cfg.Providers.Cache},
+		{"s3", cfg.Providers.S3},
+		{"workflow", cfg.Providers.Workflow},
+		{"agent", cfg.Providers.Agent},
 	} {
-		for _, entry := range entries {
-			if err := transformEntry(entry); err != nil {
+		for name, entry := range group.entries {
+			if err := transformEntry(ProviderSourceFieldPath(group.kind, name, "auth", "token"), entry); err != nil {
 				return err
 			}
 		}
 	}
-	for _, entry := range cfg.Providers.UI {
+	for name, entry := range cfg.Providers.UI {
 		if entry == nil {
 			continue
 		}
-		if err := transformEntry(&entry.ProviderEntry); err != nil {
+		if err := transformEntry(ProviderSourceFieldPath("ui", name, "auth", "token"), &entry.ProviderEntry); err != nil {
 			return err
 		}
 	}

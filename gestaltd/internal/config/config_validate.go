@@ -614,17 +614,17 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 		release := src.GitHubReleaseSource()
 		switch {
 		case release == nil:
-			return fmt.Errorf("config validation: %s %q githubRelease source is required", kind, name)
+			return newConfigValidationDiagnostic(ProviderSourceFieldPath(kind, name, "githubRelease"), "source.githubRelease is required")
 		case strings.TrimSpace(release.Repo) == "":
-			return fmt.Errorf("config validation: %s %q source.githubRelease.repo is required", kind, name)
+			return newConfigValidationDiagnostic(ProviderSourceFieldPath(kind, name, "githubRelease", "repo"), "source.githubRelease.repo is required")
 		case strings.TrimSpace(release.Tag) == "":
-			return fmt.Errorf("config validation: %s %q source.githubRelease.tag is required", kind, name)
+			return newConfigValidationDiagnostic(ProviderSourceFieldPath(kind, name, "githubRelease", "tag"), "source.githubRelease.tag is required")
 		case strings.TrimSpace(release.Asset) == "":
-			return fmt.Errorf("config validation: %s %q source.githubRelease.asset is required", kind, name)
+			return newConfigValidationDiagnostic(ProviderSourceFieldPath(kind, name, "githubRelease", "asset"), "source.githubRelease.asset is required")
 		}
 		repoParts := strings.Split(strings.TrimSpace(release.Repo), "/")
 		if len(repoParts) != 2 || strings.TrimSpace(repoParts[0]) == "" || strings.TrimSpace(repoParts[1]) == "" {
-			return fmt.Errorf("config validation: %s %q source.githubRelease.repo must be owner/name", kind, name)
+			return newConfigValidationDiagnostic(ProviderSourceFieldPath(kind, name, "githubRelease", "repo"), "source.githubRelease.repo must be owner/name")
 		}
 	}
 	if src.IsGit() {
@@ -694,7 +694,7 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 			return fmt.Errorf("config validation: %s %q auth is only valid with provider-release metadata sources", kind, name)
 		}
 		if strings.TrimSpace(auth.Token) == "" {
-			return fmt.Errorf("config validation: %s %q auth.token is required when auth is set", kind, name)
+			return newConfigValidationDiagnostic(ProviderSourceFieldPath(kind, name, "auth", "token"), "source.auth.token is empty; source.auth is configured for provider source access, so token must resolve to a non-empty value or source.auth must be removed when the source does not require authentication")
 		}
 	}
 	return nil

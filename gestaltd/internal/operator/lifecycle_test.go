@@ -4028,7 +4028,7 @@ func TestHashArchiveEntry_HashesFallbackArchive(t *testing.T) {
 		},
 	}
 
-	if err := NewLifecycle().hashArchiveEntry(context.Background(), providermanifestv1.KindUI, "roadmap", &entry, lifecyclePaths{}, "linux/amd64", nil); err != nil {
+	if err := NewLifecycle().hashArchiveEntry(context.Background(), providermanifestv1.KindUI, "roadmap", &entry, lifecyclePaths{}, "linux/amd64", nil, config.ProviderSourcePath("ui", "roadmap")); err != nil {
 		t.Fatalf("hashArchiveEntry: %v", err)
 	}
 
