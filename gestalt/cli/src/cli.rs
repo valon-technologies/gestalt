@@ -216,6 +216,11 @@ pub enum AuthorizationCommands {
         #[command(subcommand)]
         command: AuthorizationAppCommands,
     },
+    /// Manage dynamic authorization grant sources
+    Grants {
+        #[command(subcommand)]
+        command: AuthorizationGrantCommands,
+    },
     /// Inspect authorization models
     Models {
         #[command(subcommand)]
@@ -281,6 +286,34 @@ pub enum AuthorizationSubjectCommands {
     },
     /// Update a service-account subject
     Update(AuthorizationSubjectUpdateArgs),
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationGrantCommands {
+    /// Delete a dynamic authorization grant source
+    Delete {
+        /// Grant source ID, for example app/github
+        grant_id: String,
+    },
+    /// Show a dynamic authorization grant source
+    Get {
+        /// Grant source ID, for example app/github
+        grant_id: String,
+    },
+    /// List dynamic authorization grant sources
+    List,
+    /// Create or replace a dynamic authorization grant source from JSON
+    Put(AuthorizationGrantPutArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationGrantPutArgs {
+    /// Grant source ID, for example app/github
+    pub grant_id: String,
+
+    /// JSON file containing the grant source body, or - for stdin
+    #[arg(long)]
+    pub file: String,
 }
 
 #[derive(Args)]

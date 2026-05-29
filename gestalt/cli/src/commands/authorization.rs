@@ -7,14 +7,14 @@ use serde_json::{Map, Value, json};
 use crate::api::{ApiClient, encode_path_segment};
 use crate::cli::{
     AuthorizationAdminCommands, AuthorizationAdminMemberCommands, AuthorizationAppCommands,
-    AuthorizationAppMemberCommands, AuthorizationCommands, AuthorizationManagedSubjectRole,
-    AuthorizationModelCommands, AuthorizationPageArgs, AuthorizationProviderCommands,
-    AuthorizationRelationshipCommands, AuthorizationRelationshipListArgs,
-    AuthorizationSubjectCommands, AuthorizationSubjectCreateArgs,
-    AuthorizationSubjectExternalIdentityCommands, AuthorizationSubjectGrantCommands,
-    AuthorizationSubjectIntegrationCommands, AuthorizationSubjectMemberCommands,
-    AuthorizationSubjectTokenCommands, AuthorizationSubjectTokenCreateArgs,
-    AuthorizationSubjectUpdateArgs,
+    AuthorizationAppMemberCommands, AuthorizationCommands, AuthorizationGrantCommands,
+    AuthorizationGrantPutArgs, AuthorizationManagedSubjectRole, AuthorizationModelCommands,
+    AuthorizationPageArgs, AuthorizationProviderCommands, AuthorizationRelationshipCommands,
+    AuthorizationRelationshipListArgs, AuthorizationSubjectCommands,
+    AuthorizationSubjectCreateArgs, AuthorizationSubjectExternalIdentityCommands,
+    AuthorizationSubjectGrantCommands, AuthorizationSubjectIntegrationCommands,
+    AuthorizationSubjectMemberCommands, AuthorizationSubjectTokenCommands,
+    AuthorizationSubjectTokenCreateArgs, AuthorizationSubjectUpdateArgs,
 };
 use crate::commands::apps;
 use crate::output::{self, Format};
@@ -146,6 +146,16 @@ pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Form
                     remove_app_member(client, &app, &subject_id, format)
                 }
             },
+        },
+        AuthorizationCommands::Grants { command } => match command {
+            AuthorizationGrantCommands::List => list_authorization_grants(client, format),
+            AuthorizationGrantCommands::Get { grant_id } => {
+                get_authorization_grant(client, &grant_id, format)
+            }
+            AuthorizationGrantCommands::Put(args) => put_authorization_grant(client, &args, format),
+            AuthorizationGrantCommands::Delete { grant_id } => {
+                delete_authorization_grant(client, &grant_id, format)
+            }
         },
         AuthorizationCommands::Admins { command } => match command {
             AuthorizationAdminCommands::Members { command } => match command {
@@ -522,9 +532,78 @@ pub fn revoke_all_subject_tokens(client: &ApiClient, subject: &str, format: Form
     print_status(&resp, format, "Revoked all service account tokens.")
 }
 
+pub fn list_authorization_grants(client: &ApiClient, format: Format) -> Result<()> {
+    let resp = client
+        .get("/api/v1/authorization/grants")
+        .context("failed to list authorization grants")?;
+    print_array_response(
+        &resp,
+        format,
+        &["ID", "Owner", "Version", "Relationships"],
+        authorization_grant_source_row,
+    )
+}
+
+pub fn get_authorization_grant(client: &ApiClient, grant_id: &str, format: Format) -> Result<()> {
+    let resp = client
+        .get(&format!(
+            "/api/v1/authorization/grants/{}",
+            encode_path_segment(non_empty("grant_id", grant_id)?)
+        ))
+        .context("failed to get authorization grant")?;
+    print_single_response(
+        &resp,
+        format,
+        &["ID", "Owner", "Version", "Relationships"],
+        authorization_grant_source_row,
+    )
+}
+
+pub fn put_authorization_grant(
+    client: &ApiClient,
+    args: &AuthorizationGrantPutArgs,
+    format: Format,
+) -> Result<()> {
+    let body: Value = serde_json::from_str(&read_input(&args.file)?)
+        .with_context(|| format!("failed to parse grant JSON from {}", args.file))?;
+    let resp = client
+        .put(
+            &format!(
+                "/api/v1/authorization/grants/{}",
+                encode_path_segment(non_empty("grant_id", &args.grant_id)?)
+            ),
+            &body,
+        )
+        .context("failed to put authorization grant")?;
+    print_single_response(
+        &resp,
+        format,
+        &["ID", "Owner", "Version", "Relationships"],
+        authorization_grant_source_row,
+    )
+}
+
+pub fn delete_authorization_grant(
+    client: &ApiClient,
+    grant_id: &str,
+    format: Format,
+) -> Result<()> {
+    let resp = client
+        .delete(&format!(
+            "/api/v1/authorization/grants/{}",
+            encode_path_segment(non_empty("grant_id", grant_id)?)
+        ))
+        .context("failed to delete authorization grant")?;
+    print_status(
+        &resp,
+        format,
+        &format!("Deleted authorization grant {grant_id}."),
+    )
+}
+
 pub fn list_apps(client: &ApiClient, format: Format) -> Result<()> {
     let resp = client
-        .get("/admin/api/v1/authorization/apps")
+        .get("/api/v1/authorization/apps")
         .context("failed to list authorization apps")?;
     print_array_response(
         &resp,
@@ -537,7 +616,7 @@ pub fn list_apps(client: &ApiClient, format: Format) -> Result<()> {
 pub fn list_app_members(client: &ApiClient, app: &str, format: Format) -> Result<()> {
     let resp = client
         .get(&format!(
-            "/admin/api/v1/authorization/apps/{}/members",
+            "/api/v1/authorization/apps/{}/members",
             encode_path_segment(app)
         ))
         .context("failed to list app members")?;
@@ -562,7 +641,7 @@ pub fn set_app_member(
     let resp = client
         .put(
             &format!(
-                "/admin/api/v1/authorization/apps/{}/members",
+                "/api/v1/authorization/apps/{}/members",
                 encode_path_segment(app)
             ),
             &body,
@@ -580,7 +659,7 @@ pub fn remove_app_member(
     let subject_id = canonical_non_system_subject(subject_id)?;
     let resp = client
         .delete(&format!(
-            "/admin/api/v1/authorization/apps/{}/members/{}",
+            "/api/v1/authorization/apps/{}/members/{}",
             encode_path_segment(app),
             encode_path_segment(&subject_id)
         ))
@@ -590,7 +669,7 @@ pub fn remove_app_member(
 
 pub fn list_admin_members(client: &ApiClient, format: Format) -> Result<()> {
     let resp = client
-        .get("/admin/api/v1/authorization/admins/members")
+        .get("/api/v1/authorization/admins/members")
         .context("failed to list admin members")?;
     print_array_response(
         &resp,
@@ -610,7 +689,7 @@ pub fn set_admin_member(
     let mut body = subject_selector_body(subject_id, email)?;
     body.insert("role".to_string(), json!(non_empty("role", role)?));
     let resp = client
-        .put("/admin/api/v1/authorization/admins/members", &body)
+        .put("/api/v1/authorization/admins/members", &body)
         .context("failed to set admin member")?;
     print_admin_write_response(&resp, format)
 }
@@ -619,7 +698,7 @@ pub fn remove_admin_member(client: &ApiClient, subject_id: &str, format: Format)
     let subject_id = canonical_non_system_subject(subject_id)?;
     let resp = client
         .delete(&format!(
-            "/admin/api/v1/authorization/admins/members/{}",
+            "/api/v1/authorization/admins/members/{}",
             encode_path_segment(&subject_id)
         ))
         .context("failed to remove admin member")?;
@@ -632,14 +711,14 @@ pub fn remove_admin_member(client: &ApiClient, subject_id: &str, format: Format)
 
 pub fn get_provider(client: &ApiClient, format: Format) -> Result<()> {
     let resp = client
-        .get("/admin/api/v1/authorization/provider")
+        .get("/api/v1/authorization/provider")
         .context("failed to get authorization provider")?;
     print_response(&resp, format)
 }
 
 pub fn list_models(client: &ApiClient, args: &AuthorizationPageArgs, format: Format) -> Result<()> {
     let path = query::append_query(
-        "/admin/api/v1/authorization/models",
+        "/api/v1/authorization/models",
         &query::page_params(args.page_size, args.page_token.as_deref()),
     )?;
     let resp = client
@@ -676,7 +755,7 @@ pub fn list_relationships(
     query::push_opt_param(&mut params, "resourceType", args.resource_type.as_deref());
     query::push_opt_param(&mut params, "resourceId", args.resource_id.as_deref());
     query::push_opt_param(&mut params, "modelId", args.model_id.as_deref());
-    let path = query::append_query("/admin/api/v1/authorization/relationships", &params)?;
+    let path = query::append_query("/api/v1/authorization/relationships", &params)?;
     let resp = client
         .get(&path)
         .context("failed to list authorization relationships")?;
@@ -883,7 +962,7 @@ fn read_input(path: &str) -> Result<String> {
         let mut input = String::new();
         std::io::stdin()
             .read_to_string(&mut input)
-            .context("failed to read permissions from stdin")?;
+            .context("failed to read stdin")?;
         return Ok(input);
     }
     std::fs::read_to_string(path).with_context(|| format!("failed to read {path}"))
@@ -1027,6 +1106,31 @@ fn grant_row(item: &Value) -> Vec<String> {
         string_cell(item, "source"),
         bool_cell(item, "mutable"),
     ]
+}
+
+fn authorization_grant_source_row(item: &Value) -> Vec<String> {
+    vec![
+        string_cell(item, "id"),
+        authorization_grant_owner_cell(item.get("owner")),
+        number_cell(item, "version"),
+        item["relationships"]
+            .as_array()
+            .map(|items| items.len().to_string())
+            .unwrap_or_else(|| "-".to_string()),
+    ]
+}
+
+fn authorization_grant_owner_cell(value: Option<&Value>) -> String {
+    let Some(value) = value else {
+        return "-".to_string();
+    };
+    let kind = string_cell(value, "kind");
+    match kind.as_str() {
+        "app" => format!("app:{}", string_cell(value, "app")),
+        "global" => "global".to_string(),
+        "-" => "-".to_string(),
+        _ => kind,
+    }
 }
 
 fn external_identity_row(item: &Value) -> Vec<String> {
@@ -1186,5 +1290,14 @@ fn bool_cell(item: &Value, key: &str) -> String {
     item.get(key)
         .and_then(Value::as_bool)
         .map(|value| value.to_string())
+        .unwrap_or_else(|| "-".to_string())
+}
+
+fn number_cell(item: &Value, key: &str) -> String {
+    item[key]
+        .as_i64()
+        .map(|value| value.to_string())
+        .or_else(|| item[key].as_u64().map(|value| value.to_string()))
+        .or_else(|| item[key].as_f64().map(|value| value.to_string()))
         .unwrap_or_else(|| "-".to_string())
 }
