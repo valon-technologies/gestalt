@@ -16567,7 +16567,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 	})
 
-	t.Run("slack identity already linked", func(t *testing.T) {
+	t.Run("slack identity can be linked to multiple subjects", func(t *testing.T) {
 		t.Parallel()
 
 		svc := testutil.NewStubServices(t)
@@ -16677,20 +16677,17 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 
 		viewerResp := runConnect("viewer-session")
 		defer func() { _ = viewerResp.Body.Close() }()
-		if viewerResp.StatusCode != http.StatusBadGateway {
+		if viewerResp.StatusCode != http.StatusSeeOther {
 			body, _ := io.ReadAll(viewerResp.Body)
-			t.Fatalf("viewer callback status = %d, want %d: %s", viewerResp.StatusCode, http.StatusBadGateway, strings.TrimSpace(string(body)))
+			t.Fatalf("viewer callback status = %d, want %d: %s", viewerResp.StatusCode, http.StatusSeeOther, strings.TrimSpace(string(body)))
 		}
 
 		admin, _ := svc.Users.FindOrCreateUser(context.Background(), "admin@example.test")
 		viewer, _ := svc.Users.FindOrCreateUser(context.Background(), "viewer@example.test")
 		adminTokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(admin.ID))
-		if len(adminTokens) != 1 {
-			t.Fatalf("expected one admin token, got %d", len(adminTokens))
-		}
 		viewerTokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(viewer.ID))
-		if len(viewerTokens) != 0 {
-			t.Fatalf("expected viewer token rollback, got %d", len(viewerTokens))
+		if len(adminTokens) != 1 || len(viewerTokens) != 1 {
+			t.Fatalf("expected one token per subject, got admin=%d viewer=%d", len(adminTokens), len(viewerTokens))
 		}
 
 		respAuthz, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
@@ -16701,13 +16698,15 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			},
 		})
 		if err != nil {
-			t.Fatalf("ReadRelationships after conflict: %v", err)
+			t.Fatalf("ReadRelationships after shared link: %v", err)
 		}
-		if len(respAuthz.GetRelationships()) != 1 {
-			t.Fatalf("relationships after conflict = %+v, want one", respAuthz.GetRelationships())
+		gotSubjects := map[string]bool{}
+		for _, rel := range respAuthz.GetRelationships() {
+			gotSubjects[rel.GetSubject().GetId()] = true
 		}
-		if got := respAuthz.GetRelationships()[0].GetSubject().GetId(); got != principal.UserSubjectID(admin.ID) {
-			t.Fatalf("linked subject after conflict = %q, want %q", got, principal.UserSubjectID(admin.ID))
+		adminSubjectID, viewerSubjectID := principal.UserSubjectID(admin.ID), principal.UserSubjectID(viewer.ID)
+		if len(gotSubjects) != 2 || !gotSubjects[adminSubjectID] || !gotSubjects[viewerSubjectID] {
+			t.Fatalf("relationships after shared link = %+v, want subjects %v", respAuthz.GetRelationships(), []string{adminSubjectID, viewerSubjectID})
 		}
 	})
 }
@@ -20120,23 +20119,28 @@ func TestConnectManual(t *testing.T) {
 		}
 	})
 
-	t.Run("service account external identity writes subject relationship", func(t *testing.T) {
+	t.Run("external identity can be linked to user and service account", func(t *testing.T) {
 		t.Parallel()
 
+		userToken, userTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
+		if err != nil {
+			t.Fatalf("GenerateToken user: %v", err)
+		}
 		subjectToken, subjectTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 		if err != nil {
-			t.Fatalf("GenerateToken: %v", err)
+			t.Fatalf("GenerateToken subject: %v", err)
 		}
 		svc := testutil.NewStubServices(t)
+		user := seedAPITokenWithPermissions(t, svc, userToken, userTokenHash, "api-user", nil)
 		seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
 		base, err := newTestAuthorizer(config.AuthorizationConfig{
 			Policies: map[string]config.SubjectPolicyDef{
 				"manual_policy": {
-					Members: []config.SubjectPolicyMemberDef{{
-						SubjectID: "service_account:triage-bot",
-						Role:      "viewer",
-					}},
+					Members: []config.SubjectPolicyMemberDef{
+						{SubjectID: principal.UserSubjectID(user.ID), Role: "viewer"},
+						{SubjectID: "service_account:triage-bot", Role: "viewer"},
+					},
 				},
 			},
 		}, map[string]*config.ProviderEntry{"manual-svc": {AuthorizationPolicy: "manual_policy"}})
@@ -20163,19 +20167,25 @@ func TestConnectManual(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key","connectionParams":{"team_id":"T123","user_id":"U456"}}`)
-		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
-		req.Header.Set("Authorization", "Bearer "+subjectToken)
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
+		connect := func(token, credential string) {
+			t.Helper()
+			body := bytes.NewBufferString(fmt.Sprintf(`{"integration":"manual-svc","credential":%q,"connectionParams":{"team_id":"T123","user_id":"U456"}}`, credential))
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+			}
 		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
-		}
+
+		connect(userToken, "user-key")
+		connect(subjectToken, "subject-key")
 
 		relResp, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
 			Relation: authorization.ProviderExternalIdentityRelationAssume,
@@ -20187,13 +20197,13 @@ func TestConnectManual(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadRelationships: %v", err)
 		}
-		relationships := relResp.GetRelationships()
-		if len(relationships) != 1 {
-			t.Fatalf("expected one external identity relationship, got %+v", relationships)
+		gotSubjects := map[string]bool{}
+		for _, rel := range relResp.GetRelationships() {
+			gotSubjects[rel.GetSubject().GetId()] = true
 		}
-		subject := relationships[0].GetSubject()
-		if subject.GetType() != authorization.ProviderSubjectTypeSubject || subject.GetId() != "service_account:triage-bot" {
-			t.Fatalf("expected subject service account relationship, got %+v", subject)
+		userSubjectID, serviceAccountSubjectID := principal.UserSubjectID(user.ID), "service_account:triage-bot"
+		if len(gotSubjects) != 2 || !gotSubjects[userSubjectID] || !gotSubjects[serviceAccountSubjectID] {
+			t.Fatalf("expected shared external identity relationships for %v, got %+v", []string{userSubjectID, serviceAccountSubjectID}, relResp.GetRelationships())
 		}
 	})
 

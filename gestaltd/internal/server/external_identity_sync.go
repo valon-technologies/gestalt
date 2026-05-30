@@ -10,7 +10,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 )
 
-var errExternalIdentityAlreadyLinked = errors.New("external identity already linked")
 var errDuplicateExternalIdentityCredential = errors.New("duplicate external identity credential")
 
 type duplicateExternalIdentityCredentialError struct {
@@ -164,23 +163,13 @@ func (s *Server) ensureExternalIdentityLink(ctx context.Context, subjectID strin
 		return err
 	}
 
-	currentSubjectLinked := false
-	otherSubjectLinked := false
 	for _, rel := range relationships {
 		if rel == nil || rel.GetSubject() == nil {
 			continue
 		}
 		if externalIdentityRelationshipSubjectMatches(rel.GetSubject(), subjectID) {
-			currentSubjectLinked = true
-			continue
+			return nil
 		}
-		otherSubjectLinked = true
-	}
-	if currentSubjectLinked {
-		return nil
-	}
-	if otherSubjectLinked {
-		return errExternalIdentityAlreadyLinked
 	}
 
 	modelID, err := s.managedAuthorizationModelID(ctx)
