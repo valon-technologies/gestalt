@@ -152,6 +152,19 @@ func TestConnectionAuthMetrics(t *testing.T) {
 			authURL:         "https://idp.example.test/authorize",
 		})
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			providerName: {
+				Connections: map[string]*config.ConnectionDef{
+					testDefaultConnection: {
+						Auth: config.ConnectionAuthDef{
+							Type:             providermanifestv1.AuthTypeOAuth2,
+							AuthorizationURL: "https://idp.example.test/authorize",
+							TokenURL:         "https://idp.example.test/token",
+						},
+					},
+				},
+			},
+		}
 		cfg.ConnectionAuth = testConnectionAuth(providerName, handler)
 		cfg.Services = testutil.NewStubServices(t)
 	})
@@ -482,6 +495,15 @@ func TestManualConnectionMetrics(t *testing.T) {
 		cfg.Services = testutil.NewStubServices(t)
 		cfg.Providers = testutil.NewProviderRegistry(t, &manualMetricsProvider{name: providerName})
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			providerName: {
+				Connections: map[string]*config.ConnectionDef{
+					testDefaultConnection: {
+						Auth: config.ConnectionAuthDef{Type: providermanifestv1.AuthTypeManual},
+					},
+				},
+			},
+		}
 	})
 	testutil.CloseOnCleanup(t, srv)
 

@@ -192,7 +192,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			info.MountedPath = strings.TrimSpace(entry.MountPath)
 		}
 		instances := connected[name]
-		authTypes := s.populateIntegrationSettings(&info, prov, instances, p)
+		authTypes := s.populateIntegrationSettings(&info, instances, p)
 		s.applyIntegrationConnectionStatus(&info, prov, instances, authTypes, p)
 		info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
 		if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, prov, info) {
@@ -514,8 +514,8 @@ func resolveRequestedInstance(w http.ResponseWriter, requested string) (string, 
 	return instance, true
 }
 
-func resolveConnectionParams(w http.ResponseWriter, prov core.Provider, provided map[string]string) (map[string]string, bool) {
-	connParams, err := validateConnectionParams(prov.ConnectionParamDefs(), provided)
+func resolveConnectionParams(w http.ResponseWriter, defs map[string]core.ConnectionParamDef, provided map[string]string) (map[string]string, bool) {
+	connParams, err := validateConnectionParams(defs, provided)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return nil, false

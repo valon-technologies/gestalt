@@ -1966,6 +1966,18 @@ func testConnectionAuth(integration string, handler bootstrap.OAuthHandler) func
 	return func() map[string]map[string]bootstrap.OAuthHandler { return m }
 }
 
+func oauthConnectionDef(params map[string]config.ConnectionParamDef) *config.ConnectionDef {
+	return &config.ConnectionDef{
+		Mode: providermanifestv1.ConnectionModeSubject,
+		Auth: config.ConnectionAuthDef{
+			Type:             providermanifestv1.AuthTypeOAuth2,
+			AuthorizationURL: "https://provider.example/oauth/authorize",
+			TokenURL:         "https://provider.example/oauth/token",
+		},
+		ConnectionParams: params,
+	}
+}
+
 func oauthRefreshConnectionAuth(integration string, refreshFn func(context.Context, string) (*core.TokenResponse, error)) func() map[string]map[string]bootstrap.OAuthHandler {
 	return testConnectionAuth(integration, &testOAuthHandler{refreshTokenFn: refreshFn})
 }
@@ -2102,6 +2114,9 @@ func testPluginDefsForConnections(plugin string, connections ...string) map[stri
 		entry.Connections[connection] = &config.ConnectionDef{
 			ConnectionID: plugin + ":" + connection,
 			Mode:         providermanifestv1.ConnectionModeSubject,
+			Auth: config.ConnectionAuthDef{
+				Type: providermanifestv1.AuthTypeManual,
+			},
 		}
 	}
 	return map[string]*config.ProviderEntry{plugin: entry}
@@ -3933,6 +3948,7 @@ func TestListIntegrations(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack", Desc: "Team messaging"}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.AppDefs = testPluginDefsForConnections("slack", "default")
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -4087,11 +4103,25 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 		&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: "manual-multi", DN: "Manual Multi"}},
 	)
 	pluginDefs := map[string]*config.ProviderEntry{
+		"manual-disconnected": {
+			Connections: map[string]*config.ConnectionDef{
+				testDefaultConnection: {
+					ConnectionID: "manual-disconnected:" + testDefaultConnection,
+					Mode:         providermanifestv1.ConnectionModeSubject,
+					Auth: config.ConnectionAuthDef{
+						Type: providermanifestv1.AuthTypeManual,
+					},
+				},
+			},
+		},
 		"manual-connected": {
 			Connections: map[string]*config.ConnectionDef{
 				testDefaultConnection: {
 					ConnectionID: "manual-connected:" + testDefaultConnection,
 					Mode:         providermanifestv1.ConnectionModeSubject,
+					Auth: config.ConnectionAuthDef{
+						Type: providermanifestv1.AuthTypeManual,
+					},
 				},
 			},
 		},
@@ -4100,6 +4130,9 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 				testDefaultConnection: {
 					ConnectionID: "manual-multi:" + testDefaultConnection,
 					Mode:         providermanifestv1.ConnectionModeSubject,
+					Auth: config.ConnectionAuthDef{
+						Type: providermanifestv1.AuthTypeManual,
+					},
 				},
 			},
 		},
@@ -4238,10 +4271,16 @@ func TestListIntegrations_StaleRefreshFailuresRequireReconnect(t *testing.T) {
 			testDefaultConnection: {
 				ConnectionID: "named-stale:" + testDefaultConnection,
 				Mode:         providermanifestv1.ConnectionModeSubject,
+				Auth: config.ConnectionAuthDef{
+					Type: providermanifestv1.AuthTypeManual,
+				},
 			},
 			"archive": {
 				ConnectionID: "named-stale:archive",
 				Mode:         providermanifestv1.ConnectionModeSubject,
+				Auth: config.ConnectionAuthDef{
+					Type: providermanifestv1.AuthTypeManual,
+				},
 			},
 		},
 	}
@@ -4351,6 +4390,31 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 	}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, oauthStub, manualStub, mcpStub)
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"oauth-svc": {
+				Connections: map[string]*config.ConnectionDef{
+					"default": {
+						ConnectionID: "oauth-svc:default",
+						Mode:         providermanifestv1.ConnectionModeSubject,
+						Auth: config.ConnectionAuthDef{
+							Type: providermanifestv1.AuthTypeOAuth2,
+						},
+					},
+				},
+			},
+			"manual-svc": {
+				Connections: map[string]*config.ConnectionDef{
+					"default": {
+						ConnectionID: "manual-svc:default",
+						Mode:         providermanifestv1.ConnectionModeSubject,
+						Auth: config.ConnectionAuthDef{
+							Type: providermanifestv1.AuthTypeManual,
+						},
+					},
+				},
+			},
+			"clickhouse": {},
+		}
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -4527,14 +4591,11 @@ func TestListIntegrations_ShowsCredentialedConnectionsInUserFacingMetadata(t *te
 	if len(integrations) != 1 {
 		t.Fatalf("expected 1 integration, got %d", len(integrations))
 	}
-	if len(integrations[0].Connections) != 2 {
-		t.Fatalf("connections = %+v, want app and default user-facing connections", integrations[0].Connections)
+	if len(integrations[0].Connections) != 1 {
+		t.Fatalf("connections = %+v, want one declared default connection", integrations[0].Connections)
 	}
-	if integrations[0].Connections[0].Name != "app" {
-		t.Fatalf("first connection name = %q, want %q", integrations[0].Connections[0].Name, "app")
-	}
-	if integrations[0].Connections[1].Name != "default" {
-		t.Fatalf("second connection name = %q, want %q", integrations[0].Connections[1].Name, "default")
+	if integrations[0].Connections[0].Name != "default" {
+		t.Fatalf("connection name = %q, want %q", integrations[0].Connections[0].Name, "default")
 	}
 	for _, conn := range integrations[0].Connections {
 		if !reflect.DeepEqual(conn.AuthTypes, []string{"manual"}) {
@@ -4553,7 +4614,11 @@ func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGeneric
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"linear": {},
+			"linear": {
+				Auth: &config.ConnectionAuthDef{
+					Type: providermanifestv1.AuthTypeManual,
+				},
+			},
 		}
 		cfg.Services = testutil.NewStubServices(t)
 	})
@@ -4852,100 +4917,6 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		}
 	})
 
-	t.Run("composite wrappers preserve API metadata", func(t *testing.T) {
-		t.Parallel()
-
-		apiProv := &stubManualProviderWithCapabilities{
-			stubManualProvider: stubManualProvider{
-				StubIntegration: coretesting.StubIntegration{N: "docs", DN: "Docs"},
-			},
-			credentialFields: []core.CredentialFieldDef{
-				{Name: "api_key", Label: "API Key", Description: "Docs API key"},
-			},
-			connectionParams: map[string]core.ConnectionParamDef{
-				"tenant": {
-					Required:    true,
-					Description: "Tenant slug",
-					Default:     "acme",
-				},
-			},
-		}
-		prov := composite.New("docs", apiProv, &stubIntegrationWithSessionCatalog{
-			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "docs-mcp", ConnMode: core.ConnectionModeNone},
-			},
-		})
-
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, prov)
-			cfg.AppDefs = map[string]*config.ProviderEntry{
-				"docs": {},
-			}
-			cfg.Services = testutil.NewStubServices(t)
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d", resp.StatusCode)
-		}
-
-		type credentialField struct {
-			Name        string `json:"name"`
-			Label       string `json:"label"`
-			Description string `json:"description"`
-		}
-		type connectionParam struct {
-			Required    bool   `json:"required"`
-			Description string `json:"description"`
-			Default     string `json:"default"`
-		}
-		var integrations []struct {
-			Name        string `json:"name"`
-			Connections []struct {
-				Name             string                     `json:"name"`
-				AuthTypes        []string                   `json:"authTypes"`
-				CredentialFields []credentialField          `json:"credentialFields"`
-				ConnectionParams map[string]connectionParam `json:"connectionParams"`
-			} `json:"connections"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
-			t.Fatalf("decoding: %v", err)
-		}
-		if len(integrations) != 1 {
-			t.Fatalf("expected 1 integration, got %d", len(integrations))
-		}
-
-		wantFields := []credentialField{{Name: "api_key", Label: "API Key", Description: "Docs API key"}}
-		if len(integrations[0].Connections) != 1 {
-			t.Fatalf("connections = %+v, want one default connection", integrations[0].Connections)
-		}
-		if integrations[0].Connections[0].Name != config.AppConnectionAlias {
-			t.Fatalf("connection name = %q, want %q", integrations[0].Connections[0].Name, config.AppConnectionAlias)
-		}
-		if !reflect.DeepEqual(integrations[0].Connections[0].AuthTypes, []string{"manual"}) {
-			t.Fatalf("connection auth types = %v, want [manual]", integrations[0].Connections[0].AuthTypes)
-		}
-		if !reflect.DeepEqual(integrations[0].Connections[0].CredentialFields, wantFields) {
-			t.Fatalf("connection credential fields = %+v, want %+v", integrations[0].Connections[0].CredentialFields, wantFields)
-		}
-		if !reflect.DeepEqual(integrations[0].Connections[0].ConnectionParams, map[string]connectionParam{
-			"tenant": {
-				Required:    true,
-				Description: "Tenant slug",
-				Default:     "acme",
-			},
-		}) {
-			t.Fatalf("connection params = %+v", integrations[0].Connections[0].ConnectionParams)
-		}
-	})
-
 	t.Run("manifest-backed MCP passthrough without declared auth exposes no synthetic connection", func(t *testing.T) {
 		t.Parallel()
 
@@ -5140,7 +5111,11 @@ func TestListIntegrations_ConnectionInfosHideOAuthConnectionsWithoutHandler(t *t
 	plugin := &config.ProviderEntry{
 		Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-slack/v1.0.0/provider-release.yaml"),
 		Connections: map[string]*config.ConnectionDef{
-			"default": {},
+			"default": {
+				Auth: config.ConnectionAuthDef{
+					Type: providermanifestv1.AuthTypeOAuth2,
+				},
+			},
 		},
 	}
 
@@ -5228,60 +5203,6 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 				Name  string `json:"name"`
 				Label string `json:"label"`
 			}{},
-		},
-		{
-			name: "empty auth type still exposes oauth",
-			provider: func(t *testing.T) core.Provider {
-				t.Helper()
-				return &stubDualAuthProvider{
-					StubIntegration: coretesting.StubIntegration{N: "example", DN: "Example"},
-				}
-			},
-			plugin: &config.ProviderEntry{
-				Auth: &config.ConnectionAuthDef{
-					Type:             "",
-					AuthorizationURL: "https://example.com/oauth/authorize",
-					TokenURL:         "https://example.com/oauth/token",
-				},
-			},
-			wantAuth: []string{"oauth", "manual"},
-			wantFields: []struct {
-				Name  string `json:"name"`
-				Label string `json:"label"`
-			}{
-				{Name: "api_token", Label: "API Token"},
-			},
-		},
-		{
-			name: "plugin auth unset uses provider auth types",
-			provider: func(t *testing.T) core.Provider {
-				t.Helper()
-				prov, err := declarative.Build(&declarative.Definition{
-					Provider:    "example",
-					DisplayName: "Example",
-					Auth:        declarative.AuthDef{Type: "manual"},
-					CredentialFields: []declarative.CredentialFieldDef{
-						{Name: "primary_token", Label: "Primary Token"},
-						{Name: "secondary_token", Label: "Secondary Token"},
-					},
-					Operations: map[string]declarative.OperationDef{
-						"list_items": {Method: http.MethodGet, Path: "/items"},
-					},
-				}, declarative.ConnectionDef{})
-				if err != nil {
-					t.Fatalf("Build: %v", err)
-				}
-				return prov
-			},
-			plugin:   &config.ProviderEntry{},
-			wantAuth: []string{"manual"},
-			wantFields: []struct {
-				Name  string `json:"name"`
-				Label string `json:"label"`
-			}{
-				{Name: "primary_token", Label: "Primary Token"},
-				{Name: "secondary_token", Label: "Secondary Token"},
-			},
 		},
 		{
 			name: "declared manual credential fields are exposed without synthetic auth inputs",
@@ -5469,7 +5390,17 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 			},
 		}
 		cfg.Providers = testutil.NewProviderRegistry(t, stub, stub2)
-		cfg.AppDefs = testPluginDefsForConnections("slack", "default")
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"slack": testPluginDefsForConnections("slack", "default")["slack"],
+			"github": {
+				Connections: map[string]*config.ConnectionDef{
+					testDefaultConnection: {
+						ConnectionID: "github:" + testDefaultConnection,
+						Mode:         providermanifestv1.ConnectionModeSubject,
+					},
+				},
+			},
+		}
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -6973,7 +6904,10 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		Spec: &providermanifestv1.Spec{
 			DefaultConnection: "default",
 			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-				"default": {Mode: providermanifestv1.ConnectionModeSubject},
+				"default": {
+					Mode: providermanifestv1.ConnectionModeSubject,
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+				},
 				"bot": {
 					Mode: providermanifestv1.ConnectionModeSubject,
 					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
@@ -7054,6 +6988,9 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		Connections: map[string]*config.ConnectionDef{
 			"bot": {
 				Mode: providermanifestv1.ConnectionModeSubject,
+				Auth: config.ConnectionAuthDef{
+					Type: providermanifestv1.AuthTypeBearer,
+				},
 			},
 		},
 	}
@@ -8619,6 +8556,13 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"slack": {
+				Connections: map[string]*config.ConnectionDef{
+					testDefaultConnection: oauthConnectionDef(nil),
+				},
+			},
+		}
 		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 		cfg.Services = testutil.NewStubServices(t)
@@ -8675,6 +8619,13 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	invalidTS := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"slack": {
+				Connections: map[string]*config.ConnectionDef{
+					testDefaultConnection: oauthConnectionDef(nil),
+				},
+			},
+		}
 		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
 		cfg.AuditSink = invocation.NewSlogAuditSink(&invalidAuditBuf)
 		cfg.Services = testutil.NewStubServices(t)
@@ -8762,6 +8713,16 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			}
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
 			cfg.DefaultConnection = map[string]string{"oauth-svc": testDefaultConnection}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"oauth-svc": {
+					Connections: map[string]*config.ConnectionDef{
+						testDefaultConnection: oauthConnectionDef(map[string]config.ConnectionParamDef{
+							"tenant_id":  {Required: true, From: "token_response", Field: "tenant.id"},
+							"account_id": {Required: true, From: "token_response", Field: "account.id"},
+						}),
+					},
+				},
+			}
 			cfg.ConnectionAuth = testConnectionAuth("oauth-svc", handler)
 			cfg.Services = svc
 			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
@@ -8920,6 +8881,16 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			}
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
 			cfg.DefaultConnection = map[string]string{"oauth-svc": testDefaultConnection}
+			cfg.AppDefs = map[string]*config.ProviderEntry{
+				"oauth-svc": {
+					Connections: map[string]*config.ConnectionDef{
+						testDefaultConnection: oauthConnectionDef(map[string]config.ConnectionParamDef{
+							"tenant_id":  {Required: true, From: "token_response", Field: "tenant.id"},
+							"account_id": {Required: true, From: "token_response", Field: "account.id"},
+						}),
+					},
+				},
+			}
 			cfg.ConnectionAuth = testConnectionAuth("oauth-svc", handler)
 			cfg.Services = svc
 		})
@@ -10232,6 +10203,13 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"gitlab": testDefaultConnection}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"gitlab": {
+				Connections: map[string]*config.ConnectionDef{
+					testDefaultConnection: oauthConnectionDef(nil),
+				},
+			},
+		}
 		cfg.ConnectionAuth = testConnectionAuth("gitlab", handler)
 		cfg.Services = testutil.NewStubServices(t)
 	})
@@ -11313,6 +11291,14 @@ func TestStartOAuth_MultiConnection_SelectsByConnectionName(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"multi": "conn-a"}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"multi": {
+				Connections: map[string]*config.ConnectionDef{
+					"conn-a": oauthConnectionDef(nil),
+					"conn-b": oauthConnectionDef(nil),
+				},
+			},
+		}
 		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
 			return map[string]map[string]bootstrap.OAuthHandler{
 				"multi": {
@@ -11454,6 +11440,14 @@ func TestOAuthCallback_UsesStateConnection(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"multi": "conn-a"}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"multi": {
+				Connections: map[string]*config.ConnectionDef{
+					"conn-a": oauthConnectionDef(nil),
+					"conn-b": oauthConnectionDef(nil),
+				},
+			},
+		}
 		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
 			return map[string]map[string]bootstrap.OAuthHandler{
 				"multi": {
@@ -12901,6 +12895,17 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 					StubIntegration: coretesting.StubIntegration{N: "multi-key-svc"},
 				}
 			},
+			pluginDefs: map[string]*config.ProviderEntry{
+				"multi-key-svc": {
+					Auth: &config.ConnectionAuthDef{
+						Type: providermanifestv1.AuthTypeManual,
+						Credentials: []config.CredentialFieldDef{
+							{Name: "api_key", Label: "API Key"},
+							{Name: "app_key", Label: "App Key"},
+						},
+					},
+				},
+			},
 			wantTokenData: map[string]string{
 				"api_key": "k1",
 				"app_key": "k2",
@@ -13057,6 +13062,9 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 							{Name: "client_id", Label: "Client ID"},
 							{Name: "client_secret", Label: "Client Secret"},
 						},
+					},
+					ConnectionParams: map[string]config.ConnectionParamDef{
+						"account_id": {From: "token_response", Field: "account.id", Required: true},
 					},
 				},
 			}
