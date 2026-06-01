@@ -178,6 +178,112 @@ func TestInvocationTokenExchangeAllowsNarrowingWildcardGrants(t *testing.T) {
 	}
 }
 
+func TestInvocationTokenExchangePreservesInvocationDelegationMetadata(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewInvocationTokenManager([]byte("invocation-token-delegation-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+
+	now := time.Date(2026, time.April, 21, 12, 0, 0, 0, time.UTC)
+	manager.now = func() time.Time { return now }
+
+	delegation := InvocationDelegation{
+		RunAs: &core.RunAsSubject{
+			SubjectID:           "service_account:data-schema-explorer",
+			SubjectKind:         "service_account",
+			CredentialSubjectID: "service_account:data-schema-explorer",
+			DisplayName:         "Data Schema Explorer",
+		},
+	}
+	rootToken, err := manager.MintRootToken(context.Background(), "caller", InvocationGrants{
+		InvocationGrantAllApps: {AllOperations: true},
+		"frontPorchRestApi": {
+			Operations: map[string]core.ConnectionMode{
+				"vds.schemaVersions": core.ConnectionModeSubject,
+			},
+			OperationDelegations: map[string]InvocationDelegation{
+				"vds.schemaVersions": delegation,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		grants InvocationGrants
+	}{
+		{
+			name: "exact operation",
+			grants: InvocationGrants{
+				"frontPorchRestApi": {Operations: map[string]core.ConnectionMode{"vds.schemaVersions": ""}},
+			},
+		},
+		{
+			name: "app all operations",
+			grants: InvocationGrants{
+				"frontPorchRestApi": {AllOperations: true},
+			},
+		},
+		{
+			name: "wildcard all operations",
+			grants: InvocationGrants{
+				InvocationGrantAllApps: {AllOperations: true},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			childToken, err := manager.ExchangeToken(rootToken, tc.grants, time.Minute)
+			if err != nil {
+				t.Fatalf("ExchangeToken: %v", err)
+			}
+			tokenCtx, err := manager.resolveToken(childToken, "caller")
+			if err != nil {
+				t.Fatalf("resolveToken: %v", err)
+			}
+			if !allowsOperation(tokenCtx.grants, "frontPorchRestApi", "vds.schemaVersions") {
+				t.Fatal("exchanged token does not allow frontPorchRestApi.vds.schemaVersions")
+			}
+			profile, ok := EffectiveOperationProfile(tokenCtx.grants, "frontPorchRestApi", "vds.schemaVersions")
+			if !ok {
+				t.Fatal("exchanged token has no profile for frontPorchRestApi.vds.schemaVersions")
+			}
+			if got := profile.CredentialMode; got != core.ConnectionModeSubject {
+				t.Fatalf("operation credential mode = %q, want subject", got)
+			}
+			if got := profile.Delegation; !invocationDelegationsEqual(got, delegation) {
+				t.Fatalf("operation delegation = %#v, want %#v", got, delegation)
+			}
+		})
+	}
+
+	_, err = manager.ExchangeToken(rootToken, InvocationGrants{
+		"frontPorchRestApi": {
+			Operations: map[string]core.ConnectionMode{"vds.schemaVersions": ""},
+			OperationDelegations: map[string]InvocationDelegation{
+				"vds.schemaVersions": {RunAs: &core.RunAsSubject{SubjectID: "service_account:other"}},
+			},
+		},
+	}, time.Minute)
+	if err == nil {
+		t.Fatal("ExchangeToken should reject changed delegation metadata")
+	}
+
+	_, err = manager.ExchangeToken(rootToken, InvocationGrants{
+		"frontPorchRestApi": {
+			Operations: map[string]core.ConnectionMode{"vds.schemaVersions": core.ConnectionModeNone},
+		},
+	}, time.Minute)
+	if err == nil {
+		t.Fatal("ExchangeToken should reject changed credential-mode metadata")
+	}
+}
+
 func TestAppInvocationExchangeRequiresExplicitGrantScope(t *testing.T) {
 	t.Parallel()
 
@@ -344,14 +450,14 @@ func TestInvocationTokenExchangePreservesWorkflowContext(t *testing.T) {
 		},
 	})
 	rootToken, err := manager.MintRootToken(ctx, "caller", InvocationGrants{
-		"slack":  {Operations: map[string]core.ConnectionMode{"chat.postMessage": ""}},
-		"github": {Operations: map[string]core.ConnectionMode{"issues.create": ""}},
+		"source": {Operations: map[string]core.ConnectionMode{"messages.send": ""}},
+		"target": {Operations: map[string]core.ConnectionMode{"items.create": ""}},
 	})
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
 	}
 	childToken, err := manager.ExchangeToken(rootToken, InvocationGrants{
-		"slack": {Operations: map[string]core.ConnectionMode{"chat.postMessage": ""}},
+		"source": {Operations: map[string]core.ConnectionMode{"messages.send": ""}},
 	}, time.Minute)
 	if err != nil {
 		t.Fatalf("ExchangeToken: %v", err)
@@ -379,21 +485,21 @@ func TestDecodeInvocationGrantClaimsIgnoresModesForUndeclaredOperations(t *testi
 	t.Parallel()
 
 	grants := decodeInvocationGrantClaims(map[string]invocationGrantClaims{
-		"slack": {
-			Operations: []string{"chat.postMessage"},
+		"source": {
+			Operations: []string{"messages.send"},
 			OperationModes: map[string]string{
-				"chat.postMessage": "subject",
-				"events.reply":     "none",
+				"messages.send":  "subject",
+				"messages.reply": "none",
 			},
 		},
 	})
 
-	slackGrant := grants["slack"]
-	if _, ok := slackGrant.Operations["events.reply"]; ok {
+	sourceGrant := grants["source"]
+	if _, ok := sourceGrant.Operations["messages.reply"]; ok {
 		t.Fatal("decodeInvocationGrantClaims should not add operations that only appear in operation_modes")
 	}
-	if got := slackGrant.Operations["chat.postMessage"]; got != core.ConnectionModeSubject {
-		t.Fatalf("chat.postMessage mode = %q, want %q", got, core.ConnectionModeSubject)
+	if got := sourceGrant.Operations["messages.send"]; got != core.ConnectionModeSubject {
+		t.Fatalf("messages.send mode = %q, want %q", got, core.ConnectionModeSubject)
 	}
 }
 
@@ -401,10 +507,10 @@ func TestDecodeInvocationGrantClaimsRequiresGrantScope(t *testing.T) {
 	t.Parallel()
 
 	grants := decodeInvocationGrantClaims(map[string]invocationGrantClaims{
-		"slack": {},
+		"source": {},
 	})
 
-	if allowsOperation(grants, "slack", "chat.postMessage") {
+	if allowsOperation(grants, "source", "messages.send") {
 		t.Fatal("empty grant claims should not grant wildcard operation access")
 	}
 }

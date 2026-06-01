@@ -86,8 +86,14 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 	if raw := req.GetParams(); raw != nil {
 		params = raw.AsMap()
 	}
+	invokePrincipal := tokenCtx.principal
+	invokeCtx, invokePrincipal = invocation.ApplyDelegation(
+		invokeCtx,
+		invokePrincipal,
+		tokenCtx.operationProfile.Delegation.RunAs,
+	)
 
-	result, err := s.invoker.Invoke(invokeCtx, tokenCtx.principal, targetApp, instance, targetOperation, params)
+	result, err := s.invoker.Invoke(invokeCtx, invokePrincipal, targetApp, instance, targetOperation, params)
 	if err != nil {
 		return nil, invocationStatusError(err)
 	}
@@ -164,7 +170,8 @@ func (s *AppServer) tokenContextForInvoke(req *proto.AppInvokeRequest, targetApp
 		return invocationTokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	callerApp := strings.TrimSpace(tokenCtx.callerApp)
-	if !allowsOperation(tokenCtx.grants, targetApp, targetOperation) {
+	profile, ok := EffectiveOperationProfile(tokenCtx.grants, targetApp, targetOperation)
+	if !ok {
 		return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s", callerApp, targetApp, targetOperation)
 	}
 	credentialMode, err := appInvokeCredentialMode(req.GetCredentialMode())
@@ -172,13 +179,15 @@ func (s *AppServer) tokenContextForInvoke(req *proto.AppInvokeRequest, targetApp
 		return invocationTokenContext{}, err
 	}
 	if credentialMode != "" {
-		if !appInvokeCredentialModeAllowed(credentialMode, tokenCtx.grants, targetApp, targetOperation) {
+		if !appInvokeCredentialModeAllowed(credentialMode, profile) {
 			return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s with credential_mode %q", callerApp, targetApp, targetOperation, credentialMode)
 		}
 		tokenCtx.credentialModeOverride = credentialMode
+		tokenCtx.operationProfile = profile
 		return tokenCtx, nil
 	}
-	tokenCtx.credentialModeOverride = appInvokeCredentialModeOverride(tokenCtx.grants, targetApp, targetOperation)
+	tokenCtx.credentialModeOverride = profile.CredentialMode
+	tokenCtx.operationProfile = profile
 	return tokenCtx, nil
 }
 
@@ -195,6 +204,8 @@ func (s *AppServer) tokenContextForSurfaceInvoke(req *proto.AppInvokeGraphQLRequ
 	if !allowsSurface(tokenCtx.grants, targetApp, surface) {
 		return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s surface %q", callerApp, targetApp, surface)
 	}
+	// Surface invocations do not carry operation delegation metadata. Config
+	// validation rejects runAs on surfaces so GraphQL cannot silently ignore it.
 	return tokenCtx, nil
 }
 
@@ -208,19 +219,15 @@ func appInvokeCredentialMode(raw string) (core.ConnectionMode, error) {
 	}
 }
 
-func appInvokeCredentialModeAllowed(mode core.ConnectionMode, tokenGrants InvocationGrants, appName, operation string) bool {
+func appInvokeCredentialModeAllowed(mode core.ConnectionMode, profile OperationProfile) bool {
 	mode = core.NormalizeOptionalConnectionMode(mode)
 	if mode == "" {
 		return true
 	}
-	if tokenMode := operationCredentialMode(tokenGrants, appName, operation); tokenMode != "" {
-		return tokenMode == mode
+	if profile.CredentialMode != "" {
+		return profile.CredentialMode == mode
 	}
-	return allowsOperation(tokenGrants, appName, operation)
-}
-
-func appInvokeCredentialModeOverride(tokenGrants InvocationGrants, appName, operation string) core.ConnectionMode {
-	return operationCredentialMode(tokenGrants, appName, operation)
+	return true
 }
 
 func prepareInvocationSelectors(ctx context.Context, tokenCtx invocationTokenContext, rawConnection, rawInstance string) (context.Context, string, error) {

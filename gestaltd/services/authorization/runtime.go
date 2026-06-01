@@ -32,10 +32,10 @@ type RuntimeAuthorizer interface {
 	StaticMembersForProvider(provider string) (string, []StaticSubjectMember, bool)
 }
 
-// ExternalIdentityAssumptionAuthorizer grants provider-owned external identity
-// assumptions for a canonical Gestalt subject.
-type ExternalIdentityAssumptionAuthorizer interface {
-	AllowExternalIdentityAssumption(ctx context.Context, p *principal.Principal, identity *core.ExternalIdentityRef) bool
+// ProviderActionAuthorizer optionally grants provider-scoped actions that are
+// not operation invocations, such as provider-dev remote attach.
+type ProviderActionAuthorizer interface {
+	AllowProviderAction(ctx context.Context, p *principal.Principal, provider, action string) bool
 }
 
 // ManagedAuthorizationModelResolver exposes the authorization model managed by

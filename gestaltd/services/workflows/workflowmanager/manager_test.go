@@ -1191,12 +1191,12 @@ func TestSignalOrStartRunAppStepCredentialModeUsesDeclaredInvoke(t *testing.T) {
 	invoker := &recordingWorkflowManagerInvoker{requireNone: true}
 	manager := New(Config{
 		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "github",
+			N:        "target",
 			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
-				Name: "github",
+				Name: "target",
 				Operations: []catalog.CatalogOperation{
-					{ID: "reviewPullRequest", Method: "POST"},
+					{ID: "reviews.create", Method: "POST"},
 				},
 			},
 		}),
@@ -1204,11 +1204,11 @@ func TestSignalOrStartRunAppStepCredentialModeUsesDeclaredInvoke(t *testing.T) {
 		Invoker:  invoker,
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:        "github",
-		Operations: []string{"events.handle", "reviewPullRequest"},
+		App:        "target",
+		Operations: []string{"events.handle", "reviews.create"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
-		SubjectID:        "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectID:        "service_account:event-handler",
 		Kind:             principal.Kind("service_account"),
 		TokenPermissions: permissions,
 		Scopes:           principal.PermissionApps(permissions),
@@ -1216,10 +1216,10 @@ func TestSignalOrStartRunAppStepCredentialModeUsesDeclaredInvoke(t *testing.T) {
 
 	managed, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
 		ProviderName:  "local",
-		WorkflowKey:   "github:99:acme/widgets:7:policy:pr-review",
-		CallerAppName: "github",
-		Target:        testWorkflowAppStepTarget("github", "reviewPullRequest", nil, core.ConnectionModeNone),
-		Signal:        coreworkflow.Signal{Name: "github.app.webhook"},
+		WorkflowKey:   "target:99:acme/widgets:7:policy:review",
+		CallerAppName: "target",
+		Target:        testWorkflowAppStepTarget("target", "reviews.create", nil, core.ConnectionModeNone),
+		Signal:        coreworkflow.Signal{Name: "target.event.received"},
 	})
 	if err != nil {
 		t.Fatalf("SignalOrStartRun: %v", err)
@@ -1242,32 +1242,32 @@ func TestSignalOrStartRunAppStepCredentialModeKeepsBlankModeBlank(t *testing.T) 
 	invoker := &recordingWorkflowManagerInvoker{}
 	manager := New(Config{
 		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "github",
+			N:        "target",
 			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
-				Name:       "github",
-				Operations: []catalog.CatalogOperation{{ID: "reviewPullRequest", Method: "POST"}},
+				Name:       "target",
+				Operations: []catalog.CatalogOperation{{ID: "reviews.create", Method: "POST"}},
 			},
 		}),
 		Workflow: testWorkflowControl{provider: provider},
 		Invoker:  invoker,
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:        "github",
-		Operations: []string{"events.handle", "reviewPullRequest"},
+		App:        "target",
+		Operations: []string{"events.handle", "reviews.create"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
-		SubjectID:        "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectID:        "service_account:event-handler",
 		TokenPermissions: permissions,
 		Scopes:           principal.PermissionApps(permissions),
 	})
 
 	managed, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
 		ProviderName:  "local",
-		WorkflowKey:   "github:99:acme/widgets:7:policy:pr-review",
-		CallerAppName: "github",
-		Target:        testWorkflowAppStepTarget("github", "reviewPullRequest", nil),
-		Signal:        coreworkflow.Signal{Name: "github.app.webhook"},
+		WorkflowKey:   "target:99:acme/widgets:7:policy:review",
+		CallerAppName: "target",
+		Target:        testWorkflowAppStepTarget("target", "reviews.create", nil),
+		Signal:        coreworkflow.Signal{Name: "target.event.received"},
 	})
 	if err != nil {
 		t.Fatalf("SignalOrStartRun: %v", err)
@@ -1284,10 +1284,10 @@ func TestSignalOrStartRunAppStepCredentialModeKeepsBlankModeBlank(t *testing.T) 
 
 	explicit, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
 		ProviderName:  "local",
-		WorkflowKey:   "github:99:acme/widgets:7:policy:pr-review",
-		CallerAppName: "github",
-		Target:        testWorkflowAppStepTarget("github", "reviewPullRequest", nil, core.ConnectionModeNone),
-		Signal:        coreworkflow.Signal{Name: "github.app.webhook"},
+		WorkflowKey:   "target:99:acme/widgets:7:policy:review",
+		CallerAppName: "target",
+		Target:        testWorkflowAppStepTarget("target", "reviews.create", nil, core.ConnectionModeNone),
+		Signal:        coreworkflow.Signal{Name: "target.event.received"},
 	})
 	if err != nil {
 		t.Fatalf("SignalOrStartRun explicit mode: %v", err)
@@ -1306,17 +1306,17 @@ func TestCreateScheduleAcceptsExplicitAppStepCredentialMode(t *testing.T) {
 	provider := newTestWorkflowProvider()
 	manager := New(Config{
 		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N: "github",
+			N: "target",
 			CatalogVal: &catalog.Catalog{
-				Name:       "github",
-				Operations: []catalog.CatalogOperation{{ID: "reviewPullRequest", Method: "POST"}},
+				Name:       "target",
+				Operations: []catalog.CatalogOperation{{ID: "reviews.create", Method: "POST"}},
 			},
 		}),
 		Workflow: testWorkflowControl{provider: provider},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:        "github",
-		Operations: []string{"reviewPullRequest"},
+		App:        "target",
+		Operations: []string{"reviews.create"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
 		SubjectID:        principal.UserSubjectID("ada"),
@@ -1327,7 +1327,7 @@ func TestCreateScheduleAcceptsExplicitAppStepCredentialMode(t *testing.T) {
 	managed, err := manager.CreateSchedule(context.Background(), caller, ScheduleUpsert{
 		ProviderName: "local",
 		Cron:         "*/5 * * * *",
-		Target:       testWorkflowAppStepTarget("github", "reviewPullRequest", nil, core.ConnectionModeNone),
+		Target:       testWorkflowAppStepTarget("target", "reviews.create", nil, core.ConnectionModeNone),
 	})
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
@@ -1347,21 +1347,21 @@ func TestSignalOrStartRunRejectsDeniedTargetPermissionsBeforeEnqueue(t *testing.
 		AgentManager: testAgentManager{},
 	})
 	caller := principal.Canonicalize(&principal.Principal{
-		SubjectID: "system:http_binding:github:event",
+		SubjectID: "system:http_binding:source:event",
 	})
 	req := RunSignalOrStart{
 		ProviderName:  "local",
-		WorkflowKey:   "github:99:acme/widgets:7",
-		CallerAppName: "github",
+		WorkflowKey:   "source:99:acme/widgets:7",
+		CallerAppName: "source",
 		Target: testWorkflowAgentStepTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
 			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
 			Output:       testWorkflowAgentTextOutput(),
 			ToolRefs: []coreagent.ToolRef{
-				{App: "github", Operation: "bot.admin"},
+				{App: "target", Operation: "automation.admin"},
 			},
 		}),
-		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+		Signal: coreworkflow.Signal{Name: "source.event.received"},
 	}
 
 	if _, err := manager.SignalOrStartRun(context.Background(), caller, req); err != nil {
@@ -1384,13 +1384,9 @@ func TestSignalOrStartRunRejectsAgentToolRunAsDelegationBeforeEnqueue(t *testing
 	t.Parallel()
 
 	runAs := &core.RunAsSubject{
-		SubjectID:           "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectID:           "service_account:automation",
 		SubjectKind:         "service_account",
-		CredentialSubjectID: "service_account:github_app_installation:99:repo:acme/widgets",
-	}
-	externalIdentity := &core.ExternalIdentityRef{
-		Type: "github_app_installation",
-		ID:   "repo:acme/widgets",
+		CredentialSubjectID: "service_account:automation",
 	}
 	for _, tc := range []struct {
 		name string
@@ -1399,18 +1395,9 @@ func TestSignalOrStartRunRejectsAgentToolRunAsDelegationBeforeEnqueue(t *testing
 		{
 			name: "runAs",
 			ref: coreagent.ToolRef{
-				App:       "github",
-				Operation: "bot.openPullRequest",
+				App:       "target",
+				Operation: "automation.write",
 				RunAs:     runAs,
-			},
-		},
-		{
-			name: "external identity",
-			ref: coreagent.ToolRef{
-				App:                   "github",
-				Operation:             "bot.openPullRequest",
-				RunAs:                 runAs,
-				RunAsExternalIdentity: externalIdentity,
 			},
 		},
 	} {
@@ -1424,27 +1411,30 @@ func TestSignalOrStartRunRejectsAgentToolRunAsDelegationBeforeEnqueue(t *testing
 				AgentManager: testAgentManager{},
 			})
 			callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
-				App:        "github",
-				Operations: []string{"events.handle", "bot.openPullRequest"},
+				App:        "source",
+				Operations: []string{"events.handle"},
 			}, {
 				App: "simple",
+			}, {
+				App:        "target",
+				Operations: []string{"automation.write"},
 			}})
 			caller := principal.Canonicalize(&principal.Principal{
-				SubjectID:        "system:http_binding:github:event",
+				SubjectID:        "system:http_binding:source:event",
 				TokenPermissions: callerPermissions,
 				Scopes:           principal.PermissionApps(callerPermissions),
 			})
 
 			_, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
 				ProviderName:  "local",
-				WorkflowKey:   "github:99:acme/widgets:7",
-				CallerAppName: "github",
+				WorkflowKey:   "source:99:acme/widgets:7",
+				CallerAppName: "source",
 				Target: testWorkflowAgentStepTarget(coreworkflow.AgentTurn{
 					ProviderName: "simple",
 					Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
 					ToolRefs:     []coreagent.ToolRef{tc.ref},
 				}),
-				Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+				Signal: coreworkflow.Signal{Name: "source.event.received"},
 			})
 			if !errors.Is(err, invocation.ErrAuthorizationDenied) {
 				t.Fatalf("SignalOrStartRun error = %v, want authorization denied", err)

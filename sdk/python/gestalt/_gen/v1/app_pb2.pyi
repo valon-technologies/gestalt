@@ -1,8 +1,5 @@
-import datetime
-
 from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import struct_pb2 as _struct_pb2
-from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -123,7 +120,6 @@ class ProviderMetadata(_message.Message):
     CONNECTION_PARAMS_FIELD_NUMBER: _ClassVar[int]
     STATIC_CATALOG_FIELD_NUMBER: _ClassVar[int]
     SUPPORTS_SESSION_CATALOG_FIELD_NUMBER: _ClassVar[int]
-    SUPPORTS_POST_CONNECT_FIELD_NUMBER: _ClassVar[int]
     MIN_PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]
     MAX_PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]
     name: str
@@ -134,10 +130,9 @@ class ProviderMetadata(_message.Message):
     connection_params: _containers.MessageMap[str, ConnectionParamDef]
     static_catalog: Catalog
     supports_session_catalog: bool
-    supports_post_connect: bool
     min_protocol_version: int
     max_protocol_version: int
-    def __init__(self, name: _Optional[str] = ..., display_name: _Optional[str] = ..., description: _Optional[str] = ..., connection_mode: _Optional[_Union[ConnectionMode, str]] = ..., auth_types: _Optional[_Iterable[str]] = ..., connection_params: _Optional[_Mapping[str, ConnectionParamDef]] = ..., static_catalog: _Optional[_Union[Catalog, _Mapping]] = ..., supports_session_catalog: _Optional[bool] = ..., supports_post_connect: _Optional[bool] = ..., min_protocol_version: _Optional[int] = ..., max_protocol_version: _Optional[int] = ...) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., display_name: _Optional[str] = ..., description: _Optional[str] = ..., connection_mode: _Optional[_Union[ConnectionMode, str]] = ..., auth_types: _Optional[_Iterable[str]] = ..., connection_params: _Optional[_Mapping[str, ConnectionParamDef]] = ..., static_catalog: _Optional[_Union[Catalog, _Mapping]] = ..., supports_session_catalog: _Optional[bool] = ..., min_protocol_version: _Optional[int] = ..., max_protocol_version: _Optional[int] = ...) -> None: ...
 
 class OperationResult(_message.Message):
     __slots__ = ()
@@ -224,38 +219,6 @@ class AppInvokeGraphQLRequest(_message.Message):
     idempotency_key: str
     def __init__(self, app: _Optional[str] = ..., document: _Optional[str] = ..., variables: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
 
-class PostConnectCredential(_message.Message):
-    __slots__ = ()
-    ID_FIELD_NUMBER: _ClassVar[int]
-    SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    INTEGRATION_FIELD_NUMBER: _ClassVar[int]
-    INSTANCE_FIELD_NUMBER: _ClassVar[int]
-    ACCESS_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    REFRESH_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    SCOPES_FIELD_NUMBER: _ClassVar[int]
-    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
-    LAST_REFRESHED_AT_FIELD_NUMBER: _ClassVar[int]
-    REFRESH_ERROR_COUNT_FIELD_NUMBER: _ClassVar[int]
-    METADATA_JSON_FIELD_NUMBER: _ClassVar[int]
-    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
-    UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
-    CONNECTION_FIELD_NUMBER: _ClassVar[int]
-    id: str
-    subject_id: str
-    integration: str
-    instance: str
-    access_token: str
-    refresh_token: str
-    scopes: str
-    expires_at: _timestamp_pb2.Timestamp
-    last_refreshed_at: _timestamp_pb2.Timestamp
-    refresh_error_count: int
-    metadata_json: str
-    created_at: _timestamp_pb2.Timestamp
-    updated_at: _timestamp_pb2.Timestamp
-    connection: str
-    def __init__(self, id: _Optional[str] = ..., subject_id: _Optional[str] = ..., integration: _Optional[str] = ..., instance: _Optional[str] = ..., access_token: _Optional[str] = ..., refresh_token: _Optional[str] = ..., scopes: _Optional[str] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_refreshed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., refresh_error_count: _Optional[int] = ..., metadata_json: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., connection: _Optional[str] = ...) -> None: ...
-
 class SubjectContext(_message.Message):
     __slots__ = ()
     ID_FIELD_NUMBER: _ClassVar[int]
@@ -272,14 +235,6 @@ class SubjectContext(_message.Message):
     credential_subject_id: str
     def __init__(self, id: _Optional[str] = ..., kind: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ..., email: _Optional[str] = ..., credential_subject_id: _Optional[str] = ...) -> None: ...
 
-class ExternalIdentityContext(_message.Message):
-    __slots__ = ()
-    TYPE_FIELD_NUMBER: _ClassVar[int]
-    ID_FIELD_NUMBER: _ClassVar[int]
-    type: str
-    id: str
-    def __init__(self, type: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
-
 class AgentToolRef(_message.Message):
     __slots__ = ()
     APP_FIELD_NUMBER: _ClassVar[int]
@@ -290,7 +245,6 @@ class AgentToolRef(_message.Message):
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     SYSTEM_FIELD_NUMBER: _ClassVar[int]
     RUN_AS_FIELD_NUMBER: _ClassVar[int]
-    RUN_AS_EXTERNAL_IDENTITY_FIELD_NUMBER: _ClassVar[int]
     app: str
     operation: str
     connection: str
@@ -299,8 +253,7 @@ class AgentToolRef(_message.Message):
     description: str
     system: str
     run_as: SubjectContext
-    run_as_external_identity: ExternalIdentityContext
-    def __init__(self, app: _Optional[str] = ..., operation: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., system: _Optional[str] = ..., run_as: _Optional[_Union[SubjectContext, _Mapping]] = ..., run_as_external_identity: _Optional[_Union[ExternalIdentityContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, app: _Optional[str] = ..., operation: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., system: _Optional[str] = ..., run_as: _Optional[_Union[SubjectContext, _Mapping]] = ...) -> None: ...
 
 class StringList(_message.Message):
     __slots__ = ()
@@ -342,8 +295,6 @@ class RequestContext(_message.Message):
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
     HOST_FIELD_NUMBER: _ClassVar[int]
     AGENT_SUBJECT_FIELD_NUMBER: _ClassVar[int]
-    AGENT_EXTERNAL_IDENTITY_FIELD_NUMBER: _ClassVar[int]
-    EXTERNAL_IDENTITY_FIELD_NUMBER: _ClassVar[int]
     TOOL_REFS_FIELD_NUMBER: _ClassVar[int]
     TOOL_REFS_SET_FIELD_NUMBER: _ClassVar[int]
     subject: SubjectContext
@@ -352,11 +303,9 @@ class RequestContext(_message.Message):
     workflow: _struct_pb2.Struct
     host: HostContext
     agent_subject: SubjectContext
-    agent_external_identity: ExternalIdentityContext
-    external_identity: ExternalIdentityContext
     tool_refs: _containers.RepeatedCompositeFieldContainer[AgentToolRef]
     tool_refs_set: bool
-    def __init__(self, subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., credential: _Optional[_Union[CredentialContext, _Mapping]] = ..., access: _Optional[_Union[AccessContext, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., host: _Optional[_Union[HostContext, _Mapping]] = ..., agent_subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., agent_external_identity: _Optional[_Union[ExternalIdentityContext, _Mapping]] = ..., external_identity: _Optional[_Union[ExternalIdentityContext, _Mapping]] = ..., tool_refs: _Optional[_Iterable[_Union[AgentToolRef, _Mapping]]] = ..., tool_refs_set: _Optional[bool] = ...) -> None: ...
+    def __init__(self, subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., credential: _Optional[_Union[CredentialContext, _Mapping]] = ..., access: _Optional[_Union[AccessContext, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., host: _Optional[_Union[HostContext, _Mapping]] = ..., agent_subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., tool_refs: _Optional[_Iterable[_Union[AgentToolRef, _Mapping]]] = ..., tool_refs_set: _Optional[bool] = ...) -> None: ...
 
 class HTTPSubjectRequest(_message.Message):
     __slots__ = ()
@@ -474,25 +423,6 @@ class GetSessionCatalogResponse(_message.Message):
     CATALOG_FIELD_NUMBER: _ClassVar[int]
     catalog: Catalog
     def __init__(self, catalog: _Optional[_Union[Catalog, _Mapping]] = ...) -> None: ...
-
-class PostConnectRequest(_message.Message):
-    __slots__ = ()
-    TOKEN_FIELD_NUMBER: _ClassVar[int]
-    token: PostConnectCredential
-    def __init__(self, token: _Optional[_Union[PostConnectCredential, _Mapping]] = ...) -> None: ...
-
-class PostConnectResponse(_message.Message):
-    __slots__ = ()
-    class MetadataEntry(_message.Message):
-        __slots__ = ()
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: str
-        value: str
-        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
-    METADATA_FIELD_NUMBER: _ClassVar[int]
-    metadata: _containers.ScalarMap[str, str]
-    def __init__(self, metadata: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class StartProviderRequest(_message.Message):
     __slots__ = ()

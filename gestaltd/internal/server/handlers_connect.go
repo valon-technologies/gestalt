@@ -150,11 +150,11 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 	credentialActorFromPrincipal(p, subjectID).applyTo(&tm)
 
-	result, err := s.runPostConnect(r.Context(), prov, tm)
+	result, err := s.runConnectionSetup(r.Context(), prov, tm)
 	if err != nil {
 		auditErr = errors.New("connection setup failed")
-		slog.ErrorContext(r.Context(), "post_connect failed", "provider", req.Integration, "error", err)
-		writeError(w, connectionSetupErrorStatus(err), connectionSetupAPIErrorMessage(err))
+		slog.ErrorContext(r.Context(), "connection setup failed", "provider", req.Integration, "error", err)
+		writeError(w, http.StatusBadGateway, "connection setup failed")
 		return
 	}
 
@@ -386,7 +386,7 @@ func credentialMaterialContext(ctx context.Context, p *principal.Principal, tm c
 	return principal.WithPrincipal(ctx, actor)
 }
 
-type postConnectResult struct {
+type connectionSetupResult struct {
 	Status       string                   `json:"status"`
 	Integration  string                   `json:"integration,omitempty"`
 	SelectionURL string                   `json:"selectionUrl,omitempty"`
@@ -405,13 +405,6 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 	if connectionID == "" {
 		connectionID = tm.Integration + ":" + tm.Connection
 	}
-	previous, err := s.externalCredentials.GetCredential(ctx, tm.SubjectID, connectionID, tm.Instance)
-	if err != nil && !errors.Is(err, core.ErrNotFound) {
-		return nil, err
-	}
-	if errors.Is(err, core.ErrNotFound) {
-		previous = nil
-	}
 	tok := &core.ExternalCredential{
 		ID:              uuid.NewString(),
 		SubjectID:       tm.SubjectID,
@@ -427,56 +420,10 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
-	if err := s.ensureNoDuplicateExternalIdentityCredential(ctx, tok); err != nil {
-		return nil, err
-	}
 	if err := s.externalCredentials.PutCredential(ctx, tok); err != nil {
 		return nil, err
 	}
-	if err := s.syncStoredCredentialAuthorization(ctx, tok); err != nil {
-		if rollbackErr := s.rollbackStoredCredential(ctx, previous, tok.ID); rollbackErr != nil {
-			return nil, fmt.Errorf("sync stored credential authorization: %w (rollback credential restore: %v)", err, rollbackErr)
-		}
-		return nil, err
-	}
-	if err := s.unlinkReplacedCredentialAuthorization(ctx, previous, tok); err != nil {
-		if rollbackErr := s.rollbackStoredCredential(ctx, previous, tok.ID); rollbackErr != nil {
-			return nil, fmt.Errorf("unlink replaced credential authorization: %w (rollback credential restore: %v)", err, rollbackErr)
-		}
-		if unlinkErr := s.unlinkStoredCredentialAuthorization(ctx, tok); unlinkErr != nil {
-			return nil, fmt.Errorf("unlink replaced credential authorization: %w (rollback new authorization unlink: %v)", err, unlinkErr)
-		}
-		return nil, err
-	}
 	return tok, nil
-}
-
-func (s *Server) rollbackStoredCredential(ctx context.Context, previous *core.ExternalCredential, tokenID string) error {
-	if previous != nil {
-		return s.externalCredentials.RestoreCredential(ctx, previous)
-	}
-	return s.externalCredentials.DeleteCredential(ctx, tokenID)
-}
-
-func (s *Server) unlinkReplacedCredentialAuthorization(ctx context.Context, previous, current *core.ExternalCredential) error {
-	if previous == nil {
-		return nil
-	}
-	previousRef, previousOK, err := externalIdentityRefFromMetadataJSON(previous.MetadataJSON)
-	if err != nil {
-		return err
-	}
-	currentRef, currentOK, err := externalIdentityRefFromMetadataJSON(current.MetadataJSON)
-	if err != nil {
-		return err
-	}
-	if previousOK == currentOK && externalIdentityRefsEqual(previousRef, currentRef) {
-		return nil
-	}
-	if !previousOK {
-		return nil
-	}
-	return s.unlinkStoredCredentialAuthorization(ctx, previous)
 }
 
 func validateProviderMetadata(source string, metadata map[string]string) error {
@@ -496,10 +443,6 @@ func validateDiscoveryMetadata(metadata map[string]string) error {
 	return validateProviderMetadata("discovery", metadata)
 }
 
-func validatePostConnectMetadata(metadata map[string]string) error {
-	return validateProviderMetadata("post-connect", metadata)
-}
-
 func mergeMetadataJSON(existing string, extra map[string]string) (string, error) {
 	m := make(map[string]string)
 	if existing != "" {
@@ -517,7 +460,7 @@ func mergeMetadataJSON(existing string, extra map[string]string) (string, error)
 	return string(b), nil
 }
 
-func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm credentialMaterial) (*postConnectResult, error) {
+func (s *Server) runConnectionSetup(ctx context.Context, prov core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
 	if cfg := prov.DiscoveryConfig(); cfg != nil {
 		client := &http.Client{
 			Timeout:   30 * time.Second,
@@ -546,7 +489,7 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm cred
 		if err != nil {
 			return nil, fmt.Errorf("encode pending connection: %w", err)
 		}
-		return &postConnectResult{
+		return &connectionSetupResult{
 			Status:       "selection_required",
 			Integration:  tm.Integration,
 			SelectionURL: pendingConnectionPath,
@@ -558,67 +501,11 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm cred
 	return s.completeConnection(ctx, prov, tm)
 }
 
-func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm credentialMaterial) (*postConnectResult, error) {
-	tm, err := s.applyProviderPostConnect(ctx, prov, tm)
-	if err != nil {
-		return nil, err
-	}
+func (s *Server) completeConnection(ctx context.Context, _ core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
 	if _, err := s.storeCredentialFromMaterial(ctx, tm); err != nil {
 		return nil, err
 	}
-	return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
-}
-
-func connectionSetupErrorStatus(err error) int {
-	if errors.Is(err, errDuplicateExternalIdentityCredential) {
-		return http.StatusConflict
-	}
-	return http.StatusBadGateway
-}
-
-func connectionSetupAPIErrorMessage(err error) string {
-	if errors.Is(err, errDuplicateExternalIdentityCredential) {
-		return err.Error()
-	}
-	return "connection setup failed"
-}
-
-func (s *Server) applyProviderPostConnect(ctx context.Context, prov core.Provider, tm credentialMaterial) (credentialMaterial, error) {
-	if !core.SupportsPostConnect(prov) {
-		return tm, nil
-	}
-	token := &core.ExternalCredential{
-		SubjectID:    tm.SubjectID,
-		Integration:  tm.Integration,
-		Connection:   tm.Connection,
-		Instance:     tm.Instance,
-		AccessToken:  tm.AccessToken,
-		RefreshToken: tm.RefreshToken,
-		ExpiresAt:    tm.TokenExpiresAt,
-		MetadataJSON: tm.MetadataJSON,
-	}
-	metadata, supported, err := core.PostConnect(ctx, prov, token)
-	if err != nil {
-		return tm, err
-	}
-	if !supported {
-		return tm, nil
-	}
-	if metadata == nil {
-		slog.Warn("provider post-connect returned nil metadata", "integration", tm.Integration, "connection", tm.Connection, "instance", tm.Instance)
-	}
-	if len(metadata) == 0 {
-		return tm, nil
-	}
-	if err := validatePostConnectMetadata(metadata); err != nil {
-		return tm, err
-	}
-	merged, err := mergeMetadataJSON(tm.MetadataJSON, metadata)
-	if err != nil {
-		return tm, err
-	}
-	tm.MetadataJSON = merged
-	return tm, nil
+	return &connectionSetupResult{Status: "connected", Integration: tm.Integration}, nil
 }
 
 func manualConnectionAllowed(prov core.Provider, conn config.ConnectionDef, hasConnectionDef bool) bool {

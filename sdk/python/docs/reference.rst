@@ -71,9 +71,7 @@ App authoring
    App
    operation
    session_catalog
-   post_connect
    http_subject
-   ConnectedToken
    HTTPSubjectRequest
    HTTPSubjectResolutionError
    http_subject_error
@@ -91,11 +89,7 @@ App authoring
 
 .. autofunction:: session_catalog
 
-.. autofunction:: post_connect
-
 .. autofunction:: http_subject
-
-.. autoclass:: ConnectedToken
 
 .. autoclass:: HTTPSubjectRequest
 

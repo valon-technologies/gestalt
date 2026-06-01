@@ -4,7 +4,6 @@ package gestalt.provider.v1;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
-import "google/protobuf/timestamp.proto";
 
 // CatalogParameter describes one input parameter surfaced in the generated
 // catalog for an operation.
@@ -59,6 +58,7 @@ enum ConnectionMode {
   CONNECTION_MODE_UNSPECIFIED = 0;
   CONNECTION_MODE_NONE = 1;
   CONNECTION_MODE_SUBJECT = 2;
+  reserved 3, 4, 5;
 }
 
 // ConnectionParamDef describes one provider-defined connection parameter.
@@ -80,7 +80,8 @@ message ProviderMetadata {
   map<string, ConnectionParamDef> connection_params = 6;
   Catalog static_catalog = 7;
   bool supports_session_catalog = 8;
-  bool supports_post_connect = 9;
+  reserved 9;
+  reserved "supports_post_connect";
   int32 min_protocol_version = 11;
   int32 max_protocol_version = 12;
 }
@@ -141,27 +142,6 @@ message AppInvokeGraphQLRequest {
   string idempotency_key = 7;
 }
 
-// PostConnectCredential is the host-managed credential payload passed into
-// post-connect hooks. Field numbers intentionally match the legacy
-// post-connect credential payload so older compiled providers can still decode
-// the request during rolling upgrades.
-message PostConnectCredential {
-  string id = 1;
-  string subject_id = 2;
-  string integration = 3;
-  string instance = 4;
-  string access_token = 5;
-  string refresh_token = 6;
-  string scopes = 7;
-  google.protobuf.Timestamp expires_at = 8;
-  google.protobuf.Timestamp last_refreshed_at = 9;
-  int32 refresh_error_count = 10;
-  string metadata_json = 11;
-  google.protobuf.Timestamp created_at = 12;
-  google.protobuf.Timestamp updated_at = 13;
-  string connection = 14;
-}
-
 // SubjectContext identifies the caller that initiated an operation.
 message SubjectContext {
   string id = 1;
@@ -172,14 +152,9 @@ message SubjectContext {
   string credential_subject_id = 6;
 }
 
-// ExternalIdentityContext identifies the caller in a provider-owned external
-// identity namespace, as discovered from that caller's stored connection.
-message ExternalIdentityContext {
-  string type = 1;
-  string id = 2;
-}
-
 message AgentToolRef {
+  reserved 7, 10;
+
   string app = 1;
   string operation = 2;
   string connection = 3;
@@ -188,7 +163,6 @@ message AgentToolRef {
   string description = 6;
   string system = 8;
   SubjectContext run_as = 9;
-  ExternalIdentityContext run_as_external_identity = 10;
 }
 
 // StringList is a helper map value for repeated HTTP header and query values.
@@ -218,6 +192,8 @@ message HostContext {
 // RequestContext bundles the caller, credential, access, and host metadata for
 // one operation.
 message RequestContext {
+  reserved 7, 8;
+
   SubjectContext subject = 1;
   CredentialContext credential = 2;
   AccessContext access = 3;
@@ -225,10 +201,6 @@ message RequestContext {
   HostContext host = 5;
   // Original agent caller when an agent tool executes with delegated run-as identity.
   SubjectContext agent_subject = 6;
-  // The original agent caller's provider-owned external identity, when known.
-  ExternalIdentityContext agent_external_identity = 7;
-  // Provider-owned external identity the invocation is authorized to assume.
-  ExternalIdentityContext external_identity = 8;
   // Agent tool refs granted to the operation request, when the request is
   // executing as an agent tool.
   repeated AgentToolRef tool_refs = 9;
@@ -299,17 +271,6 @@ message GetSessionCatalogResponse {
   Catalog catalog = 1;
 }
 
-// PostConnectRequest notifies a provider that a connection has completed.
-message PostConnectRequest {
-  PostConnectCredential token = 1;
-}
-
-// PostConnectResponse returns provider-defined metadata captured after
-// connection.
-message PostConnectResponse {
-  map<string, string> metadata = 1;
-}
-
 // StartProviderRequest configures an integration provider for one runtime
 // session.
 message StartProviderRequest {
@@ -330,7 +291,6 @@ service AppProvider {
   rpc Execute(ExecuteRequest) returns (OperationResult);
   rpc ResolveHTTPSubject(ResolveHTTPSubjectRequest) returns (ResolveHTTPSubjectResponse);
   rpc GetSessionCatalog(GetSessionCatalogRequest) returns (GetSessionCatalogResponse);
-  rpc PostConnect(PostConnectRequest) returns (PostConnectResponse);
 }
 
 service App {

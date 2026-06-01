@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"testing"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -51,54 +49,6 @@ func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *test
 	}
 	if got := CredentialContextFromContext(ctx).Mode; got != core.ConnectionModeNone {
 		t.Fatalf("credential mode = %q, want %q", got, core.ConnectionModeNone)
-	}
-}
-
-func TestBrokerInvokeRejectsUnauthorizedExternalIdentity(t *testing.T) {
-	t.Parallel()
-
-	called := false
-	svc := testutil.NewStubServices(t)
-	authorizer, err := authorization.New(authorization.StaticConfig{
-		Policies: map[string]authorization.StaticSubjectPolicy{
-			"github_policy": {Default: "allow"},
-		},
-		ProviderPolicies: map[string]string{
-			"github": "github_policy",
-		},
-	})
-	if err != nil {
-		t.Fatalf("authorization.New: %v", err)
-	}
-	broker := NewBroker(
-		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "github",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID: "bot.createPullRequest",
-			}}},
-			ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
-				called = true
-				return &core.OperationResult{Status: http.StatusOK}, nil
-			},
-		}),
-		svc.Users,
-		svc.ExternalCredentials,
-		WithAuthorizer(authorizer),
-	)
-	ctx := WithExternalIdentityContext(context.Background(), ExternalIdentityContext{
-		Type: "github_app_installation",
-		ID:   "repo:acme/widgets",
-	})
-	_, err = broker.Invoke(ctx, &principal.Principal{
-		SubjectID: "service_account:github-toolshed",
-		Kind:      principal.Kind("service_account"),
-	}, "github", "", "bot.createPullRequest", map[string]any{})
-	if !errors.Is(err, ErrAuthorizationDenied) {
-		t.Fatalf("Invoke error = %v, want ErrAuthorizationDenied", err)
-	}
-	if called {
-		t.Fatal("provider Execute was called for unauthorized external identity")
 	}
 }
 
@@ -274,88 +224,6 @@ func TestBrokerInvokeAllowsExplicitConnectionForResolvedPluginTransport(t *testi
 	}
 }
 
-func TestBrokerAgentExternalIdentitySkipsIncompleteConnectionMatchForFallback(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	broker := NewBroker(nil, svc.Users, svc.ExternalCredentials)
-	subjectID := principal.UserSubjectID("agent-user")
-
-	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-		SubjectID:    subjectID,
-		Integration:  "github",
-		Connection:   "workspace",
-		AccessToken:  "invalid-token",
-		MetadataJSON: `{"gestalt.external_identity.id":"222"}`,
-	}); err != nil {
-		t.Fatalf("PutCredential invalid: %v", err)
-	}
-	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-		SubjectID:    subjectID,
-		Integration:  "github",
-		Connection:   "fallback",
-		AccessToken:  "valid-token",
-		MetadataJSON: `{"gestalt.external_identity.type":"github_user","gestalt.external_identity.id":"333"}`,
-	}); err != nil {
-		t.Fatalf("PutCredential fallback: %v", err)
-	}
-
-	identity, err := broker.agentExternalIdentity(context.Background(), subjectID, "github", "workspace")
-	if err != nil {
-		t.Fatalf("agentExternalIdentity: %v", err)
-	}
-	if identity.Type != "github_user" || identity.ID != "333" {
-		t.Fatalf("identity = %#v, want github_user/333", identity)
-	}
-}
-
-func TestBrokerInvokeGraphQLEnrichesAgentExternalIdentity(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	agentSubjectID := principal.UserSubjectID("agent-user")
-	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-		SubjectID:    agentSubjectID,
-		Integration:  "github",
-		AccessToken:  "github-token",
-		MetadataJSON: `{"gestalt.external_identity.type":"github_user","gestalt.external_identity.id":"222"}`,
-	}); err != nil {
-		t.Fatalf("PutCredential: %v", err)
-	}
-
-	var captured ExternalIdentityContext
-	provider := &brokerGraphQLProvider{
-		StubIntegration: &coretesting.StubIntegration{
-			N:        "github",
-			ConnMode: core.ConnectionModeNone,
-		},
-		invokeGraphQLFn: func(ctx context.Context, _ core.GraphQLRequest, _ string) (*core.OperationResult, error) {
-			captured = AgentExternalIdentityContextFromContext(ctx)
-			return &core.OperationResult{Status: 200}, nil
-		},
-	}
-	broker := NewBroker(testutil.NewProviderRegistry(t, provider), svc.Users, svc.ExternalCredentials)
-
-	ctx := WithRunAsAudit(
-		context.Background(),
-		&core.RunAsSubject{SubjectID: agentSubjectID, CredentialSubjectID: agentSubjectID, SubjectKind: string(principal.KindUser)},
-		&core.RunAsSubject{SubjectID: "service_account:github-bot", CredentialSubjectID: "service_account:github-bot", SubjectKind: "service_account"},
-	)
-	_, err := broker.InvokeGraphQL(
-		ctx,
-		&principal.Principal{SubjectID: "service_account:github-bot", CredentialSubjectID: "service_account:github-bot"},
-		"github",
-		"",
-		core.GraphQLRequest{Document: "query { viewer { login } }"},
-	)
-	if err != nil {
-		t.Fatalf("InvokeGraphQL: %v", err)
-	}
-	if captured.Type != "github_user" || captured.ID != "222" {
-		t.Fatalf("agent external identity = %#v, want github_user/222", captured)
-	}
-}
-
 func TestOperationConnectionOverrideAllowedForPluginTransportOperations(t *testing.T) {
 	t.Parallel()
 
@@ -414,16 +282,4 @@ func (p *brokerOperationConnectionProvider) ResolveConnectionForOperation(operat
 
 func (p *brokerOperationConnectionProvider) OperationConnectionOverrideAllowed(string, map[string]any) bool {
 	return p.allowOverride
-}
-
-type brokerGraphQLProvider struct {
-	*coretesting.StubIntegration
-	invokeGraphQLFn func(context.Context, core.GraphQLRequest, string) (*core.OperationResult, error)
-}
-
-func (p *brokerGraphQLProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
-	if p.invokeGraphQLFn != nil {
-		return p.invokeGraphQLFn(ctx, request, token)
-	}
-	return &core.OperationResult{Status: 200}, nil
 }

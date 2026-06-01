@@ -144,25 +144,15 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 			DisplayName:         "Gestalt Support Notion",
 			AuthSource:          "notion_service_account",
 		},
-		RunAsExternalIdentity: &ExternalIdentity{
-			Type: "notion_workspace",
-			ID:   "valon-support",
-		},
 	}
 
 	encoded := agentToolRefToProto(input)
 	if got := encoded.GetRunAs().GetId(); got != "service_account:gestalt-support-notion" {
 		t.Fatalf("encoded runAs subject = %q", got)
 	}
-	if got := encoded.GetRunAsExternalIdentity().GetId(); got != "valon-support" {
-		t.Fatalf("encoded external identity = %q", got)
-	}
 	roundTrip := agentToolRefFromProto(encoded)
 	if roundTrip.RunAs == nil || roundTrip.RunAs.DisplayName != "Gestalt Support Notion" {
 		t.Fatalf("round-trip runAs = %#v", roundTrip.RunAs)
-	}
-	if roundTrip.RunAsExternalIdentity == nil || roundTrip.RunAsExternalIdentity.Type != "notion_workspace" {
-		t.Fatalf("round-trip external identity = %#v", roundTrip.RunAsExternalIdentity)
 	}
 }
 

@@ -252,11 +252,6 @@ pub enum AuthorizationSubjectCommands {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
     },
-    /// Manage external identity assumptions
-    ExternalIdentities {
-        #[command(subcommand)]
-        command: AuthorizationSubjectExternalIdentityCommands,
-    },
     /// Show a service-account subject
     Get {
         /// Service-account slug or canonical service_account:<id>
@@ -411,33 +406,6 @@ pub enum AuthorizationSubjectGrantCommands {
         #[arg(long)]
         role: String,
     },
-}
-
-#[derive(Subcommand)]
-pub enum AuthorizationSubjectExternalIdentityCommands {
-    /// Allow a subject to assume an external identity
-    Add(AuthorizationSubjectExternalIdentityArgs),
-    /// List external identities assumed by a subject
-    List {
-        /// Service-account slug or canonical service_account:<id>
-        subject: String,
-    },
-    /// Remove an external identity assumption
-    Remove(AuthorizationSubjectExternalIdentityArgs),
-}
-
-#[derive(Args)]
-pub struct AuthorizationSubjectExternalIdentityArgs {
-    /// Service-account slug or canonical service_account:<id>
-    pub subject: String,
-
-    /// External identity type
-    #[arg(long = "type")]
-    pub identity_type: String,
-
-    /// External identity ID
-    #[arg(long)]
-    pub id: String,
 }
 
 #[derive(Subcommand)]

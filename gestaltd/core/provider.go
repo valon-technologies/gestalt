@@ -98,19 +98,11 @@ type SessionCatalogProvider interface {
 	CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error)
 }
 
-// PostConnectCapable is an optional interface for providers that need to
-// derive connection metadata after a credential has been established. The
-// returned metadata is merged into the stored connection metadata before the
-// host persists the token.
-type PostConnectCapable interface {
-	PostConnect(ctx context.Context, token *ExternalCredential) (map[string]string, error)
-}
-
 type ConnectionParamDef struct {
 	Required    bool
 	Description string
 	Default     string
-	From        string // "" = user-provided, "token_response" = from OAuth response, "discovery" = from post-connect discovery
+	From        string // "" = user-provided, "token_response" = from OAuth response, "discovery" = from provider discovery
 	Field       string // JSON field name for token_response extraction
 }
 
@@ -132,28 +124,4 @@ type DiscoveryConfig struct {
 	IDPath    string
 	NamePath  string
 	Metadata  map[string]string
-}
-
-type PostConnectConfig struct {
-	Request          PostConnectRequestConfig
-	SourcePath       string
-	Success          *PostConnectSuccessCheck
-	ExternalIdentity *PostConnectExternalIdentityConfig
-	Metadata         map[string]string
-}
-
-type PostConnectRequestConfig struct {
-	Method  string
-	URL     string
-	Headers map[string]string
-}
-
-type PostConnectSuccessCheck struct {
-	Path   string
-	Equals any
-}
-
-type PostConnectExternalIdentityConfig struct {
-	Type string
-	ID   string
 }

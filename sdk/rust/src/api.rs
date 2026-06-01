@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::convert::Infallible;
-use std::time::SystemTime;
 
 use tonic::codegen::async_trait;
 
@@ -23,15 +22,6 @@ pub struct Subject {
     pub auth_source: String,
     /// Email address resolved by the Gestalt host for user subjects.
     pub email: String,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-/// Provider-owned identity attached to an incoming provider request.
-pub struct ExternalIdentity {
-    /// Provider identity namespace.
-    pub r#type: String,
-    /// Provider-owned identity id.
-    pub id: String,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -74,10 +64,6 @@ pub struct Request {
     pub subject: Subject,
     /// Original agent caller when an agent tool runs as a delegated subject.
     pub agent_subject: Subject,
-    /// Provider-owned external identity this request is authorized to assume.
-    pub external_identity: ExternalIdentity,
-    /// Original agent caller's provider-owned external identity, when known.
-    pub agent_external_identity: ExternalIdentity,
     /// Credential used to authorize the request.
     pub credential: Credential,
     /// Access decision attached to the request.
@@ -96,41 +82,6 @@ pub struct Request {
     pub tool_refs_set: bool,
     /// Invocation token used to call host services.
     pub invocation_token: String,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-/// Host-managed connection payload passed into post-connect hooks.
-pub struct ConnectedToken {
-    /// Stable connection token id.
-    pub id: String,
-    /// Subject id associated with the connected credential.
-    pub subject_id: String,
-    /// Provider integration name.
-    pub integration: String,
-    /// Connection id or name associated with the credential.
-    pub connection: String,
-    /// Provider instance id or name associated with the credential.
-    pub instance: String,
-    /// Access token stored by the host for the connected credential.
-    pub access_token: String,
-    /// Refresh token stored by the host for the connected credential.
-    pub refresh_token: String,
-    /// Space- or provider-formatted scope string returned by the upstream provider.
-    pub scopes: String,
-    /// Access-token expiration timestamp, when known.
-    pub expires_at: Option<SystemTime>,
-    /// Last refresh timestamp, when known.
-    pub last_refreshed_at: Option<SystemTime>,
-    /// Consecutive refresh failure count tracked by the host.
-    pub refresh_error_count: i32,
-    /// Raw JSON metadata stored with the connected credential.
-    pub metadata_json: String,
-    /// String-valued metadata parsed from [`Self::metadata_json`].
-    pub metadata: BTreeMap<String, String>,
-    /// Credential creation timestamp, when known.
-    pub created_at: Option<SystemTime>,
-    /// Credential update timestamp, when known.
-    pub updated_at: Option<SystemTime>,
 }
 
 impl Request {
@@ -308,18 +259,6 @@ pub trait Provider: Send + Sync + 'static {
         _context: &Request,
     ) -> Result<Option<Subject>> {
         Ok(None)
-    }
-
-    /// Reports whether this provider can derive additional connection metadata
-    /// after the host completes the credential exchange.
-    fn supports_post_connect(&self) -> bool {
-        false
-    }
-
-    /// Returns provider-defined, non-secret connection metadata to persist after
-    /// a successful credential exchange.
-    async fn post_connect(&self, _token: &ConnectedToken) -> Result<BTreeMap<String, String>> {
-        Ok(BTreeMap::new())
     }
 
     /// Shuts the provider down before the runtime exits.

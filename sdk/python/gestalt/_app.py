@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import copy
-import datetime as dt
 import inspect
 import json
 import pathlib
 import re
 import sys
 import types
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final
 
 import yaml
@@ -30,27 +28,6 @@ DEFAULT_OPERATION_METHOD: Final[str] = "POST"
 
 if TYPE_CHECKING:
     from ._catalog import Catalog
-
-
-@dataclass(frozen=True)
-class ConnectedToken:
-    """Normalized connection payload passed into :meth:`App.post_connect`."""
-
-    id: str = ""
-    subject_id: str = ""
-    integration: str = ""
-    connection: str = ""
-    instance: str = ""
-    access_token: str = ""
-    refresh_token: str = ""
-    scopes: str = ""
-    expires_at: dt.datetime | None = None
-    last_refreshed_at: dt.datetime | None = None
-    refresh_error_count: int = 0
-    metadata_json: str = ""
-    metadata: dict[str, str] = field(default_factory=dict)
-    created_at: dt.datetime | None = None
-    updated_at: dt.datetime | None = None
 
 
 class App:
@@ -84,7 +61,6 @@ class App:
         self._operations: dict[str, OperationDefinition] = {}
         self._configure_handler: Any = None
         self._session_catalog_handler: tuple[Any, bool] | None = None
-        self._post_connect_handler: tuple[Any, bool] | None = None
         self._http_subject_handler: tuple[Any, bool] | None = None
 
     @classmethod
@@ -112,12 +88,6 @@ class App:
         """Register a per-request catalog hook."""
 
         self._session_catalog_handler = (func, _inspect_session_catalog_handler(func))
-        return func
-
-    def post_connect(self, func: Any) -> Any:
-        """Register a connect-time metadata hook."""
-
-        self._post_connect_handler = (func, _inspect_post_connect_handler(func))
         return func
 
     def http_subject(self, func: Any) -> Any:
@@ -219,11 +189,6 @@ class App:
 
         return self._resolve_session_catalog_handler() is not None
 
-    def supports_post_connect(self) -> bool:
-        """Report whether the app exposes a post-connect metadata hook."""
-
-        return self._resolve_post_connect_handler() is not None
-
     def supports_http_subject(self) -> bool:
         """Report whether the app exposes a hosted HTTP subject hook."""
 
@@ -239,18 +204,6 @@ class App:
         handler, takes_request = definition
         if takes_request:
             return run_sync(handler(request))
-        return run_sync(handler())
-
-    def post_connect_metadata(self, token: ConnectedToken) -> dict[str, str] | None:
-        """Return additional stored metadata after a connection is established."""
-
-        definition = self._resolve_post_connect_handler()
-        if definition is None:
-            return None
-
-        handler, takes_token = definition
-        if takes_token:
-            return run_sync(handler(token))
         return run_sync(handler())
 
     def resolve_http_subject(
@@ -313,28 +266,6 @@ class App:
                 _inspect_session_catalog_handler(session_catalog),
             )
         return self._session_catalog_handler
-
-    def _resolve_post_connect_handler(self) -> tuple[Any, bool] | None:
-        if self._post_connect_handler is not None:
-            return self._post_connect_handler
-
-        if not self._module_name:
-            return None
-
-        module = sys.modules.get(self._module_name)
-        if module is None:
-            return None
-
-        post_connect = getattr(module, "post_connect", None)
-        if (
-            callable(post_connect)
-            and getattr(post_connect, "__module__", None) == module.__name__
-        ):
-            self._post_connect_handler = (
-                post_connect,
-                _inspect_post_connect_handler(post_connect),
-            )
-        return self._post_connect_handler
 
     def _resolve_http_subject_handler(self) -> tuple[Any, bool] | None:
         if self._http_subject_handler is not None:
@@ -449,18 +380,6 @@ def session_catalog(func: Any | None = None, /) -> Any:
     return decorator(func)
 
 
-def post_connect(func: Any | None = None, /) -> Any:
-    """Register a connect-time metadata hook on the implicit module app."""
-
-    def decorator(handler: Any) -> Any:
-        app = _MODULE_APPS.for_function(handler)
-        return app.post_connect(handler)
-
-    if func is None:
-        return decorator
-    return decorator(func)
-
-
 def http_subject(func: Any | None = None, /) -> Any:
     """Register a hosted HTTP subject hook on the implicit module app."""
 
@@ -503,24 +422,6 @@ def _inspect_session_catalog_handler(func: Any) -> bool:
     if annotation not in (inspect.Signature.empty, Request):
         raise TypeError(
             "session catalog handler parameter must be annotated as gestalt.Request"
-        )
-    return True
-
-
-def _inspect_post_connect_handler(func: Any) -> bool:
-    signature = inspect.signature(func)
-    parameters = list(signature.parameters.values())
-    type_hints = inspect.get_annotations(func, eval_str=True)
-
-    if len(parameters) > 1:
-        raise TypeError("post_connect handlers may declare at most one parameter")
-    if not parameters:
-        return False
-
-    annotation = type_hints.get(parameters[0].name, parameters[0].annotation)
-    if annotation not in (inspect.Signature.empty, ConnectedToken):
-        raise TypeError(
-            "post_connect handler parameter must be annotated as gestalt.ConnectedToken"
         )
     return True
 

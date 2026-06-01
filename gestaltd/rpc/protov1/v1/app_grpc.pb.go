@@ -25,7 +25,6 @@ const (
 	AppProvider_Execute_FullMethodName            = "/gestalt.provider.v1.AppProvider/Execute"
 	AppProvider_ResolveHTTPSubject_FullMethodName = "/gestalt.provider.v1.AppProvider/ResolveHTTPSubject"
 	AppProvider_GetSessionCatalog_FullMethodName  = "/gestalt.provider.v1.AppProvider/GetSessionCatalog"
-	AppProvider_PostConnect_FullMethodName        = "/gestalt.provider.v1.AppProvider/PostConnect"
 )
 
 // AppProviderClient is the client API for AppProvider service.
@@ -39,7 +38,6 @@ type AppProviderClient interface {
 	Execute(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (*OperationResult, error)
 	ResolveHTTPSubject(ctx context.Context, in *ResolveHTTPSubjectRequest, opts ...grpc.CallOption) (*ResolveHTTPSubjectResponse, error)
 	GetSessionCatalog(ctx context.Context, in *GetSessionCatalogRequest, opts ...grpc.CallOption) (*GetSessionCatalogResponse, error)
-	PostConnect(ctx context.Context, in *PostConnectRequest, opts ...grpc.CallOption) (*PostConnectResponse, error)
 }
 
 type appProviderClient struct {
@@ -100,16 +98,6 @@ func (c *appProviderClient) GetSessionCatalog(ctx context.Context, in *GetSessio
 	return out, nil
 }
 
-func (c *appProviderClient) PostConnect(ctx context.Context, in *PostConnectRequest, opts ...grpc.CallOption) (*PostConnectResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PostConnectResponse)
-	err := c.cc.Invoke(ctx, AppProvider_PostConnect_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // AppProviderServer is the server API for AppProvider service.
 // All implementations must embed UnimplementedAppProviderServer
 // for forward compatibility.
@@ -121,7 +109,6 @@ type AppProviderServer interface {
 	Execute(context.Context, *ExecuteRequest) (*OperationResult, error)
 	ResolveHTTPSubject(context.Context, *ResolveHTTPSubjectRequest) (*ResolveHTTPSubjectResponse, error)
 	GetSessionCatalog(context.Context, *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error)
-	PostConnect(context.Context, *PostConnectRequest) (*PostConnectResponse, error)
 	mustEmbedUnimplementedAppProviderServer()
 }
 
@@ -146,9 +133,6 @@ func (UnimplementedAppProviderServer) ResolveHTTPSubject(context.Context, *Resol
 }
 func (UnimplementedAppProviderServer) GetSessionCatalog(context.Context, *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSessionCatalog not implemented")
-}
-func (UnimplementedAppProviderServer) PostConnect(context.Context, *PostConnectRequest) (*PostConnectResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method PostConnect not implemented")
 }
 func (UnimplementedAppProviderServer) mustEmbedUnimplementedAppProviderServer() {}
 func (UnimplementedAppProviderServer) testEmbeddedByValue()                     {}
@@ -261,24 +245,6 @@ func _AppProvider_GetSessionCatalog_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AppProvider_PostConnect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PostConnectRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AppProviderServer).PostConnect(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AppProvider_PostConnect_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppProviderServer).PostConnect(ctx, req.(*PostConnectRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // AppProvider_ServiceDesc is the grpc.ServiceDesc for AppProvider service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -305,10 +271,6 @@ var AppProvider_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSessionCatalog",
 			Handler:    _AppProvider_GetSessionCatalog_Handler,
-		},
-		{
-			MethodName: "PostConnect",
-			Handler:    _AppProvider_PostConnect_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

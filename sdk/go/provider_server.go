@@ -18,10 +18,9 @@ import (
 // [ServeProvider] instead of constructing this directly.
 type ProviderServer struct {
 	proto.UnimplementedAppProviderServer
-	provider    Provider
-	executeFn   func(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
-	sessionCat  func() (SessionCatalogProvider, bool)
-	postConnect func() (PostConnectCapable, bool)
+	provider   Provider
+	executeFn  func(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
+	sessionCat func() (SessionCatalogProvider, bool)
 }
 
 // NewProviderServer adapts provider plus router into the gRPC integration
@@ -41,10 +40,6 @@ func NewProviderServer[P any, PP interface {
 		sessionCat: func() (SessionCatalogProvider, bool) {
 			scp, ok := any(provider).(SessionCatalogProvider)
 			return scp, ok
-		},
-		postConnect: func() (PostConnectCapable, bool) {
-			pcp, ok := any(provider).(PostConnectCapable)
-			return pcp, ok
 		},
 	}
 }
@@ -70,10 +65,8 @@ func (s *ProviderServer) StartProvider(ctx context.Context, req *proto.StartProv
 
 func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*proto.ProviderMetadata, error) {
 	_, ok := s.sessionCat()
-	_, supportsPostConnect := s.postConnect()
 	return &proto.ProviderMetadata{
 		SupportsSessionCatalog: ok,
-		SupportsPostConnect:    supportsPostConnect,
 		MinProtocolVersion:     proto.CurrentProtocolVersion,
 		MaxProtocolVersion:     proto.CurrentProtocolVersion,
 	}, nil
@@ -228,51 +221,6 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 	return &proto.GetSessionCatalogResponse{Catalog: pbCat}, nil
 }
 
-func (s *ProviderServer) PostConnect(ctx context.Context, req *proto.PostConnectRequest) (*proto.PostConnectResponse, error) {
-	pcp, ok := s.postConnect()
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "provider does not support post connect")
-	}
-	metadata, err := pcp.PostConnect(ctx, connectedTokenFromProto(req.GetToken()))
-	if err != nil {
-		return nil, status.Errorf(codes.Unknown, "post connect: %v", err)
-	}
-	return &proto.PostConnectResponse{Metadata: metadata}, nil
-}
-
-func connectedTokenFromProto(token *proto.PostConnectCredential) *ConnectedToken {
-	if token == nil {
-		return nil
-	}
-	out := &ConnectedToken{
-		ID:                token.GetId(),
-		SubjectID:         token.GetSubjectId(),
-		Integration:       token.GetIntegration(),
-		Connection:        token.GetConnection(),
-		Instance:          token.GetInstance(),
-		AccessToken:       token.GetAccessToken(),
-		RefreshToken:      token.GetRefreshToken(),
-		Scopes:            token.GetScopes(),
-		RefreshErrorCount: int(token.GetRefreshErrorCount()),
-		MetadataJSON:      token.GetMetadataJson(),
-	}
-	if ts := token.GetExpiresAt(); ts != nil {
-		value := ts.AsTime()
-		out.ExpiresAt = &value
-	}
-	if ts := token.GetLastRefreshedAt(); ts != nil {
-		value := ts.AsTime()
-		out.LastRefreshedAt = &value
-	}
-	if ts := token.GetCreatedAt(); ts != nil {
-		out.CreatedAt = ts.AsTime()
-	}
-	if ts := token.GetUpdatedAt(); ts != nil {
-		out.UpdatedAt = ts.AsTime()
-	}
-	return out
-}
-
 func operationResultProto(result *OperationResult) *proto.OperationResult {
 	if result == nil {
 		return nil
@@ -306,18 +254,6 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 			DisplayName:         subject.GetDisplayName(),
 			AuthSource:          subject.GetAuthSource(),
 			Email:               subject.GetEmail(),
-		})
-	}
-	if identity := reqCtx.GetAgentExternalIdentity(); identity != nil {
-		ctx = WithAgentExternalIdentity(ctx, ExternalIdentity{
-			Type: identity.GetType(),
-			ID:   identity.GetId(),
-		})
-	}
-	if identity := reqCtx.GetExternalIdentity(); identity != nil {
-		ctx = WithExternalIdentity(ctx, ExternalIdentity{
-			Type: identity.GetType(),
-			ID:   identity.GetId(),
 		})
 	}
 	if credential := reqCtx.GetCredential(); credential != nil {

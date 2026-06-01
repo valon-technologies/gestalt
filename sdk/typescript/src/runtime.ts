@@ -47,12 +47,10 @@ import {
   ConnectionMode as ProviderConnectionMode,
   GetSessionCatalogResponseSchema,
   OperationAnnotationsSchema as ProtoOperationAnnotationsSchema,
-  PostConnectResponseSchema,
   ResolveHTTPSubjectResponseSchema,
   OperationResultSchema,
   ProviderMetadataSchema,
   type HTTPSubjectRequest as ProtoHTTPSubjectRequest,
-  type PostConnectCredential as ProtoPostConnectCredential,
   type RequestContext as ProtoRequestContext,
   type ResolveHTTPSubjectRequest as ProtoResolveHTTPSubjectRequest,
   AppProvider as AppProviderService,
@@ -108,7 +106,6 @@ import {
   type HTTPSubjectResolutionContext,
 } from "./http-subject.ts";
 import {
-  type ConnectedToken,
   AppProvider,
   encodeConnectionMode,
   encodeConnectionParam,
@@ -561,7 +558,6 @@ export function createProviderService(
           ),
           staticCatalog: catalogToProto(provider.staticCatalog()),
           supportsSessionCatalog: provider.supportsSessionCatalog(),
-          supportsPostConnect: provider.supportsPostConnect(),
           minProtocolVersion: CURRENT_PROTOCOL_VERSION,
           maxProtocolVersion: CURRENT_PROTOCOL_VERSION,
         });
@@ -654,30 +650,6 @@ export function createProviderService(
       }
       return create(GetSessionCatalogResponseSchema, {
         catalog: catalogToProto(catalog),
-      });
-    },
-    async postConnect(request) {
-      if (!provider.supportsPostConnect()) {
-        throw new ConnectError(
-          "provider does not support post connect",
-          Code.Unimplemented,
-        );
-      }
-      let metadata: Record<string, string> | null | undefined;
-      try {
-        metadata = await provider.postConnectMetadata(
-          providerConnectedToken(request.token),
-        );
-      } catch (error) {
-        throw new ConnectError(
-          `post connect: ${errorMessage(error)}`,
-          Code.Unknown,
-        );
-      }
-      return create(PostConnectResponseSchema, {
-        metadata: {
-          ...(metadata ?? {}),
-        },
       });
     },
   };
@@ -853,8 +825,6 @@ function providerRequest(
 ): Request {
   const subject = requestContext?.subject;
   const agentSubject = requestContext?.agentSubject;
-  const externalIdentity = requestContext?.externalIdentity;
-  const agentExternalIdentity = requestContext?.agentExternalIdentity;
   const credential = requestContext?.credential;
   const access = requestContext?.access;
   const host = requestContext?.host;
@@ -878,14 +848,6 @@ function providerRequest(
       displayName: agentSubject?.displayName ?? "",
       authSource: agentSubject?.authSource ?? "",
       email: agentSubject?.email ?? "",
-    },
-    externalIdentity: {
-      type: externalIdentity?.type ?? "",
-      id: externalIdentity?.id ?? "",
-    },
-    agentExternalIdentity: {
-      type: agentExternalIdentity?.type ?? "",
-      id: agentExternalIdentity?.id ?? "",
     },
     credential: {
       mode: credential?.mode ?? "",
@@ -946,29 +908,6 @@ function providerHTTPSubjectResolutionContext(
     access: request.access,
     host: request.host,
     workflow: request.workflow,
-  };
-}
-
-function providerConnectedToken(
-  token?: ProtoPostConnectCredential,
-): ConnectedToken {
-  const metadataJson = token?.metadataJson ?? "";
-  return {
-    id: token?.id ?? "",
-    subjectId: token?.subjectId ?? "",
-    integration: token?.integration ?? "",
-    connection: token?.connection ?? "",
-    instance: token?.instance ?? "",
-    accessToken: token?.accessToken ?? "",
-    refreshToken: token?.refreshToken ?? "",
-    scopes: token?.scopes ?? "",
-    expiresAt: timestampToDate(token?.expiresAt),
-    lastRefreshedAt: timestampToDate(token?.lastRefreshedAt),
-    refreshErrorCount: token?.refreshErrorCount ?? 0,
-    metadataJson,
-    metadata: stringRecordFromJSON(metadataJson),
-    createdAt: timestampToDate(token?.createdAt),
-    updatedAt: timestampToDate(token?.updatedAt),
   };
 }
 
@@ -1105,45 +1044,6 @@ function normalizeBigInt(value: number | bigint): bigint {
     return 0n;
   }
   return BigInt(Math.max(0, Math.trunc(value)));
-}
-
-function timestampToDate(
-  value: { seconds: bigint; nanos: number } | undefined,
-): Date | undefined {
-  if (!value) {
-    return undefined;
-  }
-  const seconds = Number(value.seconds ?? 0n);
-  const nanos = Number(value.nanos ?? 0);
-  if (!Number.isFinite(seconds) || !Number.isFinite(nanos)) {
-    return undefined;
-  }
-  const millis = (seconds * 1000) + Math.trunc(nanos / 1_000_000);
-  if (!Number.isFinite(millis)) {
-    return undefined;
-  }
-  return new Date(millis);
-}
-
-function stringRecordFromJSON(value: string): Record<string, string> {
-  if (!value.trim()) {
-    return {};
-  }
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return {};
-    }
-    const output: Record<string, string> = {};
-    for (const [key, entry] of Object.entries(parsed)) {
-      if (typeof entry === "string") {
-        output[key] = entry;
-      }
-    }
-    return output;
-  } catch {
-    return {};
-  }
 }
 
 function cloneUint8Array(value: Uint8Array | undefined): Uint8Array {

@@ -284,9 +284,6 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
 	}
-	if err := b.authorizeExternalIdentityAssumption(ctx, p); err != nil {
-		return fail(err)
-	}
 	metricOperation = operation
 	metricTransport = metricutil.AttrValue(transport)
 	span.SetAttributes(attrTransport.String(metricTransport))
@@ -356,8 +353,6 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if err != nil {
 		return fail(err)
 	}
-	ctx = b.withAgentExternalIdentity(ctx, providerName, conn)
-
 	result, err = prov.Execute(ctx, operation, params, accessToken)
 	if err != nil {
 		return fail(err)
@@ -515,10 +510,6 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 			return fail(fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName))
 		}
 	}
-	if err := b.authorizeExternalIdentityAssumption(ctx, p); err != nil {
-		return fail(err)
-	}
-
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)
 	}
@@ -529,8 +520,6 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	if err != nil {
 		return fail(err)
 	}
-	ctx = b.withAgentExternalIdentity(ctx, providerName, conn)
-
 	result, err = graphQLProv.InvokeGraphQL(ctx, request, accessToken)
 	if err != nil {
 		return fail(err)
@@ -548,26 +537,6 @@ func (b *Broker) resolveOperation(ctx context.Context, p *principal.Principal, p
 	}
 
 	return ResolveOperation(ctx, prov, providerName, b, p, operation, sessionConnections, instance)
-}
-
-func (b *Broker) authorizeExternalIdentityAssumption(ctx context.Context, p *principal.Principal) error {
-	identityCtx := ExternalIdentityContextFromContext(ctx)
-	identity := core.NormalizeExternalIdentityRef(&core.ExternalIdentityRef{
-		Type: identityCtx.Type,
-		ID:   identityCtx.ID,
-	})
-	if identity == nil {
-		return nil
-	}
-	// TODO(#1823): Validate accepted external identity types before invocation.
-	if b == nil || b.authorizer == nil {
-		return fmt.Errorf("%w: external identity %s/%s", ErrAuthorizationDenied, identity.Type, identity.ID)
-	}
-	authorizer, ok := b.authorizer.(authorization.ExternalIdentityAssumptionAuthorizer)
-	if !ok || !authorizer.AllowExternalIdentityAssumption(ctx, p, identity) {
-		return fmt.Errorf("%w: external identity %s/%s", ErrAuthorizationDenied, identity.Type, identity.ID)
-	}
-	return nil
 }
 
 func (b *Broker) mcpConnection(providerName string) string {
@@ -951,79 +920,6 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 		token = storedCredential.AccessToken
 	}
 	return ctx, ConnectionRuntimeCredential{Token: token, ExpiresAt: expiresAt}, nil
-}
-
-func (b *Broker) withAgentExternalIdentity(ctx context.Context, providerName, connection string) context.Context {
-	if validExternalIdentity(AgentExternalIdentityContextFromContext(ctx)) {
-		return ctx
-	}
-	if b == nil || core.ExternalCredentialProviderMissing(b.externalCreds) {
-		return ctx
-	}
-	agentSubject := RunAsAuditFromContext(ctx).AgentSubject
-	if agentSubject == nil {
-		return ctx
-	}
-	subjectID := strings.TrimSpace(agentSubject.CredentialSubjectID)
-	if subjectID == "" {
-		subjectID = strings.TrimSpace(agentSubject.SubjectID)
-	}
-	if subjectID == "" {
-		return ctx
-	}
-	identity, err := b.agentExternalIdentity(ctx, subjectID, providerName, connection)
-	if err != nil {
-		b.log().DebugContext(ctx, "agent external identity unavailable", "provider", providerName, "subject_id", subjectID, "error", err)
-		return ctx
-	}
-	return WithAgentExternalIdentityContext(ctx, identity)
-}
-
-func (b *Broker) agentExternalIdentity(ctx context.Context, subjectID, providerName, connection string) (ExternalIdentityContext, error) {
-	credentials, err := b.externalCreds.ListCredentials(ctx, subjectID)
-	if err != nil {
-		return ExternalIdentityContext{}, err
-	}
-	connectionID := b.connectionID(providerName, connection)
-	var fallback ExternalIdentityContext
-	for _, credential := range credentials {
-		if credential == nil || strings.TrimSpace(credential.Integration) != strings.TrimSpace(providerName) {
-			continue
-		}
-		identity := externalIdentityFromMetadata(credential.MetadataJSON)
-		if !validExternalIdentity(identity) {
-			continue
-		}
-		if strings.TrimSpace(credential.ConnectionID) == connectionID || strings.TrimSpace(credential.Connection) == strings.TrimSpace(connection) {
-			return identity, nil
-		}
-		if !validExternalIdentity(fallback) {
-			fallback = identity
-		}
-	}
-	if validExternalIdentity(fallback) {
-		return fallback, nil
-	}
-	return ExternalIdentityContext{}, core.ErrNotFound
-}
-
-func validExternalIdentity(identity ExternalIdentityContext) bool {
-	return strings.TrimSpace(identity.Type) != "" && strings.TrimSpace(identity.ID) != ""
-}
-
-func externalIdentityFromMetadata(metadataJSON string) ExternalIdentityContext {
-	metadataJSON = strings.TrimSpace(metadataJSON)
-	if metadataJSON == "" {
-		return ExternalIdentityContext{}
-	}
-	var metadata map[string]string
-	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
-		return ExternalIdentityContext{}
-	}
-	return ExternalIdentityContext{
-		Type: strings.TrimSpace(metadata["gestalt.external_identity.type"]),
-		ID:   strings.TrimSpace(metadata["gestalt.external_identity.id"]),
-	}
 }
 
 // ResolveSubjectToken exposes the broker's refresh-aware token lookup for

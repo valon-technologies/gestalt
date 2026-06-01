@@ -19,6 +19,10 @@ type recordingAppInvocation struct {
 	idempotencyKey        string
 	internalConnection    bool
 	workflowContext       map[string]any
+	subjectID             string
+	credentialSubjectID   string
+	agentSubjectID        string
+	runAsSubjectID        string
 	providerName          string
 	instance              string
 	operation             string
@@ -31,10 +35,21 @@ type recordingAppInvocation struct {
 	graphQLVariables      map[string]any
 }
 
-func (i *recordingAppInvocation) Invoke(ctx context.Context, _ *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+func (i *recordingAppInvocation) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+	runAsAudit := invocation.RunAsAuditFromContext(ctx)
 	i.idempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
 	i.internalConnection = invocation.InternalConnectionAccessFromContext(ctx)
 	i.workflowContext = invocation.WorkflowContextFromContext(ctx)
+	if p != nil {
+		i.subjectID = p.SubjectID
+		i.credentialSubjectID = p.CredentialSubjectID
+	}
+	if runAsAudit.AgentSubject != nil {
+		i.agentSubjectID = runAsAudit.AgentSubject.SubjectID
+	}
+	if runAsAudit.RunAsSubject != nil {
+		i.runAsSubjectID = runAsAudit.RunAsSubject.SubjectID
+	}
 	i.providerName = providerName
 	i.instance = instance
 	i.operation = operation
@@ -185,6 +200,11 @@ func TestAppServerInvokeCredentialModeForForwardedToken(t *testing.T) {
 			requestMode: "subject",
 			want:        core.ConnectionModeSubject,
 		},
+		{
+			name:        "unsupported mode rejected",
+			requestMode: "unsupported-mode",
+			wantErr:     codes.InvalidArgument,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -229,6 +249,81 @@ func TestAppServerInvokeCredentialModeForForwardedToken(t *testing.T) {
 				t.Fatalf("credential mode override = %q, want %q", invoker.credentialMode, tc.want)
 			}
 		})
+	}
+}
+
+func TestAppServerInvokeAppliesConfiguredDelegationMetadata(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("plugin-invoker-delegation-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID:           "user:test-user",
+		CredentialSubjectID: "user:test-user",
+		DisplayName:         "Test User",
+		Kind:                principal.KindUser,
+		Source:              principal.SourceSession,
+	})
+	rootToken, err := tokens.MintRootToken(ctx, "data-schema-explorer", InvocationGrants{
+		"frontPorchRestApi": {
+			AllOperations: true,
+			Operations: map[string]core.ConnectionMode{
+				"vds.schemaVersions": core.ConnectionModeSubject,
+			},
+			OperationDelegations: map[string]InvocationDelegation{
+				"vds.schemaVersions": {
+					RunAs: &core.RunAsSubject{
+						SubjectID:           "service_account:data-schema-explorer",
+						SubjectKind:         "service_account",
+						CredentialSubjectID: "service_account:data-schema-explorer",
+						DisplayName:         "Data Schema Explorer",
+						AuthSource:          "app_invocation",
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+	params, err := structpb.NewStruct(map[string]any{
+		"owner": "valon-technologies",
+		"repo":  "toolshed",
+	})
+	if err != nil {
+		t.Fatalf("NewStruct: %v", err)
+	}
+
+	invoker := &recordingAppInvocation{}
+	server := NewAppServer(invoker, tokens)
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
+	}))
+	if _, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		InvocationToken: rootToken,
+		App:             "frontPorchRestApi",
+		Operation:       "vds.schemaVersions",
+		Params:          params,
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+
+	if invoker.subjectID != "service_account:data-schema-explorer" {
+		t.Fatalf("subject = %q, want service_account:data-schema-explorer", invoker.subjectID)
+	}
+	if invoker.credentialSubjectID != "service_account:data-schema-explorer" {
+		t.Fatalf("credential subject = %q, want service_account:data-schema-explorer", invoker.credentialSubjectID)
+	}
+	if invoker.agentSubjectID != "user:test-user" {
+		t.Fatalf("run-as audit agent subject = %q, want subject:test-user", invoker.agentSubjectID)
+	}
+	if invoker.runAsSubjectID != "service_account:data-schema-explorer" {
+		t.Fatalf("run-as audit subject = %q, want service_account:data-schema-explorer", invoker.runAsSubjectID)
+	}
+	if invoker.credentialMode != core.ConnectionModeSubject {
+		t.Fatalf("credential mode override = %q, want subject", invoker.credentialMode)
 	}
 }
 

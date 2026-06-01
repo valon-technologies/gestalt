@@ -113,7 +113,6 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 		RequestContentType:          declarativeJSONContentType,
 		ConnectionDefs:              ConnectionParamDefsFromManifest(params),
 		DiscoveryDef:                DiscoveryConfigFromManifest(discovery),
-		PostConnectConfigs:          PostConnectConfigsFromManifestConnections(manifest.Spec.Connections),
 		CredentialFieldDefs:         declarativeCredentialFields(auth),
 		CheckEgress:                 options.egressCheck,
 		NoRetry:                     true,

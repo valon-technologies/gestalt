@@ -160,15 +160,14 @@ type ResolvedAgentTool struct {
 }
 
 type AgentToolRef struct {
-	App                   string
-	Operation             string
-	Connection            string
-	Instance              string
-	Title                 string
-	Description           string
-	System                string
-	RunAs                 *Subject
-	RunAsExternalIdentity *ExternalIdentity
+	App         string
+	Operation   string
+	Connection  string
+	Instance    string
+	Title       string
+	Description string
+	System      string
+	RunAs       *Subject
 }
 
 type AgentProviderCapabilities struct {

@@ -19,21 +19,19 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type StaticProviderSpec struct {
-	Name               string
-	DisplayName        string
-	Description        string
-	IconSVG            string
-	ConnectionMode     core.ConnectionMode
-	Catalog            *catalog.Catalog
-	AuthTypes          []string
-	ConnectionParams   map[string]core.ConnectionParamDef
-	CredentialFields   []core.CredentialFieldDef
-	DiscoveryConfig    *core.DiscoveryConfig
-	PostConnectConfigs map[string]*core.PostConnectConfig
+	Name             string
+	DisplayName      string
+	Description      string
+	IconSVG          string
+	ConnectionMode   core.ConnectionMode
+	Catalog          *catalog.Catalog
+	AuthTypes        []string
+	ConnectionParams map[string]core.ConnectionParamDef
+	CredentialFields []core.CredentialFieldDef
+	DiscoveryConfig  *core.DiscoveryConfig
 }
 
 type remoteProviderBase struct {
@@ -59,12 +57,10 @@ type remoteProviderBase struct {
 
 var (
 	_ core.SessionCatalogProvider = (*remoteProviderBase)(nil)
-	_ core.PostConnectCapable     = (*remoteProviderBase)(nil)
 )
 
 type integrationProviderSupport struct {
 	sessionCatalog bool
-	postConnect    bool
 }
 
 // RemoteProviderOption configures a remote provider returned by NewRemoteProvider.
@@ -140,7 +136,6 @@ func getAppProviderSupportWithRetry(ctx context.Context, client proto.AppProvide
 		if err == nil {
 			return &integrationProviderSupport{
 				sessionCatalog: meta.GetSupportsSessionCatalog(),
-				postConnect:    meta.GetSupportsPostConnect(),
 			}, nil
 		}
 		if status.Code(err) == codes.Unimplemented {
@@ -267,38 +262,6 @@ func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (
 	return p.decorateCatalog(cat), nil
 }
 
-func (p *remoteProviderBase) SupportsPostConnect() bool {
-	return p != nil && p.support.postConnect
-}
-
-func (p *remoteProviderBase) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	if !p.SupportsPostConnect() {
-		return nil, core.ErrPostConnectUnsupported
-	}
-	return p.postConnect(ctx, token)
-}
-
-func (p *remoteProviderBase) postConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	resp, err := p.client.PostConnect(ctx, &proto.PostConnectRequest{
-		Token: postConnectCredentialToProto(token),
-	})
-	if err != nil {
-		if status.Code(err) == codes.Unimplemented {
-			return nil, core.ErrPostConnectUnsupported
-		}
-		return nil, err
-	}
-	metadata := resp.GetMetadata()
-	if len(metadata) == 0 {
-		return nil, nil
-	}
-	out := make(map[string]string, len(metadata))
-	for key, value := range metadata {
-		out[key] = value
-	}
-	return out, nil
-}
-
 func (p *remoteProviderBase) decorateCatalog(cat *catalog.Catalog) *catalog.Catalog {
 	if cat == nil {
 		return nil
@@ -411,22 +374,8 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 	if audit := invocation.RunAsAuditFromContext(ctx); audit.AgentSubject != nil {
 		out.AgentSubject = agentwire.RunAsSubjectToProto(audit.AgentSubject)
 	}
-	if identity := invocation.AgentExternalIdentityContextFromContext(ctx); identity.Type != "" && identity.ID != "" {
-		out.AgentExternalIdentity = &proto.ExternalIdentityContext{
-			Type: identity.Type,
-			Id:   identity.ID,
-		}
-	}
-	if identity := invocation.ExternalIdentityContextFromContext(ctx); identity.Type != "" && identity.ID != "" {
-		// TODO(#1823): Let provider install/connect flows report identity
-		// candidates without writing authorization relationships themselves.
-		out.ExternalIdentity = &proto.ExternalIdentityContext{
-			Type: identity.Type,
-			Id:   identity.ID,
-		}
-	}
 
-	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && !out.ToolRefsSet && len(out.ToolRefs) == 0 && out.Host == nil && out.AgentSubject == nil && out.AgentExternalIdentity == nil && out.ExternalIdentity == nil {
+	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && !out.ToolRefsSet && len(out.ToolRefs) == 0 && out.Host == nil && out.AgentSubject == nil {
 		return nil, nil
 	}
 	return &out, nil
@@ -434,37 +383,6 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 
 func normalizePublicBaseURL(baseURL string) string {
 	return strings.TrimRight(strings.TrimSpace(baseURL), "/")
-}
-
-func postConnectCredentialToProto(token *core.ExternalCredential) *proto.PostConnectCredential {
-	if token == nil {
-		return nil
-	}
-	out := &proto.PostConnectCredential{
-		Id:                token.ID,
-		SubjectId:         token.SubjectID,
-		Integration:       token.Integration,
-		Connection:        token.Connection,
-		Instance:          token.Instance,
-		AccessToken:       token.AccessToken,
-		RefreshToken:      token.RefreshToken,
-		Scopes:            token.Scopes,
-		RefreshErrorCount: int32(token.RefreshErrorCount),
-		MetadataJson:      token.MetadataJSON,
-	}
-	if token.ExpiresAt != nil {
-		out.ExpiresAt = timestamppb.New(*token.ExpiresAt)
-	}
-	if token.LastRefreshedAt != nil {
-		out.LastRefreshedAt = timestamppb.New(*token.LastRefreshedAt)
-	}
-	if !token.CreatedAt.IsZero() {
-		out.CreatedAt = timestamppb.New(token.CreatedAt)
-	}
-	if !token.UpdatedAt.IsZero() {
-		out.UpdatedAt = timestamppb.New(token.UpdatedAt)
-	}
-	return out
 }
 
 func subjectIDForPrincipal(p *principal.Principal) string {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"reflect"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -13,15 +12,14 @@ import (
 )
 
 type connectedCapabilityProvider struct {
-	postConnectMetadata map[string]string
 	operationConnection map[string]string
 	resolveConnection   func(operation string, params map[string]any) (string, error)
 	overrideAllowed     func(operation string, params map[string]any) bool
 }
 
-func (p *connectedCapabilityProvider) Name() string        { return "slack" }
-func (p *connectedCapabilityProvider) DisplayName() string { return "Slack" }
-func (p *connectedCapabilityProvider) Description() string { return "Slack provider" }
+func (p *connectedCapabilityProvider) Name() string        { return "test" }
+func (p *connectedCapabilityProvider) DisplayName() string { return "Test" }
+func (p *connectedCapabilityProvider) Description() string { return "Test provider" }
 func (p *connectedCapabilityProvider) ConnectionMode() core.ConnectionMode {
 	return core.ConnectionModeSubject
 }
@@ -48,7 +46,7 @@ func (p *connectedCapabilityProvider) OperationConnectionOverrideAllowed(operati
 }
 func (p *connectedCapabilityProvider) Catalog() *catalog.Catalog {
 	return &catalog.Catalog{
-		Name: "slack",
+		Name: "test",
 		Operations: []catalog.CatalogOperation{{
 			ID:     "viewer",
 			Method: http.MethodGet,
@@ -73,51 +71,6 @@ func (p *connectedCapabilityProvider) ExchangeCode(_ context.Context, _ string) 
 func (p *connectedCapabilityProvider) RefreshToken(_ context.Context, _ string) (*core.TokenResponse, error) {
 	return &core.TokenResponse{AccessToken: "refreshed-token"}, nil
 }
-func (p *connectedCapabilityProvider) PostConnect(_ context.Context, _ *core.ExternalCredential) (map[string]string, error) {
-	return p.postConnectMetadata, nil
-}
-
-func TestBindProviderConnectionPreservesPostConnectCapability(t *testing.T) {
-	t.Parallel()
-
-	want := map[string]string{
-		"gestalt.external_identity.type": "slack_identity",
-		"gestalt.external_identity.id":   "team:T123:user:U456",
-	}
-	prov := bindProviderConnection(&connectedCapabilityProvider{postConnectMetadata: want}, "default")
-
-	if _, ok := prov.(core.OAuthProvider); !ok {
-		t.Fatal("expected bound provider to preserve oauth support")
-	}
-	if _, ok := prov.(core.SessionCatalogProvider); !ok {
-		t.Fatal("expected bound provider to preserve session catalog support")
-	}
-	if _, ok := prov.(core.GraphQLSurfaceInvoker); !ok {
-		t.Fatal("expected bound provider to preserve graphql support")
-	}
-	if got := prov.ConnectionForOperation("viewer"); got != "default" {
-		t.Fatalf("ConnectionForOperation(viewer) = %q, want %q", got, "default")
-	}
-	if !core.SupportsPostConnect(prov) {
-		t.Fatal("expected bound provider to preserve post-connect support")
-	}
-
-	got, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{
-		Integration: "slack",
-		Connection:  "default",
-		AccessToken: "tok",
-	})
-	if err != nil {
-		t.Fatalf("PostConnect: %v", err)
-	}
-	if !supported {
-		t.Fatal("expected core.PostConnect to report support")
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("PostConnect metadata = %#v, want %#v", got, want)
-	}
-}
-
 func TestBindProviderConnectionResolvesInnerStaticOperationConnection(t *testing.T) {
 	t.Parallel()
 
@@ -174,75 +127,51 @@ func TestBindProviderConnectionPreservesOperationConnectionInterfacesThroughCapa
 	}
 }
 
-type connectedNoPostConnectProvider struct{}
+type connectedBasicProvider struct{}
 
-func (p *connectedNoPostConnectProvider) Name() string        { return "slack" }
-func (p *connectedNoPostConnectProvider) DisplayName() string { return "Slack" }
-func (p *connectedNoPostConnectProvider) Description() string { return "Slack provider" }
-func (p *connectedNoPostConnectProvider) ConnectionMode() core.ConnectionMode {
+func (p *connectedBasicProvider) Name() string        { return "test" }
+func (p *connectedBasicProvider) DisplayName() string { return "Test" }
+func (p *connectedBasicProvider) Description() string { return "Test provider" }
+func (p *connectedBasicProvider) ConnectionMode() core.ConnectionMode {
 	return core.ConnectionModeSubject
 }
-func (p *connectedNoPostConnectProvider) AuthTypes() []string { return []string{"oauth"} }
-func (p *connectedNoPostConnectProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+func (p *connectedBasicProvider) AuthTypes() []string { return []string{"oauth"} }
+func (p *connectedBasicProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return nil
 }
-func (p *connectedNoPostConnectProvider) CredentialFields() []core.CredentialFieldDef { return nil }
-func (p *connectedNoPostConnectProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
-func (p *connectedNoPostConnectProvider) ConnectionForOperation(string) string        { return "" }
-func (p *connectedNoPostConnectProvider) Catalog() *catalog.Catalog {
+func (p *connectedBasicProvider) CredentialFields() []core.CredentialFieldDef { return nil }
+func (p *connectedBasicProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
+func (p *connectedBasicProvider) ConnectionForOperation(string) string        { return "" }
+func (p *connectedBasicProvider) Catalog() *catalog.Catalog {
 	return &catalog.Catalog{
-		Name: "slack",
+		Name: "test",
 		Operations: []catalog.CatalogOperation{{
 			ID:     "viewer",
 			Method: http.MethodGet,
 		}},
 	}
 }
-func (p *connectedNoPostConnectProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+func (p *connectedBasicProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 	return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
 }
-func (p *connectedNoPostConnectProvider) CatalogForRequest(_ context.Context, _ string) (*catalog.Catalog, error) {
+func (p *connectedBasicProvider) CatalogForRequest(_ context.Context, _ string) (*catalog.Catalog, error) {
 	return p.Catalog(), nil
 }
-func (p *connectedNoPostConnectProvider) InvokeGraphQL(_ context.Context, _ core.GraphQLRequest, _ string) (*core.OperationResult, error) {
+func (p *connectedBasicProvider) InvokeGraphQL(_ context.Context, _ core.GraphQLRequest, _ string) (*core.OperationResult, error) {
 	return &core.OperationResult{Status: http.StatusOK, Body: `{"data":{"viewer":{"id":"U456"}}}`}, nil
 }
-func (p *connectedNoPostConnectProvider) AuthorizationURL(state string, _ []string) string {
+func (p *connectedBasicProvider) AuthorizationURL(state string, _ []string) string {
 	return "https://example.com/start?state=" + state
 }
-func (p *connectedNoPostConnectProvider) ExchangeCode(_ context.Context, _ string) (*core.TokenResponse, error) {
+func (p *connectedBasicProvider) ExchangeCode(_ context.Context, _ string) (*core.TokenResponse, error) {
 	return &core.TokenResponse{AccessToken: "access-token"}, nil
 }
-func (p *connectedNoPostConnectProvider) RefreshToken(_ context.Context, _ string) (*core.TokenResponse, error) {
+func (p *connectedBasicProvider) RefreshToken(_ context.Context, _ string) (*core.TokenResponse, error) {
 	return &core.TokenResponse{AccessToken: "refreshed-token"}, nil
 }
 
-func TestBindProviderConnectionDoesNotFalsePositivePostConnectSupport(t *testing.T) {
-	t.Parallel()
-
-	prov := bindProviderConnection(&connectedNoPostConnectProvider{}, "default")
-	if core.SupportsPostConnect(prov) {
-		t.Fatal("expected bound provider to report no post-connect support")
-	}
-
-	got, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{
-		Integration: "slack",
-		Connection:  "default",
-		AccessToken: "tok",
-	})
-	if err != nil {
-		t.Fatalf("PostConnect: %v", err)
-	}
-	if supported {
-		t.Fatal("expected core.PostConnect to report unsupported")
-	}
-	if got != nil {
-		t.Fatalf("PostConnect metadata = %#v, want nil", got)
-	}
-}
-
 type connectedNoSessionCatalogProvider struct {
-	connectedNoPostConnectProvider
+	connectedBasicProvider
 	catalogCalls int
 }
 
@@ -252,7 +181,7 @@ func (p *connectedNoSessionCatalogProvider) SupportsSessionCatalog() bool {
 
 func (p *connectedNoSessionCatalogProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	p.catalogCalls++
-	return p.connectedNoPostConnectProvider.CatalogForRequest(ctx, token)
+	return p.connectedBasicProvider.CatalogForRequest(ctx, token)
 }
 
 func TestBindProviderConnectionDoesNotFalsePositiveSessionCatalogSupport(t *testing.T) {

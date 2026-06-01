@@ -2371,13 +2371,9 @@ func TestNormalizeToolRefsRejectsProviderRunAsDelegation(t *testing.T) {
 	t.Parallel()
 
 	runAs := &core.RunAsSubject{
-		SubjectID:           "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectID:           "service_account:automation",
 		SubjectKind:         "service_account",
-		CredentialSubjectID: "service_account:github_app_installation:99:repo:acme/widgets",
-	}
-	externalIdentity := &core.ExternalIdentityRef{
-		Type: "github_app_installation",
-		ID:   "repo:acme/widgets",
+		CredentialSubjectID: "service_account:automation",
 	}
 	for _, tc := range []struct {
 		name string
@@ -2386,18 +2382,9 @@ func TestNormalizeToolRefsRejectsProviderRunAsDelegation(t *testing.T) {
 		{
 			name: "runAs",
 			ref: coreagent.ToolRef{
-				App:       "github",
-				Operation: "bot.createPullRequest",
+				App:       "target",
+				Operation: "automation.write",
 				RunAs:     runAs,
-			},
-		},
-		{
-			name: "external identity",
-			ref: coreagent.ToolRef{
-				App:                   "github",
-				Operation:             "bot.createPullRequest",
-				RunAs:                 runAs,
-				RunAsExternalIdentity: externalIdentity,
 			},
 		},
 	} {
@@ -2881,31 +2868,23 @@ func TestAgentToolTargetKeyIgnoresRunAsDisplayMetadata(t *testing.T) {
 	t.Parallel()
 
 	base := coreagent.ToolRef{
-		App:       "github",
-		Operation: "bot.createPullRequest",
+		App:       "target",
+		Operation: "automation.write",
 		RunAs: &core.RunAsSubject{
-			SubjectID:           "service_account:github_app_installation:99:repo:acme/widgets",
+			SubjectID:           "service_account:automation",
 			SubjectKind:         "service_account",
-			CredentialSubjectID: "service_account:github_app_installation:99:repo:acme/widgets",
-			DisplayName:         "Toolshed app",
-			AuthSource:          "github_app_webhook",
-		},
-		RunAsExternalIdentity: &core.ExternalIdentityRef{
-			Type: "github_app_installation",
-			ID:   "repo:acme/widgets",
+			CredentialSubjectID: "service_account:automation",
+			DisplayName:         "Automation app",
+			AuthSource:          "managed_event",
 		},
 	}
 	same := base
 	same.RunAs = &core.RunAsSubject{
-		SubjectID:           " service_account:github_app_installation:99:repo:acme/widgets ",
+		SubjectID:           " service_account:automation ",
 		SubjectKind:         " service_account ",
-		CredentialSubjectID: " service_account:github_app_installation:99:repo:acme/widgets ",
-		DisplayName:         " Toolshed app ",
-		AuthSource:          " github_app_webhook ",
-	}
-	same.RunAsExternalIdentity = &core.ExternalIdentityRef{
-		Type: " github_app_installation ",
-		ID:   " repo:acme/widgets ",
+		CredentialSubjectID: " service_account:automation ",
+		DisplayName:         " Automation app ",
+		AuthSource:          " managed_event ",
 	}
 	differentDisplayMetadata := base
 	differentDisplayMetadata.RunAs = &core.RunAsSubject{
@@ -2919,26 +2898,17 @@ func TestAgentToolTargetKeyIgnoresRunAsDisplayMetadata(t *testing.T) {
 	differentCredentialSubject.RunAs = &core.RunAsSubject{
 		SubjectID:           base.RunAs.SubjectID,
 		SubjectKind:         base.RunAs.SubjectKind,
-		CredentialSubjectID: "service_account:github_app_installation:99:repo:acme/other",
+		CredentialSubjectID: "service_account:other-automation",
 		DisplayName:         base.RunAs.DisplayName,
 		AuthSource:          base.RunAs.AuthSource,
 	}
-	differentExternalIdentity := base
-	differentExternalIdentity.RunAsExternalIdentity = &core.ExternalIdentityRef{
-		Type: "github_app_installation",
-		ID:   "repo:acme/other",
-	}
-
 	if agentToolTargetKeyFromRef(base) != agentToolTargetKeyFromRef(same) {
-		t.Fatal("agentToolTargetKeyFromRef should normalize equivalent runAs subjects and external identities")
+		t.Fatal("agentToolTargetKeyFromRef should normalize equivalent runAs subjects")
 	}
 	if agentToolTargetKeyFromRef(base) != agentToolTargetKeyFromRef(differentDisplayMetadata) {
 		t.Fatal("agentToolTargetKeyFromRef should ignore runAs display/auth metadata")
 	}
 	if agentToolTargetKeyFromRef(base) == agentToolTargetKeyFromRef(differentCredentialSubject) {
 		t.Fatal("agentToolTargetKeyFromRef collapsed distinct runAs credential subject")
-	}
-	if agentToolTargetKeyFromRef(base) == agentToolTargetKeyFromRef(differentExternalIdentity) {
-		t.Fatal("agentToolTargetKeyFromRef collapsed distinct runAs external identity")
 	}
 }

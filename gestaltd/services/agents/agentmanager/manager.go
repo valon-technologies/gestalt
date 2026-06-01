@@ -1815,13 +1815,12 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		description = strings.TrimSpace(opMeta.Description)
 	}
 	target := coreagent.ToolTarget{
-		App:                   appName,
-		Operation:             opMeta.ID,
-		Connection:            connection,
-		Instance:              sessionInstance,
-		CredentialMode:        credentialMode,
-		RunAs:                 core.NormalizeRunAsSubject(ref.RunAs),
-		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(ref.RunAsExternalIdentity),
+		App:            appName,
+		Operation:      opMeta.ID,
+		Connection:     connection,
+		Instance:       sessionInstance,
+		CredentialMode: credentialMode,
+		RunAs:          core.NormalizeRunAsSubject(ref.RunAs),
 	}
 	toolID, err := m.mintAgentToolID(target)
 	if err != nil {
@@ -1858,39 +1857,36 @@ type agentToolSearchCatalog struct {
 }
 
 type agentToolTargetKey struct {
-	system                string
-	app                   string
-	operation             string
-	connection            string
-	instance              string
-	credentialMode        core.ConnectionMode
-	runAs                 core.RunAsSubject
-	runAsExternalIdentity core.ExternalIdentityRef
+	system         string
+	app            string
+	operation      string
+	connection     string
+	instance       string
+	credentialMode core.ConnectionMode
+	runAs          core.RunAsSubject
 }
 
 func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
 	return agentToolTargetKey{
-		system:                strings.TrimSpace(ref.System),
-		app:                   strings.TrimSpace(ref.App),
-		operation:             strings.TrimSpace(ref.Operation),
-		connection:            core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
-		instance:              strings.TrimSpace(ref.Instance),
-		credentialMode:        ref.CredentialMode,
-		runAs:                 agentToolRunAsKey(ref.RunAs),
-		runAsExternalIdentity: agentToolExternalIdentityKey(ref.RunAsExternalIdentity),
+		system:         strings.TrimSpace(ref.System),
+		app:            strings.TrimSpace(ref.App),
+		operation:      strings.TrimSpace(ref.Operation),
+		connection:     core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
+		instance:       strings.TrimSpace(ref.Instance),
+		credentialMode: ref.CredentialMode,
+		runAs:          agentToolRunAsKey(ref.RunAs),
 	}
 }
 
 func agentToolTargetKeyFromTarget(target coreagent.ToolTarget) agentToolTargetKey {
 	return agentToolTargetKey{
-		system:                strings.TrimSpace(target.System),
-		app:                   strings.TrimSpace(target.App),
-		operation:             strings.TrimSpace(target.Operation),
-		connection:            core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
-		instance:              strings.TrimSpace(target.Instance),
-		credentialMode:        target.CredentialMode,
-		runAs:                 agentToolRunAsKey(target.RunAs),
-		runAsExternalIdentity: agentToolExternalIdentityKey(target.RunAsExternalIdentity),
+		system:         strings.TrimSpace(target.System),
+		app:            strings.TrimSpace(target.App),
+		operation:      strings.TrimSpace(target.Operation),
+		connection:     core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
+		instance:       strings.TrimSpace(target.Instance),
+		credentialMode: target.CredentialMode,
+		runAs:          agentToolRunAsKey(target.RunAs),
 	}
 }
 
@@ -1900,9 +1896,8 @@ func (k agentToolTargetKey) String() string {
 	}
 	parts := []string{k.app, k.operation}
 	runAsKey := agentToolRunAsKeyString(k.runAs)
-	externalIdentityKey := agentToolExternalIdentityKeyString(k.runAsExternalIdentity)
-	if k.connection != "" || k.instance != "" || k.credentialMode != "" || runAsKey != "" || externalIdentityKey != "" {
-		parts = append(parts, k.connection, k.instance, string(k.credentialMode), runAsKey, externalIdentityKey)
+	if k.connection != "" || k.instance != "" || k.credentialMode != "" || runAsKey != "" {
+		parts = append(parts, k.connection, k.instance, string(k.credentialMode), runAsKey)
 	}
 	return strings.Join(parts, "/")
 }
@@ -3014,13 +3009,12 @@ func (m *Manager) listedAgentAppCandidateTool(candidate agentToolSearchCandidate
 	projectedCandidate.operation = projectedOperation
 	ref := candidate.ref
 	target := coreagent.ToolTarget{
-		App:                   strings.TrimSpace(ref.App),
-		Operation:             strings.TrimSpace(ref.Operation),
-		Connection:            core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
-		Instance:              strings.TrimSpace(ref.Instance),
-		CredentialMode:        ref.CredentialMode,
-		RunAs:                 core.NormalizeRunAsSubject(ref.RunAs),
-		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(ref.RunAsExternalIdentity),
+		App:            strings.TrimSpace(ref.App),
+		Operation:      strings.TrimSpace(ref.Operation),
+		Connection:     core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
+		Instance:       strings.TrimSpace(ref.Instance),
+		CredentialMode: ref.CredentialMode,
+		RunAs:          core.NormalizeRunAsSubject(ref.RunAs),
 	}
 	toolID, err := m.mintAgentToolID(target)
 	if err != nil {
@@ -3040,7 +3034,6 @@ func (m *Manager) listedAgentAppCandidateTool(candidate agentToolSearchCandidate
 	ref.Connection = target.Connection
 	ref.Instance = target.Instance
 	ref.CredentialMode = target.CredentialMode
-	ref.RunAsExternalIdentity = target.RunAsExternalIdentity
 	return coreagent.ListedTool{
 		ToolID:           toolID,
 		MCPName:          agentToolMCPName(target),
@@ -3101,14 +3094,13 @@ func agentToolBoolPtr(value bool) *bool {
 
 func agentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
 	return coreagent.ToolRef{
-		System:                target.System,
-		App:                   target.App,
-		Operation:             target.Operation,
-		Connection:            target.Connection,
-		Instance:              target.Instance,
-		CredentialMode:        target.CredentialMode,
-		RunAs:                 core.NormalizeRunAsSubject(target.RunAs),
-		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(target.RunAsExternalIdentity),
+		System:         target.System,
+		App:            target.App,
+		Operation:      target.Operation,
+		Connection:     target.Connection,
+		Instance:       target.Instance,
+		CredentialMode: target.CredentialMode,
+		RunAs:          core.NormalizeRunAsSubject(target.RunAs),
 	}
 }
 
@@ -3700,7 +3692,6 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 		ref.Title = strings.TrimSpace(ref.Title)
 		ref.Description = strings.TrimSpace(ref.Description)
 		ref.RunAs = core.NormalizeRunAsSubject(ref.RunAs)
-		ref.RunAsExternalIdentity = core.NormalizeExternalIdentityRef(ref.RunAsExternalIdentity)
 		credentialMode, err := normalizeAgentToolCredentialMode(ref.CredentialMode)
 		if err != nil {
 			return nil, err
@@ -3716,8 +3707,8 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 			if ref.Operation == "" {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d].operation is required for system tool refs", invocation.ErrOperationNotFound, idx)
 			}
-			if ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil || ref.Title != "" || ref.Description != "" {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d] system refs cannot include connection, instance, credential mode, runAs, runAs external identity, title, or description", invocation.ErrInvalidInvocation, idx)
+			if ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.Title != "" || ref.Description != "" {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d] system refs cannot include connection, instance, credential mode, runAs, title, or description", invocation.ErrInvalidInvocation, idx)
 			}
 			out = append(out, ref)
 			continue
@@ -3726,11 +3717,11 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].app is required", invocation.ErrProviderNotFound, idx)
 		}
 		if ref.App == agentToolSearchAllApp {
-			if ref.Operation != "" || ref.Connection != "" || ref.Instance != "" || ref.Title != "" || ref.Description != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d] global search ref cannot include operation, connection, instance, credential mode, runAs, runAs external identity, title, or description", invocation.ErrProviderNotFound, idx)
+			if ref.Operation != "" || ref.Connection != "" || ref.Instance != "" || ref.Title != "" || ref.Description != "" || ref.CredentialMode != "" || ref.RunAs != nil {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d] global search ref cannot include operation, connection, instance, credential mode, runAs, title, or description", invocation.ErrProviderNotFound, idx)
 			}
 		}
-		if ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+		if ref.RunAs != nil {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d] runAs delegation is not supported for provider tool refs", invocation.ErrAuthorizationDenied, idx)
 		}
 		out = append(out, ref)
@@ -3762,24 +3753,6 @@ func agentToolRunAsKeyString(subject core.RunAsSubject) string {
 		subject.SubjectKind,
 		subject.CredentialSubjectID,
 	}, "\x00")
-}
-
-func agentToolExternalIdentityKey(identity *core.ExternalIdentityRef) core.ExternalIdentityRef {
-	if identity == nil {
-		return core.ExternalIdentityRef{}
-	}
-	normalized := core.NormalizeExternalIdentityRef(identity)
-	if normalized == nil {
-		return core.ExternalIdentityRef{}
-	}
-	return *normalized
-}
-
-func agentToolExternalIdentityKeyString(identity core.ExternalIdentityRef) string {
-	if identity == (core.ExternalIdentityRef{}) {
-		return ""
-	}
-	return strings.Join([]string{identity.Type, identity.ID}, "\x00")
 }
 
 func agentProviderSupportsToolSource(ctx context.Context, provider coreagent.Provider, source coreagent.ToolSourceMode) (bool, error) {

@@ -10,7 +10,6 @@ import (
 
 var ErrSessionCatalogUnavailable = errors.New("session catalog unavailable")
 var ErrSessionCatalogUnsupported = errors.New("session catalog unsupported")
-var ErrPostConnectUnsupported = errors.New("post connect unsupported")
 
 type sessionCatalogUnavailableError struct {
 	cause       error
@@ -68,10 +67,6 @@ type sessionCatalogSupporter interface {
 	SupportsSessionCatalog() bool
 }
 
-type postConnectSupporter interface {
-	SupportsPostConnect() bool
-}
-
 type httpSubjectSupporter interface {
 	SupportsHTTPSubject() bool
 }
@@ -118,40 +113,6 @@ func CatalogForRequest(ctx context.Context, prov Provider, token string) (*catal
 	}
 	cat, err := scp.CatalogForRequest(ctx, token)
 	return cat, true, wrapSessionCatalogUnavailable(err)
-}
-
-func SupportsPostConnect(prov Provider) bool {
-	return supportsOptionalProviderFeature(prov,
-		func(p Provider) (bool, bool) {
-			aware, ok := p.(postConnectSupporter)
-			if !ok {
-				return false, false
-			}
-			return true, aware.SupportsPostConnect()
-		},
-		func(p Provider) bool {
-			_, ok := p.(PostConnectCapable)
-			return ok
-		},
-	)
-}
-
-func PostConnect(ctx context.Context, prov Provider, token *ExternalCredential) (map[string]string, bool, error) {
-	if !SupportsPostConnect(prov) {
-		return nil, false, nil
-	}
-	pcp, ok := prov.(PostConnectCapable)
-	if !ok {
-		return nil, true, fmt.Errorf("%w: provider %q advertises post-connect support but does not implement post-connect", ErrPostConnectUnsupported, prov.Name())
-	}
-	metadata, err := pcp.PostConnect(ctx, token)
-	if err != nil {
-		if errors.Is(err, ErrPostConnectUnsupported) {
-			return nil, false, nil
-		}
-		return nil, true, err
-	}
-	return metadata, true, nil
 }
 
 func SupportsHTTPSubject(prov Provider) bool {

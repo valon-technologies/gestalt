@@ -13,7 +13,7 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
-use crate::api::{ExternalIdentity, RuntimeMetadata, Subject};
+use crate::api::{RuntimeMetadata, Subject};
 use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::error::Result as ProviderResult;
 use crate::generated::v1::{
@@ -437,7 +437,6 @@ pub struct AgentToolRef {
     pub description: String,
     pub system: String,
     pub run_as: Option<Subject>,
-    pub run_as_external_identity: Option<ExternalIdentity>,
 }
 
 impl AgentMessage {
@@ -914,7 +913,6 @@ pub fn new_agent_tool_ref(input: AgentToolRef) -> AgentToolRef {
         description: input.description,
         system: input.system,
         run_as: input.run_as,
-        run_as_external_identity: input.run_as_external_identity,
     }
 }
 
@@ -1310,7 +1308,6 @@ pub(crate) fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef
         description: value.description,
         system: value.system,
         run_as: agent_run_as_context_from_proto(value.run_as),
-        run_as_external_identity: external_identity_from_proto(value.run_as_external_identity),
     }
 }
 
@@ -1324,7 +1321,6 @@ pub(crate) fn agent_tool_ref_to_proto(value: AgentToolRef) -> pb::AgentToolRef {
         description: value.description,
         system: value.system,
         run_as: agent_run_as_context_to_proto(value.run_as),
-        run_as_external_identity: external_identity_to_proto(value.run_as_external_identity),
     }
 }
 
@@ -1347,24 +1343,6 @@ fn agent_run_as_context_to_proto(value: Option<Subject>) -> Option<pb::SubjectCo
         display_name: value.display_name,
         auth_source: value.auth_source,
         email: value.email,
-    })
-}
-
-fn external_identity_from_proto(
-    value: Option<pb::ExternalIdentityContext>,
-) -> Option<ExternalIdentity> {
-    value.map(|value| ExternalIdentity {
-        r#type: value.r#type,
-        id: value.id,
-    })
-}
-
-fn external_identity_to_proto(
-    value: Option<ExternalIdentity>,
-) -> Option<pb::ExternalIdentityContext> {
-    value.map(|value| pb::ExternalIdentityContext {
-        r#type: value.r#type,
-        id: value.id,
     })
 }
 

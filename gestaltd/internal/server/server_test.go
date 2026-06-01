@@ -2606,15 +2606,6 @@ func TestMemoryAuthorizationProviderDoesNotGrantMixedSubjectAndSubjectSetTarget(
 	}
 }
 
-func testExternalIdentityResourceID(typ, id string) string {
-	typ = strings.TrimSpace(typ)
-	id = strings.TrimSpace(id)
-	if typ == "" || id == "" {
-		return ""
-	}
-	return base64.RawURLEncoding.EncodeToString([]byte(typ + "\x00" + id))
-}
-
 func seedProviderDynamicAdminMembership(t *testing.T, svc *coredata.Services, authz authorization.RuntimeAuthorizer, provider *memoryAuthorizationProvider, email, role string) *core.User {
 	t.Helper()
 	user := seedUser(t, svc, email)
@@ -5369,11 +5360,10 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	}
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
-	ownerUser := seedProviderPluginAuthorization(t, svc, authz, provider, "svc", "owner@example.test", "editor")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "svc", "owner@example.test", "editor")
 	seedProviderPluginAuthorization(t, svc, authz, provider, "manual-svc", "owner@example.test", "viewer")
 	seedProviderPluginAuthorization(t, svc, authz, provider, "discover-manual-svc", "owner@example.test", "viewer")
 	seedProviderPluginAuthorization(t, svc, authz, provider, "oauth-svc", "owner@example.test", "viewer")
-	ownerSubjectID := principal.UserSubjectID(ownerUser.ID)
 
 	newStub := func(name string) *stubIntegrationWithSessionCatalog {
 		return &stubIntegrationWithSessionCatalog{
@@ -5413,34 +5403,15 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		Kind        string `json:"kind"`
 		DisplayName string `json:"displayName"`
 	}
-	assertManagedSubjectCredentialContext := func(label string) func(context.Context, *core.ExternalCredential) (map[string]string, error) {
-		return func(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-			p := principal.FromContext(ctx)
-			if p == nil {
-				return nil, fmt.Errorf("%s post-connect principal missing", label)
-			}
-			if p.SubjectID != ownerSubjectID {
-				return nil, fmt.Errorf("%s post-connect subject = %q, want %q", label, p.SubjectID, ownerSubjectID)
-			}
-			if p.CredentialSubjectID != created.SubjectID {
-				return nil, fmt.Errorf("%s post-connect credential subject = %q, want %q", label, p.CredentialSubjectID, created.SubjectID)
-			}
-			if token.SubjectID != created.SubjectID {
-				return nil, fmt.Errorf("%s stored subject = %q, want %q", label, token.SubjectID, created.SubjectID)
-			}
-			return nil, nil
-		}
-	}
 	managedDiscoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `[{"id":"site-a","name":"Site A","workspace":"alpha"},{"id":"site-b","name":"Site B","workspace":"beta"}]`)
 	}))
 	testutil.CloseOnCleanup(t, managedDiscoverySrv)
-	manualStub := &stubPostConnectManualProvider{
+	manualStub := &stubManualProviderWithCapabilities{
 		stubManualProvider: stubManualProvider{
 			StubIntegration: coretesting.StubIntegration{N: "manual-svc", DN: "Manual Service"},
 		},
-		postConnect: assertManagedSubjectCredentialContext("manual"),
 	}
 	discoverManualStub := &stubDiscoveringManualProvider{
 		stubManualProvider: stubManualProvider{
@@ -5452,12 +5423,10 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 			NamePath: "name",
 			Metadata: map[string]string{"workspace": "workspace"},
 		},
-		postConnect: assertManagedSubjectCredentialContext("discovery"),
 	}
 	oauthStub := &stubIntegrationWithAuthURL{
 		StubIntegration: coretesting.StubIntegration{N: "oauth-svc", DN: "OAuth Service"},
 		authURL:         "https://oauth.example/authorize",
-		postConnect:     assertManagedSubjectCredentialContext("oauth"),
 	}
 	oauthHandler := &testOAuthHandler{
 		authorizationBaseURLVal: "https://oauth.example/authorize",
@@ -5579,61 +5548,6 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	expectJSONStatus(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/members", "owner-session", `{"email":"viewer@example.test","role":"viewer"}`, http.StatusOK)
 
 	expectJSONStatus(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID, "viewer-session", "", http.StatusOK)
-
-	externalIdentityBody := `{"type":"github_app_installation","id":"repo:valon-technologies/toolshed"}`
-	type externalIdentityInfo struct {
-		Type       string `json:"type"`
-		ID         string `json:"id"`
-		ResourceID string `json:"resourceId"`
-	}
-	expectJSONStatus(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID+"/external-identities", "viewer-session", "", http.StatusForbidden)
-	resp = doJSON(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/external-identities", "owner-session", externalIdentityBody)
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		t.Fatalf("managed subject external identity put status = %d, want 200: %s", resp.StatusCode, body)
-	}
-	var externalIdentity externalIdentityInfo
-	if err := json.NewDecoder(resp.Body).Decode(&externalIdentity); err != nil {
-		_ = resp.Body.Close()
-		t.Fatalf("decode managed subject external identity: %v", err)
-	}
-	_ = resp.Body.Close()
-	if externalIdentity.Type != "github_app_installation" || externalIdentity.ID != "repo:valon-technologies/toolshed" {
-		t.Fatalf("managed subject external identity = %+v", externalIdentity)
-	}
-	if want := core.ExternalIdentityResourceID(&core.ExternalIdentityRef{Type: "github_app_installation", ID: "repo:valon-technologies/toolshed"}); externalIdentity.ResourceID != want {
-		t.Fatalf("managed subject external identity resource ID = %q, want %q", externalIdentity.ResourceID, want)
-	}
-	if !authz.AllowExternalIdentityAssumption(context.Background(), &principal.Principal{
-		SubjectID: created.SubjectID,
-		Kind:      principal.Kind("service_account"),
-	}, &core.ExternalIdentityRef{Type: "github_app_installation", ID: "repo:valon-technologies/toolshed"}) {
-		t.Fatal("managed subject external identity relationship did not authorize assumption")
-	}
-	resp = doJSON(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID+"/external-identities", "owner-session", "")
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		t.Fatalf("managed subject external identity list status = %d, want 200: %s", resp.StatusCode, body)
-	}
-	var externalIdentities []externalIdentityInfo
-	if err := json.NewDecoder(resp.Body).Decode(&externalIdentities); err != nil {
-		_ = resp.Body.Close()
-		t.Fatalf("decode managed subject external identity list: %v", err)
-	}
-	_ = resp.Body.Close()
-	if len(externalIdentities) != 1 || externalIdentities[0] != externalIdentity {
-		t.Fatalf("managed subject external identity list = %+v, want %+v", externalIdentities, externalIdentity)
-	}
-	expectJSONStatus(http.MethodDelete, "/api/v1/authorization/subjects/"+escapedSubjectID+"/external-identities", "owner-session", externalIdentityBody, http.StatusOK)
-	if authz.AllowExternalIdentityAssumption(context.Background(), &principal.Principal{
-		SubjectID: created.SubjectID,
-		Kind:      principal.Kind("service_account"),
-	}, &core.ExternalIdentityRef{Type: "github_app_installation", ID: "repo:valon-technologies/toolshed"}) {
-		t.Fatal("managed subject external identity relationship still authorizes assumption after delete")
-	}
-	expectJSONStatus(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/external-identities", "owner-session", externalIdentityBody, http.StatusOK)
 
 	expectJSONStatus(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/tokens", "viewer-session", `{"name":"viewer-token"}`, http.StatusForbidden)
 
@@ -10802,47 +10716,20 @@ func TestDisconnectIntegration(t *testing.T) {
 		recordingCreds := newRecordingExternalCredentialProvider(svc.ExternalCredentials)
 		svc.ExternalCredentials = recordingCreds
 		u := seedUser(t, svc, "anonymous@gestalt")
-		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
-		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
-		if err != nil {
-			t.Fatalf("authorization.New: %v", err)
-		}
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:" + config.AppConnectionName,
-			Integration: "slack", Connection: "", Instance: "default", AccessToken: "test-token",
-			MetadataJSON: `{"team_id":"T123","user_id":"U456","gestalt.external_identity.type":"slack_identity","gestalt.external_identity.id":"team:T123:user:U456"}`,
+			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "app-svc:" + config.AppConnectionName,
+			Integration: "app-svc", Connection: "", Instance: "default", AccessToken: "test-token",
 		})
-		modelID, err := authz.ManagedModelID(context.Background())
-		if err != nil {
-			t.Fatalf("ManagedModelID: %v", err)
-		}
-		if err := authzProvider.WriteRelationships(context.Background(), &core.WriteRelationshipsRequest{
-			Writes: []*core.Relationship{{
-				Subject:  &core.SubjectRef{Type: "user", Id: principal.UserSubjectID(u.ID)},
-				Relation: authorization.ProviderExternalIdentityRelationAssume,
-				Resource: &core.ResourceRef{
-					Type: authorization.ProviderResourceTypeExternalIdentity,
-					Id:   externalIdentityID,
-				},
-			}},
-			ModelId: modelID,
-		}); err != nil {
-			t.Fatalf("WriteRelationships seed slack identity: %v", err)
-		}
 
-		stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
+		stub := &coretesting.StubIntegration{N: "app-svc", DN: "App Service"}
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.AppDefs = testPluginDefsForConnections("slack")
+			cfg.AppDefs = testPluginDefsForConnections("app-svc")
 			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AuthorizationProvider = authzProvider
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/slack", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -10853,7 +10740,7 @@ func TestDisconnectIntegration(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 		}
-		tokens, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "slack")
+		tokens, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "app-svc")
 		if err != nil {
 			t.Fatalf("ListCredentialsForProvider: %v", err)
 		}
@@ -10866,72 +10753,31 @@ func TestDisconnectIntegration(t *testing.T) {
 		if recordingCreds.deleteCredentialCalls.Load() == 0 {
 			t.Fatal("expected disconnect to delete credentials through ExternalCredentialProvider")
 		}
-		respAuthz, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   externalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships after disconnect: %v", err)
-		}
-		if len(respAuthz.GetRelationships()) != 0 {
-			t.Fatalf("expected external identity relationship to be removed, got %+v", respAuthz.GetRelationships())
-		}
 	})
 
-	t.Run("shared external identity remains linked while another token still exists", func(t *testing.T) {
+	t.Run("shared connection remains while another token still exists", func(t *testing.T) {
 		t.Parallel()
 
 		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
-		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
-		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
-		if err != nil {
-			t.Fatalf("authorization.New: %v", err)
-		}
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:workspace",
-			Integration: "slack", Connection: "workspace", Instance: "team-a", AccessToken: "test-token-a",
-			MetadataJSON: `{"team_id":"T123","user_id":"U456","gestalt.external_identity.type":"slack_identity","gestalt.external_identity.id":"team:T123:user:U456"}`,
+			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "app-svc:workspace",
+			Integration: "app-svc", Connection: "workspace", Instance: "instance-a", AccessToken: "test-token-a",
 		})
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-2", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:workspace",
-			Integration: "slack", Connection: "workspace", Instance: "team-b", AccessToken: "test-token-b",
-			MetadataJSON: `{"team_id":"T123","user_id":"U456","gestalt.external_identity.type":"slack_identity","gestalt.external_identity.id":"team:T123:user:U456"}`,
+			ID: "tok-2", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "app-svc:workspace",
+			Integration: "app-svc", Connection: "workspace", Instance: "instance-b", AccessToken: "test-token-b",
 		})
-		modelID, err := authz.ManagedModelID(context.Background())
-		if err != nil {
-			t.Fatalf("ManagedModelID: %v", err)
-		}
-		if err := authzProvider.WriteRelationships(context.Background(), &core.WriteRelationshipsRequest{
-			Writes: []*core.Relationship{{
-				Subject:  &core.SubjectRef{Type: "user", Id: principal.UserSubjectID(u.ID)},
-				Relation: authorization.ProviderExternalIdentityRelationAssume,
-				Resource: &core.ResourceRef{
-					Type: authorization.ProviderResourceTypeExternalIdentity,
-					Id:   externalIdentityID,
-				},
-			}},
-			ModelId: modelID,
-		}); err != nil {
-			t.Fatalf("WriteRelationships seed slack identity: %v", err)
-		}
 
-		stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
+		stub := &coretesting.StubIntegration{N: "app-svc", DN: "App Service"}
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.AppDefs = testPluginDefsForConnections("slack", "workspace")
+			cfg.AppDefs = testPluginDefsForConnections("app-svc", "workspace")
 			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AuthorizationProvider = authzProvider
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/slack?_connection=workspace&_instance=team-a", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc?_connection=workspace&_instance=instance-a", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -10942,122 +10788,15 @@ func TestDisconnectIntegration(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 		}
-		tokens, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "slack")
+		tokens, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "app-svc")
 		if err != nil {
 			t.Fatalf("ListCredentialsForProvider: %v", err)
 		}
 		if len(tokens) != 1 {
 			t.Fatalf("expected 1 token after disconnect, got %d", len(tokens))
 		}
-		if tokens[0].Connection != "workspace" || tokens[0].Instance != "team-b" {
+		if tokens[0].Connection != "workspace" || tokens[0].Instance != "instance-b" {
 			t.Fatalf("unexpected remaining token %+v", tokens[0])
-		}
-		respAuthz, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   externalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships after partial disconnect: %v", err)
-		}
-		if len(respAuthz.GetRelationships()) != 1 {
-			t.Fatalf("expected external identity relationship to remain, got %+v", respAuthz.GetRelationships())
-		}
-	})
-
-	t.Run("disconnect restores token when authz unlink fails", func(t *testing.T) {
-		t.Parallel()
-
-		svc := testutil.NewStubServices(t)
-		u := seedUser(t, svc, "anonymous@gestalt")
-		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
-		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
-		if err != nil {
-			t.Fatalf("authorization.New: %v", err)
-		}
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
-		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:" + config.AppConnectionName,
-			Integration: "slack", Connection: "", Instance: "default", AccessToken: "test-token",
-			MetadataJSON: `{"team_id":"T123","user_id":"U456","gestalt.external_identity.type":"slack_identity","gestalt.external_identity.id":"team:T123:user:U456"}`,
-		})
-		modelID, err := authz.ManagedModelID(context.Background())
-		if err != nil {
-			t.Fatalf("ManagedModelID: %v", err)
-		}
-		if err := authzProvider.WriteRelationships(context.Background(), &core.WriteRelationshipsRequest{
-			Writes: []*core.Relationship{{
-				Subject:  &core.SubjectRef{Type: "user", Id: principal.UserSubjectID(u.ID)},
-				Relation: authorization.ProviderExternalIdentityRelationAssume,
-				Resource: &core.ResourceRef{
-					Type: authorization.ProviderResourceTypeExternalIdentity,
-					Id:   externalIdentityID,
-				},
-			}},
-			ModelId: modelID,
-		}); err != nil {
-			t.Fatalf("WriteRelationships seed slack identity: %v", err)
-		}
-		originalTokens, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "slack")
-		if err != nil {
-			t.Fatalf("ListCredentialsForProvider before disconnect: %v", err)
-		}
-		if len(originalTokens) != 1 {
-			t.Fatalf("expected 1 token before disconnect, got %d", len(originalTokens))
-		}
-		originalCreatedAt := originalTokens[0].CreatedAt
-		originalUpdatedAt := originalTokens[0].UpdatedAt
-		authzProvider.writeErr = errors.New("unlink failed")
-
-		stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.AppDefs = testPluginDefsForConnections("slack")
-			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AuthorizationProvider = authzProvider
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/slack", nil)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != http.StatusInternalServerError {
-			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("expected 500, got %d: %s", resp.StatusCode, body)
-		}
-		tokens, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "slack")
-		if err != nil {
-			t.Fatalf("ListCredentialsForProvider: %v", err)
-		}
-		if len(tokens) != 1 || tokens[0].ID != "tok-1" {
-			t.Fatalf("expected token rollback after unlink failure, got %+v", tokens)
-		}
-		if !tokens[0].CreatedAt.Equal(originalCreatedAt) {
-			t.Fatalf("expected rollback to preserve created_at %v, got %v", originalCreatedAt, tokens[0].CreatedAt)
-		}
-		if !tokens[0].UpdatedAt.Equal(originalUpdatedAt) {
-			t.Fatalf("expected rollback to preserve updated_at %v, got %v", originalUpdatedAt, tokens[0].UpdatedAt)
-		}
-		respAuthz, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   externalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships after rollback: %v", err)
-		}
-		if len(respAuthz.GetRelationships()) != 1 {
-			t.Fatalf("expected external identity relationship to remain after rollback, got %+v", respAuthz.GetRelationships())
 		}
 	})
 
@@ -11067,22 +10806,22 @@ func TestDisconnectIntegration(t *testing.T) {
 		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "notion:mcp",
-			Integration: "notion", Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
+			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "app-svc:mcp",
+			Integration: "app-svc", Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
 		})
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "notion:default",
-			Integration: "notion", Connection: "default", Instance: "default", AccessToken: "test-token-2",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "app-svc:default",
+			Integration: "app-svc", Connection: "default", Instance: "default", AccessToken: "test-token-2",
 		})
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "notion", DN: "Notion"})
-			cfg.AppDefs = testPluginDefsForConnections("notion", "mcp", "default")
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "app-svc", DN: "App Service"})
+			cfg.AppDefs = testPluginDefsForConnections("app-svc", "mcp", "default")
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/notion", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -11101,18 +10840,18 @@ func TestDisconnectIntegration(t *testing.T) {
 		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:workspace",
-			Integration: "slack", Connection: "workspace", Instance: "team-b", AccessToken: "test-token",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "app-svc:workspace",
+			Integration: "app-svc", Connection: "workspace", Instance: "instance-b", AccessToken: "test-token",
 		})
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
-			cfg.AppDefs = testPluginDefsForConnections("slack", "workspace")
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "app-svc", DN: "App Service"})
+			cfg.AppDefs = testPluginDefsForConnections("app-svc", "workspace")
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/slack?_connection=workspace&_instance=team-b", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc?_connection=workspace&_instance=instance-b", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -11131,18 +10870,18 @@ func TestDisconnectIntegration(t *testing.T) {
 		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "notion:mcp",
-			Integration: "notion", Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "app-svc:mcp",
+			Integration: "app-svc", Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
 		})
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "notion", DN: "Notion"})
-			cfg.AppDefs = testPluginDefsForConnections("notion", "mcp")
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "app-svc", DN: "App Service"})
+			cfg.AppDefs = testPluginDefsForConnections("app-svc", "mcp")
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/notion?connection=mcp", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc?connection=mcp", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -11169,23 +10908,23 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		var auditBuf bytes.Buffer
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:workspace",
-			Integration: "slack", Connection: "workspace", Instance: "team-a", AccessToken: "test-token",
+			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "app-svc:workspace",
+			Integration: "app-svc", Connection: "workspace", Instance: "instance-a", AccessToken: "test-token",
 		})
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:workspace",
-			Integration: "slack", Connection: "workspace", Instance: "team-b", AccessToken: "test-token-2",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "app-svc:workspace",
+			Integration: "app-svc", Connection: "workspace", Instance: "instance-b", AccessToken: "test-token-2",
 		})
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
-			cfg.AppDefs = testPluginDefsForConnections("slack", "workspace")
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "app-svc", DN: "App Service"})
+			cfg.AppDefs = testPluginDefsForConnections("app-svc", "workspace")
 			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/slack?_connection=workspace", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc?_connection=workspace", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -11223,14 +10962,14 @@ func TestDisconnectIntegration(t *testing.T) {
 func TestDisconnectIntegration_NotConnected(t *testing.T) {
 	t.Parallel()
 
-	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
+	stub := &coretesting.StubIntegration{N: "app-svc", DN: "App Service"}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/slack", nil)
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/apps/app-svc", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -12654,7 +12393,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/chat.postMessage", "/api/chat.scheduleMessage", "/api/views.open":
+		case "/api/messages.send", "/api/messages.schedule", "/api/views.open":
 		default:
 			http.NotFound(w, r)
 			return
@@ -12681,8 +12420,8 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	t.Cleanup(upstream.Close)
 
 	manifest := &providermanifestv1.Manifest{
-		Source:      "slack",
-		DisplayName: "Slack",
+		Source:      "messaging",
+		DisplayName: "Messaging",
 		Spec: &providermanifestv1.Spec{
 			DefaultConnection: "default",
 			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
@@ -12698,10 +12437,10 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 					BaseURL:    upstream.URL,
 					Operations: []providermanifestv1.ProviderOperation{
 						{
-							Name:        "chat.postMessage",
-							Description: "Send a Slack message",
+							Name:        "messages.send",
+							Description: "Send a message",
 							Method:      http.MethodPost,
-							Path:        "/api/chat.postMessage",
+							Path:        "/api/messages.send",
 							ConnectionSelector: &providermanifestv1.OperationConnectionSelector{
 								Parameter: "actor",
 								Default:   "user",
@@ -12717,10 +12456,10 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 							},
 						},
 						{
-							Name:        "chat.scheduleMessage",
-							Description: "Schedule a Slack message",
+							Name:        "messages.schedule",
+							Description: "Schedule a message",
 							Method:      http.MethodPost,
-							Path:        "/api/chat.scheduleMessage",
+							Path:        "/api/messages.schedule",
 							Parameters: []providermanifestv1.ProviderParameter{
 								{Name: "channel", Type: "string", In: "body", Required: true},
 								{Name: "text", Type: "string", In: "body", Required: true},
@@ -12741,7 +12480,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 						},
 						{
 							Name:        "views.open",
-							Description: "Open a Slack view",
+							Description: "Open a view",
 							Method:      http.MethodPost,
 							Path:        "/api/views.open",
 							ConnectionSelector: &providermanifestv1.OperationConnectionSelector{
@@ -12795,21 +12534,21 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	}
 	subjectID := principal.UserSubjectID(user.ID)
 	seedToken(t, svc, &core.ExternalCredential{
-		ID:          "slack-default",
+		ID:          "messaging-default",
 		SubjectID:   subjectID,
-		Integration: "slack",
+		Integration: "messaging",
 		Connection:  "default",
 		Instance:    "default",
-		AccessToken: "user-slack-token",
+		AccessToken: "user-messaging-token",
 	})
-	seedSubjectToken(t, svc, subjectID, "slack", "bot", "default", "bot-slack-token")
+	seedSubjectToken(t, svc, subjectID, "messaging", "bot", "default", "bot-messaging-token")
 	connectionRuntime, err := bootstrap.BuildConnectionRuntime(&config.Config{
-		Apps: map[string]*config.ProviderEntry{"slack": entry},
+		Apps: map[string]*config.ProviderEntry{"messaging": entry},
 	})
 	if err != nil {
 		t.Fatalf("BuildConnectionRuntime: %v", err)
 	}
-	if runtimeInfo, ok := connectionRuntime.Resolve("slack", "bot"); !ok || runtimeInfo.Mode != core.ConnectionModeSubject {
+	if runtimeInfo, ok := connectionRuntime.Resolve("messaging", "bot"); !ok || runtimeInfo.Mode != core.ConnectionModeSubject {
 		t.Fatalf("runtime bot connection = (%+v, %v), want user-owned bot connection", runtimeInfo, ok)
 	}
 	broker := invocation.NewBroker(
@@ -12818,7 +12557,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		svc.ExternalCredentials,
 		invocation.WithConnectionRuntime(connectionRuntime.Resolve),
 	)
-	if _, token, err := broker.ResolveToken(context.Background(), &principal.Principal{SubjectID: subjectID}, "slack", "bot", ""); err != nil || token != "bot-slack-token" {
+	if _, token, err := broker.ResolveToken(context.Background(), &principal.Principal{SubjectID: subjectID}, "messaging", "bot", ""); err != nil || token != "bot-messaging-token" {
 		t.Fatalf("ResolveToken bot = token %q, err %v; want subject-owned bot token", token, err)
 	}
 	metrics := metrictest.NewManualMeterProvider(t)
@@ -12836,7 +12575,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		}
 		cfg.Providers = testutil.NewProviderRegistry(t, prov)
 		cfg.Services = svc
-		cfg.AppDefs = map[string]*config.ProviderEntry{"slack": entry}
+		cfg.AppDefs = map[string]*config.ProviderEntry{"messaging": entry}
 		cfg.Invoker = broker
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -12884,13 +12623,13 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		Actions         []string `json:"actions"`
 		AuthTypes       []string `json:"authTypes"`
 	}
-	var slackStatus, slackCredentialState string
+	var messagingStatus, messagingCredentialState string
 	for i := range integrations {
-		if integrations[i].Name != "slack" {
+		if integrations[i].Name != "messaging" {
 			continue
 		}
-		slackStatus = integrations[i].Status
-		slackCredentialState = integrations[i].CredentialState
+		messagingStatus = integrations[i].Status
+		messagingCredentialState = integrations[i].CredentialState
 		for j := range integrations[i].Connections {
 			if integrations[i].Connections[j].Name == "default" {
 				defaultConnection = &integrations[i].Connections[j]
@@ -12906,8 +12645,8 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if botConnection == nil {
 		t.Fatal("bot connection missing from integrations response")
 	}
-	if slackStatus != "ready" || slackCredentialState != "connected" {
-		t.Fatalf("slack status = {%q, %q}, want ready/connected", slackStatus, slackCredentialState)
+	if messagingStatus != "ready" || messagingCredentialState != "connected" {
+		t.Fatalf("messaging status = {%q, %q}, want ready/connected", messagingStatus, messagingCredentialState)
 	}
 	if defaultConnection.Mode != "subject" || defaultConnection.Status != "ready" || defaultConnection.CredentialState != "connected" || !reflect.DeepEqual(defaultConnection.Actions, []string{"disconnect", "add_instance"}) {
 		t.Fatalf("default connection metadata = %+v, want connected subject-scoped connection", *defaultConnection)
@@ -12916,7 +12655,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		t.Fatalf("bot connection metadata = %+v, want connected subject-scoped bot connection", *botConnection)
 	}
 
-	opsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/slack/operations", nil)
+	opsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/messaging/operations", nil)
 	opsReq.Header.Set("Authorization", "Bearer api-token")
 	opsResp, err := http.DefaultClient.Do(opsReq)
 	if err != nil {
@@ -12940,9 +12679,9 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if _, ok := seenOps["assistant.threads.setStatus"]; !ok {
 		t.Fatal("assistant.threads.setStatus missing from public operations response")
 	}
-	postMessage, ok := seenOps["chat.postMessage"]
+	postMessage, ok := seenOps["messages.send"]
 	if !ok {
-		t.Fatal("chat.postMessage missing from public operations response")
+		t.Fatal("messages.send missing from public operations response")
 	}
 	for _, param := range postMessage.Parameters {
 		if param.Name == "actor" {
@@ -12950,7 +12689,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		}
 	}
 	if strings.Contains(string(postMessage.InputSchema), "actor") {
-		t.Fatalf("public chat.postMessage input schema contains internal actor parameter: %s", postMessage.InputSchema)
+		t.Fatalf("public messages.send input schema contains internal actor parameter: %s", postMessage.InputSchema)
 	}
 	viewsOpen, ok := seenOps["views.open"]
 	if !ok {
@@ -12982,7 +12721,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 
 	doInvoke := func(operation, body string) int {
 		t.Helper()
-		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/slack/"+operation, strings.NewReader(body))
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/messaging/"+operation, strings.NewReader(body))
 		req.Header.Set("Authorization", "Bearer api-token")
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
@@ -13000,16 +12739,16 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		return resp.StatusCode
 	}
 
-	if status := doInvoke("chat.postMessage", `{"channel":"C1","text":"as user"}`); status != http.StatusOK {
+	if status := doInvoke("messages.send", `{"channel":"C1","text":"as user"}`); status != http.StatusOK {
 		t.Fatalf("default user status = %d, want %d", status, http.StatusOK)
 	}
-	if status := doInvoke("chat.postMessage", `{"channel":"C1","text":"bad actor","actor":"user"}`); status != http.StatusBadRequest {
+	if status := doInvoke("messages.send", `{"channel":"C1","text":"bad actor","actor":"user"}`); status != http.StatusBadRequest {
 		t.Fatalf("hidden actor status = %d, want %d", status, http.StatusBadRequest)
 	}
-	if status := doInvoke("chat.scheduleMessage?_connection=default", `{"channel":"C1","text":"scheduled","post_at":4102444800}`); status != http.StatusOK {
+	if status := doInvoke("messages.schedule?_connection=default", `{"channel":"C1","text":"scheduled","post_at":4102444800}`); status != http.StatusOK {
 		t.Fatalf("surface fallback override status = %d, want %d", status, http.StatusOK)
 	}
-	if status := doInvoke("chat.scheduleMessage?_connection=bot", `{"channel":"C1","text":"scheduled","post_at":4102444800}`); status != http.StatusOK {
+	if status := doInvoke("messages.schedule?_connection=bot", `{"channel":"C1","text":"scheduled","post_at":4102444800}`); status != http.StatusOK {
 		t.Fatalf("bot connection override status = %d, want %d", status, http.StatusOK)
 	}
 	if status := doInvoke("views.open", `{"trigger_id":"T1","audience":"user"}`); status != http.StatusOK {
@@ -13022,8 +12761,8 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	httpOperationAttrs := map[string]string{
 		"http.route":                  "/api/v1/{integration}/{operation}",
-		"gestaltd.provider.name":      "slack",
-		"gestaltd.operation.name":     "chat.postMessage",
+		"gestaltd.provider.name":      "messaging",
+		"gestaltd.operation.name":     "messages.send",
 		"gestaltd.invocation.surface": "http",
 	}
 	subjectAttrs := maps.Clone(httpOperationAttrs)
@@ -13035,34 +12774,34 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if len(calls) != 5 {
 		t.Fatalf("upstream calls = %d, want 5", len(calls))
 	}
-	if calls[0].path != "/api/chat.postMessage" {
-		t.Fatalf("first call path = %q, want chat.postMessage", calls[0].path)
+	if calls[0].path != "/api/messages.send" {
+		t.Fatalf("first call path = %q, want messages.send", calls[0].path)
 	}
-	if calls[0].auth != "Bearer user-slack-token" {
+	if calls[0].auth != "Bearer user-messaging-token" {
 		t.Fatalf("first call auth = %q, want user token", calls[0].auth)
 	}
 	if _, ok := calls[0].body["actor"]; ok {
 		t.Fatalf("first upstream body included internal actor param: %+v", calls[0].body)
 	}
-	if calls[1].path != "/api/chat.scheduleMessage" {
-		t.Fatalf("second call path = %q, want chat.scheduleMessage", calls[1].path)
+	if calls[1].path != "/api/messages.schedule" {
+		t.Fatalf("second call path = %q, want messages.schedule", calls[1].path)
 	}
-	if calls[1].auth != "Bearer user-slack-token" {
+	if calls[1].auth != "Bearer user-messaging-token" {
 		t.Fatalf("second call auth = %q, want user token", calls[1].auth)
 	}
 	if calls[1].body["text"] != "scheduled" {
 		t.Fatalf("second upstream body text = %#v, want scheduled", calls[1].body["text"])
 	}
-	if calls[2].path != "/api/chat.scheduleMessage" {
-		t.Fatalf("third call path = %q, want chat.scheduleMessage", calls[2].path)
+	if calls[2].path != "/api/messages.schedule" {
+		t.Fatalf("third call path = %q, want messages.schedule", calls[2].path)
 	}
-	if calls[2].auth != "Bearer bot-slack-token" {
+	if calls[2].auth != "Bearer bot-messaging-token" {
 		t.Fatalf("third call auth = %q, want bot token", calls[2].auth)
 	}
 	if calls[3].path != "/api/views.open" {
 		t.Fatalf("fourth call path = %q, want views.open", calls[3].path)
 	}
-	if calls[3].auth != "Bearer user-slack-token" {
+	if calls[3].auth != "Bearer user-messaging-token" {
 		t.Fatalf("fourth call auth = %q, want user token", calls[3].auth)
 	}
 	if calls[3].body["audience"] != "user" {
@@ -13071,7 +12810,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if calls[4].path != "/api/views.open" {
 		t.Fatalf("fifth call path = %q, want views.open", calls[4].path)
 	}
-	if calls[4].auth != "Bearer bot-slack-token" {
+	if calls[4].auth != "Bearer bot-messaging-token" {
 		t.Fatalf("fifth call auth = %q, want bot token", calls[4].auth)
 	}
 	if calls[4].body["audience"] != "bot" {
@@ -15309,23 +15048,16 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		svc := testutil.NewStubServices(t)
 		recordingCreds := newRecordingExternalCredentialProvider(svc.ExternalCredentials)
 		svc.ExternalCredentials = recordingCreds
-		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
-		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
-		if err != nil {
-			t.Fatalf("authorization.New: %v", err)
-		}
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 
 		handler := &testOAuthHandler{
-			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+			authorizationBaseURLVal: "https://auth.example.com/oauth/authorize",
 			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
 				if code == "good-code" {
 					return &core.TokenResponse{
-						AccessToken: "slack-token",
+						AccessToken: "oauth-token",
 						Extra: map[string]any{
-							"team":        map[string]any{"id": "T123"},
-							"authed_user": map[string]any{"id": "U456"},
+							"tenant":  map[string]any{"id": "tenant-123"},
+							"account": map[string]any{"id": "account-456"},
 						},
 					}, nil
 				}
@@ -15334,19 +15066,18 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 
 		stub := &stubIntegrationWithAuthURL{
-			StubIntegration: coretesting.StubIntegration{N: "slack"},
-			authURL:         "https://slack.com/oauth/v2/authorize",
-			postConnect:     testSlackPostConnect,
+			StubIntegration: coretesting.StubIntegration{N: "oauth-svc"},
+			authURL:         "https://auth.example.com/oauth/authorize",
 			connectionParams: map[string]core.ConnectionParamDef{
-				"team_id": {
+				"tenant_id": {
 					Required: true,
 					From:     "token_response",
-					Field:    "team.id",
+					Field:    "tenant.id",
 				},
-				"user_id": {
+				"account_id": {
 					Required: true,
 					From:     "token_response",
-					Field:    "authed_user.id",
+					Field:    "account.id",
 				},
 			},
 		}
@@ -15362,16 +15093,14 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 				},
 			}
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
-			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.DefaultConnection = map[string]string{"oauth-svc": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("oauth-svc", handler)
 			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AuthorizationProvider = authzProvider
 			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
+		startBody := bytes.NewBufferString(`{"integration":"oauth-svc"}`)
 		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
 		startReq.Header.Set("Content-Type", "application/json")
 		startReq.Header.Set("Authorization", "Bearer session-token")
@@ -15406,8 +15135,8 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("expected 303, got %d", resp.StatusCode)
 		}
 		loc := resp.Header.Get("Location")
-		if loc != "/apps?connected=slack" {
-			t.Fatalf("expected redirect to /apps?connected=slack, got %q", loc)
+		if loc != "/apps?connected=oauth-svc" {
+			t.Fatalf("expected redirect to /apps?connected=oauth-svc, got %q", loc)
 		}
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "user@example.com")
 		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
@@ -15415,14 +15144,11 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatal("expected token to be stored")
 		}
 		stored := tokens[0]
-		if stored.Integration != "slack" {
-			t.Fatalf("stored token integration = %q, want %q", stored.Integration, "slack")
+		if stored.Integration != "oauth-svc" {
+			t.Fatalf("stored token integration = %q, want %q", stored.Integration, "oauth-svc")
 		}
-		if stored.AccessToken != "slack-token" {
-			t.Fatalf("stored access token = %q, want %q", stored.AccessToken, "slack-token")
-		}
-		if recordingCreds.getCredentialCalls.Load() == 0 {
-			t.Fatal("expected oauth callback to load credentials through ExternalCredentialProvider")
+		if stored.AccessToken != "oauth-token" {
+			t.Fatalf("stored access token = %q, want %q", stored.AccessToken, "oauth-token")
 		}
 		if recordingCreds.putCredentialCalls.Load() == 0 {
 			t.Fatal("expected oauth callback to store credentials through ExternalCredentialProvider")
@@ -15432,44 +15158,10 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("unmarshal metadata: %v", err)
 		}
 		if !reflect.DeepEqual(metadata, map[string]string{
-			"team_id":                        "T123",
-			"user_id":                        "U456",
-			"gestalt.external_identity.type": "slack_identity",
-			"gestalt.external_identity.id":   "team:T123:user:U456",
+			"tenant_id":  "tenant-123",
+			"account_id": "account-456",
 		}) {
 			t.Fatalf("stored metadata = %+v", metadata)
-		}
-		respAuthz, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   externalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships after connect: %v", err)
-		}
-		if len(respAuthz.GetRelationships()) != 1 {
-			t.Fatalf("relationships after connect = %+v, want one", respAuthz.GetRelationships())
-		}
-		if got := respAuthz.GetRelationships()[0].GetSubject().GetId(); got != principal.UserSubjectID(u.ID) {
-			t.Fatalf("linked subject = %q, want %q", got, principal.UserSubjectID(u.ID))
-		}
-		if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
-			t.Fatalf("ReloadAuthorizationState after connect: %v", err)
-		}
-		respAuthz, err = authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   externalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships after reload: %v", err)
-		}
-		if len(respAuthz.GetRelationships()) != 1 {
-			t.Fatalf("relationships after reload = %+v, want one", respAuthz.GetRelationships())
 		}
 
 		lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
@@ -15495,154 +15187,11 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		if auditRecord["target_kind"] != "connection" {
 			t.Fatalf("expected audit target_kind connection, got %v", auditRecord["target_kind"])
 		}
-		if auditRecord["target_id"] != "slack/default/default" {
-			t.Fatalf("expected audit target_id slack/default/default, got %v", auditRecord["target_id"])
+		if auditRecord["target_id"] != "oauth-svc/default/default" {
+			t.Fatalf("expected audit target_id oauth-svc/default/default, got %v", auditRecord["target_id"])
 		}
 		if auditRecord["target_name"] != "default/default" {
 			t.Fatalf("expected audit target_name default/default, got %v", auditRecord["target_name"])
-		}
-	})
-
-	t.Run("declarative post-connect stores external identity relationship", func(t *testing.T) {
-		t.Parallel()
-
-		identitySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != http.MethodGet {
-				t.Fatalf("identity request method = %q, want GET", r.Method)
-			}
-			if got := r.Header.Get("Authorization"); got != "Bearer pagerduty-token" {
-				t.Fatalf("identity Authorization = %q, want bearer token", got)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(w, `{"user":{"id":"P12345","email":"user@example.com"}}`)
-		}))
-		testutil.CloseOnCleanup(t, identitySrv)
-
-		svc := testutil.NewStubServices(t)
-		externalIdentityID := testExternalIdentityResourceID("pagerduty_identity", "user:P12345")
-		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
-		if err != nil {
-			t.Fatalf("authorization.New: %v", err)
-		}
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
-		handler := &testOAuthHandler{
-			authorizationBaseURLVal: "https://identity.pagerduty.com/oauth/authorize",
-			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
-				if code == "good-code" {
-					return &core.TokenResponse{AccessToken: "pagerduty-token"}, nil
-				}
-				return nil, fmt.Errorf("bad code")
-			},
-		}
-		prov := &declarative.Base{
-			IntegrationName:    "pagerduty",
-			IntegrationDisplay: "PagerDuty",
-			IntegrationDesc:    "PagerDuty",
-			ConnMode:           core.ConnectionModeSubject,
-			HTTPClient:         identitySrv.Client(),
-			PostConnectConfigs: map[string]*core.PostConnectConfig{
-				"default": {
-					Request: core.PostConnectRequestConfig{
-						Method: http.MethodGet,
-						URL:    identitySrv.URL,
-					},
-					SourcePath: "user",
-					ExternalIdentity: &core.PostConnectExternalIdentityConfig{
-						Type: "pagerduty_identity",
-						ID:   "user:{id}",
-					},
-					Metadata: map[string]string{
-						"pagerduty.user_id": "id",
-					},
-				},
-			},
-		}
-
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{
-				N: "test",
-				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-					if token != "session-token" {
-						return nil, fmt.Errorf("bad token")
-					}
-					return &core.UserIdentity{Email: "pagerduty-user@example.com"}, nil
-				},
-			}
-			cfg.Providers = testutil.NewProviderRegistry(t, prov)
-			cfg.DefaultConnection = map[string]string{"pagerduty": testDefaultConnection}
-			cfg.ConnectionAuth = testConnectionAuth("pagerduty", handler)
-			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AuthorizationProvider = authzProvider
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		startBody := bytes.NewBufferString(`{"integration":"pagerduty"}`)
-		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
-		startReq.Header.Set("Content-Type", "application/json")
-		startReq.Header.Set("Authorization", "Bearer session-token")
-		startResp, err := http.DefaultClient.Do(startReq)
-		if err != nil {
-			t.Fatalf("start request: %v", err)
-		}
-		defer func() { _ = startResp.Body.Close() }()
-		if startResp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(startResp.Body)
-			t.Fatalf("expected 200 from start-oauth, got %d: %s", startResp.StatusCode, body)
-		}
-		var startResult map[string]string
-		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
-			t.Fatalf("decoding start response: %v", err)
-		}
-
-		noRedirect := &http.Client{
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		}
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
-		resp, err := noRedirect.Do(req)
-		if err != nil {
-			t.Fatalf("callback request: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusSeeOther {
-			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("expected 303, got %d: %s", resp.StatusCode, body)
-		}
-
-		u, _ := svc.Users.FindOrCreateUser(context.Background(), "pagerduty-user@example.com")
-		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
-		if len(tokens) == 0 {
-			t.Fatal("expected token to be stored")
-		}
-		var metadata map[string]string
-		if err := json.Unmarshal([]byte(tokens[0].MetadataJSON), &metadata); err != nil {
-			t.Fatalf("unmarshal metadata: %v", err)
-		}
-		if !reflect.DeepEqual(metadata, map[string]string{
-			"pagerduty.user_id":              "P12345",
-			"gestalt.external_identity.type": "pagerduty_identity",
-			"gestalt.external_identity.id":   "user:P12345",
-		}) {
-			t.Fatalf("stored metadata = %+v", metadata)
-		}
-		respAuthz, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   externalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships after connect: %v", err)
-		}
-		if len(respAuthz.GetRelationships()) != 1 {
-			t.Fatalf("relationships after connect = %+v, want one", respAuthz.GetRelationships())
-		}
-		if got := respAuthz.GetRelationships()[0].GetSubject().GetId(); got != principal.UserSubjectID(u.ID) {
-			t.Fatalf("linked subject = %q, want %q", got, principal.UserSubjectID(u.ID))
 		}
 	})
 
@@ -15656,22 +15205,15 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		testutil.CloseOnCleanup(t, discoverySrv)
 
 		svc := testutil.NewStubServices(t)
-		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
-		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
-		if err != nil {
-			t.Fatalf("authorization.New: %v", err)
-		}
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		handler := &testOAuthHandler{
-			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+			authorizationBaseURLVal: "https://auth.example.com/oauth/authorize",
 			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
 				if code == "good-code" {
 					return &core.TokenResponse{
-						AccessToken: "slack-token",
+						AccessToken: "oauth-token",
 						Extra: map[string]any{
-							"team":        map[string]any{"id": "T123"},
-							"authed_user": map[string]any{"id": "U456"},
+							"tenant":  map[string]any{"id": "tenant-123"},
+							"account": map[string]any{"id": "account-456"},
 						},
 					}, nil
 				}
@@ -15680,24 +15222,23 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 
 		stub := &stubDiscoveringProvider{
-			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			StubIntegration: coretesting.StubIntegration{N: "oauth-svc"},
 			discovery: &core.DiscoveryConfig{
 				URL:      discoverySrv.URL,
 				IDPath:   "id",
 				NamePath: "name",
 				Metadata: map[string]string{"workspace": "workspace"},
 			},
-			postConnect: testSlackPostConnect,
 			connectionParams: map[string]core.ConnectionParamDef{
-				"team_id": {
+				"tenant_id": {
 					Required: true,
 					From:     "token_response",
-					Field:    "team.id",
+					Field:    "tenant.id",
 				},
-				"user_id": {
+				"account_id": {
 					Required: true,
 					From:     "token_response",
-					Field:    "authed_user.id",
+					Field:    "account.id",
 				},
 			},
 		}
@@ -15713,15 +15254,13 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 				},
 			}
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
-			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.DefaultConnection = map[string]string{"oauth-svc": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("oauth-svc", handler)
 			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AuthorizationProvider = authzProvider
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
+		startBody := bytes.NewBufferString(`{"integration":"oauth-svc"}`)
 		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
 		startReq.Header.Set("Content-Type", "application/json")
 		startReq.Header.Set("Authorization", "Bearer cli-api-token")
@@ -15761,7 +15300,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("read body: %v", err)
 		}
 		text := string(body)
-		if !strings.Contains(text, "Select a slack connection") {
+		if !strings.Contains(text, "Select a oauth-svc connection") {
 			t.Fatalf("expected selection page, got %q", text)
 		}
 		if !strings.Contains(text, "Site A") || !strings.Contains(text, "Site B") {
@@ -15813,193 +15352,19 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatal("expected token to be stored after selection")
 		}
 		stored := tokens[0]
-		if stored.Integration != "slack" {
-			t.Fatalf("stored token integration = %q, want %q", stored.Integration, "slack")
+		if stored.Integration != "oauth-svc" {
+			t.Fatalf("stored token integration = %q, want %q", stored.Integration, "oauth-svc")
 		}
 		var metadata map[string]string
 		if err := json.Unmarshal([]byte(stored.MetadataJSON), &metadata); err != nil {
 			t.Fatalf("unmarshal metadata: %v", err)
 		}
 		if !reflect.DeepEqual(metadata, map[string]string{
-			"team_id":                        "T123",
-			"user_id":                        "U456",
-			"workspace":                      "beta",
-			"gestalt.external_identity.type": "slack_identity",
-			"gestalt.external_identity.id":   "team:T123:user:U456",
+			"tenant_id":  "tenant-123",
+			"account_id": "account-456",
+			"workspace":  "beta",
 		}) {
 			t.Fatalf("stored metadata = %+v", metadata)
-		}
-		respAuthz, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   externalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships after pending selection: %v", err)
-		}
-		if len(respAuthz.GetRelationships()) != 1 {
-			t.Fatalf("relationships after pending selection = %+v, want one", respAuthz.GetRelationships())
-		}
-		if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
-			t.Fatalf("ReloadAuthorizationState after pending selection: %v", err)
-		}
-		respAuthz, err = authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   externalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships after pending selection reload: %v", err)
-		}
-		if len(respAuthz.GetRelationships()) != 1 {
-			t.Fatalf("relationships after pending selection reload = %+v, want one", respAuthz.GetRelationships())
-		}
-	})
-
-	t.Run("slack identity can be linked to multiple subjects", func(t *testing.T) {
-		t.Parallel()
-
-		svc := testutil.NewStubServices(t)
-		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
-		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
-		if err != nil {
-			t.Fatalf("authorization.New: %v", err)
-		}
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
-
-		handler := &testOAuthHandler{
-			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
-			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
-				if code == "good-code" {
-					return &core.TokenResponse{
-						AccessToken: "slack-token",
-						Extra: map[string]any{
-							"team":        map[string]any{"id": "T123"},
-							"authed_user": map[string]any{"id": "U456"},
-						},
-					}, nil
-				}
-				return nil, fmt.Errorf("bad code")
-			},
-		}
-
-		stub := &stubIntegrationWithAuthURL{
-			StubIntegration: coretesting.StubIntegration{N: "slack"},
-			authURL:         "https://slack.com/oauth/v2/authorize",
-			postConnect:     testSlackPostConnect,
-			connectionParams: map[string]core.ConnectionParamDef{
-				"team_id": {
-					Required: true,
-					From:     "token_response",
-					Field:    "team.id",
-				},
-				"user_id": {
-					Required: true,
-					From:     "token_response",
-					Field:    "authed_user.id",
-				},
-			},
-		}
-
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{
-				N: "test",
-				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-					switch token {
-					case "admin-session":
-						return &core.UserIdentity{Email: "admin@example.test"}, nil
-					case "viewer-session":
-						return &core.UserIdentity{Email: "viewer@example.test"}, nil
-					default:
-						return nil, fmt.Errorf("bad token")
-					}
-				},
-			}
-			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
-			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
-			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AuthorizationProvider = authzProvider
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		runConnect := func(session string) *http.Response {
-			t.Helper()
-			startBody := bytes.NewBufferString(`{"integration":"slack"}`)
-			startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
-			startReq.Header.Set("Content-Type", "application/json")
-			startReq.Header.Set("Authorization", "Bearer "+session)
-			startResp, err := http.DefaultClient.Do(startReq)
-			if err != nil {
-				t.Fatalf("start request: %v", err)
-			}
-			defer func() { _ = startResp.Body.Close() }()
-			if startResp.StatusCode != http.StatusOK {
-				body, _ := io.ReadAll(startResp.Body)
-				t.Fatalf("expected 200 from start-oauth, got %d: %s", startResp.StatusCode, strings.TrimSpace(string(body)))
-			}
-			var startResult map[string]string
-			if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
-				t.Fatalf("decoding start response: %v", err)
-			}
-			noRedirect := &http.Client{
-				CheckRedirect: func(*http.Request, []*http.Request) error {
-					return http.ErrUseLastResponse
-				},
-			}
-			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
-			resp, err := noRedirect.Do(req)
-			if err != nil {
-				t.Fatalf("callback request: %v", err)
-			}
-			return resp
-		}
-
-		adminResp := runConnect("admin-session")
-		defer func() { _ = adminResp.Body.Close() }()
-		if adminResp.StatusCode != http.StatusSeeOther {
-			body, _ := io.ReadAll(adminResp.Body)
-			t.Fatalf("admin callback status = %d, want %d: %s", adminResp.StatusCode, http.StatusSeeOther, strings.TrimSpace(string(body)))
-		}
-
-		viewerResp := runConnect("viewer-session")
-		defer func() { _ = viewerResp.Body.Close() }()
-		if viewerResp.StatusCode != http.StatusSeeOther {
-			body, _ := io.ReadAll(viewerResp.Body)
-			t.Fatalf("viewer callback status = %d, want %d: %s", viewerResp.StatusCode, http.StatusSeeOther, strings.TrimSpace(string(body)))
-		}
-
-		admin, _ := svc.Users.FindOrCreateUser(context.Background(), "admin@example.test")
-		viewer, _ := svc.Users.FindOrCreateUser(context.Background(), "viewer@example.test")
-		adminTokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(admin.ID))
-		viewerTokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(viewer.ID))
-		if len(adminTokens) != 1 || len(viewerTokens) != 1 {
-			t.Fatalf("expected one token per subject, got admin=%d viewer=%d", len(adminTokens), len(viewerTokens))
-		}
-
-		respAuthz, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   externalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships after shared link: %v", err)
-		}
-		gotSubjects := map[string]bool{}
-		for _, rel := range respAuthz.GetRelationships() {
-			gotSubjects[rel.GetSubject().GetId()] = true
-		}
-		adminSubjectID, viewerSubjectID := principal.UserSubjectID(admin.ID), principal.UserSubjectID(viewer.ID)
-		if len(gotSubjects) != 2 || !gotSubjects[adminSubjectID] || !gotSubjects[viewerSubjectID] {
-			t.Fatalf("relationships after shared link = %+v, want subjects %v", respAuthz.GetRelationships(), []string{adminSubjectID, viewerSubjectID})
 		}
 	})
 }
@@ -16007,7 +15372,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
 	t.Parallel()
 
-	stub := &coretesting.StubIntegration{N: "slack"}
+	stub := &coretesting.StubIntegration{N: "oauth-svc"}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
@@ -18175,7 +17540,6 @@ type stubIntegrationWithAuthURL struct {
 	coretesting.StubIntegration
 	authURL          string
 	connectionParams map[string]core.ConnectionParamDef
-	postConnect      func(context.Context, *core.ExternalCredential) (map[string]string, error)
 }
 
 func (s *stubIntegrationWithAuthURL) AuthorizationURL(_ string, _ []string) string {
@@ -18184,13 +17548,6 @@ func (s *stubIntegrationWithAuthURL) AuthorizationURL(_ string, _ []string) stri
 
 func (s *stubIntegrationWithAuthURL) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return maps.Clone(s.connectionParams)
-}
-
-func (s *stubIntegrationWithAuthURL) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	if s.postConnect != nil {
-		return s.postConnect(ctx, token)
-	}
-	return nil, nil
 }
 
 type stubPKCEIntegration struct {
@@ -19159,26 +18516,17 @@ func (s *stubNilAuthTypesProvider) AuthTypes() []string { return nil }
 
 type stubDiscoveringManualProvider struct {
 	stubManualProvider
-	discovery   *core.DiscoveryConfig
-	postConnect func(context.Context, *core.ExternalCredential) (map[string]string, error)
+	discovery *core.DiscoveryConfig
 }
 
 func (s *stubDiscoveringManualProvider) DiscoveryConfig() *core.DiscoveryConfig {
 	return s.discovery
 }
 
-func (s *stubDiscoveringManualProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	if s.postConnect != nil {
-		return s.postConnect(ctx, token)
-	}
-	return nil, nil
-}
-
 type stubDiscoveringProvider struct {
 	coretesting.StubIntegration
 	discovery        *core.DiscoveryConfig
 	connectionParams map[string]core.ConnectionParamDef
-	postConnect      func(context.Context, *core.ExternalCredential) (map[string]string, error)
 }
 
 func (s *stubDiscoveringProvider) DiscoveryConfig() *core.DiscoveryConfig {
@@ -19187,31 +18535,6 @@ func (s *stubDiscoveringProvider) DiscoveryConfig() *core.DiscoveryConfig {
 
 func (s *stubDiscoveringProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return maps.Clone(s.connectionParams)
-}
-
-func (s *stubDiscoveringProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	if s.postConnect != nil {
-		return s.postConnect(ctx, token)
-	}
-	return nil, nil
-}
-
-func testSlackPostConnect(_ context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	var metadata map[string]string
-	if strings.TrimSpace(token.MetadataJSON) != "" {
-		if err := json.Unmarshal([]byte(token.MetadataJSON), &metadata); err != nil {
-			return nil, err
-		}
-	}
-	teamID := strings.TrimSpace(metadata["team_id"])
-	userID := strings.TrimSpace(metadata["user_id"])
-	if teamID == "" || userID == "" {
-		return nil, fmt.Errorf("missing slack token metadata")
-	}
-	return map[string]string{
-		"gestalt.external_identity.type": "slack_identity",
-		"gestalt.external_identity.id":   "team:" + teamID + ":user:" + userID,
-	}, nil
 }
 
 type stubManualProviderWithCapabilities struct {
@@ -19231,23 +18554,6 @@ func (s *stubManualProviderWithCapabilities) ConnectionParamDefs() map[string]co
 
 func (s *stubManualProviderWithCapabilities) DiscoveryConfig() *core.DiscoveryConfig {
 	return s.discovery
-}
-
-type stubPostConnectManualProvider struct {
-	stubManualProvider
-	connectionParams map[string]core.ConnectionParamDef
-	postConnect      func(context.Context, *core.ExternalCredential) (map[string]string, error)
-}
-
-func (s *stubPostConnectManualProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
-	return maps.Clone(s.connectionParams)
-}
-
-func (s *stubPostConnectManualProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	if s.postConnect != nil {
-		return s.postConnect(ctx, token)
-	}
-	return nil, nil
 }
 
 type stubDualAuthProvider struct {
@@ -19313,9 +18619,6 @@ func TestConnectManual(t *testing.T) {
 		}
 		if stored.AccessToken != "my-api-key" {
 			t.Fatalf("expected credential my-api-key, got %q", stored.AccessToken)
-		}
-		if recordingCreds.getCredentialCalls.Load() == 0 {
-			t.Fatal("expected manual connect to load credentials through ExternalCredentialProvider")
 		}
 		if recordingCreds.putCredentialCalls.Load() == 0 {
 			t.Fatal("expected manual connect to store credentials through ExternalCredentialProvider")
@@ -19385,125 +18688,28 @@ func TestConnectManual(t *testing.T) {
 		}
 	})
 
-	t.Run("external identity can be linked to user and service account", func(t *testing.T) {
+	t.Run("reconnect replaces existing credential", func(t *testing.T) {
 		t.Parallel()
 
-		userToken, userTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
-		if err != nil {
-			t.Fatalf("GenerateToken user: %v", err)
-		}
-		subjectToken, subjectTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
-		if err != nil {
-			t.Fatalf("GenerateToken subject: %v", err)
-		}
 		svc := testutil.NewStubServices(t)
-		user := seedAPITokenWithPermissions(t, svc, userToken, userTokenHash, "api-user", nil)
-		seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
-		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		base, err := newTestAuthorizer(config.AuthorizationConfig{
-			Policies: map[string]config.SubjectPolicyDef{
-				"manual_policy": {
-					Members: []config.SubjectPolicyMemberDef{
-						{SubjectID: principal.UserSubjectID(user.ID), Role: "viewer"},
-						{SubjectID: "service_account:triage-bot", Role: "viewer"},
-					},
-				},
-			},
-		}, map[string]*config.ProviderEntry{"manual-svc": {AuthorizationPolicy: "manual_policy"}})
-		if err != nil {
-			t.Fatalf("authorization.New: %v", err)
-		}
-		authz := mustProviderBackedAuthorizer(t, base, authzProvider)
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
-			cfg.Providers = testutil.NewProviderRegistry(t, &stubPostConnectManualProvider{
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProviderWithCapabilities{
 				stubManualProvider: stubManualProvider{
 					StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 				},
 				connectionParams: map[string]core.ConnectionParamDef{
-					"team_id": {Required: true},
-					"user_id": {Required: true},
+					"tenant_id":  {Required: true},
+					"account_id": {Required: true},
 				},
-				postConnect: testSlackPostConnect,
 			})
 			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
 			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AuthorizationProvider = authzProvider
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		connect := func(token, credential string) {
+		connect := func(credential, tenantID, accountID string) *http.Response {
 			t.Helper()
-			body := bytes.NewBufferString(fmt.Sprintf(`{"integration":"manual-svc","credential":%q,"connectionParams":{"team_id":"T123","user_id":"U456"}}`, credential))
-			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
-			req.Header.Set("Authorization", "Bearer "+token)
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatalf("request: %v", err)
-			}
-			defer func() { _ = resp.Body.Close() }()
-			if resp.StatusCode != http.StatusOK {
-				body, _ := io.ReadAll(resp.Body)
-				t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
-			}
-		}
-
-		connect(userToken, "user-key")
-		connect(subjectToken, "subject-key")
-
-		relResp, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   testExternalIdentityResourceID("slack_identity", "team:T123:user:U456"),
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships: %v", err)
-		}
-		gotSubjects := map[string]bool{}
-		for _, rel := range relResp.GetRelationships() {
-			gotSubjects[rel.GetSubject().GetId()] = true
-		}
-		userSubjectID, serviceAccountSubjectID := principal.UserSubjectID(user.ID), "service_account:triage-bot"
-		if len(gotSubjects) != 2 || !gotSubjects[userSubjectID] || !gotSubjects[serviceAccountSubjectID] {
-			t.Fatalf("expected shared external identity relationships for %v, got %+v", []string{userSubjectID, serviceAccountSubjectID}, relResp.GetRelationships())
-		}
-	})
-
-	t.Run("reconnect replaces prior external identity authorization", func(t *testing.T) {
-		t.Parallel()
-
-		svc := testutil.NewStubServices(t)
-		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
-		if err != nil {
-			t.Fatalf("authorization.New: %v", err)
-		}
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, &stubPostConnectManualProvider{
-				stubManualProvider: stubManualProvider{
-					StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
-				},
-				connectionParams: map[string]core.ConnectionParamDef{
-					"team_id": {Required: true},
-					"user_id": {Required: true},
-				},
-				postConnect: testSlackPostConnect,
-			})
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
-			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AuthorizationProvider = authzProvider
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		connect := func(credential, teamID, userID string) *http.Response {
-			t.Helper()
-			body := bytes.NewBufferString(fmt.Sprintf(`{"integration":"manual-svc","credential":%q,"connectionParams":{"team_id":%q,"user_id":%q}}`, credential, teamID, userID))
+			body := bytes.NewBufferString(fmt.Sprintf(`{"integration":"manual-svc","credential":%q,"connectionParams":{"tenant_id":%q,"account_id":%q}}`, credential, tenantID, accountID))
 			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
 			req.Header.Set("Content-Type", "application/json")
 			resp, err := http.DefaultClient.Do(req)
@@ -19513,14 +18719,14 @@ func TestConnectManual(t *testing.T) {
 			return resp
 		}
 
-		firstResp := connect("first-key", "T123", "U456")
+		firstResp := connect("first-key", "tenant-123", "account-456")
 		defer func() { _ = firstResp.Body.Close() }()
 		if firstResp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(firstResp.Body)
 			t.Fatalf("expected first connect 200, got %d: %s", firstResp.StatusCode, body)
 		}
 
-		secondResp := connect("second-key", "T999", "U999")
+		secondResp := connect("second-key", "tenant-999", "account-999")
 		defer func() { _ = secondResp.Body.Close() }()
 		if secondResp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(secondResp.Body)
@@ -19537,189 +18743,6 @@ func TestConnectManual(t *testing.T) {
 		}
 		if tokens[0].AccessToken != "second-key" {
 			t.Fatalf("expected updated access token second-key, got %q", tokens[0].AccessToken)
-		}
-		oldExternalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
-		newExternalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T999:user:U999")
-		oldResp, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   oldExternalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships old identity: %v", err)
-		}
-		if len(oldResp.GetRelationships()) != 0 {
-			t.Fatalf("expected old external identity relationship to be removed, got %+v", oldResp.GetRelationships())
-		}
-		newResp, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   newExternalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships new identity: %v", err)
-		}
-		if len(newResp.GetRelationships()) != 1 {
-			t.Fatalf("expected new external identity relationship to exist, got %+v", newResp.GetRelationships())
-		}
-	})
-
-	t.Run("reconnect rolls back existing token when authz sync fails", func(t *testing.T) {
-		t.Parallel()
-
-		svc := testutil.NewStubServices(t)
-		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
-		if err != nil {
-			t.Fatalf("authorization.New: %v", err)
-		}
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, &stubPostConnectManualProvider{
-				stubManualProvider: stubManualProvider{
-					StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
-				},
-				connectionParams: map[string]core.ConnectionParamDef{
-					"team_id": {Required: true},
-					"user_id": {Required: true},
-				},
-				postConnect: testSlackPostConnect,
-			})
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
-			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AuthorizationProvider = authzProvider
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		connect := func(credential, teamID, userID string) *http.Response {
-			t.Helper()
-			body := bytes.NewBufferString(fmt.Sprintf(`{"integration":"manual-svc","credential":%q,"connectionParams":{"team_id":%q,"user_id":%q}}`, credential, teamID, userID))
-			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatalf("request: %v", err)
-			}
-			return resp
-		}
-
-		firstResp := connect("first-key", "T123", "U456")
-		defer func() { _ = firstResp.Body.Close() }()
-		if firstResp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(firstResp.Body)
-			t.Fatalf("expected first connect 200, got %d: %s", firstResp.StatusCode, body)
-		}
-
-		authzProvider.writeErr = errors.New("authorization provider unavailable")
-		secondResp := connect("second-key", "T999", "U999")
-		defer func() { _ = secondResp.Body.Close() }()
-		if secondResp.StatusCode != http.StatusBadGateway {
-			body, _ := io.ReadAll(secondResp.Body)
-			t.Fatalf("expected reconnect failure 502, got %d: %s", secondResp.StatusCode, body)
-		}
-
-		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
-		tokens, err := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
-		if err != nil {
-			t.Fatalf("ListCredentials: %v", err)
-		}
-		if len(tokens) != 1 {
-			t.Fatalf("expected original token to be restored, got %d tokens", len(tokens))
-		}
-		if tokens[0].AccessToken != "first-key" {
-			t.Fatalf("expected original access token first-key after rollback, got %q", tokens[0].AccessToken)
-		}
-		oldExternalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
-		newExternalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T999:user:U999")
-		oldResp, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   oldExternalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships old identity: %v", err)
-		}
-		if len(oldResp.GetRelationships()) != 1 {
-			t.Fatalf("expected original external identity relationship to remain, got %+v", oldResp.GetRelationships())
-		}
-		newResp, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-			Relation: authorization.ProviderExternalIdentityRelationAssume,
-			Resource: &core.ResourceRef{
-				Type: authorization.ProviderResourceTypeExternalIdentity,
-				Id:   newExternalIdentityID,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ReadRelationships new identity: %v", err)
-		}
-		if len(newResp.GetRelationships()) != 0 {
-			t.Fatalf("expected new external identity relationship to be absent after rollback, got %+v", newResp.GetRelationships())
-		}
-	})
-
-	t.Run("duplicate external identity under another instance is rejected", func(t *testing.T) {
-		t.Parallel()
-
-		svc := testutil.NewStubServices(t)
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, &stubPostConnectManualProvider{
-				stubManualProvider: stubManualProvider{
-					StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
-				},
-				connectionParams: map[string]core.ConnectionParamDef{
-					"team_id": {Required: true},
-					"user_id": {Required: true},
-				},
-				postConnect: testSlackPostConnect,
-			})
-			cfg.DefaultConnection = map[string]string{"manual-svc": config.AppConnectionName}
-			cfg.Services = svc
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		connect := func(instance, credential string) *http.Response {
-			t.Helper()
-			body := bytes.NewBufferString(fmt.Sprintf(`{"integration":"manual-svc","instance":%q,"credential":%q,"connectionParams":{"team_id":"T123","user_id":"U456"}}`, instance, credential))
-			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatalf("request: %v", err)
-			}
-			return resp
-		}
-
-		firstResp := connect("sa", "first-key")
-		defer func() { _ = firstResp.Body.Close() }()
-		if firstResp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(firstResp.Body)
-			t.Fatalf("expected first connect 200, got %d: %s", firstResp.StatusCode, body)
-		}
-
-		duplicateResp := connect("z", "duplicate-key")
-		defer func() { _ = duplicateResp.Body.Close() }()
-		if duplicateResp.StatusCode != http.StatusConflict {
-			body, _ := io.ReadAll(duplicateResp.Body)
-			t.Fatalf("expected duplicate connect 409, got %d: %s", duplicateResp.StatusCode, body)
-		}
-
-		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
-		tokens, err := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
-		if err != nil {
-			t.Fatalf("ListCredentials: %v", err)
-		}
-		if len(tokens) != 1 {
-			t.Fatalf("expected exactly one stored token after duplicate rejection, got %d", len(tokens))
-		}
-		if tokens[0].Instance != "sa" || tokens[0].AccessToken != "first-key" {
-			t.Fatalf("unexpected stored token after duplicate rejection: %+v", tokens[0])
 		}
 	})
 
@@ -20211,11 +19234,11 @@ func TestConnectManual_OAuthProviderRejected(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack"})
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "oauth-svc"})
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"integration":"slack","credential":"some-key"}`)
+	body := bytes.NewBufferString(`{"integration":"oauth-svc","credential":"some-key"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)

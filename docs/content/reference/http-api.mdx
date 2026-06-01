@@ -189,9 +189,6 @@ API tokens cannot manage managed subjects.
 | `GET` | `/api/v1/authorization/subjects/{subjectID}/grants` | List app authorization grants for the managed subject. |
 | `PUT` | `/api/v1/authorization/subjects/{subjectID}/grants/{app}` | Grant a app role to the managed subject. Requires managed subject `admin` and the caller must already hold the requested app role, or app `admin`. |
 | `DELETE` | `/api/v1/authorization/subjects/{subjectID}/grants/{app}` | Remove a app authorization grant from the managed subject. Requires managed subject `admin`. |
-| `GET` | `/api/v1/authorization/subjects/{subjectID}/external-identities` | List external identities the managed subject may assume. Requires managed subject `admin`. |
-| `PUT` | `/api/v1/authorization/subjects/{subjectID}/external-identities` | Grant an external identity assumption relationship. Body includes `type` and `id`. Requires managed subject `admin`. |
-| `DELETE` | `/api/v1/authorization/subjects/{subjectID}/external-identities` | Remove an external identity assumption relationship. Body includes `type` and `id`. Requires managed subject `admin`. |
 | `GET` | `/api/v1/authorization/subjects/{subjectID}/integrations` | List apps with connection state resolved against the managed subject's credential subject. Requires managed subject `viewer`. |
 | `POST` | `/api/v1/authorization/subjects/{subjectID}/auth/start-oauth` | Start a app OAuth flow that stores credentials on the managed subject. Requires managed subject `editor`. |
 | `POST` | `/api/v1/authorization/subjects/{subjectID}/auth/connect-manual` | Submit manual app credentials for the managed subject. Requires managed subject `editor`. |

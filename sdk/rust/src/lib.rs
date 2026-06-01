@@ -68,8 +68,8 @@ pub use agent_access::{
     AgentListTurns, AgentListTurnsResponse, AgentResolveInteraction, AgentUpdateSession,
 };
 pub use api::{
-    Access, ConnectedToken, Credential, ExternalIdentity, HTTPSubjectRequest, Host, Provider,
-    Request, Response, RuntimeMetadata, Subject, ok,
+    Access, Credential, HTTPSubjectRequest, Host, Provider, Request, Response, RuntimeMetadata,
+    Subject, ok,
 };
 pub use app_access::{
     App, AppContract, AppError, InvocationGrant, InvokeGraphQLOptions, InvokeOptions,

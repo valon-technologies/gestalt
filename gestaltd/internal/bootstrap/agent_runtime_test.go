@@ -82,8 +82,6 @@ type agentRuntimeInvokerCall struct {
 	idempotencyKey         string
 	agentSubjectID         string
 	runAsSubjectID         string
-	externalIdentityType   string
-	externalIdentityID     string
 	toolRefsSet            bool
 	toolRefs               []coreagent.ToolRef
 }
@@ -114,8 +112,6 @@ func (i *recordingAgentRuntimeInvoker) Invoke(ctx context.Context, p *principal.
 		idempotencyKey:         invocation.IdempotencyKeyFromContext(ctx),
 		agentSubjectID:         agentSubjectID,
 		runAsSubjectID:         runAsSubjectID,
-		externalIdentityType:   invocation.ExternalIdentityContextFromContext(ctx).Type,
-		externalIdentityID:     invocation.ExternalIdentityContextFromContext(ctx).ID,
 		toolRefsSet:            toolRefs.Set,
 		toolRefs:               toolRefs.Refs,
 	})
@@ -146,14 +142,13 @@ func (r staticAgentToolResolver) ListTools(context.Context, *principal.Principal
 
 func (r staticAgentToolResolver) ResolveTool(_ context.Context, _ *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
 	target := coreagent.ToolTarget{
-		System:                strings.TrimSpace(ref.System),
-		App:                   strings.TrimSpace(ref.App),
-		Operation:             strings.TrimSpace(ref.Operation),
-		Connection:            strings.TrimSpace(ref.Connection),
-		Instance:              strings.TrimSpace(ref.Instance),
-		CredentialMode:        ref.CredentialMode,
-		RunAs:                 core.NormalizeRunAsSubject(ref.RunAs),
-		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(ref.RunAsExternalIdentity),
+		System:         strings.TrimSpace(ref.System),
+		App:            strings.TrimSpace(ref.App),
+		Operation:      strings.TrimSpace(ref.Operation),
+		Connection:     strings.TrimSpace(ref.Connection),
+		Instance:       strings.TrimSpace(ref.Instance),
+		CredentialMode: ref.CredentialMode,
+		RunAs:          core.NormalizeRunAsSubject(ref.RunAs),
 	}
 	for i := range r.tools {
 		if agentToolTargetsEqual(r.tools[i].Target, target) {
@@ -2684,29 +2679,24 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 	runtime.SetRunGrants(runGrants)
 
 	runAs := &core.RunAsSubject{
-		SubjectID:   "service_account:github-toolshed",
+		SubjectID:   "service_account:review-worker",
 		SubjectKind: "service_account",
 	}
-	externalIdentity := &core.ExternalIdentityRef{
-		Type: "github_app_installation",
-		ID:   "repo:{owner}/{repo}",
+	messageTarget := coreagent.ToolTarget{
+		App:       "source",
+		Operation: "messages.reply",
 	}
-	slackTarget := coreagent.ToolTarget{
-		App:       "slack",
-		Operation: "events.reply",
+	reviewTarget := coreagent.ToolTarget{
+		App:            "target",
+		Operation:      "reviews.create",
+		CredentialMode: core.ConnectionModeNone,
+		RunAs:          runAs,
 	}
-	githubTarget := coreagent.ToolTarget{
-		App:                   "github",
-		Operation:             "bot.createPullRequest",
-		CredentialMode:        core.ConnectionModeNone,
-		RunAs:                 runAs,
-		RunAsExternalIdentity: externalIdentity,
-	}
-	slackToolID := mustMintAgentToolID(t, runGrants, slackTarget)
-	githubToolID := mustMintAgentToolID(t, runGrants, githubTarget)
+	messageToolID := mustMintAgentToolID(t, runGrants, messageTarget)
+	reviewToolID := mustMintAgentToolID(t, runGrants, reviewTarget)
 	runtime.SetToolSearcher(staticAgentToolResolver{tools: []coreagent.Tool{
-		{ID: slackToolID, Target: slackTarget},
-		{ID: githubToolID, Target: githubTarget},
+		{ID: messageToolID, Target: messageTarget},
+		{ID: reviewToolID, Target: reviewTarget},
 	}})
 
 	grant, err := runGrants.Mint(agentgrant.Grant{
@@ -2716,14 +2706,14 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		DisplayName:  "Hugh",
-		AuthSource:   "slack",
+		AuthSource:   "source-app",
 		Permissions: []core.AccessPermission{
-			{App: "slack", Operations: []string{"events.reply"}},
-			{App: "github", Operations: []string{"bot.createPullRequest"}},
+			{App: "source", Operations: []string{"messages.reply"}},
+			{App: "target", Operations: []string{"reviews.create"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
-			{App: "slack", Operation: "events.reply"},
-			{App: "github", Operation: "bot.createPullRequest", CredentialMode: core.ConnectionModeNone, RunAs: runAs, RunAsExternalIdentity: externalIdentity},
+			{App: "source", Operation: "messages.reply"},
+			{App: "target", Operation: "reviews.create", CredentialMode: core.ConnectionModeNone, RunAs: runAs},
 		},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
@@ -2735,45 +2725,42 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolID:       slackToolID,
+		ToolID:       messageToolID,
 		RunGrant:     grant,
 		Arguments:    map[string]any{"eventId": "evt-1"},
 	}); err != nil {
-		t.Fatalf("ExecuteTool slack: %v", err)
+		t.Fatalf("ExecuteTool source: %v", err)
 	}
 
 	if _, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolID:       githubToolID,
+		ToolID:       reviewToolID,
 		RunGrant:     grant,
 		Arguments:    map[string]any{"owner": "acme", "repo": "widgets"},
 	}); err != nil {
-		t.Fatalf("ExecuteTool github: %v", err)
+		t.Fatalf("ExecuteTool target: %v", err)
 	}
 
 	calls := invoker.Calls()
 	if len(calls) != 2 {
 		t.Fatalf("invoker calls = %#v, want two calls", calls)
 	}
-	if calls[0].providerName != "slack" || calls[0].subjectID != "user:user-123" || calls[0].runAsSubjectID != "" {
-		t.Fatalf("slack call = %#v, want original user subject without runAs", calls[0])
+	if calls[0].providerName != "source" || calls[0].subjectID != "user:user-123" || calls[0].runAsSubjectID != "" {
+		t.Fatalf("source call = %#v, want original user subject without runAs", calls[0])
 	}
 	if calls[0].credentialModeOverride != "" {
-		t.Fatalf("slack credential mode override = %q, want none", calls[0].credentialModeOverride)
+		t.Fatalf("source credential mode override = %q, want none", calls[0].credentialModeOverride)
 	}
-	if calls[1].providerName != "github" || calls[1].subjectID != runAs.SubjectID {
-		t.Fatalf("github call = %#v, want delegated subject %q", calls[1], runAs.SubjectID)
+	if calls[1].providerName != "target" || calls[1].subjectID != runAs.SubjectID {
+		t.Fatalf("target call = %#v, want delegated subject %q", calls[1], runAs.SubjectID)
 	}
 	if calls[1].credentialModeOverride != core.ConnectionModeNone {
-		t.Fatalf("github credential mode override = %q, want %q", calls[1].credentialModeOverride, core.ConnectionModeNone)
+		t.Fatalf("target credential mode override = %q, want %q", calls[1].credentialModeOverride, core.ConnectionModeNone)
 	}
 	if calls[1].agentSubjectID != "user:user-123" || calls[1].runAsSubjectID != runAs.SubjectID {
-		t.Fatalf("github audit context = %#v, want original and delegated subjects", calls[1])
-	}
-	if calls[1].externalIdentityType != "github_app_installation" || calls[1].externalIdentityID != "repo:acme/widgets" {
-		t.Fatalf("github external identity context = %#v, want rendered repo identity", calls[1])
+		t.Fatalf("target audit context = %#v, want original and delegated subjects", calls[1])
 	}
 }
 

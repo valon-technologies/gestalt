@@ -11,10 +11,10 @@ use crate::cli::{
     AuthorizationGrantPutArgs, AuthorizationManagedSubjectRole, AuthorizationModelCommands,
     AuthorizationPageArgs, AuthorizationProviderCommands, AuthorizationRelationshipCommands,
     AuthorizationRelationshipListArgs, AuthorizationSubjectCommands,
-    AuthorizationSubjectCreateArgs, AuthorizationSubjectExternalIdentityCommands,
-    AuthorizationSubjectGrantCommands, AuthorizationSubjectIntegrationCommands,
-    AuthorizationSubjectMemberCommands, AuthorizationSubjectTokenCommands,
-    AuthorizationSubjectTokenCreateArgs, AuthorizationSubjectUpdateArgs,
+    AuthorizationSubjectCreateArgs, AuthorizationSubjectGrantCommands,
+    AuthorizationSubjectIntegrationCommands, AuthorizationSubjectMemberCommands,
+    AuthorizationSubjectTokenCommands, AuthorizationSubjectTokenCreateArgs,
+    AuthorizationSubjectUpdateArgs,
 };
 use crate::commands::apps;
 use crate::output::{self, Format};
@@ -58,29 +58,6 @@ pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Form
                 }
                 AuthorizationSubjectGrantCommands::Remove { subject, app } => {
                     remove_subject_grant(client, &subject, &app, format)
-                }
-            },
-            AuthorizationSubjectCommands::ExternalIdentities { command } => match command {
-                AuthorizationSubjectExternalIdentityCommands::List { subject } => {
-                    list_subject_external_identities(client, &subject, format)
-                }
-                AuthorizationSubjectExternalIdentityCommands::Add(args) => {
-                    add_subject_external_identity(
-                        client,
-                        &args.subject,
-                        &args.identity_type,
-                        &args.id,
-                        format,
-                    )
-                }
-                AuthorizationSubjectExternalIdentityCommands::Remove(args) => {
-                    remove_subject_external_identity(
-                        client,
-                        &args.subject,
-                        &args.identity_type,
-                        &args.id,
-                        format,
-                    )
                 }
             },
             AuthorizationSubjectCommands::Integrations { command } => match command {
@@ -358,58 +335,6 @@ pub fn remove_subject_grant(
         &resp,
         format,
         &format!("Removed {app} grant from {subject}."),
-    )
-}
-
-pub fn list_subject_external_identities(
-    client: &ApiClient,
-    subject: &str,
-    format: Format,
-) -> Result<()> {
-    let resp = client
-        .get(&format!("{}/external-identities", subject_path(subject)?))
-        .context("failed to list service account external identities")?;
-    print_array_response(
-        &resp,
-        format,
-        &["Type", "ID", "Resource ID"],
-        external_identity_row,
-    )
-}
-
-pub fn add_subject_external_identity(
-    client: &ApiClient,
-    subject: &str,
-    identity_type: &str,
-    id: &str,
-    format: Format,
-) -> Result<()> {
-    write_subject_external_identity(
-        client,
-        subject,
-        identity_type,
-        id,
-        http_method::Put,
-        format,
-        "failed to add service account external identity",
-    )
-}
-
-pub fn remove_subject_external_identity(
-    client: &ApiClient,
-    subject: &str,
-    identity_type: &str,
-    id: &str,
-    format: Format,
-) -> Result<()> {
-    write_subject_external_identity(
-        client,
-        subject,
-        identity_type,
-        id,
-        http_method::Delete,
-        format,
-        "failed to remove service account external identity",
     )
 }
 
@@ -781,43 +706,6 @@ pub fn list_relationships(
     }
 }
 
-fn write_subject_external_identity(
-    client: &ApiClient,
-    subject: &str,
-    identity_type: &str,
-    id: &str,
-    method: http_method,
-    format: Format,
-    context: &str,
-) -> Result<()> {
-    let body = json!({
-        "type": non_empty("type", identity_type)?,
-        "id": non_empty("id", id)?,
-    });
-    let path = format!("{}/external-identities", subject_path(subject)?);
-    let resp = match method {
-        http_method::Put => client.put(&path, &body),
-        http_method::Delete => client.delete_json(&path, &body),
-    }
-    .context(context.to_string())?;
-    match method {
-        http_method::Put => print_single_response(
-            &resp,
-            format,
-            &["Type", "ID", "Resource ID"],
-            external_identity_row,
-        ),
-        http_method::Delete => print_status(&resp, format, "Removed external identity."),
-    }
-}
-
-#[derive(Clone, Copy)]
-#[allow(non_camel_case_types)]
-enum http_method {
-    Put,
-    Delete,
-}
-
 fn subject_path(subject: &str) -> Result<String> {
     Ok(encoded_subject_path(&canonical_service_account_subject(
         subject,
@@ -1124,14 +1012,6 @@ fn authorization_grant_owner_cell(value: Option<&Value>) -> String {
         "-" => "-".to_string(),
         _ => kind,
     }
-}
-
-fn external_identity_row(item: &Value) -> Vec<String> {
-    vec![
-        string_cell(item, "type"),
-        string_cell(item, "id"),
-        string_cell(item, "resourceId"),
-    ]
 }
 
 fn integration_row(item: &Value) -> Vec<String> {

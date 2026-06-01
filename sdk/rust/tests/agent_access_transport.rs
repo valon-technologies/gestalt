@@ -31,8 +31,7 @@ use gestalt::{
     AgentInteractionState, AgentListInteractions, AgentListSessions, AgentListTurnEvents,
     AgentListTurns, AgentMessage, AgentMessagePart,
     AgentMessagePartType as NativeAgentMessagePartType, AgentOutput, AgentResolveInteraction,
-    AgentSessionState, AgentToolRef, AgentToolSourceMode, AgentUpdateSession, ExternalIdentity,
-    Request, Subject,
+    AgentSessionState, AgentToolRef, AgentToolSourceMode, AgentUpdateSession, Request, Subject,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -740,10 +739,6 @@ async fn agent_create_turn_accepts_native_values() {
                     auth_source: "github_app".to_string(),
                     email: String::new(),
                 }),
-                run_as_external_identity: Some(ExternalIdentity {
-                    r#type: "github_app_installation".to_string(),
-                    id: "repo:valon/toolshed".to_string(),
-                }),
                 ..Default::default()
             }],
             tool_source: AgentToolSourceMode::McpCatalog,
@@ -796,12 +791,6 @@ async fn agent_create_turn_accepts_native_values() {
         .expect("tool ref run_as");
     assert_eq!(run_as.id, "service_account:gestalt-support-github");
     assert_eq!(run_as.display_name, "Gestalt Support GitHub");
-    let external_identity = request.tool_refs[0]
-        .run_as_external_identity
-        .as_ref()
-        .expect("tool ref run_as_external_identity");
-    assert_eq!(external_identity.r#type, "github_app_installation");
-    assert_eq!(external_identity.id, "repo:valon/toolshed");
     let output = request.output.as_ref().expect("output");
     let generated::v1::agent_output::Kind::Structured(output) =
         output.kind.as_ref().expect("output kind")

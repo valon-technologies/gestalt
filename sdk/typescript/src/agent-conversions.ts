@@ -24,10 +24,8 @@ import {
 import {
   SubjectContextSchema,
   AgentToolRefSchema,
-  ExternalIdentityContextSchema,
   type SubjectContext as ProtoSubjectContext,
   type AgentToolRef as ProtoAgentToolRef,
-  type ExternalIdentityContext as ProtoExternalIdentityContext,
 } from "./internal/gen/v1/app_pb.ts";
 import {
   jsonFromValue,
@@ -48,7 +46,7 @@ import type {
   AgentTurnOutput,
   AgentTurnDisplay,
 } from "./agent.ts";
-import type { ExternalIdentity, Subject, SubjectInput } from "./api.ts";
+import type { Subject, SubjectInput } from "./api.ts";
 
 export function agentTurnDisplayFromProto(
   display?: ProtoAgentTurnDisplay | undefined,
@@ -306,7 +304,6 @@ export function agentToolRefFromProto(ref: ProtoAgentToolRef): AgentToolRef {
     description: ref.description,
     system: ref.system,
     runAs: agentRunAsSubjectFromProto(ref.runAs),
-    runAsExternalIdentity: externalIdentityFromProto(ref.runAsExternalIdentity),
   };
 }
 
@@ -320,7 +317,6 @@ export function agentToolRefToProto(ref: AgentToolRef): ProtoAgentToolRef {
     description: ref.description ?? "",
     system: ref.system ?? "",
     runAs: agentRunAsSubjectToProto(ref.runAs),
-    runAsExternalIdentity: externalIdentityToProto(ref.runAsExternalIdentity),
   });
 }
 
@@ -353,29 +349,5 @@ function agentRunAsSubjectToProto(
     displayName: subject.displayName ?? "",
     authSource: subject.authSource ?? "",
     email: subject.email ?? "",
-  });
-}
-
-function externalIdentityFromProto(
-  identity?: ProtoExternalIdentityContext | undefined,
-): ExternalIdentity | undefined {
-  if (identity === undefined) {
-    return undefined;
-  }
-  return {
-    type: identity.type,
-    id: identity.id,
-  };
-}
-
-function externalIdentityToProto(
-  identity?: ExternalIdentity | undefined,
-): ProtoExternalIdentityContext | undefined {
-  if (identity === undefined) {
-    return undefined;
-  }
-  return create(ExternalIdentityContextSchema, {
-    type: identity.type,
-    id: identity.id,
   });
 }

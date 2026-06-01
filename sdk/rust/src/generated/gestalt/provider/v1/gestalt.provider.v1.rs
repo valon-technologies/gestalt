@@ -110,8 +110,6 @@ pub struct ProviderMetadata {
     pub static_catalog: ::core::option::Option<Catalog>,
     #[prost(bool, tag = "8")]
     pub supports_session_catalog: bool,
-    #[prost(bool, tag = "9")]
-    pub supports_post_connect: bool,
     #[prost(int32, tag = "11")]
     pub min_protocol_version: i32,
     #[prost(int32, tag = "12")]
@@ -198,41 +196,6 @@ pub struct AppInvokeGraphQlRequest {
     #[prost(string, tag = "7")]
     pub idempotency_key: ::prost::alloc::string::String,
 }
-/// PostConnectCredential is the host-managed credential payload passed into
-/// post-connect hooks. Field numbers intentionally match the legacy
-/// post-connect credential payload so older compiled providers can still decode
-/// the request during rolling upgrades.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct PostConnectCredential {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub integration: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub access_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub refresh_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
-    pub scopes: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "8")]
-    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "9")]
-    pub last_refreshed_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(int32, tag = "10")]
-    pub refresh_error_count: i32,
-    #[prost(string, tag = "11")]
-    pub metadata_json: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "12")]
-    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "13")]
-    pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(string, tag = "14")]
-    pub connection: ::prost::alloc::string::String,
-}
 /// SubjectContext identifies the caller that initiated an operation.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SubjectContext {
@@ -248,15 +211,6 @@ pub struct SubjectContext {
     pub email: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub credential_subject_id: ::prost::alloc::string::String,
-}
-/// ExternalIdentityContext identifies the caller in a provider-owned external
-/// identity namespace, as discovered from that caller's stored connection.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ExternalIdentityContext {
-    #[prost(string, tag = "1")]
-    pub r#type: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentToolRef {
@@ -276,8 +230,6 @@ pub struct AgentToolRef {
     pub system: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "9")]
     pub run_as: ::core::option::Option<SubjectContext>,
-    #[prost(message, optional, tag = "10")]
-    pub run_as_external_identity: ::core::option::Option<ExternalIdentityContext>,
 }
 /// StringList is a helper map value for repeated HTTP header and query values.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -328,12 +280,6 @@ pub struct RequestContext {
     /// Original agent caller when an agent tool executes with delegated run-as identity.
     #[prost(message, optional, tag = "6")]
     pub agent_subject: ::core::option::Option<SubjectContext>,
-    /// The original agent caller's provider-owned external identity, when known.
-    #[prost(message, optional, tag = "7")]
-    pub agent_external_identity: ::core::option::Option<ExternalIdentityContext>,
-    /// Provider-owned external identity the invocation is authorized to assume.
-    #[prost(message, optional, tag = "8")]
-    pub external_identity: ::core::option::Option<ExternalIdentityContext>,
     /// Agent tool refs granted to the operation request, when the request is
     /// executing as an agent tool.
     #[prost(message, repeated, tag = "9")]
@@ -440,22 +386,6 @@ pub struct GetSessionCatalogRequest {
 pub struct GetSessionCatalogResponse {
     #[prost(message, optional, tag = "1")]
     pub catalog: ::core::option::Option<Catalog>,
-}
-/// PostConnectRequest notifies a provider that a connection has completed.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct PostConnectRequest {
-    #[prost(message, optional, tag = "1")]
-    pub token: ::core::option::Option<PostConnectCredential>,
-}
-/// PostConnectResponse returns provider-defined metadata captured after
-/// connection.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PostConnectResponse {
-    #[prost(btree_map = "string, string", tag = "1")]
-    pub metadata: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
 }
 /// StartProviderRequest configures an integration provider for one runtime
 /// session.

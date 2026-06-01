@@ -416,7 +416,6 @@ func cloneConnectionDef(src ConnectionDef) ConnectionDef {
 	dst.Auth = cloneConnectionAuthDef(src.Auth)
 	dst.ConnectionParams = maps.Clone(src.ConnectionParams)
 	dst.CredentialRefresh = cloneCredentialRefreshDef(src.CredentialRefresh)
-	dst.PostConnect = providermanifestv1.CloneProviderPostConnect(src.PostConnect)
 	return dst
 }
 
@@ -991,7 +990,7 @@ func normalizeAppInvocationRunAs(path string, invoke *AppInvocationDependency) e
 		return nil
 	}
 	if strings.TrimSpace(invoke.Surface) != "" {
-		return fmt.Errorf("config validation: %s.runAs requires an exact operation", path)
+		return fmt.Errorf("config validation: %s.runAs is supported only for REST exact operation invokes", path)
 	}
 	runAs := invoke.RunAs
 	if runAs.Subject == nil {
@@ -1016,16 +1015,6 @@ func normalizeAppInvocationRunAs(path string, invoke *AppInvocationDependency) e
 	}
 	if subject.CredentialSubjectID == "" {
 		subject.CredentialSubjectID = subject.ID
-	}
-	if identity := runAs.ExternalIdentity; identity != nil {
-		identity.Type = strings.TrimSpace(identity.Type)
-		identity.ID = strings.TrimSpace(identity.ID)
-		if identity.Type == "" {
-			return fmt.Errorf("config validation: %s.runAs.externalIdentity.type is required", path)
-		}
-		if identity.ID == "" {
-			return fmt.Errorf("config validation: %s.runAs.externalIdentity.id is required", path)
-		}
 	}
 	return nil
 }

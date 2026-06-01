@@ -162,17 +162,17 @@ func TestSlogAuditSink_RunAsDelegationFields(t *testing.T) {
 		Timestamp:        time.Now(),
 		RequestID:        "req-run-as",
 		Source:           "agent",
-		SubjectID:        "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectID:        "service_account:event-handler",
 		SubjectKind:      "service_account",
 		AgentSubjectID:   principal.UserSubjectID("user-42"),
 		AgentSubjectKind: string(principal.KindUser),
 		AgentDisplayName: "Hugh",
-		AgentAuthSource:  "slack",
-		RunAsSubjectID:   "service_account:github_app_installation:99:repo:acme/widgets",
+		AgentAuthSource:  "source-app",
+		RunAsSubjectID:   "service_account:event-handler",
 		RunAsSubjectKind: "service_account",
-		RunAsAuthSource:  "github_app_webhook",
-		Provider:         "github",
-		Operation:        "bot.createPullRequest",
+		RunAsAuthSource:  "event_handler",
+		Provider:         "target",
+		Operation:        "reviews.create",
 		Allowed:          true,
 	}
 
@@ -188,7 +188,7 @@ func TestSlogAuditSink_RunAsDelegationFields(t *testing.T) {
 	if record["run_as_subject_id"] != entry.RunAsSubjectID {
 		t.Fatalf("run_as_subject_id = %v", record["run_as_subject_id"])
 	}
-	if record["run_as_auth_source"] != "github_app_webhook" {
+	if record["run_as_auth_source"] != "event_handler" {
 		t.Fatalf("run_as_auth_source = %v", record["run_as_auth_source"])
 	}
 }

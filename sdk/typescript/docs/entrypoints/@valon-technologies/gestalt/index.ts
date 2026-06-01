@@ -74,7 +74,6 @@ export {
   response,
   type Access,
   type Credential,
-  type ExternalIdentity,
   type Host,
   type MaybePromise,
   type OperationResult,
@@ -182,7 +181,6 @@ export {
   type SecretsProviderOptions,
 } from "../../../../src/secrets.ts";
 export {
-  type ConnectedToken,
   defineApp,
   isAppProvider,
   operation,
@@ -192,7 +190,6 @@ export {
   type OperationDefinition,
   type OperationOptions,
   type AppDefinitionOptions,
-  type PostConnectHandler,
   type SessionCatalog,
   type SessionCatalogHandler,
 } from "../../../../src/app.ts";

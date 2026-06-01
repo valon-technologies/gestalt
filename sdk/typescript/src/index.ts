@@ -103,7 +103,6 @@ export {
   type Host,
   type MaybePromise,
   type Credential,
-  type ExternalIdentity,
   type OperationResult,
   type Request,
   type Response,
@@ -229,7 +228,6 @@ export {
   type SecretsProviderOptions,
 } from "./secrets.ts";
 export {
-  type ConnectedToken,
   AppProvider,
   defineApp,
   isAppProvider,
@@ -238,7 +236,6 @@ export {
   type ConnectionParamDefinition,
   type OperationDefinition,
   type OperationOptions,
-  type PostConnectHandler,
   type AppDefinitionOptions,
   type SessionCatalog,
   type SessionCatalogHandler,

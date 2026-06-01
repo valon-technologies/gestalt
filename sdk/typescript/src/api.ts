@@ -25,14 +25,6 @@ export interface SubjectInput {
 }
 
 /**
- * Provider-owned external identity attached to an incoming provider request.
- */
-export interface ExternalIdentity {
-  type: string;
-  id: string;
-}
-
-/**
  * Describes the credential Gestalt used to authorize the current request.
  */
 export interface Credential {
@@ -65,8 +57,6 @@ export interface Request {
   connectionParams: Record<string, string>;
   subject: Subject;
   agentSubject: Subject;
-  externalIdentity: ExternalIdentity;
-  agentExternalIdentity: ExternalIdentity;
   credential: Credential;
   access: Access;
   host: Host;
@@ -157,8 +147,6 @@ export function request(
   idempotencyKey = "",
   host: Partial<Host> = {},
   agentSubject: Partial<Subject> = {},
-  externalIdentity: Partial<ExternalIdentity> = {},
-  agentExternalIdentity: Partial<ExternalIdentity> = {},
   toolRefs: readonly AgentToolRef[] = [],
   toolRefsSet = false,
 ): Request {
@@ -183,14 +171,6 @@ export function request(
       authSource: agentSubject.authSource ?? "",
       email: agentSubject.email ?? "",
     },
-    externalIdentity: {
-      type: externalIdentity.type ?? "",
-      id: externalIdentity.id ?? "",
-    },
-    agentExternalIdentity: {
-      type: agentExternalIdentity.type ?? "",
-      id: agentExternalIdentity.id ?? "",
-    },
     credential: {
       mode: credential.mode ?? "",
       subjectId: credential.subjectId ?? "",
@@ -207,10 +187,6 @@ export function request(
     toolRefs: toolRefs.map((ref) => ({
       ...ref,
       runAs: ref.runAs === undefined ? undefined : { ...ref.runAs },
-      runAsExternalIdentity:
-        ref.runAsExternalIdentity === undefined
-          ? undefined
-          : { ...ref.runAsExternalIdentity },
     })),
     toolRefsSet,
     host: {

@@ -86,6 +86,7 @@ type invocationTokenContext struct {
 	requestMeta            invocation.RequestMeta
 	credential             invocation.CredentialContext
 	credentialModeOverride core.ConnectionMode
+	operationProfile       OperationProfile
 	invocation             *invocation.InvocationMeta
 	surface                invocation.InvocationSurface
 	internalConnection     bool
@@ -133,14 +134,11 @@ func (m *InvocationTokenManager) ExchangeToken(parentToken string, grants Invoca
 		return "", err
 	}
 	parentGrants := decodeInvocationGrantClaims(claims.Grants)
-	switch {
-	case len(grants) == 0:
-		grants = parentGrants
-	case !invocationGrantSubset(grants, parentGrants):
+	preparedGrants, ok := prepareChildInvocationGrants(grants, parentGrants)
+	if !ok {
 		return "", fmt.Errorf("requested invocation grants exceed the parent token")
-	default:
-		grants = inheritInvocationGrantModes(grants, parentGrants)
 	}
+	grants = preparedGrants
 	child := *claims
 	child.ID = uuid.NewString()
 	now := m.now()

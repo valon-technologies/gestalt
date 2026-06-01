@@ -86,16 +86,8 @@ func (p *connectedProvider) Catalog() *catalog.Catalog { return p.inner.Catalog(
 func (p *connectedProvider) SupportsSessionCatalog() bool {
 	return core.SupportsSessionCatalog(p.inner)
 }
-func (p *connectedProvider) SupportsPostConnect() bool { return core.SupportsPostConnect(p.inner) }
 func (p *connectedProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	return p.inner.Execute(ctx, operation, params, token)
-}
-func (p *connectedProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	metadata, supported, err := core.PostConnect(ctx, p.inner, token)
-	if !supported {
-		return nil, core.ErrPostConnectUnsupported
-	}
-	return metadata, err
 }
 func (p *connectedProvider) SupportsHTTPSubject() bool { return core.SupportsHTTPSubject(p.inner) }
 func (p *connectedProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
@@ -116,18 +108,6 @@ type connectedSessionCatalogProvider struct {
 
 func (p *connectedSessionCatalogProvider) SupportsSessionCatalog() bool {
 	return core.SupportsSessionCatalog(p.sessionSource)
-}
-
-func (p *connectedSessionCatalogProvider) SupportsPostConnect() bool {
-	return core.SupportsPostConnect(p.Provider)
-}
-
-func (p *connectedSessionCatalogProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
-	if !supported {
-		return nil, core.ErrPostConnectUnsupported
-	}
-	return metadata, err
 }
 
 func (p *connectedSessionCatalogProvider) SupportsHTTPSubject() bool {
@@ -169,18 +149,6 @@ type connectedGraphQLProvider struct {
 
 func (p *connectedGraphQLProvider) SupportsSessionCatalog() bool {
 	return core.SupportsSessionCatalog(p.Provider)
-}
-
-func (p *connectedGraphQLProvider) SupportsPostConnect() bool {
-	return core.SupportsPostConnect(p.Provider)
-}
-
-func (p *connectedGraphQLProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
-	if !supported {
-		return nil, core.ErrPostConnectUnsupported
-	}
-	return metadata, err
 }
 
 func (p *connectedGraphQLProvider) SupportsHTTPSubject() bool {
@@ -226,18 +194,6 @@ type connectedOAuthProvider struct {
 
 func (p *connectedOAuthProvider) SupportsSessionCatalog() bool {
 	return core.SupportsSessionCatalog(p.Provider)
-}
-
-func (p *connectedOAuthProvider) SupportsPostConnect() bool {
-	return core.SupportsPostConnect(p.Provider)
-}
-
-func (p *connectedOAuthProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
-	if !supported {
-		return nil, core.ErrPostConnectUnsupported
-	}
-	return metadata, err
 }
 
 func (p *connectedOAuthProvider) SupportsHTTPSubject() bool {

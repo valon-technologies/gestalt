@@ -109,44 +109,6 @@ fn test_cli_authorization_subject_member_remove_path_encodes_space_as_percent_20
 }
 
 #[test]
-fn test_cli_authorization_subjects_external_identities_remove_sends_delete_body() {
-    let mut server = Server::new();
-    let mock = authed_json_mock!(
-        server,
-        Method::DELETE,
-        "/api/v1/authorization/subjects/service_account%3Arelease-bot/external-identities",
-        StatusCode::OK
-    )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"id":"google-123","type":"google"}"#.to_string(),
-    ))
-    .with_body(r#"{"status":"deleted"}"#)
-    .create();
-
-    let home = tempfile::tempdir().unwrap();
-    cli_command_for_server(home.path(), &server)
-        .args([
-            "--format",
-            "json",
-            "authz",
-            "subjects",
-            "external-identities",
-            "remove",
-            "release-bot",
-            "--type",
-            "google",
-            "--id",
-            "google-123",
-        ])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("deleted"));
-
-    mock.assert();
-}
-
-#[test]
 fn test_cli_authorization_subjects_tokens_create_groups_native_permissions() {
     let mut server = Server::new();
     let mock = authed_json_mock!(

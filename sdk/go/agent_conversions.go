@@ -313,15 +313,14 @@ func agentToolRefFromProto(value *proto.AgentToolRef) AgentToolRef {
 		return AgentToolRef{}
 	}
 	return AgentToolRef{
-		App:                   value.GetApp(),
-		Operation:             value.GetOperation(),
-		Connection:            value.GetConnection(),
-		Instance:              value.GetInstance(),
-		Title:                 value.GetTitle(),
-		Description:           value.GetDescription(),
-		System:                value.GetSystem(),
-		RunAs:                 subjectFromProto(value.GetRunAs()),
-		RunAsExternalIdentity: externalIdentityFromProto(value.GetRunAsExternalIdentity()),
+		App:         value.GetApp(),
+		Operation:   value.GetOperation(),
+		Connection:  value.GetConnection(),
+		Instance:    value.GetInstance(),
+		Title:       value.GetTitle(),
+		Description: value.GetDescription(),
+		System:      value.GetSystem(),
+		RunAs:       subjectFromProto(value.GetRunAs()),
 	}
 }
 
@@ -338,35 +337,14 @@ func agentToolRefsFromProto(values []*proto.AgentToolRef) []AgentToolRef {
 
 func agentToolRefToProto(value AgentToolRef) *proto.AgentToolRef {
 	return &proto.AgentToolRef{
-		App:                   value.App,
-		Operation:             value.Operation,
-		Connection:            value.Connection,
-		Instance:              value.Instance,
-		Title:                 value.Title,
-		Description:           value.Description,
-		System:                value.System,
-		RunAs:                 subjectToProto(value.RunAs),
-		RunAsExternalIdentity: externalIdentityToProto(value.RunAsExternalIdentity),
-	}
-}
-
-func externalIdentityFromProto(value *proto.ExternalIdentityContext) *ExternalIdentity {
-	if value == nil {
-		return nil
-	}
-	return &ExternalIdentity{
-		Type: value.GetType(),
-		ID:   value.GetId(),
-	}
-}
-
-func externalIdentityToProto(value *ExternalIdentity) *proto.ExternalIdentityContext {
-	if value == nil {
-		return nil
-	}
-	return &proto.ExternalIdentityContext{
-		Type: value.Type,
-		Id:   value.ID,
+		App:         value.App,
+		Operation:   value.Operation,
+		Connection:  value.Connection,
+		Instance:    value.Instance,
+		Title:       value.Title,
+		Description: value.Description,
+		System:      value.System,
+		RunAs:       subjectToProto(value.RunAs),
 	}
 }
 

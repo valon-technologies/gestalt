@@ -75,7 +75,6 @@ func Build(def *Definition, conn ConnectionDef, opts ...BuildOption) (core.Provi
 		Headers:            def.Headers,
 		Pagination:         buildPaginationConfigs(def),
 		CheckEgress:        bo.egressCheck,
-		PostConnectConfigs: conn.PostConnect,
 	}
 
 	connMode := conn.Mode

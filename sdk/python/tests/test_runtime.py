@@ -14,7 +14,6 @@ import grpc
 from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import json_format
 from google.protobuf import struct_pb2 as _struct_pb2
-from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from gestalt import (
     AgentProvider,
@@ -31,7 +30,6 @@ from gestalt import (
     Catalog,
     CatalogOperation,
     CompleteLoginRequest,
-    ConnectedToken,
     CreateWorkflowProviderDefinitionRequest,
     ExternalTokenValidator,
     GetRuntimeSupportRequest,
@@ -82,18 +80,8 @@ runtime_provider_pb2_grpc: Any = _runtime_provider_pb2_grpc
 runtime_pb2: Any = _runtime_pb2
 s3_pb2_grpc: Any = _s3_pb2_grpc
 struct_pb2: Any = _struct_pb2
-timestamp_pb2: Any = _timestamp_pb2
 workflow_pb2: Any = _workflow_pb2
 workflow_pb2_grpc: Any = _workflow_pb2_grpc
-
-UTC = dt.timezone.utc
-
-
-def _ts(epoch_seconds: int) -> Any:
-    ts = timestamp_pb2.Timestamp()
-    ts.FromDatetime(dt.datetime.fromtimestamp(epoch_seconds, tz=UTC))
-    return ts
-
 
 class AbortCalled(RuntimeError):
     pass
@@ -381,10 +369,6 @@ class MainEntrypointTests(unittest.TestCase):
                 "subject_email": request.subject.email,
                 "agent_subject_id": request.agent_subject.id,
                 "agent_subject_email": request.agent_subject.email,
-                "external_type": request.external_identity.type,
-                "external_id": request.external_identity.id,
-                "agent_external_type": request.agent_external_identity.type,
-                "agent_external_id": request.agent_external_identity.id,
                 "credential_mode": request.credential.mode,
                 "credential_subject_id": request.credential.subject_id,
                 "access_policy": request.access.policy,
@@ -402,9 +386,6 @@ class MainEntrypointTests(unittest.TestCase):
                 else "",
                 "tool_ref_run_as": request.tool_refs[0].run_as.id
                 if request.tool_refs and request.tool_refs[0].run_as
-                else "",
-                "tool_ref_external_id": request.tool_refs[0].run_as_external_identity.id
-                if request.tool_refs and request.tool_refs[0].run_as_external_identity
                 else "",
             }
 
@@ -426,17 +407,6 @@ class MainEntrypointTests(unittest.TestCase):
             cat.operations.append(CatalogOperation(id="private_search", method="POST"))
             cat.operations[0].allowed_roles.extend(["viewer", "admin"])
             return cat
-
-        @app.post_connect
-        def dynamic_post_connect(token: ConnectedToken) -> dict[str, str]:
-            return {
-                "subject": token.subject_id,
-                "connection": token.connection,
-                "instance": token.instance,
-                "metadata_team": (token.metadata or {}).get("team_id", ""),
-                "created_tz": token.created_at.tzname() if token.created_at else "",
-                "updated_tz": token.updated_at.tzname() if token.updated_at else "",
-            }
 
         execute_workflow = struct_pb2.Struct()
         execute_workflow.update(
@@ -511,14 +481,6 @@ class MainEntrypointTests(unittest.TestCase):
                         auth_source="slack",
                         email="grace@example.com",
                     ),
-                    agent_external_identity=app_pb2.ExternalIdentityContext(
-                        type="github_identity",
-                        id="user:12345678",
-                    ),
-                    external_identity=app_pb2.ExternalIdentityContext(
-                        type="github_app_installation",
-                        id="repo:acme/widgets",
-                    ),
                     credential=app_pb2.CredentialContext(
                         mode="subject",
                         subject_id="user:user-123",
@@ -541,10 +503,6 @@ class MainEntrypointTests(unittest.TestCase):
                                 credential_subject_id="service_account:github-review",
                                 display_name="GitHub Review",
                                 auth_source="managed_subject",
-                            ),
-                            run_as_external_identity=app_pb2.ExternalIdentityContext(
-                                type="github_identity",
-                                id="user:12345678",
                             ),
                         )
                     ],
@@ -572,33 +530,7 @@ class MainEntrypointTests(unittest.TestCase):
             ),
             mock.Mock(),
         )
-        post_connect_response = servicer.PostConnect(
-            app_pb2.PostConnectRequest(
-                token=app_pb2.PostConnectCredential(
-                    subject_id="user:user-123",
-                    connection="workspace",
-                    instance="default",
-                    metadata_json='{"team_id":"T123"}',
-                    created_at=_ts(1_700_000_000),
-                    updated_at=_ts(1_700_000_100),
-                )
-            ),
-            mock.Mock(),
-        )
-        empty_timestamp_response = servicer.PostConnect(
-            app_pb2.PostConnectRequest(
-                token=app_pb2.PostConnectCredential(
-                    subject_id="user:user-123",
-                    connection="workspace",
-                    instance="default",
-                    metadata_json='{"team_id":"T123"}',
-                )
-            ),
-            mock.Mock(),
-        )
-
         self.assertTrue(metadata.supports_session_catalog)
-        self.assertTrue(metadata.supports_post_connect)
         self.assertEqual(
             metadata.min_protocol_version,
             _runtime.CURRENT_PROTOCOL_VERSION,
@@ -624,10 +556,6 @@ class MainEntrypointTests(unittest.TestCase):
                 "subject_email": "ada@example.com",
                 "agent_subject_id": "user:user-456",
                 "agent_subject_email": "grace@example.com",
-                "external_type": "github_app_installation",
-                "external_id": "repo:acme/widgets",
-                "agent_external_type": "github_identity",
-                "agent_external_id": "user:12345678",
                 "credential_mode": "subject",
                 "credential_subject_id": "user:user-123",
                 "access_policy": "sample_policy",
@@ -660,7 +588,6 @@ class MainEntrypointTests(unittest.TestCase):
                 "tool_ref_app": "github",
                 "tool_ref_operation": "bot.getPullRequest",
                 "tool_ref_run_as": "service_account:github-review",
-                "tool_ref_external_id": "user:12345678",
                 "invocation_token": "opaque-invocation-token",
             },
         )
@@ -674,29 +601,6 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(catalog.operations[0].id, "private_search")
         self.assertEqual(catalog.operations[0].method, "POST")
         self.assertEqual(list(catalog.operations[0].allowed_roles), ["viewer", "admin"])
-        self.assertEqual(
-            dict(post_connect_response.metadata),
-            {
-                "subject": "user:user-123",
-                "connection": "workspace",
-                "instance": "default",
-                "metadata_team": "T123",
-                "created_tz": "UTC",
-                "updated_tz": "UTC",
-            },
-        )
-        self.assertEqual(
-            dict(empty_timestamp_response.metadata),
-            {
-                "subject": "user:user-123",
-                "connection": "workspace",
-                "instance": "default",
-                "metadata_team": "T123",
-                "created_tz": "",
-                "updated_tz": "",
-            },
-        )
-
     def test_provider_servicer_sanitizes_unhandled_execute_exceptions(self) -> None:
         app = App("source-name")
 
@@ -729,21 +633,9 @@ class MainEntrypointTests(unittest.TestCase):
             "provider does not support session catalogs",
         )
 
-    def test_provider_servicer_rejects_missing_post_connect_support(self) -> None:
-        app = App("source-name")
-        servicer = _runtime._provider_servicer(app=app)
-        context = mock.Mock()
-
-        servicer.PostConnect(app_pb2.PostConnectRequest(), context)
-
-        context.abort.assert_called_once_with(
-            grpc.StatusCode.UNIMPLEMENTED,
-            "provider does not support post connect",
-        )
-
     def test_provider_servicer_labels_metadata_failures(self) -> None:
         class BrokenMetadataApp(App):
-            def supports_post_connect(self) -> bool:
+            def supports_session_catalog(self) -> bool:
                 raise RuntimeError("metadata exploded")
 
         app = BrokenMetadataApp("source-name")

@@ -61,11 +61,6 @@ class AppProviderStub(object):
                 request_serializer=v1_dot_app__pb2.GetSessionCatalogRequest.SerializeToString,
                 response_deserializer=v1_dot_app__pb2.GetSessionCatalogResponse.FromString,
                 _registered_method=True)
-        self.PostConnect = channel.unary_unary(
-                '/gestalt.provider.v1.AppProvider/PostConnect',
-                request_serializer=v1_dot_app__pb2.PostConnectRequest.SerializeToString,
-                response_deserializer=v1_dot_app__pb2.PostConnectResponse.FromString,
-                _registered_method=True)
 
 
 class AppProviderServicer(object):
@@ -102,12 +97,6 @@ class AppProviderServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def PostConnect(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
 
 def add_AppProviderServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -135,11 +124,6 @@ def add_AppProviderServicer_to_server(servicer, server):
                     servicer.GetSessionCatalog,
                     request_deserializer=v1_dot_app__pb2.GetSessionCatalogRequest.FromString,
                     response_serializer=v1_dot_app__pb2.GetSessionCatalogResponse.SerializeToString,
-            ),
-            'PostConnect': grpc.unary_unary_rpc_method_handler(
-                    servicer.PostConnect,
-                    request_deserializer=v1_dot_app__pb2.PostConnectRequest.FromString,
-                    response_serializer=v1_dot_app__pb2.PostConnectResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -278,33 +262,6 @@ class AppProvider(object):
             '/gestalt.provider.v1.AppProvider/GetSessionCatalog',
             v1_dot_app__pb2.GetSessionCatalogRequest.SerializeToString,
             v1_dot_app__pb2.GetSessionCatalogResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def PostConnect(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.AppProvider/PostConnect',
-            v1_dot_app__pb2.PostConnectRequest.SerializeToString,
-            v1_dot_app__pb2.PostConnectResponse.FromString,
             options,
             channel_credentials,
             insecure,

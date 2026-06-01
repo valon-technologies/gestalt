@@ -26,7 +26,7 @@ For non-human automation subjects, see [Service Accounts](/service-accounts).
 
 A resource is what the subject wants to access, e.g.:
 
-- `external_identity:google-123`
+- `app/github/repository:github.com/acme/widgets`
 - `managed_subject:deploy-bot`
 
 ### Relations
@@ -109,7 +109,7 @@ Gestalt checks authorization before serving protected surfaces:
 
 - App and operation invocation
 - Admin APIs and UI routes
-- External identity assumption
+- Linked upstream account lookups
 - Managed subjects and [service accounts](/service-accounts)
 - Workflow and agent execution grants
 
@@ -400,7 +400,7 @@ mark one entry `default: true`.
 
 Static policy members still win over dynamic grants. Gestalt also writes managed
 models and relationships into the provider for built-in admin, plugin,
-external-identity, managed-subject, workflow, and agent authorization.
+managed-subject, workflow, and agent authorization.
 
 When OTLP tracing is enabled, keep the incoming request context attached to
 downstream calls so provider work stays in the same trace.
