@@ -650,37 +650,6 @@ apps:
 	if _, err := os.Stat(filepath.Join(artifactsDir, ".gestaltd")); !os.IsNotExist(err) {
 		t.Fatalf("lock should not create prepared artifact dirs for local source entries, stat err=%v", err)
 	}
-	lockPath := filepath.Join(dir, LockfileName)
-	for _, schemaVersion := range []int{5, 6, 7} {
-		legacyEntry := portableLockEntry{
-			InputDigest: "legacy-local",
-			Kind:        providermanifestv1.KindApp,
-			Runtime:     providerReleaseRuntimeExecutable,
-		}
-		if schemaVersion == 7 {
-			legacyEntry.SourceRef = &LockSourceRef{Type: "legacy-local"}
-		}
-		if err := writeJSONFile(lockPath, providerLockfile{
-			Schema:        providerLockSchemaName,
-			SchemaVersion: schemaVersion,
-			Revision:      providerLockRevision,
-			Providers: providerLockBuckets{
-				App: map[string]portableLockEntry{"alpha": legacyEntry},
-				UI: map[string]portableLockEntry{
-					"roadmap": {
-						InputDigest: "legacy-local",
-						Kind:        providermanifestv1.KindUI,
-						Runtime:     providerReleaseRuntimeUI,
-					},
-				},
-			},
-		}); err != nil {
-			t.Fatalf("write schema v%d legacy local source lockfile: %v", schemaVersion, err)
-		}
-		if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, nil); err == nil || !strings.Contains(err.Error(), "lockfile is out of date") {
-			t.Fatalf("CheckLockAtPathsWithStatePaths with schema v%d legacy local entries error = %v, want out of date", schemaVersion, err)
-		}
-	}
 	lock, err = lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
 	if err != nil {
 		t.Fatalf("restore canonical LockAtPathsWithStatePaths: %v", err)
@@ -932,6 +901,78 @@ server:
 
 	if _, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), "unknown effective operation") {
 		t.Fatalf("LockAtPathsWithStatePaths error = %v, want committed provider invokes validation error", err)
+	}
+}
+
+func TestCheckLockAtPathsReportsMissingProviderDrift(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const (
+		source  = "github.com/acme/tools/target"
+		version = "1.0.0"
+	)
+	archivePath := buildExecutableArchive(t, dir, "target-src", source, version, providermanifestv1.KindApp, "target", "target-binary")
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSum := sha256.Sum256(archiveData)
+	metadataRelPath := filepath.ToSlash(filepath.Join("providers", "target", "provider-release.yaml"))
+	metadataPath := filepath.Join(dir, filepath.FromSlash(metadataRelPath))
+	if err := os.MkdirAll(filepath.Dir(metadataPath), 0o755); err != nil {
+		t.Fatalf("create metadata dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(metadataPath), "target.tar.gz"), archiveData, 0o644); err != nil {
+		t.Fatalf("write archive: %v", err)
+	}
+	writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
+		Schema:        providerReleaseSchemaName,
+		SchemaVersion: providerReleaseSchemaVersion,
+		Package:       source,
+		Kind:          providermanifestv1.KindApp,
+		Version:       version,
+		Runtime:       providerReleaseRuntimeExecutable,
+		Artifacts: map[string]providerReleaseArtifact{
+			providerpkg.CurrentPlatformString(): {
+				Path:   "target.tar.gz",
+				SHA256: hex.EncodeToString(archiveSum[:]),
+			},
+		},
+	})
+
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: gestaltd.config/v6
+%sapps:
+  target:
+    source: ./%s
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), metadataRelPath, filepath.ToSlash(filepath.Join(dir, "artifacts")))
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle()
+	lock, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	delete(lock.Providers, "target")
+	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
+		t.Fatalf("write stale lockfile: %v", err)
+	}
+
+	err = lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, nil)
+	if err == nil {
+		t.Fatal("CheckLockAtPathsWithStatePaths unexpectedly succeeded")
+	}
+	if got := err.Error(); !strings.Contains(got, "lockfile is out of date; run `gestaltd lock") || !strings.Contains(got, "missing providers.app.target") {
+		t.Fatalf("CheckLockAtPathsWithStatePaths error = %v, want lock command and missing provider drift", err)
 	}
 }
 
