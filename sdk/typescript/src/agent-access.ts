@@ -63,7 +63,7 @@ export interface AgentWorkspace {
 
 /** Shape accepted when creating an agent session through the agent facade. */
 export interface AgentCreateSession {
-  providerName: string;
+  providerName?: string | undefined;
   model?: string | undefined;
   clientRef?: string | undefined;
   metadata?: JsonObjectInput | undefined;
@@ -198,7 +198,7 @@ class AgentImpl implements Agent {
   ): Promise<AgentSession> {
     return agentSessionFromProto(
       await this.client.createSession({
-        providerName: request.providerName,
+        providerName: request.providerName ?? "",
         model: request.model ?? "",
         clientRef: request.clientRef ?? "",
         metadata: optionalStruct(request.metadata),
