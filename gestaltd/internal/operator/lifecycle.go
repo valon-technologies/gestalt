@@ -48,9 +48,6 @@ const (
 )
 
 type Lockfile struct {
-	// MaterializationPlatform records the OS/arch used for committed-lock phase 1 when
-	// it differs from the host that wrote the lockfile (e.g. darwin host with
-	// --platform linux/amd64). Lock --check uses this when --platform is omitted.
 	MaterializationPlatform string               `json:"materializationPlatform,omitempty"`
 	Providers               map[string]LockEntry `json:"providers"`
 	Authentication      map[string]LockEntry `json:"authentication,omitempty"`
@@ -1606,9 +1603,7 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 type lifecyclePaths struct {
 	configPaths []string
 	configFlags string
-	lockFlags   string
-	// lockMaterializationPlatform is set only in prepareCommittedLockAtPaths from
-	// Lock/Check --platform (first value). Left empty for sync, prepare, and runtime.
+	lockFlags                   string
 	lockMaterializationPlatform string
 	pluginScope                 string
 	configPath                  string
