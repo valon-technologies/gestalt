@@ -48,7 +48,11 @@ const (
 )
 
 type Lockfile struct {
-	Providers           map[string]LockEntry `json:"providers"`
+	// MaterializationPlatform records the OS/arch used for committed-lock phase 1 when
+	// it differs from the host that wrote the lockfile (e.g. darwin host with
+	// --platform linux/amd64). Lock --check uses this when --platform is omitted.
+	MaterializationPlatform string               `json:"materializationPlatform,omitempty"`
+	Providers               map[string]LockEntry `json:"providers"`
 	Authentication      map[string]LockEntry `json:"authentication,omitempty"`
 	Authorization       map[string]LockEntry `json:"authorization,omitempty"`
 	ExternalCredentials map[string]LockEntry `json:"externalCredentials,omitempty"`
@@ -240,7 +244,19 @@ func (l *Lifecycle) LockAtPathsWithPlatforms(configPaths []string, state StatePa
 }
 
 func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state StatePaths, platforms []struct{ GOOS, GOARCH string }) error {
-	platform := lockMaterializationPlatform(platforms)
+	platform := lockCheckMaterializationPlatform(platforms, nil)
+	if len(platforms) == 0 {
+		if cfg, err := loadConfigForLifecycle(configPaths, state, true); err == nil {
+			if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err == nil {
+				if err := applyAppScope(cfg, state); err == nil {
+					paths := resolveLifecyclePaths(configPaths, cfg, state)
+					if committed, err := ReadLockfile(paths.lockfilePath); err == nil {
+						platform = lockCheckMaterializationPlatform(platforms, committed)
+					}
+				}
+			}
+		}
+	}
 	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state, platform)
 	if cleanup != nil {
 		defer cleanup()
@@ -270,6 +286,17 @@ func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state S
 		return err
 	}
 	if !bytes.Equal(current, expected) {
+		if stored := strings.TrimSpace(currentLock.MaterializationPlatform); stored != "" && len(platforms) > 0 {
+			requested := lockMaterializationPlatform(platforms)
+			if resolveMaterializationPlatform(stored) != requested {
+				return fmt.Errorf(
+					"lockfile was materialized for platform %q; re-run check with `--platform %s` (not %q)",
+					stored,
+					stored,
+					requested,
+				)
+			}
+		}
 		return fmt.Errorf("lockfile is out of date; run `%s`", formatLockCommand(paths))
 	}
 	return nil
@@ -409,6 +436,7 @@ func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state Stat
 	if err := attachStaticValidationMetadata(lock, cfg, catalogs); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
+	lock.MaterializationPlatform = materializationPlatformForLockfile(platform)
 	return lock, cfg, paths, nil
 }
 

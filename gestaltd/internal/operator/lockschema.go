@@ -25,10 +25,11 @@ const (
 )
 
 type providerLockfile struct {
-	Schema        string              `json:"schema"`
-	SchemaVersion int                 `json:"schemaVersion"`
-	Revision      int                 `json:"revision"`
-	Providers     providerLockBuckets `json:"providers"`
+	Schema                    string              `json:"schema"`
+	SchemaVersion             int                 `json:"schemaVersion"`
+	Revision                  int                 `json:"revision"`
+	MaterializationPlatform   string              `json:"materializationPlatform,omitempty"`
+	Providers                 providerLockBuckets `json:"providers"`
 }
 
 type providerLockBuckets struct {
@@ -192,9 +193,10 @@ func lockEntriesForProviderKind(lock *Lockfile, kind string) map[string]LockEntr
 func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 	lock = normalizeLockfile(lock)
 	return &providerLockfile{
-		Schema:        providerLockSchemaName,
-		SchemaVersion: providerLockSchemaVersionForLock(lock),
-		Revision:      providerLockRevision,
+		Schema:                  providerLockSchemaName,
+		SchemaVersion:           providerLockSchemaVersionForLock(lock),
+		Revision:                providerLockRevision,
+		MaterializationPlatform: strings.TrimSpace(lock.MaterializationPlatform),
 		Providers: providerLockBuckets{
 			App:                 portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindApp),
 			Authentication:      portableEntriesFromLockEntries(lock.Authentication, providermanifestv1.KindAuthentication),
@@ -233,6 +235,7 @@ func (lock *providerLockfile) toLockfile() *Lockfile {
 	runtimeLock.Telemetry = lockEntriesFromPortableEntries(lock.Providers.Telemetry)
 	runtimeLock.Audit = lockEntriesFromPortableEntries(lock.Providers.Audit)
 	runtimeLock.UIs = lockEntriesFromPortableEntries(lock.Providers.UI)
+	runtimeLock.MaterializationPlatform = strings.TrimSpace(lock.MaterializationPlatform)
 	return runtimeLock
 }
 

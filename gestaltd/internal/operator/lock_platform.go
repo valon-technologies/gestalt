@@ -31,3 +31,29 @@ func resolveMaterializationPlatform(platform string) string {
 func pathsMaterializationPlatform(paths lifecyclePaths) string {
 	return resolveMaterializationPlatform(paths.lockMaterializationPlatform)
 }
+
+// materializationPlatformForLockfile returns the platform string to persist in the
+// committed lockfile. Omitted when phase 1 used the host platform so existing
+// CI/host-native locks stay unchanged.
+func materializationPlatformForLockfile(platform string) string {
+	platform = resolveMaterializationPlatform(platform)
+	if platform == providerpkg.CurrentPlatformString() {
+		return ""
+	}
+	return platform
+}
+
+// lockCheckMaterializationPlatform selects the phase-1 platform for lock --check.
+// Explicit --platform wins; otherwise the committed lockfile's stored platform is
+// used so darwin developers can verify linux-target locks without passing flags.
+func lockCheckMaterializationPlatform(platforms []struct{ GOOS, GOARCH string }, committed *Lockfile) string {
+	if len(platforms) > 0 {
+		return lockMaterializationPlatform(platforms)
+	}
+	if committed != nil {
+		if p := strings.TrimSpace(committed.MaterializationPlatform); p != "" {
+			return resolveMaterializationPlatform(p)
+		}
+	}
+	return lockMaterializationPlatform(nil)
+}
