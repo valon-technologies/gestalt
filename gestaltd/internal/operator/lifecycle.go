@@ -117,7 +117,8 @@ type StatePaths struct {
 }
 
 type SyncOptions struct {
-	Parallelism int
+	Parallelism     int
+	ArchiveCacheDir string
 }
 
 func DefaultSyncParallelism() int {
@@ -1152,6 +1153,9 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 		return err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
+	if mode == artifactModeMaterialize && opts.ArchiveCacheDir != "" {
+		paths.archiveCacheDir = resolveCLIArtifactsDir(opts.ArchiveCacheDir)
+	}
 	lock, err := ReadLockfile(paths.lockfilePath)
 	if err != nil {
 		if os.IsNotExist(err) && !configRequiresCommittedLock(cfg) {
@@ -1591,6 +1595,7 @@ type lifecyclePaths struct {
 	agentDir               string
 	runtimeDir             string
 	uiDir                  string
+	archiveCacheDir        string
 }
 
 func primaryConfigPath(paths []string) string {
@@ -3251,14 +3256,11 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("resolve archive for %s: %w", subject, err)
 	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
+	download, err := downloadArchiveForSourceWithCache(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation, archive.SHA256, "")
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("download metadata source package for %s: %w", subject, err)
 	}
 	defer download.Cleanup()
-	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
-		return nil, LockEntry{}, fmt.Errorf("metadata source digest mismatch for %s: got %s, want %s", subject, download.SHA256Hex, archive.SHA256)
-	}
 
 	installed, err := installPackage(download.LocalPath, destDir)
 	if err != nil {
@@ -4442,6 +4444,18 @@ func (e staticArchiveUnavailableError) Unwrap() error {
 	return e.err
 }
 
+type lockedArchiveDownloadError struct {
+	err error
+}
+
+func (e lockedArchiveDownloadError) Error() string {
+	return e.err.Error()
+}
+
+func (e lockedArchiveDownloadError) Unwrap() error {
+	return e.err
+}
+
 func isStaticArchiveUnavailable(err error) bool {
 	var unavailable staticArchiveUnavailableError
 	return errors.As(err, &unavailable)
@@ -4468,41 +4482,19 @@ func fallbackStaticValidationManifest(kind string, entry LockEntry) *providerman
 }
 
 func (l *Lifecycle) installLockedArchiveForStaticValidation(ctx context.Context, paths lifecyclePaths, kind, name string, provider *config.ProviderEntry, entry LockEntry, destDir, platform string) (*preparedInstall, func(), error) {
-	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
-	if !ok || archive.URL == "" {
-		return nil, nil, fmt.Errorf("no archive for platform %s for %s %q; run `%s --platform %s`", platform, kind, name, formatLockCommand(paths), platform)
-	}
-	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
+	subject := fmt.Sprintf("%s %q", kind, name)
+	download, resolvedKey, cleanup, err := l.downloadLockedArchive(ctx, paths, provider, entry, platform, subject, "")
 	if err != nil {
-		return nil, nil, fmt.Errorf("resolve locked source provider for %s %q: %w", kind, name, err)
-	}
-	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
-		return nil, nil, fmt.Errorf("no verified hash for platform %s for %s %q; run `%s --platform %s`", platform, kind, name, formatLockCommand(paths), platform)
-	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(provider), archiveLocation)
-	if err != nil {
+		var downloadErr lockedArchiveDownloadError
+		if !errors.As(err, &downloadErr) {
+			return nil, nil, err
+		}
+		var mismatch archiveDigestMismatchError
+		if errors.As(err, &mismatch) {
+			return nil, nil, fmt.Errorf("locked source provider digest mismatch for %s %q: %w", kind, name, err)
+		}
 		return nil, nil, staticArchiveUnavailableError{
-			err: fmt.Errorf("download locked source provider for %s %q: %w", kind, name, err),
-		}
-	}
-	cleanup := download.Cleanup
-	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
-		cleanup()
-		return nil, nil, fmt.Errorf("locked source provider digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, archive.SHA256)
-	}
-	if archive.SHA256 == "" {
-		sourceLocation := entry.Source
-		if !isRemoteReleaseMetadataLocation(sourceLocation) {
-			sourceLocation = resolveLockPath(paths.configDir, sourceLocation)
-		}
-		expectedSHA, err := localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation)
-		if err != nil {
-			cleanup()
-			return nil, nil, fmt.Errorf("load local archive metadata for %s %q: %w", kind, name, err)
-		}
-		if expectedSHA != "" && download.SHA256Hex != expectedSHA {
-			cleanup()
-			return nil, nil, fmt.Errorf("locked source provider digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, expectedSHA)
+			err: err,
 		}
 	}
 	if err := os.RemoveAll(destDir); err != nil {
@@ -5326,38 +5318,11 @@ func bindPathBackedUIManifest(app *config.ProviderEntry, configMap map[string]an
 
 func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyclePaths, name string, app *config.ProviderEntry, entry LockEntry) error {
 	platform := providerpkg.CurrentPlatformString()
-	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
-	if !ok || archive.URL == "" {
-		return fmt.Errorf("no archive for platform %s for provider %q; run `%s --platform %s`", platform, name, formatLockCommand(paths), platform)
-	}
-	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
+	download, resolvedKey, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, fmt.Sprintf("provider %q", name), paths.archiveCacheDir)
 	if err != nil {
-		return fmt.Errorf("resolve locked source provider for provider %q: %w", name, err)
+		return err
 	}
-	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
-		return fmt.Errorf("no verified hash for platform %s for provider %q; run `%s --platform %s`", platform, name, formatLockCommand(paths), platform)
-	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
-	if err != nil {
-		return fmt.Errorf("download locked source provider for provider %q: %w", name, err)
-	}
-	defer download.Cleanup()
-	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
-		return fmt.Errorf("locked source provider digest mismatch for provider %q: got %s, want %s", name, download.SHA256Hex, archive.SHA256)
-	}
-	if archive.SHA256 == "" {
-		sourceLocation := entry.Source
-		if !isRemoteReleaseMetadataLocation(sourceLocation) {
-			sourceLocation = resolveLockPath(paths.configDir, sourceLocation)
-		}
-		expectedSHA, err := localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation)
-		if err != nil {
-			return fmt.Errorf("load local archive metadata for provider %q: %w", name, err)
-		}
-		if expectedSHA != "" && download.SHA256Hex != expectedSHA {
-			return fmt.Errorf("locked source provider digest mismatch for provider %q: got %s, want %s", name, download.SHA256Hex, expectedSHA)
-		}
-	}
+	defer cleanupDownload()
 
 	destDir := providerDestDir(paths, name)
 	installed, cleanupInstall, commitInstall, err := installLockedPackageAtomic(download.LocalPath, destDir)
@@ -5382,38 +5347,11 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyc
 
 func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecyclePaths, kind, name string, app *config.ProviderEntry, entry LockEntry, destDir string) error {
 	platform := providerpkg.CurrentPlatformString()
-	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
-	if !ok || archive.URL == "" {
-		return fmt.Errorf("no archive for platform %s for %s %q; run `%s --platform %s`", platform, kind, name, formatLockCommand(paths), platform)
-	}
-	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
+	download, resolvedKey, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, fmt.Sprintf("%s %q", kind, name), paths.archiveCacheDir)
 	if err != nil {
-		return fmt.Errorf("resolve locked source provider for %s %q: %w", kind, name, err)
+		return err
 	}
-	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
-		return fmt.Errorf("no verified hash for platform %s for %s %q; run `%s --platform %s`", platform, kind, name, formatLockCommand(paths), platform)
-	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
-	if err != nil {
-		return fmt.Errorf("download locked source provider for %s %q: %w", kind, name, err)
-	}
-	defer download.Cleanup()
-	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
-		return fmt.Errorf("locked source provider digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, archive.SHA256)
-	}
-	if archive.SHA256 == "" {
-		sourceLocation := entry.Source
-		if !isRemoteReleaseMetadataLocation(sourceLocation) {
-			sourceLocation = resolveLockPath(paths.configDir, sourceLocation)
-		}
-		expectedSHA, err := localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation)
-		if err != nil {
-			return fmt.Errorf("load local archive metadata for %s %q: %w", kind, name, err)
-		}
-		if expectedSHA != "" && download.SHA256Hex != expectedSHA {
-			return fmt.Errorf("locked source provider digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, expectedSHA)
-		}
-	}
+	defer cleanupDownload()
 
 	if destDir == "" {
 		return fmt.Errorf("unsupported component %q", name)
@@ -5443,38 +5381,11 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecy
 
 func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifecyclePaths, app *config.ProviderEntry, entry LockEntry, destDir string) error {
 	platform := providerpkg.CurrentPlatformString()
-	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
-	if !ok || archive.URL == "" {
-		return fmt.Errorf("no archive for platform %s for ui provider; run `%s --platform %s`", platform, formatLockCommand(paths), platform)
-	}
-	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
+	download, _, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, "ui provider", paths.archiveCacheDir)
 	if err != nil {
-		return fmt.Errorf("resolve locked source for ui provider: %w", err)
+		return err
 	}
-	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
-		return fmt.Errorf("no verified hash for platform %s for ui provider; run `%s --platform %s`", platform, formatLockCommand(paths), platform)
-	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
-	if err != nil {
-		return fmt.Errorf("download locked source for ui provider: %w", err)
-	}
-	defer download.Cleanup()
-	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
-		return fmt.Errorf("locked source digest mismatch for ui provider: got %s, want %s", download.SHA256Hex, archive.SHA256)
-	}
-	if archive.SHA256 == "" {
-		sourceLocation := entry.Source
-		if !isRemoteReleaseMetadataLocation(sourceLocation) {
-			sourceLocation = resolveLockPath(paths.configDir, sourceLocation)
-		}
-		expectedSHA, err := localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation)
-		if err != nil {
-			return fmt.Errorf("load local archive metadata for ui provider: %w", err)
-		}
-		if expectedSHA != "" && download.SHA256Hex != expectedSHA {
-			return fmt.Errorf("locked source digest mismatch for ui provider: got %s, want %s", download.SHA256Hex, expectedSHA)
-		}
-	}
+	defer cleanupDownload()
 
 	if err := os.RemoveAll(destDir); err != nil {
 		return fmt.Errorf("remove stale cache for ui provider: %w", err)
@@ -5493,6 +5404,55 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifec
 		return fmt.Errorf("locked source manifest version mismatch for ui provider: got %q, want %q", installed.Manifest.Version, entry.Version)
 	}
 	return nil
+}
+
+func (l *Lifecycle) downloadLockedArchive(ctx context.Context, paths lifecyclePaths, app *config.ProviderEntry, entry LockEntry, platform, subject, cacheDir string) (*providerpkg.DownloadResult, string, func(), error) {
+	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
+	if !ok || archive.URL == "" {
+		return nil, "", nil, fmt.Errorf("no archive for platform %s for %s; run `%s --platform %s`", platform, subject, formatLockCommand(paths), platform)
+	}
+	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("resolve locked source archive for %s: %w", subject, err)
+	}
+	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
+		return nil, "", nil, fmt.Errorf("no verified hash for platform %s for %s; run `%s --platform %s`", platform, subject, formatLockCommand(paths), platform)
+	}
+	expectedSHA, err := expectedSHAForLockedArchive(paths, entry, resolvedKey, archiveLocation, archive)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("resolve locked archive digest for %s: %w", subject, err)
+	}
+	download, err := downloadArchiveForSourceWithCache(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation, expectedSHA, cacheDir)
+	if err != nil {
+		return nil, "", nil, lockedArchiveDownloadError{err: fmt.Errorf("download locked source archive for %s: %w", subject, err)}
+	}
+	return download, resolvedKey, download.Cleanup, nil
+}
+
+func expectedSHAForLockedArchive(paths lifecyclePaths, entry LockEntry, resolvedKey, archiveLocation string, archive LockArchive) (string, error) {
+	if strings.TrimSpace(archive.SHA256) != "" {
+		sha, _, err := normalizeArchiveSHA256(archive.SHA256)
+		if err != nil {
+			return "", fmt.Errorf("lock archive sha256: %w", err)
+		}
+		return sha, nil
+	}
+	sourceLocation := entry.Source
+	if !isRemoteReleaseMetadataLocation(sourceLocation) {
+		sourceLocation = resolveLockPath(paths.configDir, sourceLocation)
+	}
+	expectedSHA, err := localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation)
+	if err != nil {
+		return "", fmt.Errorf("load local archive metadata: %w", err)
+	}
+	sha, hasSHA, err := normalizeArchiveSHA256(expectedSHA)
+	if err != nil {
+		return "", fmt.Errorf("local archive metadata sha256: %w", err)
+	}
+	if !hasSHA {
+		return "", nil
+	}
+	return sha, nil
 }
 
 func (l *Lifecycle) downloadPlatformArchives(ctx context.Context, lock *Lockfile, paths lifecyclePaths, platforms []struct{ GOOS, GOARCH string }, tokenForSource map[string]string) error {

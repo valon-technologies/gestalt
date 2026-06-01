@@ -2,7 +2,6 @@ package operator
 
 import (
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -269,7 +268,7 @@ func portableEntriesFromLockEntries(entries map[string]LockEntry, kind string) m
 			Source:             source,
 			SourceRef:          cloneLockSourceRef(entry.SourceRef),
 			Version:            entry.Version,
-			Archives:           maps.Clone(entry.Archives),
+			Archives:           normalizeLockArchives(entry.Archives),
 			Manifest:           entry.StaticManifest,
 			CatalogAvailable:   entry.StaticCatalogAvailable,
 			CatalogFingerprint: entry.StaticCatalogFingerprint,
@@ -299,7 +298,7 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 			Source:                   source,
 			SourceRef:                cloneLockSourceRef(entry.SourceRef),
 			Version:                  entry.Version,
-			Archives:                 maps.Clone(entry.Archives),
+			Archives:                 normalizeLockArchives(entry.Archives),
 			StaticManifest:           entry.Manifest,
 			StaticCatalogAvailable:   entry.CatalogAvailable,
 			StaticCatalogFingerprint: entry.CatalogFingerprint,
@@ -308,6 +307,23 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 		}
 	}
 	return runtimeEntries
+}
+
+func normalizeLockArchives(archives map[string]LockArchive) map[string]LockArchive {
+	if len(archives) == 0 {
+		return nil
+	}
+	normalized := make(map[string]LockArchive, len(archives))
+	for platform := range archives {
+		archive := archives[platform]
+		if sha, ok := canonicalArchiveCacheSHA(archive.SHA256); ok {
+			archive.SHA256 = sha
+		} else {
+			archive.SHA256 = strings.TrimSpace(archive.SHA256)
+		}
+		normalized[platform] = archive
+	}
+	return normalized
 }
 
 func cloneLockSourceRef(src *LockSourceRef) *LockSourceRef {
