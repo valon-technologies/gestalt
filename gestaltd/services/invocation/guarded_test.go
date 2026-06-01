@@ -376,6 +376,7 @@ func TestGuardedInvoker_OptionalGraphQLDelegates(t *testing.T) {
 			meta := invocation.MetaFromContext(ctx)
 			if meta == nil {
 				t.Fatal("expected invocation metadata")
+				return nil, nil
 			}
 			if meta.RequestID != "req-1" {
 				t.Fatalf("expected request req-1, got %q", meta.RequestID)

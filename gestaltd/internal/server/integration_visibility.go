@@ -34,7 +34,7 @@ func (s *Server) integrationHasVisibleHTTPOperationsContext(ctx context.Context,
 	if cat == nil {
 		return false
 	}
-	cat = invocation.FilterCatalogForPrincipal(ctx, cat, provider, p, s.authorizer)
+	cat = invocation.FilterCatalogForPrincipal(ctx, cat, provider, p, nil)
 	return len(s.publicHTTPOperations(provider, prov, cat.Operations)) > 0
 }
 
@@ -72,23 +72,11 @@ func (s *Server) mountedUIRootAccessibleContext(ctx context.Context, p *principa
 	if mounted.AuthorizationPolicy == "" {
 		return true
 	}
-	if s.authorizer == nil || p == nil || principal.IsNonUserPrincipal(p) {
+	if p == nil || principal.IsNonUserPrincipal(p) {
 		return false
 	}
 
-	var (
-		access  invocation.AccessContext
-		allowed bool
-	)
-	if mounted.AppName != "" {
-		access, allowed = s.authorizer.ResolveAccess(ctx, p, mounted.AppName)
-	} else {
-		access, allowed = s.authorizer.ResolvePolicyAccess(ctx, p, mounted.AuthorizationPolicy)
-	}
-	if !allowed {
-		return false
-	}
-
+	access := invocation.AccessContext{}
 	route, matched := mounted.routeForRequestPath(mountedUIRootRequestPath(mounted))
 	return matched && len(route.AllowedRoles) > 0 && mountedUIRoleAllowed(access.Role, route.AllowedRoles)
 }

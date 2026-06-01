@@ -6,7 +6,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -24,7 +23,6 @@ type Config struct {
 	TokenResolver       invocation.TokenResolver
 	AuditSink           core.AuditSink
 	Providers           *registry.ProviderMap[core.Provider]
-	Authorizer          authorization.RuntimeAuthorizer
 	AllowedProviders    []string
 	ToolPrefixes        map[string]string
 	ToolTargets         *toolTargetIndex

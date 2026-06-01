@@ -466,6 +466,7 @@ apps:
 	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if auth == nil {
 		t.Fatal("SelectedAuthenticationProvider = nil")
+		return
 	}
 	authCfg := mustDecodeNode(t, auth.Config)
 	if authCfg["clientId"] != "client-from-env" {
@@ -1827,6 +1828,7 @@ apps:
 		gitSource := entry.Source.GitSource()
 		if gitSource == nil {
 			t.Fatal("Source.GitSource() = nil")
+			return
 		}
 		repo, ref, manifestPath := gitSource.NormalizedLocationParts()
 		if repo != "https://github.com/Valon-Technologies/Gestalt-Providers.git" ||
@@ -2010,6 +2012,7 @@ server:
 		entry := cfg.Providers.UI["roadmap"]
 		if entry == nil {
 			t.Fatal(`Providers.UI["roadmap"] = nil`)
+			return
 		}
 		wantPath := filepath.Join(filepath.Dir(path), "ui", "default", "provider.yaml")
 		if got := entry.Source.Path; got != wantPath {
@@ -2043,6 +2046,7 @@ server:
 		entry := cfg.Providers.S3["minio"]
 		if entry == nil {
 			t.Fatal(`Providers.S3["minio"] = nil`)
+			return
 		}
 		wantPath := filepath.Join(filepath.Dir(path), "providers", "s3", "minio", "manifest.yaml")
 		if got := entry.Source.Path; got != wantPath {
@@ -2081,6 +2085,7 @@ server:
 		entry := cfg.Providers.UI["roadmap"]
 		if entry == nil {
 			t.Fatal(`Providers.UI["roadmap"] = nil`)
+			return
 		}
 		wantSourcePath := filepath.Join(filepath.Dir(path), "web", "roadmap", "manifest.yaml")
 		if got := entry.Source.Path; got != wantSourcePath {
@@ -2132,6 +2137,7 @@ server:
 		entry := cfg.Providers.UI["roadmap"]
 		if entry == nil {
 			t.Fatal(`Providers.UI["roadmap"] = nil`)
+			return
 		}
 		if got := entry.Path; got != "/create-customer-roadmap-review" {
 			t.Fatalf(`Providers.UI["roadmap"].Path = %q, want %q`, got, "/create-customer-roadmap-review")
@@ -4242,6 +4248,7 @@ server:
 		auth := cfg.Providers.Agent["simple"].Runtime.ImagePullAuth
 		if auth == nil {
 			t.Fatal("imagePullAuth = nil")
+			return
 		}
 		if auth.DockerConfigJSON != `{"auths":{"ghcr.io":{"username":"ghcr-user","password":"ghcr-token"}}}` {
 			t.Fatalf("dockerConfigJson = %q", auth.DockerConfigJSON)
@@ -4290,6 +4297,7 @@ server:
 		auth := cfg.Providers.Agent["simple"].Runtime.ImagePullAuth
 		if auth == nil {
 			t.Fatal("imagePullAuth = nil")
+			return
 		}
 		if _, isSecretRef, err := ParseSecretRefTransport(auth.DockerConfigJSON); err != nil || !isSecretRef {
 			t.Fatalf("dockerConfigJson secret ref parse = %v, %v; want encoded secret ref", isSecretRef, err)
@@ -5038,6 +5046,7 @@ apps:
 	entry := cfg.Apps["service"]
 	if entry == nil {
 		t.Fatal(`Apps["service"] = nil`)
+		return
 	}
 	if !entry.Source.IsPackage() {
 		t.Fatal("Source.IsPackage = false, want true")
@@ -5095,6 +5104,7 @@ providers:
 	} {
 		if entry == nil {
 			t.Fatalf("%s entry = nil", subject)
+			return
 		}
 		if got := entry.Source.Builtin; got != "" {
 			t.Fatalf("%s Source.Builtin = %q, want empty for package source", subject, got)
@@ -6150,6 +6160,7 @@ func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
 	canonical := connections[core.AppConnectionName]
 	if canonical == nil {
 		t.Fatalf("connections[%q] missing", core.AppConnectionName)
+		return
 	}
 	if canonical.ConnectionID != "shared" || canonical.Ref != "shared" || !canonical.BindingResolved {
 		t.Fatalf("canonical binding = %+v, want resolved shared connection", canonical)
@@ -6232,6 +6243,7 @@ func TestValidateStructureCanonicalizesAppInvokeRunAs(t *testing.T) {
 	subject := cfg.Apps["source"].Invokes[0].RunAsSubject()
 	if subject == nil {
 		t.Fatal("RunAsSubject() = nil, want subject")
+		return
 	}
 	if subject.SubjectID != "service_account:automation" {
 		t.Fatalf("RunAsSubject().SubjectID = %q", subject.SubjectID)
@@ -6402,6 +6414,7 @@ server:
 	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if auth == nil {
 		t.Fatal("SelectedAuthenticationProvider = nil")
+		return
 	}
 	if got := auth.SourcePath(); got != filepath.Join(dir, "auth-app", "provider.yaml") {
 		t.Fatalf("auth app source path = %q, want %q", got, filepath.Join(dir, "auth-app", "provider.yaml"))
@@ -6492,6 +6505,7 @@ server:
 	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if auth == nil {
 		t.Fatal("SelectedAuthenticationProvider = nil")
+		return
 	}
 	authCfg := mustDecodeNode(t, auth.Config)
 	if len(authCfg) != 3 {

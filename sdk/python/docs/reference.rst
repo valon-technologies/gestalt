@@ -733,7 +733,6 @@ These clients connect to host services made available to a provider process by
    ENV_RUNTIME_SESSION_ID
    AgentHost
    Agent
-   Authorization
    AppProtocol
    RuntimeLogHost
    RuntimeLogWriter
@@ -751,8 +750,6 @@ These clients connect to host services made available to a provider process by
    :members:
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
-
-.. autofunction:: Authorization
 
 .. autoclass:: AppProtocol
    :members:

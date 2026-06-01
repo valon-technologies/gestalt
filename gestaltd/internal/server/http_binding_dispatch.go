@@ -64,7 +64,6 @@ func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding Mou
 		p = s.httpBindingPrincipal(binding, verified)
 	}
 	ctx = principal.WithPrincipal(ctx, p)
-	ctx = invocation.WithAccessContext(ctx, s.providerAccessContextWithContext(ctx, p, binding.AppName))
 	ctx = invocation.WithWorkflowContext(ctx, httpBindingContextValue(binding, verified, parsed))
 	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTPBinding)
 	ctx = invocation.WithHTTPBinding(ctx, binding.Name)

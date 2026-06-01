@@ -292,7 +292,7 @@ func resolvePreparedInstallBuildTarget(root, kind string) (string, error) {
 			return "", ErrNoSourceProviderPackage
 		}
 		return kind, nil
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		ok, err := HasSourceComponentPackage(root, kind)
 		if err != nil {
 			return "", err
@@ -310,7 +310,7 @@ func isMissingPreparedInstallBuildTarget(err error, kind string) bool {
 	switch kind {
 	case providermanifestv1.KindApp:
 		return errors.Is(err, ErrNoSourceProviderPackage)
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		return errors.Is(err, ErrNoSourceComponentPackage)
 	default:
 		return false
@@ -321,7 +321,7 @@ func missingPreparedInstallBuildTargetError(kind string) error {
 	switch kind {
 	case providermanifestv1.KindApp:
 		return ErrNoSourceProviderPackage
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		return ErrNoSourceComponentPackage
 	default:
 		return fmt.Errorf("unsupported release build target kind %q", kind)
@@ -340,7 +340,7 @@ func buildPreparedInstallBinary(root, outputPath, pluginName, kind, goos, goarch
 	switch kind {
 	case providermanifestv1.KindApp:
 		return buildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch, output)
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		return buildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch, output)
 	default:
 		return "", fmt.Errorf("unsupported release build target kind %q", kind)

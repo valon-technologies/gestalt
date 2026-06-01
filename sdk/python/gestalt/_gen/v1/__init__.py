@@ -9,8 +9,6 @@ __all__ = [
     "app_pb2_grpc",
     "runtime_provider_pb2",
     "runtime_provider_pb2_grpc",
-    "authorization_pb2",
-    "authorization_pb2_grpc",
     "authentication_pb2",
     "authentication_pb2_grpc",
     "cache_pb2",

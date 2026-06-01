@@ -91,7 +91,6 @@ func decodeManifest(data []byte, format string, sourceMode bool) (*providermanif
 var validManifestKinds = map[string]bool{
 	providermanifestv1.KindApp:                 true,
 	providermanifestv1.KindAuthentication:      true,
-	providermanifestv1.KindAuthorization:       true,
 	providermanifestv1.KindExternalCredentials: true,
 	providermanifestv1.KindIndexedDB:           true,
 	providermanifestv1.KindCache:               true,
@@ -112,7 +111,7 @@ func ManifestKind(manifest *providermanifestv1.Manifest) (string, error) {
 	}
 	kind := providermanifestv1.NormalizeKind(manifest.Kind)
 	if !validManifestKinds[manifest.Kind] && !validManifestKinds[kind] {
-		return "", fmt.Errorf("manifest kind %q is not valid; expected one of app, authentication, authorization, externalcredentials, indexeddb, cache, s3, workflow, agent, secrets, runtime, or ui", manifest.Kind)
+		return "", fmt.Errorf("manifest kind %q is not valid; expected one of app, authentication, externalcredentials, indexeddb, cache, s3, workflow, agent, secrets, runtime, or ui", manifest.Kind)
 	}
 	return kind, nil
 }
@@ -179,7 +178,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 	switch kind {
 	case providermanifestv1.KindApp:
 		needsArtifacts = needsArtifacts || manifest.Entrypoint != nil
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		needsArtifacts = needsArtifacts || !sourceMode
 	}
 
@@ -242,7 +241,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		default:
 			return fmt.Errorf("entrypoint is required")
 		}
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		if manifest.Entrypoint == nil && !allowsSourceEntrypointOmission {
 			return fmt.Errorf("entrypoint is required")
 		}

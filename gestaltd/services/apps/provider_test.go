@@ -590,6 +590,7 @@ func TestPrincipalFromProto_NonUserEmailDoesNotCreateIdentity(t *testing.T) {
 	})
 	if p == nil {
 		t.Fatal("expected principal")
+		return
 	}
 	if p.Kind != principal.Kind("service_account") {
 		t.Fatalf("kind = %q, want service_account", p.Kind)
@@ -624,6 +625,7 @@ func TestRemoteProviderResolveHTTPSubjectIgnoresProviderReturnedEmail(t *testing
 	}
 	if resolved == nil {
 		t.Fatal("expected resolved subject")
+		return
 	}
 	if resolved.ID != "user:user-456" || resolved.Kind != "user" {
 		t.Fatalf("unexpected resolved subject: %#v", resolved)

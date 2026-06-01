@@ -90,8 +90,6 @@ func providerKindToProto(kind ProviderKind) proto.ProviderKind {
 		return proto.ProviderKind_PROVIDER_KIND_APP
 	case ProviderKindAuthentication:
 		return proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION
-	case ProviderKindAuthorization:
-		return proto.ProviderKind_PROVIDER_KIND_AUTHORIZATION
 	case ProviderKindIndexedDB:
 		return proto.ProviderKind_PROVIDER_KIND_INDEXEDDB
 	case ProviderKindCache:

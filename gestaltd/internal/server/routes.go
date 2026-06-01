@@ -31,7 +31,6 @@ func (s *Server) routes() {
 	case RouteProfileManagement:
 		s.mountCoreRoutes(r, metricsUnauthenticated)
 		s.mountManagementRootRedirect(r)
-		s.mountAdminAuthorizationAPIRoutes(r)
 		s.mountAdminAPIRoutes(r)
 		s.mountAdminUIRoutes(r)
 	default:
@@ -92,9 +91,6 @@ func (s *Server) mountAdminUIRoutes(r chi.Router) {
 func (s *Server) mountAdminAPIRoutes(r chi.Router) {
 	r.Route("/admin/api/v1", func(r chi.Router) {
 		r.Use(middleware.Timeout(60 * time.Second))
-		if s.adminRoute.AuthorizationPolicy != "" {
-			r.Use(s.adminAPIAuthMiddleware)
-		}
 		s.mountAdminRuntimeRoutes(r)
 	})
 }
@@ -174,25 +170,8 @@ func (s *Server) mountAPIRoutes(r chi.Router) {
 			s.mountAuthRoutes(r)
 			s.mountAuthenticatedRoutes(r)
 		})
-		s.mountAdminAuthorizationAPIRoutesInGroup(r)
 		r.NotFound(apiNotFound)
 		r.MethodNotAllowed(apiMethodNotAllowed)
-	})
-}
-
-func (s *Server) mountAdminAuthorizationAPIRoutes(r chi.Router) {
-	r.Route("/api/v1", func(r chi.Router) {
-		s.mountAdminAuthorizationAPIRoutesInGroup(r)
-	})
-}
-
-func (s *Server) mountAdminAuthorizationAPIRoutesInGroup(r chi.Router) {
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.Timeout(60 * time.Second))
-		if s.adminRoute.AuthorizationPolicy != "" {
-			r.Use(s.adminAPIAuthMiddleware)
-		}
-		s.mountAdminAuthorizationRoutes(r)
 	})
 }
 

@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 )
 
 type InvocationMeta struct {
@@ -94,7 +93,10 @@ type internalConnectionAccessCtxKey struct{}
 
 type InvocationSurface string
 
-type AccessContext = authorization.AccessContext
+type AccessContext struct {
+	Policy string
+	Role   string
+}
 
 const (
 	InvocationSurfaceHTTP        InvocationSurface = "http"

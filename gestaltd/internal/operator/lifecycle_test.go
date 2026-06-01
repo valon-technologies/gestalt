@@ -3764,6 +3764,9 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 				t.Fatalf("WriteFile(artifact): %v", err)
 			}
 			manifest += "entrypoint:\n  artifactPath: .gestalt/build/provider\n"
+			if kind == providermanifestv1.KindApp {
+				manifest += "spec: {}\n"
+			}
 		}
 		if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
 			t.Fatalf("WriteFile(%q): %v", manifestPath, err)
@@ -3796,8 +3799,8 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		root := t.TempDir()
 		firstConfigDir := filepath.Join(root, "one", "deploy")
 		secondConfigDir := filepath.Join(root, "two", "deploy")
-		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthorization)
-		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthorization)
+		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthentication)
+		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthentication)
 
 		firstProvider := &config.ProviderEntry{
 			Source: config.ProviderSource{Path: firstManifestPath},
@@ -3854,9 +3857,9 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		root := t.TempDir()
 		firstConfigDir := filepath.Join(root, "one", "deploy")
 		secondConfigDir := filepath.Join(root, "two", "deploy")
-		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthorization)
-		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthorization)
-		if err := os.WriteFile(secondManifestPath, []byte("source: github.com/test-org/two/component\nversion: 0.0.2\nkind: authorization\nentrypoint:\n  artifactPath: .gestalt/build/provider\n"), 0o644); err != nil {
+		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthentication)
+		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthentication)
+		if err := os.WriteFile(secondManifestPath, []byte("source: github.com/test-org/two/component\nversion: 0.0.2\nkind: authentication\nentrypoint:\n  artifactPath: .gestalt/build/provider\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile(%q): %v", secondManifestPath, err)
 		}
 

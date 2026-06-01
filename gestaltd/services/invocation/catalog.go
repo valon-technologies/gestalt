@@ -11,7 +11,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	integration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"go.opentelemetry.io/otel/attribute"
@@ -314,18 +313,6 @@ func mergeCatalogs(provName string, staticCat, sessionCat *catalog.Catalog) (*ca
 	return merged, nil
 }
 
-func FilterCatalogForPrincipal(ctx context.Context, cat *catalog.Catalog, provName string, p *principal.Principal, authorizer authorization.RuntimeAuthorizer) *catalog.Catalog {
-	if cat == nil || authorizer == nil {
-		return cat
-	}
-
-	filtered := cat.Clone()
-	ops := filtered.Operations[:0]
-	for i := range filtered.Operations {
-		if authorizer.AllowCatalogOperation(ctx, p, provName, filtered.Operations[i]) {
-			ops = append(ops, filtered.Operations[i])
-		}
-	}
-	filtered.Operations = ops
-	return filtered
+func FilterCatalogForPrincipal(ctx context.Context, cat *catalog.Catalog, provName string, p *principal.Principal, _ any) *catalog.Catalog {
+	return cat
 }

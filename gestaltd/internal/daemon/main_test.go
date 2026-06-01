@@ -427,6 +427,7 @@ packages:
 	entry := cfg.Apps["alpha"]
 	if entry == nil {
 		t.Fatal(`Apps["alpha"] = nil`)
+		return
 	}
 	if got := entry.Source.PackageRepo(); got != "local" {
 		t.Fatalf("Source.PackageRepo = %q, want local", got)

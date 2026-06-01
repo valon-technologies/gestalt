@@ -51,12 +51,6 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	metricProviderName = req.Integration
 	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
-	p := PrincipalFromContext(r.Context())
-	if !s.allowProviderContext(r.Context(), p, req.Integration) {
-		auditErr = errOperationAccess
-		writeError(w, http.StatusForbidden, errOperationAccess.Error())
-		return
-	}
 	if conn, ok := s.effectiveConnectionDef(req.Integration, connection); ok {
 		if mode := config.ConnectionModeForConnection(conn); mode != "" {
 			connectionMode = metricutil.NormalizeConnectionMode(mode)
@@ -101,6 +95,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		authURL, verifier = handler.StartOAuth("_", req.Scopes)
 	}
 
+	p := PrincipalFromContext(r.Context())
 	authSource := ""
 	if p != nil {
 		authSource = p.AuthSource()

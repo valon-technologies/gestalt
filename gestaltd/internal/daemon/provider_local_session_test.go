@@ -42,6 +42,7 @@ func TestPrepareProviderLocalSessionSupportsDirectUITarget(t *testing.T) {
 	ui := cfg.Providers.UI[session.TargetKey]
 	if ui == nil {
 		t.Fatalf("Providers.UI[%q] = nil", session.TargetKey)
+		return
 	}
 	wantManifestPath, err := canonicalPath(mountedUI.ManifestPath)
 	if err != nil {
@@ -91,6 +92,7 @@ func TestPrepareProviderLocalSessionAutoMountsSiblingUI(t *testing.T) {
 	app := cfg.Apps[session.TargetKey]
 	if app == nil {
 		t.Fatalf("Apps[%q] = nil", session.TargetKey)
+		return
 	}
 	if got := app.UI; got != session.TargetKey {
 		t.Fatalf("App UI = %q, want %q", got, session.TargetKey)
@@ -101,6 +103,7 @@ func TestPrepareProviderLocalSessionAutoMountsSiblingUI(t *testing.T) {
 	ui := cfg.Providers.UI[session.TargetKey]
 	if ui == nil {
 		t.Fatalf("Providers.UI[%q] = nil", session.TargetKey)
+		return
 	}
 	wantManifestPath, err := canonicalPath(siblingUI.ManifestPath)
 	if err != nil {
@@ -139,6 +142,7 @@ func TestPrepareProviderLocalSessionLeavesAppWithoutUIUnmounted(t *testing.T) {
 	app := cfg.Apps[session.TargetKey]
 	if app == nil {
 		t.Fatalf("Apps[%q] = nil", session.TargetKey)
+		return
 	}
 	if got := app.UI; got != "" {
 		t.Fatalf("App UI = %q, want empty", got)

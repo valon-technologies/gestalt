@@ -94,11 +94,13 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) {
 			names = append(names, s.Name)
 		}
 		t.Fatalf("expected HTTP span with prefix 'gestaltd', got spans: %v", names)
+		return
 	}
 
 	brokerSpan := findSpan(spans, "broker.invoke")
 	if brokerSpan == nil {
 		t.Fatal("expected broker span named 'broker.invoke'")
+		return
 	}
 	assertSpanHasAttr(t, httpSpan, "gestaltd.provider.name", "tracer-prov")
 	assertSpanHasAttr(t, httpSpan, "gestaltd.operation.name", "ping")
@@ -172,6 +174,7 @@ func TestTracing_BrokerSpanRecordsErrors(t *testing.T) {
 	brokerSpan := findSpan(spans, "broker.invoke")
 	if brokerSpan == nil {
 		t.Fatal("expected broker span")
+		return
 	}
 
 	if len(brokerSpan.Events) == 0 {

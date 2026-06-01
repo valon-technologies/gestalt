@@ -14,7 +14,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/otel"
@@ -112,7 +111,6 @@ type Broker struct {
 	providers         *registry.ProviderMap[core.Provider]
 	users             UserStore
 	externalCreds     core.ExternalCredentialProvider
-	authorizer        authorization.RuntimeAuthorizer
 	connMapper        ConnectionMapper
 	mcpMapper         ConnectionMapper
 	connectionRuntime ConnectionRuntimeResolver
@@ -132,10 +130,6 @@ func WithMCPConnectionMapper(m ConnectionMapper) BrokerOption {
 
 func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
 	return func(b *Broker) { b.connectionRuntime = r }
-}
-
-func WithAuthorizer(a authorization.RuntimeAuthorizer) BrokerOption {
-	return func(b *Broker) { b.authorizer = a }
 }
 
 func WithLogger(l *slog.Logger) BrokerOption {
@@ -262,22 +256,9 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
 	conn := ConnectionFromContext(ctx)
-	if b.authorizer != nil {
-		access, allowed := b.authorizer.ResolveAccess(ctx, p, providerName)
-		if access.Policy != "" || access.Role != "" {
-			ctx = WithAccessContext(ctx, access)
-		}
-		if !allowed {
-			return fail(fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName))
-		}
-	}
-
 	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
 	if err != nil {
 		return fail(err)
-	}
-	if b.authorizer != nil && !b.authorizer.AllowCatalogOperation(ctx, p, providerName, opMeta) {
-		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
 	}
 	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
@@ -470,15 +451,6 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	setSubjectAttribute(p)
 
 	conn := ConnectionFromContext(ctx)
-	if b.authorizer != nil {
-		access, allowed := b.authorizer.ResolveAccess(ctx, p, providerName)
-		if access.Policy != "" || access.Role != "" {
-			ctx = WithAccessContext(ctx, access)
-		}
-		if !allowed {
-			return fail(fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName))
-		}
-	}
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)
 	}
@@ -532,9 +504,6 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		return ctx, "", err
 	}
 	ctx = withResolvedPrincipal(ctx, p)
-	if b.authorizer != nil && !b.authorizer.AllowProvider(ctx, p, providerName) {
-		return ctx, "", fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
-	}
 	prov, err := b.providers.Get(providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
@@ -582,9 +551,6 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 		return nil, err
 	}
 	ctx = withResolvedPrincipal(ctx, p)
-	if b.authorizer != nil && !b.authorizer.AllowProvider(ctx, p, providerName) {
-		return nil, fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
-	}
 	prov, err := b.providers.Get(providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {

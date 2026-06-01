@@ -1,9 +1,7 @@
 import {
-  Authorization,
   RuntimeEgressMode,
   RuntimeLogHost,
   WorkflowRunStatus,
-  type AuthorizationEvaluateInput,
   type AgentWorkspace,
   type JsonObject,
   type JsonValue,
@@ -36,11 +34,6 @@ import type { AccessEvaluationRequest as ProtocolRequest } from "@valon-technolo
 // @ts-expect-error Generated agent contract helpers are not public.
 import type { agentContractSchemas } from "@valon-technologies/gestalt/test/agent-contract";
 
-const evaluateInput: AuthorizationEvaluateInput = {
-  subject: { type: "user", id: "user-1" },
-  action: { name: "view" },
-  resource: { type: "document", id: "doc-1" },
-};
 const appendResponse: RuntimeLogAppendResponse = { lastSeq: 1n };
 const event: WorkflowEvent = { id: "event-1", type: "fixture.event" };
 const workspace: AgentWorkspace = {
@@ -51,10 +44,8 @@ const jsonObject: JsonObject = { ok: true };
 const jsonValue: JsonValue = { nested: ["value"] };
 const egressMode: RuntimeEgressMode = RuntimeEgressMode.NONE;
 
-void Authorization;
 void RuntimeLogHost;
 void WorkflowRunStatus;
-void evaluateInput;
 void appendResponse;
 void event;
 void workspace;

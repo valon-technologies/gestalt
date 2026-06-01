@@ -21,7 +21,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
@@ -99,7 +98,6 @@ type Config struct {
 	AgentManager      agentmanager.Service
 	Invoker           invocation.Invoker
 	Audit             core.AuditSink
-	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
 	Now               func() time.Time
@@ -113,7 +111,6 @@ type Manager struct {
 	agentManager      agentmanager.Service
 	invoker           invocation.Invoker
 	audit             core.AuditSink
-	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
 	catalogConnection map[string]string
 	now               func() time.Time
@@ -217,7 +214,6 @@ func New(cfg Config) *Manager {
 		agentManager:      cfg.AgentManager,
 		invoker:           cfg.Invoker,
 		audit:             cfg.Audit,
-		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		now:               now,

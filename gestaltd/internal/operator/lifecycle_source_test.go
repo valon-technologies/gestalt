@@ -294,6 +294,7 @@ printf '<html>beta</html>\n' > dist/index.html
 				entry := loaded.Providers.UI[name]
 				if entry == nil {
 					t.Fatalf("loaded ui %q = nil", name)
+					return
 				}
 				if got := entry.OwnerApp; tc.bound {
 					if got != name {
@@ -5764,6 +5765,7 @@ func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 			readBackManifest := readBack.Providers.Cache["session"].ValidationManifest
 			if readBackManifest == nil {
 				t.Fatal("readBack static manifest is nil")
+				return
 			}
 			if len(readBackManifest.Artifacts) != 0 {
 				t.Fatalf("readBack static manifest artifacts = %+v, want nil", readBackManifest.Artifacts)

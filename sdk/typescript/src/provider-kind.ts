@@ -20,12 +20,6 @@ const PROVIDER_KIND_DEFINITIONS = {
     defaultExportNames: ["authentication", "provider"],
     label: "authentication provider",
   },
-  authorization: {
-    tokens: ["authorization"],
-    formatToken: "authorization",
-    defaultExportNames: ["authorization", "provider"],
-    label: "authorization provider",
-  },
   cache: {
     tokens: ["cache"],
     formatToken: "cache",

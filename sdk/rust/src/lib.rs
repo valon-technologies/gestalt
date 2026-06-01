@@ -7,7 +7,6 @@ mod api;
 mod app_access;
 mod auth;
 mod auth_server;
-mod authorization;
 mod cache;
 mod cache_server;
 mod catalog;
@@ -78,22 +77,6 @@ pub use app_access::{
 pub use auth::{
     AuthSessionSettings, AuthenticatedUser, AuthenticationProvider, BeginLoginRequest,
     BeginLoginResponse, CompleteLoginRequest,
-};
-pub use authorization::{
-    AUTHORIZATION_SUBJECT_TYPE_SUBJECT, AccessDecision, AccessEvaluationRequest,
-    AccessEvaluationsRequest, AccessEvaluationsResponse, ActionSearchRequest, ActionSearchResponse,
-    Authorization, AuthorizationAction, AuthorizationApi, AuthorizationError,
-    AuthorizationMetadata, AuthorizationModel, AuthorizationModelAction,
-    AuthorizationModelAllowedTarget, AuthorizationModelComputedUserset, AuthorizationModelRef,
-    AuthorizationModelRelation, AuthorizationModelResourceType, AuthorizationModelRewrite,
-    AuthorizationModelRewriteThis, AuthorizationModelRewriteUnion,
-    AuthorizationModelSubjectSetTarget, AuthorizationModelTupleToUserset, AuthorizationProvider,
-    AuthorizationRelationshipTarget, AuthorizationResource, AuthorizationSubject,
-    AuthorizationSubjectSet, EffectiveSubjectSearchRequest, EffectiveSubjectSearchResponse,
-    ExpandNode, ExpandRequest, ExpandResponse, GetActiveModelResponse, ListModelsRequest,
-    ListModelsResponse, ReadRelationshipsRequest, ReadRelationshipsResponse, Relationship,
-    RelationshipKey, ResourceSearchRequest, ResourceSearchResponse, SubjectSearchRequest,
-    SubjectSearchResponse, WriteModelRequest, WriteRelationshipsRequest,
 };
 pub use cache::{Cache, CacheApi, CacheEntry, CacheError, CacheProvider, CacheSetOptions};
 pub use catalog::{Catalog, CatalogOperation, CatalogParameter, OperationAnnotations};
@@ -219,17 +202,6 @@ macro_rules! export_authentication_provider {
         pub fn __gestalt_serve_authentication(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_authentication_provider(provider)
-        }
-    };
-}
-
-/// Exports the authorization-provider entrypoint expected by `gestaltd`.
-#[macro_export]
-macro_rules! export_authorization_provider {
-    (constructor = $constructor:path $(,)?) => {
-        pub fn __gestalt_serve_authorization(_name: &str) -> $crate::Result<()> {
-            let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_authorization_provider(provider)
         }
     };
 }
