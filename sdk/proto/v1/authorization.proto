@@ -73,6 +73,7 @@ message AddRelationshipResponse {
 
 message DeleteRelationshipRequest {
   RelationshipTuple relationship_tuple = 1;
+  SourceLayer source_layer = 2;
 }
 
 message DeleteRelationshipResponse {}
