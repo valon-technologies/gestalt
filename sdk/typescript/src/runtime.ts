@@ -875,7 +875,7 @@ function providerRequest(
 function providerRequestToolRefs(
   requestContext?: ProtoRequestContext,
 ): AgentToolRef[] {
-  return requestContext?.toolRefs.map(agentToolRefFromProto) ?? [];
+  return requestContext?.toolRefs?.map(agentToolRefFromProto) ?? [];
 }
 
 function providerHTTPSubjectRequest(
