@@ -503,8 +503,7 @@ type ProviderEntry struct {
 	SecuritySchemes map[string]*HTTPSecurityScheme         `yaml:"securitySchemes,omitempty"`
 	HTTP            map[string]*HTTPBinding                `yaml:"http,omitempty"`
 	// AuthorizationPolicy binds this provider to a shared subject access policy.
-	AuthorizationPolicy string                  `yaml:"authorizationPolicy,omitempty"`
-	Dev                 *ProviderEntryDevConfig `yaml:"dev,omitempty"`
+	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
 
 	// App-specific runtime fields populated from the canonical ui object.
 	MountPath         string                        `yaml:"-"`
@@ -585,14 +584,6 @@ type AgentProviderSessionStartHookConfig struct {
 type AgentProviderSessionStartHookOutputConfig struct {
 	AdditionalContext bool `yaml:"additionalContext,omitempty"`
 	Metadata          bool `yaml:"metadata,omitempty"`
-}
-
-type ProviderEntryDevConfig struct {
-	Attach ProviderEntryDevAttachConfig `yaml:"attach,omitempty"`
-}
-
-type ProviderEntryDevAttachConfig struct {
-	AllowedRoles []string `yaml:"allowedRoles,omitempty"`
 }
 
 type providerEntryYAML struct {
@@ -1213,7 +1204,6 @@ func (f providerEntryFields) toProviderEntry() ProviderEntry {
 func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
 	e.Egress = cloneProviderEgressConfig(e.Egress)
 	e.Runtime = cloneRuntimePlacementConfig(e.Runtime)
-	e.Dev = cloneProviderEntryDevConfig(e.Dev)
 	e.Harnesses = cloneProviderEntryHarnessConfigMap(e.Harnesses)
 	e.Lifecycle = cloneAgentProviderLifecycleConfig(e.Lifecycle)
 	normalizeProviderEntryAliases(&e)
@@ -1275,24 +1265,12 @@ func cloneProviderEntryHarnessInstallConfig(src *ProviderEntryHarnessInstallConf
 	return &dst
 }
 
-func cloneProviderEntryDevConfig(src *ProviderEntryDevConfig) *ProviderEntryDevConfig {
-	if src == nil {
-		return nil
-	}
-	dst := *src
-	dst.Attach.AllowedRoles = slices.Clone(src.Attach.AllowedRoles)
-	return &dst
-}
-
 func normalizeProviderEntryAliases(entry *ProviderEntry) {
 	if entry == nil {
 		return
 	}
 	if entry.Egress != nil {
 		entry.Egress.AllowedHosts = trimStringSlice(entry.Egress.AllowedHosts)
-	}
-	if entry.Dev != nil {
-		entry.Dev.Attach.AllowedRoles = trimStringSlice(entry.Dev.Attach.AllowedRoles)
 	}
 	normalizeAgentProviderLifecycle(entry.Lifecycle)
 	entry.DefaultHarness = strings.TrimSpace(entry.DefaultHarness)
@@ -2028,7 +2006,6 @@ type ServerConfig struct {
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
 	Agent         ServerAgentConfig        `yaml:"agent,omitempty"`
-	Dev           DevConfig                `yaml:"dev,omitempty"`
 	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
@@ -2037,14 +2014,6 @@ type ServerConfig struct {
 type ServerAgentConfig struct {
 	DefaultToolNarrowingThreshold *int `yaml:"defaultToolNarrowingThreshold,omitempty"`
 }
-
-type DevConfig struct {
-	AttachmentState DevAttachmentState `yaml:"attachmentState,omitempty"`
-}
-
-type DevAttachmentState string
-
-const DevAttachmentStateIndexedDB DevAttachmentState = "indexeddb"
 
 type ServerRuntimeConfig struct {
 	DefaultProvider string `yaml:"defaultProvider,omitempty"`

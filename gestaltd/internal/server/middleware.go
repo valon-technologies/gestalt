@@ -11,7 +11,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 )
 
@@ -57,9 +56,8 @@ func requestMetaMiddleware(next http.Handler) http.Handler {
 }
 
 const (
-	defaultMaxBodyBytes         = 1 << 20
-	providerDevCallMaxBodyBytes = 128 << 20
-	s3ObjectAccessMaxBodyBytes  = 10 << 30
+	defaultMaxBodyBytes        = 1 << 20
+	s3ObjectAccessMaxBodyBytes = 10 << 30
 )
 
 func maxBodyMiddleware(limit int64) func(http.Handler) http.Handler {
@@ -72,25 +70,10 @@ func maxBodyMiddleware(limit int64) func(http.Handler) http.Handler {
 }
 
 func maxBodyLimitForRequest(r *http.Request, defaultLimit int64) int64 {
-	if isProviderDevCompleteCallRequest(r) {
-		return providerDevCallMaxBodyBytes
-	}
 	if isS3ObjectAccessRequest(r) {
 		return s3ObjectAccessMaxBodyBytes
 	}
 	return defaultLimit
-}
-
-func isProviderDevCompleteCallRequest(r *http.Request) bool {
-	if r == nil || r.Method != http.MethodPost || r.URL == nil {
-		return false
-	}
-	rest, ok := strings.CutPrefix(r.URL.Path, providerdev.PathAttachments+"/")
-	if !ok {
-		return false
-	}
-	sessionID, callID, ok := strings.Cut(rest, "/calls/")
-	return ok && sessionID != "" && callID != "" && !strings.Contains(sessionID, "/") && !strings.Contains(callID, "/")
 }
 
 func isS3ObjectAccessRequest(r *http.Request) bool {

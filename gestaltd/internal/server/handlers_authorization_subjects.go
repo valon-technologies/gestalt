@@ -477,7 +477,7 @@ func (s *Server) createManagedSubjectAPIToken(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req createTokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeCreateTokenRequest(r.Body, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
@@ -586,7 +586,7 @@ func managedSubjectCallerIsUnscoped(p *principal.Principal) bool {
 	if p == nil || p.Source != principal.SourceAPIToken {
 		return true
 	}
-	return p.TokenPermissions == nil && p.ActionPermissions == nil && len(p.Scopes) == 0
+	return p.TokenPermissions == nil && len(p.Scopes) == 0
 }
 
 func (s *Server) ensureManagedSubjectsAvailable(w http.ResponseWriter) bool {

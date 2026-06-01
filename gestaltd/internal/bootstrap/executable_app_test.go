@@ -53,7 +53,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
@@ -62,7 +61,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
-	grpcstatus "google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -6160,161 +6158,6 @@ func TestRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *tes
 	if allowedHosts := slices.Clone(startRequests[0].GetAllowedHosts()); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
-}
-
-func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
-	t.Parallel()
-
-	secret := []byte("0123456789abcdef0123456789abcdef")
-	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
-	relaySrv.EnableHTTP2 = true
-	relaySrv.StartTLS()
-	testutil.CloseOnCleanup(t, relaySrv)
-
-	entry := &config.ProviderEntry{
-		ResolvedManifest: &providermanifestv1.Manifest{
-			Source: "local://echoext",
-		},
-		S3: []string{"main"},
-	}
-	deps := Deps{
-		BaseURL:            relaySrv.URL,
-		EncryptionKey:      secret,
-		PublicHostServices: publicHostServices,
-		S3: map[string]s3sdk.S3{
-			"main": &coretesting.StubS3{},
-		},
-	}
-	runtimeHostServices := map[string][]runtimehost.HostService{}
-	manager, err := providerdev.NewManager([]providerdev.Target{{
-		Name: "echoext",
-		RuntimeEnv: func(sessionID string) (providerdev.RuntimeEnv, error) {
-			return buildProviderDevRuntimeEnv("echoext", entry, deps, sessionID, runtimeHostServices["echoext"])
-		},
-	}})
-	if err != nil {
-		t.Fatalf("NewManager: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := manager.Close(); err != nil {
-			t.Fatalf("provider dev manager close: %v", err)
-		}
-	})
-	targets := []providerdev.Target{{Name: "echoext"}}
-	if err := registerProviderDevPublicHostServices(&config.Config{
-		Apps: map[string]*config.ProviderEntry{"echoext": entry},
-	}, manager, deps, targets, runtimeHostServices); err != nil {
-		t.Fatalf("registerProviderDevPublicHostServices: %v", err)
-	}
-	session, err := manager.CreateSession(context.Background(), &principal.Principal{
-		SubjectID: "user:test-user",
-		UserID:    "test-user",
-		Kind:      principal.KindUser,
-	}, providerdev.CreateSessionRequest{
-		Providers: []providerdev.AttachProvider{{Name: "echoext"}},
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	if len(session.Providers) != 1 {
-		t.Fatalf("session providers = %#v, want one", session.Providers)
-	}
-	env := session.Providers[0].Env
-
-	if got := env[runtimehost.HostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
-		t.Fatalf("runtime env %s = %q, want tls relay target", runtimehost.HostServiceSocketEnv, got)
-	}
-	if got := env[runtimehost.HostServiceTokenEnv]; got == "" {
-		t.Fatalf("runtime env %s is empty, want relay token", runtimehost.HostServiceTokenEnv)
-	}
-	record, err := fakeHostedS3RoundTrip("plans/q3.txt", "ship-it", "main", env)
-	if err != nil {
-		t.Fatalf("S3 round trip via provider-dev relay: %v", err)
-	}
-	if got := record["body"]; got != "ship-it" {
-		t.Fatalf("S3 body = %#v, want ship-it", got)
-	}
-	if err := manager.CloseSession(&principal.Principal{
-		SubjectID: "user:test-user",
-		UserID:    "test-user",
-		Kind:      principal.KindUser,
-	}, session.AttachID); err != nil {
-		t.Fatalf("CloseSession: %v", err)
-	}
-	if _, err := fakeHostedS3RoundTrip("plans/stale.txt", "stale", "main", env); err == nil {
-		t.Fatalf("S3 round trip after provider-dev session close succeeded, want stale relay failure")
-	}
-}
-
-func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t *testing.T) {
-	t.Parallel()
-
-	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	providers := registry.New()
-	if err := providers.Providers.Register("echoext", &connectedCapabilityProvider{}); err != nil {
-		t.Fatalf("Register provider: %v", err)
-	}
-	entry := &config.ProviderEntry{
-		ResolvedManifest: &providermanifestv1.Manifest{
-			Source: "local://echoext",
-		},
-		Cache: []string{"main"},
-		S3:    []string{"main"},
-	}
-	manager, err := buildProviderDevManager(&config.Config{
-		Apps: map[string]*config.ProviderEntry{"echoext": entry},
-	}, &providers.Providers, Deps{
-		BaseURL:            "https://gestalt.example.test",
-		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		PublicHostServices: publicHostServices,
-		Caches: map[string]corecache.Cache{
-			"main": coretesting.NewStubCache(),
-		},
-		S3: map[string]s3sdk.S3{
-			"main": &coretesting.StubS3{},
-		},
-	})
-	if err != nil {
-		t.Fatalf("buildProviderDevManager: %v", err)
-	}
-	if manager == nil {
-		t.Fatal("buildProviderDevManager returned nil manager")
-	}
-	t.Cleanup(func() {
-		if err := manager.Close(); err != nil {
-			t.Fatalf("provider dev manager close: %v", err)
-		}
-	})
-	assertPublicHostServicesVerified(t, publicHostServices, "s3")
-	assertPublicHostServicesVerified(t, publicHostServices, "cache")
-
-	p := &principal.Principal{SubjectID: "user:test-user", UserID: "test-user", Kind: principal.KindUser}
-	session, err := manager.CreateSession(context.Background(), p, providerdev.CreateSessionRequest{
-		Providers: []providerdev.AttachProvider{{Name: "echoext"}},
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	for _, service := range publicHostServices.Snapshot() {
-		if strings.TrimSpace(service.Service.Name) != "s3" {
-			continue
-		}
-		if service.SessionVerifier == nil {
-			t.Fatal("S3 public host service verifier is nil")
-		}
-		if err := service.SessionVerifier.VerifyHostServiceSession(context.Background(), session.AttachID); err != nil {
-			t.Fatalf("VerifyHostServiceSession(active memory session): %v", err)
-		}
-		if err := manager.CloseSession(p, session.AttachID); err != nil {
-			t.Fatalf("CloseSession: %v", err)
-		}
-		if err := service.SessionVerifier.VerifyHostServiceSession(context.Background(), session.AttachID); grpcstatus.Code(err) != codes.NotFound {
-			t.Fatalf("VerifyHostServiceSession(closed memory session) code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.NotFound, err)
-		}
-		return
-	}
-	t.Fatalf("public host services = %#v, want s3 verifier entry", publicHostServices.Snapshot())
 }
 
 func TestRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCapability(t *testing.T) {

@@ -433,7 +433,6 @@ func workflowSystemToolScopedPrincipalWithPermissions(p *principal.Principal, pe
 	}
 	next := *p
 	next.TokenPermissions = requested
-	next.ActionPermissions = nil
 	next.Scopes = principal.PermissionApps(requested)
 	return principal.Canonicalize(&next), nil
 }

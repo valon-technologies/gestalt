@@ -34,11 +34,9 @@ type Principal struct {
 	AuthSourceOverride  string
 	Scopes              []string
 	TokenPermissions    PermissionSet
-	ActionPermissions   ActionPermissionSet
 }
 
 type PermissionSet map[string]map[string]struct{}
-type ActionPermissionSet map[string]map[string]struct{}
 
 func ClonePermissionSet(src PermissionSet) PermissionSet {
 	if src == nil {
@@ -55,25 +53,6 @@ func ClonePermissionSet(src PermissionSet) PermissionSet {
 			copied[operation] = struct{}{}
 		}
 		out[pluginName] = copied
-	}
-	return out
-}
-
-func CloneActionPermissionSet(src ActionPermissionSet) ActionPermissionSet {
-	if src == nil {
-		return nil
-	}
-	out := make(ActionPermissionSet, len(src))
-	for resource, actions := range src {
-		if actions == nil {
-			out[resource] = nil
-			continue
-		}
-		copied := make(map[string]struct{}, len(actions))
-		for action := range actions {
-			copied[action] = struct{}{}
-		}
-		out[resource] = copied
 	}
 	return out
 }
@@ -111,7 +90,7 @@ func (p *Principal) AuthSource() string {
 	if authSource := strings.TrimSpace(p.AuthSourceOverride); authSource != "" {
 		return authSource
 	}
-	if p.Identity == nil && p.UserID == "" && p.SubjectID == "" && p.Kind == "" && len(p.Scopes) == 0 && p.TokenPermissions == nil && p.ActionPermissions == nil {
+	if p.Identity == nil && p.UserID == "" && p.SubjectID == "" && p.Kind == "" && len(p.Scopes) == 0 && p.TokenPermissions == nil {
 		return ""
 	}
 	return p.Source.String()
@@ -192,9 +171,6 @@ func CompilePermissions(perms []core.AccessPermission) PermissionSet {
 			continue
 		}
 		if len(perm.Operations) == 0 {
-			if len(perm.Actions) > 0 {
-				continue
-			}
 			set[appName] = nil
 			continue
 		}
@@ -216,35 +192,6 @@ func CompilePermissions(perms []core.AccessPermission) PermissionSet {
 	}
 	if len(set) == 0 {
 		return PermissionSet{}
-	}
-	return set
-}
-
-func CompileActionPermissions(perms []core.AccessPermission) ActionPermissionSet {
-	if len(perms) == 0 {
-		return nil
-	}
-	set := make(ActionPermissionSet, len(perms))
-	for _, perm := range perms {
-		appName := strings.TrimSpace(perm.App)
-		if appName == "" {
-			continue
-		}
-		for _, action := range perm.Actions {
-			action = strings.TrimSpace(action)
-			if action == "" {
-				continue
-			}
-			actions := set[appName]
-			if actions == nil {
-				actions = map[string]struct{}{}
-				set[appName] = actions
-			}
-			actions[action] = struct{}{}
-		}
-	}
-	if len(set) == 0 {
-		return ActionPermissionSet{}
 	}
 	return set
 }
@@ -372,21 +319,6 @@ func AllowsOperationPermission(p *Principal, provider, operation string) bool {
 		return ok
 	}
 	return AllowsProviderPermission(p, provider)
-}
-
-func AllowsActionPermission(p *Principal, provider, action string) bool {
-	if p == nil {
-		return false
-	}
-	if p.ActionPermissions != nil {
-		actions, ok := p.ActionPermissions[provider]
-		if !ok {
-			return false
-		}
-		_, ok = actions[action]
-		return ok
-	}
-	return p.Source != SourceAPIToken
 }
 
 func clonePermissionOps(src map[string]struct{}) map[string]struct{} {

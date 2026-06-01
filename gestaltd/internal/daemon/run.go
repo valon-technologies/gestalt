@@ -98,16 +98,12 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	var pathFlag *string
 	var nameFlag *string
 	var portFlag *int
-	var remoteFlag *string
-	var remoteTokenFlag *string
 	var watchFlag *bool
 	if opts.allowProviderLocal {
 		pluginFlag = fs.String("app", "", "run only the named app and its local dependency closure")
 		pathFlag = fs.String("path", "", "provider manifest path or directory for local source serve")
-		nameFlag = fs.String("name", "", "provider key override for --path or --remote")
+		nameFlag = fs.String("name", "", "provider key override for --path")
 		portFlag = fs.Int("port", 0, "public port for --path (defaults to a free localhost port)")
-		remoteFlag = fs.String("remote", "", "remote gestaltd base URL to attach local source apps to")
-		remoteTokenFlag = fs.String("remote-token", "", "bearer token for --remote (defaults to GESTALT_API_KEY)")
 		watchFlag = fs.Bool("watch", false, "watch local source files and restart/rebuild after changes")
 	}
 	var lockedFlag *bool
@@ -148,8 +144,6 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 			Name:          flagStringValue(nameFlag),
 			App:           flagStringValue(pluginFlag),
 			Port:          flagIntValue(portFlag),
-			Remote:        flagStringValue(remoteFlag),
-			RemoteToken:   flagStringValue(remoteTokenFlag),
 			ArtifactsDir:  *artifactsDir,
 			LockfilePath:  *lockfilePath,
 			Locked:        locked,
@@ -185,8 +179,6 @@ type serveProviderLocalOptions struct {
 	Name          string
 	App           string
 	Port          int
-	Remote        string
-	RemoteToken   string
 	ArtifactsDir  string
 	LockfilePath  string
 	Locked        bool
@@ -198,43 +190,6 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 	path := strings.TrimSpace(opts.Path)
 	name := strings.TrimSpace(opts.Name)
 	app := strings.TrimSpace(opts.App)
-	remote := strings.TrimSpace(opts.Remote)
-	remoteToken := strings.TrimSpace(opts.RemoteToken)
-
-	if remote != "" {
-		if opts.Port != 0 {
-			return true, fmt.Errorf("--port is only supported with --path")
-		}
-		if opts.ArtifactsDir != "" {
-			return true, fmt.Errorf("--artifacts-dir cannot be combined with --remote")
-		}
-		if opts.LockfilePath != "" {
-			return true, fmt.Errorf("--lockfile cannot be combined with --remote")
-		}
-		if opts.LockedAllowed && opts.Locked {
-			return true, fmt.Errorf("--locked cannot be combined with --remote")
-		}
-		if opts.Watch {
-			return true, fmt.Errorf("--watch cannot be combined with --remote")
-		}
-		if app != "" && path != "" {
-			return true, fmt.Errorf("--app cannot be combined with --path")
-		}
-		if app != "" && name != "" {
-			return true, fmt.Errorf("--app cannot be combined with --name")
-		}
-		if app != "" {
-			name = app
-		}
-		return true, runProviderRemoteDev(providerLocalCommandOptions{
-			Path:        opts.Path,
-			ConfigPaths: opts.ConfigPaths,
-			Name:        name,
-			App:         app,
-			Remote:      opts.Remote,
-			RemoteToken: opts.RemoteToken,
-		})
-	}
 
 	if path != "" {
 		if app != "" {
@@ -252,9 +207,6 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 		if opts.LockedAllowed && opts.Locked {
 			return true, fmt.Errorf("--locked cannot be combined with --path")
 		}
-		if remoteToken != "" {
-			return true, fmt.Errorf("--remote-token requires --remote")
-		}
 		return true, runServeProviderLocal(providerLocalCommandOptions{
 			Path:        opts.Path,
 			ConfigPaths: opts.ConfigPaths,
@@ -264,13 +216,10 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 	}
 
 	if name != "" {
-		return false, fmt.Errorf("--name requires --path or --remote")
+		return false, fmt.Errorf("--name requires --path")
 	}
 	if opts.Port != 0 {
 		return false, fmt.Errorf("--port requires --path")
-	}
-	if remoteToken != "" {
-		return false, fmt.Errorf("--remote-token requires --remote")
 	}
 	return false, nil
 }
@@ -488,7 +437,6 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--check]")
 	writeUsageLine(w, "  gestaltd serve [--app NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
-	writeUsageLine(w, "  gestaltd serve --remote URL (--path PATH | --config PATH...) [--name NAME]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--app NAME] [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
@@ -512,14 +460,11 @@ func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd serve [--app NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
-	writeUsageLine(w, "  gestaltd serve --remote URL --config PATH [--config PATH]... [--name NAME]")
-	writeUsageLine(w, "  gestaltd serve --remote URL --path PATH [--config PATH]... [--name NAME]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Without --locked, auto lock/syncs if state is missing or stale.")
 	writeUsageLine(w, "Use --app for local scoped development of one configured app without preparing the full config.")
 	writeUsageLine(w, "Use --path to serve one local source app or UI bundle inside a synthesized Gestalt config.")
 	writeUsageLine(w, "Use --watch to rebuild/restart after debounced local file changes.")
-	writeUsageLine(w, "Use --remote to attach local source apps to an authenticated remote gestaltd session.")
 	writeUsageLine(w, "For production, strongly prefer --locked so startup uses the pinned")
 	writeUsageLine(w, "lockfile and prepared artifacts instead of resolving or mutating state.")
 	writeUsageLine(w, "When locked, run `gestaltd lock` before deploy and `gestaltd sync --locked` during build.")

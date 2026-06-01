@@ -160,9 +160,8 @@ func (r *Resolver) resolveUserAPIToken(ctx context.Context, apiToken *core.APITo
 		Kind:                KindUser,
 		Source:              SourceAPIToken,
 	}
-	if perms, actionPerms, ok := permissionsForAPIToken(apiToken); ok {
+	if perms, ok := permissionsForAPIToken(apiToken); ok {
 		p.TokenPermissions = perms
-		p.ActionPermissions = actionPerms
 		p.Scopes = PermissionApps(perms)
 	}
 	return p, nil
@@ -191,9 +190,8 @@ func resolveSubjectAPIToken(apiToken *core.APIToken) (*Principal, error) {
 		DisplayName:         strings.TrimSpace(apiToken.Name),
 		Source:              SourceAPIToken,
 	}
-	if perms, actionPerms, ok := permissionsForAPIToken(apiToken); ok {
+	if perms, ok := permissionsForAPIToken(apiToken); ok {
 		p.TokenPermissions = perms
-		p.ActionPermissions = actionPerms
 		p.Scopes = PermissionApps(perms)
 	}
 	return Canonicalize(p), nil
@@ -212,17 +210,21 @@ func HashToken(token string) string {
 	return hex.EncodeToString(h[:])
 }
 
-func permissionsForAPIToken(apiToken *core.APIToken) (PermissionSet, ActionPermissionSet, bool) {
+func permissionsForAPIToken(apiToken *core.APIToken) (PermissionSet, bool) {
 	if apiToken == nil {
-		return nil, nil, false
+		return nil, false
 	}
-	if len(apiToken.Permissions) > 0 {
-		return CompilePermissions(apiToken.Permissions), CompileActionPermissions(apiToken.Permissions), true
+	if apiToken.Permissions != nil {
+		perms := CompilePermissions(apiToken.Permissions)
+		if perms == nil {
+			perms = PermissionSet{}
+		}
+		return perms, true
 	}
 	if perms := PermissionsFromScopeString(apiToken.Scopes); perms != nil {
-		return perms, nil, true
+		return perms, true
 	}
-	return nil, nil, false
+	return nil, false
 }
 
 func (r *Resolver) apiTokenOwnerKind(apiToken *core.APIToken) string {

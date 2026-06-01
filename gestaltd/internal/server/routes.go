@@ -172,7 +172,6 @@ func (s *Server) mountAPIRoutes(r chi.Router) {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(s.apiRouteTimeout))
 			s.mountAuthRoutes(r)
-			s.mountProviderDevPublicRoutes(r)
 			s.mountAuthenticatedRoutes(r)
 		})
 		s.mountAdminAuthorizationAPIRoutesInGroup(r)

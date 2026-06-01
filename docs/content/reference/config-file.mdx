@@ -286,7 +286,6 @@ Apps without `authorizationPolicy` are open to any authenticated subject. Bind a
 | `artifactsDir` | config directory | Directory for prepared artifacts produced by `gestaltd sync --locked`. |
 | `agent.defaultToolNarrowingThreshold` | `200` | Visible catalog size above which implicit default agent catalog grants may be narrowed to exactly mentioned providers. Set `0` to narrow whenever a matching provider has any visible tools. |
 | `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
-| `dev.attachmentState` | | Enables private remote provider-dev attach routes and selects where attachment state is stored. The only supported value is `indexeddb`, which stores attachment state in the configured host IndexedDB for shared and load-balanced servers. |
 | `runtime.defaultProvider` | | Default runtime-provider selector for apps and providers that opt into `runtime`. This does not move anything into hosted runtimes by itself. |
 | `runtime.relayBaseUrl` | `server.baseUrl` | Absolute HTTP(S) URL that hosted runtimes use for Gestalt host-service relay and egress proxy callbacks. |
 | `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
@@ -1259,7 +1258,6 @@ apps:
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection bindings. A binding usually uses `ref` to attach a top-level connection to the local app connection name; simple single-use `none` connections may be declared inline. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
-| `dev.attach.allowedRoles` | Roles from this app's `authorizationPolicy` that may create private remote provider-dev attachments for this app. This is denied when omitted, empty, or when the app has no `authorizationPolicy`. |
 | `runtime` | Optional runtime placement for executable apps. Supports hosted runtime fields such as `provider`, `template`, `image`, `imagePullAuth`, and `metadata`. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable apps, this is only a complete boundary when a supported sandboxed runtime is active. |
 | `indexeddb` | Optional app IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the app's IndexedDB SDK calls; when omitted, the app inherits the selected/default host IndexedDB. `indexeddb.db` overrides the app-visible database name and defaults to the app key. Supported providers derive app scoping from that `db` name using provider-native namespace config; Gestalt does not rewrite object-store names at the SDK transport layer. `indexeddb.objectStores` optionally allowlists the logical object stores the app may use. Apps then call `new IndexedDB()` (or the equivalent SDK helper) through the unified host-service socket; they do not choose arbitrary schemas or DSNs at runtime. |
@@ -1380,65 +1378,6 @@ For local development with a source provider package:
 ```yaml
 source: ./manifest.yaml
 ```
-
-When a remote `gestaltd` instance is running the provider-dev endpoints,
-authenticated developers can attach a local implementation for configured
-apps that are registered on the remote server and that they are authorized to
-access with `gestaltd serve --remote`. A path-only attach matches the
-local manifest `source` to the remote configured app and preserves the
-remote app config; layered `--config` files are only needed for explicit
-local config overrides or multi-app attach sessions.
-
-Remote provider attach is disabled by default on servers. Enable it explicitly
-on shared remotes:
-
-```yaml
-server:
-  dev:
-    attachmentState: indexeddb
-
-authorization:
-  policies:
-    provider_devs:
-      default: deny
-      members:
-        - subjectID: user:usr_123
-          role: developer
-
-apps:
-  slack:
-    authorizationPolicy: provider_devs
-    dev:
-      attach:
-        allowedRoles:
-          - developer
-```
-
-The attach transport is private to the authenticated owner. The create response
-includes an `attachId` for addressing and a one-time dispatcher secret used only
-by the local CLI for poll/complete traffic. Owner diagnostic list/get routes
-return redacted attachment metadata and never return dispatcher secrets, runtime
-environment, host-service env, app config, access tokens, or browser binding
-URLs.
-
-`attachmentState: indexeddb` stores attachment metadata and queued provider/UI
-calls in the selected host IndexedDB, so any `gestaltd` replica can accept
-attach creation, CLI poll/complete traffic, provider invocations, and
-provider-owned UI requests. Process-local attachment state is not exposed as a
-server config mode because it is unsafe for load-balanced or multi-replica
-servers.
-
-Interactive attach creation uses a short-lived browser approval page plus a
-verification code shown in the initiating terminal. The approving browser
-session must satisfy the runtime grant. For non-interactive/API-token
-attach, the caller must satisfy both the runtime grant and a token action
-grant. The runtime grant comes from
-`apps.<name>.dev.attach.allowedRoles` on a app with an
-`authorizationPolicy`, or from a runtime authorizer that explicitly grants the
-same action. API tokens must carry `permissions[].actions:
-["provider_dev.attach"]` for every attached app; normal provider scopes and
-operation permissions do not grant attach, and the attach action does not grant
-operation invocation.
 
 Source-backed executable apps can declare a local source command with
 top-level `run`. Gestalt runs that argv from the manifest directory when
