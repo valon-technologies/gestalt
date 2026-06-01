@@ -98,31 +98,33 @@ func byteRangeFromProto(r *proto.ByteRange) *ByteRange {
 	return out
 }
 
-func readOptionsFromProto(req *proto.ReadObjectRequest) *ReadOptions {
+func readRequestFromProto(req *proto.ReadObjectRequest) ReadRequest {
 	if req == nil {
-		return nil
+		return ReadRequest{}
 	}
-	opts := &ReadOptions{
+	out := ReadRequest{
+		Ref:         objectRefFromProto(req.GetRef()),
 		Range:       byteRangeFromProto(req.GetRange()),
 		IfMatch:     req.GetIfMatch(),
 		IfNoneMatch: req.GetIfNoneMatch(),
 	}
 	if ts := req.GetIfModifiedSince(); ts != nil {
 		t := ts.AsTime()
-		opts.IfModifiedSince = &t
+		out.IfModifiedSince = &t
 	}
 	if ts := req.GetIfUnmodifiedSince(); ts != nil {
 		t := ts.AsTime()
-		opts.IfUnmodifiedSince = &t
+		out.IfUnmodifiedSince = &t
 	}
-	return opts
+	return out
 }
 
-func writeOptionsFromProto(open *proto.WriteObjectOpen) *WriteOptions {
+func writeRequestFromProto(open *proto.WriteObjectOpen) WriteRequest {
 	if open == nil {
-		return nil
+		return WriteRequest{}
 	}
-	return &WriteOptions{
+	return WriteRequest{
+		Ref:                objectRefFromProto(open.GetRef()),
 		ContentType:        open.GetContentType(),
 		CacheControl:       open.GetCacheControl(),
 		ContentDisposition: open.GetContentDisposition(),
@@ -175,11 +177,12 @@ func presignMethodToProto(method PresignMethod) proto.PresignMethod {
 	}
 }
 
-func presignOptionsFromProto(req *proto.PresignObjectRequest) *PresignOptions {
+func presignRequestFromProto(req *proto.PresignObjectRequest) PresignRequest {
 	if req == nil {
-		return nil
+		return PresignRequest{}
 	}
-	return &PresignOptions{
+	return PresignRequest{
+		Ref:                objectRefFromProto(req.GetRef()),
 		Method:             presignMethodFromProto(req.GetMethod()),
 		Expires:            time.Duration(req.GetExpiresSeconds()) * time.Second,
 		ContentType:        req.GetContentType(),
@@ -234,15 +237,15 @@ func presignResultFromProto(resp *proto.PresignObjectResponse, requested Presign
 	return out
 }
 
-func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, requested PresignMethod) ObjectAccessURL {
+func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, requested PresignMethod) PresignResult {
 	if resp == nil {
-		return ObjectAccessURL{}
+		return PresignResult{}
 	}
 	method := presignMethodFromProto(resp.GetMethod())
 	if method == "" {
 		method = requested
 	}
-	out := ObjectAccessURL{
+	out := PresignResult{
 		URL:     resp.GetUrl(),
 		Method:  method,
 		Headers: CloneStringMap(resp.GetHeaders()),

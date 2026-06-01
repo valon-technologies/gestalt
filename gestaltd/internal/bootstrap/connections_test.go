@@ -77,7 +77,7 @@ func TestBuildConnectionRuntimeCarriesCredentialRefreshMetadata(t *testing.T) {
 					Spec: &providermanifestv1.Spec{
 						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 							"default": {
-								Mode: providermanifestv1.ConnectionModeUser,
+								Mode: providermanifestv1.ConnectionModeSubject,
 								Auth: &providermanifestv1.ProviderAuth{
 									Type:     providermanifestv1.AuthTypeOAuth2,
 									TokenURL: "https://oauth2.googleapis.com/token",
@@ -129,7 +129,7 @@ func TestBuildExternalCredentialsRuntimeConfigNodeResolvedConnectionsContract(t 
 					Spec: &providermanifestv1.Spec{
 						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 							"default": {
-								Mode: providermanifestv1.ConnectionModeUser,
+								Mode: providermanifestv1.ConnectionModeSubject,
 								Auth: &providermanifestv1.ProviderAuth{
 									Type:       providermanifestv1.AuthTypeOAuth2,
 									TokenURL:   "https://oauth2.googleapis.com/token",
@@ -162,7 +162,7 @@ func TestBuildExternalCredentialsRuntimeConfigNodeResolvedConnectionsContract(t 
 			"slack": {
 				Connections: map[string]*config.ConnectionDef{
 					"default": {
-						Mode: providermanifestv1.ConnectionModeUser,
+						Mode: providermanifestv1.ConnectionModeSubject,
 						Auth: config.ConnectionAuthDef{
 							Type:     providermanifestv1.AuthTypeOAuth2,
 							TokenURL: "https://slack.example.test/oauth/token",
@@ -238,7 +238,7 @@ func TestBuildExternalCredentialsRuntimeConfigNodeOmitsResolvedConnectionsWithou
 					Spec: &providermanifestv1.Spec{
 						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 							"default": {
-								Mode: providermanifestv1.ConnectionModeUser,
+								Mode: providermanifestv1.ConnectionModeSubject,
 								Auth: &providermanifestv1.ProviderAuth{
 									Type:     providermanifestv1.AuthTypeOAuth2,
 									TokenURL: "https://oauth2.googleapis.com/token",

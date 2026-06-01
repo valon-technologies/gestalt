@@ -586,7 +586,7 @@ func validateHTTPBinding(path string, binding *providermanifestv1.HTTPBinding, s
 	binding.Method = method
 	binding.CredentialMode = providermanifestv1.NormalizeOptionalConnectionMode(binding.CredentialMode)
 	switch binding.CredentialMode {
-	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
+	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeSubject:
 	default:
 		return fmt.Errorf("%s.credentialMode %q is not supported", path, binding.CredentialMode)
 	}
@@ -658,7 +658,7 @@ func validateExecutableProviderMetadata(provider *providermanifestv1.Spec) error
 		}
 		conn.Mode = providermanifestv1.NormalizeOptionalConnectionMode(conn.Mode)
 		switch conn.Mode {
-		case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
+		case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeSubject:
 		default:
 			return fmt.Errorf("unsupported provider.connections.%s.mode %q", name, conn.Mode)
 		}

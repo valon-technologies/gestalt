@@ -29,7 +29,7 @@ func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) {
 	prov := &stubProviderWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "myservice",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
 			},

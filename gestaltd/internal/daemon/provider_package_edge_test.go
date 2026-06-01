@@ -404,7 +404,7 @@ func TestRun_ProviderPackageAndReleasePreservesYAMLManifestFormatAndConnectionDe
 			MCP:              true,
 			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 				"default": {
-					Mode: providermanifestv1.ConnectionModeUser,
+					Mode: providermanifestv1.ConnectionModeSubject,
 					Params: map[string]providermanifestv1.ProviderConnectionParam{
 						"tenant": {Required: true},
 					},

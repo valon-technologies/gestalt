@@ -55,7 +55,7 @@ func TestRemoteIndexedDBSchemaChangesUseProviderRPCTimeout(t *testing.T) {
 	}
 	db := &remoteIndexedDB{Database: rpcidb.NewClient(client, rpcidb.Options{UnaryTimeout: runtimehost.ProviderRPCTimeout})}
 
-	if _, err := db.CreateObjectStore(context.Background(), "api_tokens", idb.ObjectStoreSchema{}); err != nil {
+	if _, err := db.CreateObjectStore(context.Background(), "api_tokens", idb.ObjectStoreOptions{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	if err := db.DeleteObjectStore(context.Background(), "api_tokens"); err != nil {

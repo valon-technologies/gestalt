@@ -480,7 +480,7 @@ pub struct StartProviderResponse {
 pub enum ConnectionMode {
     Unspecified = 0,
     None = 1,
-    User = 2,
+    Subject = 2,
 }
 impl ConnectionMode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -491,7 +491,7 @@ impl ConnectionMode {
         match self {
             Self::Unspecified => "CONNECTION_MODE_UNSPECIFIED",
             Self::None => "CONNECTION_MODE_NONE",
-            Self::User => "CONNECTION_MODE_USER",
+            Self::Subject => "CONNECTION_MODE_SUBJECT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -499,7 +499,7 @@ impl ConnectionMode {
         match value {
             "CONNECTION_MODE_UNSPECIFIED" => Some(Self::Unspecified),
             "CONNECTION_MODE_NONE" => Some(Self::None),
-            "CONNECTION_MODE_USER" => Some(Self::User),
+            "CONNECTION_MODE_SUBJECT" => Some(Self::Subject),
             _ => None,
         }
     }

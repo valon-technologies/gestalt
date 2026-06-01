@@ -29,7 +29,7 @@ func TestExecuteOperation_CompositeStaticRESTBypassesMCPSessionResolution(t *tes
 	apiProv := &stubIntegrationWithCatalog{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "notion",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 				gotToken = token
 				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
@@ -43,7 +43,7 @@ func TestExecuteOperation_CompositeStaticRESTBypassesMCPSessionResolution(t *tes
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "notion",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 			},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {

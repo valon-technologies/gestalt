@@ -34,7 +34,7 @@ const (
 )
 
 var (
-	indexedDBAttachmentSchema = idb.ObjectStoreSchema{
+	indexedDBAttachmentSchema = idb.ObjectStoreOptions{
 		Indexes: []idb.IndexSchema{
 			{Name: "by_owner", KeyPath: []string{"owner"}},
 			{Name: "by_owner_created_at", KeyPath: []string{"owner", "created_at"}},
@@ -50,7 +50,7 @@ var (
 			{Name: "closed_at", Type: idb.TypeInt},
 		},
 	}
-	indexedDBCallSchema = idb.ObjectStoreSchema{
+	indexedDBCallSchema = idb.ObjectStoreOptions{
 		Indexes: []idb.IndexSchema{
 			{Name: "by_attachment_state_created_at", KeyPath: []string{"attachment_id", "state", "created_at"}},
 			{Name: "by_attachment_state", KeyPath: []string{"attachment_id", "state"}},
@@ -73,7 +73,7 @@ var (
 			{Name: "expires_at", Type: idb.TypeInt},
 		},
 	}
-	indexedDBAuthSchema = idb.ObjectStoreSchema{
+	indexedDBAuthSchema = idb.ObjectStoreOptions{
 		Indexes: []idb.IndexSchema{
 			{Name: "by_expires_at", KeyPath: []string{"expires_at"}},
 		},

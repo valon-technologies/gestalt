@@ -30,15 +30,11 @@ const (
 
 func NormalizeKind(kind string) string {
 	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case "externalcredentials", "external_credentials", "external-credentials":
+	case KindExternalCredentials:
 		return KindExternalCredentials
-	case "auth":
-		return KindAuthentication
 	case KindAuthentication:
 		return KindAuthentication
 	case KindApp:
-		return KindApp
-	case "plugin":
 		return KindApp
 	case KindAuthorization:
 		return KindAuthorization
@@ -559,17 +555,12 @@ type ConnectionMode string
 const (
 	ConnectionModeNone    ConnectionMode = "none"
 	ConnectionModeSubject ConnectionMode = "subject"
-
-	// ConnectionModeUser is the legacy name for subject-scoped credentials.
-	ConnectionModeUser = ConnectionModeSubject
-
-	connectionModeLegacyUser ConnectionMode = "user"
 )
 
 func NormalizeConnectionMode(mode ConnectionMode) ConnectionMode {
 	normalized := normalizeConnectionModeValue(mode)
 	switch normalized {
-	case "", ConnectionModeSubject, connectionModeLegacyUser:
+	case "", ConnectionModeSubject:
 		return ConnectionModeSubject
 	case ConnectionModeNone:
 		return ConnectionModeNone

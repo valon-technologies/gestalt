@@ -62,7 +62,7 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	}
 	remoteSpec := appservice.StaticProviderSpec{
 		Name:           "roadmap",
-		ConnectionMode: core.ConnectionModeUser,
+		ConnectionMode: core.ConnectionModeSubject,
 		AuthTypes:      []string{"oauth2"},
 		Catalog: &catalog.Catalog{
 			Name: "roadmap",
@@ -133,8 +133,8 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	if !ok {
 		t.Fatal("ResolveProviderOverride ok = false, want true")
 	}
-	if got := prov.ConnectionMode(); got != core.ConnectionModeUser {
-		t.Fatalf("ConnectionMode = %q, want remote %q", got, core.ConnectionModeUser)
+	if got := prov.ConnectionMode(); got != core.ConnectionModeSubject {
+		t.Fatalf("ConnectionMode = %q, want remote %q", got, core.ConnectionModeSubject)
 	}
 	cat := prov.Catalog()
 	if cat == nil || len(cat.Operations) != 1 {
@@ -266,7 +266,7 @@ func TestAttachProviderSkipsSessionCatalogWhenRemoteMetadataReportsNoSupport(t *
 	spec := appservice.StaticProviderSpec{
 		Name:           "roadmap",
 		DisplayName:    "Roadmap",
-		ConnectionMode: core.ConnectionModeUser,
+		ConnectionMode: core.ConnectionModeSubject,
 		Catalog: &catalog.Catalog{
 			Name: "roadmap",
 			Operations: []catalog.CatalogOperation{{
@@ -347,7 +347,7 @@ func TestIndexedDBAttachmentStateDispatchesAcrossManagers(t *testing.T) {
 		Spec: appservice.StaticProviderSpec{
 			Name:           "roadmap",
 			DisplayName:    "Roadmap",
-			ConnectionMode: core.ConnectionModeUser,
+			ConnectionMode: core.ConnectionModeSubject,
 			Catalog: &catalog.Catalog{
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{{
@@ -1596,7 +1596,7 @@ func (db *interceptIndexedDB) Transaction(ctx context.Context, stores []string, 
 	return db.inner.Transaction(ctx, stores, mode, opts)
 }
 
-func (db *interceptIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
+func (db *interceptIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreOptions) (idb.ObjectStore, error) {
 	return db.inner.CreateObjectStore(ctx, name, schema)
 }
 

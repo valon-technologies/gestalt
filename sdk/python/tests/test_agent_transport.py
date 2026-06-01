@@ -367,7 +367,7 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
             connection_id="vertex-ai",
             connection=request.connection,
             instance=request.instance,
-            mode="user",
+            mode="subject",
             headers={"authorization": "Bearer token"},
             params={"endpoint": "vertex-endpoint"},
         )

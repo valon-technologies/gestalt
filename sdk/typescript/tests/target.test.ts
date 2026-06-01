@@ -62,9 +62,9 @@ test("provider target parsing supports app defaults and kind prefixes", () => {
   expect(() => parseProviderTarget("integration:./provider.ts#app")).toThrow(
     'unsupported provider kind "integration"',
   );
-  expect(() => parseProviderTarget("auth:./auth.ts#provider")).toThrow(
-    'unsupported provider kind "auth"',
-  );
+	expect(() => parseProviderTarget("unsupported:./auth.ts#provider")).toThrow(
+		'unsupported provider kind "unsupported"',
+	);
   expect(parseProviderTarget("workflow:./workflow.ts#provider")).toEqual({
     kind: "workflow",
     modulePath: "./workflow.ts",

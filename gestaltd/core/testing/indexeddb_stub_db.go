@@ -31,7 +31,7 @@ func (s *StubIndexedDB) ObjectStore(name string) idb.ObjectStore {
 	return st
 }
 
-func (s *StubIndexedDB) CreateObjectStore(_ context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
+func (s *StubIndexedDB) CreateObjectStore(_ context.Context, name string, schema idb.ObjectStoreOptions) (idb.ObjectStore, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stores == nil {

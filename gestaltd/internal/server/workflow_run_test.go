@@ -194,7 +194,7 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{

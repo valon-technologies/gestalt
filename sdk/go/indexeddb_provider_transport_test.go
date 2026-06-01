@@ -40,7 +40,7 @@ func TestServeIndexedDBProvider_NativeCursorAndErrors(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	store := "native_cursor"
-	_, err = client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{
+	_, err = client.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{
 		Indexes: []gestalt.IndexSchema{
 			{Name: "by_pair", KeyPath: []string{"status", "priority"}},
 		},
@@ -114,13 +114,13 @@ func nativeIndexedDBSocket(t *testing.T, name string) string {
 type nativeIndexedDBProvider struct {
 	mu      sync.Mutex
 	stores  map[string]map[string]gestalt.Record
-	schemas map[string]gestalt.ObjectStoreSchema
+	schemas map[string]gestalt.ObjectStoreOptions
 }
 
 func newNativeIndexedDBProvider() *nativeIndexedDBProvider {
 	return &nativeIndexedDBProvider{
 		stores:  map[string]map[string]gestalt.Record{},
-		schemas: map[string]gestalt.ObjectStoreSchema{},
+		schemas: map[string]gestalt.ObjectStoreOptions{},
 	}
 }
 
@@ -128,7 +128,7 @@ func (p *nativeIndexedDBProvider) Configure(context.Context, string, map[string]
 	return nil
 }
 
-func (p *nativeIndexedDBProvider) CreateObjectStore(_ context.Context, name string, schema gestalt.ObjectStoreSchema) error {
+func (p *nativeIndexedDBProvider) CreateObjectStore(_ context.Context, name string, schema gestalt.ObjectStoreOptions) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if _, ok := p.stores[name]; ok {
@@ -633,7 +633,7 @@ func TestServeIndexedDBProvider_NativeReadonlySentinel(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	store := "readonly_native"
-	if _, err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+	if _, err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	tx, err := client.Transaction(ctx, []string{store}, gestalt.TransactionReadonly, gestalt.TransactionOptions{})

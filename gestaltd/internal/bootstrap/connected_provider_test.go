@@ -23,7 +23,7 @@ func (p *connectedCapabilityProvider) Name() string        { return "slack" }
 func (p *connectedCapabilityProvider) DisplayName() string { return "Slack" }
 func (p *connectedCapabilityProvider) Description() string { return "Slack provider" }
 func (p *connectedCapabilityProvider) ConnectionMode() core.ConnectionMode {
-	return core.ConnectionModeUser
+	return core.ConnectionModeSubject
 }
 func (p *connectedCapabilityProvider) AuthTypes() []string { return []string{"oauth"} }
 func (p *connectedCapabilityProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
@@ -180,7 +180,7 @@ func (p *connectedNoPostConnectProvider) Name() string        { return "slack" }
 func (p *connectedNoPostConnectProvider) DisplayName() string { return "Slack" }
 func (p *connectedNoPostConnectProvider) Description() string { return "Slack provider" }
 func (p *connectedNoPostConnectProvider) ConnectionMode() core.ConnectionMode {
-	return core.ConnectionModeUser
+	return core.ConnectionModeSubject
 }
 func (p *connectedNoPostConnectProvider) AuthTypes() []string { return []string{"oauth"} }
 func (p *connectedNoPostConnectProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {

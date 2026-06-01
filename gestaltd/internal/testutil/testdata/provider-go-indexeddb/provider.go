@@ -15,7 +15,7 @@ type Provider struct {
 
 type objectStore struct {
 	records map[string]gestalt.Record
-	schema  gestalt.ObjectStoreSchema
+	schema  gestalt.ObjectStoreOptions
 }
 
 func New() *Provider {
@@ -24,7 +24,7 @@ func New() *Provider {
 
 func (p *Provider) Configure(context.Context, string, map[string]any) error { return nil }
 
-func (p *Provider) CreateObjectStore(_ context.Context, name string, schema gestalt.ObjectStoreSchema) error {
+func (p *Provider) CreateObjectStore(_ context.Context, name string, schema gestalt.ObjectStoreOptions) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if s, ok := p.stores[name]; ok {
@@ -260,7 +260,7 @@ func fieldString(rec gestalt.Record, key string) string {
 	return value
 }
 
-func indexMatches(rec gestalt.Record, schema gestalt.ObjectStoreSchema, indexName string, values []any) bool {
+func indexMatches(rec gestalt.Record, schema gestalt.ObjectStoreOptions, indexName string, values []any) bool {
 	var keyPath []string
 	for _, idx := range schema.Indexes {
 		if idx.Name == indexName {

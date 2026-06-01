@@ -2389,8 +2389,6 @@ def _normalized_runtime_kind(kind: object | None) -> ProviderKind:
         normalized = kind.strip().lower()
         if normalized == "":
             return ProviderKind.INTEGRATION
-        if normalized == "auth":
-            return ProviderKind.AUTHENTICATION
         try:
             return ProviderKind(normalized)
         except ValueError as exc:

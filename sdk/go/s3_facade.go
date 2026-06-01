@@ -15,25 +15,18 @@ import (
 )
 
 type (
-	ObjectRef              = s3.ObjectRef
-	ObjectMeta             = s3.ObjectMeta
-	ByteRange              = s3.ByteRange
-	ReadRequest            = s3.ReadRequest
-	ReadResult             = s3.ReadResult
-	WriteRequest           = s3.WriteRequest
-	ListRequest            = s3.ListRequest
-	ListPage               = s3.ListPage
-	CopyRequest            = s3.CopyRequest
-	PresignMethod          = s3.PresignMethod
-	PresignRequest         = s3.PresignRequest
-	PresignResult          = s3.PresignResult
-	ReadOptions            = s3.ReadOptions
-	WriteOptions           = s3.WriteOptions
-	ListOptions            = s3.ListOptions
-	CopyOptions            = s3.CopyOptions
-	PresignOptions         = s3.PresignOptions
-	ObjectAccessURLOptions = s3.ObjectAccessURLOptions
-	ObjectAccessURL        = s3.ObjectAccessURL
+	ObjectRef      = s3.ObjectRef
+	ObjectMeta     = s3.ObjectMeta
+	ByteRange      = s3.ByteRange
+	ReadRequest    = s3.ReadRequest
+	ReadResult     = s3.ReadResult
+	WriteRequest   = s3.WriteRequest
+	ListRequest    = s3.ListRequest
+	ListPage       = s3.ListPage
+	CopyRequest    = s3.CopyRequest
+	PresignMethod  = s3.PresignMethod
+	PresignRequest = s3.PresignRequest
+	PresignResult  = s3.PresignResult
 )
 
 const (

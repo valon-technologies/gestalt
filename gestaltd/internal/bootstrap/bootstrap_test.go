@@ -2321,7 +2321,7 @@ func TestBootstrap(t *testing.T) {
 					},
 				},
 				connections: map[string]*providermanifestv1.ManifestConnectionDef{
-					"default": {Mode: providermanifestv1.ConnectionModeUser},
+					"default": {Mode: providermanifestv1.ConnectionModeSubject},
 				},
 				tokenConn:  "default",
 				tokenValue: `{"username":"alice","password":"secret"}`,
@@ -2342,7 +2342,7 @@ func TestBootstrap(t *testing.T) {
 					},
 				},
 				connections: map[string]*providermanifestv1.ManifestConnectionDef{
-					"default": {Mode: providermanifestv1.ConnectionModeUser},
+					"default": {Mode: providermanifestv1.ConnectionModeSubject},
 				},
 				tokenConn:  "default",
 				tokenValue: `{"api_key":"secret-key"}`,
@@ -2352,7 +2352,7 @@ func TestBootstrap(t *testing.T) {
 				name:     "auth none still forwards bearer token when connection mode is user",
 				specAuth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 				connections: map[string]*providermanifestv1.ManifestConnectionDef{
-					"workspace": {Mode: providermanifestv1.ConnectionModeUser},
+					"workspace": {Mode: providermanifestv1.ConnectionModeSubject},
 				},
 				restConnection: "workspace",
 				tokenConn:      "workspace",
@@ -2752,7 +2752,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		},
 		&coretesting.StubIntegration{
 			N:        "lever",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name: "lever",
 				Operations: []catalog.CatalogOperation{{
@@ -2766,7 +2766,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		&callbackSessionCatalogIntegration{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "ashby",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 			},
 			sessionCatalog: &catalog.Catalog{
 				Name: "ashby",
@@ -2953,7 +2953,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		name := fmt.Sprintf("aaa_ticket_issue_source_%03d", i)
 		unavailableIssueProviders = append(unavailableIssueProviders, &coretesting.StubIntegration{
 			N:        name,
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name:        name,
 				DisplayName: "Assigned ticket issue source",
@@ -3685,7 +3685,7 @@ func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T)
 		&unavailableSessionCatalogIntegration{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "ashby",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				CatalogVal: &catalog.Catalog{
 					Name: "ashby",
 					Operations: []catalog.CatalogOperation{{
@@ -5017,7 +5017,7 @@ func TestBootstrapRejectsConfiguredWorkflowSchedulesForUserCredentialedApps(t *t
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeSubject
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
 		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
@@ -5047,7 +5047,7 @@ func TestBootstrapAllowsConfiguredWorkflowScheduleCredentialModeNoneForUserCrede
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeSubject
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
 		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
@@ -5091,7 +5091,7 @@ func TestBootstrapConfiguredWorkflowScheduleRunAsAllowsUserCredentialedTarget(t 
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeSubject
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
 		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
@@ -5175,10 +5175,10 @@ func TestBootstrapAppliesConfiguredWorkflowSchedulesForRunAsConnectionOnUserDefa
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeSubject
 	cfg.Apps["roadmap"].Connections = map[string]*config.ConnectionDef{
 		"bot": {
-			Mode: providermanifestv1.ConnectionModeUser,
+			Mode: providermanifestv1.ConnectionModeSubject,
 		},
 	}
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
@@ -5228,7 +5228,7 @@ func TestBootstrapAllowsConfiguredWorkflowScheduleInvokesForUserCredentialedApps
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	cfg.Apps["slack"] = &config.ProviderEntry{
-		ConnectionMode: providermanifestv1.ConnectionModeUser,
+		ConnectionMode: providermanifestv1.ConnectionModeSubject,
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
 				Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -5900,7 +5900,7 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeSubject
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
 		Provider: "temporal",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
@@ -7382,7 +7382,7 @@ func TestValidate(t *testing.T) {
 		cfg := validConfig()
 		cfg.Apps = map[string]*config.ProviderEntry{
 			"svc": {
-				ConnectionMode: providermanifestv1.ConnectionModeUser,
+				ConnectionMode: providermanifestv1.ConnectionModeSubject,
 				ResolvedManifest: &providermanifestv1.Manifest{
 					Spec: &providermanifestv1.Spec{
 						Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -8370,7 +8370,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		cfg.Apps = map[string]*config.ProviderEntry{
 			"roadmap": {
 				AuthorizationPolicy: "roadmap-policy",
-				ConnectionMode:      providermanifestv1.ConnectionModeUser,
+				ConnectionMode:      providermanifestv1.ConnectionModeSubject,
 				ResolvedManifest: &providermanifestv1.Manifest{
 					Spec: &providermanifestv1.Spec{},
 				},
@@ -9002,7 +9002,7 @@ func TestBootstrapWorkflowAuthorizationAllowsNormalizedCredentialedProvider(t *t
 	cfg := validConfig()
 	cfg.Apps = map[string]*config.ProviderEntry{
 		"svc": {
-			ConnectionMode: providermanifestv1.ConnectionModeUser,
+			ConnectionMode: providermanifestv1.ConnectionModeSubject,
 			ResolvedManifest: &providermanifestv1.Manifest{
 				Spec: &providermanifestv1.Spec{
 					Surfaces: &providermanifestv1.ProviderSurfaces{

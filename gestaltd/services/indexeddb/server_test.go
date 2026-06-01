@@ -47,7 +47,7 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 
 	db := metricutil.InstrumentIndexedDB(&coretesting.StubIndexedDB{}, "system")
 	srv := NewServer(db, "roadmap", ServerOptions{})
-	if _, err := metricutil.UnwrapIndexedDB(db).CreateObjectStore(ctx, "snapshots", idb.ObjectStoreSchema{
+	if _, err := metricutil.UnwrapIndexedDB(db).CreateObjectStore(ctx, "snapshots", idb.ObjectStoreOptions{
 		Indexes: []idb.IndexSchema{{Name: "by_type", KeyPath: []string{"type"}}},
 	}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
@@ -110,7 +110,7 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 
 	db := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	schema := idb.ObjectStoreSchema{
+	schema := idb.ObjectStoreOptions{
 		Indexes: []idb.IndexSchema{{Name: "by_type", KeyPath: []string{"type"}}},
 	}
 	if _, err := db.CreateObjectStore(ctx, "events", schema); err != nil {
@@ -197,10 +197,10 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 	}
 
 	t.Run("transaction_aborts_on_disallowed_store_mid_flight", func(t *testing.T) {
-		if _, err := db.CreateObjectStore(ctx, "tasks", idb.ObjectStoreSchema{}); err != nil {
+		if _, err := db.CreateObjectStore(ctx, "tasks", idb.ObjectStoreOptions{}); err != nil {
 			t.Fatalf("CreateObjectStore tasks: %v", err)
 		}
-		if _, err := db.CreateObjectStore(ctx, "notes", idb.ObjectStoreSchema{}); err != nil {
+		if _, err := db.CreateObjectStore(ctx, "notes", idb.ObjectStoreOptions{}); err != nil {
 			t.Fatalf("CreateObjectStore notes: %v", err)
 		}
 
@@ -228,7 +228,7 @@ func TestIndexedDBServerPutRejectsUniqueIndexConflict(t *testing.T) {
 
 	db := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	if _, err := db.CreateObjectStore(ctx, "users", idb.ObjectStoreSchema{
+	if _, err := db.CreateObjectStore(ctx, "users", idb.ObjectStoreOptions{
 		Indexes: []idb.IndexSchema{{Name: "by_email", KeyPath: []string{"email"}, Unique: true}},
 	}); err != nil {
 		t.Fatalf("CreateObjectStore users: %v", err)
@@ -264,7 +264,7 @@ func TestIndexedDBTransactionPreservesSentinelErrors(t *testing.T) {
 
 	db := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	if _, err := db.CreateObjectStore(ctx, "events", idb.ObjectStoreSchema{}); err != nil {
+	if _, err := db.CreateObjectStore(ctx, "events", idb.ObjectStoreOptions{}); err != nil {
 		t.Fatalf("CreateObjectStore events: %v", err)
 	}
 	srv := NewServer(db, "roadmap", ServerOptions{})

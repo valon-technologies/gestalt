@@ -64,23 +64,23 @@ func TestValidateStructureRejectsPlatformOAuth2RefreshToken(t *testing.T) {
 	}{
 		{
 			name:    "refresh_token grant rejected",
-			conn:    ConnectionDef{Mode: providermanifestv1.ConnectionModeUser, Auth: baseAuth},
+			conn:    ConnectionDef{Mode: providermanifestv1.ConnectionModeSubject, Auth: baseAuth},
 			wantErr: "oauth2 refresh_token is not supported; use managed-subject credentials",
 		},
 		{
-			name: "platform mode rejected before grant validation",
+			name: "unsupported mode rejected before grant validation",
 			conn: func() ConnectionDef {
 				auth := baseAuth
-				return ConnectionDef{Mode: providermanifestv1.ConnectionMode("platform"), Auth: auth}
+				return ConnectionDef{Mode: providermanifestv1.ConnectionMode("unsupported-mode"), Auth: auth}
 			}(),
-			wantErr: `mode "platform" is not supported`,
+			wantErr: `mode "unsupported-mode" is not supported`,
 		},
 		{
 			name: "unsupported grant rejected",
 			conn: func() ConnectionDef {
 				auth := baseAuth
 				auth.GrantType = "password"
-				return ConnectionDef{Mode: providermanifestv1.ConnectionModeUser, Auth: auth}
+				return ConnectionDef{Mode: providermanifestv1.ConnectionModeSubject, Auth: auth}
 			}(),
 			wantErr: "auth.grantType is only supported for oauth2 client_credentials or refresh_token",
 		},
@@ -89,7 +89,7 @@ func TestValidateStructureRejectsPlatformOAuth2RefreshToken(t *testing.T) {
 			conn: func() ConnectionDef {
 				auth := baseAuth
 				auth.GrantType = ""
-				return ConnectionDef{Mode: providermanifestv1.ConnectionModeUser, Auth: auth}
+				return ConnectionDef{Mode: providermanifestv1.ConnectionModeSubject, Auth: auth}
 			}(),
 			wantErr: "auth.refreshToken is only supported for oauth2 refresh_token",
 		},
@@ -98,7 +98,7 @@ func TestValidateStructureRejectsPlatformOAuth2RefreshToken(t *testing.T) {
 			conn: func() ConnectionDef {
 				auth := baseAuth
 				auth.GrantType = "client_credentials"
-				return ConnectionDef{Mode: providermanifestv1.ConnectionModeUser, Auth: auth}
+				return ConnectionDef{Mode: providermanifestv1.ConnectionModeSubject, Auth: auth}
 			}(),
 			wantErr: "oauth2 client_credentials is not supported; use managed-subject credentials",
 		},
@@ -3249,7 +3249,7 @@ workflows:
             app:
               name: roadmap
               operation: nightly_sync
-              credentialMode: platform
+              credentialMode: unsupported-mode
 providers:
   workflow:
     temporal:
@@ -3258,7 +3258,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.steps[0].app.credentialMode "platform" is not supported`,
+				want: `workflows.schedules.nightly.target.steps[0].app.credentialMode "unsupported-mode" is not supported`,
 			},
 			{
 				name: "agent step when rejects self reference",
@@ -6165,7 +6165,7 @@ func TestValidateStructureConnectionRefPreservesCredentialRefreshOverride(t *tes
 		APIVersion: ConfigAPIVersion,
 		Connections: map[string]*ConnectionDef{
 			"shared": {
-				Mode: providermanifestv1.ConnectionModeUser,
+				Mode: providermanifestv1.ConnectionModeSubject,
 				Auth: ConnectionAuthDef{
 					Type:     providermanifestv1.AuthTypeOAuth2,
 					TokenURL: "https://oauth.example.test/token",
@@ -6262,7 +6262,7 @@ func TestValidateStructureCredentialRefreshDurationContract(t *testing.T) {
 		APIVersion: ConfigAPIVersion,
 		Connections: map[string]*ConnectionDef{
 			"shared": {
-				Mode: providermanifestv1.ConnectionModeUser,
+				Mode: providermanifestv1.ConnectionModeSubject,
 				CredentialRefresh: &CredentialRefreshDef{
 					RefreshInterval:     "0s",
 					RefreshBeforeExpiry: "30m",
@@ -6346,7 +6346,7 @@ func TestValidateStructureRejectsInlineUserMCPOAuthConnection(t *testing.T) {
 			"sample": {
 				Connections: map[string]*ConnectionDef{
 					"mcp": {
-						Mode: providermanifestv1.ConnectionModeUser,
+						Mode: providermanifestv1.ConnectionModeSubject,
 						Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth},
 					},
 				},

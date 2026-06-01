@@ -3944,8 +3944,8 @@ func normalizeAgentToolCredentialMode(mode core.ConnectionMode) (core.Connection
 		return "", nil
 	case core.ConnectionModeNone:
 		return core.ConnectionModeNone, nil
-	case core.ConnectionModeUser:
-		return core.ConnectionModeUser, nil
+	case core.ConnectionModeSubject:
+		return core.ConnectionModeSubject, nil
 	default:
 		return "", fmt.Errorf("unsupported agent tool credential mode %q", mode)
 	}

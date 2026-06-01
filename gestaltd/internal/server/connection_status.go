@@ -110,7 +110,7 @@ func (s *Server) defaultConnectionName(integration string) string {
 }
 
 func (s *Server) implicitIntegrationStatus(integration string, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {
-	mode := core.ConnectionModeUser
+	mode := core.ConnectionModeSubject
 	if prov != nil {
 		mode = core.NormalizeConnectionMode(prov.ConnectionMode())
 	}

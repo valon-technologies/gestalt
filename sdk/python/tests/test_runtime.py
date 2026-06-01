@@ -116,7 +116,7 @@ class AbortContext:
 class ParseRuntimeArgsTests(unittest.TestCase):
     def test_explicit_root_and_target(self) -> None:
         runtime_args = _runtime._parse_runtime_args(
-            ["/tmp/plugin", "example.plugin:PLUGIN", "auth"]
+            ["/tmp/plugin", "example.plugin:PLUGIN", "authentication"]
         )
 
         self.assertEqual(
@@ -520,7 +520,7 @@ class MainEntrypointTests(unittest.TestCase):
                         id="repo:acme/widgets",
                     ),
                     credential=app_pb2.CredentialContext(
-                        mode="user",
+                        mode="subject",
                         subject_id="user:user-123",
                     ),
                     access=app_pb2.AccessContext(
@@ -559,7 +559,7 @@ class MainEntrypointTests(unittest.TestCase):
                 connection_params={"tenant": "acme"},
                 context=app_pb2.RequestContext(
                     subject=app_pb2.SubjectContext(id="user:user-123", kind="user"),
-                    credential=app_pb2.CredentialContext(mode="user"),
+                    credential=app_pb2.CredentialContext(mode="subject"),
                     access=app_pb2.AccessContext(
                         policy="sample_policy",
                         role="viewer",
@@ -628,7 +628,7 @@ class MainEntrypointTests(unittest.TestCase):
                 "external_id": "repo:acme/widgets",
                 "agent_external_type": "github_identity",
                 "agent_external_id": "user:12345678",
-                "credential_mode": "user",
+                "credential_mode": "subject",
                 "credential_subject_id": "user:user-123",
                 "access_policy": "sample_policy",
                 "access_role": "admin",
@@ -668,7 +668,7 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(catalog.name, "session-source")
         self.assertEqual(
             catalog.display_name,
-            "acme|user:user-123|user|viewer|https://gestalt.example.test|run-456",
+            "acme|user:user-123|subject|viewer|https://gestalt.example.test|run-456",
         )
         self.assertEqual(len(catalog.operations), 1)
         self.assertEqual(catalog.operations[0].id, "private_search")
