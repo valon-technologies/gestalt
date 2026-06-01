@@ -139,12 +139,7 @@ jobs:
         with:
           ref: main
       - name: Checkout Homebrew tap
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          repository: valon-technologies/homebrew-gestalt
-          ref: main
-          token: ${{ secrets.PAT_TOKEN }}
-          path: homebrew-tap
+        run: git clone --depth 1 --branch main https://github.com/valon-technologies/homebrew-gestalt.git homebrew-tap
       - name: Extract version
         id: version
         run: echo "version=${GITHUB_REF_NAME#gestaltd/v}" >> "$GITHUB_OUTPUT"
@@ -249,6 +244,8 @@ jobs:
           git push
 
       - name: Commit and push Homebrew tap
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           git -C homebrew-tap config user.name "github-actions[bot]"
           git -C homebrew-tap config user.email "github-actions[bot]@users.noreply.github.com"
@@ -256,4 +253,6 @@ jobs:
           git -C homebrew-tap diff --cached --quiet && { echo "No Homebrew tap changes"; exit 0; }
           git -C homebrew-tap commit -m "Update gestaltd formula to v${{ steps.version.outputs.version }}"
           git -C homebrew-tap pull --rebase origin main
-          git -C homebrew-tap push
+          test -n "${PAT_TOKEN}" || { echo "PAT_TOKEN is required to push Homebrew tap"; exit 1; }
+          git -C homebrew-tap remote set-url origin "https://x-access-token:${PAT_TOKEN}@github.com/valon-technologies/homebrew-gestalt.git"
+          git -C homebrew-tap push origin HEAD:main
