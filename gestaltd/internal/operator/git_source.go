@@ -209,10 +209,10 @@ func (l *Lifecycle) gitSourceManifestPath(ctx context.Context, paths lifecyclePa
 	return manifestPath, nil
 }
 
-func (l *Lifecycle) lockGitProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+func (l *Lifecycle) lockGitProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any, platform string) (LockEntry, error) {
 	destDir := providerDestDir(paths, name)
 	if gitSourceMaterialization(gitSourceDef(app)) == gitMaterializationSnapshot {
-		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, app)
+		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, app, platform)
 		if err != nil {
 			return LockEntry{}, err
 		}
@@ -232,10 +232,10 @@ func (l *Lifecycle) lockGitProviderEntryForSource(ctx context.Context, cfg *conf
 	return gitLocalLockEntryFromPreparedInstall(paths, providermanifestv1.KindApp, name, app, install, false)
 }
 
-func (l *Lifecycle) lockGitComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+func (l *Lifecycle) lockGitComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configMap map[string]any, platform string) (LockEntry, error) {
 	subject := fmt.Sprintf("%s %q", kind, name)
 	if gitSourceMaterialization(gitSourceDef(app)) == gitMaterializationSnapshot {
-		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, kind, name, subject, destDir, app)
+		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, kind, name, subject, destDir, app, platform)
 		if err != nil {
 			return LockEntry{}, err
 		}
@@ -255,9 +255,9 @@ func (l *Lifecycle) lockGitComponentEntryForSource(ctx context.Context, cfg *con
 	return gitLocalLockEntryFromPreparedInstall(paths, kind, name, app, install, false)
 }
 
-func (l *Lifecycle) lockGitUIEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, destDir, subject string, configMap map[string]any) (LockEntry, error) {
+func (l *Lifecycle) lockGitUIEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, destDir, subject string, configMap map[string]any, platform string) (LockEntry, error) {
 	if gitSourceMaterialization(gitSourceDef(app)) == gitMaterializationSnapshot {
-		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindUI, name, subject, destDir, app)
+		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindUI, name, subject, destDir, app, platform)
 		if err != nil {
 			return LockEntry{}, err
 		}
@@ -277,7 +277,7 @@ func (l *Lifecycle) lockGitUIEntryForSource(ctx context.Context, cfg *config.Con
 	return gitLocalLockEntryFromPreparedInstall(paths, providermanifestv1.KindUI, "ui:"+name, app, install, true)
 }
 
-func (l *Lifecycle) lockGitSnapshotSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, expectedKind, name, subject, destDir string, app *config.ProviderEntry) (LockEntry, *installedPackage, error) {
+func (l *Lifecycle) lockGitSnapshotSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, expectedKind, name, subject, destDir string, app *config.ProviderEntry, platform string) (LockEntry, *installedPackage, error) {
 	if cfg == nil {
 		return LockEntry{}, nil, fmt.Errorf("%s source.git snapshot resolution requires loaded config", subject)
 	}
@@ -288,7 +288,7 @@ func (l *Lifecycle) lockGitSnapshotSource(ctx context.Context, cfg *config.Confi
 	metadataProvider := *app
 	metadataProvider.Source = config.NewMetadataSource(snapshot.MetadataURL)
 	metadataProvider.Source.Auth = app.Source.Auth
-	installed, entry, err := l.installMetadataSourcePackage(ctx, expectedKind, name, subject, destDir, &metadataProvider, paths.configDir)
+	installed, entry, err := l.installMetadataSourcePackage(ctx, expectedKind, name, subject, destDir, &metadataProvider, paths.configDir, platform)
 	if err != nil {
 		return LockEntry{}, nil, fmt.Errorf("%s source.git snapshot %s: %w", subject, snapshot.MetadataURL, err)
 	}

@@ -4414,7 +4414,7 @@ func TestMaterializeLockedComponent_AllowsGenericDeclarativeTelemetryAndAuditPac
 				Source: config.NewMetadataSource("https://example.invalid/github-com-acme-providers-declarative/v1.0.0/provider-release.yaml"),
 			}
 			destDir := filepath.Join(dir, kind)
-			if err := lc.materializeLockedComponent(context.Background(), lifecyclePaths{}, kind, "default", providerEntry, entry, destDir); err != nil {
+			if err := lc.materializeLockedComponent(context.Background(), lifecyclePaths{}, kind, "default", providerEntry, entry, destDir, ""); err != nil {
 				t.Fatalf("materializeLockedComponent: %v", err)
 			}
 			install, err := inspectPreparedInstall(destDir)
@@ -5887,6 +5887,147 @@ func TestManagedCacheSourcesPrepareAtPathWithPlatformsHashesExtraPlatformArchive
 				t.Fatalf("readBack extra-platform URL = %q, want %q", got, wantExtraArchiveURL)
 			}
 		})
+	}
+}
+
+func TestLockAtPathsWithPlatformsUsesRequestedMaterializationPlatform(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cacheSource := "github.com/acme/tools/cache-session"
+	version := "1.0.0"
+
+	requestedPlatform := struct{ GOOS, GOARCH string }{GOOS: "linux", GOARCH: "amd64"}
+	if runtime.GOOS == requestedPlatform.GOOS && runtime.GOARCH == requestedPlatform.GOARCH {
+		requestedPlatform = struct{ GOOS, GOARCH string }{GOOS: "darwin", GOARCH: "arm64"}
+	}
+	requestedPlatformKey := providerpkg.PlatformString(requestedPlatform.GOOS, requestedPlatform.GOARCH)
+	hostPlatformKey := providerpkg.CurrentPlatformString()
+	if requestedPlatformKey == hostPlatformKey {
+		t.Skip("host already matches alternate test platform")
+	}
+
+	hostArchivePath := buildExecutableArchive(t, dir, "cache-host-src", cacheSource, version, providermanifestv1.KindCache, "cache-app", "host-cache-binary")
+	hostArchiveData, err := os.ReadFile(hostArchivePath)
+	if err != nil {
+		t.Fatalf("read host archive: %v", err)
+	}
+	requestedArchivePath := buildExecutableArchive(t, dir, "cache-requested-src", cacheSource, version, providermanifestv1.KindCache, "cache-app", "requested-cache-binary")
+	requestedArchiveData, err := os.ReadFile(requestedArchivePath)
+	if err != nil {
+		t.Fatalf("read requested archive: %v", err)
+	}
+	hostArchiveSum := sha256.Sum256(hostArchiveData)
+	requestedArchiveSum := sha256.Sum256(requestedArchiveData)
+
+	metadataPath := "/providers/cache/provider-release.yaml"
+	hostArchivePathURL := "/providers/cache/cache-host.tar.gz"
+	requestedArchivePathURL := "/providers/cache/cache-requested.tar.gz"
+
+	downloadedRequested := false
+	downloadedHost := false
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       cacheSource,
+				Kind:          providermanifestv1.KindCache,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					hostPlatformKey: {
+						Path:   filepath.Base(hostArchivePathURL),
+						SHA256: hex.EncodeToString(hostArchiveSum[:]),
+					},
+					requestedPlatformKey: {
+						Path:   filepath.Base(requestedArchivePathURL),
+						SHA256: hex.EncodeToString(requestedArchiveSum[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case hostArchivePathURL:
+			downloadedHost = true
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(hostArchiveData)
+		case requestedArchivePathURL:
+			downloadedRequested = true
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(requestedArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	externalCredentialsManifestPath := writeExecutableSourceManifest(t, dir, "external-credentials-local", "github.com/acme/tools/external-credentials/local", "0.1.0", providermanifestv1.KindExternalCredentials, []localExecutableManifestArtifact{
+		{goos: runtime.GOOS, goarch: runtime.GOARCH, binaryName: "external-credentials", data: []byte("host-external-credentials-binary")},
+		{goos: requestedPlatform.GOOS, goarch: requestedPlatform.GOARCH, binaryName: "external-credentials", data: []byte("requested-external-credentials-binary")},
+	})
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := "apiVersion: " + config.ConfigAPIVersion + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + strings.Join([]string{
+		"  externalCredentials:",
+		"    local:",
+		"      source:",
+		"        path: " + filepath.ToSlash(externalCredentialsManifestPath),
+		"  cache:",
+		"    session:",
+		"      source: " + srv.URL + metadataPath,
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"    externalCredentials: local",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle().WithHTTPClient(srv.Client())
+	if _, err := lc.LockAtPathsWithPlatforms([]string{configPath}, StatePaths{}, []struct{ GOOS, GOARCH string }{requestedPlatform}); err != nil {
+		t.Fatalf("LockAtPathsWithPlatforms: %v", err)
+	}
+
+	if !downloadedRequested {
+		t.Fatal("expected lock to download the requested platform archive")
+	}
+	if downloadedHost {
+		t.Fatalf("lock downloaded host platform %q archive while --platform requested %q", hostPlatformKey, requestedPlatformKey)
+	}
+
+	lock, err := ReadLockfile(filepath.Join(dir, LockfileName))
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	entry, ok := lock.Caches["session"]
+	if !ok {
+		t.Fatal(`lock.Caches["session"] not found`)
+	}
+	wantRequestedSHA := hex.EncodeToString(requestedArchiveSum[:])
+	if got := entry.Archives[requestedPlatformKey].SHA256; got != wantRequestedSHA {
+		t.Fatalf("lock requested-platform SHA256 = %q, want %q", got, wantRequestedSHA)
+	}
+	if _, ok := entry.Archives[hostPlatformKey]; ok && hostPlatformKey != requestedPlatformKey {
+		if got := entry.Archives[hostPlatformKey].SHA256; got == wantRequestedSHA {
+			t.Fatalf("lock host platform %q archive matches requested materialization", hostPlatformKey)
+		}
+	}
+
+	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, []struct{ GOOS, GOARCH string }{requestedPlatform}); err != nil {
+		t.Fatalf("CheckLockAtPathsWithStatePaths: %v", err)
 	}
 }
 

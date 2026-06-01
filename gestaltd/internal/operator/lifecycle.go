@@ -218,7 +218,8 @@ func (l *Lifecycle) LockAtPathsWithStatePaths(configPaths []string, state StateP
 }
 
 func (l *Lifecycle) LockAtPathsWithPlatforms(configPaths []string, state StatePaths, platforms []struct{ GOOS, GOARCH string }) (*Lockfile, error) {
-	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state)
+	platform := lockMaterializationPlatform(platforms)
+	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state, platform)
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -239,7 +240,8 @@ func (l *Lifecycle) LockAtPathsWithPlatforms(configPaths []string, state StatePa
 }
 
 func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state StatePaths, platforms []struct{ GOOS, GOARCH string }) error {
-	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state)
+	platform := lockMaterializationPlatform(platforms)
+	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state, platform)
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -349,7 +351,7 @@ func (l *Lifecycle) prepareLockAtPathsInScratch(configPaths []string, state Stat
 	return lock, cfg, paths, cleanup, nil
 }
 
-func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, state StatePaths) (*Lockfile, *config.Config, lifecyclePaths, func(), error) {
+func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, state StatePaths, platform string) (*Lockfile, *config.Config, lifecyclePaths, func(), error) {
 	scratchDir, err := os.MkdirTemp("", "gestaltd-lock-*")
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, nil, fmt.Errorf("create lock scratch dir: %w", err)
@@ -357,17 +359,18 @@ func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, s
 	cleanup := func() { _ = os.RemoveAll(scratchDir) }
 	scratchState := state
 	scratchState.ArtifactsDir = scratchDir
-	lock, cfg, paths, err := l.prepareCommittedLockAtPaths(configPaths, scratchState, state)
+	lock, cfg, paths, err := l.prepareCommittedLockAtPaths(configPaths, scratchState, platform, state)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, cleanup, err
 	}
 	actualPaths := resolveLifecyclePaths(configPaths, cfg, state)
 	paths.lockfilePath = actualPaths.lockfilePath
-	paths.lockFlags = actualPaths.lockFlags
+	paths.lockFlags = formatLockFlags(configPaths, state, platform)
+	paths.lockMaterializationPlatform = platform
 	return lock, cfg, paths, cleanup, nil
 }
 
-func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state StatePaths, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
+func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state StatePaths, platform string, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
 	cfg, err := loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
@@ -390,6 +393,8 @@ func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state Stat
 	if err := rejectLocalSourceSecretsForSourceAuthLock(cfg); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
+	paths.lockMaterializationPlatform = platform
+	paths.lockFlags = formatLockFlags(configPaths, state, platform)
 	lock, err := l.prepareCommittedRuntimeLockFromLoadedConfig(context.Background(), paths, cfg)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, err
@@ -1567,10 +1572,11 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 }
 
 type lifecyclePaths struct {
-	configPaths            []string
-	configFlags            string
-	lockFlags              string
-	pluginScope            string
+	configPaths                []string
+	configFlags                string
+	lockFlags                  string
+	lockMaterializationPlatform string
+	pluginScope                string
 	configPath             string
 	configDir              string
 	artifactsDir           string
@@ -1616,16 +1622,19 @@ func formatConfigStateFlags(paths []string, state StatePaths) string {
 	return strings.Join(args, " ")
 }
 
-func formatLockFlags(paths []string, state StatePaths) string {
+func formatLockFlags(paths []string, state StatePaths, platform string) string {
 	if len(paths) == 0 && state.LockfilePath == "" {
 		return ""
 	}
-	args := make([]string, 0, len(paths)*2+2)
+	args := make([]string, 0, len(paths)*2+3)
 	for _, path := range paths {
 		args = append(args, "--config", path)
 	}
 	if state.LockfilePath != "" {
 		args = append(args, "--lockfile", state.LockfilePath)
+	}
+	if strings.TrimSpace(platform) != "" {
+		args = append(args, "--platform", strings.TrimSpace(platform))
 	}
 	return strings.Join(args, " ")
 }
@@ -1893,7 +1902,7 @@ func resolveLifecyclePaths(configPaths []string, cfg *config.Config, state State
 	return lifecyclePaths{
 		configPaths:            append([]string(nil), configPaths...),
 		configFlags:            formatConfigStateFlags(configPaths, state),
-		lockFlags:              formatLockFlags(configPaths, state),
+		lockFlags:              formatLockFlags(configPaths, state, ""),
 		pluginScope:            pluginScopeLabel(state.AppScope),
 		configPath:             configPath,
 		configDir:              configDir,
@@ -2915,7 +2924,7 @@ func lockEntryMatches(paths lifecyclePaths, kind, name string, providerEntry *co
 		return false
 	}
 	if len(entry.Archives) > 0 {
-		platform := providerpkg.CurrentPlatformString()
+		platform := pathsMaterializationPlatform(paths)
 		_, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 		if !ok {
 			return false
@@ -3215,7 +3224,7 @@ func localUILockEntryFromPreparedInstall(paths lifecyclePaths, name string, app 
 	return entry, nil
 }
 
-func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, app *config.ProviderEntry, configDir string) (*installedPackage, LockEntry, error) {
+func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, app *config.ProviderEntry, configDir, platform string) (*installedPackage, LockEntry, error) {
 	sourceLocation := app.SourceReleaseLocation()
 	metadata, resolvedMetadataLocation, gitHubReleaseAssets, err := fetchProviderReleaseMetadata(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(app))
 	if err != nil {
@@ -3238,10 +3247,10 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 		Archives: archives,
 	}
 
-	currentPlatform := providerpkg.CurrentPlatformString()
-	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, currentPlatform)
+	platform = resolveMaterializationPlatform(platform)
+	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
-		return nil, LockEntry{}, fmt.Errorf("no archive for platform %s for %s; publish an explicit %s target or a generic package where allowed", currentPlatform, subject, currentPlatform)
+		return nil, LockEntry{}, fmt.Errorf("no archive for platform %s for %s; publish an explicit %s target or a generic package where allowed", platform, subject, platform)
 	}
 	archiveLocation, err := resolveLockedArchiveLocation(configDir, entry.Source, archive.URL)
 	if err != nil {
@@ -3277,7 +3286,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	entry.Kind = installed.Manifest.Kind
 	entry.Runtime = installedRuntime
 	entry.Version = installed.Manifest.Version
-	if err := validateLockedArchivePolicy(subject, expectedManifestKind, installed.Manifest, entry, currentPlatform, resolvedKey); err != nil {
+	if err := validateLockedArchivePolicy(subject, expectedManifestKind, installed.Manifest, entry, platform, resolvedKey); err != nil {
 		return nil, LockEntry{}, err
 	}
 	return installed, entry, nil
@@ -3296,7 +3305,7 @@ func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Conf
 		if !sourceBacked(entry) {
 			continue
 		}
-		lockEntry, err := l.lockProviderEntryForSource(ctx, cfg, paths, name, entry, configMap)
+		lockEntry, err := l.lockProviderEntryForSource(ctx, cfg, paths, name, entry, configMap, "")
 		if err != nil {
 			return nil, err
 		}
@@ -3310,7 +3319,7 @@ func (l *Lifecycle) lockCommittedProviderEntryForSource(ctx context.Context, cfg
 	if !providerRequiresCommittedLock(app) {
 		return LockEntry{}, fmt.Errorf("provider %q does not require committed lock metadata", name)
 	}
-	return l.lockProviderEntryForSource(ctx, cfg, paths, name, app, configMap)
+	return l.lockProviderEntryForSource(ctx, cfg, paths, name, app, configMap, pathsMaterializationPlatform(paths))
 }
 
 func (l *Lifecycle) writeComponentArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configNode yaml.Node) (LockEntry, error) {
@@ -3318,17 +3327,17 @@ func (l *Lifecycle) writeComponentArtifact(ctx context.Context, cfg *config.Conf
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
 	}
-	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, app, configMap)
+	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, app, configMap, "")
 }
 
 func (l *Lifecycle) lockCommittedComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
 	if !providerRequiresCommittedLock(app) {
 		return LockEntry{}, fmt.Errorf("%s %q does not require committed lock metadata", kind, name)
 	}
-	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, app, configMap)
+	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, app, configMap, pathsMaterializationPlatform(paths))
 }
 
-func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configMap map[string]any, platform string) (LockEntry, error) {
 	if app != nil && app.HasLocalSource() {
 		install, err := prepareLocalSourceInstall(kind, name, app.SourcePath(), destDir)
 		if err != nil {
@@ -3343,7 +3352,7 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config
 		return localLockEntryFromPreparedInstall(paths, kind, name, app, install)
 	}
 	if app != nil && app.HasGitSource() {
-		return l.lockGitComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, app, configMap)
+		return l.lockGitComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, app, configMap, platform)
 	}
 
 	sourceLocation := app.SourceReleaseLocation()
@@ -3356,7 +3365,7 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config
 	if !app.HasReleaseMetadataSource() {
 		return LockEntry{}, fmt.Errorf("%s %q source %q: only provider-release metadata sources and local manifest paths are supported", kind, name, sourceLocation)
 	}
-	installed, entry, err = l.installMetadataSourcePackage(ctx, kind, name, subject, destDir, app, paths.configDir)
+	installed, entry, err = l.installMetadataSourcePackage(ctx, kind, name, subject, destDir, app, paths.configDir, platform)
 	if err != nil {
 		return LockEntry{}, err
 	}
@@ -3386,7 +3395,7 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config
 	return entry, nil
 }
 
-func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any, platform string) (LockEntry, error) {
 	if app != nil && app.HasLocalSource() {
 		install, err := prepareLocalSourceInstall(providermanifestv1.KindApp, name, app.SourcePath(), providerDestDir(paths, name))
 		if err != nil {
@@ -3401,7 +3410,7 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, cfg *config.
 		return localLockEntryFromPreparedInstall(paths, providermanifestv1.KindApp, name, app, install)
 	}
 	if app != nil && app.HasGitSource() {
-		return l.lockGitProviderEntryForSource(ctx, cfg, paths, name, app, configMap)
+		return l.lockGitProviderEntryForSource(ctx, cfg, paths, name, app, configMap, platform)
 	}
 
 	sourceLocation := app.SourceReleaseLocation()
@@ -3414,7 +3423,7 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, cfg *config.
 	if !app.HasReleaseMetadataSource() {
 		return LockEntry{}, fmt.Errorf("provider %q source %q: only provider-release metadata sources and local manifest paths are supported", name, sourceLocation)
 	}
-	installed, entry, err = l.installMetadataSourcePackage(ctx, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, app, paths.configDir)
+	installed, entry, err = l.installMetadataSourcePackage(ctx, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, app, paths.configDir, platform)
 	if err != nil {
 		return LockEntry{}, err
 	}
@@ -3474,7 +3483,7 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, cfg *confi
 		return entry, nil
 	}
 	if app.HasGitSource() {
-		return l.lockGitUIEntryForSource(ctx, cfg, paths, name, app, destDir, subject, configMap)
+		return l.lockGitUIEntryForSource(ctx, cfg, paths, name, app, destDir, subject, configMap, pathsMaterializationPlatform(paths))
 	}
 	expectedPackage := app.SourceReleaseLocation()
 
@@ -3486,7 +3495,7 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, cfg *confi
 	if !app.HasReleaseMetadataSource() {
 		return LockEntry{}, fmt.Errorf("%s source %q: only provider-release metadata sources and local manifest paths are supported", subject, expectedPackage)
 	}
-	installed, entry, opErr = l.installMetadataSourcePackage(ctx, providermanifestv1.KindUI, name, subject, destDir, app, paths.configDir)
+	installed, entry, opErr = l.installMetadataSourcePackage(ctx, providermanifestv1.KindUI, name, subject, destDir, app, paths.configDir, pathsMaterializationPlatform(paths))
 	if opErr != nil {
 		return LockEntry{}, opErr
 	}
@@ -5021,7 +5030,7 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 					return "", err
 				}
 			} else {
-				if err := l.materializeLockedUIProvider(context.Background(), paths, provider, *lockEntry, destDir); err != nil {
+				if err := l.materializeLockedUIProvider(context.Background(), paths, provider, *lockEntry, destDir, pathsMaterializationPlatform(paths)); err != nil {
 					return "", err
 				}
 			}
@@ -5109,7 +5118,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 	install, err := inspectPreparedInstall(destDir)
 	needMaterialize := err != nil || !preparedInstallMatchesLockForMode(providermanifestv1.KindApp, name, app, entry, install, mode)
 	if err == nil && !needMaterialize {
-		platform := providerpkg.CurrentPlatformString()
+		platform := pathsMaterializationPlatform(paths)
 		if _, resolvedKey, ok := resolveArchiveForPlatform(entry, platform); ok {
 			if policyErr := validateLockedArchivePolicy(fmt.Sprintf("provider %q", name), providermanifestv1.KindApp, install.manifest, entry, platform, resolvedKey); policyErr != nil {
 				return policyErr
@@ -5153,7 +5162,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 				return err
 			}
 		} else {
-			if err := l.materializeLockedProvider(context.Background(), paths, name, app, entry); err != nil {
+			if err := l.materializeLockedProvider(context.Background(), paths, name, app, entry, pathsMaterializationPlatform(paths)); err != nil {
 				return err
 			}
 		}
@@ -5195,7 +5204,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 	install, err := inspectPreparedInstall(destDir)
 	needMaterialize := err != nil || !preparedInstallMatchesLockForMode(kind, name, app, *entry, install, mode)
 	if err == nil && !needMaterialize {
-		platform := providerpkg.CurrentPlatformString()
+		platform := pathsMaterializationPlatform(paths)
 		if _, resolvedKey, ok := resolveArchiveForPlatform(*entry, platform); ok {
 			if policyErr := validateLockedArchivePolicy(fmt.Sprintf("%s %q", kind, name), archivePolicyKind(kind), install.manifest, *entry, platform, resolvedKey); policyErr != nil {
 				return policyErr
@@ -5242,7 +5251,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 				return err
 			}
 		} else {
-			if err := l.materializeLockedComponent(context.Background(), paths, kind, name, app, *entry, destDir); err != nil {
+			if err := l.materializeLockedComponent(context.Background(), paths, kind, name, app, *entry, destDir, pathsMaterializationPlatform(paths)); err != nil {
 				return err
 			}
 		}
@@ -5320,8 +5329,8 @@ func bindPathBackedUIManifest(app *config.ProviderEntry, configMap map[string]an
 	return assetRoot, nil
 }
 
-func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyclePaths, name string, app *config.ProviderEntry, entry LockEntry) error {
-	platform := providerpkg.CurrentPlatformString()
+func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyclePaths, name string, app *config.ProviderEntry, entry LockEntry, platform string) error {
+	platform = resolveMaterializationPlatform(platform)
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for provider %q; run `%s --platform %s`", platform, name, formatLockCommand(paths), platform)
@@ -5376,8 +5385,8 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyc
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecyclePaths, kind, name string, app *config.ProviderEntry, entry LockEntry, destDir string) error {
-	platform := providerpkg.CurrentPlatformString()
+func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecyclePaths, kind, name string, app *config.ProviderEntry, entry LockEntry, destDir string, platform string) error {
+	platform = resolveMaterializationPlatform(platform)
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for %s %q; run `%s --platform %s`", platform, kind, name, formatLockCommand(paths), platform)
@@ -5437,8 +5446,8 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecy
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifecyclePaths, app *config.ProviderEntry, entry LockEntry, destDir string) error {
-	platform := providerpkg.CurrentPlatformString()
+func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifecyclePaths, app *config.ProviderEntry, entry LockEntry, destDir string, platform string) error {
+	platform = resolveMaterializationPlatform(platform)
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for ui provider; run `%s --platform %s`", platform, formatLockCommand(paths), platform)
