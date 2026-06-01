@@ -263,7 +263,6 @@ test("Agent forwards invocation tokens across session, turn, and interaction cal
 
     const fromHandle = new Agent("invocation-token-123");
     const session = await fromHandle.createSession({
-      providerName: "basic",
       model: "gpt-test",
       clientRef: "cli-session-1",
       metadata: {
@@ -344,7 +343,7 @@ test("Agent forwards invocation tokens across session, turn, and interaction cal
       {
         method: "createSession",
         invocationToken: "invocation-token-123",
-        providerName: "basic",
+        providerName: "",
       },
       {
         method: "getSession",
