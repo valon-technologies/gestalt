@@ -22,13 +22,11 @@ type clientDB struct {
 func (db *clientDB) Close() error { return nil }
 
 var (
-	_ idb.Database     = (*clientDB)(nil)
-	_ idb.ObjectStore  = (*objectStore)(nil)
-	_ idb.RangeDeleter = (*objectStore)(nil)
-	_ idb.Index        = (*indexClient)(nil)
-	_ idb.MutableIndex = (*indexClient)(nil)
-	_ idb.Transaction  = (*hostTx)(nil)
-	_ idb.Cursor       = (*rpcCursor)(nil)
+	_ idb.Database    = (*clientDB)(nil)
+	_ idb.ObjectStore = (*objectStore)(nil)
+	_ idb.Index       = (*indexClient)(nil)
+	_ idb.Transaction = (*hostTx)(nil)
+	_ idb.Cursor      = (*rpcCursor)(nil)
 )
 
 // CreateObjectStore creates a named object store with the supplied schema.

@@ -29,9 +29,6 @@ type ObjectStore interface {
 	OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (Cursor, error)
 }
 
-// RangeDeleter names the DeleteRange capability on object stores.
-type RangeDeleter = ObjectStore
-
 // Index maps to IDBIndex for the supported Gestalt protocol subset.
 type Index interface {
 	Get(ctx context.Context, values ...any) (Record, error)
@@ -44,9 +41,6 @@ type Index interface {
 	OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (Cursor, error)
 	OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (Cursor, error)
 }
-
-// MutableIndex names index delete capabilities (same as Index in the Gestalt protocol).
-type MutableIndex = Index
 
 // Transaction maps to IDBTransaction (cursor ops remain on stores/indexes).
 type Transaction interface {
@@ -70,9 +64,6 @@ type TransactionObjectStore interface {
 	Index(name string) TransactionIndex
 }
 
-// TransactionRangeDeleter names transaction-scoped range delete support.
-type TransactionRangeDeleter = TransactionObjectStore
-
 // TransactionIndex provides transaction-scoped index operations.
 type TransactionIndex interface {
 	Get(ctx context.Context, values ...any) (Record, error)
@@ -83,9 +74,6 @@ type TransactionIndex interface {
 	Delete(ctx context.Context, values ...any) (int64, error)
 	DeleteRange(ctx context.Context, r *KeyRange, values ...any) (int64, error)
 }
-
-// TransactionMutableIndex names transaction-scoped index delete support.
-type TransactionMutableIndex = TransactionIndex
 
 // Cursor maps to IDBCursor / IDBCursorWithValue.
 type Cursor interface {

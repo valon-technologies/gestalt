@@ -29,34 +29,7 @@ const (
 )
 
 func NormalizeKind(kind string) string {
-	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case KindExternalCredentials:
-		return KindExternalCredentials
-	case KindAuthentication:
-		return KindAuthentication
-	case KindApp:
-		return KindApp
-	case KindAuthorization:
-		return KindAuthorization
-	case KindIndexedDB:
-		return KindIndexedDB
-	case KindCache:
-		return KindCache
-	case KindS3:
-		return KindS3
-	case KindWorkflow:
-		return KindWorkflow
-	case KindAgent:
-		return KindAgent
-	case KindSecrets:
-		return KindSecrets
-	case KindUI:
-		return KindUI
-	case KindRuntime:
-		return KindRuntime
-	default:
-		return strings.TrimSpace(kind)
-	}
+	return strings.TrimSpace(strings.ToLower(kind))
 }
 
 type Manifest struct {

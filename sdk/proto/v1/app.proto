@@ -58,7 +58,6 @@ enum ConnectionMode {
   CONNECTION_MODE_UNSPECIFIED = 0;
   CONNECTION_MODE_NONE = 1;
   CONNECTION_MODE_SUBJECT = 2;
-  reserved 3, 4, 5;
 }
 
 // ConnectionParamDef describes one provider-defined connection parameter.
@@ -80,8 +79,6 @@ message ProviderMetadata {
   map<string, ConnectionParamDef> connection_params = 6;
   Catalog static_catalog = 7;
   bool supports_session_catalog = 8;
-  reserved 9;
-  reserved "supports_post_connect";
   int32 min_protocol_version = 11;
   int32 max_protocol_version = 12;
 }
@@ -117,8 +114,6 @@ message ExchangeInvocationTokenResponse {
 
 // AppInvokeRequest invokes a declared operation on another app through Gestalt.
 message AppInvokeRequest {
-  reserved 1;
-  reserved "request_handle";
   string app = 2;
   string operation = 3;
   google.protobuf.Struct params = 4;
@@ -153,8 +148,6 @@ message SubjectContext {
 }
 
 message AgentToolRef {
-  reserved 7, 10;
-
   string app = 1;
   string operation = 2;
   string connection = 3;
@@ -192,8 +185,6 @@ message HostContext {
 // RequestContext bundles the caller, credential, access, and host metadata for
 // one operation.
 message RequestContext {
-  reserved 7, 8;
-
   SubjectContext subject = 1;
   CredentialContext credential = 2;
   AccessContext access = 3;
@@ -251,8 +242,6 @@ message ExecuteRequest {
   map<string, string> connection_params = 4;
   string invocation_id = 5;
   RequestContext context = 6;
-  reserved 7;
-  reserved "request_handle";
   string invocation_token = 8;
   string idempotency_key = 9;
 }
