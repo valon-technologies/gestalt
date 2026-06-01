@@ -5165,6 +5165,51 @@ func TestPluginInvokesGraphQLSurface(t *testing.T) {
 	if variables["team"] != "eng" {
 		t.Fatalf("body.echo.variables.team = %#v, want %q", variables["team"], "eng")
 	}
+
+	missingUser := newNestedInvokeUser(t, harness, ctx, "nested-graphql-surface-missing@test.com")
+	storeNestedInvokeToken(t, harness, ctx, missingUser.ID, "caller", "work", "default")
+	missingResult, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID: missingUser.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"caller", "linear"},
+		},
+		"caller",
+		"",
+		"invoke_plugin_graphql",
+		map[string]any{
+			"app":      "linear",
+			"document": document,
+			"variables": map[string]any{
+				"team": "eng",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin_graphql missing credential): %v", err)
+	}
+	var missingGot struct {
+		OK     bool   `json:"ok"`
+		Status int    `json:"status"`
+		Body   any    `json:"body"`
+		Error  string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(missingResult.Body), &missingGot); err != nil {
+		t.Fatalf("json.Unmarshal missing credential: %v", err)
+	}
+	if !missingGot.OK {
+		t.Fatalf("expected missing credential operation result, got error: %+v", missingGot)
+	}
+	if missingGot.Status != http.StatusPreconditionFailed {
+		t.Fatalf("missing credential nested status = %d, want %d", missingGot.Status, http.StatusPreconditionFailed)
+	}
+	body, ok := missingGot.Body.(string)
+	if !ok || !strings.Contains(body, `no external credential stored for integration "linear"`) {
+		t.Fatalf("missing credential body = %#v, want missing linear credential", missingGot.Body)
+	}
+
 	if got := introspectionCalls.Load(); got != 0 {
 		t.Fatalf("introspection calls = %d, want 0", got)
 	}
@@ -5317,11 +5362,13 @@ func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 		instance   string
 	}
 	tests := []struct {
-		name      string
-		email     string
-		tokens    []tokenSpec
-		params    map[string]any
-		wantError string
+		name              string
+		email             string
+		tokens            []tokenSpec
+		params            map[string]any
+		wantStatus        int
+		wantBodySubstring string
+		wantError         string
 	}{
 		{
 			name:  "invalid invocation token",
@@ -5338,7 +5385,7 @@ func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 			wantError: "invalid or expired",
 		},
 		{
-			name:  "missing target token",
+			name:  "missing target credential returns operation result",
 			email: "nested-no-target-token@test.com",
 			tokens: []tokenSpec{
 				{plugin: "caller", connection: "work", instance: "default"},
@@ -5347,7 +5394,8 @@ func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 				"app":       "example",
 				"operation": "request_context",
 			},
-			wantError: "code = FailedPrecondition",
+			wantStatus:        http.StatusPreconditionFailed,
+			wantBodySubstring: `no external credential stored for integration "example"`,
 		},
 		{
 			name:  "ambiguous target instance",
@@ -5395,9 +5443,27 @@ func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 				t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
 			}
 
-			var got invokePluginEnvelope
+			var got struct {
+				OK     bool   `json:"ok"`
+				Status int    `json:"status"`
+				Body   any    `json:"body"`
+				Error  string `json:"error"`
+			}
 			if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
 				t.Fatalf("json.Unmarshal: %v", err)
+			}
+			if tc.wantError == "" {
+				if !got.OK {
+					t.Fatalf("expected success envelope, got error: %+v", got)
+				}
+				if got.Status != tc.wantStatus {
+					t.Fatalf("nested status = %d, want %d", got.Status, tc.wantStatus)
+				}
+				body, ok := got.Body.(string)
+				if !ok || !strings.Contains(body, tc.wantBodySubstring) {
+					t.Fatalf("body = %#v, want substring %q", got.Body, tc.wantBodySubstring)
+				}
+				return
 			}
 			if got.OK {
 				t.Fatalf("expected error envelope, got success: %+v", got)
