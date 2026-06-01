@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 )
 
@@ -151,12 +152,14 @@ func (s *Server) ensureExternalIdentityLink(ctx context.Context, subjectID strin
 		return err
 	}
 	resourceID := externalIdentityResourceID(ref)
-	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ReadRelationshipsRequest{
+	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ListRelationshipsRequest{
 		PageSize: adminAuthorizationProviderReadPageSize,
-		Relation: externalIdentityLinkRelation,
-		Resource: &core.ResourceRef{
-			Type: authorization.ProviderResourceTypeExternalIdentity,
-			Id:   resourceID,
+		Filter: &core.RelationshipFilter{
+			Relation: externalIdentityLinkRelation,
+			Resource: &core.ResourceRef{
+				Type: authorization.ProviderResourceTypeExternalIdentity,
+				Id:   resourceID,
+			},
 		},
 	})
 	if err != nil {
@@ -164,10 +167,11 @@ func (s *Server) ensureExternalIdentityLink(ctx context.Context, subjectID strin
 	}
 
 	for _, rel := range relationships {
-		if rel == nil || rel.GetSubject() == nil {
+		subject := authorization.RelationshipSubject(rel)
+		if rel == nil || subject == nil {
 			continue
 		}
-		if externalIdentityRelationshipSubjectMatches(rel.GetSubject(), subjectID) {
+		if externalIdentityRelationshipSubjectMatches(subject, subjectID) {
 			return nil
 		}
 	}
@@ -176,20 +180,20 @@ func (s *Server) ensureExternalIdentityLink(ctx context.Context, subjectID strin
 	if err != nil {
 		return err
 	}
-	return s.authorizationProvider.WriteRelationships(ctx, &core.WriteRelationshipsRequest{
-		Writes: []*core.Relationship{{
-			Subject: &core.SubjectRef{
+	_ = modelID
+	return s.writeAuthorizationRelationships(ctx, []*core.Relationship{{
+		Tuple: &core.RelationshipTuple{
+			Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: &core.SubjectRef{
 				Type: authorization.ProviderSubjectTypeSubject,
 				Id:   subjectID,
-			},
+			}}},
 			Relation: externalIdentityLinkRelation,
 			Resource: &core.ResourceRef{
 				Type: authorization.ProviderResourceTypeExternalIdentity,
 				Id:   resourceID,
 			},
-		}},
-		ModelId: modelID,
-	})
+		},
+	}}, nil)
 }
 
 func (s *Server) removeExternalIdentityLink(ctx context.Context, subjectID string, ref externalIdentityRef) error {
@@ -200,12 +204,14 @@ func (s *Server) removeExternalIdentityLink(ctx context.Context, subjectID strin
 		return err
 	}
 	resourceID := externalIdentityResourceID(ref)
-	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ReadRelationshipsRequest{
+	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ListRelationshipsRequest{
 		PageSize: adminAuthorizationProviderReadPageSize,
-		Relation: externalIdentityLinkRelation,
-		Resource: &core.ResourceRef{
-			Type: authorization.ProviderResourceTypeExternalIdentity,
-			Id:   resourceID,
+		Filter: &core.RelationshipFilter{
+			Relation: externalIdentityLinkRelation,
+			Resource: &core.ResourceRef{
+				Type: authorization.ProviderResourceTypeExternalIdentity,
+				Id:   resourceID,
+			},
 		},
 	})
 	if err != nil {
@@ -214,10 +220,11 @@ func (s *Server) removeExternalIdentityLink(ctx context.Context, subjectID strin
 
 	target := make([]*core.Relationship, 0, 1)
 	for _, rel := range relationships {
-		if rel == nil || rel.GetSubject() == nil {
+		subject := authorization.RelationshipSubject(rel)
+		if rel == nil || subject == nil {
 			continue
 		}
-		if externalIdentityRelationshipSubjectMatches(rel.GetSubject(), subjectID) {
+		if externalIdentityRelationshipSubjectMatches(subject, subjectID) {
 			target = append(target, rel)
 		}
 	}
@@ -229,10 +236,8 @@ func (s *Server) removeExternalIdentityLink(ctx context.Context, subjectID strin
 	if err != nil {
 		return err
 	}
-	return s.authorizationProvider.WriteRelationships(ctx, &core.WriteRelationshipsRequest{
-		Deletes: relationshipKeys(target),
-		ModelId: modelID,
-	})
+	_ = modelID
+	return s.writeAuthorizationRelationships(ctx, nil, relationshipTuples(target))
 }
 
 func externalIdentityRelationshipSubjectMatches(subject *core.SubjectRef, subjectID string) bool {

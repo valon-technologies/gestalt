@@ -5,25 +5,26 @@ import (
 	"time"
 )
 
-// AuthorizationMetadata describes the host authorization provider.
-type AuthorizationMetadata struct {
-	Capabilities  []string
-	ActiveModelId string
-}
+// AuthorizationSubjectTypeSubject identifies canonical Gestalt subjects in
+// managed authorization relationships.
+const AuthorizationSubjectTypeSubject = "subject"
 
-func (m *AuthorizationMetadata) GetCapabilities() []string {
-	if m == nil {
-		return nil
-	}
-	return m.Capabilities
-}
+type SourceLayer int32
 
-func (m *AuthorizationMetadata) GetActiveModelId() string {
-	if m == nil {
-		return ""
-	}
-	return m.ActiveModelId
-}
+const (
+	SourceLayerUnspecified  SourceLayer = 0
+	SourceLayerStaticConfig SourceLayer = 1
+	SourceLayerRuntime      SourceLayer = 2
+)
+
+type RelationshipTargetType int32
+
+const (
+	RelationshipTargetTypeUnspecified RelationshipTargetType = 0
+	RelationshipTargetTypeSubject     RelationshipTargetType = 1
+	RelationshipTargetTypeResource    RelationshipTargetType = 2
+	RelationshipTargetTypeSubjectSet  RelationshipTargetType = 3
+)
 
 // AuthorizationSubject identifies a subject in the authorization graph.
 type AuthorizationSubject struct {
@@ -150,439 +151,85 @@ func (a *AuthorizationAction) GetProperties() map[string]any {
 	return a.Properties
 }
 
-// AccessEvaluationRequest asks whether one subject can perform one action.
-type AccessEvaluationRequest struct {
+type CheckAccessRequest struct {
 	Subject  *AuthorizationSubject
 	Action   *AuthorizationAction
 	Resource *AuthorizationResource
-	Context  map[string]any
 }
 
-func (r *AccessEvaluationRequest) GetSubject() *AuthorizationSubject {
+func (r *CheckAccessRequest) GetSubject() *AuthorizationSubject {
 	if r == nil {
 		return nil
 	}
 	return r.Subject
 }
 
-func (r *AccessEvaluationRequest) GetAction() *AuthorizationAction {
+func (r *CheckAccessRequest) GetAction() *AuthorizationAction {
 	if r == nil {
 		return nil
 	}
 	return r.Action
 }
 
-func (r *AccessEvaluationRequest) GetResource() *AuthorizationResource {
+func (r *CheckAccessRequest) GetResource() *AuthorizationResource {
 	if r == nil {
 		return nil
 	}
 	return r.Resource
 }
 
-func (r *AccessEvaluationRequest) GetContext() map[string]any {
-	if r == nil {
-		return nil
-	}
-	return r.Context
-}
-
-// AccessDecision is the result of evaluating one access request.
-type AccessDecision struct {
+type CheckAccessResponse struct {
 	Allowed bool
-	Context map[string]any
 	ModelId string
 }
 
-func (d *AccessDecision) GetAllowed() bool {
-	if d == nil {
+func (r *CheckAccessResponse) GetAllowed() bool {
+	if r == nil {
 		return false
 	}
-	return d.Allowed
+	return r.Allowed
 }
 
-func (d *AccessDecision) GetContext() map[string]any {
-	if d == nil {
-		return nil
-	}
-	return d.Context
-}
-
-func (d *AccessDecision) GetModelId() string {
-	if d == nil {
+func (r *CheckAccessResponse) GetModelId() string {
+	if r == nil {
 		return ""
 	}
-	return d.ModelId
+	return r.ModelId
 }
 
-// AccessEvaluationsRequest batches access evaluation requests.
-type AccessEvaluationsRequest struct {
-	Requests []*AccessEvaluationRequest
+type CheckAccessManyRequest struct {
+	Requests []*CheckAccessRequest
 }
 
-func (r *AccessEvaluationsRequest) GetRequests() []*AccessEvaluationRequest {
+func (r *CheckAccessManyRequest) GetRequests() []*CheckAccessRequest {
 	if r == nil {
 		return nil
 	}
 	return r.Requests
 }
 
-// AccessEvaluationsResponse batches access evaluation results.
-type AccessEvaluationsResponse struct {
-	Decisions []*AccessDecision
+type CheckAccessManyResponse struct {
+	Decisions []*CheckAccessResponse
 }
 
-func (r *AccessEvaluationsResponse) GetDecisions() []*AccessDecision {
+func (r *CheckAccessManyResponse) GetDecisions() []*CheckAccessResponse {
 	if r == nil {
 		return nil
 	}
 	return r.Decisions
 }
 
-// ResourceSearchRequest searches resources visible to a subject.
-type ResourceSearchRequest struct {
-	Subject      *AuthorizationSubject
-	Action       *AuthorizationAction
-	ResourceType string
-	Context      map[string]any
-	PageSize     int32
-	PageToken    string
-}
-
-func (r *ResourceSearchRequest) GetSubject() *AuthorizationSubject {
-	if r == nil {
-		return nil
-	}
-	return r.Subject
-}
-
-func (r *ResourceSearchRequest) GetAction() *AuthorizationAction {
-	if r == nil {
-		return nil
-	}
-	return r.Action
-}
-
-func (r *ResourceSearchRequest) GetResourceType() string {
-	if r == nil {
-		return ""
-	}
-	return r.ResourceType
-}
-
-func (r *ResourceSearchRequest) GetContext() map[string]any {
-	if r == nil {
-		return nil
-	}
-	return r.Context
-}
-
-func (r *ResourceSearchRequest) GetPageSize() int32 {
-	if r == nil {
-		return 0
-	}
-	return r.PageSize
-}
-
-func (r *ResourceSearchRequest) GetPageToken() string {
-	if r == nil {
-		return ""
-	}
-	return r.PageToken
-}
-
-// ResourceSearchResponse contains resources visible to a subject.
-type ResourceSearchResponse struct {
-	Resources     []*AuthorizationResource
-	NextPageToken string
-	ModelId       string
-}
-
-func (r *ResourceSearchResponse) GetResources() []*AuthorizationResource {
-	if r == nil {
-		return nil
-	}
-	return r.Resources
-}
-
-func (r *ResourceSearchResponse) GetNextPageToken() string {
-	if r == nil {
-		return ""
-	}
-	return r.NextPageToken
-}
-
-func (r *ResourceSearchResponse) GetModelId() string {
-	if r == nil {
-		return ""
-	}
-	return r.ModelId
-}
-
-// SubjectSearchRequest searches subjects related to a resource and action.
-type SubjectSearchRequest struct {
-	Resource    *AuthorizationResource
-	Action      *AuthorizationAction
-	SubjectType string
-	Context     map[string]any
-	PageSize    int32
-	PageToken   string
-}
-
-func (r *SubjectSearchRequest) GetResource() *AuthorizationResource {
-	if r == nil {
-		return nil
-	}
-	return r.Resource
-}
-
-func (r *SubjectSearchRequest) GetAction() *AuthorizationAction {
-	if r == nil {
-		return nil
-	}
-	return r.Action
-}
-
-func (r *SubjectSearchRequest) GetSubjectType() string {
-	if r == nil {
-		return ""
-	}
-	return r.SubjectType
-}
-
-func (r *SubjectSearchRequest) GetContext() map[string]any {
-	if r == nil {
-		return nil
-	}
-	return r.Context
-}
-
-func (r *SubjectSearchRequest) GetPageSize() int32 {
-	if r == nil {
-		return 0
-	}
-	return r.PageSize
-}
-
-func (r *SubjectSearchRequest) GetPageToken() string {
-	if r == nil {
-		return ""
-	}
-	return r.PageToken
-}
-
-// SubjectSearchResponse contains subjects related to a resource and action.
-type SubjectSearchResponse struct {
-	Subjects      []*AuthorizationSubject
-	NextPageToken string
-	ModelId       string
-}
-
-func (r *SubjectSearchResponse) GetSubjects() []*AuthorizationSubject {
-	if r == nil {
-		return nil
-	}
-	return r.Subjects
-}
-
-func (r *SubjectSearchResponse) GetNextPageToken() string {
-	if r == nil {
-		return ""
-	}
-	return r.NextPageToken
-}
-
-func (r *SubjectSearchResponse) GetModelId() string {
-	if r == nil {
-		return ""
-	}
-	return r.ModelId
-}
-
-// EffectiveSubjectSearchRequest searches effective targets related to a
-// resource and action through computed usersets and inherited relationships.
-type EffectiveSubjectSearchRequest struct {
-	Resource  *AuthorizationResource
-	Action    *AuthorizationAction
-	Context   map[string]any
-	PageSize  int32
-	PageToken string
-}
-
-func (r *EffectiveSubjectSearchRequest) GetResource() *AuthorizationResource {
-	if r == nil {
-		return nil
-	}
-	return r.Resource
-}
-
-func (r *EffectiveSubjectSearchRequest) GetAction() *AuthorizationAction {
-	if r == nil {
-		return nil
-	}
-	return r.Action
-}
-
-func (r *EffectiveSubjectSearchRequest) GetContext() map[string]any {
-	if r == nil {
-		return nil
-	}
-	return r.Context
-}
-
-func (r *EffectiveSubjectSearchRequest) GetPageSize() int32 {
-	if r == nil {
-		return 0
-	}
-	return r.PageSize
-}
-
-func (r *EffectiveSubjectSearchRequest) GetPageToken() string {
-	if r == nil {
-		return ""
-	}
-	return r.PageToken
-}
-
-// EffectiveSubjectSearchResponse contains effective subjects or subject sets
-// related to a resource and action.
-type EffectiveSubjectSearchResponse struct {
-	Targets       []*AuthorizationRelationshipTarget
-	NextPageToken string
-	ModelId       string
-	Truncated     bool
-}
-
-func (r *EffectiveSubjectSearchResponse) GetTargets() []*AuthorizationRelationshipTarget {
-	if r == nil {
-		return nil
-	}
-	return r.Targets
-}
-
-func (r *EffectiveSubjectSearchResponse) GetNextPageToken() string {
-	if r == nil {
-		return ""
-	}
-	return r.NextPageToken
-}
-
-func (r *EffectiveSubjectSearchResponse) GetModelId() string {
-	if r == nil {
-		return ""
-	}
-	return r.ModelId
-}
-
-func (r *EffectiveSubjectSearchResponse) GetTruncated() bool {
-	if r == nil {
-		return false
-	}
-	return r.Truncated
-}
-
-// ActionSearchRequest searches actions available between a subject and resource.
-type ActionSearchRequest struct {
-	Subject   *AuthorizationSubject
-	Resource  *AuthorizationResource
-	Context   map[string]any
-	PageSize  int32
-	PageToken string
-}
-
-func (r *ActionSearchRequest) GetSubject() *AuthorizationSubject {
-	if r == nil {
-		return nil
-	}
-	return r.Subject
-}
-
-func (r *ActionSearchRequest) GetResource() *AuthorizationResource {
-	if r == nil {
-		return nil
-	}
-	return r.Resource
-}
-
-func (r *ActionSearchRequest) GetContext() map[string]any {
-	if r == nil {
-		return nil
-	}
-	return r.Context
-}
-
-func (r *ActionSearchRequest) GetPageSize() int32 {
-	if r == nil {
-		return 0
-	}
-	return r.PageSize
-}
-
-func (r *ActionSearchRequest) GetPageToken() string {
-	if r == nil {
-		return ""
-	}
-	return r.PageToken
-}
-
-// ActionSearchResponse contains actions available between a subject and resource.
-type ActionSearchResponse struct {
-	Actions       []*AuthorizationAction
-	NextPageToken string
-	ModelId       string
-}
-
-func (r *ActionSearchResponse) GetActions() []*AuthorizationAction {
-	if r == nil {
-		return nil
-	}
-	return r.Actions
-}
-
-func (r *ActionSearchResponse) GetNextPageToken() string {
-	if r == nil {
-		return ""
-	}
-	return r.NextPageToken
-}
-
-func (r *ActionSearchResponse) GetModelId() string {
-	if r == nil {
-		return ""
-	}
-	return r.ModelId
-}
-
-// Relationship describes one authorization relationship tuple.
-//
-// A relationship grants a subject a relation on a resource, for example
-// subject "user:123" has relation "member" on resource "team:servicing".
 type Relationship struct {
-	Subject    *AuthorizationSubject
-	Relation   string
-	Resource   *AuthorizationResource
-	Properties map[string]any
-	Target     *AuthorizationRelationshipTarget
+	Tuple       *RelationshipTuple
+	Properties  map[string]any
+	SourceLayer SourceLayer
 }
 
-func (r *Relationship) GetSubject() *AuthorizationSubject {
+func (r *Relationship) GetTuple() *RelationshipTuple {
 	if r == nil {
 		return nil
 	}
-	return r.Subject
-}
-
-func (r *Relationship) GetRelation() string {
-	if r == nil {
-		return ""
-	}
-	return r.Relation
-}
-
-func (r *Relationship) GetResource() *AuthorizationResource {
-	if r == nil {
-		return nil
-	}
-	return r.Resource
+	return r.Tuple
 }
 
 func (r *Relationship) GetProperties() map[string]any {
@@ -592,176 +239,218 @@ func (r *Relationship) GetProperties() map[string]any {
 	return r.Properties
 }
 
-func (r *Relationship) GetTarget() *AuthorizationRelationshipTarget {
+func (r *Relationship) GetSourceLayer() SourceLayer {
 	if r == nil {
-		return nil
+		return SourceLayerUnspecified
 	}
-	return r.Target
+	return r.SourceLayer
 }
 
-// RelationshipKey identifies one authorization relationship tuple.
-type RelationshipKey struct {
-	Subject  *AuthorizationSubject
+type RelationshipTuple struct {
+	Target   *AuthorizationRelationshipTarget
 	Relation string
 	Resource *AuthorizationResource
-	Target   *AuthorizationRelationshipTarget
 }
 
-func (r *RelationshipKey) GetSubject() *AuthorizationSubject {
-	if r == nil {
+func (t *RelationshipTuple) GetTarget() *AuthorizationRelationshipTarget {
+	if t == nil {
 		return nil
 	}
-	return r.Subject
+	return t.Target
 }
 
-func (r *RelationshipKey) GetRelation() string {
-	if r == nil {
+func (t *RelationshipTuple) GetRelation() string {
+	if t == nil {
 		return ""
 	}
-	return r.Relation
+	return t.Relation
 }
 
-func (r *RelationshipKey) GetResource() *AuthorizationResource {
-	if r == nil {
+func (t *RelationshipTuple) GetResource() *AuthorizationResource {
+	if t == nil {
 		return nil
 	}
-	return r.Resource
+	return t.Resource
 }
 
-func (r *RelationshipKey) GetTarget() *AuthorizationRelationshipTarget {
-	if r == nil {
+type RelationshipFilter struct {
+	Target           *AuthorizationRelationshipTarget
+	Relation         string
+	Resource         *AuthorizationResource
+	TargetType       RelationshipTargetType
+	TargetEntityType string
+	ResourceType     string
+	SourceLayer      SourceLayer
+}
+
+func (f *RelationshipFilter) GetTarget() *AuthorizationRelationshipTarget {
+	if f == nil {
 		return nil
 	}
-	return r.Target
+	return f.Target
 }
 
-// ReadRelationshipsRequest selects authorization relationships to read.
-type ReadRelationshipsRequest struct {
-	Subject   *AuthorizationSubject
-	Relation  string
-	Resource  *AuthorizationResource
+func (f *RelationshipFilter) GetRelation() string {
+	if f == nil {
+		return ""
+	}
+	return f.Relation
+}
+
+func (f *RelationshipFilter) GetResource() *AuthorizationResource {
+	if f == nil {
+		return nil
+	}
+	return f.Resource
+}
+
+func (f *RelationshipFilter) GetTargetType() RelationshipTargetType {
+	if f == nil {
+		return RelationshipTargetTypeUnspecified
+	}
+	return f.TargetType
+}
+
+func (f *RelationshipFilter) GetTargetEntityType() string {
+	if f == nil {
+		return ""
+	}
+	return f.TargetEntityType
+}
+
+func (f *RelationshipFilter) GetResourceType() string {
+	if f == nil {
+		return ""
+	}
+	return f.ResourceType
+}
+
+func (f *RelationshipFilter) GetSourceLayer() SourceLayer {
+	if f == nil {
+		return SourceLayerUnspecified
+	}
+	return f.SourceLayer
+}
+
+type ListRelationshipsRequest struct {
+	Filter    *RelationshipFilter
 	PageSize  int32
 	PageToken string
-	ModelId   string
-	Target    *AuthorizationRelationshipTarget
 }
 
-func (r *ReadRelationshipsRequest) GetSubject() *AuthorizationSubject {
+func (r *ListRelationshipsRequest) GetFilter() *RelationshipFilter {
 	if r == nil {
 		return nil
 	}
-	return r.Subject
+	return r.Filter
 }
 
-func (r *ReadRelationshipsRequest) GetRelation() string {
-	if r == nil {
-		return ""
-	}
-	return r.Relation
-}
-
-func (r *ReadRelationshipsRequest) GetResource() *AuthorizationResource {
-	if r == nil {
-		return nil
-	}
-	return r.Resource
-}
-
-func (r *ReadRelationshipsRequest) GetPageSize() int32 {
+func (r *ListRelationshipsRequest) GetPageSize() int32 {
 	if r == nil {
 		return 0
 	}
 	return r.PageSize
 }
 
-func (r *ReadRelationshipsRequest) GetPageToken() string {
+func (r *ListRelationshipsRequest) GetPageToken() string {
 	if r == nil {
 		return ""
 	}
 	return r.PageToken
 }
 
-func (r *ReadRelationshipsRequest) GetModelId() string {
-	if r == nil {
-		return ""
-	}
-	return r.ModelId
-}
-
-func (r *ReadRelationshipsRequest) GetTarget() *AuthorizationRelationshipTarget {
-	if r == nil {
-		return nil
-	}
-	return r.Target
-}
-
-// ReadRelationshipsResponse contains authorization relationships.
-type ReadRelationshipsResponse struct {
+type ListRelationshipsResponse struct {
 	Relationships []*Relationship
 	NextPageToken string
-	ModelId       string
 }
 
-func (r *ReadRelationshipsResponse) GetRelationships() []*Relationship {
+func (r *ListRelationshipsResponse) GetRelationships() []*Relationship {
 	if r == nil {
 		return nil
 	}
 	return r.Relationships
 }
 
-func (r *ReadRelationshipsResponse) GetNextPageToken() string {
+func (r *ListRelationshipsResponse) GetNextPageToken() string {
 	if r == nil {
 		return ""
 	}
 	return r.NextPageToken
 }
 
-func (r *ReadRelationshipsResponse) GetModelId() string {
-	if r == nil {
-		return ""
-	}
-	return r.ModelId
+type AddRelationshipRequest struct {
+	Relationship *Relationship
 }
 
-// WriteRelationshipsRequest mutates authorization relationships.
-//
-// Writes are upserts and deletes remove exact RelationshipKey tuples.
-type WriteRelationshipsRequest struct {
-	Writes  []*Relationship
-	Deletes []*RelationshipKey
-	ModelId string
-}
-
-func (r *WriteRelationshipsRequest) GetWrites() []*Relationship {
+func (r *AddRelationshipRequest) GetRelationship() *Relationship {
 	if r == nil {
 		return nil
 	}
-	return r.Writes
+	return r.Relationship
 }
 
-func (r *WriteRelationshipsRequest) GetDeletes() []*RelationshipKey {
+type AddRelationshipResponse struct {
+	Relationship *Relationship
+}
+
+func (r *AddRelationshipResponse) GetRelationship() *Relationship {
 	if r == nil {
 		return nil
 	}
-	return r.Deletes
+	return r.Relationship
 }
 
-func (r *WriteRelationshipsRequest) GetModelId() string {
+type DeleteRelationshipRequest struct {
+	RelationshipTuple *RelationshipTuple
+}
+
+func (r *DeleteRelationshipRequest) GetRelationshipTuple() *RelationshipTuple {
 	if r == nil {
-		return ""
+		return nil
 	}
-	return r.ModelId
+	return r.RelationshipTuple
 }
 
-// AuthorizationModel describes an authorization model.
+type DeleteRelationshipResponse struct{}
+
+type SetRelationshipsRequest struct {
+	Relationships []*Relationship
+}
+
+func (r *SetRelationshipsRequest) GetRelationships() []*Relationship {
+	if r == nil {
+		return nil
+	}
+	return r.Relationships
+}
+
+type SetRelationshipsResponse struct {
+	Relationships []*Relationship
+}
+
+func (r *SetRelationshipsResponse) GetRelationships() []*Relationship {
+	if r == nil {
+		return nil
+	}
+	return r.Relationships
+}
+
 type AuthorizationModel struct {
-	Version       int32
+	Id            string
+	Version       string
 	ResourceTypes []*AuthorizationModelResourceType
 }
 
-func (m *AuthorizationModel) GetVersion() int32 {
+func (m *AuthorizationModel) GetId() string {
 	if m == nil {
-		return 0
+		return ""
+	}
+	return m.Id
+}
+
+func (m *AuthorizationModel) GetVersion() string {
+	if m == nil {
+		return ""
 	}
 	return m.Version
 }
@@ -773,11 +462,38 @@ func (m *AuthorizationModel) GetResourceTypes() []*AuthorizationModelResourceTyp
 	return m.ResourceTypes
 }
 
-// AuthorizationModelResourceType describes one resource type in a model.
+type AuthorizationModelRef struct {
+	Id        string
+	Version   string
+	CreatedAt time.Time
+}
+
+func (m *AuthorizationModelRef) GetId() string {
+	if m == nil {
+		return ""
+	}
+	return m.Id
+}
+
+func (m *AuthorizationModelRef) GetVersion() string {
+	if m == nil {
+		return ""
+	}
+	return m.Version
+}
+
+func (m *AuthorizationModelRef) GetCreatedAt() time.Time {
+	if m == nil {
+		return time.Time{}
+	}
+	return m.CreatedAt
+}
+
 type AuthorizationModelResourceType struct {
-	Name      string
-	Relations []*AuthorizationModelRelation
-	Actions   []*AuthorizationModelAction
+	Name        string
+	Relations   []*AuthorizationModelRelation
+	Actions     []*AuthorizationModelAction
+	SourceLayer SourceLayer
 }
 
 func (r *AuthorizationModelResourceType) GetName() string {
@@ -801,12 +517,16 @@ func (r *AuthorizationModelResourceType) GetActions() []*AuthorizationModelActio
 	return r.Actions
 }
 
-// AuthorizationModelRelation describes one relation in a model.
+func (r *AuthorizationModelResourceType) GetSourceLayer() SourceLayer {
+	if r == nil {
+		return SourceLayerUnspecified
+	}
+	return r.SourceLayer
+}
+
 type AuthorizationModelRelation struct {
 	Name           string
-	SubjectTypes   []string
 	AllowedTargets []*AuthorizationModelAllowedTarget
-	Rewrite        *AuthorizationModelRewrite
 }
 
 func (r *AuthorizationModelRelation) GetName() string {
@@ -816,13 +536,6 @@ func (r *AuthorizationModelRelation) GetName() string {
 	return r.Name
 }
 
-func (r *AuthorizationModelRelation) GetSubjectTypes() []string {
-	if r == nil {
-		return nil
-	}
-	return r.SubjectTypes
-}
-
 func (r *AuthorizationModelRelation) GetAllowedTargets() []*AuthorizationModelAllowedTarget {
 	if r == nil {
 		return nil
@@ -830,18 +543,9 @@ func (r *AuthorizationModelRelation) GetAllowedTargets() []*AuthorizationModelAl
 	return r.AllowedTargets
 }
 
-func (r *AuthorizationModelRelation) GetRewrite() *AuthorizationModelRewrite {
-	if r == nil {
-		return nil
-	}
-	return r.Rewrite
-}
-
-// AuthorizationModelAction describes one action in a model.
 type AuthorizationModelAction struct {
 	Name      string
 	Relations []string
-	Rewrite   *AuthorizationModelRewrite
 }
 
 func (a *AuthorizationModelAction) GetName() string {
@@ -858,18 +562,10 @@ func (a *AuthorizationModelAction) GetRelations() []string {
 	return a.Relations
 }
 
-func (a *AuthorizationModelAction) GetRewrite() *AuthorizationModelRewrite {
-	if a == nil {
-		return nil
-	}
-	return a.Rewrite
-}
-
-// AuthorizationModelAllowedTarget describes one valid target kind for a relation.
 type AuthorizationModelAllowedTarget struct {
-	SubjectType  string
-	ResourceType string
-	SubjectSet   *AuthorizationModelSubjectSetTarget
+	SubjectType    string
+	ResourceType   string
+	SubjectSetType *SubjectSetType
 }
 
 func (t *AuthorizationModelAllowedTarget) GetSubjectType() string {
@@ -886,512 +582,193 @@ func (t *AuthorizationModelAllowedTarget) GetResourceType() string {
 	return t.ResourceType
 }
 
-func (t *AuthorizationModelAllowedTarget) GetSubjectSet() *AuthorizationModelSubjectSetTarget {
+func (t *AuthorizationModelAllowedTarget) GetSubjectSetType() *SubjectSetType {
 	if t == nil {
 		return nil
 	}
-	return t.SubjectSet
+	return t.SubjectSetType
 }
 
-// AuthorizationModelSubjectSetTarget describes a valid userset target.
-type AuthorizationModelSubjectSetTarget struct {
+type SubjectSetType struct {
 	ResourceType string
 	Relation     string
 }
 
-func (t *AuthorizationModelSubjectSetTarget) GetResourceType() string {
+func (t *SubjectSetType) GetResourceType() string {
 	if t == nil {
 		return ""
 	}
 	return t.ResourceType
 }
 
-func (t *AuthorizationModelSubjectSetTarget) GetRelation() string {
+func (t *SubjectSetType) GetRelation() string {
 	if t == nil {
 		return ""
 	}
 	return t.Relation
 }
 
-// AuthorizationModelRewrite describes how to compute one relation or action.
-type AuthorizationModelRewrite struct {
-	This            *AuthorizationModelRewriteThis
-	ComputedUserset *AuthorizationModelComputedUserset
-	TupleToUserset  *AuthorizationModelTupleToUserset
-	Union           *AuthorizationModelRewriteUnion
-}
-
-func (r *AuthorizationModelRewrite) GetThis() *AuthorizationModelRewriteThis {
-	if r == nil {
-		return nil
-	}
-	return r.This
-}
-
-func (r *AuthorizationModelRewrite) GetComputedUserset() *AuthorizationModelComputedUserset {
-	if r == nil {
-		return nil
-	}
-	return r.ComputedUserset
-}
-
-func (r *AuthorizationModelRewrite) GetTupleToUserset() *AuthorizationModelTupleToUserset {
-	if r == nil {
-		return nil
-	}
-	return r.TupleToUserset
-}
-
-func (r *AuthorizationModelRewrite) GetUnion() *AuthorizationModelRewriteUnion {
-	if r == nil {
-		return nil
-	}
-	return r.Union
-}
-
-// AuthorizationModelRewriteThis includes directly related targets in a rewrite.
-type AuthorizationModelRewriteThis struct{}
-
-// AuthorizationModelComputedUserset references another relation on the same resource.
-type AuthorizationModelComputedUserset struct {
-	Relation string
-}
-
-func (r *AuthorizationModelComputedUserset) GetRelation() string {
-	if r == nil {
-		return ""
-	}
-	return r.Relation
-}
-
-// AuthorizationModelTupleToUserset follows one relation and computes another
-// relation on each related resource.
-type AuthorizationModelTupleToUserset struct {
-	TuplesetRelation string
-	ComputedRelation string
-}
-
-func (r *AuthorizationModelTupleToUserset) GetTuplesetRelation() string {
-	if r == nil {
-		return ""
-	}
-	return r.TuplesetRelation
-}
-
-func (r *AuthorizationModelTupleToUserset) GetComputedRelation() string {
-	if r == nil {
-		return ""
-	}
-	return r.ComputedRelation
-}
-
-// AuthorizationModelRewriteUnion unions multiple rewrite branches.
-type AuthorizationModelRewriteUnion struct {
-	Children []*AuthorizationModelRewrite
-}
-
-func (r *AuthorizationModelRewriteUnion) GetChildren() []*AuthorizationModelRewrite {
-	if r == nil {
-		return nil
-	}
-	return r.Children
-}
-
-// AuthorizationModelRef identifies a stored authorization model.
-type AuthorizationModelRef struct {
-	Id        string
-	Version   string
-	CreatedAt time.Time
-}
-
-func (r *AuthorizationModelRef) GetId() string {
-	if r == nil {
-		return ""
-	}
-	return r.Id
-}
-
-func (r *AuthorizationModelRef) GetVersion() string {
-	if r == nil {
-		return ""
-	}
-	return r.Version
-}
-
-func (r *AuthorizationModelRef) GetCreatedAt() time.Time {
-	if r == nil {
-		return time.Time{}
-	}
-	return r.CreatedAt
-}
-
-// GetActiveModelResponse returns the active authorization model.
-type GetActiveModelResponse struct {
+type GetActiveModelRefResponse struct {
 	Model *AuthorizationModelRef
 }
 
-func (r *GetActiveModelResponse) GetModel() *AuthorizationModelRef {
+func (r *GetActiveModelRefResponse) GetModel() *AuthorizationModelRef {
 	if r == nil {
 		return nil
 	}
 	return r.Model
 }
 
-// ListModelsRequest selects authorization models to list.
-type ListModelsRequest struct {
-	PageSize  int32
-	PageToken string
-}
-
-func (r *ListModelsRequest) GetPageSize() int32 {
-	if r == nil {
-		return 0
-	}
-	return r.PageSize
-}
-
-func (r *ListModelsRequest) GetPageToken() string {
-	if r == nil {
-		return ""
-	}
-	return r.PageToken
-}
-
-// ListModelsResponse contains authorization model refs.
-type ListModelsResponse struct {
-	Models        []*AuthorizationModelRef
-	NextPageToken string
-}
-
-func (r *ListModelsResponse) GetModels() []*AuthorizationModelRef {
-	if r == nil {
-		return nil
-	}
-	return r.Models
-}
-
-func (r *ListModelsResponse) GetNextPageToken() string {
-	if r == nil {
-		return ""
-	}
-	return r.NextPageToken
-}
-
-// WriteModelRequest stores an authorization model.
-type WriteModelRequest struct {
+type SetActiveModelRequest struct {
 	Model *AuthorizationModel
 }
 
-func (r *WriteModelRequest) GetModel() *AuthorizationModel {
+func (r *SetActiveModelRequest) GetModel() *AuthorizationModel {
 	if r == nil {
 		return nil
 	}
 	return r.Model
 }
 
-// ExpandRequest asks a provider to explain one resource relation.
-type ExpandRequest struct {
-	Resource *AuthorizationResource
-	Relation string
-	Context  map[string]any
-	MaxDepth int32
-	ModelId  string
+type SetActiveModelResponse struct {
+	Model *AuthorizationModelRef
 }
 
-func (r *ExpandRequest) GetResource() *AuthorizationResource {
+func (r *SetActiveModelResponse) GetModel() *AuthorizationModelRef {
 	if r == nil {
 		return nil
 	}
-	return r.Resource
+	return r.Model
 }
 
-func (r *ExpandRequest) GetRelation() string {
-	if r == nil {
+type AuthorizationModelResourceTypeFilter struct {
+	Name        string
+	SourceLayer SourceLayer
+}
+
+func (f *AuthorizationModelResourceTypeFilter) GetName() string {
+	if f == nil {
 		return ""
 	}
-	return r.Relation
+	return f.Name
 }
 
-func (r *ExpandRequest) GetContext() map[string]any {
-	if r == nil {
-		return nil
+func (f *AuthorizationModelResourceTypeFilter) GetSourceLayer() SourceLayer {
+	if f == nil {
+		return SourceLayerUnspecified
 	}
-	return r.Context
+	return f.SourceLayer
 }
 
-func (r *ExpandRequest) GetMaxDepth() int32 {
-	if r == nil {
-		return 0
-	}
-	return r.MaxDepth
+type ListActiveModelResourceTypesRequest struct {
+	ModelId string
+	Filter  *AuthorizationModelResourceTypeFilter
 }
 
-func (r *ExpandRequest) GetModelId() string {
-	if r == nil {
-		return ""
-	}
-	return r.ModelId
-}
-
-// ExpandNode describes one node in an expanded authorization graph.
-type ExpandNode struct {
-	Target   *AuthorizationRelationshipTarget
-	Relation string
-	Children []*ExpandNode
-}
-
-func (n *ExpandNode) GetTarget() *AuthorizationRelationshipTarget {
-	if n == nil {
-		return nil
-	}
-	return n.Target
-}
-
-func (n *ExpandNode) GetRelation() string {
-	if n == nil {
-		return ""
-	}
-	return n.Relation
-}
-
-func (n *ExpandNode) GetChildren() []*ExpandNode {
-	if n == nil {
-		return nil
-	}
-	return n.Children
-}
-
-// ExpandResponse contains an expanded authorization graph.
-type ExpandResponse struct {
-	Root            *ExpandNode
-	Truncated       bool
-	CycleDetected   bool
-	MaxDepthReached bool
-	ModelId         string
-}
-
-func (r *ExpandResponse) GetRoot() *ExpandNode {
-	if r == nil {
-		return nil
-	}
-	return r.Root
-}
-
-func (r *ExpandResponse) GetTruncated() bool {
-	if r == nil {
-		return false
-	}
-	return r.Truncated
-}
-
-func (r *ExpandResponse) GetCycleDetected() bool {
-	if r == nil {
-		return false
-	}
-	return r.CycleDetected
-}
-
-func (r *ExpandResponse) GetMaxDepthReached() bool {
-	if r == nil {
-		return false
-	}
-	return r.MaxDepthReached
-}
-
-func (r *ExpandResponse) GetModelId() string {
+func (r *ListActiveModelResourceTypesRequest) GetModelId() string {
 	if r == nil {
 		return ""
 	}
 	return r.ModelId
 }
 
-const (
-	// AuthorizationSubjectTypeSubject identifies canonical Gestalt subjects in
-	// managed authorization relationships.
-	AuthorizationSubjectTypeSubject = "subject"
-)
+func (r *ListActiveModelResourceTypesRequest) GetFilter() *AuthorizationModelResourceTypeFilter {
+	if r == nil {
+		return nil
+	}
+	return r.Filter
+}
 
-// NewAuthorizationSubject creates a subject reference for authorization requests.
+type ListActiveModelResourceTypesResponse struct {
+	ResourceTypes []*AuthorizationModelResourceType
+}
+
+func (r *ListActiveModelResourceTypesResponse) GetResourceTypes() []*AuthorizationModelResourceType {
+	if r == nil {
+		return nil
+	}
+	return r.ResourceTypes
+}
+
+// Authorization is the client contract for the host-configured authorization provider.
+type Authorization interface {
+	CheckAccess(ctx context.Context, req *CheckAccessRequest) (*CheckAccessResponse, error)
+	CheckAccessMany(ctx context.Context, req *CheckAccessManyRequest) (*CheckAccessManyResponse, error)
+	ListRelationships(ctx context.Context, req *ListRelationshipsRequest) (*ListRelationshipsResponse, error)
+	AddRelationship(ctx context.Context, req *AddRelationshipRequest) (*AddRelationshipResponse, error)
+	DeleteRelationship(ctx context.Context, req *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error)
+	SetRelationships(ctx context.Context, req *SetRelationshipsRequest) (*SetRelationshipsResponse, error)
+	GetActiveModelRef(ctx context.Context) (*GetActiveModelRefResponse, error)
+	SetActiveModel(ctx context.Context, req *SetActiveModelRequest) (*SetActiveModelResponse, error)
+	ListActiveModelResourceTypes(ctx context.Context, req *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error)
+	Close() error
+}
+
+// Provider is the base authorization contract implemented by authorization providers.
+type Provider interface {
+	CheckAccess(ctx context.Context, req *CheckAccessRequest) (*CheckAccessResponse, error)
+	CheckAccessMany(ctx context.Context, req *CheckAccessManyRequest) (*CheckAccessManyResponse, error)
+	ListRelationships(ctx context.Context, req *ListRelationshipsRequest) (*ListRelationshipsResponse, error)
+	AddRelationship(ctx context.Context, req *AddRelationshipRequest) (*AddRelationshipResponse, error)
+	DeleteRelationship(ctx context.Context, req *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error)
+	SetRelationships(ctx context.Context, req *SetRelationshipsRequest) (*SetRelationshipsResponse, error)
+	GetActiveModelRef(ctx context.Context) (*GetActiveModelRefResponse, error)
+	SetActiveModel(ctx context.Context, req *SetActiveModelRequest) (*SetActiveModelResponse, error)
+	ListActiveModelResourceTypes(ctx context.Context, req *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error)
+}
+
 func NewAuthorizationSubject(subjectType, id string) *AuthorizationSubject {
 	return &AuthorizationSubject{Type: subjectType, Id: id}
 }
 
-// NewAuthorizationResource creates a resource reference for authorization requests.
 func NewAuthorizationResource(resourceType, id string) *AuthorizationResource {
 	return &AuthorizationResource{Type: resourceType, Id: id}
 }
 
-// NewAuthorizationSubjectSet creates a subject-set reference.
 func NewAuthorizationSubjectSet(resource *AuthorizationResource, relation string) *AuthorizationSubjectSet {
 	return &AuthorizationSubjectSet{Resource: resource, Relation: relation}
 }
 
-// NewAuthorizationSubjectTarget creates a relationship target from a subject.
 func NewAuthorizationSubjectTarget(subject *AuthorizationSubject) *AuthorizationRelationshipTarget {
 	return &AuthorizationRelationshipTarget{Subject: subject}
 }
 
-// NewAuthorizationResourceTarget creates a relationship target from a resource.
 func NewAuthorizationResourceTarget(resource *AuthorizationResource) *AuthorizationRelationshipTarget {
 	return &AuthorizationRelationshipTarget{Resource: resource}
 }
 
-// NewAuthorizationSubjectSetTarget creates a relationship target from a subject set.
 func NewAuthorizationSubjectSetTarget(resource *AuthorizationResource, relation string) *AuthorizationRelationshipTarget {
-	return &AuthorizationRelationshipTarget{
-		SubjectSet: NewAuthorizationSubjectSet(resource, relation),
-	}
+	return &AuthorizationRelationshipTarget{SubjectSet: NewAuthorizationSubjectSet(resource, relation)}
 }
 
-// NewAuthorizationAction creates an action reference for authorization requests.
 func NewAuthorizationAction(name string) *AuthorizationAction {
 	return &AuthorizationAction{Name: name}
 }
 
-// NewAuthorizationModelRef creates an authorization model reference.
 func NewAuthorizationModelRef(id, version string, createdAt time.Time) *AuthorizationModelRef {
-	return &AuthorizationModelRef{
-		Id:        id,
-		Version:   version,
-		CreatedAt: createdAt,
-	}
+	return &AuthorizationModelRef{Id: id, Version: version, CreatedAt: createdAt}
 }
 
-// NewAccessEvaluationRequest creates an access-evaluation request.
-func NewAccessEvaluationRequest(subject *AuthorizationSubject, action *AuthorizationAction, resource *AuthorizationResource) *AccessEvaluationRequest {
-	return &AccessEvaluationRequest{
-		Subject:  subject,
-		Action:   action,
-		Resource: resource,
-	}
+func NewCheckAccessRequest(subject *AuthorizationSubject, action *AuthorizationAction, resource *AuthorizationResource) *CheckAccessRequest {
+	return &CheckAccessRequest{Subject: subject, Action: action, Resource: resource}
 }
 
-// NewRelationship creates a relationship tuple for authorization writes.
 func NewRelationship(subject *AuthorizationSubject, relation string, resource *AuthorizationResource) *Relationship {
-	return &Relationship{
-		Subject:  subject,
-		Relation: relation,
-		Resource: resource,
-	}
+	return NewRelationshipWithTarget(NewAuthorizationSubjectTarget(subject), relation, resource)
 }
 
-// NewRelationshipWithTarget creates a generalized authorization tuple.
 func NewRelationshipWithTarget(target *AuthorizationRelationshipTarget, relation string, resource *AuthorizationResource) *Relationship {
-	return &Relationship{
-		Target:   target,
-		Relation: relation,
-		Resource: resource,
-	}
+	return &Relationship{Tuple: &RelationshipTuple{Target: target, Relation: relation, Resource: resource}}
 }
 
-// NewRelationshipKey creates a relationship key for authorization deletes.
-func NewRelationshipKey(subject *AuthorizationSubject, relation string, resource *AuthorizationResource) *RelationshipKey {
-	return &RelationshipKey{
-		Subject:  subject,
-		Relation: relation,
-		Resource: resource,
-	}
-}
-
-// NewRelationshipKeyWithTarget creates a generalized authorization tuple key.
-func NewRelationshipKeyWithTarget(target *AuthorizationRelationshipTarget, relation string, resource *AuthorizationResource) *RelationshipKey {
-	return &RelationshipKey{
-		Target:   target,
-		Relation: relation,
-		Resource: resource,
-	}
-}
-
-// NewWriteRelationshipsRequest creates a relationship mutation request.
-func NewWriteRelationshipsRequest(writes []*Relationship, deletes []*RelationshipKey) *WriteRelationshipsRequest {
-	return &WriteRelationshipsRequest{
-		Writes:  writes,
-		Deletes: deletes,
-	}
-}
-
-// NewAuthorizationModelSubjectTypeTarget allows a relation target subject type.
 func NewAuthorizationModelSubjectTypeTarget(subjectType string) *AuthorizationModelAllowedTarget {
 	return &AuthorizationModelAllowedTarget{SubjectType: subjectType}
 }
 
-// NewAuthorizationModelResourceTypeTarget allows a relation target resource type.
 func NewAuthorizationModelResourceTypeTarget(resourceType string) *AuthorizationModelAllowedTarget {
 	return &AuthorizationModelAllowedTarget{ResourceType: resourceType}
 }
 
-// NewAuthorizationModelSubjectSetAllowedTarget allows a relation target subject set.
 func NewAuthorizationModelSubjectSetAllowedTarget(resourceType, relation string) *AuthorizationModelAllowedTarget {
-	return &AuthorizationModelAllowedTarget{
-		SubjectSet: &AuthorizationModelSubjectSetTarget{
-			ResourceType: resourceType,
-			Relation:     relation,
-		},
-	}
-}
-
-// NewAuthorizationModelThisRewrite includes directly related targets.
-func NewAuthorizationModelThisRewrite() *AuthorizationModelRewrite {
-	return &AuthorizationModelRewrite{This: &AuthorizationModelRewriteThis{}}
-}
-
-// NewAuthorizationModelComputedUsersetRewrite computes another relation on the same resource.
-func NewAuthorizationModelComputedUsersetRewrite(relation string) *AuthorizationModelRewrite {
-	return &AuthorizationModelRewrite{
-		ComputedUserset: &AuthorizationModelComputedUserset{Relation: relation},
-	}
-}
-
-// NewAuthorizationModelTupleToUsersetRewrite follows tuplesetRelation and then
-// computes computedRelation on each related resource.
-func NewAuthorizationModelTupleToUsersetRewrite(tuplesetRelation, computedRelation string) *AuthorizationModelRewrite {
-	return &AuthorizationModelRewrite{
-		TupleToUserset: &AuthorizationModelTupleToUserset{
-			TuplesetRelation: tuplesetRelation,
-			ComputedRelation: computedRelation,
-		},
-	}
-}
-
-// NewAuthorizationModelUnionRewrite unions multiple rewrite branches.
-func NewAuthorizationModelUnionRewrite(children ...*AuthorizationModelRewrite) *AuthorizationModelRewrite {
-	return &AuthorizationModelRewrite{
-		Union: &AuthorizationModelRewriteUnion{Children: children},
-	}
-}
-
-// Authorization is the app-facing authorization capability exposed by gestaltd.
-type Authorization interface {
-	Provider
-	EffectiveSearch
-	Expansion
-}
-
-// Provider is the base authorization contract implemented by authorization
-// providers. Effective search and expansion are optional provider capabilities.
-type Provider interface {
-	Evaluate(ctx context.Context, req *AccessEvaluationRequest) (*AccessDecision, error)
-	EvaluateMany(ctx context.Context, req *AccessEvaluationsRequest) (*AccessEvaluationsResponse, error)
-	SearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error)
-	SearchSubjects(ctx context.Context, req *SubjectSearchRequest) (*SubjectSearchResponse, error)
-	SearchActions(ctx context.Context, req *ActionSearchRequest) (*ActionSearchResponse, error)
-	GetMetadata(ctx context.Context) (*AuthorizationMetadata, error)
-	ReadRelationships(ctx context.Context, req *ReadRelationshipsRequest) (*ReadRelationshipsResponse, error)
-	WriteRelationships(ctx context.Context, req *WriteRelationshipsRequest) error
-	GetActiveModel(ctx context.Context) (*GetActiveModelResponse, error)
-	ListModels(ctx context.Context, req *ListModelsRequest) (*ListModelsResponse, error)
-	WriteModel(ctx context.Context, req *WriteModelRequest) (*AuthorizationModelRef, error)
-}
-
-// EffectiveSearch is implemented by authorization capabilities that can search
-// through computed usersets and inherited relationships.
-type EffectiveSearch interface {
-	EffectiveSearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error)
-	EffectiveSearchSubjects(ctx context.Context, req *EffectiveSubjectSearchRequest) (*EffectiveSubjectSearchResponse, error)
-}
-
-// Expansion is implemented by authorization capabilities that can explain the
-// relationship targets contributing to one resource relation.
-type Expansion interface {
-	Expand(ctx context.Context, req *ExpandRequest) (*ExpandResponse, error)
+	return &AuthorizationModelAllowedTarget{SubjectSetType: &SubjectSetType{ResourceType: resourceType, Relation: relation}}
 }

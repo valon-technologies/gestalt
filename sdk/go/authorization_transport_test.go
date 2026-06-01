@@ -10,9 +10,7 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -20,119 +18,99 @@ import (
 type authorizationTransportHarness struct {
 	proto.UnimplementedAuthorizationProviderServer
 
-	mu                        sync.Mutex
-	requests                  []*proto.SubjectSearchRequest
-	effectiveResourceRequests []*proto.ResourceSearchRequest
-	effectiveSubjectRequests  []*proto.EffectiveSubjectSearchRequest
-	expands                   []*proto.ExpandRequest
-	writes                    []*proto.WriteRelationshipsRequest
-	tokens                    []string
+	mu                    sync.Mutex
+	checks                []*proto.CheckAccessRequest
+	checkMany             []*proto.CheckAccessManyRequest
+	lists                 []*proto.ListRelationshipsRequest
+	adds                  []*proto.AddRelationshipRequest
+	deletes               []*proto.DeleteRelationshipRequest
+	sets                  []*proto.SetRelationshipsRequest
+	setModels             []*proto.SetActiveModelRequest
+	listResourceTypes     []*proto.ListActiveModelResourceTypesRequest
+	getActiveModelRefHits int
+	tokens                []string
 }
 
-func (h *authorizationTransportHarness) SearchSubjects(ctx context.Context, req *proto.SubjectSearchRequest) (*proto.SubjectSearchResponse, error) {
+func (h *authorizationTransportHarness) recordToken(ctx context.Context) {
 	md, _ := metadata.FromIncomingContext(ctx)
-
-	h.mu.Lock()
 	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
 		h.tokens = append(h.tokens, values...)
 	}
-	h.requests = append(h.requests, gproto.Clone(req).(*proto.SubjectSearchRequest))
-	h.mu.Unlock()
+}
 
-	return &proto.SubjectSearchResponse{
-		Subjects: []*proto.Subject{{
-			Type: "user",
-			Id:   "user:user-123",
-		}},
-		ModelId: "authz-model-1",
+func (h *authorizationTransportHarness) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.recordToken(ctx)
+	h.checks = append(h.checks, gproto.Clone(req).(*proto.CheckAccessRequest))
+	return &proto.CheckAccessResponse{Allowed: true, ModelId: "authz-model-1"}, nil
+}
+
+func (h *authorizationTransportHarness) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.recordToken(ctx)
+	h.checkMany = append(h.checkMany, gproto.Clone(req).(*proto.CheckAccessManyRequest))
+	return &proto.CheckAccessManyResponse{Decisions: []*proto.CheckAccessResponse{{Allowed: true, ModelId: "authz-model-1"}}}, nil
+}
+
+func (h *authorizationTransportHarness) ListRelationships(ctx context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.recordToken(ctx)
+	h.lists = append(h.lists, gproto.Clone(req).(*proto.ListRelationshipsRequest))
+	return &proto.ListRelationshipsResponse{
+		Relationships: []*proto.Relationship{relationshipProto("user", "user-123", "editor", "agent_session", "session-123")},
+		NextPageToken: "next-page",
 	}, nil
 }
 
-func (h *authorizationTransportHarness) EffectiveSearchResources(ctx context.Context, req *proto.ResourceSearchRequest) (*proto.ResourceSearchResponse, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
-
+func (h *authorizationTransportHarness) AddRelationship(ctx context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	h.mu.Lock()
-	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
-		h.tokens = append(h.tokens, values...)
-	}
-	h.effectiveResourceRequests = append(h.effectiveResourceRequests, gproto.Clone(req).(*proto.ResourceSearchRequest))
-	h.mu.Unlock()
-
-	return &proto.ResourceSearchResponse{
-		Resources: []*proto.Resource{{
-			Type: "agent_session",
-			Id:   "session-123",
-		}},
-		ModelId: "authz-model-1",
-	}, nil
+	defer h.mu.Unlock()
+	h.recordToken(ctx)
+	h.adds = append(h.adds, gproto.Clone(req).(*proto.AddRelationshipRequest))
+	return &proto.AddRelationshipResponse{Relationship: req.GetRelationship()}, nil
 }
 
-func (h *authorizationTransportHarness) EffectiveSearchSubjects(ctx context.Context, req *proto.EffectiveSubjectSearchRequest) (*proto.EffectiveSubjectSearchResponse, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
-
+func (h *authorizationTransportHarness) DeleteRelationship(ctx context.Context, req *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
 	h.mu.Lock()
-	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
-		h.tokens = append(h.tokens, values...)
-	}
-	h.effectiveSubjectRequests = append(h.effectiveSubjectRequests, gproto.Clone(req).(*proto.EffectiveSubjectSearchRequest))
-	h.mu.Unlock()
-
-	return &proto.EffectiveSubjectSearchResponse{
-		Targets: []*proto.RelationshipTarget{
-			{
-				Kind: &proto.RelationshipTarget_Subject{
-					Subject: &proto.Subject{Type: "subject", Id: "user:user-123"},
-				},
-			},
-			{
-				Kind: &proto.RelationshipTarget_SubjectSet{
-					SubjectSet: &proto.SubjectSet{
-						Resource: &proto.Resource{Type: "slack_channel", Id: "C123"},
-						Relation: "member",
-					},
-				},
-			},
-		},
-		ModelId:   "authz-model-1",
-		Truncated: true,
-	}, nil
+	defer h.mu.Unlock()
+	h.recordToken(ctx)
+	h.deletes = append(h.deletes, gproto.Clone(req).(*proto.DeleteRelationshipRequest))
+	return &proto.DeleteRelationshipResponse{}, nil
 }
 
-func (h *authorizationTransportHarness) Expand(ctx context.Context, req *proto.ExpandRequest) (*proto.ExpandResponse, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
-
+func (h *authorizationTransportHarness) SetRelationships(ctx context.Context, req *proto.SetRelationshipsRequest) (*proto.SetRelationshipsResponse, error) {
 	h.mu.Lock()
-	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
-		h.tokens = append(h.tokens, values...)
-	}
-	h.expands = append(h.expands, gproto.Clone(req).(*proto.ExpandRequest))
-	h.mu.Unlock()
-
-	return &proto.ExpandResponse{
-		Root: &proto.ExpandNode{
-			Target:   &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Resource{Resource: req.GetResource()}},
-			Relation: req.GetRelation(),
-			Children: []*proto.ExpandNode{{
-				Target:   &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:user-123"}}},
-				Relation: "member",
-			}},
-		},
-		ModelId:         "authz-model-1",
-		MaxDepthReached: true,
-	}, nil
+	defer h.mu.Unlock()
+	h.recordToken(ctx)
+	h.sets = append(h.sets, gproto.Clone(req).(*proto.SetRelationshipsRequest))
+	return &proto.SetRelationshipsResponse{Relationships: req.GetRelationships()}, nil
 }
 
-func (h *authorizationTransportHarness) WriteRelationships(ctx context.Context, req *proto.WriteRelationshipsRequest) (*emptypb.Empty, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
-
+func (h *authorizationTransportHarness) GetActiveModelRef(ctx context.Context, _ *emptypb.Empty) (*proto.GetActiveModelRefResponse, error) {
 	h.mu.Lock()
-	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
-		h.tokens = append(h.tokens, values...)
-	}
-	h.writes = append(h.writes, gproto.Clone(req).(*proto.WriteRelationshipsRequest))
-	h.mu.Unlock()
+	defer h.mu.Unlock()
+	h.recordToken(ctx)
+	h.getActiveModelRefHits++
+	return &proto.GetActiveModelRefResponse{Model: &proto.AuthorizationModelRef{Id: "authz-model-1", Version: "v1"}}, nil
+}
 
-	return &emptypb.Empty{}, nil
+func (h *authorizationTransportHarness) SetActiveModel(ctx context.Context, req *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.recordToken(ctx)
+	h.setModels = append(h.setModels, gproto.Clone(req).(*proto.SetActiveModelRequest))
+	return &proto.SetActiveModelResponse{Model: &proto.AuthorizationModelRef{Id: req.GetModel().GetId(), Version: req.GetModel().GetVersion()}}, nil
+}
+
+func (h *authorizationTransportHarness) ListActiveModelResourceTypes(ctx context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.recordToken(ctx)
+	h.listResourceTypes = append(h.listResourceTypes, gproto.Clone(req).(*proto.ListActiveModelResourceTypesRequest))
+	return &proto.ListActiveModelResourceTypesResponse{ResourceTypes: []*proto.AuthorizationModelResourceType{{Name: "agent_session"}}}, nil
 }
 
 func TestTransport_AuthorizationTCPTargetTokenEnv(t *testing.T) {
@@ -159,126 +137,79 @@ func TestTransport_AuthorizationTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("Authorization: %v", err)
 	}
 
-	resp, err := client.SearchSubjects(context.Background(), &gestalt.SubjectSearchRequest{
-		SubjectType: "user",
-		Resource:    gestalt.NewAuthorizationResource("slack_identity", "team:T123:user:U456"),
-		Action:      gestalt.NewAuthorizationAction("assume"),
-		PageSize:    1,
-	})
-	if err != nil {
-		t.Fatalf("SearchSubjects: %v", err)
+	subject := gestalt.NewAuthorizationSubject("user", "user-123")
+	action := gestalt.NewAuthorizationAction("edit")
+	resource := gestalt.NewAuthorizationResource("agent_session", "session-123")
+	relationship := gestalt.NewRelationship(subject, "editor", resource)
+
+	if resp, err := client.CheckAccess(context.Background(), gestalt.NewCheckAccessRequest(subject, action, resource)); err != nil {
+		t.Fatalf("CheckAccess: %v", err)
+	} else if !resp.GetAllowed() || resp.GetModelId() != "authz-model-1" {
+		t.Fatalf("CheckAccess response = %#v, want allowed authz-model-1", resp)
 	}
-	if resp.GetModelId() != "authz-model-1" {
-		t.Fatalf("model id = %q, want %q", resp.GetModelId(), "authz-model-1")
+	if resp, err := client.CheckAccessMany(context.Background(), &gestalt.CheckAccessManyRequest{Requests: []*gestalt.CheckAccessRequest{gestalt.NewCheckAccessRequest(subject, action, resource)}}); err != nil {
+		t.Fatalf("CheckAccessMany: %v", err)
+	} else if len(resp.GetDecisions()) != 1 || !resp.GetDecisions()[0].GetAllowed() {
+		t.Fatalf("CheckAccessMany response = %#v, want one allowed decision", resp)
 	}
-	if len(resp.GetSubjects()) != 1 || resp.GetSubjects()[0].GetId() != "user:user-123" {
-		t.Fatalf("subjects = %#v, want [user:user-123]", resp.GetSubjects())
+	if resp, err := client.ListRelationships(context.Background(), &gestalt.ListRelationshipsRequest{Filter: &gestalt.RelationshipFilter{Resource: resource}, PageSize: 10}); err != nil {
+		t.Fatalf("ListRelationships: %v", err)
+	} else if len(resp.GetRelationships()) != 1 || resp.GetNextPageToken() != "next-page" {
+		t.Fatalf("ListRelationships response = %#v, want one relationship and next page", resp)
 	}
-	resourceResp, err := client.EffectiveSearchResources(context.Background(), &gestalt.ResourceSearchRequest{
-		Subject:      gestalt.NewAuthorizationSubject("subject", "user:user-123"),
-		Action:       gestalt.NewAuthorizationAction("edit"),
-		ResourceType: "agent_session",
-	})
-	if err != nil {
-		t.Fatalf("EffectiveSearchResources: %v", err)
+	if resp, err := client.AddRelationship(context.Background(), &gestalt.AddRelationshipRequest{Relationship: relationship}); err != nil {
+		t.Fatalf("AddRelationship: %v", err)
+	} else if resp.GetRelationship().GetTuple().GetRelation() != "editor" {
+		t.Fatalf("AddRelationship response = %#v, want editor", resp)
 	}
-	if len(resourceResp.GetResources()) != 1 || resourceResp.GetResources()[0].GetId() != "session-123" {
-		t.Fatalf("effective resources = %#v, want [session-123]", resourceResp.GetResources())
+	if _, err := client.DeleteRelationship(context.Background(), &gestalt.DeleteRelationshipRequest{RelationshipTuple: relationship.GetTuple()}); err != nil {
+		t.Fatalf("DeleteRelationship: %v", err)
 	}
-	targetResp, err := client.EffectiveSearchSubjects(context.Background(), &gestalt.EffectiveSubjectSearchRequest{
-		Resource: gestalt.NewAuthorizationResource("agent_session", "session-123"),
-		Action:   gestalt.NewAuthorizationAction("edit"),
-	})
-	if err != nil {
-		t.Fatalf("EffectiveSearchSubjects: %v", err)
+	if resp, err := client.SetRelationships(context.Background(), &gestalt.SetRelationshipsRequest{Relationships: []*gestalt.Relationship{relationship}}); err != nil {
+		t.Fatalf("SetRelationships: %v", err)
+	} else if len(resp.GetRelationships()) != 1 {
+		t.Fatalf("SetRelationships response = %#v, want one relationship", resp)
 	}
-	if len(targetResp.GetTargets()) != 2 || targetResp.GetTargets()[1].GetSubjectSet().GetRelation() != "member" {
-		t.Fatalf("effective targets = %#v, want subject and slack_channel#member", targetResp.GetTargets())
+	if resp, err := client.GetActiveModelRef(context.Background()); err != nil {
+		t.Fatalf("GetActiveModelRef: %v", err)
+	} else if resp.GetModel().GetId() != "authz-model-1" {
+		t.Fatalf("GetActiveModelRef response = %#v, want authz-model-1", resp)
 	}
-	if !targetResp.GetTruncated() {
-		t.Fatal("effective subject response truncated = false, want true")
+	if resp, err := client.SetActiveModel(context.Background(), &gestalt.SetActiveModelRequest{Model: &gestalt.AuthorizationModel{Id: "authz-model-2", Version: "v2"}}); err != nil {
+		t.Fatalf("SetActiveModel: %v", err)
+	} else if resp.GetModel().GetId() != "authz-model-2" {
+		t.Fatalf("SetActiveModel response = %#v, want authz-model-2", resp)
 	}
-	expandResp, err := client.Expand(context.Background(), &gestalt.ExpandRequest{
-		Resource: gestalt.NewAuthorizationResource("agent_session", "session-123"),
-		Relation: "editor",
-		MaxDepth: 1,
-	})
-	if err != nil {
-		t.Fatalf("Expand: %v", err)
+	if resp, err := client.ListActiveModelResourceTypes(context.Background(), &gestalt.ListActiveModelResourceTypesRequest{ModelId: "authz-model-1"}); err != nil {
+		t.Fatalf("ListActiveModelResourceTypes: %v", err)
+	} else if len(resp.GetResourceTypes()) != 1 || resp.GetResourceTypes()[0].GetName() != "agent_session" {
+		t.Fatalf("ListActiveModelResourceTypes response = %#v, want agent_session", resp)
 	}
-	if expandResp.GetRoot().GetTarget().GetResource().GetType() != "agent_session" {
-		t.Fatalf("expand root = %#v, want agent_session resource target", expandResp.GetRoot().GetTarget())
-	}
-	if !expandResp.GetMaxDepthReached() {
-		t.Fatal("expand max_depth_reached = false, want true")
-	}
-	if err := client.WriteRelationships(context.Background(), gestalt.NewWriteRelationshipsRequest(
-		[]*gestalt.Relationship{
-			gestalt.NewRelationshipWithTarget(
-				gestalt.NewAuthorizationSubjectSetTarget(gestalt.NewAuthorizationResource("slack_channel", "C123"), "member"),
-				"editor",
-				gestalt.NewAuthorizationResource("agent_session", "session-123"),
-			),
-		},
-		nil,
-	)); err != nil {
-		t.Fatalf("WriteRelationships: %v", err)
-	}
+
 	harness.mu.Lock()
 	defer harness.mu.Unlock()
-	if len(harness.tokens) != 5 {
-		t.Fatalf("relay tokens = %#v, want five relay-token-go entries", harness.tokens)
+	if len(harness.tokens) != 9 {
+		t.Fatalf("relay tokens = %#v, want nine relay-token-go entries", harness.tokens)
 	}
 	for i, token := range harness.tokens {
 		if token != "relay-token-go" {
 			t.Fatalf("relay token %d = %q, want relay-token-go", i, token)
 		}
 	}
-	if len(harness.requests) != 1 {
-		t.Fatalf("search subject requests len = %d, want 1", len(harness.requests))
+	if harness.checks[0].GetSubject().GetId() != "user-123" {
+		t.Fatalf("check subject = %q, want user-123", harness.checks[0].GetSubject().GetId())
 	}
-	if len(harness.effectiveResourceRequests) != 1 {
-		t.Fatalf("effective resource requests len = %d, want 1", len(harness.effectiveResourceRequests))
+	if harness.lists[0].GetFilter().GetResource().GetId() != "session-123" {
+		t.Fatalf("list resource = %q, want session-123", harness.lists[0].GetFilter().GetResource().GetId())
 	}
-	if harness.effectiveResourceRequests[0].GetResourceType() != "agent_session" {
-		t.Fatalf("effective resource type = %q, want agent_session", harness.effectiveResourceRequests[0].GetResourceType())
+	if harness.adds[0].GetRelationship().GetTuple().GetRelation() != "editor" {
+		t.Fatalf("add relationship = %#v, want editor", harness.adds[0].GetRelationship())
 	}
-	if len(harness.effectiveSubjectRequests) != 1 {
-		t.Fatalf("effective subject requests len = %d, want 1", len(harness.effectiveSubjectRequests))
+	if harness.deletes[0].GetRelationshipTuple().GetResource().GetId() != "session-123" {
+		t.Fatalf("delete tuple = %#v, want session resource", harness.deletes[0].GetRelationshipTuple())
 	}
-	if harness.effectiveSubjectRequests[0].GetResource().GetId() != "session-123" {
-		t.Fatalf("effective subject resource = %q, want session-123", harness.effectiveSubjectRequests[0].GetResource().GetId())
-	}
-	if len(harness.expands) != 1 {
-		t.Fatalf("expand requests len = %d, want 1", len(harness.expands))
-	}
-	if harness.expands[0].GetRelation() != "editor" || harness.expands[0].GetMaxDepth() != 1 {
-		t.Fatalf("expand request = %#v, want editor max_depth 1", harness.expands[0])
-	}
-	if harness.requests[0].GetSubjectType() != "user" {
-		t.Fatalf("subject type = %q, want %q", harness.requests[0].GetSubjectType(), "user")
-	}
-	if harness.requests[0].GetResource().GetId() != "team:T123:user:U456" {
-		t.Fatalf("resource id = %q, want %q", harness.requests[0].GetResource().GetId(), "team:T123:user:U456")
-	}
-	if harness.requests[0].GetAction().GetName() != "assume" {
-		t.Fatalf("action name = %q, want %q", harness.requests[0].GetAction().GetName(), "assume")
-	}
-	if len(harness.writes) != 1 {
-		t.Fatalf("write relationship requests len = %d, want 1", len(harness.writes))
-	}
-	write := harness.writes[0].GetWrites()[0]
-	if write.GetTarget().GetSubjectSet().GetResource().GetType() != "slack_channel" {
-		t.Fatalf("write target = %#v, want slack_channel subject set", write.GetTarget())
-	}
-	if write.GetTarget().GetSubjectSet().GetRelation() != "member" {
-		t.Fatalf("write subject set relation = %q, want member", write.GetTarget().GetSubjectSet().GetRelation())
-	}
-	if write.GetRelation() != "editor" {
-		t.Fatalf("write relation = %q, want editor", write.GetRelation())
-	}
-	if write.GetResource().GetType() != "agent_session" || write.GetResource().GetId() != "session-123" {
-		t.Fatalf("write resource = %#v, want agent_session/session-123", write.GetResource())
+	if harness.setModels[0].GetModel().GetId() != "authz-model-2" {
+		t.Fatalf("set model = %#v, want authz-model-2", harness.setModels[0].GetModel())
 	}
 }
 
@@ -299,162 +230,51 @@ func (*fullAuthorizationProvider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (*fullAuthorizationProvider) Evaluate(context.Context, *gestalt.AccessEvaluationRequest) (*gestalt.AccessDecision, error) {
-	return &gestalt.AccessDecision{Allowed: true, ModelId: "authz-model-1"}, nil
+func (*fullAuthorizationProvider) CheckAccess(context.Context, *gestalt.CheckAccessRequest) (*gestalt.CheckAccessResponse, error) {
+	return &gestalt.CheckAccessResponse{Allowed: true, ModelId: "authz-model-1"}, nil
 }
 
-func (*fullAuthorizationProvider) EvaluateMany(_ context.Context, req *gestalt.AccessEvaluationsRequest) (*gestalt.AccessEvaluationsResponse, error) {
-	resp := &gestalt.AccessEvaluationsResponse{}
+func (*fullAuthorizationProvider) CheckAccessMany(_ context.Context, req *gestalt.CheckAccessManyRequest) (*gestalt.CheckAccessManyResponse, error) {
+	resp := &gestalt.CheckAccessManyResponse{}
 	for range req.GetRequests() {
-		resp.Decisions = append(resp.Decisions, &gestalt.AccessDecision{Allowed: true, ModelId: "authz-model-1"})
+		resp.Decisions = append(resp.Decisions, &gestalt.CheckAccessResponse{Allowed: true, ModelId: "authz-model-1"})
 	}
 	return resp, nil
 }
 
-func (*fullAuthorizationProvider) SearchResources(context.Context, *gestalt.ResourceSearchRequest) (*gestalt.ResourceSearchResponse, error) {
-	return &gestalt.ResourceSearchResponse{ModelId: "authz-model-1"}, nil
-}
-
-func (*fullAuthorizationProvider) SearchSubjects(context.Context, *gestalt.SubjectSearchRequest) (*gestalt.SubjectSearchResponse, error) {
-	return &gestalt.SubjectSearchResponse{ModelId: "authz-model-1"}, nil
-}
-
-func (*fullAuthorizationProvider) SearchActions(context.Context, *gestalt.ActionSearchRequest) (*gestalt.ActionSearchResponse, error) {
-	return &gestalt.ActionSearchResponse{ModelId: "authz-model-1"}, nil
-}
-
-func (*fullAuthorizationProvider) GetMetadata(context.Context) (*gestalt.AuthorizationMetadata, error) {
-	return &gestalt.AuthorizationMetadata{ActiveModelId: "authz-model-1"}, nil
-}
-
-func (*fullAuthorizationProvider) ReadRelationships(context.Context, *gestalt.ReadRelationshipsRequest) (*gestalt.ReadRelationshipsResponse, error) {
-	return &gestalt.ReadRelationshipsResponse{ModelId: "authz-model-1"}, nil
-}
-
-func (*fullAuthorizationProvider) WriteRelationships(context.Context, *gestalt.WriteRelationshipsRequest) error {
-	return nil
-}
-
-func (*fullAuthorizationProvider) GetActiveModel(context.Context) (*gestalt.GetActiveModelResponse, error) {
-	return &gestalt.GetActiveModelResponse{Model: gestalt.NewAuthorizationModelRef("authz-model-1", "v1", time.Unix(1, 0))}, nil
-}
-
-func (*fullAuthorizationProvider) ListModels(context.Context, *gestalt.ListModelsRequest) (*gestalt.ListModelsResponse, error) {
-	return &gestalt.ListModelsResponse{Models: []*gestalt.AuthorizationModelRef{
-		gestalt.NewAuthorizationModelRef("authz-model-1", "v1", time.Unix(1, 0)),
-	}}, nil
-}
-
-func (*fullAuthorizationProvider) WriteModel(context.Context, *gestalt.WriteModelRequest) (*gestalt.AuthorizationModelRef, error) {
-	return gestalt.NewAuthorizationModelRef("authz-model-1", "v1", time.Unix(1, 0)), nil
-}
-
-type zanzibarAuthorizationProvider struct {
-	fullAuthorizationProvider
-}
-
-func (*zanzibarAuthorizationProvider) EffectiveSearchResources(context.Context, *gestalt.ResourceSearchRequest) (*gestalt.ResourceSearchResponse, error) {
-	return &gestalt.ResourceSearchResponse{
-		Resources: []*gestalt.AuthorizationResource{
-			gestalt.NewAuthorizationResource("agent_session", "session-123"),
-		},
-		ModelId: "authz-model-1",
+func (*fullAuthorizationProvider) ListRelationships(context.Context, *gestalt.ListRelationshipsRequest) (*gestalt.ListRelationshipsResponse, error) {
+	return &gestalt.ListRelationshipsResponse{
+		Relationships: []*gestalt.Relationship{gestalt.NewRelationship(gestalt.NewAuthorizationSubject("user", "user-123"), "editor", gestalt.NewAuthorizationResource("agent_session", "session-123"))},
+		NextPageToken: "next-page",
 	}, nil
 }
 
-func (*zanzibarAuthorizationProvider) EffectiveSearchSubjects(context.Context, *gestalt.EffectiveSubjectSearchRequest) (*gestalt.EffectiveSubjectSearchResponse, error) {
-	return &gestalt.EffectiveSubjectSearchResponse{
-		Targets: []*gestalt.AuthorizationRelationshipTarget{
-			gestalt.NewAuthorizationSubjectTarget(gestalt.NewAuthorizationSubject("subject", "user:user-123")),
-			gestalt.NewAuthorizationSubjectSetTarget(gestalt.NewAuthorizationResource("slack_channel", "C123"), "member"),
-		},
-		ModelId: "authz-model-1",
-	}, nil
+func (*fullAuthorizationProvider) AddRelationship(_ context.Context, req *gestalt.AddRelationshipRequest) (*gestalt.AddRelationshipResponse, error) {
+	return &gestalt.AddRelationshipResponse{Relationship: req.GetRelationship()}, nil
 }
 
-func (*zanzibarAuthorizationProvider) Expand(_ context.Context, req *gestalt.ExpandRequest) (*gestalt.ExpandResponse, error) {
-	return &gestalt.ExpandResponse{
-		Root: &gestalt.ExpandNode{
-			Target:   gestalt.NewAuthorizationResourceTarget(req.GetResource()),
-			Relation: req.GetRelation(),
-			Children: []*gestalt.ExpandNode{{
-				Target:   gestalt.NewAuthorizationSubjectTarget(gestalt.NewAuthorizationSubject("subject", "user:user-123")),
-				Relation: "member",
-			}},
-		},
-		ModelId: "authz-model-1",
-	}, nil
+func (*fullAuthorizationProvider) DeleteRelationship(context.Context, *gestalt.DeleteRelationshipRequest) (*gestalt.DeleteRelationshipResponse, error) {
+	return &gestalt.DeleteRelationshipResponse{}, nil
 }
 
-func TestAuthorizationProviderOptionalZanzibarTransport(t *testing.T) {
-	socket := newSocketPath(t, "authorization-zanzibar.sock")
-	t.Setenv(proto.EnvProviderSocket, socket)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	provider := &zanzibarAuthorizationProvider{}
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- gestalt.ServeAuthorizationProvider(ctx, provider)
-	}()
-	t.Cleanup(func() {
-		cancel()
-		waitServeResult(t, errCh)
-		if !provider.closed.Load() {
-			t.Fatal("authorization provider Close was not called")
-		}
-	})
-
-	conn := newUnixConn(t, socket)
-	client := proto.NewAuthorizationProviderClient(conn)
-
-	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer rpcCancel()
-
-	meta, err := client.GetMetadata(rpcCtx, &emptypb.Empty{}, grpc.WaitForReady(true))
-	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
-	}
-	if !hasCapabilities(meta.GetCapabilities(), "effective_search_resources", "effective_search_subjects", "expand") {
-		t.Fatalf("GetMetadata capabilities = %#v, want optional Zanzibar capabilities", meta.GetCapabilities())
-	}
-
-	resourceResp, err := client.EffectiveSearchResources(rpcCtx, &proto.ResourceSearchRequest{
-		Subject:      &proto.Subject{Type: "subject", Id: "user:user-123"},
-		Action:       &proto.Action{Name: "edit"},
-		ResourceType: "agent_session",
-	}, grpc.WaitForReady(true))
-	if err != nil {
-		t.Fatalf("EffectiveSearchResources: %v", err)
-	}
-	if len(resourceResp.GetResources()) != 1 || resourceResp.GetResources()[0].GetId() != "session-123" {
-		t.Fatalf("effective resources = %#v, want session-123", resourceResp.GetResources())
-	}
-
-	subjectResp, err := client.EffectiveSearchSubjects(rpcCtx, &proto.EffectiveSubjectSearchRequest{
-		Resource: &proto.Resource{Type: "agent_session", Id: "session-123"},
-		Action:   &proto.Action{Name: "edit"},
-	})
-	if err != nil {
-		t.Fatalf("EffectiveSearchSubjects: %v", err)
-	}
-	if subjectResp.GetTargets()[1].GetSubjectSet().GetResource().GetId() != "C123" {
-		t.Fatalf("effective targets = %#v, want slack channel subject set", subjectResp.GetTargets())
-	}
-
-	expandResp, err := client.Expand(rpcCtx, &proto.ExpandRequest{
-		Resource: &proto.Resource{Type: "agent_session", Id: "session-123"},
-		Relation: "editor",
-	})
-	if err != nil {
-		t.Fatalf("Expand: %v", err)
-	}
-	if expandResp.GetRoot().GetTarget().GetResource().GetId() != "session-123" {
-		t.Fatalf("expand root = %#v, want session resource target", expandResp.GetRoot().GetTarget())
-	}
+func (*fullAuthorizationProvider) SetRelationships(_ context.Context, req *gestalt.SetRelationshipsRequest) (*gestalt.SetRelationshipsResponse, error) {
+	return &gestalt.SetRelationshipsResponse{Relationships: req.GetRelationships()}, nil
 }
 
-func TestAuthorizationProviderOptionalZanzibarTransportUnimplemented(t *testing.T) {
-	socket := newSocketPath(t, "authorization-unimplemented.sock")
+func (*fullAuthorizationProvider) GetActiveModelRef(context.Context) (*gestalt.GetActiveModelRefResponse, error) {
+	return &gestalt.GetActiveModelRefResponse{Model: gestalt.NewAuthorizationModelRef("authz-model-1", "v1", time.Unix(1, 0))}, nil
+}
+
+func (*fullAuthorizationProvider) SetActiveModel(_ context.Context, req *gestalt.SetActiveModelRequest) (*gestalt.SetActiveModelResponse, error) {
+	return &gestalt.SetActiveModelResponse{Model: gestalt.NewAuthorizationModelRef(req.GetModel().GetId(), req.GetModel().GetVersion(), time.Unix(1, 0))}, nil
+}
+
+func (*fullAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *gestalt.ListActiveModelResourceTypesRequest) (*gestalt.ListActiveModelResourceTypesResponse, error) {
+	return &gestalt.ListActiveModelResourceTypesResponse{ResourceTypes: []*gestalt.AuthorizationModelResourceType{{Name: "agent_session"}}}, nil
+}
+
+func TestServeAuthorizationProviderTransport(t *testing.T) {
+	socket := newSocketPath(t, "authorization.sock")
 	t.Setenv(proto.EnvProviderSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -477,24 +297,41 @@ func TestAuthorizationProviderOptionalZanzibarTransportUnimplemented(t *testing.
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer rpcCancel()
 
-	_, err := client.EffectiveSearchSubjects(rpcCtx, &proto.EffectiveSubjectSearchRequest{
-		Resource: &proto.Resource{Type: "agent_session", Id: "session-123"},
+	checkResp, err := client.CheckAccess(rpcCtx, &proto.CheckAccessRequest{
+		Subject:  &proto.Subject{Type: "user", Id: "user-123"},
 		Action:   &proto.Action{Name: "edit"},
+		Resource: &proto.Resource{Type: "agent_session", Id: "session-123"},
 	}, grpc.WaitForReady(true))
-	if status.Code(err) != codes.Unimplemented {
-		t.Fatalf("EffectiveSearchSubjects error = %v, want Unimplemented", err)
+	if err != nil {
+		t.Fatalf("CheckAccess: %v", err)
+	}
+	if !checkResp.GetAllowed() || checkResp.GetModelId() != "authz-model-1" {
+		t.Fatalf("CheckAccess response = %#v, want allowed authz-model-1", checkResp)
+	}
+
+	listResp, err := client.ListRelationships(rpcCtx, &proto.ListRelationshipsRequest{}, grpc.WaitForReady(true))
+	if err != nil {
+		t.Fatalf("ListRelationships: %v", err)
+	}
+	if len(listResp.GetRelationships()) != 1 || listResp.GetRelationships()[0].GetTuple().GetRelation() != "editor" {
+		t.Fatalf("ListRelationships response = %#v, want editor relationship", listResp)
+	}
+
+	modelResp, err := client.GetActiveModelRef(rpcCtx, &emptypb.Empty{}, grpc.WaitForReady(true))
+	if err != nil {
+		t.Fatalf("GetActiveModelRef: %v", err)
+	}
+	if modelResp.GetModel().GetId() != "authz-model-1" {
+		t.Fatalf("GetActiveModelRef response = %#v, want authz-model-1", modelResp)
 	}
 }
 
-func hasCapabilities(actual []string, required ...string) bool {
-	seen := make(map[string]struct{}, len(actual))
-	for _, capability := range actual {
-		seen[capability] = struct{}{}
+func relationshipProto(subjectType, subjectID, relation, resourceType, resourceID string) *proto.Relationship {
+	return &proto.Relationship{
+		Tuple: &proto.RelationshipTuple{
+			Target:   &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: subjectType, Id: subjectID}}},
+			Relation: relation,
+			Resource: &proto.Resource{Type: resourceType, Id: resourceID},
+		},
 	}
-	for _, capability := range required {
-		if _, ok := seen[capability]; !ok {
-			return false
-		}
-	}
-	return true
 }

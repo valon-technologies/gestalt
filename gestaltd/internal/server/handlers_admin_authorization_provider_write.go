@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -11,169 +11,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 )
-
-type providerPluginAuthorizationMembership struct {
-	App       string
-	SubjectID string
-	Role      string
-}
-
-type providerAdminAuthorizationMembership struct {
-	SubjectID string
-	Role      string
-}
-
-func (s *Server) upsertProviderPluginAuthorization(ctx context.Context, subject *adminAuthorizationWriteSubject, plugin, role string) (*providerPluginAuthorizationMembership, error) {
-	if s.authorizationProvider == nil {
-		return nil, errAdminAuthorizationUnavailable
-	}
-	if subject == nil || strings.TrimSpace(subject.SubjectID) == "" {
-		return nil, fmt.Errorf("subject is required")
-	}
-	resource := &core.ResourceRef{
-		Type: authorization.ProviderResourceTypeAppDynamic,
-		Id:   strings.TrimSpace(plugin),
-	}
-	fragmentRel := coredata.AuthorizationDynamicFragmentRelationship{
-		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: authorization.ProviderSubjectTypeSubject, ID: strings.TrimSpace(subject.SubjectID)},
-		Relation: strings.TrimSpace(role),
-		Resource: coredata.AuthorizationDynamicFragmentResource{Type: resource.GetType(), ID: resource.GetId()},
-	}
-	_, _, err := s.replaceProviderDynamicMembership(ctx, resource, subject.SubjectID, strings.TrimSpace(role))
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.upsertAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationAppFragmentOwner(plugin), fragmentRel, "app_member_upsert"); err != nil {
-		return nil, err
-	}
-	return &providerPluginAuthorizationMembership{
-		App:       plugin,
-		SubjectID: strings.TrimSpace(subject.SubjectID),
-		Role:      role,
-	}, nil
-}
-
-func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, subjectID string) error {
-	if s.authorizationProvider == nil {
-		return errAdminAuthorizationUnavailable
-	}
-	resource := &core.ResourceRef{
-		Type: authorization.ProviderResourceTypeAppDynamic,
-		Id:   strings.TrimSpace(plugin),
-	}
-	return s.deleteProviderDynamicFragmentMembership(ctx, coredata.AuthorizationAppFragmentOwner(plugin), resource, subjectID, "app_member_delete")
-}
-
-func (s *Server) upsertSourceAppAuthorization(ctx context.Context, subject *adminAuthorizationWriteSubject, app, role string) (*providerPluginAuthorizationMembership, error) {
-	if s.authzFragments == nil {
-		return nil, errAdminAuthorizationUnavailable
-	}
-	if subject == nil || strings.TrimSpace(subject.SubjectID) == "" {
-		return nil, fmt.Errorf("subject is required")
-	}
-	resource := &core.ResourceRef{
-		Type: authorization.ProviderResourceTypeAppDynamic,
-		Id:   strings.TrimSpace(app),
-	}
-	fragmentRel := coredata.AuthorizationDynamicFragmentRelationship{
-		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: authorization.ProviderSubjectTypeSubject, ID: strings.TrimSpace(subject.SubjectID)},
-		Relation: strings.TrimSpace(role),
-		Resource: coredata.AuthorizationDynamicFragmentResource{Type: resource.GetType(), ID: resource.GetId()},
-	}
-	if _, err := s.upsertAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationAppFragmentOwner(app), fragmentRel, "app_member_upsert"); err != nil {
-		return nil, err
-	}
-	return &providerPluginAuthorizationMembership{
-		App:       app,
-		SubjectID: strings.TrimSpace(subject.SubjectID),
-		Role:      strings.TrimSpace(role),
-	}, nil
-}
-
-func (s *Server) deleteSourceAppAuthorization(ctx context.Context, app, subjectID string) error {
-	if s.authzFragments == nil {
-		return errAdminAuthorizationUnavailable
-	}
-	resource := &core.ResourceRef{
-		Type: authorization.ProviderResourceTypeAppDynamic,
-		Id:   strings.TrimSpace(app),
-	}
-	deleted, _, err := s.deleteDynamicFragmentMembership(ctx, coredata.AuthorizationAppFragmentOwner(app), resource, subjectID, "app_member_delete")
-	if err != nil {
-		return err
-	}
-	if !deleted {
-		return core.ErrNotFound
-	}
-	return nil
-}
-
-func (s *Server) upsertSourceAdminAuthorization(ctx context.Context, subject *adminAuthorizationWriteSubject, role string) (*providerAdminAuthorizationMembership, error) {
-	if s.authzFragments == nil {
-		return nil, errAdminAuthorizationUnavailable
-	}
-	if subject == nil || strings.TrimSpace(subject.SubjectID) == "" {
-		return nil, fmt.Errorf("subject is required")
-	}
-	resource := &core.ResourceRef{
-		Type: authorization.ProviderResourceTypeAdminDynamic,
-		Id:   authorization.ProviderResourceIDAdminDynamicGlobal,
-	}
-	fragmentRel := coredata.AuthorizationDynamicFragmentRelationship{
-		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: authorization.ProviderSubjectTypeSubject, ID: strings.TrimSpace(subject.SubjectID)},
-		Relation: strings.TrimSpace(role),
-		Resource: coredata.AuthorizationDynamicFragmentResource{Type: resource.GetType(), ID: resource.GetId()},
-	}
-	if _, err := s.upsertAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationGlobalFragmentOwner(), fragmentRel, "admin_member_upsert"); err != nil {
-		return nil, err
-	}
-	return &providerAdminAuthorizationMembership{
-		SubjectID: strings.TrimSpace(subject.SubjectID),
-		Role:      strings.TrimSpace(role),
-	}, nil
-}
-
-func (s *Server) deleteSourceAdminAuthorization(ctx context.Context, subjectID string) error {
-	if s.authzFragments == nil {
-		return errAdminAuthorizationUnavailable
-	}
-	resource := &core.ResourceRef{
-		Type: authorization.ProviderResourceTypeAdminDynamic,
-		Id:   authorization.ProviderResourceIDAdminDynamicGlobal,
-	}
-	deleted, _, err := s.deleteDynamicFragmentMembership(ctx, coredata.AuthorizationGlobalFragmentOwner(), resource, subjectID, "admin_member_delete")
-	if err != nil {
-		return err
-	}
-	if !deleted {
-		return core.ErrNotFound
-	}
-	return nil
-}
-
-func (s *Server) deleteProviderDynamicFragmentMembership(ctx context.Context, owner coredata.AuthorizationFragmentOwner, resource *core.ResourceRef, subjectID, reason string) error {
-	existing, _, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
-	if err != nil {
-		return err
-	}
-	if len(existing) == 0 {
-		return core.ErrNotFound
-	}
-	deleted, _, err := s.deleteDynamicFragmentMembership(ctx, owner, resource, subjectID, reason)
-	if err != nil {
-		return err
-	}
-	if !deleted {
-		slog.WarnContext(ctx, "provider authorization membership deleted without matching dynamic fragment relationship",
-			"owner_kind", owner.Kind,
-			"owner_app", owner.App,
-			"resource_type", resource.GetType(),
-			"resource_id", resource.GetId(),
-			"subject_id", strings.TrimSpace(subjectID),
-		)
-	}
-	return nil
-}
 
 func (s *Server) deleteDynamicFragmentMembership(ctx context.Context, owner coredata.AuthorizationFragmentOwner, resource *core.ResourceRef, subjectID, reason string) (bool, *coredata.AuthorizationDynamicFragment, error) {
 	return s.deleteAuthorizationDynamicFragmentSubjectResourceRelationships(ctx, owner, coredata.AuthorizationDynamicFragmentSubject{
@@ -201,10 +38,8 @@ func (s *Server) upsertManagedSubjectExternalIdentity(ctx context.Context, subje
 	if err != nil {
 		return err
 	}
-	return s.authorizationProvider.WriteRelationships(ctx, &core.WriteRelationshipsRequest{
-		Writes:  []*core.Relationship{rel},
-		ModelId: modelID,
-	})
+	_ = modelID
+	return s.writeAuthorizationRelationships(ctx, []*core.Relationship{rel}, nil)
 }
 
 func (s *Server) deleteManagedSubjectExternalIdentityRelationship(ctx context.Context, subjectID string, ref externalIdentityRef) (bool, error) {
@@ -215,10 +50,12 @@ func (s *Server) deleteManagedSubjectExternalIdentityRelationship(ctx context.Co
 	if rel == nil {
 		return false, fmt.Errorf("external identity relationship is required")
 	}
-	existing, err := s.readAllAuthorizationRelationships(ctx, &core.ReadRelationshipsRequest{
+	existing, err := s.readAllAuthorizationRelationships(ctx, &core.ListRelationshipsRequest{
 		PageSize: adminAuthorizationProviderReadPageSize,
-		Subject:  rel.GetSubject(),
-		Resource: rel.GetResource(),
+		Filter: &core.RelationshipFilter{
+			Target:   authorization.RelationshipTarget(rel),
+			Resource: authorization.RelationshipResource(rel),
+		},
 	})
 	if err != nil {
 		return false, err
@@ -237,10 +74,8 @@ func (s *Server) deleteManagedSubjectExternalIdentityRelationship(ctx context.Co
 	if err != nil {
 		return false, err
 	}
-	if err := s.authorizationProvider.WriteRelationships(ctx, &core.WriteRelationshipsRequest{
-		Deletes: relationshipKeys([]*core.Relationship{rel}),
-		ModelId: modelID,
-	}); err != nil {
+	_ = modelID
+	if err := s.writeAuthorizationRelationships(ctx, nil, relationshipTuples([]*core.Relationship{rel})); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -267,21 +102,14 @@ func (s *Server) replaceProviderDynamicMembership(ctx context.Context, resource 
 			modelID = strings.TrimSpace(ensuredModelID)
 		}
 	}
-	if err := s.authorizationProvider.WriteRelationships(ctx, &core.WriteRelationshipsRequest{
-		Writes:  writes,
-		Deletes: deletes,
-		ModelId: modelID,
-	}); err != nil {
+	_ = modelID
+	if err := s.writeAuthorizationRelationships(ctx, writes, deletes); err != nil {
 		return nil, nil, fmt.Errorf("write authorization relationships: %w", err)
 	}
 	rollbackDeletes := filterRelationshipKeys(writes, existing)
 	rollbackWrites := cloneRelationships(existing)
 	return existing, func(rollbackCtx context.Context) {
-		_ = s.authorizationProvider.WriteRelationships(rollbackCtx, &core.WriteRelationshipsRequest{
-			Writes:  rollbackWrites,
-			Deletes: rollbackDeletes,
-			ModelId: modelID,
-		})
+		_ = s.writeAuthorizationRelationships(rollbackCtx, rollbackWrites, rollbackDeletes)
 	}, nil
 }
 
@@ -306,22 +134,17 @@ func (s *Server) deleteProviderDynamicMembership(ctx context.Context, resource *
 	if err != nil {
 		return nil, nil, err
 	}
-	deletes := relationshipKeys(existing)
+	deletes := relationshipTuples(existing)
 	if len(deletes) == 0 {
 		return existing, nil, nil
 	}
-	if err := s.authorizationProvider.WriteRelationships(ctx, &core.WriteRelationshipsRequest{
-		Deletes: deletes,
-		ModelId: modelID,
-	}); err != nil {
+	_ = modelID
+	if err := s.writeAuthorizationRelationships(ctx, nil, deletes); err != nil {
 		return nil, nil, fmt.Errorf("delete authorization relationships: %w", err)
 	}
 	rollbackWrites := cloneRelationships(existing)
 	return existing, func(rollbackCtx context.Context) {
-		_ = s.authorizationProvider.WriteRelationships(rollbackCtx, &core.WriteRelationshipsRequest{
-			Writes:  rollbackWrites,
-			ModelId: modelID,
-		})
+		_ = s.writeAuthorizationRelationships(rollbackCtx, rollbackWrites, nil)
 	}, nil
 }
 
@@ -332,7 +155,7 @@ func (s *Server) managedAuthorizationModelID(ctx context.Context) (string, error
 	if resolver, ok := s.authorizer.(authorization.ManagedAuthorizationModelResolver); ok {
 		return resolver.ManagedModelID(ctx)
 	}
-	active, err := s.authorizationProvider.GetActiveModel(ctx)
+	active, err := s.authorizationProvider.GetActiveModelRef(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -346,9 +169,9 @@ func (s *Server) providerDynamicRelationshipsForSubject(ctx context.Context, res
 	if s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
-	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ReadRelationshipsRequest{
+	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ListRelationshipsRequest{
 		PageSize: adminAuthorizationProviderReadPageSize,
-		Resource: resource,
+		Filter:   &core.RelationshipFilter{Resource: resource},
 	})
 	if err != nil {
 		return nil, err
@@ -389,9 +212,11 @@ func providerDynamicMembershipRelationships(resource *core.ResourceRef, subjectI
 		return nil
 	}
 	return []*core.Relationship{{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: subjectID},
-		Relation: role,
-		Resource: cloneResourceRef(resource),
+		Tuple: &core.RelationshipTuple{
+			Target:   &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: subjectID}}},
+			Relation: role,
+			Resource: cloneResourceRef(resource),
+		},
 	}}
 }
 
@@ -405,38 +230,35 @@ func managedSubjectExternalIdentityRelationship(subjectID string, ref externalId
 	// TODO(#1823): Keep encoded resource ids internal to the authorization
 	// provider boundary.
 	return &core.Relationship{
-		Subject: &core.SubjectRef{
-			Type: authorization.ProviderSubjectTypeSubject,
-			Id:   subjectID,
-		},
-		Relation: authorization.ProviderExternalIdentityRelationAssume,
-		Resource: &core.ResourceRef{
-			Type: authorization.ProviderResourceTypeExternalIdentity,
-			Id:   resourceID,
+		Tuple: &core.RelationshipTuple{
+			Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: &core.SubjectRef{
+				Type: authorization.ProviderSubjectTypeSubject,
+				Id:   subjectID,
+			}}},
+			Relation: authorization.ProviderExternalIdentityRelationAssume,
+			Resource: &core.ResourceRef{
+				Type: authorization.ProviderResourceTypeExternalIdentity,
+				Id:   resourceID,
+			},
 		},
 	}
 }
 
-func relationshipKeys(rels []*core.Relationship) []*core.RelationshipKey {
+func relationshipTuples(rels []*core.Relationship) []*core.RelationshipTuple {
 	if len(rels) == 0 {
 		return nil
 	}
-	keys := make([]*core.RelationshipKey, 0, len(rels))
+	tuples := make([]*core.RelationshipTuple, 0, len(rels))
 	for _, rel := range rels {
-		if rel == nil {
+		if rel == nil || rel.GetTuple() == nil {
 			continue
 		}
-		keys = append(keys, &core.RelationshipKey{
-			Subject:  cloneSubjectRef(rel.GetSubject()),
-			Relation: rel.GetRelation(),
-			Resource: cloneResourceRef(rel.GetResource()),
-			Target:   cloneRelationshipTarget(rel.GetTarget(), rel.GetSubject()),
-		})
+		tuples = append(tuples, cloneRelationshipTuple(rel.GetTuple()))
 	}
-	return keys
+	return tuples
 }
 
-func filterRelationshipKeys(rels []*core.Relationship, keep []*core.Relationship) []*core.RelationshipKey {
+func filterRelationshipKeys(rels []*core.Relationship, keep []*core.Relationship) []*core.RelationshipTuple {
 	if len(rels) == 0 {
 		return nil
 	}
@@ -444,7 +266,7 @@ func filterRelationshipKeys(rels []*core.Relationship, keep []*core.Relationship
 	for _, rel := range keep {
 		keepKeys[providerRelationshipKey(rel)] = struct{}{}
 	}
-	keys := make([]*core.RelationshipKey, 0, len(rels))
+	tuples := make([]*core.RelationshipTuple, 0, len(rels))
 	for _, rel := range rels {
 		if rel == nil {
 			continue
@@ -452,26 +274,28 @@ func filterRelationshipKeys(rels []*core.Relationship, keep []*core.Relationship
 		if _, ok := keepKeys[providerRelationshipKey(rel)]; ok {
 			continue
 		}
-		keys = append(keys, &core.RelationshipKey{
-			Subject:  cloneSubjectRef(rel.GetSubject()),
-			Relation: rel.GetRelation(),
-			Resource: cloneResourceRef(rel.GetResource()),
-			Target:   cloneRelationshipTarget(rel.GetTarget(), rel.GetSubject()),
-		})
+		tuples = append(tuples, cloneRelationshipTuple(rel.GetTuple()))
 	}
-	return keys
+	return tuples
 }
 
 func providerRelationshipKey(rel *core.Relationship) string {
-	if rel == nil || rel.GetResource() == nil {
+	if rel == nil || authorization.RelationshipResource(rel) == nil {
 		return ""
 	}
 	return strings.Join([]string{
-		authorization.RelationshipTargetMapKey(rel.GetTarget(), rel.GetSubject()),
-		strings.TrimSpace(rel.GetRelation()),
-		strings.TrimSpace(rel.GetResource().GetType()),
-		strings.TrimSpace(rel.GetResource().GetId()),
+		authorization.RelationshipTargetMapKey(authorization.RelationshipTarget(rel), authorization.RelationshipSubject(rel)),
+		strings.TrimSpace(authorization.RelationshipRelation(rel)),
+		strings.TrimSpace(authorization.RelationshipResource(rel).GetType()),
+		strings.TrimSpace(authorization.RelationshipResource(rel).GetId()),
 	}, "\x00")
+}
+
+func providerRelationshipTupleKey(tuple *core.RelationshipTuple) string {
+	if tuple == nil {
+		return ""
+	}
+	return providerRelationshipKey(&core.Relationship{Tuple: tuple})
 }
 
 func cloneRelationships(rels []*core.Relationship) []*core.Relationship {
@@ -480,17 +304,85 @@ func cloneRelationships(rels []*core.Relationship) []*core.Relationship {
 	}
 	out := make([]*core.Relationship, 0, len(rels))
 	for _, rel := range rels {
+		if cloned := cloneRelationship(rel); cloned != nil {
+			out = append(out, cloned)
+		}
+	}
+	return out
+}
+
+func cloneRelationship(rel *core.Relationship) *core.Relationship {
+	if rel == nil {
+		return nil
+	}
+	return &core.Relationship{
+		Tuple:       cloneRelationshipTuple(rel.GetTuple()),
+		Properties:  rel.GetProperties(),
+		SourceLayer: rel.GetSourceLayer(),
+	}
+}
+
+func (s *Server) writeAuthorizationRelationships(ctx context.Context, writes []*core.Relationship, deletes []*core.RelationshipTuple) error {
+	hasChanges := false
+	for _, tuple := range deletes {
+		if tuple != nil {
+			hasChanges = true
+			break
+		}
+	}
+	if !hasChanges {
+		for _, rel := range writes {
+			if rel != nil {
+				hasChanges = true
+				break
+			}
+		}
+	}
+	if !hasChanges {
+		return nil
+	}
+
+	existing, err := s.readAllAuthorizationRelationships(ctx, &core.ListRelationshipsRequest{
+		PageSize: adminAuthorizationProviderReadPageSize,
+	})
+	if err != nil {
+		return err
+	}
+	nextByKey := make(map[string]*core.Relationship, len(existing)+len(writes))
+	for _, rel := range existing {
+		key := providerRelationshipKey(rel)
+		if key == "" {
+			continue
+		}
+		nextByKey[key] = cloneRelationship(rel)
+	}
+	for _, tuple := range deletes {
+		if tuple == nil {
+			continue
+		}
+		if key := providerRelationshipTupleKey(tuple); key != "" {
+			delete(nextByKey, key)
+		}
+	}
+	for _, rel := range writes {
 		if rel == nil {
 			continue
 		}
-		out = append(out, &core.Relationship{
-			Subject:  cloneSubjectRef(rel.GetSubject()),
-			Relation: rel.GetRelation(),
-			Resource: cloneResourceRef(rel.GetResource()),
-			Target:   cloneRelationshipTarget(rel.GetTarget(), rel.GetSubject()),
-		})
+		if key := providerRelationshipKey(rel); key != "" {
+			nextByKey[key] = cloneRelationship(rel)
+		}
 	}
-	return out
+	next := make([]*core.Relationship, 0, len(nextByKey))
+	for _, rel := range nextByKey {
+		next = append(next, rel)
+	}
+	sort.Slice(next, func(i, j int) bool {
+		return providerRelationshipKey(next[i]) < providerRelationshipKey(next[j])
+	})
+	if _, err := s.authorizationProvider.SetRelationships(ctx, &core.SetRelationshipsRequest{Relationships: next}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func cloneSubjectRef(subject *core.SubjectRef) *core.SubjectRef {
@@ -510,6 +402,17 @@ func cloneResourceRef(resource *core.ResourceRef) *core.ResourceRef {
 	return &core.ResourceRef{
 		Type: resource.GetType(),
 		Id:   resource.GetId(),
+	}
+}
+
+func cloneRelationshipTuple(tuple *core.RelationshipTuple) *core.RelationshipTuple {
+	if tuple == nil {
+		return nil
+	}
+	return &core.RelationshipTuple{
+		Target:   cloneRelationshipTarget(tuple.GetTarget(), nil),
+		Relation: tuple.GetRelation(),
+		Resource: cloneResourceRef(tuple.GetResource()),
 	}
 }
 

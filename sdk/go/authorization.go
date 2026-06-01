@@ -10,54 +10,53 @@ import (
 )
 
 type (
-	AuthorizationMetadata              = sdkauthorization.AuthorizationMetadata
-	AuthorizationSubject               = sdkauthorization.AuthorizationSubject
-	AuthorizationResource              = sdkauthorization.AuthorizationResource
-	AuthorizationSubjectSet            = sdkauthorization.AuthorizationSubjectSet
-	AuthorizationRelationshipTarget    = sdkauthorization.AuthorizationRelationshipTarget
-	AuthorizationAction                = sdkauthorization.AuthorizationAction
-	AccessEvaluationRequest            = sdkauthorization.AccessEvaluationRequest
-	AccessDecision                     = sdkauthorization.AccessDecision
-	AccessEvaluationsRequest           = sdkauthorization.AccessEvaluationsRequest
-	AccessEvaluationsResponse          = sdkauthorization.AccessEvaluationsResponse
-	ResourceSearchRequest              = sdkauthorization.ResourceSearchRequest
-	ResourceSearchResponse             = sdkauthorization.ResourceSearchResponse
-	SubjectSearchRequest               = sdkauthorization.SubjectSearchRequest
-	SubjectSearchResponse              = sdkauthorization.SubjectSearchResponse
-	EffectiveSubjectSearchRequest      = sdkauthorization.EffectiveSubjectSearchRequest
-	EffectiveSubjectSearchResponse     = sdkauthorization.EffectiveSubjectSearchResponse
-	ActionSearchRequest                = sdkauthorization.ActionSearchRequest
-	ActionSearchResponse               = sdkauthorization.ActionSearchResponse
-	Relationship                       = sdkauthorization.Relationship
-	RelationshipKey                    = sdkauthorization.RelationshipKey
-	ReadRelationshipsRequest           = sdkauthorization.ReadRelationshipsRequest
-	ReadRelationshipsResponse          = sdkauthorization.ReadRelationshipsResponse
-	WriteRelationshipsRequest          = sdkauthorization.WriteRelationshipsRequest
-	AuthorizationModel                 = sdkauthorization.AuthorizationModel
-	AuthorizationModelResourceType     = sdkauthorization.AuthorizationModelResourceType
-	AuthorizationModelRelation         = sdkauthorization.AuthorizationModelRelation
-	AuthorizationModelAction           = sdkauthorization.AuthorizationModelAction
-	AuthorizationModelAllowedTarget    = sdkauthorization.AuthorizationModelAllowedTarget
-	AuthorizationModelSubjectSetTarget = sdkauthorization.AuthorizationModelSubjectSetTarget
-	AuthorizationModelRewrite          = sdkauthorization.AuthorizationModelRewrite
-	AuthorizationModelRewriteThis      = sdkauthorization.AuthorizationModelRewriteThis
-	AuthorizationModelComputedUserset  = sdkauthorization.AuthorizationModelComputedUserset
-	AuthorizationModelTupleToUserset   = sdkauthorization.AuthorizationModelTupleToUserset
-	AuthorizationModelRewriteUnion     = sdkauthorization.AuthorizationModelRewriteUnion
-	AuthorizationModelRef              = sdkauthorization.AuthorizationModelRef
-	GetActiveModelResponse             = sdkauthorization.GetActiveModelResponse
-	ListModelsRequest                  = sdkauthorization.ListModelsRequest
-	ListModelsResponse                 = sdkauthorization.ListModelsResponse
-	WriteModelRequest                  = sdkauthorization.WriteModelRequest
-	ExpandRequest                      = sdkauthorization.ExpandRequest
-	ExpandNode                         = sdkauthorization.ExpandNode
-	ExpandResponse                     = sdkauthorization.ExpandResponse
+	SourceLayer                          = sdkauthorization.SourceLayer
+	RelationshipTargetType               = sdkauthorization.RelationshipTargetType
+	AuthorizationSourceLayer             = sdkauthorization.SourceLayer
+	AuthorizationRelationshipTargetType  = sdkauthorization.RelationshipTargetType
+	AuthorizationSubject                 = sdkauthorization.AuthorizationSubject
+	AuthorizationResource                = sdkauthorization.AuthorizationResource
+	AuthorizationSubjectSet              = sdkauthorization.AuthorizationSubjectSet
+	AuthorizationRelationshipTarget      = sdkauthorization.AuthorizationRelationshipTarget
+	AuthorizationAction                  = sdkauthorization.AuthorizationAction
+	CheckAccessRequest                   = sdkauthorization.CheckAccessRequest
+	CheckAccessResponse                  = sdkauthorization.CheckAccessResponse
+	CheckAccessManyRequest               = sdkauthorization.CheckAccessManyRequest
+	CheckAccessManyResponse              = sdkauthorization.CheckAccessManyResponse
+	Relationship                         = sdkauthorization.Relationship
+	RelationshipTuple                    = sdkauthorization.RelationshipTuple
+	RelationshipFilter                   = sdkauthorization.RelationshipFilter
+	ListRelationshipsRequest             = sdkauthorization.ListRelationshipsRequest
+	ListRelationshipsResponse            = sdkauthorization.ListRelationshipsResponse
+	AddRelationshipRequest               = sdkauthorization.AddRelationshipRequest
+	AddRelationshipResponse              = sdkauthorization.AddRelationshipResponse
+	DeleteRelationshipRequest            = sdkauthorization.DeleteRelationshipRequest
+	DeleteRelationshipResponse           = sdkauthorization.DeleteRelationshipResponse
+	SetRelationshipsRequest              = sdkauthorization.SetRelationshipsRequest
+	SetRelationshipsResponse             = sdkauthorization.SetRelationshipsResponse
+	AuthorizationModel                   = sdkauthorization.AuthorizationModel
+	AuthorizationModelRef                = sdkauthorization.AuthorizationModelRef
+	AuthorizationModelResourceType       = sdkauthorization.AuthorizationModelResourceType
+	AuthorizationModelRelation           = sdkauthorization.AuthorizationModelRelation
+	AuthorizationModelAction             = sdkauthorization.AuthorizationModelAction
+	AuthorizationModelAllowedTarget      = sdkauthorization.AuthorizationModelAllowedTarget
+	SubjectSetType                       = sdkauthorization.SubjectSetType
+	AuthorizationSubjectSetType          = sdkauthorization.SubjectSetType
+	GetActiveModelRefResponse            = sdkauthorization.GetActiveModelRefResponse
+	SetActiveModelRequest                = sdkauthorization.SetActiveModelRequest
+	SetActiveModelResponse               = sdkauthorization.SetActiveModelResponse
+	AuthorizationModelResourceTypeFilter = sdkauthorization.AuthorizationModelResourceTypeFilter
+	ListActiveModelResourceTypesRequest  = sdkauthorization.ListActiveModelResourceTypesRequest
+	ListActiveModelResourceTypesResponse = sdkauthorization.ListActiveModelResourceTypesResponse
 )
 
 const (
 	// AuthorizationSubjectTypeSubject identifies canonical Gestalt subjects in
 	// managed authorization relationships.
-	AuthorizationSubjectTypeSubject = sdkauthorization.AuthorizationSubjectTypeSubject
+	AuthorizationSubjectTypeSubject      = sdkauthorization.AuthorizationSubjectTypeSubject
+	AuthorizationSourceLayerUnspecified  = sdkauthorization.SourceLayerUnspecified
+	AuthorizationSourceLayerStaticConfig = sdkauthorization.SourceLayerStaticConfig
+	AuthorizationSourceLayerRuntime      = sdkauthorization.SourceLayerRuntime
 )
 
 // NewAuthorizationSubject creates a subject reference for authorization requests.
@@ -100,9 +99,9 @@ func NewAuthorizationModelRef(id, version string, createdAt time.Time) *Authoriz
 	return sdkauthorization.NewAuthorizationModelRef(id, version, createdAt)
 }
 
-// NewAccessEvaluationRequest creates an access-evaluation request.
-func NewAccessEvaluationRequest(subject *AuthorizationSubject, action *AuthorizationAction, resource *AuthorizationResource) *AccessEvaluationRequest {
-	return sdkauthorization.NewAccessEvaluationRequest(subject, action, resource)
+// NewCheckAccessRequest creates an access-check request.
+func NewCheckAccessRequest(subject *AuthorizationSubject, action *AuthorizationAction, resource *AuthorizationResource) *CheckAccessRequest {
+	return sdkauthorization.NewCheckAccessRequest(subject, action, resource)
 }
 
 // NewRelationship creates a relationship tuple for authorization writes.
@@ -113,21 +112,6 @@ func NewRelationship(subject *AuthorizationSubject, relation string, resource *A
 // NewRelationshipWithTarget creates a generalized authorization tuple.
 func NewRelationshipWithTarget(target *AuthorizationRelationshipTarget, relation string, resource *AuthorizationResource) *Relationship {
 	return sdkauthorization.NewRelationshipWithTarget(target, relation, resource)
-}
-
-// NewRelationshipKey creates a relationship key for authorization deletes.
-func NewRelationshipKey(subject *AuthorizationSubject, relation string, resource *AuthorizationResource) *RelationshipKey {
-	return sdkauthorization.NewRelationshipKey(subject, relation, resource)
-}
-
-// NewRelationshipKeyWithTarget creates a generalized authorization tuple key.
-func NewRelationshipKeyWithTarget(target *AuthorizationRelationshipTarget, relation string, resource *AuthorizationResource) *RelationshipKey {
-	return sdkauthorization.NewRelationshipKeyWithTarget(target, relation, resource)
-}
-
-// NewWriteRelationshipsRequest creates a relationship mutation request.
-func NewWriteRelationshipsRequest(writes []*Relationship, deletes []*RelationshipKey) *WriteRelationshipsRequest {
-	return sdkauthorization.NewWriteRelationshipsRequest(writes, deletes)
 }
 
 // NewAuthorizationModelSubjectTypeTarget allows a relation target subject type.
@@ -143,27 +127,6 @@ func NewAuthorizationModelResourceTypeTarget(resourceType string) *Authorization
 // NewAuthorizationModelSubjectSetAllowedTarget allows a relation target subject set.
 func NewAuthorizationModelSubjectSetAllowedTarget(resourceType, relation string) *AuthorizationModelAllowedTarget {
 	return sdkauthorization.NewAuthorizationModelSubjectSetAllowedTarget(resourceType, relation)
-}
-
-// NewAuthorizationModelThisRewrite includes directly related targets.
-func NewAuthorizationModelThisRewrite() *AuthorizationModelRewrite {
-	return sdkauthorization.NewAuthorizationModelThisRewrite()
-}
-
-// NewAuthorizationModelComputedUsersetRewrite computes another relation on the same resource.
-func NewAuthorizationModelComputedUsersetRewrite(relation string) *AuthorizationModelRewrite {
-	return sdkauthorization.NewAuthorizationModelComputedUsersetRewrite(relation)
-}
-
-// NewAuthorizationModelTupleToUsersetRewrite follows tuplesetRelation and then
-// computes computedRelation on each related resource.
-func NewAuthorizationModelTupleToUsersetRewrite(tuplesetRelation, computedRelation string) *AuthorizationModelRewrite {
-	return sdkauthorization.NewAuthorizationModelTupleToUsersetRewrite(tuplesetRelation, computedRelation)
-}
-
-// NewAuthorizationModelUnionRewrite unions multiple rewrite branches.
-func NewAuthorizationModelUnionRewrite(children ...*AuthorizationModelRewrite) *AuthorizationModelRewrite {
-	return sdkauthorization.NewAuthorizationModelUnionRewrite(children...)
 }
 
 var sharedAuthorizationTransport sharedManagerTransport[proto.AuthorizationProviderClient]
@@ -190,11 +153,3 @@ type AuthorizationProvider interface {
 	Provider
 	sdkauthorization.Provider
 }
-
-// AuthorizationProviderEffectiveSearch is implemented by providers that can
-// search through computed usersets and inherited relationships.
-type AuthorizationProviderEffectiveSearch = sdkauthorization.EffectiveSearch
-
-// AuthorizationProviderExpansion is implemented by providers that can explain
-// the relationship targets contributing to one resource relation.
-type AuthorizationProviderExpansion = sdkauthorization.Expansion

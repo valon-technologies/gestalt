@@ -1,5 +1,4 @@
 import { create } from "@bufbuild/protobuf";
-import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
   Code,
   ConnectError,
@@ -9,79 +8,49 @@ import {
 } from "@connectrpc/connect";
 
 import {
-  AccessDecisionSchema,
-  AccessEvaluationRequestSchema,
-  AccessEvaluationsRequestSchema,
-  AccessEvaluationsResponseSchema,
-  ActionSearchRequestSchema,
-  ActionSearchResponseSchema,
   ActionSchema,
-  AuthorizationMetadataSchema,
+  AddRelationshipRequestSchema,
+  AddRelationshipResponseSchema,
+  AuthorizationModelActionSchema,
+  AuthorizationModelAllowedTargetSchema,
   AuthorizationModelRefSchema,
+  AuthorizationModelRelationSchema,
+  AuthorizationModelResourceTypeFilterSchema,
+  AuthorizationModelResourceTypeSchema,
+  AuthorizationModelSchema,
   AuthorizationProvider as AuthorizationProviderService,
-  EffectiveSubjectSearchRequestSchema,
-  EffectiveSubjectSearchResponseSchema,
-  ExpandNodeSchema,
-  ExpandRequestSchema,
-  ExpandResponseSchema,
-  GetActiveModelResponseSchema,
-  ListModelsRequestSchema,
-  ListModelsResponseSchema,
-  ReadRelationshipsRequestSchema,
-  ReadRelationshipsResponseSchema,
-  RelationshipKeySchema,
+  CheckAccessManyRequestSchema,
+  CheckAccessRequestSchema,
+  ListActiveModelResourceTypesRequestSchema,
+  ListRelationshipsRequestSchema,
+  RelationshipFilterSchema,
   RelationshipSchema,
   RelationshipTargetSchema,
+  RelationshipTupleSchema,
   ResourceSchema,
-  ResourceSearchRequestSchema,
-  ResourceSearchResponseSchema,
+  SetActiveModelRequestSchema,
+  SetRelationshipsRequestSchema,
   SubjectSchema,
-  SubjectSearchRequestSchema,
-  SubjectSearchResponseSchema,
   SubjectSetSchema,
-  WriteModelRequestSchema,
-  WriteRelationshipsRequestSchema,
-  type AccessDecision as ProtoAccessDecision,
-  type AccessEvaluationRequest as ProtoAccessEvaluationRequest,
-  type AccessEvaluationsRequest as ProtoAccessEvaluationsRequest,
-  type AccessEvaluationsResponse as ProtoAccessEvaluationsResponse,
   type Action as ProtoAction,
-  type ActionSearchRequest as ProtoActionSearchRequest,
-  type ActionSearchResponse as ProtoActionSearchResponse,
-  type AuthorizationMetadata as ProtoAuthorizationMetadata,
   type AuthorizationModel as ProtoAuthorizationModel,
   type AuthorizationModelAction as ProtoAuthorizationModelAction,
   type AuthorizationModelAllowedTarget as ProtoAuthorizationModelAllowedTarget,
-  type AuthorizationModelComputedUserset as ProtoAuthorizationModelComputedUserset,
   type AuthorizationModelRef as ProtoAuthorizationModelRef,
   type AuthorizationModelRelation as ProtoAuthorizationModelRelation,
   type AuthorizationModelResourceType as ProtoAuthorizationModelResourceType,
-  type AuthorizationModelRewrite as ProtoAuthorizationModelRewrite,
-  type AuthorizationModelRewriteUnion as ProtoAuthorizationModelRewriteUnion,
-  type AuthorizationModelSubjectSetTarget as ProtoAuthorizationModelSubjectSetTarget,
-  type AuthorizationModelTupleToUserset as ProtoAuthorizationModelTupleToUserset,
-  type EffectiveSubjectSearchRequest as ProtoEffectiveSubjectSearchRequest,
-  type EffectiveSubjectSearchResponse as ProtoEffectiveSubjectSearchResponse,
-  type ExpandNode as ProtoExpandNode,
-  type ExpandRequest as ProtoExpandRequest,
-  type ExpandResponse as ProtoExpandResponse,
-  type GetActiveModelResponse as ProtoGetActiveModelResponse,
-  type ListModelsRequest as ProtoListModelsRequest,
-  type ListModelsResponse as ProtoListModelsResponse,
-  type ReadRelationshipsRequest as ProtoReadRelationshipsRequest,
-  type ReadRelationshipsResponse as ProtoReadRelationshipsResponse,
+  type AuthorizationModelResourceTypeFilter as ProtoAuthorizationModelResourceTypeFilter,
+  type CheckAccessRequest as ProtoCheckAccessRequest,
+  type CheckAccessResponse as ProtoCheckAccessResponse,
   type Relationship as ProtoRelationship,
-  type RelationshipKey as ProtoRelationshipKey,
+  type RelationshipFilter as ProtoRelationshipFilter,
   type RelationshipTarget as ProtoRelationshipTarget,
+  type RelationshipTuple as ProtoRelationshipTuple,
   type Resource as ProtoResource,
-  type ResourceSearchRequest as ProtoResourceSearchRequest,
-  type ResourceSearchResponse as ProtoResourceSearchResponse,
   type Subject as ProtoSubject,
-  type SubjectSearchRequest as ProtoSubjectSearchRequest,
-  type SubjectSearchResponse as ProtoSubjectSearchResponse,
   type SubjectSet as ProtoSubjectSet,
-  type WriteModelRequest as ProtoWriteModelRequest,
-  type WriteRelationshipsRequest as ProtoWriteRelationshipsRequest,
+  RelationshipTargetType,
+  SourceLayer,
 } from "./internal/gen/v1/authorization_pb.ts";
 import {
   dateFromTimestamp,
@@ -106,8 +75,9 @@ type AuthorizationProviderServiceImpl = Partial<
   ServiceImpl<typeof AuthorizationProviderService>
 >;
 
-/** Subject type used for canonical Gestalt subject ids in managed grants. */
 export const AUTHORIZATION_SUBJECT_TYPE_SUBJECT = "subject";
+
+export { RelationshipTargetType, SourceLayer };
 
 export interface AuthorizationSubject {
   type: string;
@@ -141,130 +111,81 @@ export interface AuthorizationAction {
   properties?: JsonObjectInput | undefined;
 }
 
-export interface AuthorizationEvaluateInput {
+export interface AuthorizationCheckAccessInput {
   subject?: AuthorizationSubject | undefined;
   action?: AuthorizationAction | undefined;
   resource?: AuthorizationResource | undefined;
-  context?: JsonObjectInput | undefined;
 }
 
 export interface AuthorizationDecision {
   allowed?: boolean | undefined;
-  context?: JsonObjectInput | undefined;
   modelId?: string | undefined;
 }
 
-export interface AuthorizationEvaluateManyInput {
-  requests: readonly AuthorizationEvaluateInput[];
+export interface AuthorizationCheckAccessManyInput {
+  requests: readonly AuthorizationCheckAccessInput[];
 }
 
-export interface AuthorizationEvaluationsResponse {
+export interface AuthorizationCheckAccessManyResponse {
   decisions: readonly AuthorizationDecision[];
 }
 
-export interface AuthorizationSearchResourcesInput {
-  subject?: AuthorizationSubject | undefined;
-  action?: AuthorizationAction | undefined;
-  resourceType?: string | undefined;
-  context?: JsonObjectInput | undefined;
-  pageSize?: number | undefined;
-  pageToken?: string | undefined;
-}
-
-export interface AuthorizationResourceSearch {
-  resources: readonly AuthorizationResource[];
-  nextPageToken?: string | undefined;
-  modelId?: string | undefined;
-}
-
-export interface AuthorizationSearchSubjectsInput {
+export interface AuthorizationRelationshipTuple {
+  target?: AuthorizationRelationshipTarget | undefined;
+  relation: string;
   resource?: AuthorizationResource | undefined;
-  action?: AuthorizationAction | undefined;
-  subjectType?: string | undefined;
-  context?: JsonObjectInput | undefined;
-  pageSize?: number | undefined;
-  pageToken?: string | undefined;
-}
-
-export interface AuthorizationSubjectSearch {
-  subjects: readonly AuthorizationSubject[];
-  nextPageToken?: string | undefined;
-  modelId?: string | undefined;
-}
-
-export interface AuthorizationEffectiveSearchSubjectsInput {
-  resource?: AuthorizationResource | undefined;
-  action?: AuthorizationAction | undefined;
-  context?: JsonObjectInput | undefined;
-  pageSize?: number | undefined;
-  pageToken?: string | undefined;
-}
-
-export interface AuthorizationEffectiveSubjectSearch {
-  targets: readonly AuthorizationRelationshipTarget[];
-  nextPageToken?: string | undefined;
-  modelId?: string | undefined;
-  truncated?: boolean | undefined;
-}
-
-export interface AuthorizationSearchActionsInput {
-  subject?: AuthorizationSubject | undefined;
-  resource?: AuthorizationResource | undefined;
-  context?: JsonObjectInput | undefined;
-  pageSize?: number | undefined;
-  pageToken?: string | undefined;
-}
-
-export interface AuthorizationActionSearch {
-  actions: readonly AuthorizationAction[];
-  nextPageToken?: string | undefined;
-  modelId?: string | undefined;
-}
-
-export interface AuthorizationMetadata {
-  capabilities?: readonly string[] | undefined;
-  activeModelId?: string | undefined;
 }
 
 export interface AuthorizationRelationship {
-  subject?: AuthorizationSubject | undefined;
-  relation: string;
-  resource?: AuthorizationResource | undefined;
+  tuple?: AuthorizationRelationshipTuple | undefined;
   properties?: JsonObjectInput | undefined;
-  target?: AuthorizationRelationshipTarget | undefined;
+  sourceLayer?: SourceLayer | undefined;
 }
 
-export interface AuthorizationRelationshipKey {
-  subject?: AuthorizationSubject | undefined;
-  relation: string;
-  resource?: AuthorizationResource | undefined;
+export interface AuthorizationRelationshipFilter {
   target?: AuthorizationRelationshipTarget | undefined;
-}
-
-export interface AuthorizationReadRelationshipsInput {
-  subject?: AuthorizationSubject | undefined;
   relation?: string | undefined;
   resource?: AuthorizationResource | undefined;
+  targetType?: RelationshipTargetType | undefined;
+  targetEntityType?: string | undefined;
+  resourceType?: string | undefined;
+  sourceLayer?: SourceLayer | undefined;
+}
+
+export interface AuthorizationListRelationshipsInput {
+  filter?: AuthorizationRelationshipFilter | undefined;
   pageSize?: number | undefined;
   pageToken?: string | undefined;
-  modelId?: string | undefined;
-  target?: AuthorizationRelationshipTarget | undefined;
 }
 
-export interface AuthorizationReadRelationships {
+export interface AuthorizationListRelationships {
   relationships: readonly AuthorizationRelationship[];
   nextPageToken?: string | undefined;
-  modelId?: string | undefined;
 }
 
-export interface AuthorizationWriteRelationshipsInput {
-  writes?: readonly AuthorizationRelationship[] | undefined;
-  deletes?: readonly AuthorizationRelationshipKey[] | undefined;
-  modelId?: string | undefined;
+export interface AuthorizationAddRelationshipInput {
+  relationship?: AuthorizationRelationship | undefined;
+}
+
+export interface AuthorizationAddRelationshipResponse {
+  relationship?: AuthorizationRelationship | undefined;
+}
+
+export interface AuthorizationDeleteRelationshipInput {
+  relationshipTuple?: AuthorizationRelationshipTuple | undefined;
+}
+
+export interface AuthorizationSetRelationshipsInput {
+  relationships: readonly AuthorizationRelationship[];
+}
+
+export interface AuthorizationSetRelationshipsResponse {
+  relationships: readonly AuthorizationRelationship[];
 }
 
 export interface AuthorizationModel {
-  version?: number | undefined;
+  id?: string | undefined;
+  version?: string | undefined;
   resourceTypes?: readonly AuthorizationModelResourceType[] | undefined;
 }
 
@@ -272,60 +193,32 @@ export interface AuthorizationModelResourceType {
   name: string;
   relations?: readonly AuthorizationModelRelation[] | undefined;
   actions?: readonly AuthorizationModelAction[] | undefined;
+  sourceLayer?: SourceLayer | undefined;
 }
 
 export interface AuthorizationModelRelation {
   name: string;
-  subjectTypes?: readonly string[] | undefined;
   allowedTargets?: readonly AuthorizationModelAllowedTarget[] | undefined;
-  rewrite?: AuthorizationModelRewrite | undefined;
 }
 
 export interface AuthorizationModelAction {
   name: string;
   relations?: readonly string[] | undefined;
-  rewrite?: AuthorizationModelRewrite | undefined;
 }
 
 export type AuthorizationModelAllowedTargetKind =
   | { case: "subjectType"; value: string }
   | { case: "resourceType"; value: string }
-  | { case: "subjectSet"; value: AuthorizationModelSubjectSetTarget }
+  | { case: "subjectSetType"; value: AuthorizationSubjectSetType }
   | { case: undefined; value?: undefined };
 
 export interface AuthorizationModelAllowedTarget {
   kind: AuthorizationModelAllowedTargetKind;
 }
 
-export interface AuthorizationModelSubjectSetTarget {
+export interface AuthorizationSubjectSetType {
   resourceType: string;
   relation: string;
-}
-
-export type AuthorizationModelRewriteKind =
-  | { case: "this"; value: AuthorizationModelRewriteThis }
-  | { case: "computedUserset"; value: AuthorizationModelComputedUserset }
-  | { case: "tupleToUserset"; value: AuthorizationModelTupleToUserset }
-  | { case: "union"; value: AuthorizationModelRewriteUnion }
-  | { case: undefined; value?: undefined };
-
-export interface AuthorizationModelRewrite {
-  kind: AuthorizationModelRewriteKind;
-}
-
-export interface AuthorizationModelRewriteThis {}
-
-export interface AuthorizationModelComputedUserset {
-  relation: string;
-}
-
-export interface AuthorizationModelTupleToUserset {
-  tuplesetRelation: string;
-  computedRelation: string;
-}
-
-export interface AuthorizationModelRewriteUnion {
-  children?: readonly AuthorizationModelRewrite[] | undefined;
 }
 
 export interface AuthorizationModelRef {
@@ -334,102 +227,124 @@ export interface AuthorizationModelRef {
   createdAt?: Date | undefined;
 }
 
+export interface AuthorizationGetActiveModelRefResponse {
+  model?: AuthorizationModelRef | undefined;
+}
+
+export interface AuthorizationSetActiveModelInput {
+  model?: AuthorizationModel | undefined;
+}
+
+export interface AuthorizationSetActiveModelResponse {
+  model?: AuthorizationModelRef | undefined;
+}
+
+export interface AuthorizationModelResourceTypeFilter {
+  name?: string | undefined;
+  sourceLayer?: SourceLayer | undefined;
+}
+
+export interface AuthorizationListActiveModelResourceTypesInput {
+  modelId?: string | undefined;
+  filter?: AuthorizationModelResourceTypeFilter | undefined;
+}
+
+export interface AuthorizationListActiveModelResourceTypesResponse {
+  resourceTypes: readonly AuthorizationModelResourceType[];
+}
+
+export type AuthorizationEvaluateInput = AuthorizationCheckAccessInput;
+export type AuthorizationEvaluateManyInput = AuthorizationCheckAccessManyInput;
+export type AuthorizationEvaluationsResponse = AuthorizationCheckAccessManyResponse;
+export type AuthorizationReadRelationshipsInput = AuthorizationListRelationshipsInput;
+export type AuthorizationReadRelationships = AuthorizationListRelationships;
+export type AuthorizationWriteRelationshipsInput = AuthorizationSetRelationshipsInput;
+export type AuthorizationGetActiveModel = AuthorizationGetActiveModelRefResponse;
+export type AuthorizationWriteModelInput = AuthorizationSetActiveModelInput;
+export type AuthorizationModelSubjectSetTarget = AuthorizationSubjectSetType;
+export type AuthorizationRelationshipKey = AuthorizationRelationshipTuple;
+export interface AuthorizationMetadata {
+  capabilities?: readonly string[] | undefined;
+  activeModelId?: string | undefined;
+}
+export interface AuthorizationResourceSearch {
+  resources: readonly AuthorizationResource[];
+  nextPageToken?: string | undefined;
+  modelId?: string | undefined;
+}
+export interface AuthorizationSubjectSearch {
+  subjects: readonly AuthorizationSubject[];
+  nextPageToken?: string | undefined;
+  modelId?: string | undefined;
+}
+export interface AuthorizationActionSearch {
+  actions: readonly AuthorizationAction[];
+  nextPageToken?: string | undefined;
+  modelId?: string | undefined;
+}
+export type AuthorizationSearchResourcesInput = AuthorizationListRelationshipsInput;
+export type AuthorizationSearchSubjectsInput = AuthorizationListRelationshipsInput;
+export type AuthorizationSearchActionsInput = AuthorizationListRelationshipsInput;
+export type AuthorizationEffectiveSearchSubjectsInput = AuthorizationListRelationshipsInput;
+export interface AuthorizationEffectiveSubjectSearch {
+  targets: readonly AuthorizationRelationshipTarget[];
+  nextPageToken?: string | undefined;
+  modelId?: string | undefined;
+  truncated?: boolean | undefined;
+}
 export interface AuthorizationExpandInput {
   resource?: AuthorizationResource | undefined;
   relation?: string | undefined;
-  context?: JsonObjectInput | undefined;
-  maxDepth?: number | undefined;
-  modelId?: string | undefined;
 }
-
 export interface AuthorizationExpandNode {
   target?: AuthorizationRelationshipTarget | undefined;
   relation?: string | undefined;
   children?: readonly AuthorizationExpandNode[] | undefined;
 }
-
 export interface AuthorizationExpand {
   root?: AuthorizationExpandNode | undefined;
-  truncated?: boolean | undefined;
-  cycleDetected?: boolean | undefined;
-  maxDepthReached?: boolean | undefined;
-  modelId?: string | undefined;
 }
-
-export interface AuthorizationGetActiveModel {
-  model?: AuthorizationModelRef | undefined;
-}
-
 export interface AuthorizationListModelsInput {
   pageSize?: number | undefined;
   pageToken?: string | undefined;
 }
-
 export interface AuthorizationListModels {
   models?: readonly AuthorizationModelRef[] | undefined;
   nextPageToken?: string | undefined;
 }
-
-export interface AuthorizationWriteModelInput {
-  model?: AuthorizationModel | undefined;
+export interface AuthorizationModelRewriteThis {}
+export interface AuthorizationModelComputedUserset {
+  relation: string;
+}
+export interface AuthorizationModelTupleToUserset {
+  tuplesetRelation: string;
+  computedRelation: string;
+}
+export interface AuthorizationModelRewriteUnion {
+  children?: readonly AuthorizationModelRewrite[] | undefined;
+}
+export type AuthorizationModelRewriteKind =
+  | { case: "this"; value: AuthorizationModelRewriteThis }
+  | { case: "computedUserset"; value: AuthorizationModelComputedUserset }
+  | { case: "tupleToUserset"; value: AuthorizationModelTupleToUserset }
+  | { case: "union"; value: AuthorizationModelRewriteUnion }
+  | { case: undefined; value?: undefined };
+export interface AuthorizationModelRewrite {
+  kind: AuthorizationModelRewriteKind;
 }
 
-const sharedAuthorizationTransport: {
-  target: string;
-  token: string;
-  client: AuthorizationImpl | undefined;
-} = {
-  target: "",
-  token: "",
-  client: undefined,
-};
-
-/**
- * Fakeable contract for authorization calls.
- */
 export interface Authorization {
-  evaluate(request: AuthorizationEvaluateInput): Promise<AuthorizationDecision>;
-  evaluateMany(
-    request: AuthorizationEvaluateManyInput,
-  ): Promise<AuthorizationEvaluationsResponse>;
-  searchResources(
-    request: AuthorizationSearchResourcesInput,
-  ): Promise<AuthorizationResourceSearch>;
-  searchSubjects(
-    request: AuthorizationSearchSubjectsInput,
-  ): Promise<AuthorizationSubjectSearch>;
-  effectiveSearchResources(
-    request: AuthorizationSearchResourcesInput,
-  ): Promise<AuthorizationResourceSearch>;
-  effectiveSearchSubjects(
-    request: AuthorizationEffectiveSearchSubjectsInput,
-  ): Promise<AuthorizationEffectiveSubjectSearch>;
-  searchActions(
-    request: AuthorizationSearchActionsInput,
-  ): Promise<AuthorizationActionSearch>;
-  expand(request: AuthorizationExpandInput): Promise<AuthorizationExpand>;
-  readRelationships(
-    request: AuthorizationReadRelationshipsInput,
-  ): Promise<AuthorizationReadRelationships>;
-  writeRelationships(
-    request: AuthorizationWriteRelationshipsInput,
-  ): Promise<void>;
-  getMetadata(): Promise<AuthorizationMetadata>;
-  getActiveModel(): Promise<AuthorizationGetActiveModel>;
-  listModels(
-    request?: AuthorizationListModelsInput,
-  ): Promise<AuthorizationListModels>;
-  writeModel(
-    request: AuthorizationWriteModelInput,
-  ): Promise<AuthorizationModelRef>;
+  checkAccess(request: AuthorizationCheckAccessInput): Promise<AuthorizationDecision>;
+  checkAccessMany(request: AuthorizationCheckAccessManyInput): Promise<AuthorizationCheckAccessManyResponse>;
+  listRelationships(request?: AuthorizationListRelationshipsInput): Promise<AuthorizationListRelationships>;
+  addRelationship(request: AuthorizationAddRelationshipInput): Promise<AuthorizationAddRelationshipResponse>;
+  deleteRelationship(request: AuthorizationDeleteRelationshipInput): Promise<void>;
+  setRelationships(request: AuthorizationSetRelationshipsInput): Promise<AuthorizationSetRelationshipsResponse>;
+  getActiveModelRef(): Promise<AuthorizationGetActiveModelRefResponse>;
+  setActiveModel(request: AuthorizationSetActiveModelInput): Promise<AuthorizationSetActiveModelResponse>;
+  listActiveModelResourceTypes(request?: AuthorizationListActiveModelResourceTypesInput): Promise<AuthorizationListActiveModelResourceTypesResponse>;
 }
 
-/**
- * Client for the configured authorization provider.
- *
- * The client accepts plain SDK request objects and keeps transport message
- * construction inside the SDK.
- */
 class AuthorizationImpl implements Authorization {
   private readonly client: Client<typeof AuthorizationProviderService>;
 
@@ -445,423 +360,234 @@ class AuthorizationImpl implements Authorization {
     this.client = createClient(AuthorizationProviderService, transport);
   }
 
-  async evaluate(
-    request: AuthorizationEvaluateInput,
-  ): Promise<AuthorizationDecision> {
+  async checkAccess(request: AuthorizationCheckAccessInput) {
     return authorizationDecisionFromProto(
-      await this.client.evaluate(authorizationEvaluateInputToProto(request)),
+      await this.client.checkAccess(authorizationCheckAccessInputToProto(request)),
     );
   }
 
-  async evaluateMany(
-    request: AuthorizationEvaluateManyInput,
-  ): Promise<AuthorizationEvaluationsResponse> {
-    return authorizationEvaluationsResponseFromProto(
-      await this.client.evaluateMany(authorizationEvaluateManyInputToProto(request)),
+  async checkAccessMany(request: AuthorizationCheckAccessManyInput) {
+    return authorizationCheckAccessManyResponseFromProto(
+      await this.client.checkAccessMany(authorizationCheckAccessManyInputToProto(request)),
     );
   }
 
-  async searchResources(
-    request: AuthorizationSearchResourcesInput,
-  ): Promise<AuthorizationResourceSearch> {
-    return authorizationResourceSearchFromProto(
-      await this.client.searchResources(authorizationSearchResourcesInputToProto(request)),
+  async listRelationships(request: AuthorizationListRelationshipsInput = {}) {
+    return authorizationListRelationshipsFromProto(
+      await this.client.listRelationships(authorizationListRelationshipsInputToProto(request)),
     );
   }
 
-  async searchSubjects(
-    request: AuthorizationSearchSubjectsInput,
-  ): Promise<AuthorizationSubjectSearch> {
-    return authorizationSubjectSearchFromProto(
-      await this.client.searchSubjects(authorizationSearchSubjectsInputToProto(request)),
+  async addRelationship(request: AuthorizationAddRelationshipInput) {
+    return {
+      relationship: authorizationRelationshipFromProto(
+        (await this.client.addRelationship(create(AddRelationshipRequestSchema, {
+          relationship: request.relationship === undefined ? undefined : authorizationRelationshipToProto(request.relationship),
+        }))).relationship,
+      ),
+    };
+  }
+
+  async deleteRelationship(request: AuthorizationDeleteRelationshipInput) {
+    await this.client.deleteRelationship({
+      relationshipTuple: request.relationshipTuple === undefined ? undefined : authorizationRelationshipTupleToProto(request.relationshipTuple),
+    });
+  }
+
+  async setRelationships(request: AuthorizationSetRelationshipsInput) {
+    return authorizationSetRelationshipsResponseFromProto(
+      await this.client.setRelationships(create(SetRelationshipsRequestSchema, {
+        relationships: request.relationships.map(authorizationRelationshipToProto),
+      })),
     );
   }
 
-  async effectiveSearchResources(
-    request: AuthorizationSearchResourcesInput,
-  ): Promise<AuthorizationResourceSearch> {
-    return authorizationResourceSearchFromProto(
-      await this.client.effectiveSearchResources(authorizationSearchResourcesInputToProto(request)),
-    );
+  async getActiveModelRef() {
+    return {
+      model: authorizationModelRefFromProto((await this.client.getActiveModelRef({})).model),
+    };
   }
 
-  async effectiveSearchSubjects(
-    request: AuthorizationEffectiveSearchSubjectsInput,
-  ): Promise<AuthorizationEffectiveSubjectSearch> {
-    return authorizationEffectiveSubjectSearchFromProto(
-      await this.client.effectiveSearchSubjects(authorizationEffectiveSearchSubjectsInputToProto(request)),
-    );
+  async setActiveModel(request: AuthorizationSetActiveModelInput) {
+    return {
+      model: authorizationModelRefFromProto(
+        (await this.client.setActiveModel(create(SetActiveModelRequestSchema, {
+          model: request.model === undefined ? undefined : authorizationModelToProto(request.model),
+        }))).model,
+      ),
+    };
   }
 
-  async searchActions(
-    request: AuthorizationSearchActionsInput,
-  ): Promise<AuthorizationActionSearch> {
-    return authorizationActionSearchFromProto(
-      await this.client.searchActions(authorizationSearchActionsInputToProto(request)),
-    );
-  }
-
-  async expand(
-    request: AuthorizationExpandInput,
-  ): Promise<AuthorizationExpand> {
-    return authorizationExpandFromProto(
-      await this.client.expand(authorizationExpandInputToProto(request)),
-    );
-  }
-
-  async readRelationships(
-    request: AuthorizationReadRelationshipsInput,
-  ): Promise<AuthorizationReadRelationships> {
-    return authorizationReadRelationshipsFromProto(
-      await this.client.readRelationships(authorizationReadRelationshipsInputToProto(request)),
-    );
-  }
-
-  /** Writes and deletes authorization relationships. */
-  async writeRelationships(
-    request: AuthorizationWriteRelationshipsInput,
-  ): Promise<void> {
-    await this.client.writeRelationships(authorizationWriteRelationshipsInputToProto(request));
-  }
-
-  async getMetadata(): Promise<AuthorizationMetadata> {
-    return authorizationMetadataFromProto(await this.client.getMetadata({}));
-  }
-
-  async getActiveModel(): Promise<AuthorizationGetActiveModel> {
-    return authorizationGetActiveModelFromProto(await this.client.getActiveModel({}));
-  }
-
-  async listModels(
-    request: AuthorizationListModelsInput = {},
-  ): Promise<AuthorizationListModels> {
-    return authorizationListModelsFromProto(
-      await this.client.listModels(authorizationListModelsInputToProto(request)),
-    );
-  }
-
-  async writeModel(
-    request: AuthorizationWriteModelInput,
-  ): Promise<AuthorizationModelRef> {
-    return authorizationModelRefFromProtoRequired(
-      await this.client.writeModel(authorizationWriteModelInputToProto(request)),
-    );
+  async listActiveModelResourceTypes(request: AuthorizationListActiveModelResourceTypesInput = {}) {
+    return {
+      resourceTypes: (await this.client.listActiveModelResourceTypes(
+        authorizationListActiveModelResourceTypesInputToProto(request),
+      )).resourceTypes.map(authorizationModelResourceTypeFromProto),
+    };
   }
 }
 
 export interface AuthorizationProviderOptions extends ProviderBaseOptions {
-  evaluate: (
-    request: AuthorizationEvaluateInput,
-  ) => MaybePromise<AuthorizationDecision>;
-  evaluateMany: (
-    request: AuthorizationEvaluateManyInput,
-  ) => MaybePromise<AuthorizationEvaluationsResponse>;
-  searchResources: (
-    request: AuthorizationSearchResourcesInput,
-  ) => MaybePromise<AuthorizationResourceSearch>;
-  searchSubjects: (
-    request: AuthorizationSearchSubjectsInput,
-  ) => MaybePromise<AuthorizationSubjectSearch>;
-  effectiveSearchResources?: (
-    request: AuthorizationSearchResourcesInput,
-  ) => MaybePromise<AuthorizationResourceSearch>;
-  effectiveSearchSubjects?: (
-    request: AuthorizationEffectiveSearchSubjectsInput,
-  ) => MaybePromise<AuthorizationEffectiveSubjectSearch>;
-  searchActions: (
-    request: AuthorizationSearchActionsInput,
-  ) => MaybePromise<AuthorizationActionSearch>;
-  expand?: (
-    request: AuthorizationExpandInput,
-  ) => MaybePromise<AuthorizationExpand>;
-  getMetadata: () => MaybePromise<AuthorizationMetadata>;
-  readRelationships: (
-    request: AuthorizationReadRelationshipsInput,
-  ) => MaybePromise<AuthorizationReadRelationships>;
-  writeRelationships: (
-    request: AuthorizationWriteRelationshipsInput,
-  ) => MaybePromise<void>;
-  getActiveModel: () => MaybePromise<AuthorizationGetActiveModel>;
-  listModels: (
-    request: AuthorizationListModelsInput,
-  ) => MaybePromise<AuthorizationListModels>;
-  writeModel: (
-    request: AuthorizationWriteModelInput,
-  ) => MaybePromise<AuthorizationModelRef>;
+  checkAccess: (request: AuthorizationCheckAccessInput) => MaybePromise<AuthorizationDecision>;
+  checkAccessMany: (request: AuthorizationCheckAccessManyInput) => MaybePromise<AuthorizationCheckAccessManyResponse>;
+  listRelationships: (request: AuthorizationListRelationshipsInput) => MaybePromise<AuthorizationListRelationships>;
+  addRelationship: (request: AuthorizationAddRelationshipInput) => MaybePromise<AuthorizationAddRelationshipResponse>;
+  deleteRelationship: (request: AuthorizationDeleteRelationshipInput) => MaybePromise<void>;
+  setRelationships: (request: AuthorizationSetRelationshipsInput) => MaybePromise<AuthorizationSetRelationshipsResponse>;
+  getActiveModelRef: () => MaybePromise<AuthorizationGetActiveModelRefResponse>;
+  setActiveModel: (request: AuthorizationSetActiveModelInput) => MaybePromise<AuthorizationSetActiveModelResponse>;
+  listActiveModelResourceTypes: (request: AuthorizationListActiveModelResourceTypesInput) => MaybePromise<AuthorizationListActiveModelResourceTypesResponse>;
 }
 
-export class AuthorizationProvider extends ProviderBase {
+export class AuthorizationProvider extends ProviderBase implements Authorization {
   readonly kind = "authorization" as const;
 
-  private readonly options: AuthorizationProviderOptions;
-
-  constructor(options: AuthorizationProviderOptions) {
+  constructor(private readonly options: AuthorizationProviderOptions) {
     super(options);
-    this.options = options;
   }
 
-  async evaluate(request: AuthorizationEvaluateInput) {
-    return await this.options.evaluate(request);
+  async checkAccess(request: AuthorizationCheckAccessInput) {
+    return await this.options.checkAccess(request);
   }
 
-  async evaluateMany(request: AuthorizationEvaluateManyInput) {
-    return await this.options.evaluateMany(request);
+  async checkAccessMany(request: AuthorizationCheckAccessManyInput) {
+    return await this.options.checkAccessMany(request);
   }
 
-  async searchResources(request: AuthorizationSearchResourcesInput) {
-    return await this.options.searchResources(request);
+  async listRelationships(request: AuthorizationListRelationshipsInput = {}) {
+    return await this.options.listRelationships(request);
   }
 
-  async searchSubjects(request: AuthorizationSearchSubjectsInput) {
-    return await this.options.searchSubjects(request);
+  async addRelationship(request: AuthorizationAddRelationshipInput) {
+    return await this.options.addRelationship(request);
   }
 
-  supportsEffectiveSearch(): boolean {
-    return (
-      this.options.effectiveSearchResources !== undefined &&
-      this.options.effectiveSearchSubjects !== undefined
-    );
+  async deleteRelationship(request: AuthorizationDeleteRelationshipInput) {
+    await this.options.deleteRelationship(request);
   }
 
-  async effectiveSearchResources(request: AuthorizationSearchResourcesInput) {
-    return await this.options.effectiveSearchResources?.(request);
+  async setRelationships(request: AuthorizationSetRelationshipsInput) {
+    return await this.options.setRelationships(request);
   }
 
-  async effectiveSearchSubjects(request: AuthorizationEffectiveSearchSubjectsInput) {
-    return await this.options.effectiveSearchSubjects?.(request);
+  async getActiveModelRef() {
+    return await this.options.getActiveModelRef();
   }
 
-  async searchActions(request: AuthorizationSearchActionsInput) {
-    return await this.options.searchActions(request);
+  async setActiveModel(request: AuthorizationSetActiveModelInput) {
+    return await this.options.setActiveModel(request);
   }
 
-  supportsExpand(): boolean {
-    return this.options.expand !== undefined;
-  }
-
-  async expand(request: AuthorizationExpandInput) {
-    return await this.options.expand?.(request);
-  }
-
-  async getMetadata() {
-    return await this.options.getMetadata();
-  }
-
-  async readRelationships(request: AuthorizationReadRelationshipsInput) {
-    return await this.options.readRelationships(request);
-  }
-
-  async writeRelationships(request: AuthorizationWriteRelationshipsInput): Promise<void> {
-    await this.options.writeRelationships(request);
-  }
-
-  async getActiveModel() {
-    return await this.options.getActiveModel();
-  }
-
-  async listModels(request: AuthorizationListModelsInput) {
-    return await this.options.listModels(request);
-  }
-
-  async writeModel(request: AuthorizationWriteModelInput) {
-    return await this.options.writeModel(request);
+  async listActiveModelResourceTypes(request: AuthorizationListActiveModelResourceTypesInput = {}) {
+    return await this.options.listActiveModelResourceTypes(request);
   }
 }
 
-export function defineAuthorizationProvider(
-  options: AuthorizationProviderOptions,
-): AuthorizationProvider {
+export function defineAuthorizationProvider(options: AuthorizationProviderOptions): AuthorizationProvider {
   return new AuthorizationProvider(options);
 }
 
-export function isAuthorizationProvider(
-  value: unknown,
-): value is AuthorizationProvider {
+export function isAuthorizationProvider(value: unknown): value is AuthorizationProvider {
   return (
     value instanceof AuthorizationProvider ||
     (typeof value === "object" &&
       value !== null &&
       "kind" in value &&
       String((value as { kind?: unknown }).kind ?? "") === "authorization" &&
-      "evaluate" in value &&
-      "evaluateMany" in value &&
-      "searchResources" in value &&
-      "searchSubjects" in value &&
-      "searchActions" in value &&
-      "getMetadata" in value &&
-      "readRelationships" in value &&
-      "writeRelationships" in value &&
-      "getActiveModel" in value &&
-      "listModels" in value &&
-      "writeModel" in value)
+      "checkAccess" in value &&
+      "checkAccessMany" in value &&
+      "listRelationships" in value &&
+      "addRelationship" in value &&
+      "deleteRelationship" in value &&
+      "setRelationships" in value &&
+      "getActiveModelRef" in value &&
+      "setActiveModel" in value &&
+      "listActiveModelResourceTypes" in value)
   );
 }
 
-export function createAuthorizationProviderService(
-  provider: AuthorizationProvider,
-): AuthorizationProviderServiceImpl {
+export function createAuthorizationProviderService(provider: AuthorizationProvider): AuthorizationProviderServiceImpl {
   return {
-    async evaluate(request) {
+    async checkAccess(request) {
       return authorizationDecisionToProto(
-        requiredAuthorizationResponse(
-          await provider.evaluate(authorizationEvaluateInputFromProto(request)),
-          "evaluate",
+        requiredAuthorizationResponse(await provider.checkAccess(authorizationCheckAccessInputFromProto(request)), "check access"),
+      );
+    },
+    async checkAccessMany(request) {
+      return authorizationCheckAccessManyResponseToProto(
+        requiredAuthorizationResponse(await provider.checkAccessMany({
+          requests: request.requests.map(authorizationCheckAccessInputFromProto),
+        }), "check access many"),
+      );
+    },
+    async listRelationships(request) {
+      return authorizationListRelationshipsToProto(
+        requiredAuthorizationResponse(await provider.listRelationships(authorizationListRelationshipsInputFromProto(request)), "list relationships"),
+      );
+    },
+    async addRelationship(request) {
+      return create(AddRelationshipResponseSchema, {
+        relationship: authorizationRelationshipToProtoRequired(
+          requiredAuthorizationResponse(await provider.addRelationship({
+            relationship: authorizationRelationshipFromProto(request.relationship),
+          }), "add relationship").relationship,
         ),
+      });
+    },
+    async deleteRelationship(request) {
+      await provider.deleteRelationship({
+        relationshipTuple: authorizationRelationshipTupleFromProto(request.relationshipTuple),
+      });
+      return {};
+    },
+    async setRelationships(request) {
+      return authorizationSetRelationshipsResponseToProto(
+        requiredAuthorizationResponse(await provider.setRelationships({
+          relationships: request.relationships.map(authorizationRelationshipFromProtoRequired),
+        }), "set relationships"),
       );
     },
-    async evaluateMany(request) {
-      return authorizationEvaluationsResponseToProto(
-        requiredAuthorizationResponse(
-          await provider.evaluateMany(authorizationEvaluateManyInputFromProto(request)),
-          "evaluate many",
-        ),
-      );
+    async getActiveModelRef() {
+      return {
+        model: authorizationModelRefToProto(requiredAuthorizationResponse(await provider.getActiveModelRef(), "active model ref").model),
+      };
     },
-    async searchResources(request) {
-      return authorizationResourceSearchToProto(
-        requiredAuthorizationResponse(
-          await provider.searchResources(authorizationSearchResourcesInputFromProto(request)),
-          "search resources",
-        ),
-      );
+    async setActiveModel(request) {
+      return {
+        model: authorizationModelRefToProto(requiredAuthorizationResponse(await provider.setActiveModel({
+          model: authorizationModelFromProto(request.model),
+        }), "set active model").model),
+      };
     },
-    async searchSubjects(request) {
-      return authorizationSubjectSearchToProto(
-        requiredAuthorizationResponse(
-          await provider.searchSubjects(authorizationSearchSubjectsInputFromProto(request)),
-          "search subjects",
-        ),
-      );
-    },
-    async effectiveSearchResources(request) {
-      if (!provider.supportsEffectiveSearch()) {
-        throw new ConnectError(
-          "authorization provider does not support effective search",
-          Code.Unimplemented,
-        );
-      }
-      return authorizationResourceSearchToProto(
-        requiredAuthorizationResponse(
-          await provider.effectiveSearchResources(authorizationSearchResourcesInputFromProto(request)),
-          "effective search resources",
-        ),
-      );
-    },
-    async effectiveSearchSubjects(request) {
-      if (!provider.supportsEffectiveSearch()) {
-        throw new ConnectError(
-          "authorization provider does not support effective search",
-          Code.Unimplemented,
-        );
-      }
-      return authorizationEffectiveSubjectSearchToProto(
-        requiredAuthorizationResponse(
-          await provider.effectiveSearchSubjects(authorizationEffectiveSearchSubjectsInputFromProto(request)),
-          "effective search subjects",
-        ),
-      );
-    },
-    async searchActions(request) {
-      return authorizationActionSearchToProto(
-        requiredAuthorizationResponse(
-          await provider.searchActions(authorizationSearchActionsInputFromProto(request)),
-          "search actions",
-        ),
-      );
-    },
-    async expand(request) {
-      if (!provider.supportsExpand()) {
-        throw new ConnectError(
-          "authorization provider does not support expansion",
-          Code.Unimplemented,
-        );
-      }
-      return authorizationExpandToProto(
-        requiredAuthorizationResponse(
-          await provider.expand(authorizationExpandInputFromProto(request)),
-          "expand",
-        ),
-      );
-    },
-    async getMetadata() {
-      const metadata = authorizationMetadataToProto(
-        requiredAuthorizationResponse(await provider.getMetadata(), "metadata"),
-      );
-      if (provider.supportsEffectiveSearch()) {
-        pushCapability(metadata.capabilities, "effective_search_resources");
-        pushCapability(metadata.capabilities, "effective_search_subjects");
-      }
-      if (provider.supportsExpand()) {
-        pushCapability(metadata.capabilities, "expand");
-      }
-      return metadata;
-    },
-    async readRelationships(request) {
-      return authorizationReadRelationshipsToProto(
-        requiredAuthorizationResponse(
-          await provider.readRelationships(authorizationReadRelationshipsInputFromProto(request)),
-          "read relationships",
-        ),
-      );
-    },
-    async writeRelationships(request) {
-      await provider.writeRelationships(authorizationWriteRelationshipsInputFromProto(request));
-      return create(EmptySchema, {});
-    },
-    async getActiveModel() {
-      return authorizationGetActiveModelToProto(
-        requiredAuthorizationResponse(
-          await provider.getActiveModel(),
-          "get active model",
-        ),
-      );
-    },
-    async listModels(request) {
-      return authorizationListModelsToProto(
-        requiredAuthorizationResponse(
-          await provider.listModels(authorizationListModelsInputFromProto(request)),
-          "list models",
-        ),
-      );
-    },
-    async writeModel(request) {
-      return authorizationModelRefToProto(
-        requiredAuthorizationResponse(
-          await provider.writeModel(authorizationWriteModelInputFromProto(request)),
-          "write model",
-        ),
-      );
+    async listActiveModelResourceTypes(request) {
+      return {
+        resourceTypes: requiredAuthorizationResponse(await provider.listActiveModelResourceTypes(
+          authorizationListActiveModelResourceTypesInputFromProto(request),
+        ), "list active model resource types").resourceTypes.map(authorizationModelResourceTypeToProto),
+      };
     },
   };
 }
 
-function requiredAuthorizationResponse<T>(
-  value: T | null | undefined,
-  label: string,
-): T {
+function requiredAuthorizationResponse<T>(value: T | null | undefined, label: string): T {
   if (value === null || value === undefined) {
-    throw new ConnectError(
-      `authorization provider returned nil ${label} response`,
-      Code.Internal,
-    );
+    throw new ConnectError(`authorization provider returned nil ${label} response`, Code.Internal);
   }
   return value;
 }
 
-/**
- * Returns a shared authorization capability for authored providers.
- */
+const sharedAuthorizationTransport: {
+  target: string;
+  token: string;
+  client: AuthorizationImpl | undefined;
+} = { target: "", token: "", client: undefined };
+
 export function Authorization(): Authorization {
   const target = resolveAuthorizationSocketTarget();
   const token = process.env[ENV_HOST_SERVICE_TOKEN]?.trim() ?? "";
-  if (
-    sharedAuthorizationTransport.client &&
-    sharedAuthorizationTransport.target === target &&
-    sharedAuthorizationTransport.token === token
-  ) {
+  if (sharedAuthorizationTransport.client && sharedAuthorizationTransport.target === target && sharedAuthorizationTransport.token === token) {
     return sharedAuthorizationTransport.client;
   }
-
   const client = new AuthorizationImpl(target, token);
   sharedAuthorizationTransport.target = target;
   sharedAuthorizationTransport.token = token;
@@ -869,480 +595,197 @@ export function Authorization(): Authorization {
   return client;
 }
 
-/** Creates an authorization subject reference. */
-export function authorizationSubject(
-  type: string,
-  id: string,
-  properties?: JsonObjectInput,
-): AuthorizationSubject {
+export function authorizationSubject(type: string, id: string, properties?: JsonObjectInput): AuthorizationSubject {
   return properties === undefined ? { type, id } : { type, id, properties };
 }
 
-/** Creates an authorization resource reference. */
-export function authorizationResource(
-  type: string,
-  id: string,
-  properties?: JsonObjectInput,
-): AuthorizationResource {
+export function authorizationResource(type: string, id: string, properties?: JsonObjectInput): AuthorizationResource {
   return properties === undefined ? { type, id } : { type, id, properties };
 }
 
-/** Creates an authorization subject-set reference. */
-export function authorizationSubjectSet(
-  resource: AuthorizationResource,
-  relation: string,
-): AuthorizationSubjectSet {
+export function authorizationSubjectSet(resource: AuthorizationResource, relation: string): AuthorizationSubjectSet {
   return { resource, relation };
 }
 
-/** Creates a relationship target from a subject. */
-export function authorizationSubjectTarget(
-  subject: AuthorizationSubject,
-): AuthorizationRelationshipTarget {
+export function authorizationSubjectTarget(subject: AuthorizationSubject): AuthorizationRelationshipTarget {
   return { kind: { case: "subject", value: subject } };
 }
 
-/** Creates a relationship target from a resource. */
-export function authorizationResourceTarget(
-  resource: AuthorizationResource,
-): AuthorizationRelationshipTarget {
+export function authorizationResourceTarget(resource: AuthorizationResource): AuthorizationRelationshipTarget {
   return { kind: { case: "resource", value: resource } };
 }
 
-/** Creates a relationship target from a subject set. */
-export function authorizationSubjectSetTarget(
-  resource: AuthorizationResource,
-  relation: string,
-): AuthorizationRelationshipTarget {
-  return {
-    kind: {
-      case: "subjectSet",
-      value: authorizationSubjectSet(resource, relation),
-    },
-  };
+export function authorizationSubjectSetTarget(resource: AuthorizationResource, relation: string): AuthorizationRelationshipTarget {
+  return { kind: { case: "subjectSet", value: authorizationSubjectSet(resource, relation) } };
 }
 
-/** Creates an authorization action reference. */
-export function authorizationAction(
-  name: string,
-  properties?: JsonObjectInput,
-): AuthorizationAction {
+export function authorizationAction(name: string, properties?: JsonObjectInput): AuthorizationAction {
   return properties === undefined ? { name } : { name, properties };
 }
 
-/** Creates a relationship tuple for authorization writes. */
-export function authorizationRelationship(
-  subject: AuthorizationSubject,
-  relation: string,
-  resource: AuthorizationResource,
-  properties?: JsonObjectInput,
-): AuthorizationRelationship {
-  return properties === undefined
-    ? { subject, relation, resource }
-    : { subject, relation, resource, properties };
+export function authorizationRelationship(subject: AuthorizationSubject, relation: string, resource: AuthorizationResource, properties?: JsonObjectInput): AuthorizationRelationship {
+  return authorizationRelationshipWithTarget(authorizationSubjectTarget(subject), relation, resource, properties);
 }
 
-/** Creates a generalized relationship tuple for authorization writes. */
-export function authorizationRelationshipWithTarget(
-  target: AuthorizationRelationshipTarget,
-  relation: string,
-  resource: AuthorizationResource,
-  properties?: JsonObjectInput,
-): AuthorizationRelationship {
-  return properties === undefined
-    ? { target, relation, resource }
-    : { target, relation, resource, properties };
+export function authorizationRelationshipWithTarget(target: AuthorizationRelationshipTarget, relation: string, resource: AuthorizationResource, properties?: JsonObjectInput): AuthorizationRelationship {
+  const tuple = { target, relation, resource };
+  return properties === undefined ? { tuple } : { tuple, properties };
 }
 
-/** Creates a relationship key for authorization deletes. */
-export function authorizationRelationshipKey(
-  subject: AuthorizationSubject,
-  relation: string,
-  resource: AuthorizationResource,
-): AuthorizationRelationshipKey {
-  return { subject, relation, resource };
-}
-
-/** Creates a generalized relationship key for authorization deletes. */
-export function authorizationRelationshipKeyWithTarget(
-  target: AuthorizationRelationshipTarget,
-  relation: string,
-  resource: AuthorizationResource,
-): AuthorizationRelationshipKey {
+export function authorizationRelationshipTuple(target: AuthorizationRelationshipTarget, relation: string, resource: AuthorizationResource): AuthorizationRelationshipTuple {
   return { target, relation, resource };
 }
 
-function authorizationEvaluateInputToProto(input: AuthorizationEvaluateInput) {
-  return create(AccessEvaluationRequestSchema, {
+export const authorizationRelationshipKey = authorizationRelationshipTuple;
+export const authorizationRelationshipKeyWithTarget = authorizationRelationshipTuple;
+
+function authorizationCheckAccessInputToProto(input: AuthorizationCheckAccessInput) {
+  return create(CheckAccessRequestSchema, {
     subject: input.subject === undefined ? undefined : authorizationSubjectToProto(input.subject),
     action: input.action === undefined ? undefined : authorizationActionToProto(input.action),
     resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
-    context: optionalStruct(input.context),
   });
 }
 
-function authorizationEvaluateInputFromProto(
-  input: ProtoAccessEvaluationRequest,
-): AuthorizationEvaluateInput {
+function authorizationCheckAccessInputFromProto(input: ProtoCheckAccessRequest): AuthorizationCheckAccessInput {
   return {
     subject: authorizationSubjectFromProto(input.subject),
     action: authorizationActionFromProto(input.action),
     resource: authorizationResourceFromProto(input.resource),
-    context: optionalObjectFromStruct(input.context),
   };
 }
 
-function authorizationEvaluateManyInputToProto(input: AuthorizationEvaluateManyInput) {
-  return create(AccessEvaluationsRequestSchema, {
-    requests: input.requests?.map(authorizationEvaluateInputToProto) ?? [],
+function authorizationCheckAccessManyInputToProto(input: AuthorizationCheckAccessManyInput) {
+  return create(CheckAccessManyRequestSchema, {
+    requests: input.requests.map(authorizationCheckAccessInputToProto),
   });
-}
-
-function authorizationEvaluateManyInputFromProto(
-  input: ProtoAccessEvaluationsRequest,
-): AuthorizationEvaluateManyInput {
-  return { requests: input.requests.map(authorizationEvaluateInputFromProto) };
-}
-
-function authorizationSearchResourcesInputToProto(input: AuthorizationSearchResourcesInput) {
-  return create(ResourceSearchRequestSchema, {
-    subject: input.subject === undefined ? undefined : authorizationSubjectToProto(input.subject),
-    action: input.action === undefined ? undefined : authorizationActionToProto(input.action),
-    resourceType: input.resourceType ?? "",
-    context: optionalStruct(input.context),
-    pageSize: input.pageSize ?? 0,
-    pageToken: input.pageToken ?? "",
-  });
-}
-
-function authorizationSearchResourcesInputFromProto(
-  input: ProtoResourceSearchRequest,
-): AuthorizationSearchResourcesInput {
-  return {
-    subject: authorizationSubjectFromProto(input.subject),
-    action: authorizationActionFromProto(input.action),
-    resourceType: input.resourceType,
-    context: optionalObjectFromStruct(input.context),
-    pageSize: input.pageSize,
-    pageToken: input.pageToken,
-  };
-}
-
-function authorizationSearchSubjectsInputToProto(input: AuthorizationSearchSubjectsInput) {
-  return create(SubjectSearchRequestSchema, {
-    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
-    action: input.action === undefined ? undefined : authorizationActionToProto(input.action),
-    subjectType: input.subjectType ?? "",
-    context: optionalStruct(input.context),
-    pageSize: input.pageSize ?? 0,
-    pageToken: input.pageToken ?? "",
-  });
-}
-
-function authorizationSearchSubjectsInputFromProto(
-  input: ProtoSubjectSearchRequest,
-): AuthorizationSearchSubjectsInput {
-  return {
-    resource: authorizationResourceFromProto(input.resource),
-    action: authorizationActionFromProto(input.action),
-    subjectType: input.subjectType,
-    context: optionalObjectFromStruct(input.context),
-    pageSize: input.pageSize,
-    pageToken: input.pageToken,
-  };
-}
-
-function authorizationEffectiveSearchSubjectsInputToProto(
-  input: AuthorizationEffectiveSearchSubjectsInput,
-) {
-  return create(EffectiveSubjectSearchRequestSchema, {
-    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
-    action: input.action === undefined ? undefined : authorizationActionToProto(input.action),
-    context: optionalStruct(input.context),
-    pageSize: input.pageSize ?? 0,
-    pageToken: input.pageToken ?? "",
-  });
-}
-
-function authorizationEffectiveSearchSubjectsInputFromProto(
-  input: ProtoEffectiveSubjectSearchRequest,
-): AuthorizationEffectiveSearchSubjectsInput {
-  return {
-    resource: authorizationResourceFromProto(input.resource),
-    action: authorizationActionFromProto(input.action),
-    context: optionalObjectFromStruct(input.context),
-    pageSize: input.pageSize,
-    pageToken: input.pageToken,
-  };
-}
-
-function authorizationSearchActionsInputToProto(input: AuthorizationSearchActionsInput) {
-  return create(ActionSearchRequestSchema, {
-    subject: input.subject === undefined ? undefined : authorizationSubjectToProto(input.subject),
-    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
-    context: optionalStruct(input.context),
-    pageSize: input.pageSize ?? 0,
-    pageToken: input.pageToken ?? "",
-  });
-}
-
-function authorizationSearchActionsInputFromProto(
-  input: ProtoActionSearchRequest,
-): AuthorizationSearchActionsInput {
-  return {
-    subject: authorizationSubjectFromProto(input.subject),
-    resource: authorizationResourceFromProto(input.resource),
-    context: optionalObjectFromStruct(input.context),
-    pageSize: input.pageSize,
-    pageToken: input.pageToken,
-  };
-}
-
-function authorizationExpandInputToProto(input: AuthorizationExpandInput) {
-  return create(ExpandRequestSchema, {
-    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
-    relation: input.relation ?? "",
-    context: optionalStruct(input.context),
-    maxDepth: input.maxDepth ?? 0,
-    modelId: input.modelId ?? "",
-  });
-}
-
-function authorizationExpandInputFromProto(input: ProtoExpandRequest): AuthorizationExpandInput {
-  return {
-    resource: authorizationResourceFromProto(input.resource),
-    relation: input.relation,
-    context: optionalObjectFromStruct(input.context),
-    maxDepth: input.maxDepth,
-    modelId: input.modelId,
-  };
-}
-
-function authorizationReadRelationshipsInputToProto(input: AuthorizationReadRelationshipsInput) {
-  return create(ReadRelationshipsRequestSchema, {
-    subject: input.subject === undefined ? undefined : authorizationSubjectToProto(input.subject),
-    relation: input.relation ?? "",
-    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
-    pageSize: input.pageSize ?? 0,
-    pageToken: input.pageToken ?? "",
-    modelId: input.modelId ?? "",
-    target: input.target === undefined ? undefined : authorizationRelationshipTargetToProto(input.target),
-  });
-}
-
-function authorizationReadRelationshipsInputFromProto(
-  input: ProtoReadRelationshipsRequest,
-): AuthorizationReadRelationshipsInput {
-  return {
-    subject: authorizationSubjectFromProto(input.subject),
-    relation: input.relation,
-    resource: authorizationResourceFromProto(input.resource),
-    pageSize: input.pageSize,
-    pageToken: input.pageToken,
-    modelId: input.modelId,
-    target: authorizationRelationshipTargetFromProto(input.target),
-  };
-}
-
-function authorizationWriteRelationshipsInputToProto(input: AuthorizationWriteRelationshipsInput) {
-  return create(WriteRelationshipsRequestSchema, {
-    writes: input.writes?.map(authorizationRelationshipToProto) ?? [],
-    deletes: input.deletes?.map(authorizationRelationshipKeyToProto) ?? [],
-    modelId: input.modelId ?? "",
-  });
-}
-
-function authorizationWriteRelationshipsInputFromProto(
-  input: ProtoWriteRelationshipsRequest,
-): AuthorizationWriteRelationshipsInput {
-  return {
-    writes: input.writes.map(authorizationRelationshipFromProto),
-    deletes: input.deletes.map(authorizationRelationshipKeyFromProto),
-    modelId: input.modelId,
-  };
-}
-
-function authorizationListModelsInputToProto(input: AuthorizationListModelsInput) {
-  return create(ListModelsRequestSchema, {
-    pageSize: input.pageSize ?? 0,
-    pageToken: input.pageToken ?? "",
-  });
-}
-
-function authorizationListModelsInputFromProto(input: ProtoListModelsRequest): AuthorizationListModelsInput {
-  return {
-    pageSize: input.pageSize,
-    pageToken: input.pageToken,
-  };
-}
-
-function authorizationWriteModelInputToProto(input: AuthorizationWriteModelInput) {
-  return create(WriteModelRequestSchema, {
-    model: input.model === undefined ? undefined : authorizationModelToProto(input.model),
-  });
-}
-
-function authorizationWriteModelInputFromProto(input: ProtoWriteModelRequest): AuthorizationWriteModelInput {
-  return {
-    model: authorizationModelFromProto(input.model),
-  };
 }
 
 function authorizationDecisionToProto(input: AuthorizationDecision) {
-  return create(AccessDecisionSchema, {
-    allowed: input.allowed ?? false,
-    context: optionalStruct(input.context),
-    modelId: input.modelId ?? "",
-  });
+  return { allowed: input.allowed ?? false, modelId: input.modelId ?? "" };
 }
 
-function authorizationDecisionFromProto(input: ProtoAccessDecision): AuthorizationDecision {
-  return {
-    allowed: input.allowed,
-    context: optionalObjectFromStruct(input.context),
-    modelId: input.modelId,
-  };
+function authorizationDecisionFromProto(input: ProtoCheckAccessResponse): AuthorizationDecision {
+  return { allowed: input.allowed, modelId: input.modelId };
 }
 
-function authorizationEvaluationsResponseToProto(input: AuthorizationEvaluationsResponse) {
-  return create(AccessEvaluationsResponseSchema, {
-    decisions: input.decisions?.map(authorizationDecisionToProto) ?? [],
-  });
+function authorizationCheckAccessManyResponseToProto(input: AuthorizationCheckAccessManyResponse) {
+  return { decisions: input.decisions.map(authorizationDecisionToProto) };
 }
 
-function authorizationEvaluationsResponseFromProto(
-  input: ProtoAccessEvaluationsResponse,
-): AuthorizationEvaluationsResponse {
+function authorizationCheckAccessManyResponseFromProto(input: { decisions: ProtoCheckAccessResponse[] }): AuthorizationCheckAccessManyResponse {
   return { decisions: input.decisions.map(authorizationDecisionFromProto) };
 }
 
-function authorizationResourceSearchToProto(input: AuthorizationResourceSearch) {
-  return create(ResourceSearchResponseSchema, {
-    resources: input.resources?.map(authorizationResourceToProto) ?? [],
+function authorizationListRelationshipsInputToProto(input: AuthorizationListRelationshipsInput) {
+  return create(ListRelationshipsRequestSchema, {
+    filter: input.filter === undefined ? undefined : authorizationRelationshipFilterToProto(input.filter),
+    pageSize: input.pageSize ?? 0,
+    pageToken: input.pageToken ?? "",
+  });
+}
+
+function authorizationListRelationshipsInputFromProto(input: { filter?: ProtoRelationshipFilter | undefined; pageSize: number; pageToken: string }): AuthorizationListRelationshipsInput {
+  return {
+    filter: authorizationRelationshipFilterFromProto(input.filter),
+    pageSize: input.pageSize,
+    pageToken: input.pageToken,
+  };
+}
+
+function authorizationListRelationshipsToProto(input: AuthorizationListRelationships) {
+  return {
+    relationships: input.relationships.map(authorizationRelationshipToProto),
     nextPageToken: input.nextPageToken ?? "",
-    modelId: input.modelId ?? "",
-  });
-}
-
-function authorizationResourceSearchFromProto(input: ProtoResourceSearchResponse): AuthorizationResourceSearch {
-  return {
-    resources: input.resources.map(authorizationResourceFromProtoRequired),
-    nextPageToken: input.nextPageToken,
-    modelId: input.modelId,
   };
 }
 
-function authorizationSubjectSearchToProto(input: AuthorizationSubjectSearch) {
-  return create(SubjectSearchResponseSchema, {
-    subjects: input.subjects?.map(authorizationSubjectToProto) ?? [],
-    nextPageToken: input.nextPageToken ?? "",
-    modelId: input.modelId ?? "",
-  });
-}
-
-function authorizationSubjectSearchFromProto(input: ProtoSubjectSearchResponse): AuthorizationSubjectSearch {
+function authorizationListRelationshipsFromProto(input: { relationships: ProtoRelationship[]; nextPageToken: string }): AuthorizationListRelationships {
   return {
-    subjects: input.subjects.map(authorizationSubjectFromProtoRequired),
-    nextPageToken: input.nextPageToken,
-    modelId: input.modelId,
-  };
-}
-
-function authorizationEffectiveSubjectSearchToProto(input: AuthorizationEffectiveSubjectSearch) {
-  return create(EffectiveSubjectSearchResponseSchema, {
-    targets: input.targets?.map(authorizationRelationshipTargetToProto) ?? [],
-    nextPageToken: input.nextPageToken ?? "",
-    modelId: input.modelId ?? "",
-    truncated: input.truncated ?? false,
-  });
-}
-
-function authorizationEffectiveSubjectSearchFromProto(
-  input: ProtoEffectiveSubjectSearchResponse,
-): AuthorizationEffectiveSubjectSearch {
-  return {
-    targets: input.targets.map(authorizationRelationshipTargetFromProtoRequired),
-    nextPageToken: input.nextPageToken,
-    modelId: input.modelId,
-    truncated: input.truncated,
-  };
-}
-
-function authorizationActionSearchToProto(input: AuthorizationActionSearch) {
-  return create(ActionSearchResponseSchema, {
-    actions: input.actions?.map(authorizationActionToProto) ?? [],
-    nextPageToken: input.nextPageToken ?? "",
-    modelId: input.modelId ?? "",
-  });
-}
-
-function authorizationActionSearchFromProto(input: ProtoActionSearchResponse): AuthorizationActionSearch {
-  return {
-    actions: input.actions.map(authorizationActionFromProtoRequired),
-    nextPageToken: input.nextPageToken,
-    modelId: input.modelId,
-  };
-}
-
-function authorizationMetadataToProto(input: AuthorizationMetadata) {
-  return create(AuthorizationMetadataSchema, {
-    capabilities: [...(input.capabilities ?? [])],
-    activeModelId: input.activeModelId ?? "",
-  });
-}
-
-function authorizationMetadataFromProto(input: ProtoAuthorizationMetadata): AuthorizationMetadata {
-  return {
-    capabilities: [...input.capabilities],
-    activeModelId: input.activeModelId,
-  };
-}
-
-function authorizationReadRelationshipsToProto(input: AuthorizationReadRelationships) {
-  return create(ReadRelationshipsResponseSchema, {
-    relationships: input.relationships?.map(authorizationRelationshipToProto) ?? [],
-    nextPageToken: input.nextPageToken ?? "",
-    modelId: input.modelId ?? "",
-  });
-}
-
-function authorizationReadRelationshipsFromProto(
-  input: ProtoReadRelationshipsResponse,
-): AuthorizationReadRelationships {
-  return {
-    relationships: input.relationships.map(authorizationRelationshipFromProto),
-    nextPageToken: input.nextPageToken,
-    modelId: input.modelId,
-  };
-}
-
-function authorizationGetActiveModelToProto(input: AuthorizationGetActiveModel) {
-  return create(GetActiveModelResponseSchema, {
-    model: input.model === undefined ? undefined : authorizationModelRefToProto(input.model),
-  });
-}
-
-function authorizationGetActiveModelFromProto(input: ProtoGetActiveModelResponse): AuthorizationGetActiveModel {
-  return {
-    model: authorizationModelRefFromProto(input.model),
-  };
-}
-
-function authorizationListModelsToProto(input: AuthorizationListModels) {
-  return create(ListModelsResponseSchema, {
-    models: input.models?.map(authorizationModelRefToProto) ?? [],
-    nextPageToken: input.nextPageToken ?? "",
-  });
-}
-
-function authorizationListModelsFromProto(input: ProtoListModelsResponse): AuthorizationListModels {
-  return {
-    models: input.models.map(authorizationModelRefFromProtoRequired),
+    relationships: input.relationships.map(authorizationRelationshipFromProtoRequired),
     nextPageToken: input.nextPageToken,
   };
 }
 
-function authorizationSubjectToProto(input: AuthorizationSubject) {
+function authorizationSetRelationshipsResponseToProto(input: AuthorizationSetRelationshipsResponse) {
+  return { relationships: input.relationships.map(authorizationRelationshipToProto) };
+}
+
+function authorizationSetRelationshipsResponseFromProto(input: { relationships: ProtoRelationship[] }): AuthorizationSetRelationshipsResponse {
+  return { relationships: input.relationships.map(authorizationRelationshipFromProtoRequired) };
+}
+
+function authorizationRelationshipFilterToProto(input: AuthorizationRelationshipFilter) {
+  return create(RelationshipFilterSchema, {
+    target: input.target === undefined ? undefined : authorizationRelationshipTargetToProto(input.target),
+    relation: input.relation ?? "",
+    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
+    targetType: input.targetType ?? RelationshipTargetType.UNSPECIFIED,
+    targetEntityType: input.targetEntityType ?? "",
+    resourceType: input.resourceType ?? "",
+    sourceLayer: input.sourceLayer ?? SourceLayer.UNSPECIFIED,
+  });
+}
+
+function authorizationRelationshipFilterFromProto(input?: ProtoRelationshipFilter): AuthorizationRelationshipFilter | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    target: authorizationRelationshipTargetFromProto(input.target),
+    relation: input.relation,
+    resource: authorizationResourceFromProto(input.resource),
+    targetType: input.targetType,
+    targetEntityType: input.targetEntityType,
+    resourceType: input.resourceType,
+    sourceLayer: input.sourceLayer,
+  };
+}
+
+function authorizationRelationshipToProto(input: AuthorizationRelationship): ProtoRelationship {
+  return create(RelationshipSchema, {
+    tuple: input.tuple === undefined ? undefined : authorizationRelationshipTupleToProto(input.tuple),
+    properties: optionalStruct(input.properties),
+    sourceLayer: input.sourceLayer ?? SourceLayer.UNSPECIFIED,
+  });
+}
+
+function authorizationRelationshipToProtoRequired(input?: AuthorizationRelationship): ProtoRelationship {
+  return authorizationRelationshipToProto(requiredAuthorizationResponse(input, "relationship"));
+}
+
+function authorizationRelationshipFromProto(input?: ProtoRelationship): AuthorizationRelationship | undefined {
+  return input === undefined ? undefined : authorizationRelationshipFromProtoRequired(input);
+}
+
+function authorizationRelationshipFromProtoRequired(input: ProtoRelationship): AuthorizationRelationship {
+  return {
+    tuple: authorizationRelationshipTupleFromProto(input.tuple),
+    properties: optionalObjectFromStruct(input.properties),
+    sourceLayer: input.sourceLayer,
+  };
+}
+
+function authorizationRelationshipTupleToProto(input: AuthorizationRelationshipTuple): ProtoRelationshipTuple {
+  return create(RelationshipTupleSchema, {
+    target: input.target === undefined ? undefined : authorizationRelationshipTargetToProto(input.target),
+    relation: input.relation,
+    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
+  });
+}
+
+function authorizationRelationshipTupleFromProto(input?: ProtoRelationshipTuple): AuthorizationRelationshipTuple | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    target: authorizationRelationshipTargetFromProto(input.target),
+    relation: input.relation,
+    resource: authorizationResourceFromProto(input.resource),
+  };
+}
+
+function authorizationSubjectToProto(input: AuthorizationSubject): ProtoSubject {
   return create(SubjectSchema, {
     type: input.type,
     id: input.id,
@@ -1350,19 +793,15 @@ function authorizationSubjectToProto(input: AuthorizationSubject) {
   });
 }
 
-function authorizationSubjectFromProto(input?: ProtoSubject | undefined): AuthorizationSubject | undefined {
-  return input === undefined ? undefined : authorizationSubjectFromProtoRequired(input);
-}
-
-function authorizationSubjectFromProtoRequired(input: ProtoSubject): AuthorizationSubject {
-  return {
+function authorizationSubjectFromProto(input?: ProtoSubject): AuthorizationSubject | undefined {
+  return input === undefined ? undefined : {
     type: input.type,
     id: input.id,
     properties: optionalObjectFromStruct(input.properties),
   };
 }
 
-function authorizationResourceToProto(input: AuthorizationResource) {
+function authorizationResourceToProto(input: AuthorizationResource): ProtoResource {
   return create(ResourceSchema, {
     type: input.type,
     id: input.id,
@@ -1370,68 +809,49 @@ function authorizationResourceToProto(input: AuthorizationResource) {
   });
 }
 
-function authorizationResourceFromProto(input?: ProtoResource | undefined): AuthorizationResource | undefined {
-  return input === undefined ? undefined : authorizationResourceFromProtoRequired(input);
-}
-
-function authorizationResourceFromProtoRequired(input: ProtoResource): AuthorizationResource {
-  return {
+function authorizationResourceFromProto(input?: ProtoResource): AuthorizationResource | undefined {
+  return input === undefined ? undefined : {
     type: input.type,
     id: input.id,
     properties: optionalObjectFromStruct(input.properties),
   };
 }
 
-function authorizationSubjectSetToProto(input: AuthorizationSubjectSet) {
+function authorizationSubjectSetToProto(input: AuthorizationSubjectSet): ProtoSubjectSet {
   return create(SubjectSetSchema, {
     resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
     relation: input.relation,
   });
 }
 
-function authorizationSubjectSetFromProto(input?: ProtoSubjectSet | undefined): AuthorizationSubjectSet | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
+function authorizationSubjectSetFromProto(input?: ProtoSubjectSet): AuthorizationSubjectSet | undefined {
+  return input === undefined ? undefined : {
     resource: authorizationResourceFromProto(input.resource),
     relation: input.relation,
   };
 }
 
-function authorizationRelationshipTargetToProto(input: AuthorizationRelationshipTarget) {
-  switch (input.kind.case) {
-    case "subject":
-      return create(RelationshipTargetSchema, {
-        kind: { case: "subject", value: authorizationSubjectToProto(input.kind.value) },
-      });
-    case "resource":
-      return create(RelationshipTargetSchema, {
-        kind: { case: "resource", value: authorizationResourceToProto(input.kind.value) },
-      });
-    case "subjectSet":
-      return create(RelationshipTargetSchema, {
-        kind: { case: "subjectSet", value: authorizationSubjectSetToProto(input.kind.value) },
-      });
-    default:
-      return create(RelationshipTargetSchema);
+function authorizationRelationshipTargetToProto(input: AuthorizationRelationshipTarget): ProtoRelationshipTarget {
+  return create(RelationshipTargetSchema, {
+    kind: input.kind.case === "subject"
+      ? { case: "subject", value: authorizationSubjectToProto(input.kind.value) }
+      : input.kind.case === "resource"
+        ? { case: "resource", value: authorizationResourceToProto(input.kind.value) }
+        : input.kind.case === "subjectSet"
+          ? { case: "subjectSet", value: authorizationSubjectSetToProto(input.kind.value) }
+          : { case: undefined },
+  });
+}
+
+function authorizationRelationshipTargetFromProto(input?: ProtoRelationshipTarget): AuthorizationRelationshipTarget | undefined {
+  if (input === undefined) {
+    return undefined;
   }
-}
-
-function authorizationRelationshipTargetFromProto(
-  input?: ProtoRelationshipTarget | undefined,
-): AuthorizationRelationshipTarget | undefined {
-  return input === undefined ? undefined : authorizationRelationshipTargetFromProtoRequired(input);
-}
-
-function authorizationRelationshipTargetFromProtoRequired(
-  input: ProtoRelationshipTarget,
-): AuthorizationRelationshipTarget {
   switch (input.kind.case) {
     case "subject":
-      return { kind: { case: "subject", value: authorizationSubjectFromProtoRequired(input.kind.value) } };
+      return { kind: { case: "subject", value: authorizationSubjectFromProto(input.kind.value)! } };
     case "resource":
-      return { kind: { case: "resource", value: authorizationResourceFromProtoRequired(input.kind.value) } };
+      return { kind: { case: "resource", value: authorizationResourceFromProto(input.kind.value)! } };
     case "subjectSet":
       return { kind: { case: "subjectSet", value: authorizationSubjectSetFromProto(input.kind.value)! } };
     default:
@@ -1439,330 +859,142 @@ function authorizationRelationshipTargetFromProtoRequired(
   }
 }
 
-function authorizationActionToProto(input: AuthorizationAction) {
+function authorizationActionToProto(input: AuthorizationAction): ProtoAction {
   return create(ActionSchema, {
     name: input.name,
     properties: optionalStruct(input.properties),
   });
 }
 
-function authorizationActionFromProto(input?: ProtoAction | undefined): AuthorizationAction | undefined {
-  return input === undefined ? undefined : authorizationActionFromProtoRequired(input);
-}
-
-function authorizationActionFromProtoRequired(input: ProtoAction): AuthorizationAction {
-  return {
+function authorizationActionFromProto(input?: ProtoAction): AuthorizationAction | undefined {
+  return input === undefined ? undefined : {
     name: input.name,
     properties: optionalObjectFromStruct(input.properties),
   };
 }
 
-function authorizationRelationshipToProto(input: AuthorizationRelationship) {
-  return create(RelationshipSchema, {
-    subject: input.subject === undefined ? undefined : authorizationSubjectToProto(input.subject),
-    relation: input.relation,
-    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
-    properties: optionalStruct(input.properties),
-    target: input.target === undefined ? undefined : authorizationRelationshipTargetToProto(input.target),
-  });
-}
-
-function authorizationRelationshipFromProto(input: ProtoRelationship): AuthorizationRelationship {
-  return {
-    subject: authorizationSubjectFromProto(input.subject),
-    relation: input.relation,
-    resource: authorizationResourceFromProto(input.resource),
-    properties: optionalObjectFromStruct(input.properties),
-    target: authorizationRelationshipTargetFromProto(input.target),
-  };
-}
-
-function authorizationRelationshipKeyToProto(input: AuthorizationRelationshipKey) {
-  return create(RelationshipKeySchema, {
-    subject: input.subject === undefined ? undefined : authorizationSubjectToProto(input.subject),
-    relation: input.relation,
-    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
-    target: input.target === undefined ? undefined : authorizationRelationshipTargetToProto(input.target),
-  });
-}
-
-function authorizationRelationshipKeyFromProto(input: ProtoRelationshipKey): AuthorizationRelationshipKey {
-  return {
-    subject: authorizationSubjectFromProto(input.subject),
-    relation: input.relation,
-    resource: authorizationResourceFromProto(input.resource),
-    target: authorizationRelationshipTargetFromProto(input.target),
-  };
-}
-
-function authorizationModelToProto(input: AuthorizationModel) {
-  return {
-    version: input.version ?? 0,
+function authorizationModelToProto(input: AuthorizationModel): ProtoAuthorizationModel {
+  return create(AuthorizationModelSchema, {
+    id: input.id ?? "",
+    version: input.version ?? "",
     resourceTypes: input.resourceTypes?.map(authorizationModelResourceTypeToProto) ?? [],
-  };
+  });
 }
 
-function authorizationModelFromProto(input?: ProtoAuthorizationModel | undefined): AuthorizationModel | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
+function authorizationModelFromProto(input?: ProtoAuthorizationModel): AuthorizationModel | undefined {
+  return input === undefined ? undefined : {
+    id: input.id,
     version: input.version,
     resourceTypes: input.resourceTypes.map(authorizationModelResourceTypeFromProto),
   };
 }
 
-function authorizationModelResourceTypeToProto(input: AuthorizationModelResourceType) {
-  return {
+function authorizationModelResourceTypeToProto(input: AuthorizationModelResourceType): ProtoAuthorizationModelResourceType {
+  return create(AuthorizationModelResourceTypeSchema, {
     name: input.name,
     relations: input.relations?.map(authorizationModelRelationToProto) ?? [],
     actions: input.actions?.map(authorizationModelActionToProto) ?? [],
-  };
+    sourceLayer: input.sourceLayer ?? SourceLayer.UNSPECIFIED,
+  });
 }
 
-function authorizationModelResourceTypeFromProto(
-  input: ProtoAuthorizationModelResourceType,
-): AuthorizationModelResourceType {
+function authorizationModelResourceTypeFromProto(input: ProtoAuthorizationModelResourceType): AuthorizationModelResourceType {
   return {
     name: input.name,
     relations: input.relations.map(authorizationModelRelationFromProto),
     actions: input.actions.map(authorizationModelActionFromProto),
+    sourceLayer: input.sourceLayer,
   };
 }
 
-function authorizationModelRelationToProto(input: AuthorizationModelRelation) {
-  return {
+function authorizationModelRelationToProto(input: AuthorizationModelRelation): ProtoAuthorizationModelRelation {
+  return create(AuthorizationModelRelationSchema, {
     name: input.name,
-    subjectTypes: [...(input.subjectTypes ?? [])],
     allowedTargets: input.allowedTargets?.map(authorizationModelAllowedTargetToProto) ?? [],
-    rewrite: input.rewrite === undefined ? undefined : authorizationModelRewriteToProto(input.rewrite),
-  };
+  });
 }
 
-function authorizationModelRelationFromProto(
-  input: ProtoAuthorizationModelRelation,
-): AuthorizationModelRelation {
+function authorizationModelRelationFromProto(input: ProtoAuthorizationModelRelation): AuthorizationModelRelation {
   return {
     name: input.name,
-    subjectTypes: [...input.subjectTypes],
     allowedTargets: input.allowedTargets.map(authorizationModelAllowedTargetFromProto),
-    rewrite: authorizationModelRewriteFromProto(input.rewrite),
   };
 }
 
-function authorizationModelActionToProto(input: AuthorizationModelAction) {
-  return {
+function authorizationModelActionToProto(input: AuthorizationModelAction): ProtoAuthorizationModelAction {
+  return create(AuthorizationModelActionSchema, {
     name: input.name,
-    relations: [...(input.relations ?? [])],
-    rewrite: input.rewrite === undefined ? undefined : authorizationModelRewriteToProto(input.rewrite),
-  };
+    relations: input.relations === undefined ? [] : [...input.relations],
+  });
 }
 
 function authorizationModelActionFromProto(input: ProtoAuthorizationModelAction): AuthorizationModelAction {
-  return {
-    name: input.name,
-    relations: [...input.relations],
-    rewrite: authorizationModelRewriteFromProto(input.rewrite),
-  };
+  return { name: input.name, relations: [...input.relations] };
 }
 
-function authorizationModelAllowedTargetToProto(input: AuthorizationModelAllowedTarget) {
-  switch (input.kind.case) {
-    case "subjectType":
-      return { kind: { case: "subjectType" as const, value: input.kind.value } };
-    case "resourceType":
-      return { kind: { case: "resourceType" as const, value: input.kind.value } };
-    case "subjectSet":
-      return {
-        kind: {
-          case: "subjectSet" as const,
-          value: {
-            resourceType: input.kind.value.resourceType,
-            relation: input.kind.value.relation,
-          },
-        },
-      };
-    default:
-      return { kind: { case: undefined } };
+function authorizationModelAllowedTargetToProto(input: AuthorizationModelAllowedTarget): ProtoAuthorizationModelAllowedTarget {
+  return create(AuthorizationModelAllowedTargetSchema, {
+    kind: input.kind.case === "subjectType"
+      ? { case: "subjectType", value: input.kind.value }
+      : input.kind.case === "resourceType"
+        ? { case: "resourceType", value: input.kind.value }
+        : input.kind.case === "subjectSetType"
+          ? { case: "subjectSetType", value: input.kind.value }
+          : { case: undefined },
+  });
+}
+
+function authorizationModelAllowedTargetFromProto(input: ProtoAuthorizationModelAllowedTarget): AuthorizationModelAllowedTarget {
+  if (input.kind.case === "subjectType" || input.kind.case === "resourceType" || input.kind.case === "subjectSetType") {
+    return { kind: input.kind };
   }
+  return { kind: { case: undefined } };
 }
 
-function authorizationModelAllowedTargetFromProto(
-  input: ProtoAuthorizationModelAllowedTarget,
-): AuthorizationModelAllowedTarget {
-  switch (input.kind.case) {
-    case "subjectType":
-      return { kind: { case: "subjectType", value: input.kind.value } };
-    case "resourceType":
-      return { kind: { case: "resourceType", value: input.kind.value } };
-    case "subjectSet":
-      return {
-        kind: {
-          case: "subjectSet",
-          value: authorizationModelSubjectSetTargetFromProto(input.kind.value),
-        },
-      };
-    default:
-      return { kind: { case: undefined } };
-  }
-}
-
-function authorizationModelSubjectSetTargetFromProto(
-  input: ProtoAuthorizationModelSubjectSetTarget,
-): AuthorizationModelSubjectSetTarget {
-  return {
-    resourceType: input.resourceType,
-    relation: input.relation,
-  };
-}
-
-function authorizationModelRewriteToProto(input: AuthorizationModelRewrite): ProtoAuthorizationModelRewrite {
-  switch (input.kind.case) {
-    case "this":
-      return { kind: { case: "this", value: {} } } as ProtoAuthorizationModelRewrite;
-    case "computedUserset":
-      return {
-        kind: {
-          case: "computedUserset",
-          value: { relation: input.kind.value.relation },
-        },
-      } as ProtoAuthorizationModelRewrite;
-    case "tupleToUserset":
-      return {
-        kind: {
-          case: "tupleToUserset",
-          value: {
-            tuplesetRelation: input.kind.value.tuplesetRelation,
-            computedRelation: input.kind.value.computedRelation,
-          },
-        },
-      } as ProtoAuthorizationModelRewrite;
-    case "union":
-      return {
-        kind: {
-          case: "union",
-          value: {
-            children: input.kind.value.children?.map(authorizationModelRewriteToProto) ?? [],
-          },
-        },
-      } as ProtoAuthorizationModelRewrite;
-    default:
-      return { kind: { case: undefined } } as ProtoAuthorizationModelRewrite;
-  }
-}
-
-function authorizationModelRewriteFromProto(
-  input?: ProtoAuthorizationModelRewrite | undefined,
-): AuthorizationModelRewrite | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  switch (input.kind.case) {
-    case "this":
-      return { kind: { case: "this", value: {} } };
-    case "computedUserset":
-      return { kind: { case: "computedUserset", value: authorizationComputedUsersetFromProto(input.kind.value) } };
-    case "tupleToUserset":
-      return { kind: { case: "tupleToUserset", value: authorizationTupleToUsersetFromProto(input.kind.value) } };
-    case "union":
-      return { kind: { case: "union", value: authorizationRewriteUnionFromProto(input.kind.value) } };
-    default:
-      return { kind: { case: undefined } };
-  }
-}
-
-function authorizationComputedUsersetFromProto(
-  input: ProtoAuthorizationModelComputedUserset,
-): AuthorizationModelComputedUserset {
-  return { relation: input.relation };
-}
-
-function authorizationTupleToUsersetFromProto(
-  input: ProtoAuthorizationModelTupleToUserset,
-): AuthorizationModelTupleToUserset {
-  return {
-    tuplesetRelation: input.tuplesetRelation,
-    computedRelation: input.computedRelation,
-  };
-}
-
-function authorizationRewriteUnionFromProto(
-  input: ProtoAuthorizationModelRewriteUnion,
-): AuthorizationModelRewriteUnion {
-  return { children: input.children.map((child) => authorizationModelRewriteFromProto(child)!) };
-}
-
-function authorizationModelRefToProto(input: AuthorizationModelRef) {
-  return create(AuthorizationModelRefSchema, {
+function authorizationModelRefToProto(input?: AuthorizationModelRef): ProtoAuthorizationModelRef | undefined {
+  return input === undefined ? undefined : create(AuthorizationModelRefSchema, {
     id: input.id,
     version: input.version,
     createdAt: input.createdAt === undefined ? undefined : timestampFromDate(input.createdAt),
   });
 }
 
-function authorizationModelRefFromProto(input?: ProtoAuthorizationModelRef | undefined): AuthorizationModelRef | undefined {
-  return input === undefined ? undefined : authorizationModelRefFromProtoRequired(input);
-}
-
-function authorizationModelRefFromProtoRequired(input: ProtoAuthorizationModelRef): AuthorizationModelRef {
-  return {
+function authorizationModelRefFromProto(input?: ProtoAuthorizationModelRef): AuthorizationModelRef | undefined {
+  return input === undefined ? undefined : {
     id: input.id,
     version: input.version,
     createdAt: input.createdAt === undefined ? undefined : dateFromTimestamp(input.createdAt),
   };
 }
 
-function authorizationExpandToProto(input: AuthorizationExpand) {
-  return create(ExpandResponseSchema, {
-    root: input.root === undefined ? undefined : authorizationExpandNodeToProto(input.root),
-    truncated: input.truncated ?? false,
-    cycleDetected: input.cycleDetected ?? false,
-    maxDepthReached: input.maxDepthReached ?? false,
+function authorizationListActiveModelResourceTypesInputToProto(input: AuthorizationListActiveModelResourceTypesInput) {
+  return create(ListActiveModelResourceTypesRequestSchema, {
     modelId: input.modelId ?? "",
+    filter: input.filter === undefined ? undefined : authorizationModelResourceTypeFilterToProto(input.filter),
   });
 }
 
-function authorizationExpandFromProto(input: ProtoExpandResponse): AuthorizationExpand {
+function authorizationListActiveModelResourceTypesInputFromProto(input: { modelId: string; filter?: ProtoAuthorizationModelResourceTypeFilter | undefined }): AuthorizationListActiveModelResourceTypesInput {
   return {
-    root: authorizationExpandNodeFromProto(input.root),
-    truncated: input.truncated,
-    cycleDetected: input.cycleDetected,
-    maxDepthReached: input.maxDepthReached,
     modelId: input.modelId,
+    filter: authorizationModelResourceTypeFilterFromProto(input.filter),
   };
 }
 
-function authorizationExpandNodeToProto(input: AuthorizationExpandNode): ProtoExpandNode {
-  return create(ExpandNodeSchema, {
-    target: input.target === undefined ? undefined : authorizationRelationshipTargetToProto(input.target),
-    relation: input.relation ?? "",
-    children: input.children?.map(authorizationExpandNodeToProto) ?? [],
+function authorizationModelResourceTypeFilterToProto(input: AuthorizationModelResourceTypeFilter): ProtoAuthorizationModelResourceTypeFilter {
+  return create(AuthorizationModelResourceTypeFilterSchema, {
+    name: input.name ?? "",
+    sourceLayer: input.sourceLayer ?? SourceLayer.UNSPECIFIED,
   });
 }
 
-function authorizationExpandNodeFromProto(input?: ProtoExpandNode | undefined): AuthorizationExpandNode | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    target: authorizationRelationshipTargetFromProto(input.target),
-    relation: input.relation,
-    children: input.children.map((child) => authorizationExpandNodeFromProto(child)!),
+function authorizationModelResourceTypeFilterFromProto(input?: ProtoAuthorizationModelResourceTypeFilter): AuthorizationModelResourceTypeFilter | undefined {
+  return input === undefined ? undefined : {
+    name: input.name,
+    sourceLayer: input.sourceLayer,
   };
 }
 
-function resolveAuthorizationSocketTarget(
-  socketPath = process.env[ENV_HOST_SERVICE_SOCKET],
-): string {
-  const trimmed = socketPath?.trim() ?? "";
-  if (!trimmed) {
-    throw new Error(`authorization: ${ENV_HOST_SERVICE_SOCKET} is not set`);
-  }
-  return trimmed;
-}
-
-function pushCapability(capabilities: string[], capability: string): void {
-  if (!capabilities.includes(capability)) {
-    capabilities.push(capability);
-  }
+function resolveAuthorizationSocketTarget(socketTarget?: string): string {
+  return socketTarget?.trim() || process.env[ENV_HOST_SERVICE_SOCKET]?.trim() || "unix:///tmp/gestalt-authorization.sock";
 }

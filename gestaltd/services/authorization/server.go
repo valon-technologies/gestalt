@@ -10,12 +10,11 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-const (
-	capabilitySearchSubjects           = "search_subjects"
-	capabilityEffectiveSearchResources = "effective_search_resources"
-	capabilityEffectiveSearchSubjects  = "effective_search_subjects"
-	capabilityExpand                   = "expand"
-)
+const DefaultSocketEnv = "GESTALT_AUTHORIZATION_SOCKET"
+
+func SocketTokenEnv() string {
+	return DefaultSocketEnv + "_TOKEN"
+}
 
 type authorizationProviderServer struct {
 	proto.UnimplementedAuthorizationProviderServer
@@ -26,13 +25,24 @@ func NewProviderServer(provider core.AuthorizationProvider) proto.AuthorizationP
 	return &authorizationProviderServer{provider: provider}
 }
 
-func (s *authorizationProviderServer) SearchSubjects(ctx context.Context, req *proto.SubjectSearchRequest) (*proto.SubjectSearchResponse, error) {
+func (s *authorizationProviderServer) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	resp, err := s.provider.SearchSubjects(ctx, req)
+	resp, err := s.provider.CheckAccess(ctx, req)
 	if err != nil {
-		return nil, authorizationProviderRPCError("search subjects", err)
+		return nil, authorizationProviderRPCError("check access", err)
+	}
+	return requireAuthorizationResponse(resp)
+}
+
+func (s *authorizationProviderServer) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	resp, err := s.provider.CheckAccessMany(ctx, req)
+	if err != nil {
+		return nil, authorizationProviderRPCError("check access many", err)
 	}
 	if resp == nil {
 		return nil, status.Error(codes.Internal, "authorization provider returned nil response")
@@ -40,17 +50,13 @@ func (s *authorizationProviderServer) SearchSubjects(ctx context.Context, req *p
 	return resp, nil
 }
 
-func (s *authorizationProviderServer) EffectiveSearchResources(ctx context.Context, req *proto.ResourceSearchRequest) (*proto.ResourceSearchResponse, error) {
+func (s *authorizationProviderServer) ListRelationships(ctx context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	provider, ok := s.provider.(core.AuthorizationProviderEffectiveSearch)
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "authorization provider does not implement effective resource search")
-	}
-	resp, err := provider.EffectiveSearchResources(ctx, req)
+	resp, err := s.provider.ListRelationships(ctx, req)
 	if err != nil {
-		return nil, authorizationProviderRPCError("effective search resources", err)
+		return nil, authorizationProviderRPCError("list relationships", err)
 	}
 	if resp == nil {
 		return nil, status.Error(codes.Internal, "authorization provider returned nil response")
@@ -58,17 +64,13 @@ func (s *authorizationProviderServer) EffectiveSearchResources(ctx context.Conte
 	return resp, nil
 }
 
-func (s *authorizationProviderServer) EffectiveSearchSubjects(ctx context.Context, req *proto.EffectiveSubjectSearchRequest) (*proto.EffectiveSubjectSearchResponse, error) {
+func (s *authorizationProviderServer) AddRelationship(ctx context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	provider, ok := s.provider.(core.AuthorizationProviderEffectiveSearch)
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "authorization provider does not implement effective subject search")
-	}
-	resp, err := provider.EffectiveSearchSubjects(ctx, req)
+	resp, err := s.provider.AddRelationship(ctx, req)
 	if err != nil {
-		return nil, authorizationProviderRPCError("effective search subjects", err)
+		return nil, authorizationProviderRPCError("add relationship", err)
 	}
 	if resp == nil {
 		return nil, status.Error(codes.Internal, "authorization provider returned nil response")
@@ -76,17 +78,27 @@ func (s *authorizationProviderServer) EffectiveSearchSubjects(ctx context.Contex
 	return resp, nil
 }
 
-func (s *authorizationProviderServer) Expand(ctx context.Context, req *proto.ExpandRequest) (*proto.ExpandResponse, error) {
+func (s *authorizationProviderServer) DeleteRelationship(ctx context.Context, req *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	provider, ok := s.provider.(core.AuthorizationProviderExpansion)
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "authorization provider does not implement relationship expansion")
-	}
-	resp, err := provider.Expand(ctx, req)
+	resp, err := s.provider.DeleteRelationship(ctx, req)
 	if err != nil {
-		return nil, authorizationProviderRPCError("expand", err)
+		return nil, authorizationProviderRPCError("delete relationship", err)
+	}
+	if resp == nil {
+		resp = &proto.DeleteRelationshipResponse{}
+	}
+	return resp, nil
+}
+
+func (s *authorizationProviderServer) SetRelationships(ctx context.Context, req *proto.SetRelationshipsRequest) (*proto.SetRelationshipsResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	resp, err := s.provider.SetRelationships(ctx, req)
+	if err != nil {
+		return nil, authorizationProviderRPCError("set relationships", err)
 	}
 	if resp == nil {
 		return nil, status.Error(codes.Internal, "authorization provider returned nil response")
@@ -94,39 +106,50 @@ func (s *authorizationProviderServer) Expand(ctx context.Context, req *proto.Exp
 	return resp, nil
 }
 
-func (s *authorizationProviderServer) GetMetadata(ctx context.Context, _ *emptypb.Empty) (*proto.AuthorizationMetadata, error) {
-	providerMetadata, err := s.provider.GetMetadata(ctx)
+func (s *authorizationProviderServer) GetActiveModelRef(ctx context.Context, _ *emptypb.Empty) (*proto.GetActiveModelRefResponse, error) {
+	resp, err := s.provider.GetActiveModelRef(ctx)
 	if err != nil {
-		return nil, authorizationProviderRPCError("get metadata", err)
+		return nil, authorizationProviderRPCError("get active model ref", err)
 	}
-	resp := &proto.AuthorizationMetadata{}
-	if providerMetadata != nil {
-		resp.Capabilities = append([]string(nil), providerMetadata.GetCapabilities()...)
-		resp.ActiveModelId = providerMetadata.GetActiveModelId()
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "authorization provider returned nil response")
 	}
-	resp.Capabilities = appendMissingCapabilities(resp.Capabilities, authorizationHostCapabilities(s.provider)...)
 	return resp, nil
 }
 
-func (s *authorizationProviderServer) WriteRelationships(ctx context.Context, req *proto.WriteRelationshipsRequest) (*emptypb.Empty, error) {
+func (s *authorizationProviderServer) SetActiveModel(ctx context.Context, req *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	if err := s.provider.WriteRelationships(ctx, req); err != nil {
-		return nil, authorizationProviderRPCError("write relationships", err)
+	resp, err := s.provider.SetActiveModel(ctx, req)
+	if err != nil {
+		return nil, authorizationProviderRPCError("set active model", err)
 	}
-	return &emptypb.Empty{}, nil
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "authorization provider returned nil response")
+	}
+	return resp, nil
 }
 
-func authorizationHostCapabilities(provider core.AuthorizationProvider) []string {
-	capabilities := []string{capabilitySearchSubjects}
-	if _, ok := provider.(core.AuthorizationProviderEffectiveSearch); ok {
-		capabilities = append(capabilities, capabilityEffectiveSearchResources, capabilityEffectiveSearchSubjects)
+func (s *authorizationProviderServer) ListActiveModelResourceTypes(ctx context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	if _, ok := provider.(core.AuthorizationProviderExpansion); ok {
-		capabilities = append(capabilities, capabilityExpand)
+	resp, err := s.provider.ListActiveModelResourceTypes(ctx, req)
+	if err != nil {
+		return nil, authorizationProviderRPCError("list active model resource types", err)
 	}
-	return capabilities
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "authorization provider returned nil response")
+	}
+	return resp, nil
+}
+
+func requireAuthorizationResponse(resp *proto.CheckAccessResponse) (*proto.CheckAccessResponse, error) {
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "authorization provider returned nil response")
+	}
+	return resp, nil
 }
 
 func authorizationProviderRPCError(operation string, err error) error {
@@ -137,19 +160,4 @@ func authorizationProviderRPCError(operation string, err error) error {
 		return st.Err()
 	}
 	return status.Errorf(codes.Unknown, "%s: %v", operation, err)
-}
-
-func appendMissingCapabilities(capabilities []string, required ...string) []string {
-	seen := make(map[string]struct{}, len(capabilities)+len(required))
-	for _, capability := range capabilities {
-		seen[capability] = struct{}{}
-	}
-	for _, capability := range required {
-		if _, ok := seen[capability]; ok {
-			continue
-		}
-		capabilities = append(capabilities, capability)
-		seen[capability] = struct{}{}
-	}
-	return capabilities
 }
