@@ -146,11 +146,11 @@ func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, par
 	if !declarativeHasOperation(p.Base.Catalog(), operation) {
 		return &core.OperationResult{Status: http.StatusNotFound, Body: `{"error":"unknown operation"}`}, nil
 	}
-	base, err := p.baseForConnection(ctx, operation, params)
+	parser, err := p.tokenParserForExecution(ctx, operation, params)
 	if err != nil {
 		return nil, err
 	}
-	return base.Execute(ctx, operation, params, token)
+	return p.ExecuteWithTokenParser(ctx, operation, params, token, parser)
 }
 
 func (p *DeclarativeProvider) ConnectionForOperation(operation string) string {
@@ -177,7 +177,7 @@ func (p *DeclarativeProvider) OperationConnectionOverrideAllowed(operation strin
 	return !p.operationLocks[operation]
 }
 
-func (p *DeclarativeProvider) baseForConnection(ctx context.Context, operation string, params map[string]any) (*integration.Base, error) {
+func (p *DeclarativeProvider) tokenParserForExecution(ctx context.Context, operation string, params map[string]any) (egress.TokenParser, error) {
 	connection, resolved, err := p.connectionForExecution(ctx, operation, params)
 	if err != nil {
 		return nil, err
@@ -185,11 +185,10 @@ func (p *DeclarativeProvider) baseForConnection(ctx context.Context, operation s
 	if !resolved {
 		connection = declarativeDefaultConnection
 	}
-	base := *p.Base
 	if parser, ok := p.tokenParsers[connection]; ok {
-		base.TokenParser = parser
+		return parser, nil
 	}
-	return &base, nil
+	return p.TokenParser, nil
 }
 
 func (p *DeclarativeProvider) connectionForExecution(ctx context.Context, operation string, params map[string]any) (string, bool, error) {

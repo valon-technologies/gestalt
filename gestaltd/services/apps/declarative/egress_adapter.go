@@ -13,7 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
-func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog.CatalogOperation, params map[string]any, token string) (*core.OperationResult, error) {
+func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog.CatalogOperation, params map[string]any, token string, parser egress.TokenParser) (*core.OperationResult, error) {
 	if catOp == nil {
 		return nil, fmt.Errorf("unknown operation: %s", operation)
 	}
@@ -38,7 +38,7 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 		return nil, err
 	}
 
-	credential, err := b.materializeCredential(token)
+	credential, err := b.materializeCredential(token, parser)
 	if err != nil {
 		return nil, err
 	}
@@ -73,14 +73,14 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 	return result, nil
 }
 
-func (b *Base) executeGraphQL(ctx context.Context, operation string, query string, operationName string, params map[string]any, token string) (*core.OperationResult, error) {
+func (b *Base) executeGraphQL(ctx context.Context, operation string, query string, operationName string, params map[string]any, token string, parser egress.TokenParser) (*core.OperationResult, error) {
 	gqlURL, headers := b.resolvedURLAndHeaders(ctx)
 
 	if err := b.checkEgressHost(gqlURL); err != nil {
 		return nil, err
 	}
 
-	credential, err := b.materializeCredential(token)
+	credential, err := b.materializeCredential(token, parser)
 	if err != nil {
 		return nil, err
 	}
