@@ -5,10 +5,9 @@ import (
 )
 
 const (
-	StoreUsers                         = "users"
-	StoreAPITokens                     = "api_tokens"
-	StoreManagedSubjects               = "managed_subjects"
-	StoreAuthorizationDynamicFragments = "authz_dynamic_fragments"
+	StoreUsers           = "users"
+	StoreAPITokens       = "api_tokens"
+	StoreManagedSubjects = "managed_subjects"
 )
 
 var UsersSchema = idb.ObjectStoreOptions{
@@ -64,28 +63,5 @@ var ManagedSubjectsSchema = idb.ObjectStoreOptions{
 		{Name: "created_at", Type: idb.TypeTime},
 		{Name: "updated_at", Type: idb.TypeTime},
 		{Name: "deleted_at", Type: idb.TypeTime},
-	},
-}
-
-var AuthorizationDynamicFragmentsSchema = idb.ObjectStoreOptions{
-	Indexes: []idb.IndexSchema{
-		{Name: "by_owner", KeyPath: []string{"owner_kind", "owner_id"}, Unique: true},
-		{Name: "by_scope", KeyPath: []string{"scope"}},
-		{Name: "by_app", KeyPath: []string{"app"}},
-		{Name: "by_status", KeyPath: []string{"status"}},
-	},
-	Columns: []idb.ColumnDef{
-		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
-		{Name: "owner_kind", Type: idb.TypeString, NotNull: true},
-		{Name: "owner_id", Type: idb.TypeString, NotNull: true},
-		{Name: "scope", Type: idb.TypeString, NotNull: true},
-		{Name: "app", Type: idb.TypeString},
-		{Name: "version", Type: idb.TypeInt},
-		{Name: "status", Type: idb.TypeString},
-		{Name: "resource_types_json", Type: idb.TypeString},
-		{Name: "relationships_json", Type: idb.TypeString},
-		{Name: "audit_json", Type: idb.TypeString},
-		{Name: "created_at", Type: idb.TypeTime},
-		{Name: "updated_at", Type: idb.TypeTime},
 	},
 }

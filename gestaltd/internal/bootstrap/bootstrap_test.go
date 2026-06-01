@@ -129,38 +129,32 @@ type stubAuthorizationProvider struct {
 }
 
 func (p *stubAuthorizationProvider) Name() string { return p.name }
-func (p *stubAuthorizationProvider) Evaluate(context.Context, *core.AccessEvaluationRequest) (*core.AccessDecision, error) {
-	return &core.AccessDecision{}, nil
+func (p *stubAuthorizationProvider) CheckAccess(context.Context, *core.CheckAccessRequest) (*core.CheckAccessResponse, error) {
+	return &core.CheckAccessResponse{}, nil
 }
-func (p *stubAuthorizationProvider) EvaluateMany(context.Context, *core.AccessEvaluationsRequest) (*core.AccessEvaluationsResponse, error) {
-	return &core.AccessEvaluationsResponse{}, nil
+func (p *stubAuthorizationProvider) CheckAccessMany(context.Context, *core.CheckAccessManyRequest) (*core.CheckAccessManyResponse, error) {
+	return &core.CheckAccessManyResponse{}, nil
 }
-func (p *stubAuthorizationProvider) SearchResources(context.Context, *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
-	return &core.ResourceSearchResponse{}, nil
+func (p *stubAuthorizationProvider) ListRelationships(context.Context, *core.ListRelationshipsRequest) (*core.ListRelationshipsResponse, error) {
+	return &core.ListRelationshipsResponse{}, nil
 }
-func (p *stubAuthorizationProvider) SearchSubjects(context.Context, *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
-	return &core.SubjectSearchResponse{}, nil
+func (p *stubAuthorizationProvider) AddRelationship(context.Context, *core.AddRelationshipRequest) (*core.AddRelationshipResponse, error) {
+	return &core.AddRelationshipResponse{}, nil
 }
-func (p *stubAuthorizationProvider) SearchActions(context.Context, *core.ActionSearchRequest) (*core.ActionSearchResponse, error) {
-	return &core.ActionSearchResponse{}, nil
+func (p *stubAuthorizationProvider) DeleteRelationship(context.Context, *core.DeleteRelationshipRequest) (*core.DeleteRelationshipResponse, error) {
+	return &core.DeleteRelationshipResponse{}, nil
 }
-func (p *stubAuthorizationProvider) GetMetadata(context.Context) (*core.AuthorizationMetadata, error) {
-	return &core.AuthorizationMetadata{}, nil
+func (p *stubAuthorizationProvider) SetRelationships(context.Context, *core.SetRelationshipsRequest) (*core.SetRelationshipsResponse, error) {
+	return &core.SetRelationshipsResponse{}, nil
 }
-func (p *stubAuthorizationProvider) ReadRelationships(context.Context, *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
-	return &core.ReadRelationshipsResponse{}, nil
+func (p *stubAuthorizationProvider) GetActiveModelRef(context.Context) (*core.GetActiveModelRefResponse, error) {
+	return &core.GetActiveModelRefResponse{}, nil
 }
-func (p *stubAuthorizationProvider) WriteRelationships(context.Context, *core.WriteRelationshipsRequest) error {
-	return nil
+func (p *stubAuthorizationProvider) SetActiveModel(context.Context, *core.SetActiveModelRequest) (*core.SetActiveModelResponse, error) {
+	return &core.SetActiveModelResponse{}, nil
 }
-func (p *stubAuthorizationProvider) GetActiveModel(context.Context) (*core.GetActiveModelResponse, error) {
-	return &core.GetActiveModelResponse{}, nil
-}
-func (p *stubAuthorizationProvider) ListModels(context.Context, *core.ListModelsRequest) (*core.ListModelsResponse, error) {
-	return &core.ListModelsResponse{}, nil
-}
-func (p *stubAuthorizationProvider) WriteModel(context.Context, *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
-	return &core.AuthorizationModelRef{}, nil
+func (p *stubAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *core.ListActiveModelResourceTypesRequest) (*core.ListActiveModelResourceTypesResponse, error) {
+	return &core.ListActiveModelResourceTypesResponse{}, nil
 }
 
 func stubAuthorizationFactory(name string) bootstrap.AuthorizationFactory {
@@ -175,34 +169,36 @@ type memoryAuthorizationProvider struct {
 	mu            sync.Mutex
 	activeModelID string
 	models        []*core.AuthorizationModelRef
+	modelDefs     map[string]*core.AuthorizationModel
 	relsByModel   map[string]map[string]*core.Relationship
 }
 
 func newMemoryAuthorizationProvider(name string) *memoryAuthorizationProvider {
 	return &memoryAuthorizationProvider{
 		name:        name,
+		modelDefs:   map[string]*core.AuthorizationModel{},
 		relsByModel: map[string]map[string]*core.Relationship{},
 	}
 }
 
 func (p *memoryAuthorizationProvider) Name() string { return p.name }
 
-func (p *memoryAuthorizationProvider) Evaluate(ctx context.Context, req *core.AccessEvaluationRequest) (*core.AccessDecision, error) {
-	resp, err := p.EvaluateMany(ctx, &core.AccessEvaluationsRequest{Requests: []*core.AccessEvaluationRequest{req}})
+func (p *memoryAuthorizationProvider) CheckAccess(ctx context.Context, req *core.CheckAccessRequest) (*core.CheckAccessResponse, error) {
+	resp, err := p.CheckAccessMany(ctx, &core.CheckAccessManyRequest{Requests: []*core.CheckAccessRequest{req}})
 	if err != nil {
 		return nil, err
 	}
 	if len(resp.Decisions) == 0 {
-		return &core.AccessDecision{}, nil
+		return &core.CheckAccessResponse{}, nil
 	}
 	return resp.Decisions[0], nil
 }
 
-func (p *memoryAuthorizationProvider) EvaluateMany(_ context.Context, req *core.AccessEvaluationsRequest) (*core.AccessEvaluationsResponse, error) {
+func (p *memoryAuthorizationProvider) CheckAccessMany(_ context.Context, req *core.CheckAccessManyRequest) (*core.CheckAccessManyResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	resp := &core.AccessEvaluationsResponse{
-		Decisions: make([]*core.AccessDecision, 0, len(req.GetRequests())),
+	resp := &core.CheckAccessManyResponse{
+		Decisions: make([]*core.CheckAccessResponse, 0, len(req.GetRequests())),
 	}
 	rels := p.relsByModel[p.activeModelID]
 	for _, item := range req.GetRequests() {
@@ -210,7 +206,7 @@ func (p *memoryAuthorizationProvider) EvaluateMany(_ context.Context, req *core.
 		if item != nil && rels != nil {
 			_, allowed = rels[bootstrapRelationshipKey(item.GetSubject(), item.GetAction().GetName(), item.GetResource())]
 		}
-		resp.Decisions = append(resp.Decisions, &core.AccessDecision{
+		resp.Decisions = append(resp.Decisions, &core.CheckAccessResponse{
 			Allowed: allowed,
 			ModelId: p.activeModelID,
 		})
@@ -218,34 +214,13 @@ func (p *memoryAuthorizationProvider) EvaluateMany(_ context.Context, req *core.
 	return resp, nil
 }
 
-func (p *memoryAuthorizationProvider) SearchResources(context.Context, *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
-	return &core.ResourceSearchResponse{}, nil
-}
-
-func (p *memoryAuthorizationProvider) SearchSubjects(context.Context, *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
-	return &core.SubjectSearchResponse{}, nil
-}
-
-func (p *memoryAuthorizationProvider) SearchActions(context.Context, *core.ActionSearchRequest) (*core.ActionSearchResponse, error) {
-	return &core.ActionSearchResponse{}, nil
-}
-
-func (p *memoryAuthorizationProvider) GetMetadata(context.Context) (*core.AuthorizationMetadata, error) {
+func (p *memoryAuthorizationProvider) ListRelationships(_ context.Context, req *core.ListRelationshipsRequest) (*core.ListRelationshipsResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return &core.AuthorizationMetadata{ActiveModelId: p.activeModelID}, nil
-}
-
-func (p *memoryAuthorizationProvider) ReadRelationships(_ context.Context, req *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	modelID := strings.TrimSpace(req.GetModelId())
-	if modelID == "" {
-		modelID = p.activeModelID
-	}
+	modelID := p.activeModelID
 	out := make([]*core.Relationship, 0, len(p.relsByModel[modelID]))
 	for _, rel := range p.relsByModel[modelID] {
-		if !bootstrapRelationshipMatches(rel, req) {
+		if !bootstrapRelationshipMatches(rel, req.GetFilter()) {
 			continue
 		}
 		out = append(out, cloneRelationship(rel))
@@ -253,71 +228,106 @@ func (p *memoryAuthorizationProvider) ReadRelationships(_ context.Context, req *
 			break
 		}
 	}
-	return &core.ReadRelationshipsResponse{
+	return &core.ListRelationshipsResponse{
 		Relationships: out,
-		ModelId:       modelID,
 	}, nil
 }
 
-func bootstrapRelationshipMatches(rel *core.Relationship, req *core.ReadRelationshipsRequest) bool {
+func bootstrapRelationshipMatches(rel *core.Relationship, filter *core.RelationshipFilter) bool {
 	if rel == nil {
 		return false
 	}
-	if subject := req.GetSubject(); subject != nil {
-		if rel.GetSubject().GetType() != subject.GetType() || rel.GetSubject().GetId() != subject.GetId() {
+	if filter == nil {
+		return true
+	}
+	if target := filter.GetTarget(); target != nil {
+		if authorization.RelationshipTargetMapKey(authorization.RelationshipTarget(rel), authorization.RelationshipSubject(rel)) != authorization.RelationshipTargetMapKey(target, nil) {
 			return false
 		}
 	}
-	if relation := strings.TrimSpace(req.GetRelation()); relation != "" && rel.GetRelation() != relation {
+	if relation := strings.TrimSpace(filter.GetRelation()); relation != "" && authorization.RelationshipRelation(rel) != relation {
 		return false
 	}
-	if resource := req.GetResource(); resource != nil {
-		if rel.GetResource().GetType() != resource.GetType() || rel.GetResource().GetId() != resource.GetId() {
+	if resource := filter.GetResource(); resource != nil {
+		relResource := authorization.RelationshipResource(rel)
+		if relResource == nil || relResource.GetType() != resource.GetType() || relResource.GetId() != resource.GetId() {
 			return false
 		}
 	}
 	return true
 }
 
-func (p *memoryAuthorizationProvider) WriteRelationships(_ context.Context, req *core.WriteRelationshipsRequest) error {
+func (p *memoryAuthorizationProvider) writeRelationships(writes, deletes []*core.Relationship) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	modelID := req.GetModelId()
-	if modelID == "" {
-		modelID = p.activeModelID
-	}
+	modelID := p.activeModelID
 	rels := p.relsByModel[modelID]
 	if rels == nil {
 		rels = map[string]*core.Relationship{}
 		p.relsByModel[modelID] = rels
 	}
-	for _, key := range req.GetDeletes() {
-		delete(rels, bootstrapRelationshipKey(key.GetSubject(), key.GetRelation(), key.GetResource()))
+	for _, rel := range deletes {
+		delete(rels, bootstrapRelationshipKey(authorization.RelationshipSubject(rel), authorization.RelationshipRelation(rel), authorization.RelationshipResource(rel)))
 	}
-	for _, rel := range req.GetWrites() {
-		rels[bootstrapRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource())] = cloneRelationship(rel)
+	for _, rel := range writes {
+		rels[bootstrapRelationshipKey(authorization.RelationshipSubject(rel), authorization.RelationshipRelation(rel), authorization.RelationshipResource(rel))] = cloneRelationship(rel)
 	}
 	return nil
 }
 
-func (p *memoryAuthorizationProvider) GetActiveModel(context.Context) (*core.GetActiveModelResponse, error) {
+func (p *memoryAuthorizationProvider) AddRelationship(_ context.Context, req *core.AddRelationshipRequest) (*core.AddRelationshipResponse, error) {
+	if req == nil || req.GetRelationship() == nil {
+		return &core.AddRelationshipResponse{}, nil
+	}
+	err := p.writeRelationships([]*core.Relationship{req.GetRelationship()}, nil)
+	return &core.AddRelationshipResponse{Relationship: cloneRelationship(req.GetRelationship())}, err
+}
+
+func (p *memoryAuthorizationProvider) DeleteRelationship(_ context.Context, req *core.DeleteRelationshipRequest) (*core.DeleteRelationshipResponse, error) {
+	if req == nil || req.GetRelationshipTuple() == nil {
+		return &core.DeleteRelationshipResponse{}, nil
+	}
+	return &core.DeleteRelationshipResponse{}, p.writeRelationships(nil, []*core.Relationship{bootstrapRelationshipFromTuple(req.GetRelationshipTuple())})
+}
+
+func (p *memoryAuthorizationProvider) SetRelationships(_ context.Context, req *core.SetRelationshipsRequest) (*core.SetRelationshipsResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	modelID := p.activeModelID
+	rels := map[string]*core.Relationship{}
+	for _, rel := range req.GetRelationships() {
+		rels[bootstrapRelationshipKey(authorization.RelationshipSubject(rel), authorization.RelationshipRelation(rel), authorization.RelationshipResource(rel))] = cloneRelationship(rel)
+	}
+	p.relsByModel[modelID] = rels
+	return &core.SetRelationshipsResponse{Relationships: cloneRelationships(req.GetRelationships())}, nil
+}
+
+func (p *memoryAuthorizationProvider) GetActiveModelRef(context.Context) (*core.GetActiveModelRefResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, model := range p.models {
 		if model.GetId() == p.activeModelID {
-			return &core.GetActiveModelResponse{Model: model}, nil
+			return &core.GetActiveModelRefResponse{Model: model}, nil
 		}
 	}
-	return &core.GetActiveModelResponse{}, nil
+	return &core.GetActiveModelRefResponse{}, nil
 }
 
-func (p *memoryAuthorizationProvider) ListModels(context.Context, *core.ListModelsRequest) (*core.ListModelsResponse, error) {
+func (p *memoryAuthorizationProvider) ListActiveModelResourceTypes(_ context.Context, req *core.ListActiveModelResourceTypesRequest) (*core.ListActiveModelResourceTypesResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return &core.ListModelsResponse{Models: append([]*core.AuthorizationModelRef(nil), p.models...)}, nil
+	modelID := strings.TrimSpace(req.GetModelId())
+	if modelID == "" {
+		modelID = p.activeModelID
+	}
+	model := p.modelDefs[modelID]
+	if model == nil {
+		return &core.ListActiveModelResourceTypesResponse{}, nil
+	}
+	return &core.ListActiveModelResourceTypesResponse{ResourceTypes: cloneModelResourceTypesForTest(model.GetResourceTypes())}, nil
 }
 
-func (p *memoryAuthorizationProvider) WriteModel(_ context.Context, req *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
+func (p *memoryAuthorizationProvider) SetActiveModel(_ context.Context, req *core.SetActiveModelRequest) (*core.SetActiveModelResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -326,8 +336,8 @@ func (p *memoryAuthorizationProvider) WriteModel(_ context.Context, req *core.Wr
 		return nil, fmt.Errorf("model is required")
 	}
 	modelVersion := definition.GetVersion()
-	if modelVersion == 0 {
-		modelVersion = 1
+	if modelVersion == "" {
+		modelVersion = "1"
 	}
 	modelBytes, err := gproto.MarshalOptions{Deterministic: true}.Marshal(definition)
 	if err != nil {
@@ -341,19 +351,21 @@ func (p *memoryAuthorizationProvider) WriteModel(_ context.Context, req *core.Wr
 			if p.relsByModel[modelID] == nil {
 				p.relsByModel[modelID] = map[string]*core.Relationship{}
 			}
-			return existing, nil
+			p.modelDefs[modelID] = gproto.Clone(definition).(*core.AuthorizationModel)
+			return &core.SetActiveModelResponse{Model: existing}, nil
 		}
 	}
 	model := &core.AuthorizationModelRef{
 		Id:      modelID,
-		Version: fmt.Sprintf("%d", modelVersion),
+		Version: modelVersion,
 	}
 	p.models = append(p.models, model)
+	p.modelDefs[model.GetId()] = gproto.Clone(definition).(*core.AuthorizationModel)
 	p.activeModelID = model.GetId()
 	if p.relsByModel[model.GetId()] == nil {
 		p.relsByModel[model.GetId()] = map[string]*core.Relationship{}
 	}
-	return model, nil
+	return &core.SetActiveModelResponse{Model: model}, nil
 }
 
 func memoryAuthorizationFactory(provider *memoryAuthorizationProvider) bootstrap.AuthorizationFactory {
@@ -364,11 +376,11 @@ func memoryAuthorizationFactory(provider *memoryAuthorizationProvider) bootstrap
 
 func writeMemoryAuthorizationModel(t *testing.T, provider *memoryAuthorizationProvider, model *core.AuthorizationModel) string {
 	t.Helper()
-	ref, err := provider.WriteModel(context.Background(), &core.WriteModelRequest{Model: model})
+	resp, err := provider.SetActiveModel(context.Background(), &core.SetActiveModelRequest{Model: model})
 	if err != nil {
-		t.Fatalf("WriteModel: %v", err)
+		t.Fatalf("SetActiveModel: %v", err)
 	}
-	return ref.GetId()
+	return resp.GetModel().GetId()
 }
 
 func bootstrapRelationshipKey(subject *core.SubjectRef, relation string, resource *core.ResourceRef) string {
@@ -381,13 +393,23 @@ func bootstrapRelationshipKey(subject *core.SubjectRef, relation string, resourc
 	}, "\x00")
 }
 
+func bootstrapRelationship(subject *core.SubjectRef, relation string, resource *core.ResourceRef) *core.Relationship {
+	return &core.Relationship{
+		Tuple: &core.RelationshipTuple{
+			Target:   &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: cloneSubject(subject)}},
+			Relation: relation,
+			Resource: cloneResource(resource),
+		},
+	}
+}
+
 func (p *memoryAuthorizationProvider) putRelationship(modelID string, rel *core.Relationship) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.relsByModel[modelID] == nil {
 		p.relsByModel[modelID] = map[string]*core.Relationship{}
 	}
-	p.relsByModel[modelID][bootstrapRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource())] = cloneRelationship(rel)
+	p.relsByModel[modelID][bootstrapRelationshipKey(authorization.RelationshipSubject(rel), authorization.RelationshipRelation(rel), authorization.RelationshipResource(rel))] = cloneRelationship(rel)
 }
 
 func cloneRelationship(rel *core.Relationship) *core.Relationship {
@@ -395,14 +417,77 @@ func cloneRelationship(rel *core.Relationship) *core.Relationship {
 		return nil
 	}
 	return &core.Relationship{
-		Subject: &core.SubjectRef{
-			Type: rel.GetSubject().GetType(),
-			Id:   rel.GetSubject().GetId(),
+		Tuple: &core.RelationshipTuple{
+			Target:   cloneRelationshipTarget(authorization.RelationshipTarget(rel), authorization.RelationshipSubject(rel)),
+			Relation: authorization.RelationshipRelation(rel),
+			Resource: cloneResource(authorization.RelationshipResource(rel)),
 		},
-		Relation: rel.GetRelation(),
-		Resource: &core.ResourceRef{
-			Type: rel.GetResource().GetType(),
-			Id:   rel.GetResource().GetId(),
+	}
+}
+
+func cloneRelationships(rels []*core.Relationship) []*core.Relationship {
+	out := make([]*core.Relationship, 0, len(rels))
+	for _, rel := range rels {
+		out = append(out, cloneRelationship(rel))
+	}
+	return out
+}
+
+func cloneModelResourceTypesForTest(resourceTypes []*core.AuthorizationModelResourceType) []*core.AuthorizationModelResourceType {
+	out := make([]*core.AuthorizationModelResourceType, 0, len(resourceTypes))
+	for _, resourceType := range resourceTypes {
+		if resourceType == nil {
+			continue
+		}
+		out = append(out, gproto.Clone(resourceType).(*core.AuthorizationModelResourceType))
+	}
+	return out
+}
+
+func cloneResource(resource *core.ResourceRef) *core.ResourceRef {
+	if resource == nil {
+		return nil
+	}
+	return &core.ResourceRef{Type: resource.GetType(), Id: resource.GetId()}
+}
+
+func cloneSubject(subject *core.SubjectRef) *core.SubjectRef {
+	if subject == nil {
+		return nil
+	}
+	return &core.SubjectRef{Type: subject.GetType(), Id: subject.GetId()}
+}
+
+func cloneRelationshipTarget(target *core.RelationshipTargetRef, subject *core.SubjectRef) *core.RelationshipTargetRef {
+	if target != nil {
+		if targetSubject := target.GetSubject(); targetSubject != nil {
+			return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: cloneSubject(targetSubject)}}
+		}
+		if targetResource := target.GetResource(); targetResource != nil {
+			return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Resource{Resource: cloneResource(targetResource)}}
+		}
+		if targetSet := target.GetSubjectSet(); targetSet != nil {
+			return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
+				Resource: cloneResource(targetSet.GetResource()),
+				Relation: targetSet.GetRelation(),
+			}}}
+		}
+	}
+	if subject == nil {
+		return nil
+	}
+	return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: cloneSubject(subject)}}
+}
+
+func bootstrapRelationshipFromTuple(tuple *core.RelationshipTuple) *core.Relationship {
+	if tuple == nil {
+		return nil
+	}
+	return &core.Relationship{
+		Tuple: &core.RelationshipTuple{
+			Target:   cloneRelationshipTarget(tuple.GetTarget(), nil),
+			Relation: tuple.GetRelation(),
+			Resource: cloneResource(tuple.GetResource()),
 		},
 	}
 }
@@ -2189,12 +2274,12 @@ func TestBootstrapProviderBoundaryMetrics(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("PutCredential: %v", err)
 	}
-	if _, err := result.AuthorizationProvider.Evaluate(ctx, &core.AccessEvaluationRequest{
+	if _, err := result.AuthorizationProvider.CheckAccess(ctx, &core.CheckAccessRequest{
 		Subject:  &core.SubjectRef{Type: "user", Id: "metrics-user"},
 		Action:   &core.ActionRef{Name: "read"},
 		Resource: &core.ResourceRef{Type: "integration", Id: "slack"},
 	}); err != nil {
-		t.Fatalf("Evaluate: %v", err)
+		t.Fatalf("CheckAccess: %v", err)
 	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
@@ -2205,7 +2290,7 @@ func TestBootstrapProviderBoundaryMetrics(t *testing.T) {
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.authorization.provider.operation.count", 1, map[string]string{
 		"gestalt.authorization.provider":  "remote-authz",
-		"gestalt.authorization.operation": "evaluate",
+		"gestalt.authorization.operation": "check_access",
 	})
 }
 
@@ -8211,11 +8296,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			"owner",
 			&core.ResourceRef{Type: "foreign_resource", Id: "roadmap"},
 		)
-		provider.putRelationship(existingModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: "team", Id: "ops"},
-			Relation: "owner",
-			Resource: &core.ResourceRef{Type: "foreign_resource", Id: "roadmap"},
-		})
+		provider.putRelationship(existingModelID, bootstrapRelationship(
+			&core.SubjectRef{Type: "team", Id: "ops"},
+			"owner",
+			&core.ResourceRef{Type: "foreign_resource", Id: "roadmap"},
+		))
 		factories := validFactories()
 		factories.Authorization = memoryAuthorizationFactory(provider)
 
@@ -8229,16 +8314,16 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FindOrCreateUser(dynamic): %v", err)
 		}
-		provider.putRelationship(existingModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
-			Relation: "editor",
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: "calendar"},
-		})
-		provider.putRelationship(existingModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
-			Relation: "admin",
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
-		})
+		provider.putRelationship(existingModelID, bootstrapRelationship(
+			&core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
+			"editor",
+			&core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: "calendar"},
+		))
+		provider.putRelationship(existingModelID, bootstrapRelationship(
+			&core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
+			"admin",
+			&core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
+		))
 
 		if err := result.Start(ctx); err != nil {
 			t.Fatalf("Start: %v", err)
@@ -8510,16 +8595,16 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FindOrCreateUser(dynamic): %v", err)
 		}
-		provider.putRelationship(provider.activeModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
-			Relation: "editor",
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: "calendar"},
-		})
-		provider.putRelationship(provider.activeModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
-			Relation: "admin",
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
-		})
+		provider.putRelationship(provider.activeModelID, bootstrapRelationship(
+			&core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
+			"editor",
+			&core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: "calendar"},
+		))
+		provider.putRelationship(provider.activeModelID, bootstrapRelationship(
+			&core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
+			"admin",
+			&core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
+		))
 		if err := result.Start(ctx); err != nil {
 			t.Fatalf("Start(first): %v", err)
 		}
@@ -8608,16 +8693,16 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FindOrCreateUser(dynamic): %v", err)
 		}
-		provider.putRelationship(existingModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
-			Relation: "viewer",
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: "calendar"},
-		})
-		provider.putRelationship(existingModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
-			Relation: "operator",
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
-		})
+		provider.putRelationship(existingModelID, bootstrapRelationship(
+			&core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
+			"viewer",
+			&core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: "calendar"},
+		))
+		provider.putRelationship(existingModelID, bootstrapRelationship(
+			&core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(dynamicUser.ID)},
+			"operator",
+			&core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
+		))
 
 		if err := result.Start(ctx); err != nil {
 			t.Fatalf("Start: %v", err)
@@ -8685,11 +8770,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			"owner",
 			&core.ResourceRef{Type: "foreign_resource", Id: "roadmap"},
 		)
-		provider.putRelationship("model-existing", &core.Relationship{
-			Subject:  &core.SubjectRef{Type: "team", Id: "ops"},
-			Relation: "owner",
-			Resource: &core.ResourceRef{Type: "foreign_resource", Id: "roadmap"},
-		})
+		provider.putRelationship("model-existing", bootstrapRelationship(
+			&core.SubjectRef{Type: "team", Id: "ops"},
+			"owner",
+			&core.ResourceRef{Type: "foreign_resource", Id: "roadmap"},
+		))
 
 		factories := validFactories()
 		factories.Authorization = memoryAuthorizationFactory(provider)
@@ -8769,11 +8854,8 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			Kind:      principal.KindUser,
 		}
 		access, allowed := result.Authorizer.ResolveAccess(ctx, staticPrincipal, "calendar")
-		if !allowed {
-			t.Fatal("expected access to use the cached model while the provider active model drifts")
-		}
-		if access.Role != "viewer" {
-			t.Fatalf("role during active model drift = %q, want %q", access.Role, "viewer")
+		if allowed {
+			t.Fatalf("access during active model drift = %+v, want denied", access)
 		}
 		if err := result.Authorizer.ReloadAuthorizationState(ctx); err != nil {
 			t.Fatalf("expected authorization state reload to heal active model drift: %v", err)

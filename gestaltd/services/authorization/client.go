@@ -3,7 +3,6 @@ package authorization
 import (
 	"context"
 	"io"
-	"slices"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -30,18 +29,6 @@ type remoteAuthorizationProvider struct {
 	runtime proto.ProviderLifecycleClient
 	closer  io.Closer
 	name    string
-}
-
-type remoteAuthorizationProviderWithEffectiveSearch struct {
-	*remoteAuthorizationProvider
-}
-
-type remoteAuthorizationProviderWithExpansion struct {
-	*remoteAuthorizationProvider
-}
-
-type remoteAuthorizationProviderWithEffectiveSearchAndExpansion struct {
-	*remoteAuthorizationProvider
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthorizationProvider, error) {
@@ -76,160 +63,70 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthorizationProvi
 		name = "authorization"
 	}
 
-	capabilities := remoteAuthorizationCapabilities(ctx, authzClient)
-	return newRemoteAuthorizationProvider(authzClient, runtimeClient, proc, name, capabilities), nil
-}
-
-func newRemoteAuthorizationProvider(client proto.AuthorizationProviderClient, runtime proto.ProviderLifecycleClient, closer io.Closer, name string, capabilities []string) core.AuthorizationProvider {
-	base := &remoteAuthorizationProvider{
-		client:  client,
-		runtime: runtime,
-		closer:  closer,
+	return &remoteAuthorizationProvider{
+		client:  authzClient,
+		runtime: runtimeClient,
+		closer:  proc,
 		name:    name,
-	}
-	hasEffectiveSearch := remoteAuthorizationCapabilitySet(capabilities).has(capabilityEffectiveSearchResources, capabilityEffectiveSearchSubjects)
-	hasExpansion := remoteAuthorizationCapabilitySet(capabilities).has(capabilityExpand)
-	switch {
-	case hasEffectiveSearch && hasExpansion:
-		return &remoteAuthorizationProviderWithEffectiveSearchAndExpansion{remoteAuthorizationProvider: base}
-	case hasEffectiveSearch:
-		return &remoteAuthorizationProviderWithEffectiveSearch{remoteAuthorizationProvider: base}
-	case hasExpansion:
-		return &remoteAuthorizationProviderWithExpansion{remoteAuthorizationProvider: base}
-	default:
-		return base
-	}
-}
-
-func remoteAuthorizationCapabilities(ctx context.Context, client proto.AuthorizationProviderClient) []string {
-	if client == nil {
-		return nil
-	}
-	callCtx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	metadata, err := client.GetMetadata(callCtx, &emptypb.Empty{})
-	if err != nil {
-		return nil
-	}
-	return append([]string(nil), metadata.GetCapabilities()...)
-}
-
-type remoteAuthorizationCapabilitySet []string
-
-func (s remoteAuthorizationCapabilitySet) has(capabilities ...string) bool {
-	for _, capability := range capabilities {
-		if !slices.Contains(s, capability) {
-			return false
-		}
-	}
-	return true
+	}, nil
 }
 
 func (r *remoteAuthorizationProvider) Name() string {
 	return r.name
 }
 
-func (r *remoteAuthorizationProvider) Evaluate(ctx context.Context, req *core.AccessEvaluationRequest) (*core.AccessDecision, error) {
+func (r *remoteAuthorizationProvider) CheckAccess(ctx context.Context, req *core.CheckAccessRequest) (*core.CheckAccessResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	return r.client.Evaluate(ctx, req)
+	return r.client.CheckAccess(ctx, req)
 }
 
-func (r *remoteAuthorizationProvider) EvaluateMany(ctx context.Context, req *core.AccessEvaluationsRequest) (*core.AccessEvaluationsResponse, error) {
+func (r *remoteAuthorizationProvider) CheckAccessMany(ctx context.Context, req *core.CheckAccessManyRequest) (*core.CheckAccessManyResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	return r.client.EvaluateMany(ctx, req)
+	return r.client.CheckAccessMany(ctx, req)
 }
 
-func (r *remoteAuthorizationProvider) SearchResources(ctx context.Context, req *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
+func (r *remoteAuthorizationProvider) ListRelationships(ctx context.Context, req *core.ListRelationshipsRequest) (*core.ListRelationshipsResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	return r.client.SearchResources(ctx, req)
+	return r.client.ListRelationships(ctx, req)
 }
 
-func (r *remoteAuthorizationProvider) SearchSubjects(ctx context.Context, req *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
+func (r *remoteAuthorizationProvider) AddRelationship(ctx context.Context, req *core.AddRelationshipRequest) (*core.AddRelationshipResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	return r.client.SearchSubjects(ctx, req)
+	return r.client.AddRelationship(ctx, req)
 }
 
-func (r *remoteAuthorizationProviderWithEffectiveSearch) EffectiveSearchResources(ctx context.Context, req *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
+func (r *remoteAuthorizationProvider) DeleteRelationship(ctx context.Context, req *core.DeleteRelationshipRequest) (*core.DeleteRelationshipResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	return r.client.EffectiveSearchResources(ctx, req)
+	return r.client.DeleteRelationship(ctx, req)
 }
 
-func (r *remoteAuthorizationProviderWithEffectiveSearch) EffectiveSearchSubjects(ctx context.Context, req *core.EffectiveSubjectSearchRequest) (*core.EffectiveSubjectSearchResponse, error) {
+func (r *remoteAuthorizationProvider) SetRelationships(ctx context.Context, req *core.SetRelationshipsRequest) (*core.SetRelationshipsResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	return r.client.EffectiveSearchSubjects(ctx, req)
+	return r.client.SetRelationships(ctx, req)
 }
 
-func (r *remoteAuthorizationProviderWithEffectiveSearchAndExpansion) EffectiveSearchResources(ctx context.Context, req *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
+func (r *remoteAuthorizationProvider) GetActiveModelRef(ctx context.Context) (*core.GetActiveModelRefResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	return r.client.EffectiveSearchResources(ctx, req)
+	return r.client.GetActiveModelRef(ctx, &emptypb.Empty{})
 }
 
-func (r *remoteAuthorizationProviderWithEffectiveSearchAndExpansion) EffectiveSearchSubjects(ctx context.Context, req *core.EffectiveSubjectSearchRequest) (*core.EffectiveSubjectSearchResponse, error) {
+func (r *remoteAuthorizationProvider) SetActiveModel(ctx context.Context, req *core.SetActiveModelRequest) (*core.SetActiveModelResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	return r.client.EffectiveSearchSubjects(ctx, req)
+	return r.client.SetActiveModel(ctx, req)
 }
 
-func (r *remoteAuthorizationProvider) SearchActions(ctx context.Context, req *core.ActionSearchRequest) (*core.ActionSearchResponse, error) {
+func (r *remoteAuthorizationProvider) ListActiveModelResourceTypes(ctx context.Context, req *core.ListActiveModelResourceTypesRequest) (*core.ListActiveModelResourceTypesResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	return r.client.SearchActions(ctx, req)
-}
-
-func (r *remoteAuthorizationProvider) GetMetadata(ctx context.Context) (*core.AuthorizationMetadata, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	return r.client.GetMetadata(ctx, &emptypb.Empty{})
-}
-
-func (r *remoteAuthorizationProvider) ReadRelationships(ctx context.Context, req *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	return r.client.ReadRelationships(ctx, req)
-}
-
-func (r *remoteAuthorizationProvider) WriteRelationships(ctx context.Context, req *core.WriteRelationshipsRequest) error {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	_, err := r.client.WriteRelationships(ctx, req)
-	return err
-}
-
-func (r *remoteAuthorizationProviderWithExpansion) Expand(ctx context.Context, req *core.ExpandRequest) (*core.ExpandResponse, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	return r.client.Expand(ctx, req)
-}
-
-func (r *remoteAuthorizationProviderWithEffectiveSearchAndExpansion) Expand(ctx context.Context, req *core.ExpandRequest) (*core.ExpandResponse, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	return r.client.Expand(ctx, req)
-}
-
-func (r *remoteAuthorizationProvider) GetActiveModel(ctx context.Context) (*core.GetActiveModelResponse, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	return r.client.GetActiveModel(ctx, &emptypb.Empty{})
-}
-
-func (r *remoteAuthorizationProvider) ListModels(ctx context.Context, req *core.ListModelsRequest) (*core.ListModelsResponse, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	return r.client.ListModels(ctx, req)
-}
-
-func (r *remoteAuthorizationProvider) WriteModel(ctx context.Context, req *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	return r.client.WriteModel(ctx, req)
+	return r.client.ListActiveModelResourceTypes(ctx, req)
 }
 
 func (r *remoteAuthorizationProvider) Close() error {

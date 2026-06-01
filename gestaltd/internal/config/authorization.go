@@ -73,8 +73,7 @@ func authorizationModelResourceType(name string, def AuthorizationResourceTypeDe
 	for relationName, relation := range def.Relations {
 		resourceType.Relations = append(resourceType.Relations, &core.AuthorizationModelRelation{
 			Name:           relationName,
-			SubjectTypes:   append([]string(nil), relation.SubjectTypes...),
-			AllowedTargets: authorizationAllowedTargets(relation.AllowedTargets),
+			AllowedTargets: append(authorizationSubjectTypeTargets(relation.SubjectTypes), authorizationAllowedTargets(relation.AllowedTargets)...),
 		})
 	}
 	for actionName, action := range def.Actions {
@@ -100,7 +99,7 @@ func authorizationAllowedTargets(targets []AuthorizationAllowedTargetDef) []*cor
 			})
 		case target.SubjectSet != nil:
 			out = append(out, &core.AuthorizationModelAllowedTarget{
-				Kind: &proto.AuthorizationModelAllowedTarget_SubjectSet{SubjectSet: &core.AuthorizationModelSubjectSetTarget{
+				Kind: &proto.AuthorizationModelAllowedTarget_SubjectSetType{SubjectSetType: &core.AuthorizationSubjectSetType{
 					ResourceType: target.SubjectSet.ResourceType,
 					Relation:     target.SubjectSet.Relation,
 				}},
@@ -115,11 +114,25 @@ func authorizationRelationships(cfg AuthorizationConfig) []*core.Relationship {
 	for i := range cfg.Relationships {
 		relationship := &cfg.Relationships[i]
 		out = append(out, &core.Relationship{
-			Subject:    authorizationSubject(relationship.Subject),
-			Relation:   relationship.Relation,
-			Resource:   authorizationResource(relationship.Resource),
-			Target:     authorizationRelationshipTarget(relationship.Target),
+			Tuple: &core.RelationshipTuple{
+				Target:   authorizationRelationshipTarget(relationship.Target),
+				Relation: relationship.Relation,
+				Resource: authorizationResource(relationship.Resource),
+			},
 			Properties: authorizationStringProperties(relationship.Properties),
+		})
+	}
+	return out
+}
+
+func authorizationSubjectTypeTargets(subjectTypes []string) []*core.AuthorizationModelAllowedTarget {
+	out := make([]*core.AuthorizationModelAllowedTarget, 0, len(subjectTypes))
+	for _, subjectType := range subjectTypes {
+		if subjectType == "" {
+			continue
+		}
+		out = append(out, &core.AuthorizationModelAllowedTarget{
+			Kind: &proto.AuthorizationModelAllowedTarget_SubjectType{SubjectType: subjectType},
 		})
 	}
 	return out

@@ -1144,9 +1144,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}()
 	var authz authorization.RuntimeAuthorizer = baseAuthz
 	if prepared.AuthorizationProvider != nil {
-		authz, err = authorization.NewProviderBacked(baseAuthz, prepared.AuthorizationProvider,
-			authorization.WithDynamicFragmentSource(prepared.Services.AuthzFragments),
-		)
+		authz, err = authorization.NewProviderBacked(baseAuthz, prepared.AuthorizationProvider)
 		if err != nil {
 			failPendingStartupProviders(prepared.Deps, err)
 			return nil, err

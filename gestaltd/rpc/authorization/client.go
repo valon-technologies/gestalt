@@ -9,227 +9,148 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-var (
-	_ sdkauthorization.Authorization = (*rpcClient)(nil)
-)
+var _ sdkauthorization.Authorization = (*rpcClient)(nil)
 
 type rpcClient struct {
 	grpc proto.AuthorizationProviderClient
 	opts Options
 }
 
-// Close is a no-op because this client uses shared transport.
 func (c *rpcClient) Close() error { return nil }
 
-func (c *rpcClient) Evaluate(ctx context.Context, req *AccessEvaluationRequest) (*AccessDecision, error) {
+func (c *rpcClient) CheckAccess(ctx context.Context, req *CheckAccessRequest) (*CheckAccessResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoAccessEvaluationRequest(req)
+	pbReq, err := protoCheckAccessRequest(req)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
-	resp, err := c.grpc.Evaluate(ctx, pbReq)
+	resp, err := c.grpc.CheckAccess(ctx, pbReq)
 	if err != nil {
 		return nil, err
 	}
-	return accessDecisionFromProto(resp), nil
+	return checkAccessResponseFromProto(resp), nil
 }
 
-func (c *rpcClient) EvaluateMany(ctx context.Context, req *AccessEvaluationsRequest) (*AccessEvaluationsResponse, error) {
+func (c *rpcClient) CheckAccessMany(ctx context.Context, req *CheckAccessManyRequest) (*CheckAccessManyResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoAccessEvaluationsRequest(req)
+	pbReq, err := protoCheckAccessManyRequest(req)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
-	resp, err := c.grpc.EvaluateMany(ctx, pbReq)
+	resp, err := c.grpc.CheckAccessMany(ctx, pbReq)
 	if err != nil {
 		return nil, err
 	}
-	return accessEvaluationsResponseFromProto(resp), nil
+	return checkAccessManyResponseFromProto(resp), nil
 }
 
-func (c *rpcClient) SearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error) {
+func (c *rpcClient) ListRelationships(ctx context.Context, req *ListRelationshipsRequest) (*ListRelationshipsResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoResourceSearchRequest(req)
+	pbReq, err := protoListRelationshipsRequest(req)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
-	resp, err := c.grpc.SearchResources(ctx, pbReq)
+	resp, err := c.grpc.ListRelationships(ctx, pbReq)
 	if err != nil {
 		return nil, err
 	}
-	return resourceSearchResponseFromProto(resp), nil
+	return listRelationshipsResponseFromProto(resp), nil
 }
 
-func (c *rpcClient) SearchSubjects(ctx context.Context, req *SubjectSearchRequest) (*SubjectSearchResponse, error) {
+func (c *rpcClient) AddRelationship(ctx context.Context, req *AddRelationshipRequest) (*AddRelationshipResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoSubjectSearchRequest(req)
+	pbReq, err := protoAddRelationshipRequest(req)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
-	resp, err := c.grpc.SearchSubjects(ctx, pbReq)
+	resp, err := c.grpc.AddRelationship(ctx, pbReq)
 	if err != nil {
 		return nil, err
 	}
-	return subjectSearchResponseFromProto(resp), nil
+	return addRelationshipResponseFromProto(resp), nil
 }
 
-func (c *rpcClient) EffectiveSearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error) {
+func (c *rpcClient) DeleteRelationship(ctx context.Context, req *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoResourceSearchRequest(req)
+	pbReq, err := protoDeleteRelationshipRequest(req)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
-	resp, err := c.grpc.EffectiveSearchResources(ctx, pbReq)
-	if err != nil {
+	if _, err := c.grpc.DeleteRelationship(ctx, pbReq); err != nil {
 		return nil, err
 	}
-	return resourceSearchResponseFromProto(resp), nil
+	return &DeleteRelationshipResponse{}, nil
 }
 
-func (c *rpcClient) EffectiveSearchSubjects(ctx context.Context, req *EffectiveSubjectSearchRequest) (*EffectiveSubjectSearchResponse, error) {
+func (c *rpcClient) SetRelationships(ctx context.Context, req *SetRelationshipsRequest) (*SetRelationshipsResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	pbReq, err := protoEffectiveSubjectSearchRequest(req)
+	pbReq, err := protoSetRelationshipsRequest(req)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
-	resp, err := c.grpc.EffectiveSearchSubjects(ctx, pbReq)
+	resp, err := c.grpc.SetRelationships(ctx, pbReq)
 	if err != nil {
 		return nil, err
 	}
-	return effectiveSubjectSearchResponseFromProto(resp), nil
+	return setRelationshipsResponseFromProto(resp), nil
 }
 
-func (c *rpcClient) SearchActions(ctx context.Context, req *ActionSearchRequest) (*ActionSearchResponse, error) {
-	if req == nil {
-		return nil, fmt.Errorf("authorization: request is required")
-	}
-	pbReq, err := protoActionSearchRequest(req)
-	if err != nil {
-		return nil, err
-	}
+func (c *rpcClient) GetActiveModelRef(ctx context.Context) (*GetActiveModelRefResponse, error) {
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
-	resp, err := c.grpc.SearchActions(ctx, pbReq)
+	resp, err := c.grpc.GetActiveModelRef(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, err
 	}
-	return actionSearchResponseFromProto(resp), nil
+	return getActiveModelRefResponseFromProto(resp), nil
 }
 
-func (c *rpcClient) Expand(ctx context.Context, req *ExpandRequest) (*ExpandResponse, error) {
-	if req == nil {
-		return nil, fmt.Errorf("authorization: request is required")
-	}
-	pbReq, err := protoExpandRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.callCtx(ctx)
-	defer cancel()
-	resp, err := c.grpc.Expand(ctx, pbReq)
-	if err != nil {
-		return nil, err
-	}
-	return expandResponseFromProto(resp), nil
-}
-
-func (c *rpcClient) ReadRelationships(ctx context.Context, req *ReadRelationshipsRequest) (*ReadRelationshipsResponse, error) {
-	if req == nil {
-		return nil, fmt.Errorf("authorization: request is required")
-	}
-	pbReq, err := protoReadRelationshipsRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.callCtx(ctx)
-	defer cancel()
-	resp, err := c.grpc.ReadRelationships(ctx, pbReq)
-	if err != nil {
-		return nil, err
-	}
-	return readRelationshipsResponseFromProto(resp), nil
-}
-
-func (c *rpcClient) WriteRelationships(ctx context.Context, req *WriteRelationshipsRequest) error {
-	if req == nil {
-		return fmt.Errorf("authorization: request is required")
-	}
-	pbReq, err := protoWriteRelationshipsRequest(req)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := c.callCtx(ctx)
-	defer cancel()
-	_, err = c.grpc.WriteRelationships(ctx, pbReq)
-	return err
-}
-
-func (c *rpcClient) GetMetadata(ctx context.Context) (*AuthorizationMetadata, error) {
-	ctx, cancel := c.callCtx(ctx)
-	defer cancel()
-	resp, err := c.grpc.GetMetadata(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, err
-	}
-	return authorizationMetadataFromProto(resp), nil
-}
-
-func (c *rpcClient) GetActiveModel(ctx context.Context) (*GetActiveModelResponse, error) {
-	ctx, cancel := c.callCtx(ctx)
-	defer cancel()
-	resp, err := c.grpc.GetActiveModel(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, err
-	}
-	return getActiveModelResponseFromProto(resp), nil
-}
-
-func (c *rpcClient) ListModels(ctx context.Context, req *ListModelsRequest) (*ListModelsResponse, error) {
+func (c *rpcClient) SetActiveModel(ctx context.Context, req *SetActiveModelRequest) (*SetActiveModelResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
-	resp, err := c.grpc.ListModels(ctx, protoListModelsRequest(req))
+	resp, err := c.grpc.SetActiveModel(ctx, protoSetActiveModelRequest(req))
 	if err != nil {
 		return nil, err
 	}
-	return listModelsResponseFromProto(resp), nil
+	return setActiveModelResponseFromProto(resp), nil
 }
 
-func (c *rpcClient) WriteModel(ctx context.Context, req *WriteModelRequest) (*AuthorizationModelRef, error) {
+func (c *rpcClient) ListActiveModelResourceTypes(ctx context.Context, req *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
-	resp, err := c.grpc.WriteModel(ctx, protoWriteModelRequest(req))
+	resp, err := c.grpc.ListActiveModelResourceTypes(ctx, protoListActiveModelResourceTypesRequest(req))
 	if err != nil {
 		return nil, err
 	}
-	return authorizationModelRefFromProto(resp), nil
+	return listActiveModelResourceTypesResponseFromProto(resp), nil
 }

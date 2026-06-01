@@ -62,7 +62,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	gproto "google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
@@ -107,56 +106,48 @@ type hostedHTTPAuthorizationProvider struct{}
 
 func (p *hostedHTTPAuthorizationProvider) Name() string { return "authz" }
 
-func (p *hostedHTTPAuthorizationProvider) Evaluate(context.Context, *core.AccessEvaluationRequest) (*core.AccessDecision, error) {
-	return &core.AccessDecision{}, nil
+func (p *hostedHTTPAuthorizationProvider) CheckAccess(context.Context, *core.CheckAccessRequest) (*core.CheckAccessResponse, error) {
+	return &core.CheckAccessResponse{}, nil
 }
 
-func (p *hostedHTTPAuthorizationProvider) EvaluateMany(context.Context, *core.AccessEvaluationsRequest) (*core.AccessEvaluationsResponse, error) {
-	return &core.AccessEvaluationsResponse{}, nil
+func (p *hostedHTTPAuthorizationProvider) CheckAccessMany(context.Context, *core.CheckAccessManyRequest) (*core.CheckAccessManyResponse, error) {
+	return &core.CheckAccessManyResponse{}, nil
 }
 
-func (p *hostedHTTPAuthorizationProvider) SearchResources(context.Context, *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
-	return &core.ResourceSearchResponse{}, nil
+func (p *hostedHTTPAuthorizationProvider) ListRelationships(context.Context, *core.ListRelationshipsRequest) (*core.ListRelationshipsResponse, error) {
+	return &core.ListRelationshipsResponse{}, nil
 }
 
-func (p *hostedHTTPAuthorizationProvider) SearchSubjects(context.Context, *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
-	return &core.SubjectSearchResponse{}, nil
+func (p *hostedHTTPAuthorizationProvider) AddRelationship(context.Context, *core.AddRelationshipRequest) (*core.AddRelationshipResponse, error) {
+	return &core.AddRelationshipResponse{}, nil
 }
 
-func (p *hostedHTTPAuthorizationProvider) SearchActions(context.Context, *core.ActionSearchRequest) (*core.ActionSearchResponse, error) {
-	return &core.ActionSearchResponse{}, nil
+func (p *hostedHTTPAuthorizationProvider) DeleteRelationship(context.Context, *core.DeleteRelationshipRequest) (*core.DeleteRelationshipResponse, error) {
+	return &core.DeleteRelationshipResponse{}, nil
 }
 
-func (p *hostedHTTPAuthorizationProvider) GetMetadata(context.Context) (*core.AuthorizationMetadata, error) {
-	return &core.AuthorizationMetadata{}, nil
+func (p *hostedHTTPAuthorizationProvider) SetRelationships(context.Context, *core.SetRelationshipsRequest) (*core.SetRelationshipsResponse, error) {
+	return &core.SetRelationshipsResponse{}, nil
 }
 
-func (p *hostedHTTPAuthorizationProvider) ReadRelationships(context.Context, *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
-	return &core.ReadRelationshipsResponse{}, nil
+func (p *hostedHTTPAuthorizationProvider) GetActiveModelRef(context.Context) (*core.GetActiveModelRefResponse, error) {
+	return &core.GetActiveModelRefResponse{}, nil
 }
 
-func (p *hostedHTTPAuthorizationProvider) WriteRelationships(context.Context, *core.WriteRelationshipsRequest) error {
-	return nil
+func (p *hostedHTTPAuthorizationProvider) SetActiveModel(context.Context, *core.SetActiveModelRequest) (*core.SetActiveModelResponse, error) {
+	return &core.SetActiveModelResponse{}, nil
 }
 
-func (p *hostedHTTPAuthorizationProvider) GetActiveModel(context.Context) (*core.GetActiveModelResponse, error) {
-	return &core.GetActiveModelResponse{}, nil
-}
-
-func (p *hostedHTTPAuthorizationProvider) ListModels(context.Context, *core.ListModelsRequest) (*core.ListModelsResponse, error) {
-	return &core.ListModelsResponse{}, nil
-}
-
-func (p *hostedHTTPAuthorizationProvider) WriteModel(context.Context, *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
-	return &core.AuthorizationModelRef{}, nil
+func (p *hostedHTTPAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *core.ListActiveModelResourceTypesRequest) (*core.ListActiveModelResourceTypesResponse, error) {
+	return &core.ListActiveModelResourceTypesResponse{}, nil
 }
 
 type authorizationSearchCall struct {
 	SubjectType  string
+	SubjectID    string
 	ResourceType string
 	ResourceID   string
 	ActionName   string
-	PageSize     int32
 }
 
 type recordingHostedAuthorizationProvider struct {
@@ -166,10 +157,11 @@ type recordingHostedAuthorizationProvider struct {
 	searchCalls []authorizationSearchCall
 }
 
-func (p *recordingHostedAuthorizationProvider) SearchSubjects(_ context.Context, req *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
-	call := authorizationSearchCall{
-		SubjectType: req.GetSubjectType(),
-		PageSize:    req.GetPageSize(),
+func (p *recordingHostedAuthorizationProvider) CheckAccess(_ context.Context, req *core.CheckAccessRequest) (*core.CheckAccessResponse, error) {
+	call := authorizationSearchCall{}
+	if subject := req.GetSubject(); subject != nil {
+		call.SubjectType = subject.GetType()
+		call.SubjectID = subject.GetId()
 	}
 	if resource := req.GetResource(); resource != nil {
 		call.ResourceType = resource.GetType()
@@ -183,11 +175,8 @@ func (p *recordingHostedAuthorizationProvider) SearchSubjects(_ context.Context,
 	p.searchCalls = append(p.searchCalls, call)
 	p.mu.Unlock()
 
-	return &core.SubjectSearchResponse{
-		Subjects: []*core.SubjectRef{{
-			Type: "user",
-			Id:   "user:user-123",
-		}},
+	return &core.CheckAccessResponse{
+		Allowed: true,
 		ModelId: "authz-model-1",
 	}, nil
 }
@@ -1041,31 +1030,24 @@ func fakeHostedAuthorizationRoundTrip(env map[string]string) (map[string]any, er
 	defer cancel()
 
 	client := proto.NewAuthorizationProviderClient(conn)
-	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, fmt.Errorf("get authorization metadata: %w", err)
-	}
-	resp, err := client.SearchSubjects(ctx, &proto.SubjectSearchRequest{
-		SubjectType: "user",
+	resp, err := client.CheckAccess(ctx, &proto.CheckAccessRequest{
+		Subject: &proto.Subject{
+			Type: "user",
+			Id:   "user:user-123",
+		},
 		Resource: &proto.Resource{
 			Type: "slack_identity",
 			Id:   "team:T123:user:U456",
 		},
-		Action:   &proto.Action{Name: "assume"},
-		PageSize: 1,
+		Action: &proto.Action{Name: "assume"},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("search authorization subjects: %w", err)
-	}
-	if len(resp.GetSubjects()) == 0 {
-		return nil, fmt.Errorf("authorization search did not return any subjects")
+		return nil, fmt.Errorf("check authorization access: %w", err)
 	}
 
 	return map[string]any{
-		"model_id":     resp.GetModelId(),
-		"subject_id":   resp.GetSubjects()[0].GetId(),
-		"subject_type": resp.GetSubjects()[0].GetType(),
-		"capabilities": meta.GetCapabilities(),
+		"model_id": resp.GetModelId(),
+		"allowed":  resp.GetAllowed(),
 	}, nil
 }
 
@@ -7790,10 +7772,8 @@ func TestRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing.T)
 	}
 
 	var body struct {
-		ModelID      string   `json:"model_id"`
-		SubjectID    string   `json:"subject_id"`
-		SubjectType  string   `json:"subject_type"`
-		Capabilities []string `json:"capabilities"`
+		ModelID string `json:"model_id"`
+		Allowed bool   `json:"allowed"`
 	}
 	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
 		t.Fatalf("unmarshal authorization_roundtrip: %v", err)
@@ -7801,30 +7781,24 @@ func TestRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing.T)
 	if body.ModelID != "authz-model-1" {
 		t.Fatalf("model_id = %q, want %q", body.ModelID, "authz-model-1")
 	}
-	if body.SubjectID != "user:user-123" {
-		t.Fatalf("subject_id = %q, want %q", body.SubjectID, "user:user-123")
-	}
-	if body.SubjectType != "user" {
-		t.Fatalf("subject_type = %q, want %q", body.SubjectType, "user")
-	}
-	if !slices.Equal(body.Capabilities, []string{"search_subjects"}) {
-		t.Fatalf("capabilities = %#v, want [search_subjects]", body.Capabilities)
+	if !body.Allowed {
+		t.Fatal("allowed = false, want true")
 	}
 
 	if got := authz.Calls(); len(got) != 1 {
-		t.Fatalf("authorization search calls = %d, want 1", len(got))
+		t.Fatalf("authorization check calls = %d, want 1", len(got))
 	} else {
 		if got[0].SubjectType != "user" {
 			t.Fatalf("subject type = %q, want %q", got[0].SubjectType, "user")
+		}
+		if got[0].SubjectID != "user:user-123" {
+			t.Fatalf("subject id = %q, want %q", got[0].SubjectID, "user:user-123")
 		}
 		if got[0].ResourceType != "slack_identity" || got[0].ResourceID != "team:T123:user:U456" {
 			t.Fatalf("resource = (%q, %q), want (%q, %q)", got[0].ResourceType, got[0].ResourceID, "slack_identity", "team:T123:user:U456")
 		}
 		if got[0].ActionName != "assume" {
 			t.Fatalf("action name = %q, want %q", got[0].ActionName, "assume")
-		}
-		if got[0].PageSize != 1 {
-			t.Fatalf("page size = %d, want 1", got[0].PageSize)
 		}
 	}
 

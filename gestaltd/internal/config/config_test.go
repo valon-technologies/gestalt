@@ -905,9 +905,10 @@ authorization:
       dynamic:
         allowAdditionalRelationships: true
   relationships:
-    - subject:
-        type: subject
-        id: user:alice
+    - target:
+        subject:
+          type: subject
+          id: user:alice
       relation: admin
       resource:
         type: team
@@ -936,7 +937,7 @@ authorization:
 		t.Fatalf("repository maintainer allowed target = %q, want subject", got)
 	}
 	relationship := cfg.Authorization.Relationships[0]
-	if relationship.Subject.ID != "user:alice" || relationship.Resource.Type != "team" || relationship.Relation != "admin" {
+	if relationship.Target.Subject == nil || relationship.Target.Subject.ID != "user:alice" || relationship.Resource.Type != "team" || relationship.Relation != "admin" {
 		t.Fatalf("relationship parsed as %#v", relationship)
 	}
 }
@@ -1044,7 +1045,7 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 					}),
 				},
 				Relationships: []AuthorizationRelationshipDef{{
-					Subject:  AuthorizationSubjectDef{Type: "subject", ID: "user:alice"},
+					Target:   AuthorizationRelationshipTargetDef{Subject: &AuthorizationSubjectDef{Type: "subject", ID: "user:alice"}},
 					Relation: "admin",
 					Resource: AuthorizationResourceDef{Type: "missing", ID: "servicing"},
 				}},
@@ -1060,7 +1061,6 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 					}),
 				},
 				Relationships: []AuthorizationRelationshipDef{{
-					Subject:  AuthorizationSubjectDef{Type: "subject", ID: "user:alice"},
 					Relation: "member",
 					Resource: AuthorizationResourceDef{Type: "team", ID: "servicing"},
 					Target: AuthorizationRelationshipTargetDef{SubjectSet: &AuthorizationSubjectSetDef{
@@ -1071,10 +1071,25 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 			wantErr: `target.subjectSet.relation is required`,
 		},
 		{
+			name: "relationship without target",
+			authz: AuthorizationConfig{
+				Models: map[string]AuthorizationModelDef{
+					"default": model(map[string]AuthorizationResourceTypeDef{
+						"team": resourceType(map[string]AuthorizationRelationDef{"admin": subjectRelation("subject")}, nil),
+					}),
+				},
+				Relationships: []AuthorizationRelationshipDef{{
+					Relation: "admin",
+					Resource: AuthorizationResourceDef{Type: "team", ID: "servicing"},
+				}},
+			},
+			wantErr: `target must set exactly one of subject, resource, or subjectSet`,
+		},
+		{
 			name: "relationship without model resource type",
 			authz: AuthorizationConfig{
 				Relationships: []AuthorizationRelationshipDef{{
-					Subject:  AuthorizationSubjectDef{Type: "subject", ID: "user:alice"},
+					Target:   AuthorizationRelationshipTargetDef{Subject: &AuthorizationSubjectDef{Type: "subject", ID: "user:alice"}},
 					Relation: "admin",
 					Resource: AuthorizationResourceDef{Type: "team", ID: "servicing"},
 				}},

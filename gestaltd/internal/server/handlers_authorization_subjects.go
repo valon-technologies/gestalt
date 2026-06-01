@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
@@ -66,10 +67,6 @@ func (s *Server) mountAuthorizationSubjectRoutes(r chi.Router) {
 	r.Get("/authorization/subjects/{subjectID}/members", s.listManagedSubjectMembers)
 	r.Put("/authorization/subjects/{subjectID}/members", s.putManagedSubjectMember)
 	r.Delete("/authorization/subjects/{subjectID}/members/{memberSubjectID}", s.deleteManagedSubjectMember)
-
-	r.Get("/authorization/subjects/{subjectID}/grants", s.listManagedSubjectGrants)
-	r.Put("/authorization/subjects/{subjectID}/grants/{app}", s.putManagedSubjectGrant)
-	r.Delete("/authorization/subjects/{subjectID}/grants/{app}", s.deleteManagedSubjectGrant)
 
 	r.Get("/authorization/subjects/{subjectID}/apps", s.listManagedSubjectIntegrations)
 	r.Post("/authorization/subjects/{subjectID}/auth/start-oauth", s.startManagedSubjectIntegrationOAuth)
@@ -313,88 +310,6 @@ func (s *Server) deleteManagedSubjectMember(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-func (s *Server) listManagedSubjectGrants(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionView)
-	if !ok {
-		return
-	}
-	grants, err := s.managedSubjectGrantRows(r.Context(), subject.SubjectID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list managed subject grants")
-		return
-	}
-	writeJSON(w, http.StatusOK, grants)
-}
-
-func (s *Server) putManagedSubjectGrant(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionGrant)
-	if !ok {
-		return
-	}
-	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "app"))
-	if err != nil {
-		s.writeAdminAuthorizationPluginError(w, err)
-		return
-	}
-	if access, ok := s.authorizer.StaticRoleForProviderIdentity(plugin, subject.SubjectID); ok && access.Role != "" {
-		writeError(w, http.StatusConflict, "subject already has static authorization for this plugin")
-		return
-	}
-	var req struct {
-		Role string `json:"role"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if strings.TrimSpace(req.Role) == "" {
-		writeError(w, http.StatusBadRequest, "role is required")
-		return
-	}
-	if !s.requireManagedSubjectPluginDelegation(w, r, plugin, req.Role) {
-		return
-	}
-	membership, err := s.upsertProviderPluginAuthorization(r.Context(), &adminAuthorizationWriteSubject{SubjectID: subject.SubjectID}, plugin, req.Role)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to persist managed subject grant")
-		return
-	}
-	if err := s.reloadAuthorizationState(r.Context()); err != nil {
-		writeJSON(w, http.StatusAccepted, map[string]any{
-			"status":   "persisted_pending_reload",
-			"grant":    managedSubjectGrantInfo{App: plugin, Role: membership.Role, Source: "dynamic", Mutable: true},
-			"reloaded": false,
-		})
-		return
-	}
-	writeJSON(w, http.StatusOK, managedSubjectGrantInfo{App: plugin, Role: membership.Role, Source: "dynamic", Mutable: true})
-}
-
-func (s *Server) deleteManagedSubjectGrant(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionGrant)
-	if !ok {
-		return
-	}
-	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "app"))
-	if err != nil {
-		s.writeAdminAuthorizationPluginError(w, err)
-		return
-	}
-	if err := s.deleteProviderPluginAuthorization(r.Context(), plugin, subject.SubjectID); err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "managed subject grant not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "failed to delete managed subject grant")
-		return
-	}
-	if err := s.reloadAuthorizationState(r.Context()); err != nil {
-		writeJSON(w, http.StatusAccepted, map[string]any{"status": "deleted_pending_reload", "reloaded": false})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
-}
-
 func (s *Server) listManagedSubjectIntegrations(w http.ResponseWriter, r *http.Request) {
 	s.withManagedSubjectCredential(w, r, authorization.ProviderManagedSubjectActionView, s.listIntegrations)
 }
@@ -612,15 +527,15 @@ func (s *Server) managedSubjectActionAllowed(ctx context.Context, subjectID, act
 		return false, fmt.Errorf("authorization provider is unavailable")
 	}
 	roles := managedSubjectActionRoles(action)
-	reqs := make([]*core.AccessEvaluationRequest, 0, len(roles))
+	reqs := make([]*core.CheckAccessRequest, 0, len(roles))
 	for _, role := range roles {
-		reqs = append(reqs, &core.AccessEvaluationRequest{
+		reqs = append(reqs, &core.CheckAccessRequest{
 			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: strings.TrimSpace(p.SubjectID)},
 			Action:   &core.ActionRef{Name: role},
 			Resource: managedSubjectResource(subjectID),
 		})
 	}
-	resp, err := s.authorizationProvider.EvaluateMany(ctx, &core.AccessEvaluationsRequest{Requests: reqs})
+	resp, err := s.authorizationProvider.CheckAccessMany(ctx, &core.CheckAccessManyRequest{Requests: reqs})
 	if err != nil {
 		return false, err
 	}
@@ -678,24 +593,25 @@ func (s *Server) requireManagedSubjectPluginDelegation(w http.ResponseWriter, r 
 }
 
 func (s *Server) managedSubjectMemberRows(ctx context.Context, subjectID string) ([]managedSubjectMemberInfo, error) {
-	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ReadRelationshipsRequest{
+	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ListRelationshipsRequest{
 		PageSize: adminAuthorizationProviderReadPageSize,
-		Resource: managedSubjectResource(subjectID),
+		Filter:   &core.RelationshipFilter{Resource: managedSubjectResource(subjectID)},
 	})
 	if err != nil {
 		return nil, err
 	}
 	out := make([]managedSubjectMemberInfo, 0, len(relationships))
 	for _, rel := range relationships {
-		if rel == nil || rel.GetSubject() == nil || !managedSubjectManagementRole(rel.GetRelation()) {
+		subject := authorization.RelationshipSubject(rel)
+		if rel == nil || subject == nil || !managedSubjectManagementRole(authorization.RelationshipRelation(rel)) {
 			continue
 		}
-		if rel.GetSubject().GetType() != authorization.ProviderSubjectTypeSubject {
+		if subject.GetType() != authorization.ProviderSubjectTypeSubject {
 			continue
 		}
 		row := managedSubjectMemberInfo{
-			SubjectID: rel.GetSubject().GetId(),
-			Role:      rel.GetRelation(),
+			SubjectID: subject.GetId(),
+			Role:      authorization.RelationshipRelation(rel),
 		}
 		if userID := principal.UserIDFromSubjectID(row.SubjectID); userID != "" {
 			if user, err := s.users.GetUser(ctx, userID); err == nil && user != nil {
@@ -720,25 +636,28 @@ func (s *Server) managedSubjectGrantRows(ctx context.Context, subjectID string) 
 			byApp[appName] = managedSubjectGrantInfo{App: appName, Role: access.Role, Source: "static", Mutable: false}
 		}
 	}
-	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ReadRelationshipsRequest{
+	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ListRelationshipsRequest{
 		PageSize: adminAuthorizationProviderReadPageSize,
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: subjectID},
+		Filter: &core.RelationshipFilter{
+			Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: subjectID}}},
+		},
 	})
 	if err != nil {
 		return nil, err
 	}
 	for _, rel := range relationships {
-		if rel == nil || rel.GetResource() == nil || rel.GetResource().GetType() != authorization.ProviderResourceTypeAppDynamic {
+		resource := authorization.RelationshipResource(rel)
+		if rel == nil || resource == nil || resource.GetType() != authorization.ProviderResourceTypeAppDynamic {
 			continue
 		}
-		app := strings.TrimSpace(rel.GetResource().GetId())
+		app := strings.TrimSpace(resource.GetId())
 		if app == "" {
 			continue
 		}
 		if existing, ok := byApp[app]; ok && existing.Source == "static" {
 			continue
 		}
-		byApp[app] = managedSubjectGrantInfo{App: app, Role: strings.TrimSpace(rel.GetRelation()), Source: "dynamic", Mutable: true}
+		byApp[app] = managedSubjectGrantInfo{App: app, Role: strings.TrimSpace(authorization.RelationshipRelation(rel)), Source: "dynamic", Mutable: true}
 	}
 	out := make([]managedSubjectGrantInfo, 0, len(byApp))
 	for _, grant := range byApp {
@@ -772,9 +691,11 @@ func (s *Server) deleteManagedSubjectSubjectRelationships(ctx context.Context, s
 		return errAdminAuthorizationUnavailable
 	}
 	subjectID = strings.TrimSpace(subjectID)
-	subjectRels, err := s.readAllAuthorizationRelationships(ctx, &core.ReadRelationshipsRequest{
+	subjectRels, err := s.readAllAuthorizationRelationships(ctx, &core.ListRelationshipsRequest{
 		PageSize: adminAuthorizationProviderReadPageSize,
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: subjectID},
+		Filter: &core.RelationshipFilter{
+			Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: subjectID}}},
+		},
 	})
 	if err != nil {
 		return err
@@ -786,9 +707,9 @@ func (s *Server) deleteManagedSubjectResourceRelationships(ctx context.Context, 
 	if s.authorizationProvider == nil {
 		return errAdminAuthorizationUnavailable
 	}
-	resourceRels, err := s.readAllAuthorizationRelationships(ctx, &core.ReadRelationshipsRequest{
+	resourceRels, err := s.readAllAuthorizationRelationships(ctx, &core.ListRelationshipsRequest{
 		PageSize: adminAuthorizationProviderReadPageSize,
-		Resource: managedSubjectResource(subjectID),
+		Filter:   &core.RelationshipFilter{Resource: managedSubjectResource(subjectID)},
 	})
 	if err != nil {
 		return err
@@ -811,14 +732,10 @@ func (s *Server) deleteAuthorizationRelationships(ctx context.Context, relations
 	for _, rel := range relationshipsByKey {
 		rels = append(rels, rel)
 	}
-	modelID, err := s.managedAuthorizationModelID(ctx)
-	if err != nil {
+	if _, err := s.managedAuthorizationModelID(ctx); err != nil {
 		return err
 	}
-	return s.authorizationProvider.WriteRelationships(ctx, &core.WriteRelationshipsRequest{
-		Deletes: relationshipKeys(rels),
-		ModelId: modelID,
-	})
+	return s.writeAuthorizationRelationships(ctx, nil, cloneRelationships(rels))
 }
 
 func managedSubjectResource(subjectID string) *core.ResourceRef {

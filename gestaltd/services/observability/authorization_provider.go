@@ -18,22 +18,6 @@ type observedAuthorizationProviderCarrier interface {
 	observedAuthorizationBase() *observedAuthorizationProvider
 }
 
-type observedAuthorizationProviderWithEffectiveSearch struct {
-	*observedAuthorizationProvider
-	effectiveSearch core.AuthorizationProviderEffectiveSearch
-}
-
-type observedAuthorizationProviderWithExpansion struct {
-	*observedAuthorizationProvider
-	expansion core.AuthorizationProviderExpansion
-}
-
-type observedAuthorizationProviderWithEffectiveSearchAndExpansion struct {
-	*observedAuthorizationProvider
-	effectiveSearch core.AuthorizationProviderEffectiveSearch
-	expansion       core.AuthorizationProviderExpansion
-}
-
 func InstrumentAuthorizationProvider(name string, provider core.AuthorizationProvider) core.AuthorizationProvider {
 	if provider == nil {
 		return nil
@@ -41,31 +25,9 @@ func InstrumentAuthorizationProvider(name string, provider core.AuthorizationPro
 	if _, ok := provider.(observedAuthorizationProviderCarrier); ok {
 		return provider
 	}
-	base := &observedAuthorizationProvider{
+	return &observedAuthorizationProvider{
 		name:     strings.TrimSpace(name),
 		delegate: provider,
-	}
-	effectiveSearch, hasEffectiveSearch := provider.(core.AuthorizationProviderEffectiveSearch)
-	expansion, hasExpansion := provider.(core.AuthorizationProviderExpansion)
-	switch {
-	case hasEffectiveSearch && hasExpansion:
-		return &observedAuthorizationProviderWithEffectiveSearchAndExpansion{
-			observedAuthorizationProvider: base,
-			effectiveSearch:               effectiveSearch,
-			expansion:                     expansion,
-		}
-	case hasEffectiveSearch:
-		return &observedAuthorizationProviderWithEffectiveSearch{
-			observedAuthorizationProvider: base,
-			effectiveSearch:               effectiveSearch,
-		}
-	case hasExpansion:
-		return &observedAuthorizationProviderWithExpansion{
-			observedAuthorizationProvider: base,
-			expansion:                     expansion,
-		}
-	default:
-		return base
 	}
 }
 
@@ -87,106 +49,58 @@ func (p *observedAuthorizationProvider) Name() string {
 	return p.delegate.Name()
 }
 
-func (p *observedAuthorizationProvider) Evaluate(ctx context.Context, req *core.AccessEvaluationRequest) (decision *core.AccessDecision, err error) {
-	ctx, end := p.start(ctx, "evaluate")
+func (p *observedAuthorizationProvider) CheckAccess(ctx context.Context, req *core.CheckAccessRequest) (resp *core.CheckAccessResponse, err error) {
+	ctx, end := p.start(ctx, "check_access")
 	defer func() { end(err) }()
-	return p.delegate.Evaluate(ctx, req)
+	return p.delegate.CheckAccess(ctx, req)
 }
 
-func (p *observedAuthorizationProvider) EvaluateMany(ctx context.Context, req *core.AccessEvaluationsRequest) (resp *core.AccessEvaluationsResponse, err error) {
-	ctx, end := p.start(ctx, "evaluate_many")
+func (p *observedAuthorizationProvider) CheckAccessMany(ctx context.Context, req *core.CheckAccessManyRequest) (resp *core.CheckAccessManyResponse, err error) {
+	ctx, end := p.start(ctx, "check_access_many")
 	defer func() { end(err) }()
-	return p.delegate.EvaluateMany(ctx, req)
+	return p.delegate.CheckAccessMany(ctx, req)
 }
 
-func (p *observedAuthorizationProvider) SearchResources(ctx context.Context, req *core.ResourceSearchRequest) (resp *core.ResourceSearchResponse, err error) {
-	ctx, end := p.start(ctx, "search_resources")
+func (p *observedAuthorizationProvider) ListRelationships(ctx context.Context, req *core.ListRelationshipsRequest) (resp *core.ListRelationshipsResponse, err error) {
+	ctx, end := p.start(ctx, "list_relationships")
 	defer func() { end(err) }()
-	return p.delegate.SearchResources(ctx, req)
+	return p.delegate.ListRelationships(ctx, req)
 }
 
-func (p *observedAuthorizationProvider) SearchSubjects(ctx context.Context, req *core.SubjectSearchRequest) (resp *core.SubjectSearchResponse, err error) {
-	ctx, end := p.start(ctx, "search_subjects")
+func (p *observedAuthorizationProvider) AddRelationship(ctx context.Context, req *core.AddRelationshipRequest) (resp *core.AddRelationshipResponse, err error) {
+	ctx, end := p.start(ctx, "add_relationship")
 	defer func() { end(err) }()
-	return p.delegate.SearchSubjects(ctx, req)
+	return p.delegate.AddRelationship(ctx, req)
 }
 
-func (p *observedAuthorizationProviderWithEffectiveSearch) EffectiveSearchResources(ctx context.Context, req *core.ResourceSearchRequest) (resp *core.ResourceSearchResponse, err error) {
-	ctx, end := p.start(ctx, "effective_search_resources")
+func (p *observedAuthorizationProvider) DeleteRelationship(ctx context.Context, req *core.DeleteRelationshipRequest) (resp *core.DeleteRelationshipResponse, err error) {
+	ctx, end := p.start(ctx, "delete_relationship")
 	defer func() { end(err) }()
-	return p.effectiveSearch.EffectiveSearchResources(ctx, req)
+	return p.delegate.DeleteRelationship(ctx, req)
 }
 
-func (p *observedAuthorizationProviderWithEffectiveSearch) EffectiveSearchSubjects(ctx context.Context, req *core.EffectiveSubjectSearchRequest) (resp *core.EffectiveSubjectSearchResponse, err error) {
-	ctx, end := p.start(ctx, "effective_search_subjects")
+func (p *observedAuthorizationProvider) SetRelationships(ctx context.Context, req *core.SetRelationshipsRequest) (resp *core.SetRelationshipsResponse, err error) {
+	ctx, end := p.start(ctx, "set_relationships")
 	defer func() { end(err) }()
-	return p.effectiveSearch.EffectiveSearchSubjects(ctx, req)
+	return p.delegate.SetRelationships(ctx, req)
 }
 
-func (p *observedAuthorizationProviderWithEffectiveSearchAndExpansion) EffectiveSearchResources(ctx context.Context, req *core.ResourceSearchRequest) (resp *core.ResourceSearchResponse, err error) {
-	ctx, end := p.start(ctx, "effective_search_resources")
+func (p *observedAuthorizationProvider) GetActiveModelRef(ctx context.Context) (resp *core.GetActiveModelRefResponse, err error) {
+	ctx, end := p.start(ctx, "get_active_model_ref")
 	defer func() { end(err) }()
-	return p.effectiveSearch.EffectiveSearchResources(ctx, req)
+	return p.delegate.GetActiveModelRef(ctx)
 }
 
-func (p *observedAuthorizationProviderWithEffectiveSearchAndExpansion) EffectiveSearchSubjects(ctx context.Context, req *core.EffectiveSubjectSearchRequest) (resp *core.EffectiveSubjectSearchResponse, err error) {
-	ctx, end := p.start(ctx, "effective_search_subjects")
+func (p *observedAuthorizationProvider) SetActiveModel(ctx context.Context, req *core.SetActiveModelRequest) (resp *core.SetActiveModelResponse, err error) {
+	ctx, end := p.start(ctx, "set_active_model")
 	defer func() { end(err) }()
-	return p.effectiveSearch.EffectiveSearchSubjects(ctx, req)
+	return p.delegate.SetActiveModel(ctx, req)
 }
 
-func (p *observedAuthorizationProvider) SearchActions(ctx context.Context, req *core.ActionSearchRequest) (resp *core.ActionSearchResponse, err error) {
-	ctx, end := p.start(ctx, "search_actions")
+func (p *observedAuthorizationProvider) ListActiveModelResourceTypes(ctx context.Context, req *core.ListActiveModelResourceTypesRequest) (resp *core.ListActiveModelResourceTypesResponse, err error) {
+	ctx, end := p.start(ctx, "list_active_model_resource_types")
 	defer func() { end(err) }()
-	return p.delegate.SearchActions(ctx, req)
-}
-
-func (p *observedAuthorizationProvider) GetMetadata(ctx context.Context) (metadata *core.AuthorizationMetadata, err error) {
-	ctx, end := p.start(ctx, "get_metadata")
-	defer func() { end(err) }()
-	return p.delegate.GetMetadata(ctx)
-}
-
-func (p *observedAuthorizationProvider) ReadRelationships(ctx context.Context, req *core.ReadRelationshipsRequest) (resp *core.ReadRelationshipsResponse, err error) {
-	ctx, end := p.start(ctx, "read_relationships")
-	defer func() { end(err) }()
-	return p.delegate.ReadRelationships(ctx, req)
-}
-
-func (p *observedAuthorizationProvider) WriteRelationships(ctx context.Context, req *core.WriteRelationshipsRequest) (err error) {
-	ctx, end := p.start(ctx, "write_relationships")
-	defer func() { end(err) }()
-	return p.delegate.WriteRelationships(ctx, req)
-}
-
-func (p *observedAuthorizationProviderWithExpansion) Expand(ctx context.Context, req *core.ExpandRequest) (resp *core.ExpandResponse, err error) {
-	ctx, end := p.start(ctx, "expand")
-	defer func() { end(err) }()
-	return p.expansion.Expand(ctx, req)
-}
-
-func (p *observedAuthorizationProviderWithEffectiveSearchAndExpansion) Expand(ctx context.Context, req *core.ExpandRequest) (resp *core.ExpandResponse, err error) {
-	ctx, end := p.start(ctx, "expand")
-	defer func() { end(err) }()
-	return p.expansion.Expand(ctx, req)
-}
-
-func (p *observedAuthorizationProvider) GetActiveModel(ctx context.Context) (resp *core.GetActiveModelResponse, err error) {
-	ctx, end := p.start(ctx, "get_active_model")
-	defer func() { end(err) }()
-	return p.delegate.GetActiveModel(ctx)
-}
-
-func (p *observedAuthorizationProvider) ListModels(ctx context.Context, req *core.ListModelsRequest) (resp *core.ListModelsResponse, err error) {
-	ctx, end := p.start(ctx, "list_models")
-	defer func() { end(err) }()
-	return p.delegate.ListModels(ctx, req)
-}
-
-func (p *observedAuthorizationProvider) WriteModel(ctx context.Context, req *core.WriteModelRequest) (ref *core.AuthorizationModelRef, err error) {
-	ctx, end := p.start(ctx, "write_model")
-	defer func() { end(err) }()
-	return p.delegate.WriteModel(ctx, req)
+	return p.delegate.ListActiveModelResourceTypes(ctx, req)
 }
 
 func (p *observedAuthorizationProvider) Close() error {

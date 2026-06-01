@@ -1743,9 +1743,6 @@ func validateAuthorizationAllowedTargetDef(path string, target AuthorizationAllo
 }
 
 func validateAuthorizationRelationshipDef(path string, relationship AuthorizationRelationshipDef, resourceTypes map[string]map[string]AuthorizationRelationDef) error {
-	if err := validateAuthorizationSubjectDef(path+".subject", relationship.Subject); err != nil {
-		return err
-	}
 	if strings.TrimSpace(relationship.Relation) == "" {
 		return fmt.Errorf("config validation: %s.relation is required", path)
 	}
@@ -1836,8 +1833,8 @@ func validateAuthorizationRelationshipTargetDef(path string, target Authorizatio
 			}
 		}
 	}
-	if set > 1 {
-		return fmt.Errorf("config validation: %s must set at most one of subject, resource, or subjectSet", path)
+	if set != 1 {
+		return fmt.Errorf("config validation: %s must set exactly one of subject, resource, or subjectSet", path)
 	}
 	return nil
 }

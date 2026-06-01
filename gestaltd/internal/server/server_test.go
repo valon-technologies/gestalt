@@ -69,7 +69,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	"github.com/valon-technologies/gestalt/server/services/ui"
-	"github.com/valon-technologies/gestalt/server/services/ui/adminui"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -1864,22 +1863,22 @@ func newMemoryAuthorizationProvider(name string) *memoryAuthorizationProvider {
 
 func (p *memoryAuthorizationProvider) Name() string { return p.name }
 
-func (p *memoryAuthorizationProvider) Evaluate(ctx context.Context, req *core.AccessEvaluationRequest) (*core.AccessDecision, error) {
-	resp, err := p.EvaluateMany(ctx, &core.AccessEvaluationsRequest{Requests: []*core.AccessEvaluationRequest{req}})
+func (p *memoryAuthorizationProvider) CheckAccess(ctx context.Context, req *core.CheckAccessRequest) (*core.CheckAccessResponse, error) {
+	resp, err := p.CheckAccessMany(ctx, &core.CheckAccessManyRequest{Requests: []*core.CheckAccessRequest{req}})
 	if err != nil {
 		return nil, err
 	}
 	if len(resp.GetDecisions()) == 0 {
-		return &core.AccessDecision{}, nil
+		return &core.CheckAccessResponse{}, nil
 	}
 	return resp.GetDecisions()[0], nil
 }
 
-func (p *memoryAuthorizationProvider) EvaluateMany(_ context.Context, req *core.AccessEvaluationsRequest) (*core.AccessEvaluationsResponse, error) {
+func (p *memoryAuthorizationProvider) CheckAccessMany(_ context.Context, req *core.CheckAccessManyRequest) (*core.CheckAccessManyResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	resp := &core.AccessEvaluationsResponse{
-		Decisions: make([]*core.AccessDecision, 0, len(req.GetRequests())),
+	resp := &core.CheckAccessManyResponse{
+		Decisions: make([]*core.CheckAccessResponse, 0, len(req.GetRequests())),
 	}
 	rels := p.relsByModel[p.activeModelID]
 	for _, item := range req.GetRequests() {
@@ -1892,7 +1891,7 @@ func (p *memoryAuthorizationProvider) EvaluateMany(_ context.Context, req *core.
 				}
 			}
 		}
-		resp.Decisions = append(resp.Decisions, &core.AccessDecision{
+		resp.Decisions = append(resp.Decisions, &core.CheckAccessResponse{
 			Allowed: allowed,
 			ModelId: p.activeModelID,
 		})
@@ -1900,96 +1899,15 @@ func (p *memoryAuthorizationProvider) EvaluateMany(_ context.Context, req *core.
 	return resp, nil
 }
 
-func (p *memoryAuthorizationProvider) SearchResources(_ context.Context, req *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
+func (p *memoryAuthorizationProvider) ListRelationships(_ context.Context, req *core.ListRelationshipsRequest) (*core.ListRelationshipsResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	modelID := p.activeModelID
 	rels := p.relsByModel[modelID]
 	keys := make([]string, 0, len(rels))
-	resources := map[string]*core.ResourceRef{}
-	for _, rel := range rels {
-		if rel == nil || rel.GetResource() == nil {
-			continue
-		}
-		if resourceType := strings.TrimSpace(req.GetResourceType()); resourceType != "" && rel.GetResource().GetType() != resourceType {
-			continue
-		}
-		if !memoryAuthorizationRelationshipGrantsAction(p.modelDefs[modelID], rel, req.GetSubject(), req.GetAction().GetName(), rel.GetResource()) {
-			continue
-		}
-		resourceKey := rel.GetResource().GetType() + "\x00" + rel.GetResource().GetId()
-		if _, ok := resources[resourceKey]; ok {
-			continue
-		}
-		keys = append(keys, resourceKey)
-		resources[resourceKey] = &core.ResourceRef{
-			Type: rel.GetResource().GetType(),
-			Id:   rel.GetResource().GetId(),
-		}
-	}
-	slices.Sort(keys)
-
-	start := 0
-	if token := strings.TrimSpace(req.GetPageToken()); token != "" {
-		offset, err := strconv.Atoi(token)
-		if err != nil || offset < 0 {
-			offset = 0
-		}
-		start = offset
-	}
-	if start > len(keys) {
-		start = len(keys)
-	}
-	pageSize := int(req.GetPageSize())
-	if pageSize <= 0 {
-		pageSize = len(keys)
-	}
-	end := start + pageSize
-	if end > len(keys) {
-		end = len(keys)
-	}
-	out := make([]*core.ResourceRef, 0, end-start)
-	for _, key := range keys[start:end] {
-		out = append(out, resources[key])
-	}
-	nextPageToken := ""
-	if end < len(keys) {
-		nextPageToken = strconv.Itoa(end)
-	}
-	return &core.ResourceSearchResponse{
-		Resources:     out,
-		NextPageToken: nextPageToken,
-		ModelId:       modelID,
-	}, nil
-}
-
-func (p *memoryAuthorizationProvider) SearchSubjects(context.Context, *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
-	return &core.SubjectSearchResponse{}, nil
-}
-
-func (p *memoryAuthorizationProvider) SearchActions(context.Context, *core.ActionSearchRequest) (*core.ActionSearchResponse, error) {
-	return &core.ActionSearchResponse{}, nil
-}
-
-func (p *memoryAuthorizationProvider) GetMetadata(context.Context) (*core.AuthorizationMetadata, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return &core.AuthorizationMetadata{ActiveModelId: p.activeModelID}, nil
-}
-
-func (p *memoryAuthorizationProvider) ReadRelationships(_ context.Context, req *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	modelID := strings.TrimSpace(req.GetModelId())
-	if modelID == "" {
-		modelID = p.activeModelID
-	}
-	rels := p.relsByModel[modelID]
-	keys := make([]string, 0, len(rels))
 	for key, rel := range rels {
-		if !memoryAuthorizationRelationshipMatches(rel, req) {
+		if !memoryAuthorizationRelationshipMatches(rel, req.GetFilter()) {
 			continue
 		}
 		keys = append(keys, key)
@@ -2025,62 +1943,111 @@ func (p *memoryAuthorizationProvider) ReadRelationships(_ context.Context, req *
 	if end < len(keys) {
 		nextPageToken = strconv.Itoa(end)
 	}
-	return &core.ReadRelationshipsResponse{
+	return &core.ListRelationshipsResponse{
 		Relationships: out,
 		NextPageToken: nextPageToken,
-		ModelId:       modelID,
 	}, nil
 }
 
-func (p *memoryAuthorizationProvider) WriteRelationships(_ context.Context, req *core.WriteRelationshipsRequest) error {
+func (p *memoryAuthorizationProvider) writeRelationships(writes, deletes []*core.Relationship) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.writeErr != nil {
 		return p.writeErr
 	}
-	modelID := strings.TrimSpace(req.GetModelId())
-	if modelID == "" {
-		modelID = p.activeModelID
-	}
+	modelID := p.activeModelID
 	rels := p.relsByModel[modelID]
 	if rels == nil {
 		rels = map[string]*core.Relationship{}
 		p.relsByModel[modelID] = rels
 	}
 	if p.validateModel {
-		for _, rel := range req.GetWrites() {
+		for _, rel := range writes {
 			if !memoryAuthorizationModelAllowsRelationship(p.modelDefs[modelID], rel) {
 				return fmt.Errorf("model %q does not allow relationship %s", modelID, memoryAuthorizationRelationshipKeyForRelationship(rel))
 			}
 		}
 	}
-	for _, key := range req.GetDeletes() {
-		delete(rels, memoryAuthorizationRelationshipKeyForKey(key))
+	for _, rel := range deletes {
+		delete(rels, memoryAuthorizationRelationshipKeyForRelationship(rel))
 	}
-	for _, rel := range req.GetWrites() {
+	for _, rel := range writes {
 		rels[memoryAuthorizationRelationshipKeyForRelationship(rel)] = cloneMemoryAuthorizationRelationship(rel)
 	}
 	return nil
 }
 
-func (p *memoryAuthorizationProvider) GetActiveModel(context.Context) (*core.GetActiveModelResponse, error) {
+func (p *memoryAuthorizationProvider) AddRelationship(_ context.Context, req *core.AddRelationshipRequest) (*core.AddRelationshipResponse, error) {
+	if req == nil || req.GetRelationship() == nil {
+		return &core.AddRelationshipResponse{}, nil
+	}
+	err := p.writeRelationships([]*core.Relationship{req.GetRelationship()}, nil)
+	return &core.AddRelationshipResponse{Relationship: cloneMemoryAuthorizationRelationship(req.GetRelationship())}, err
+}
+
+func (p *memoryAuthorizationProvider) DeleteRelationship(_ context.Context, req *core.DeleteRelationshipRequest) (*core.DeleteRelationshipResponse, error) {
+	if req == nil || req.GetRelationshipTuple() == nil {
+		return &core.DeleteRelationshipResponse{}, nil
+	}
+	return &core.DeleteRelationshipResponse{}, p.writeRelationships(nil, []*core.Relationship{relationshipFromTuple(req.GetRelationshipTuple())})
+}
+
+func (p *memoryAuthorizationProvider) SetRelationships(_ context.Context, req *core.SetRelationshipsRequest) (*core.SetRelationshipsResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.writeErr != nil {
+		return nil, p.writeErr
+	}
+	modelID := p.activeModelID
+	rels := map[string]*core.Relationship{}
+	if p.validateModel {
+		for _, rel := range req.GetRelationships() {
+			if !memoryAuthorizationModelAllowsRelationship(p.modelDefs[modelID], rel) {
+				return nil, fmt.Errorf("model %q does not allow relationship %s", modelID, memoryAuthorizationRelationshipKeyForRelationship(rel))
+			}
+		}
+	}
+	for _, rel := range req.GetRelationships() {
+		rels[memoryAuthorizationRelationshipKeyForRelationship(rel)] = cloneMemoryAuthorizationRelationship(rel)
+	}
+	p.relsByModel[modelID] = rels
+	return &core.SetRelationshipsResponse{}, nil
+}
+
+func (p *memoryAuthorizationProvider) GetActiveModelRef(context.Context) (*core.GetActiveModelRefResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, model := range p.models {
 		if model.GetId() == p.activeModelID {
-			return &core.GetActiveModelResponse{Model: model}, nil
+			return &core.GetActiveModelRefResponse{Model: model}, nil
 		}
 	}
-	return &core.GetActiveModelResponse{}, nil
+	return &core.GetActiveModelRefResponse{}, nil
 }
 
-func (p *memoryAuthorizationProvider) ListModels(context.Context, *core.ListModelsRequest) (*core.ListModelsResponse, error) {
+func (p *memoryAuthorizationProvider) ListActiveModelResourceTypes(_ context.Context, req *core.ListActiveModelResourceTypesRequest) (*core.ListActiveModelResourceTypesResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return &core.ListModelsResponse{Models: append([]*core.AuthorizationModelRef(nil), p.models...)}, nil
+	modelID := strings.TrimSpace(req.GetModelId())
+	if modelID == "" {
+		modelID = p.activeModelID
+	}
+	model := p.modelDefs[modelID]
+	if model == nil {
+		return &core.ListActiveModelResourceTypesResponse{}, nil
+	}
+	filterName := strings.TrimSpace(req.GetFilter().GetName())
+	resourceTypes := make([]*core.AuthorizationModelResourceType, 0, len(model.GetResourceTypes()))
+	for _, resourceType := range model.GetResourceTypes() {
+		if filterName != "" && resourceType.GetName() != filterName {
+			continue
+		}
+		resourceTypes = append(resourceTypes, gproto.Clone(resourceType).(*core.AuthorizationModelResourceType))
+	}
+	return &core.ListActiveModelResourceTypesResponse{ResourceTypes: resourceTypes}, nil
 }
 
-func (p *memoryAuthorizationProvider) WriteModel(_ context.Context, req *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
+func (p *memoryAuthorizationProvider) SetActiveModel(_ context.Context, req *core.SetActiveModelRequest) (*core.SetActiveModelResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -2089,8 +2056,8 @@ func (p *memoryAuthorizationProvider) WriteModel(_ context.Context, req *core.Wr
 		return nil, fmt.Errorf("model is required")
 	}
 	modelVersion := definition.GetVersion()
-	if modelVersion == 0 {
-		modelVersion = 1
+	if modelVersion == "" {
+		modelVersion = "1"
 	}
 	modelBytes, err := gproto.MarshalOptions{Deterministic: true}.Marshal(definition)
 	if err != nil {
@@ -2105,12 +2072,12 @@ func (p *memoryAuthorizationProvider) WriteModel(_ context.Context, req *core.Wr
 			if p.relsByModel[modelID] == nil {
 				p.relsByModel[modelID] = map[string]*core.Relationship{}
 			}
-			return existing, nil
+			return &core.SetActiveModelResponse{Model: existing}, nil
 		}
 	}
 	model := &core.AuthorizationModelRef{
 		Id:      modelID,
-		Version: fmt.Sprintf("%d", modelVersion),
+		Version: modelVersion,
 	}
 	p.models = append(p.models, model)
 	p.modelDefs[model.GetId()] = gproto.Clone(definition).(*core.AuthorizationModel)
@@ -2118,15 +2085,16 @@ func (p *memoryAuthorizationProvider) WriteModel(_ context.Context, req *core.Wr
 	if p.relsByModel[model.GetId()] == nil {
 		p.relsByModel[model.GetId()] = map[string]*core.Relationship{}
 	}
-	return model, nil
+	return &core.SetActiveModelResponse{Model: model}, nil
 }
 
 func memoryAuthorizationModelAllowsRelationship(model *core.AuthorizationModel, rel *core.Relationship) bool {
-	if model == nil || rel == nil || rel.GetResource() == nil {
+	resource := authorization.RelationshipResource(rel)
+	if model == nil || rel == nil || resource == nil {
 		return false
 	}
-	resourceType := rel.GetResource().GetType()
-	relation := rel.GetRelation()
+	resourceType := resource.GetType()
+	relation := authorization.RelationshipRelation(rel)
 	for _, rt := range model.GetResourceTypes() {
 		if rt.GetName() != resourceType {
 			continue
@@ -2142,17 +2110,18 @@ func memoryAuthorizationModelAllowsRelationship(model *core.AuthorizationModel, 
 
 func memoryAuthorizationRelationshipGrantsAction(model *core.AuthorizationModel, rel *core.Relationship, subject *core.SubjectRef, action string, resource *core.ResourceRef) bool {
 	targetSubject := memoryAuthorizationRelationshipSubject(rel)
-	if rel == nil || targetSubject == nil || rel.GetResource() == nil || resource == nil {
+	relResource := authorization.RelationshipResource(rel)
+	if rel == nil || targetSubject == nil || relResource == nil || resource == nil {
 		return false
 	}
 	if subject != nil && (targetSubject.GetType() != subject.GetType() || targetSubject.GetId() != subject.GetId()) {
 		return false
 	}
-	if rel.GetResource().GetType() != resource.GetType() || rel.GetResource().GetId() != resource.GetId() {
+	if relResource.GetType() != resource.GetType() || relResource.GetId() != resource.GetId() {
 		return false
 	}
 	action = strings.TrimSpace(action)
-	relation := strings.TrimSpace(rel.GetRelation())
+	relation := strings.TrimSpace(authorization.RelationshipRelation(rel))
 	if action == "" || relation == "" {
 		return false
 	}
@@ -2176,25 +2145,25 @@ func memoryAuthorizationRelationshipGrantsAction(model *core.AuthorizationModel,
 	return false
 }
 
-func memoryAuthorizationRelationshipMatches(rel *core.Relationship, req *core.ReadRelationshipsRequest) bool {
-	if rel == nil || req == nil {
+func memoryAuthorizationRelationshipMatches(rel *core.Relationship, filter *core.RelationshipFilter) bool {
+	if rel == nil || filter == nil {
 		return rel != nil
 	}
-	if subject := req.GetSubject(); subject != nil {
-		if got := memoryAuthorizationRelationshipSubject(rel); got == nil || got.GetType() != subject.GetType() || got.GetId() != subject.GetId() {
+	if target := filter.GetTarget(); target != nil {
+		if memoryAuthorizationRelationshipTargetKey(authorization.RelationshipTarget(rel), authorization.RelationshipSubject(rel)) != memoryAuthorizationRelationshipTargetKey(target, nil) {
 			return false
 		}
 	}
-	if target := req.GetTarget(); target != nil {
-		if memoryAuthorizationRelationshipTargetKey(rel.GetTarget(), rel.GetSubject()) != memoryAuthorizationRelationshipTargetKey(target, nil) {
-			return false
-		}
-	}
-	if relation := strings.TrimSpace(req.GetRelation()); relation != "" && rel.GetRelation() != relation {
+	if relation := strings.TrimSpace(filter.GetRelation()); relation != "" && authorization.RelationshipRelation(rel) != relation {
 		return false
 	}
-	if resource := req.GetResource(); resource != nil {
-		if got := rel.GetResource(); got == nil || got.GetType() != resource.GetType() || got.GetId() != resource.GetId() {
+	if resource := filter.GetResource(); resource != nil {
+		if got := authorization.RelationshipResource(rel); got == nil || got.GetType() != resource.GetType() || got.GetId() != resource.GetId() {
+			return false
+		}
+	}
+	if resourceType := strings.TrimSpace(filter.GetResourceType()); resourceType != "" {
+		if got := authorization.RelationshipResource(rel); got == nil || got.GetType() != resourceType {
 			return false
 		}
 	}
@@ -2205,14 +2174,7 @@ func memoryAuthorizationRelationshipKeyForRelationship(rel *core.Relationship) s
 	if rel == nil {
 		return ""
 	}
-	return memoryAuthorizationRelationshipKey(rel.GetTarget(), rel.GetSubject(), rel.GetRelation(), rel.GetResource())
-}
-
-func memoryAuthorizationRelationshipKeyForKey(key *core.RelationshipKey) string {
-	if key == nil {
-		return ""
-	}
-	return memoryAuthorizationRelationshipKey(key.GetTarget(), key.GetSubject(), key.GetRelation(), key.GetResource())
+	return memoryAuthorizationRelationshipKey(authorization.RelationshipTarget(rel), authorization.RelationshipSubject(rel), authorization.RelationshipRelation(rel), authorization.RelationshipResource(rel))
 }
 
 func memoryAuthorizationRelationshipKey(target *core.RelationshipTargetRef, subject *core.SubjectRef, relation string, resource *core.ResourceRef) string {
@@ -2232,18 +2194,29 @@ func memoryAuthorizationRelationshipSubject(rel *core.Relationship) *core.Subjec
 	return authorization.RelationshipSubject(rel)
 }
 
+func relationshipFromTuple(tuple *core.RelationshipTuple) *core.Relationship {
+	if tuple == nil {
+		return nil
+	}
+	return &core.Relationship{
+		Tuple: &core.RelationshipTuple{
+			Target:   cloneMemoryAuthorizationTarget(tuple.GetTarget(), nil),
+			Relation: tuple.GetRelation(),
+			Resource: cloneMemoryAuthorizationResource(tuple.GetResource()),
+		},
+	}
+}
+
 func cloneMemoryAuthorizationRelationship(rel *core.Relationship) *core.Relationship {
 	if rel == nil {
 		return nil
 	}
 	out := &core.Relationship{
-		Subject:  cloneMemoryAuthorizationSubject(rel.GetSubject()),
-		Relation: rel.GetRelation(),
-		Resource: &core.ResourceRef{
-			Type: rel.GetResource().GetType(),
-			Id:   rel.GetResource().GetId(),
+		Tuple: &core.RelationshipTuple{
+			Target:   cloneMemoryAuthorizationTarget(authorization.RelationshipTarget(rel), authorization.RelationshipSubject(rel)),
+			Relation: authorization.RelationshipRelation(rel),
+			Resource: cloneMemoryAuthorizationResource(authorization.RelationshipResource(rel)),
 		},
-		Target: cloneMemoryAuthorizationTarget(rel.GetTarget(), rel.GetSubject()),
 	}
 	if rel.GetProperties() != nil {
 		out.Properties = gproto.Clone(rel.GetProperties()).(*structpb.Struct)
@@ -2551,9 +2524,9 @@ func newTestAuthorizer(cfg config.AuthorizationConfig, pluginDefs map[string]*co
 	return authorization.New(config.AuthorizationStaticConfig(cfg, pluginDefs))
 }
 
-func mustProviderBackedAuthorizer(t *testing.T, base *authorization.Authorizer, provider *memoryAuthorizationProvider, opts ...authorization.ProviderBackedOption) *authorization.ProviderBackedAuthorizer {
+func mustProviderBackedAuthorizer(t *testing.T, base *authorization.Authorizer, provider *memoryAuthorizationProvider) *authorization.ProviderBackedAuthorizer {
 	t.Helper()
-	authz, err := authorization.NewProviderBacked(base, provider, opts...)
+	authz, err := authorization.NewProviderBacked(base, provider)
 	if err != nil {
 		t.Fatalf("NewProviderBacked: %v", err)
 	}
@@ -2568,41 +2541,44 @@ func TestMemoryAuthorizationProviderDoesNotGrantMixedSubjectAndSubjectSetTarget(
 
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	provider.activeModelID = "model"
+	invalidSubject := &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "user:invalid"}
+	invalidResource := &core.ResourceRef{Type: authorization.ProviderResourceTypeTeam, Id: "team-1"}
 	invalidMixedGrant := &core.Relationship{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "user:invalid"},
-		Relation: authorization.ProviderRelationMember,
-		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeTeam, Id: "team-1"},
-		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeEveryone, Id: authorization.ProviderResourceIDEveryoneGlobal},
+		Tuple: &core.RelationshipTuple{
+			Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
+				Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeEveryone, Id: authorization.ProviderResourceIDEveryoneGlobal},
+				Relation: authorization.ProviderRelationMember,
+			}}},
 			Relation: authorization.ProviderRelationMember,
-		}}},
+			Resource: invalidResource,
+		},
 	}
-	if err := provider.WriteRelationships(context.Background(), &core.WriteRelationshipsRequest{Writes: []*core.Relationship{invalidMixedGrant}}); err != nil {
-		t.Fatalf("WriteRelationships: %v", err)
+	if _, err := provider.AddRelationship(context.Background(), &core.AddRelationshipRequest{Relationship: invalidMixedGrant}); err != nil {
+		t.Fatalf("AddRelationship: %v", err)
 	}
 
-	decision, err := provider.Evaluate(context.Background(), &core.AccessEvaluationRequest{
-		Subject:  invalidMixedGrant.Subject,
-		Action:   &core.ActionRef{Name: invalidMixedGrant.Relation},
-		Resource: invalidMixedGrant.Resource,
+	decision, err := provider.CheckAccess(context.Background(), &core.CheckAccessRequest{
+		Subject:  invalidSubject,
+		Action:   &core.ActionRef{Name: authorization.ProviderRelationMember},
+		Resource: invalidResource,
 	})
 	if err != nil {
-		t.Fatalf("Evaluate: %v", err)
+		t.Fatalf("CheckAccess: %v", err)
 	}
 	if decision.GetAllowed() {
-		t.Fatal("Evaluate allowed invalid mixed subject/subject-set relationship, want denied")
+		t.Fatal("CheckAccess allowed invalid mixed subject/subject-set relationship, want denied")
 	}
 
-	resp, err := provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-		Subject:  invalidMixedGrant.Subject,
-		Relation: invalidMixedGrant.Relation,
-		Resource: invalidMixedGrant.Resource,
-	})
+	resp, err := provider.ListRelationships(context.Background(), &core.ListRelationshipsRequest{Filter: &core.RelationshipFilter{
+		Target:   &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: invalidSubject}},
+		Relation: authorization.ProviderRelationMember,
+		Resource: invalidResource,
+	}})
 	if err != nil {
-		t.Fatalf("ReadRelationships(subject): %v", err)
+		t.Fatalf("ListRelationships(subject): %v", err)
 	}
 	if len(resp.GetRelationships()) != 0 {
-		t.Fatalf("ReadRelationships(subject) = %+v, want no direct-subject match", resp.GetRelationships())
+		t.Fatalf("ListRelationships(subject) = %+v, want no direct-subject match", resp.GetRelationships())
 	}
 }
 
@@ -2618,12 +2594,13 @@ func seedProviderDynamicAdminMembership(t *testing.T, svc *coredata.Services, au
 		t.Fatal("seedProviderDynamicAdminMembership: provider has no active model")
 	}
 	provider.putRelationship(provider.activeModelID, &core.Relationship{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
-		Relation: role,
-		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
-		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{
-			Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
-		}},
+		Tuple: &core.RelationshipTuple{
+			Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{
+				Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
+			}},
+			Relation: role,
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
+		},
 	})
 	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
 		t.Fatalf("seedProviderDynamicAdminMembership authorization state reload after write: %v", err)
@@ -2643,12 +2620,13 @@ func seedProviderPluginAuthorization(t *testing.T, svc *coredata.Services, authz
 		t.Fatal("seedProviderPluginAuthorization: provider has no active model")
 	}
 	provider.putRelationship(provider.activeModelID, &core.Relationship{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
-		Relation: role,
-		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: plugin},
-		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{
-			Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
-		}},
+		Tuple: &core.RelationshipTuple{
+			Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{
+				Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
+			}},
+			Relation: role,
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: plugin},
+		},
 	})
 	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
 		t.Fatalf("seedProviderPluginAuthorization authorization state reload after write: %v", err)
@@ -3965,50 +3943,6 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 	}
 }
 
-func TestBuiltInAdminRoute_EmbeddedAdminUIIncludesAuthorizationWorkspace(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.AdminUI = adminui.EmbeddedHandler(adminui.Options{BrandHref: "/"})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	resp, err := http.Get(ts.URL + "/admin/?tab=members")
-	if err != nil {
-		t.Fatalf("GET embedded admin ui: %v", err)
-	}
-	body, err := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if err != nil {
-		t.Fatalf("ReadAll embedded admin ui: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("embedded admin ui status = %d, want 200", resp.StatusCode)
-	}
-
-	text := string(body)
-	for _, want := range []string{
-		"Control surface",
-		"Authorization rules",
-		`data-tab="authorization"`,
-		`data-tab-panel="authorization"`,
-		`data-tab="admins"`,
-		`data-tab-panel="admins"`,
-		"/api/v1/authorization/apps",
-		"/api/v1/authorization/admins/members",
-		`window.__gestaltAdminShell.loginBase = "/api/v1/auth/login"`,
-		"Save dynamic grant",
-		"Save admin grant",
-		"Built-in admin members",
-		"window.history.replaceState",
-		"Prometheus telemetry",
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("embedded admin ui body missing %q", want)
-		}
-	}
-}
-
 func TestBuiltInAdminRoute_ProviderBackedAdminUIAutoDiscoversRootUI(t *testing.T) {
 	t.Parallel()
 
@@ -4212,251 +4146,6 @@ func TestBuiltInAdminRoute_ProviderBackedAdminUIDoesNotAutoDiscoverNonRootUI(t *
 	}
 	if !strings.Contains(text, "Control surface") {
 		t.Fatalf("admin ui fallback body = %q, want built-in admin shell", body)
-	}
-}
-
-func TestAdminAPI_HumanAuthorization(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	viewer := seedUser(t, svc, "viewer@example.test")
-	admin := seedUser(t, svc, "admin@example.test")
-	pluginDefs := map[string]*config.ProviderEntry{
-		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-		"other_plugin":  {AuthorizationPolicy: "other_policy"},
-		"a/b":           {AuthorizationPolicy: "slash_policy"},
-		"a%2Fb":         {AuthorizationPolicy: "escaped_policy"},
-		"a%252Fb":       {AuthorizationPolicy: "double_escaped_policy"},
-	}
-	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"admin_policy": {
-				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
-					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
-					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
-				},
-			},
-			"sample_policy": {Default: "deny"},
-			"other_policy":  {Default: "deny"},
-			"slash_policy":  {Default: "deny"},
-			"escaped_policy": {
-				Default: "deny",
-			},
-			"double_escaped_policy": {
-				Default: "deny",
-			},
-		},
-	}, pluginDefs)
-
-	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
-	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
-	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-admin@example.test", "admin")
-	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-viewer@example.test", "viewer")
-	seedProviderPluginAuthorization(t, svc, authz, provider, "a/b", "slash-plugin-admin@example.test", "admin")
-	seedProviderPluginAuthorization(t, svc, authz, provider, "a%2Fb", "escaped-plugin-admin@example.test", "admin")
-	seedProviderPluginAuthorization(t, svc, authz, provider, "a%252Fb", "double-escaped-plugin-admin@example.test", "admin")
-	dynamicUser := seedUser(t, svc, "dynamic@example.test")
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				switch token {
-				case "viewer-session":
-					return &core.UserIdentity{Email: "viewer@example.test"}, nil
-				case "admin-session":
-					return &core.UserIdentity{Email: "admin@example.test"}, nil
-				case "dynamic-admin-session":
-					return &core.UserIdentity{Email: "dynamic-admin@example.test"}, nil
-				case "plugin-admin-session":
-					return &core.UserIdentity{Email: "plugin-admin@example.test"}, nil
-				case "plugin-viewer-session":
-					return &core.UserIdentity{Email: "plugin-viewer@example.test"}, nil
-				case "slash-plugin-admin-session":
-					return &core.UserIdentity{Email: "slash-plugin-admin@example.test"}, nil
-				case "escaped-plugin-admin-session":
-					return &core.UserIdentity{Email: "escaped-plugin-admin@example.test"}, nil
-				case "double-escaped-plugin-admin-session":
-					return &core.UserIdentity{Email: "double-escaped-plugin-admin@example.test"}, nil
-				default:
-					return nil, fmt.Errorf("invalid token")
-				}
-			},
-		}
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AuthorizationProvider = provider
-		cfg.AppDefs = pluginDefs
-		cfg.Admin = server.AdminRouteConfig{
-			AuthorizationPolicy: "admin_policy",
-			AllowedRoles:        []string{"admin"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET admin api without auth: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated admin api status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET admin api with viewer session: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("viewer admin api status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "dynamic-admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET admin members api with dynamic admin session: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("dynamic admin api status = %d, want 200: %s", resp.StatusCode, body)
-	}
-	if got := resp.Header.Get("X-Gestalt-Can-Write"); got != "true" {
-		t.Fatalf("dynamic admin can-write header = %q, want true", got)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET admin api with admin session: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("admin api status = %d, want 200: %s", resp.StatusCode, body)
-	}
-
-	var apps []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&apps); err != nil {
-		t.Fatalf("decoding apps: %v", err)
-	}
-	if len(apps) != 5 || apps[0]["name"] != "a%252Fb" || apps[1]["name"] != "a%2Fb" || apps[2]["name"] != "a/b" || apps[3]["name"] != "other_plugin" || apps[4]["name"] != "sample_plugin" {
-		t.Fatalf("apps = %+v, want double escaped, escaped, slash, other_plugin, and sample_plugin", apps)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("plugin admin GET app members: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("plugin admin get app members status = %d, want 200: %s", resp.StatusCode, body)
-	}
-
-	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("plugin admin PUT app member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("plugin admin put app member status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("plugin admin DELETE app member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("plugin admin delete app member status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps/a%252Fb/members", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "escaped-plugin-admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("escaped app admin GET app members: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("escaped app admin get app members status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-
-	for _, tc := range []struct {
-		name    string
-		session string
-		path    string
-	}{
-		{name: "plugin admin cannot manage other plugin", session: "plugin-admin-session", path: "/api/v1/authorization/apps/other_plugin/members"},
-		{name: "plugin viewer cannot manage plugin", session: "plugin-viewer-session", path: "/api/v1/authorization/apps/sample_plugin/members"},
-		{name: "escaped slash path does not authorize slash plugin", session: "slash-plugin-admin-session", path: "/api/v1/authorization/apps/a%2Fb/members"},
-		{name: "double escaped app admin cannot manage escaped plugin", session: "double-escaped-plugin-admin-session", path: "/api/v1/authorization/apps/a%252Fb/members"},
-		{name: "plugin admin cannot manage gestaltd admins", session: "plugin-admin-session", path: "/api/v1/authorization/admins/members"},
-	} {
-		req, _ = http.NewRequest(http.MethodGet, ts.URL+tc.path, nil)
-		req.AddCookie(&http.Cookie{Name: "session_token", Value: tc.session})
-		resp, err = http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("%s: %v", tc.name, err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusForbidden {
-			respBody, _ := io.ReadAll(resp.Body)
-			t.Fatalf("%s status = %d, want 403: %s", tc.name, resp.StatusCode, respBody)
-		}
-	}
-}
-
-func TestAdminAPI_RoutesMountedWithoutAdminUI(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-		}
-		cfg.AdminUI = nil
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	resp, err := http.Get(ts.URL + "/api/v1/authorization/apps")
-	if err != nil {
-		t.Fatalf("GET admin api without admin ui: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("admin api without admin ui status = %d, want 200: %s", resp.StatusCode, body)
-	}
-
-	var apps []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&apps); err != nil {
-		t.Fatalf("decoding apps: %v", err)
-	}
-	if len(apps) != 1 || apps[0]["name"] != "sample_plugin" {
-		t.Fatalf("apps = %+v, want sample_plugin", apps)
 	}
 }
 
@@ -4924,408 +4613,6 @@ func TestAdminAPI_RuntimeProviderSessionLogsRejectsInvalidCursorAndMapsNotFound(
 	})
 }
 
-func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	admin := seedUser(t, svc, "admin@example.test")
-	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"admin_policy": {
-				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
-					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
-				},
-			},
-			"sample_policy": {Default: "deny"},
-		},
-	}, map[string]*config.ProviderEntry{
-		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-	})
-
-	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
-	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				switch token {
-				case "admin-session":
-					return &core.UserIdentity{Email: "admin@example.test"}, nil
-				case "dynamic-admin-session":
-					return &core.UserIdentity{Email: "dynamic-admin@example.test"}, nil
-				default:
-					return nil, fmt.Errorf("invalid token")
-				}
-			},
-		}
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AuthorizationProvider = provider
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-		}
-		cfg.RouteProfile = server.RouteProfileManagement
-		cfg.PublicBaseURL = "https://gestalt.example.test"
-		cfg.ManagementBaseURL = "https://gestalt.example.test:9090"
-		cfg.Admin = server.AdminRouteConfig{
-			AuthorizationPolicy: "admin_policy",
-			AllowedRoles:        []string{"admin"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "dynamic-admin-session"})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET management admin members api with dynamic admin session: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("management dynamic admin api status = %d, want 200: %s", resp.StatusCode, body)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET management admin api with admin session: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("management admin api status = %d, want 200: %s", resp.StatusCode, body)
-	}
-}
-
-func TestAdminAPI_HumanAuthorization_UserResolutionFailure(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	admin := seedUser(t, svc, "admin@example.test")
-	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"admin_policy": {
-				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
-					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
-				},
-			},
-			"sample_policy": {Default: "deny"},
-		},
-	}, map[string]*config.ProviderEntry{
-		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-	})
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "admin-session" {
-					return nil, fmt.Errorf("invalid token")
-				}
-				return &core.UserIdentity{Email: "admin@example.test"}, nil
-			},
-		}
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-		}
-		cfg.Admin = server.AdminRouteConfig{
-			AuthorizationPolicy: "admin_policy",
-			AllowedRoles:        []string{"admin"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	stubDB := svc.DB.(*coretesting.StubIndexedDB)
-	stubDB.Err = fmt.Errorf("database unavailable")
-	defer func() { stubDB.Err = nil }()
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET admin api with failed user resolution: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusInternalServerError {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("admin api user-resolution failure status = %d, want 500: %s", resp.StatusCode, body)
-	}
-}
-
-func TestAdminAPIRoutes_OldAdminPrefixHiddenOnPublicProfile(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.RouteProfile = server.RouteProfilePublic
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	resp, err := http.Get(ts.URL + "/admin/api/v1/authorization/apps")
-	if err != nil {
-		t.Fatalf("GET old public admin api: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("old public admin api status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
-}
-
-func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"sample_policy": {
-				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
-					staticPolicyUserMember(t, svc, "static@example.test", "admin"),
-				},
-			},
-		},
-	}, map[string]*config.ProviderEntry{
-		"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-	})
-
-	if err != nil {
-		t.Fatalf("authorization.New: %v", err)
-	}
-	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AuthorizationProvider = provider
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	resp, err := http.Get(ts.URL + "/api/v1/authorization/apps")
-	if err != nil {
-		t.Fatalf("GET apps: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("plugins status = %d, want 200", resp.StatusCode)
-	}
-	var apps []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&apps); err != nil {
-		t.Fatalf("decode apps: %v", err)
-	}
-	if len(apps) != 1 {
-		t.Fatalf("apps len = %d, want 1", len(apps))
-	}
-	if apps[0]["name"] != "sample_plugin" {
-		t.Fatalf("app name = %v, want sample_plugin", apps[0]["name"])
-	}
-	if apps[0]["authorizationPolicy"] != "sample_policy" {
-		t.Fatalf("app authorizationPolicy = %v, want sample_policy", apps[0]["authorizationPolicy"])
-	}
-	if _, ok := apps[0]["mountedUiPath"]; ok {
-		t.Fatalf("apps response unexpectedly included mountedUiPath: %#v", apps[0])
-	}
-
-	dynamicEmail := "dynamic@example.test"
-	body := bytes.NewBufferString(fmt.Sprintf(`{"email":%q,"role":"viewer"}`, dynamicEmail))
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT dynamic member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	var putPluginMembershipResp struct {
-		Membership struct {
-			SelectorKind  string `json:"selectorKind"`
-			SelectorValue string `json:"selectorValue"`
-			Email         string `json:"email"`
-			Role          string `json:"role"`
-		} `json:"membership"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&putPluginMembershipResp); err != nil {
-		t.Fatalf("decode app membership response: %v", err)
-	}
-	dynamicUser, err := svc.Users.FindUserByEmail(context.Background(), dynamicEmail)
-	if err != nil {
-		t.Fatalf("FindUserByEmail dynamic app member: %v", err)
-	}
-	if putPluginMembershipResp.Membership.SelectorKind != "subject_id" {
-		t.Fatalf("plugin membership selectorKind = %q, want subject_id", putPluginMembershipResp.Membership.SelectorKind)
-	}
-	if putPluginMembershipResp.Membership.SelectorValue != principal.UserSubjectID(dynamicUser.ID) {
-		t.Fatalf("plugin membership selectorValue = %q, want canonical subject id", putPluginMembershipResp.Membership.SelectorValue)
-	}
-	if putPluginMembershipResp.Membership.Email != dynamicEmail {
-		t.Fatalf("plugin membership email = %q, want %q", putPluginMembershipResp.Membership.Email, dynamicEmail)
-	}
-
-	serviceAccountSubjectID := "service_account:reporting-bot"
-	body = bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, serviceAccountSubjectID))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT service account member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put service account member status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	var putServiceAccountMembershipResp struct {
-		Membership struct {
-			SelectorKind  string `json:"selectorKind"`
-			SelectorValue string `json:"selectorValue"`
-			Email         string `json:"email"`
-			Role          string `json:"role"`
-		} `json:"membership"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&putServiceAccountMembershipResp); err != nil {
-		t.Fatalf("decode service account membership response: %v", err)
-	}
-	if putServiceAccountMembershipResp.Membership.SelectorKind != "subject_id" {
-		t.Fatalf("service account membership selectorKind = %q, want subject_id", putServiceAccountMembershipResp.Membership.SelectorKind)
-	}
-	if putServiceAccountMembershipResp.Membership.SelectorValue != serviceAccountSubjectID {
-		t.Fatalf("service account membership selectorValue = %q, want %q", putServiceAccountMembershipResp.Membership.SelectorValue, serviceAccountSubjectID)
-	}
-	if putServiceAccountMembershipResp.Membership.Email != "" {
-		t.Fatalf("service account membership email = %q, want empty", putServiceAccountMembershipResp.Membership.Email)
-	}
-
-	resp, err = http.Get(ts.URL + "/api/v1/authorization/apps/sample_plugin/members")
-	if err != nil {
-		t.Fatalf("GET members: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("members status = %d, want 200", resp.StatusCode)
-	}
-
-	var members []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		t.Fatalf("decoding members: %v", err)
-	}
-	if len(members) != 3 {
-		t.Fatalf("expected 3 merged members, got %d (%+v)", len(members), members)
-	}
-	foundDynamicPluginMember := false
-	foundDynamicServiceAccountMember := false
-	for _, member := range members {
-		if _, ok := member["mutable"]; ok {
-			t.Fatalf("member unexpectedly included mutable: %+v", member)
-		}
-		if member["source"] != "dynamic" {
-			continue
-		}
-		switch member["selectorValue"] {
-		case principal.UserSubjectID(dynamicUser.ID):
-			foundDynamicPluginMember = true
-			if got := member["selectorKind"]; got != "subject_id" {
-				t.Fatalf("dynamic app member selectorKind = %v, want subject_id", got)
-			}
-			if member["email"] != dynamicEmail {
-				t.Fatalf("dynamic app member email = %v, want %q", member["email"], dynamicEmail)
-			}
-		case serviceAccountSubjectID:
-			foundDynamicServiceAccountMember = true
-			if got := member["selectorKind"]; got != "subject_id" {
-				t.Fatalf("dynamic service account member selectorKind = %v, want subject_id", got)
-			}
-			if member["email"] != nil {
-				t.Fatalf("dynamic service account member email = %v, want omitted", member["email"])
-			}
-		}
-	}
-	if !foundDynamicPluginMember {
-		t.Fatalf("expected one dynamic app member, got %+v", members)
-	}
-	if !foundDynamicServiceAccountMember {
-		t.Fatalf("expected one dynamic service account member, got %+v", members)
-	}
-
-	body = bytes.NewBufferString(`{"email":"static@example.test","role":"viewer"}`)
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT static-conflict member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusConflict {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put static-conflict status = %d, want 409: %s", resp.StatusCode, respBody)
-	}
-
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("DELETE dynamic member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("delete dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/apps/sample_plugin/members/"+url.PathEscape(serviceAccountSubjectID), nil)
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("DELETE service account member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("delete service account member status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-
-	resp, err = http.Get(ts.URL + "/api/v1/authorization/apps/sample_plugin/members")
-	if err != nil {
-		t.Fatalf("GET members after delete: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("members after delete status = %d, want 200", resp.StatusCode)
-	}
-	members = nil
-	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		t.Fatalf("decoding members after delete: %v", err)
-	}
-	if len(members) != 1 || members[0]["source"] != "static" {
-		t.Fatalf("members after delete = %+v, want only static row", members)
-	}
-}
-
 func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	t.Parallel()
 
@@ -5742,7 +5029,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 
 	expectJSONStatus(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/members", "owner-session", `{"email":"blocked@example.test","role":"admin"}`, http.StatusOK)
 
-	expectJSONStatus(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/grants/svc", "blocked-session", `{"role":"viewer"}`, http.StatusForbidden)
+	expectJSONStatus(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/grants/svc", "blocked-session", `{"role":"viewer"}`, http.StatusNotFound)
 
 	resp = doJSON(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/tokens", "owner-session", `{"name":"open-token","permissions":[{"app":"open-svc","operations":["run"]}]}`)
 	if resp.StatusCode != http.StatusCreated {
@@ -5771,25 +5058,18 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 
-	resp = doJSON(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/grants/svc", "owner-session", `{"role":"viewer"}`)
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		t.Fatalf("grant subject status = %d, want 200: %s", resp.StatusCode, body)
+	if provider.activeModelID == "" {
+		if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
+			t.Fatalf("reload authorization state before seeding managed subject grant: %v", err)
+		}
 	}
-	var grant struct {
-		App     string `json:"app"`
-		Role    string `json:"role"`
-		Source  string `json:"source"`
-		Mutable bool   `json:"mutable"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&grant); err != nil {
-		_ = resp.Body.Close()
-		t.Fatalf("decode grant response: %v", err)
-	}
-	_ = resp.Body.Close()
-	if grant.App != "svc" || grant.Role != "viewer" || grant.Source != "dynamic" || !grant.Mutable {
-		t.Fatalf("grant response = %+v", grant)
+	provider.putRelationship(provider.activeModelID, &core.Relationship{Tuple: &core.RelationshipTuple{
+		Target:   &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: created.SubjectID}}},
+		Relation: "viewer",
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: "svc"},
+	}})
+	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
+		t.Fatalf("reload authorization state after seeding managed subject grant: %v", err)
 	}
 
 	resp = doJSON(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/tokens", "owner-session", `{"name":"reporting-token","permissions":[{"app":"svc","operations":["run"]}]}`)
@@ -5848,20 +5128,20 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 
-	rels, err := provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-		Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: created.SubjectID},
-	})
+	rels, err := provider.ListRelationships(context.Background(), &core.ListRelationshipsRequest{Filter: &core.RelationshipFilter{
+		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: created.SubjectID}}},
+	}})
 	if err != nil {
-		t.Fatalf("read subject relationships after delete: %v", err)
+		t.Fatalf("list subject relationships after delete: %v", err)
 	}
 	if len(rels.GetRelationships()) != 0 {
 		t.Fatalf("subject relationships after delete = %+v, want none", rels.GetRelationships())
 	}
-	rels, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+	rels, err = provider.ListRelationships(context.Background(), &core.ListRelationshipsRequest{Filter: &core.RelationshipFilter{
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeManagedSubject, Id: created.SubjectID},
-	})
+	}})
 	if err != nil {
-		t.Fatalf("read managed subject relationships after delete: %v", err)
+		t.Fatalf("list managed subject relationships after delete: %v", err)
 	}
 	if len(rels.GetRelationships()) != 0 {
 		t.Fatalf("managed subject relationships after delete = %+v, want none", rels.GetRelationships())
@@ -5875,1258 +5155,6 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	}
 
 	expectJSONStatus(http.MethodPost, "/api/v1/authorization/subjects", "owner-session", `{"id":"reporting-bot","displayName":"Reporting Bot"}`, http.StatusConflict)
-}
-
-func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	provider := newMemoryAuthorizationProvider("memory-authorization")
-	provider.validateModel = true
-	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"sample_policy": {
-				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
-					staticPolicyUserMember(t, svc, "static@example.test", "admin"),
-				},
-			},
-		},
-	}, map[string]*config.ProviderEntry{
-		"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-	})
-
-	if err != nil {
-		t.Fatalf("authorization.New: %v", err)
-	}
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "admin-session" {
-					return nil, fmt.Errorf("invalid token")
-				}
-				return &core.UserIdentity{Email: "static@example.test"}, nil
-			},
-		}
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AuthorizationProvider = provider
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-		}
-		cfg.Admin = server.AdminRouteConfig{
-			AuthorizationPolicy: "sample_policy",
-			AllowedRoles:        []string{"admin"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	rawSubjectID := principal.UserSubjectID("raw-subject")
-	provider.putRelationship(provider.activeModelID, &core.Relationship{
-		Relation: "viewer",
-		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAppDynamic, Id: "sample_plugin"},
-		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{
-			Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: rawSubjectID},
-		}},
-		Properties: mustStruct(t, map[string]any{"source": "provider"}),
-	})
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/grants/"+url.PathEscape("app/sample_plugin"), nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET app fragment: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("plugin fragment status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	var pluginFragmentResp coredata.AuthorizationDynamicFragment
-	if err := json.NewDecoder(resp.Body).Decode(&pluginFragmentResp); err != nil {
-		t.Fatalf("decoding app fragment: %v", err)
-	}
-	if len(pluginFragmentResp.Relationships) != 1 || pluginFragmentResp.Relationships[0].Subject.ID != rawSubjectID {
-		t.Fatalf("plugin fragment relationships = %#v, want backfilled provider relationship", pluginFragmentResp.Relationships)
-	}
-	if pluginFragmentResp.Relationships[0].Target.Subject == nil || pluginFragmentResp.Relationships[0].Target.Subject.ID != rawSubjectID {
-		t.Fatalf("plugin fragment target = %#v, want subject target", pluginFragmentResp.Relationships[0].Target)
-	}
-	if pluginFragmentResp.Relationships[0].Properties["source"] != "provider" {
-		t.Fatalf("plugin fragment properties = %#v, want provider source", pluginFragmentResp.Relationships[0].Properties)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/grants", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET grants: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("grants status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	var grantsResp []coredata.AuthorizationDynamicFragment
-	if err := json.NewDecoder(resp.Body).Decode(&grantsResp); err != nil {
-		t.Fatalf("decoding grants response: %v", err)
-	}
-	if len(grantsResp) != 1 || grantsResp[0].ID != "app/sample_plugin" {
-		t.Fatalf("grants response = %#v, want dynamic app grant source only", grantsResp)
-	}
-
-	dynamicUser := seedUser(t, svc, "dynamic@example.test")
-	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT dynamic member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	pluginFragment, err := svc.AuthzFragments.GetFragmentByOwner(context.Background(), coredata.AuthorizationAppFragmentOwner("sample_plugin"))
-	if err != nil {
-		t.Fatalf("GetFragmentByOwner plugin: %v", err)
-	}
-	if pluginFragment.ID != "app/sample_plugin" || len(pluginFragment.Relationships) != 2 {
-		t.Fatalf("plugin fragment = %#v, want backfilled and write path source relationships", pluginFragment)
-	}
-	foundDynamicUser := false
-	for _, relationship := range pluginFragment.Relationships {
-		if relationship.Subject.ID == principal.UserSubjectID(dynamicUser.ID) {
-			foundDynamicUser = true
-			break
-		}
-	}
-	if !foundDynamicUser {
-		t.Fatalf("plugin fragment relationships = %#v, want dynamic user", pluginFragment.Relationships)
-	}
-
-	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
-		t.Fatalf("ReloadAuthorizationState after provider-backed app write: %v", err)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET members: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("members status = %d, want 200", resp.StatusCode)
-	}
-
-	var members []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		t.Fatalf("decoding members: %v", err)
-	}
-	if len(members) != 3 {
-		t.Fatalf("expected provider-backed merged members, got %d (%+v)", len(members), members)
-	}
-	foundRawSubject := false
-	for _, member := range members {
-		if member["selectorValue"] == rawSubjectID {
-			foundRawSubject = true
-			break
-		}
-	}
-	if !foundRawSubject {
-		t.Fatalf("members = %+v, want target-only direct subject %q", members, rawSubjectID)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/provider", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET provider summary: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("provider summary status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	var providerSummary struct {
-		Name          string `json:"name"`
-		ActiveModelID string `json:"activeModelId"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&providerSummary); err != nil {
-		t.Fatalf("decoding provider summary: %v", err)
-	}
-	if providerSummary.Name != "memory-authorization" {
-		t.Fatalf("provider name = %q, want %q", providerSummary.Name, "memory-authorization")
-	}
-	if providerSummary.ActiveModelID == "" {
-		t.Fatal("expected active model id")
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/models", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET models: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("models status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	var modelsResp struct {
-		Models []struct {
-			ID string `json:"id"`
-		} `json:"models"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
-		t.Fatalf("decoding models response: %v", err)
-	}
-	if len(modelsResp.Models) == 0 {
-		t.Fatal("expected at least one authorization model")
-	}
-	foundActiveModel := false
-	for _, model := range modelsResp.Models {
-		if model.ID == providerSummary.ActiveModelID {
-			foundActiveModel = true
-			break
-		}
-	}
-	if !foundActiveModel {
-		t.Fatalf("models response = %+v, want active model %q to be listed", modelsResp.Models, providerSummary.ActiveModelID)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/relationships?resourceType=app_dynamic&resourceId=sample_plugin", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET relationships: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("relationships status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	var relationshipsResp struct {
-		ModelID       string `json:"modelId"`
-		Relationships []struct {
-			Managed bool `json:"managed"`
-		} `json:"relationships"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&relationshipsResp); err != nil {
-		t.Fatalf("decoding relationships response: %v", err)
-	}
-	if relationshipsResp.ModelID == "" {
-		t.Fatal("expected model id on relationships response")
-	}
-	if len(relationshipsResp.Relationships) != 2 {
-		t.Fatalf("expected 2 provider relationships, got %d", len(relationshipsResp.Relationships))
-	}
-	for _, rel := range relationshipsResp.Relationships {
-		if !rel.Managed {
-			t.Fatalf("expected managed relationship rows, got %+v", relationshipsResp.Relationships)
-		}
-	}
-
-	fragmentOnlySubjectID := principal.UserSubjectID("fragment-only")
-	fragmentPutBody, err := json.Marshal(map[string]any{
-		"owner": coredata.AuthorizationAppFragmentOwner("sample_plugin"),
-		"relationships": append(pluginFragment.Relationships, coredata.AuthorizationDynamicFragmentRelationship{
-			Subject: coredata.AuthorizationDynamicFragmentSubject{
-				Type: authorization.ProviderSubjectTypeSubject,
-				ID:   fragmentOnlySubjectID,
-			},
-			Relation: "viewer",
-			Resource: coredata.AuthorizationDynamicFragmentResource{
-				Type: authorization.ProviderResourceTypeAppDynamic,
-				ID:   "sample_plugin",
-			},
-		}),
-	})
-	if err != nil {
-		t.Fatalf("marshal fragment PUT body: %v", err)
-	}
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/grants/"+url.PathEscape("app/sample_plugin"), bytes.NewReader(fragmentPutBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT plugin fragment: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put plugin fragment status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	var fragmentPutResp coredata.AuthorizationDynamicFragment
-	if err := json.NewDecoder(resp.Body).Decode(&fragmentPutResp); err != nil {
-		t.Fatalf("decoding plugin fragment PUT response: %v", err)
-	}
-	if len(fragmentPutResp.Relationships) != 3 {
-		t.Fatalf("plugin fragment PUT response has %d relationships, want 3", len(fragmentPutResp.Relationships))
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/relationships?resourceType=app_dynamic&resourceId=sample_plugin", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET relationships after fragment PUT: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("relationships after fragment PUT status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	relationshipsResp = struct {
-		ModelID       string `json:"modelId"`
-		Relationships []struct {
-			Managed bool `json:"managed"`
-		} `json:"relationships"`
-	}{}
-	if err := json.NewDecoder(resp.Body).Decode(&relationshipsResp); err != nil {
-		t.Fatalf("decoding relationships after fragment PUT response: %v", err)
-	}
-	if len(relationshipsResp.Relationships) != 3 {
-		t.Fatalf("expected 3 provider relationships after fragment PUT, got %d", len(relationshipsResp.Relationships))
-	}
-
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/grants/"+url.PathEscape("app/sample_plugin"), nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("DELETE plugin fragment: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("delete plugin fragment status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	var fragmentDeleteResp struct {
-		Reloaded bool `json:"reloaded"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&fragmentDeleteResp); err != nil {
-		t.Fatalf("decoding plugin fragment DELETE response: %v", err)
-	}
-	if !fragmentDeleteResp.Reloaded {
-		t.Fatal("plugin fragment DELETE response reloaded = false, want true")
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/relationships?resourceType=app_dynamic&resourceId=sample_plugin", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET relationships after fragment DELETE: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("relationships after fragment DELETE status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	relationshipsResp = struct {
-		ModelID       string `json:"modelId"`
-		Relationships []struct {
-			Managed bool `json:"managed"`
-		} `json:"relationships"`
-	}{}
-	if err := json.NewDecoder(resp.Body).Decode(&relationshipsResp); err != nil {
-		t.Fatalf("decoding relationships after fragment DELETE response: %v", err)
-	}
-	if len(relationshipsResp.Relationships) != 0 {
-		t.Fatalf("expected no provider relationships after fragment DELETE, got %d", len(relationshipsResp.Relationships))
-	}
-}
-
-func TestAdminAPI_AuthorizationProviderDebugRequiresAdminPolicy(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	provider := newMemoryAuthorizationProvider("memory-authorization")
-	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"sample_policy": {
-				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
-					staticPolicyUserMember(t, svc, "static@example.test", "admin"),
-				},
-			},
-		},
-	}, map[string]*config.ProviderEntry{
-		"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-	})
-
-	if err != nil {
-		t.Fatalf("authorization.New: %v", err)
-	}
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AuthorizationProvider = provider
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	paths := []string{
-		"/api/v1/authorization/provider",
-		"/api/v1/authorization/models",
-		"/api/v1/authorization/relationships",
-	}
-	for _, path := range paths {
-		resp, err := http.Get(ts.URL + path)
-		if err != nil {
-			t.Fatalf("GET %s: %v", path, err)
-		}
-		if resp.StatusCode != http.StatusServiceUnavailable {
-			body, _ := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			t.Fatalf("%s status = %d, want 503: %s", path, resp.StatusCode, body)
-		}
-		_ = resp.Body.Close()
-	}
-}
-
-func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	seedUser(t, svc, "static-admin@example.test")
-	const adminRole = "owner"
-	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"admin_policy": {
-				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
-					staticPolicyUserMember(t, svc, "static-admin@example.test", adminRole),
-				},
-			},
-		},
-	}, nil)
-
-	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "admin-session" {
-					return nil, fmt.Errorf("invalid token")
-				}
-				return &core.UserIdentity{Email: "static-admin@example.test"}, nil
-			},
-		}
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AuthorizationProvider = provider
-		cfg.Admin = server.AdminRouteConfig{
-			AuthorizationPolicy: "admin_policy",
-			AllowedRoles:        []string{adminRole, "operator"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET admin members: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("admin members status = %d, want 200: %s", resp.StatusCode, body)
-	}
-
-	var members []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		t.Fatalf("decoding admin members: %v", err)
-	}
-	if len(members) != 1 || members[0]["source"] != "static" {
-		t.Fatalf("admin members = %+v, want one static row", members)
-	}
-
-	dynamicAdminEmail := "dynamic-admin@example.test"
-	body := bytes.NewBufferString(fmt.Sprintf(`{"email":%q,"role":"owner"}`, dynamicAdminEmail))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT admin member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put admin member status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	var putAdminMembershipResp struct {
-		Membership struct {
-			SelectorKind  string `json:"selectorKind"`
-			SelectorValue string `json:"selectorValue"`
-			Email         string `json:"email"`
-			Role          string `json:"role"`
-		} `json:"membership"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&putAdminMembershipResp); err != nil {
-		t.Fatalf("decode admin membership response: %v", err)
-	}
-	dynamicAdmin, err := svc.Users.FindUserByEmail(context.Background(), dynamicAdminEmail)
-	if err != nil {
-		t.Fatalf("FindUserByEmail dynamic admin member: %v", err)
-	}
-	if putAdminMembershipResp.Membership.SelectorKind != "subject_id" {
-		t.Fatalf("admin membership selectorKind = %q, want subject_id", putAdminMembershipResp.Membership.SelectorKind)
-	}
-	if putAdminMembershipResp.Membership.SelectorValue != principal.UserSubjectID(dynamicAdmin.ID) {
-		t.Fatalf("admin membership selectorValue = %q, want canonical subject id", putAdminMembershipResp.Membership.SelectorValue)
-	}
-	if putAdminMembershipResp.Membership.Email != dynamicAdminEmail {
-		t.Fatalf("admin membership email = %q, want %q", putAdminMembershipResp.Membership.Email, dynamicAdminEmail)
-	}
-	adminFragment, err := svc.AuthzFragments.GetFragmentByOwner(context.Background(), coredata.AuthorizationGlobalFragmentOwner())
-	if err != nil {
-		t.Fatalf("GetFragmentByOwner global: %v", err)
-	}
-	if adminFragment.ID != "global" || len(adminFragment.Relationships) != 1 {
-		t.Fatalf("admin fragment = %#v, want one source relationship", adminFragment)
-	}
-	if got := adminFragment.Relationships[0].Relation; got != "owner" {
-		t.Fatalf("admin fragment role = %q, want owner", got)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET admin members after put: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("admin members after put status = %d, want 200", resp.StatusCode)
-	}
-	members = nil
-	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		t.Fatalf("decoding admin members after put: %v", err)
-	}
-	if len(members) != 2 {
-		t.Fatalf("expected 2 merged admin members, got %d (%+v)", len(members), members)
-	}
-	foundDynamicAdminMember := false
-	for _, member := range members {
-		if member["source"] != "dynamic" {
-			continue
-		}
-		foundDynamicAdminMember = true
-		if got := member["selectorKind"]; got != "subject_id" {
-			t.Fatalf("dynamic admin member selectorKind = %v, want subject_id", got)
-		}
-		if member["selectorValue"] != principal.UserSubjectID(dynamicAdmin.ID) {
-			t.Fatalf("dynamic admin member selector metadata = %+v, want canonical subject_id selectorValue", member)
-		}
-		if member["email"] != dynamicAdminEmail {
-			t.Fatalf("dynamic admin member email = %v, want %q", member["email"], dynamicAdminEmail)
-		}
-	}
-	if !foundDynamicAdminMember {
-		t.Fatalf("expected one dynamic admin member, got %+v", members)
-	}
-
-	body = bytes.NewBufferString(`{"email":"static-admin@example.test","role":"owner"}`)
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT static admin conflict: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusConflict {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put static admin conflict status = %d, want 409: %s", resp.StatusCode, respBody)
-	}
-
-	body = bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"operator"}`, principal.UserSubjectID(dynamicAdmin.ID)))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT dynamic admin role change: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put dynamic admin role change status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	adminFragment, err = svc.AuthzFragments.GetFragmentByOwner(context.Background(), coredata.AuthorizationGlobalFragmentOwner())
-	if err != nil {
-		t.Fatalf("GetFragmentByOwner global after role change: %v", err)
-	}
-	if len(adminFragment.Relationships) != 1 || adminFragment.Relationships[0].Relation != "operator" {
-		t.Fatalf("admin fragment after role change = %#v, want single operator relationship", adminFragment.Relationships)
-	}
-
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/admins/members/"+url.PathEscape(principal.UserSubjectID(dynamicAdmin.ID)), nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("DELETE admin member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("delete admin member status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET admin members after delete: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("admin members after delete status = %d, want 200", resp.StatusCode)
-	}
-	members = nil
-	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		t.Fatalf("decoding admin members after delete: %v", err)
-	}
-	if len(members) != 1 || members[0]["source"] != "static" {
-		t.Fatalf("admin members after delete = %+v, want only static row", members)
-	}
-}
-
-func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	seedUser(t, svc, "static-admin@example.test")
-	const adminRole = "owner"
-	provider := newMemoryAuthorizationProvider("memory-authorization")
-	provider.validateModel = true
-	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"admin_policy": {
-				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
-					staticPolicyUserMember(t, svc, "static-admin@example.test", adminRole),
-				},
-			},
-		},
-	}, nil)
-
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "admin-session" {
-					return nil, fmt.Errorf("invalid token")
-				}
-				return &core.UserIdentity{Email: "static-admin@example.test"}, nil
-			},
-		}
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AuthorizationProvider = provider
-		cfg.Admin = server.AdminRouteConfig{
-			AuthorizationPolicy: "admin_policy",
-			AllowedRoles:        []string{adminRole, "operator"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	dynamicAdmin := seedUser(t, svc, "dynamic-admin@example.test")
-	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"owner"}`, principal.UserSubjectID(dynamicAdmin.ID)))
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT admin member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put admin member status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-
-	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
-		t.Fatalf("ReloadAuthorizationState after provider-backed admin write: %v", err)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET admin members: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("admin members status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-
-	var members []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		t.Fatalf("decoding admin members: %v", err)
-	}
-	if len(members) != 2 {
-		t.Fatalf("expected provider-backed merged admin members, got %d (%+v)", len(members), members)
-	}
-}
-
-func TestAdminAPI_ProviderBackedWritesUseDynamicFragmentSource(t *testing.T) {
-	t.Parallel()
-
-	t.Run("plugin members", func(t *testing.T) {
-		t.Parallel()
-
-		svc := testutil.NewStubServices(t)
-		provider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
-			Policies: map[string]config.SubjectPolicyDef{
-				"sample_policy": {
-					Default: "deny",
-					Members: []config.SubjectPolicyMemberDef{
-						staticPolicyUserMember(t, svc, "static@example.test", "admin"),
-					},
-				},
-			},
-		}, map[string]*config.ProviderEntry{
-			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-		})
-
-		if err != nil {
-			t.Fatalf("authorization.New: %v", err)
-		}
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
-
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{
-				N: "test",
-				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-					if token != "admin-session" {
-						return nil, fmt.Errorf("invalid token")
-					}
-					return &core.UserIdentity{Email: "static@example.test"}, nil
-				},
-			}
-			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AuthorizationProvider = provider
-			cfg.AppDefs = map[string]*config.ProviderEntry{
-				"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-			}
-			cfg.Admin = server.AdminRouteConfig{
-				AuthorizationPolicy: "sample_policy",
-				AllowedRoles:        []string{"admin"},
-			}
-			cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_, _ = w.Write([]byte("admin"))
-			})
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		dynamicUser := seedUser(t, svc, "dynamic@example.test")
-		body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
-		req.Header.Set("Content-Type", "application/json")
-		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("PUT dynamic member: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			respBody, _ := io.ReadAll(resp.Body)
-			t.Fatalf("put dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
-		}
-	})
-
-	t.Run("admin members", func(t *testing.T) {
-		t.Parallel()
-
-		svc := testutil.NewStubServices(t)
-		provider := newMemoryAuthorizationProvider("memory-authorization")
-		seedUser(t, svc, "static-admin@example.test")
-		baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
-			Policies: map[string]config.SubjectPolicyDef{
-				"admin_policy": {
-					Default: "deny",
-					Members: []config.SubjectPolicyMemberDef{
-						staticPolicyUserMember(t, svc, "static-admin@example.test", "owner"),
-					},
-				},
-			},
-		}, nil)
-
-		authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
-
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{
-				N: "test",
-				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-					if token != "admin-session" {
-						return nil, fmt.Errorf("invalid token")
-					}
-					return &core.UserIdentity{Email: "static-admin@example.test"}, nil
-				},
-			}
-			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AuthorizationProvider = provider
-			cfg.Admin = server.AdminRouteConfig{
-				AuthorizationPolicy: "admin_policy",
-				AllowedRoles:        []string{"owner", "operator"},
-			}
-			cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_, _ = w.Write([]byte("admin"))
-			})
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		dynamicAdmin := seedUser(t, svc, "dynamic-admin@example.test")
-		body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"operator"}`, principal.UserSubjectID(dynamicAdmin.ID)))
-		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
-		req.Header.Set("Content-Type", "application/json")
-		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("PUT admin member: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			respBody, _ := io.ReadAll(resp.Body)
-			t.Fatalf("put admin member status = %d, want 200: %s", resp.StatusCode, respBody)
-		}
-	})
-}
-
-func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	seedUser(t, svc, "static-admin@example.test")
-	seedUser(t, svc, "viewer@example.test")
-	const adminRole = "ops-admin"
-	provider := newMemoryAuthorizationProvider("memory-authorization")
-	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"admin_policy": {
-				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
-					staticPolicyUserMember(t, svc, "static-admin@example.test", adminRole),
-				},
-			},
-		},
-	}, nil)
-
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				switch token {
-				case "ops-admin-session":
-					return &core.UserIdentity{Email: "static-admin@example.test"}, nil
-				case "viewer-session":
-					return &core.UserIdentity{Email: "viewer@example.test"}, nil
-				default:
-					return nil, fmt.Errorf("invalid token")
-				}
-			},
-		}
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AuthorizationProvider = provider
-		cfg.Admin = server.AdminRouteConfig{
-			AuthorizationPolicy: "admin_policy",
-			AllowedRoles:        []string{adminRole},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ops-admin-session"})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("ops-admin GET admin members: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("ops-admin get admin members status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-	if got := resp.Header.Get("X-Gestalt-Can-Write"); got != "true" {
-		t.Fatalf("ops-admin can-write header = %q, want true", got)
-	}
-
-	viewer := seedUser(t, svc, "viewer@example.test")
-	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"ops-admin"}`, principal.UserSubjectID(viewer.ID)))
-	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ops-admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("ops-admin PUT admin member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("ops-admin put admin member status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/authorization/admins/members/"+url.PathEscape(principal.UserSubjectID(viewer.ID)), nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ops-admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("ops-admin DELETE admin member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("ops-admin delete admin member status = %d, want 200: %s", resp.StatusCode, respBody)
-	}
-}
-
-func TestAdminAPI_PluginAuthorizationUnavailable(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	authz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"sample_policy": {
-				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
-					staticPolicyUserMember(t, svc, "admin@example.test", "admin"),
-				},
-			},
-		},
-	}, map[string]*config.ProviderEntry{
-		"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-	})
-
-	if err != nil {
-		t.Fatalf("authorization.New: %v", err)
-	}
-	dynamicUser := seedUser(t, svc, "dynamic@example.test")
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "admin-session" {
-					return nil, fmt.Errorf("invalid token")
-				}
-				return &core.UserIdentity{Email: "admin@example.test"}, nil
-			},
-		}
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-		}
-		cfg.Admin = server.AdminRouteConfig{
-			AuthorizationPolicy: "sample_policy",
-			AllowedRoles:        []string{"admin"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	for _, tc := range []struct {
-		name   string
-		method string
-		path   string
-		body   string
-	}{
-		{name: "list", method: http.MethodGet, path: "/api/v1/authorization/apps/sample_plugin/members"},
-		{name: "put", method: http.MethodPut, path: "/api/v1/authorization/apps/sample_plugin/members", body: fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID))},
-		{name: "delete", method: http.MethodDelete, path: "/api/v1/authorization/apps/sample_plugin/members/" + url.PathEscape(principal.UserSubjectID(dynamicUser.ID))},
-	} {
-		reqBody := io.Reader(nil)
-		if tc.body != "" {
-			reqBody = strings.NewReader(tc.body)
-		}
-		req, _ := http.NewRequest(tc.method, ts.URL+tc.path, reqBody)
-		if tc.body != "" {
-			req.Header.Set("Content-Type", "application/json")
-		}
-		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("%s members: %v", tc.name, err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusServiceUnavailable {
-			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("%s members status = %d, want 503: %s", tc.name, resp.StatusCode, body)
-		}
-	}
-}
-
-func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
-	t.Parallel()
-
-	t.Run("authorization provider missing", func(t *testing.T) {
-		t.Parallel()
-
-		svc := testutil.NewStubServices(t)
-		seedUser(t, svc, "admin@example.test")
-		authz := mustAuthorizer(t, config.AuthorizationConfig{
-			Policies: map[string]config.SubjectPolicyDef{
-				"admin_policy": {
-					Default: "deny",
-					Members: []config.SubjectPolicyMemberDef{
-						staticPolicyUserMember(t, svc, "admin@example.test", "admin"),
-					},
-				},
-			},
-		}, nil)
-
-		user, err := svc.Users.FindOrCreateUser(context.Background(), "dynamic-admin@example.test")
-		if err != nil {
-			t.Fatalf("FindOrCreateUser dynamic admin: %v", err)
-		}
-
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{
-				N: "test",
-				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-					if token != "admin-session" {
-						return nil, fmt.Errorf("invalid token")
-					}
-					return &core.UserIdentity{Email: "admin@example.test"}, nil
-				},
-			}
-			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.Admin = server.AdminRouteConfig{
-				AuthorizationPolicy: "admin_policy",
-				AllowedRoles:        []string{"admin"},
-			}
-			cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_, _ = w.Write([]byte("admin"))
-			})
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		for _, tc := range []struct {
-			name   string
-			method string
-			path   string
-			body   string
-		}{
-			{name: "list", method: http.MethodGet, path: "/api/v1/authorization/admins/members"},
-			{name: "put", method: http.MethodPut, path: "/api/v1/authorization/admins/members", body: fmt.Sprintf(`{"subjectId":%q,"role":"operator"}`, principal.UserSubjectID(user.ID))},
-			{name: "delete", method: http.MethodDelete, path: "/api/v1/authorization/admins/members/" + url.PathEscape(principal.UserSubjectID(user.ID))},
-		} {
-			reqBody := io.Reader(nil)
-			if tc.body != "" {
-				reqBody = strings.NewReader(tc.body)
-			}
-			req, _ := http.NewRequest(tc.method, ts.URL+tc.path, reqBody)
-			if tc.body != "" {
-				req.Header.Set("Content-Type", "application/json")
-			}
-			req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatalf("%s admin members without authorization provider: %v", tc.name, err)
-			}
-			defer func() { _ = resp.Body.Close() }()
-			if resp.StatusCode != http.StatusServiceUnavailable {
-				body, _ := io.ReadAll(resp.Body)
-				t.Fatalf("%s status = %d, want 503: %s", tc.name, resp.StatusCode, body)
-			}
-		}
-	})
-
-	t.Run("admin policy unset", func(t *testing.T) {
-		t.Parallel()
-
-		svc := testutil.NewStubServices(t)
-		authz := mustAuthorizer(t, config.AuthorizationConfig{}, nil)
-
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{
-				N: "test",
-				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-					if token != "admin-session" {
-						return nil, fmt.Errorf("invalid token")
-					}
-					return &core.UserIdentity{Email: "admin@example.test"}, nil
-				},
-			}
-			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_, _ = w.Write([]byte("admin"))
-			})
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/authorization/admins/members", nil)
-		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("GET admin members with admin policy unset: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusServiceUnavailable {
-			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("status = %d, want 503: %s", resp.StatusCode, body)
-		}
-	})
-
-}
-
-func TestAdminAPI_PluginAuthorizationReloadFailureReturnsAccepted(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	provider := newMemoryAuthorizationProvider("memory-authorization")
-	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"sample_policy": {Default: "deny"},
-		},
-	}, map[string]*config.ProviderEntry{
-		"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-	})
-
-	if err != nil {
-		t.Fatalf("authorization.New: %v", err)
-	}
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
-	provider.writeErr = fmt.Errorf("provider write failed")
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AuthorizationProvider = provider
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	dynamicUser := seedUser(t, svc, "dynamic@example.test")
-	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/apps/sample_plugin/members", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT dynamic member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusAccepted {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put dynamic member status = %d, want 202: %s", resp.StatusCode, respBody)
-	}
-	fragment, err := svc.AuthzFragments.GetFragmentByOwner(context.Background(), coredata.AuthorizationAppFragmentOwner("sample_plugin"))
-	if err != nil {
-		t.Fatalf("GetFragmentByOwner plugin after accepted reload failure: %v", err)
-	}
-	if len(fragment.Relationships) != 1 || fragment.Relationships[0].Subject.ID != principal.UserSubjectID(dynamicUser.ID) {
-		t.Fatalf("plugin fragment relationships = %#v, want persisted source-layer member", fragment.Relationships)
-	}
-}
-
-func TestAdminAPI_AdminAuthorizationReloadFailureReturnsAccepted(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	seedUser(t, svc, "static-admin@example.test")
-	provider := newMemoryAuthorizationProvider("memory-authorization")
-	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"admin_policy": {
-				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
-					staticPolicyUserMember(t, svc, "static-admin@example.test", "admin"),
-				},
-			},
-		},
-	}, nil)
-
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider, authorization.WithDynamicFragmentSource(svc.AuthzFragments))
-	provider.writeErr = fmt.Errorf("provider write failed")
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "admin-session" {
-					return nil, fmt.Errorf("invalid token")
-				}
-				return &core.UserIdentity{Email: "static-admin@example.test"}, nil
-			},
-		}
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AuthorizationProvider = provider
-		cfg.Admin = server.AdminRouteConfig{
-			AuthorizationPolicy: "admin_policy",
-			AllowedRoles:        []string{"admin"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	dynamicAdmin := seedUser(t, svc, "dynamic-admin@example.test")
-	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"admin"}`, principal.UserSubjectID(dynamicAdmin.ID)))
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/authorization/admins/members", body)
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("PUT admin member: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusAccepted {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("put admin member status = %d, want 202: %s", resp.StatusCode, respBody)
-	}
-	fragment, err := svc.AuthzFragments.GetFragmentByOwner(context.Background(), coredata.AuthorizationGlobalFragmentOwner())
-	if err != nil {
-		t.Fatalf("GetFragmentByOwner global after accepted reload failure: %v", err)
-	}
-	if len(fragment.Relationships) != 1 || fragment.Relationships[0].Subject.ID != principal.UserSubjectID(dynamicAdmin.ID) {
-		t.Fatalf("admin fragment relationships = %#v, want persisted source-layer member", fragment.Relationships)
-	}
 }
 
 func TestMountedUIRoutesHiddenOnManagementProfile(t *testing.T) {

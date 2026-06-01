@@ -6,80 +6,63 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-type AuthorizationMetadata = proto.AuthorizationMetadata
+type AuthorizationSourceLayer = proto.SourceLayer
+type AuthorizationRelationshipTargetType = proto.RelationshipTargetType
 type SubjectRef = proto.Subject
 type ResourceRef = proto.Resource
 type SubjectSetRef = proto.SubjectSet
 type RelationshipTargetRef = proto.RelationshipTarget
 type ActionRef = proto.Action
 
-type AccessEvaluationRequest = proto.AccessEvaluationRequest
-type AccessDecision = proto.AccessDecision
-type AccessEvaluationsRequest = proto.AccessEvaluationsRequest
-type AccessEvaluationsResponse = proto.AccessEvaluationsResponse
-
-type ResourceSearchRequest = proto.ResourceSearchRequest
-type ResourceSearchResponse = proto.ResourceSearchResponse
-type SubjectSearchRequest = proto.SubjectSearchRequest
-type SubjectSearchResponse = proto.SubjectSearchResponse
-type EffectiveSubjectSearchRequest = proto.EffectiveSubjectSearchRequest
-type EffectiveSubjectSearchResponse = proto.EffectiveSubjectSearchResponse
-type ActionSearchRequest = proto.ActionSearchRequest
-type ActionSearchResponse = proto.ActionSearchResponse
+type CheckAccessRequest = proto.CheckAccessRequest
+type CheckAccessResponse = proto.CheckAccessResponse
+type CheckAccessManyRequest = proto.CheckAccessManyRequest
+type CheckAccessManyResponse = proto.CheckAccessManyResponse
 
 type Relationship = proto.Relationship
-type RelationshipKey = proto.RelationshipKey
-type ReadRelationshipsRequest = proto.ReadRelationshipsRequest
-type ReadRelationshipsResponse = proto.ReadRelationshipsResponse
-type WriteRelationshipsRequest = proto.WriteRelationshipsRequest
+type RelationshipTuple = proto.RelationshipTuple
+type RelationshipFilter = proto.RelationshipFilter
+type ListRelationshipsRequest = proto.ListRelationshipsRequest
+type ListRelationshipsResponse = proto.ListRelationshipsResponse
+type AddRelationshipRequest = proto.AddRelationshipRequest
+type AddRelationshipResponse = proto.AddRelationshipResponse
+type DeleteRelationshipRequest = proto.DeleteRelationshipRequest
+type DeleteRelationshipResponse = proto.DeleteRelationshipResponse
+type SetRelationshipsRequest = proto.SetRelationshipsRequest
+type SetRelationshipsResponse = proto.SetRelationshipsResponse
 
 type AuthorizationModel = proto.AuthorizationModel
+type AuthorizationModelRef = proto.AuthorizationModelRef
 type AuthorizationModelResourceType = proto.AuthorizationModelResourceType
 type AuthorizationModelRelation = proto.AuthorizationModelRelation
 type AuthorizationModelAction = proto.AuthorizationModelAction
 type AuthorizationModelAllowedTarget = proto.AuthorizationModelAllowedTarget
-type AuthorizationModelSubjectSetTarget = proto.AuthorizationModelSubjectSetTarget
-type AuthorizationModelRewrite = proto.AuthorizationModelRewrite
-type AuthorizationModelRewriteThis = proto.AuthorizationModelRewriteThis
-type AuthorizationModelComputedUserset = proto.AuthorizationModelComputedUserset
-type AuthorizationModelTupleToUserset = proto.AuthorizationModelTupleToUserset
-type AuthorizationModelRewriteUnion = proto.AuthorizationModelRewriteUnion
-type AuthorizationModelRef = proto.AuthorizationModelRef
-type GetActiveModelResponse = proto.GetActiveModelResponse
-type ListModelsRequest = proto.ListModelsRequest
-type ListModelsResponse = proto.ListModelsResponse
-type WriteModelRequest = proto.WriteModelRequest
-type ExpandRequest = proto.ExpandRequest
-type ExpandNode = proto.ExpandNode
-type ExpandResponse = proto.ExpandResponse
+type AuthorizationSubjectSetType = proto.SubjectSetType
+type GetActiveModelRefResponse = proto.GetActiveModelRefResponse
+type SetActiveModelRequest = proto.SetActiveModelRequest
+type SetActiveModelResponse = proto.SetActiveModelResponse
+type AuthorizationModelResourceTypeFilter = proto.AuthorizationModelResourceTypeFilter
+type ListActiveModelResourceTypesRequest = proto.ListActiveModelResourceTypesRequest
+type ListActiveModelResourceTypesResponse = proto.ListActiveModelResourceTypesResponse
+
+const (
+	AuthorizationSourceLayerUnspecified  = proto.SourceLayer_SOURCE_LAYER_UNSPECIFIED
+	AuthorizationSourceLayerStaticConfig = proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG
+	AuthorizationSourceLayerRuntime      = proto.SourceLayer_SOURCE_LAYER_RUNTIME
+)
 
 type AuthorizationProvider interface {
 	Name() string
 
-	Evaluate(ctx context.Context, req *AccessEvaluationRequest) (*AccessDecision, error)
-	EvaluateMany(ctx context.Context, req *AccessEvaluationsRequest) (*AccessEvaluationsResponse, error)
-	SearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error)
-	SearchSubjects(ctx context.Context, req *SubjectSearchRequest) (*SubjectSearchResponse, error)
-	SearchActions(ctx context.Context, req *ActionSearchRequest) (*ActionSearchResponse, error)
-	GetMetadata(ctx context.Context) (*AuthorizationMetadata, error)
+	CheckAccess(ctx context.Context, req *CheckAccessRequest) (*CheckAccessResponse, error)
+	CheckAccessMany(ctx context.Context, req *CheckAccessManyRequest) (*CheckAccessManyResponse, error)
 
-	ReadRelationships(ctx context.Context, req *ReadRelationshipsRequest) (*ReadRelationshipsResponse, error)
-	WriteRelationships(ctx context.Context, req *WriteRelationshipsRequest) error
+	ListRelationships(ctx context.Context, req *ListRelationshipsRequest) (*ListRelationshipsResponse, error)
+	AddRelationship(ctx context.Context, req *AddRelationshipRequest) (*AddRelationshipResponse, error)
+	DeleteRelationship(ctx context.Context, req *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error)
+	SetRelationships(ctx context.Context, req *SetRelationshipsRequest) (*SetRelationshipsResponse, error)
 
-	GetActiveModel(ctx context.Context) (*GetActiveModelResponse, error)
-	ListModels(ctx context.Context, req *ListModelsRequest) (*ListModelsResponse, error)
-	WriteModel(ctx context.Context, req *WriteModelRequest) (*AuthorizationModelRef, error)
-}
-
-// AuthorizationProviderEffectiveSearch is implemented by providers that can
-// search through computed usersets and inherited relationships.
-type AuthorizationProviderEffectiveSearch interface {
-	EffectiveSearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error)
-	EffectiveSearchSubjects(ctx context.Context, req *EffectiveSubjectSearchRequest) (*EffectiveSubjectSearchResponse, error)
-}
-
-// AuthorizationProviderExpansion is implemented by providers that can explain
-// the relationship targets contributing to one resource relation.
-type AuthorizationProviderExpansion interface {
-	Expand(ctx context.Context, req *ExpandRequest) (*ExpandResponse, error)
+	GetActiveModelRef(ctx context.Context) (*GetActiveModelRefResponse, error)
+	SetActiveModel(ctx context.Context, req *SetActiveModelRequest) (*SetActiveModelResponse, error)
+	ListActiveModelResourceTypes(ctx context.Context, req *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error)
 }

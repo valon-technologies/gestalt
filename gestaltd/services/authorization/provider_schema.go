@@ -68,10 +68,10 @@ var providerAuthorizationResourceTypes = []string{
 }
 
 func IsManagedProviderRelationship(rel *core.Relationship) bool {
-	if rel == nil || rel.GetResource() == nil {
+	if rel == nil || relationshipResource(rel) == nil {
 		return false
 	}
-	resourceType := strings.TrimSpace(rel.GetResource().GetType())
+	resourceType := strings.TrimSpace(relationshipResource(rel).GetType())
 	for _, managedResourceType := range providerAuthorizationResourceTypes {
 		if resourceType == managedResourceType {
 			return true
@@ -96,7 +96,7 @@ func ProviderAuthorizationModelForRoles(policyRoles, appStaticRoles, appDynamicR
 }
 
 func buildProviderAuthorizationModel(state providerBackedRoleState) *core.AuthorizationModel {
-	model := &core.AuthorizationModel{Version: 1}
+	model := &core.AuthorizationModel{Version: "1"}
 
 	policyRoles := unionRoleLists(state.policyStaticRoles)
 	policyRelations := map[string][]string{}
@@ -139,9 +139,9 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 		&core.AuthorizationModelResourceType{
 			Name: resourceTypeManagedSubject,
 			Relations: []*core.AuthorizationModelRelation{
-				{Name: relationManagedSubjectViewer, SubjectTypes: []string{subjectTypeSubject}},
-				{Name: relationManagedSubjectEditor, SubjectTypes: []string{subjectTypeSubject}},
-				{Name: relationManagedSubjectAdmin, SubjectTypes: []string{subjectTypeSubject}},
+				{Name: relationManagedSubjectViewer, AllowedTargets: allowedSubjectTypeTargets(subjectTypeSubject)},
+				{Name: relationManagedSubjectEditor, AllowedTargets: allowedSubjectTypeTargets(subjectTypeSubject)},
+				{Name: relationManagedSubjectAdmin, AllowedTargets: allowedSubjectTypeTargets(subjectTypeSubject)},
 			},
 			Actions: []*core.AuthorizationModelAction{
 				{Name: relationManagedSubjectViewer, Relations: []string{relationManagedSubjectViewer, relationManagedSubjectEditor, relationManagedSubjectAdmin}},
@@ -175,11 +175,8 @@ func membershipResourceType(name string) *core.AuthorizationModelResourceType {
 	return &core.AuthorizationModelResourceType{
 		Name: name,
 		Relations: []*core.AuthorizationModelRelation{{
-			Name:         relationMember,
-			SubjectTypes: []string{subjectTypeSubject},
-			AllowedTargets: []*core.AuthorizationModelAllowedTarget{{
-				Kind: &proto.AuthorizationModelAllowedTarget_SubjectType{SubjectType: subjectTypeSubject},
-			}},
+			Name:           relationMember,
+			AllowedTargets: allowedSubjectTypeTargets(subjectTypeSubject),
 		}},
 		Actions: []*core.AuthorizationModelAction{{
 			Name:      relationMember,
@@ -207,8 +204,8 @@ func buildProviderAuthorizationResourceType(name string, relations map[string][]
 	slices.SortFunc(relationNames, strings.Compare)
 	for _, relation := range relationNames {
 		resourceType.Relations = append(resourceType.Relations, &core.AuthorizationModelRelation{
-			Name:         relation,
-			SubjectTypes: append([]string(nil), relations[relation]...),
+			Name:           relation,
+			AllowedTargets: allowedSubjectTypeTargets(relations[relation]...),
 		})
 	}
 	for _, action := range actionNames {
@@ -222,6 +219,20 @@ func buildProviderAuthorizationResourceType(name string, relations map[string][]
 		})
 	}
 	return resourceType
+}
+
+func allowedSubjectTypeTargets(subjectTypes ...string) []*core.AuthorizationModelAllowedTarget {
+	out := make([]*core.AuthorizationModelAllowedTarget, 0, len(subjectTypes))
+	for _, subjectType := range subjectTypes {
+		subjectType = strings.TrimSpace(subjectType)
+		if subjectType == "" {
+			continue
+		}
+		out = append(out, &core.AuthorizationModelAllowedTarget{
+			Kind: &proto.AuthorizationModelAllowedTarget_SubjectType{SubjectType: subjectType},
+		})
+	}
+	return out
 }
 
 func resourceTypesForRoles(roles []string, subjectTypes ...string) map[string][]string {
