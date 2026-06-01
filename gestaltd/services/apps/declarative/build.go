@@ -122,20 +122,19 @@ func Build(def *Definition, conn ConnectionDef, opts ...BuildOption) (core.Provi
 		}
 	}
 
-	switch {
-	case def.AuthMapping != nil && (len(def.AuthMapping.Headers) > 0 || def.AuthMapping.Basic != nil):
+	if parser := AuthMappingTokenParser(def.AuthMapping); parser != nil {
 		if base.AuthStyle != AuthStyleBasic {
 			if def.AuthMapping.Basic != nil {
 				return nil, fmt.Errorf("%s: authMapping.basic requires authStyle basic", def.Provider)
 			}
 		}
-		base.TokenParser = MappedCredentialParser(def.AuthMapping)
-	case def.AuthHeader != "":
+		base.TokenParser = parser
+	} else if def.AuthHeader != "" {
 		headerName := def.AuthHeader
 		base.TokenParser = func(token string) (string, map[string]string, error) {
 			return "", map[string]string{headerName: token}, nil
 		}
-	case def.TokenPrefix != "":
+	} else if def.TokenPrefix != "" {
 		prefix := def.TokenPrefix
 		base.TokenParser = func(token string) (string, map[string]string, error) {
 			return prefix + token, nil, nil

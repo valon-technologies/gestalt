@@ -4,11 +4,20 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+
+	"github.com/valon-technologies/gestalt/server/services/egress"
 )
+
+func AuthMappingTokenParser(mapping *AuthMappingDef) egress.TokenParser {
+	if mapping == nil || (len(mapping.Headers) == 0 && mapping.Basic == nil) {
+		return nil
+	}
+	return MappedCredentialParser(mapping)
+}
 
 // MappedCredentialParser maps a structured credential JSON token into request
 // auth material according to an authMapping definition.
-func MappedCredentialParser(mapping *AuthMappingDef) func(string) (string, map[string]string, error) {
+func MappedCredentialParser(mapping *AuthMappingDef) egress.TokenParser {
 	return func(token string) (string, map[string]string, error) {
 		var (
 			tokenData map[string]any
