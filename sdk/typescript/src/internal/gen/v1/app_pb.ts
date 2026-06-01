@@ -4,15 +4,15 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { EmptySchema, Timestamp, Value } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { EmptySchema, Value } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_empty, file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file v1/app.proto.
  */
 export const file_v1_app: GenFile = /*@__PURE__*/
-  fileDesc("Cgx2MS9hcHAucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEifgoQQ2F0YWxvZ1BhcmFtZXRlchIMCgRuYW1lGAEgASgJEgwKBHR5cGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSJwoHZGVmYXVsdBgFIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZSLeAQoUT3BlcmF0aW9uQW5ub3RhdGlvbnMSGwoOcmVhZF9vbmx5X2hpbnQYASABKAhIAIgBARIcCg9pZGVtcG90ZW50X2hpbnQYAiABKAhIAYgBARIdChBkZXN0cnVjdGl2ZV9oaW50GAMgASgISAKIAQESHAoPb3Blbl93b3JsZF9oaW50GAQgASgISAOIAQFCEQoPX3JlYWRfb25seV9oaW50QhIKEF9pZGVtcG90ZW50X2hpbnRCEwoRX2Rlc3RydWN0aXZlX2hpbnRCEgoQX29wZW5fd29ybGRfaGludCKAAwoQQ2F0YWxvZ09wZXJhdGlvbhIKCgJpZBgBIAEoCRIOCgZtZXRob2QYAiABKAkSDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSFAoMaW5wdXRfc2NoZW1hGAUgASgJEhUKDW91dHB1dF9zY2hlbWEYBiABKAkSPgoLYW5ub3RhdGlvbnMYByABKAsyKS5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZXJhdGlvbkFubm90YXRpb25zEjkKCnBhcmFtZXRlcnMYCCADKAsyJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhdGFsb2dQYXJhbWV0ZXISFwoPcmVxdWlyZWRfc2NvcGVzGAkgAygJEgwKBHRhZ3MYCiADKAkSEQoJcmVhZF9vbmx5GAsgASgIEhQKB3Zpc2libGUYDCABKAhIAIgBARIRCgl0cmFuc3BvcnQYDSABKAkSFQoNYWxsb3dlZF9yb2xlcxgOIAMoCUIKCghfdmlzaWJsZSKPAQoHQ2F0YWxvZxIMCgRuYW1lGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIQCghpY29uX3N2ZxgEIAEoCRI5CgpvcGVyYXRpb25zGAUgAygLMiUuZ2VzdGFsdC5wcm92aWRlci52MS5DYXRhbG9nT3BlcmF0aW9uIm8KEkNvbm5lY3Rpb25QYXJhbURlZhIQCghyZXF1aXJlZBgBIAEoCBITCgtkZXNjcmlwdGlvbhgCIAEoCRIVCg1kZWZhdWx0X3ZhbHVlGAMgASgJEgwKBGZyb20YBCABKAkSDQoFZmllbGQYBSABKAkiigQKEFByb3ZpZGVyTWV0YWRhdGESDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSPAoPY29ubmVjdGlvbl9tb2RlGAQgASgOMiMuZ2VzdGFsdC5wcm92aWRlci52MS5Db25uZWN0aW9uTW9kZRISCgphdXRoX3R5cGVzGAUgAygJElYKEWNvbm5lY3Rpb25fcGFyYW1zGAYgAygLMjsuZ2VzdGFsdC5wcm92aWRlci52MS5Qcm92aWRlck1ldGFkYXRhLkNvbm5lY3Rpb25QYXJhbXNFbnRyeRI0Cg5zdGF0aWNfY2F0YWxvZxgHIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuQ2F0YWxvZxIgChhzdXBwb3J0c19zZXNzaW9uX2NhdGFsb2cYCCABKAgSHQoVc3VwcG9ydHNfcG9zdF9jb25uZWN0GAkgASgIEhwKFG1pbl9wcm90b2NvbF92ZXJzaW9uGAsgASgFEhwKFG1heF9wcm90b2NvbF92ZXJzaW9uGAwgASgFGmAKFUNvbm5lY3Rpb25QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSNgoFdmFsdWUYAiABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbm5lY3Rpb25QYXJhbURlZjoCOAEixAEKD09wZXJhdGlvblJlc3VsdBIOCgZzdGF0dXMYASABKAUSDAoEYm9keRgCIAEoCRJCCgdoZWFkZXJzGAMgAygLMjEuZ2VzdGFsdC5wcm92aWRlci52MS5PcGVyYXRpb25SZXN1bHQuSGVhZGVyc0VudHJ5Gk8KDEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSLgoFdmFsdWUYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0cmluZ0xpc3Q6AjgBIl8KEkFwcEludm9jYXRpb25HcmFudBILCgNhcHAYASABKAkSEgoKb3BlcmF0aW9ucxgCIAMoCRIQCghzdXJmYWNlcxgDIAMoCRIWCg5hbGxfb3BlcmF0aW9ucxgEIAEoCCKPAQoeRXhjaGFuZ2VJbnZvY2F0aW9uVG9rZW5SZXF1ZXN0Eh8KF3BhcmVudF9pbnZvY2F0aW9uX3Rva2VuGAEgASgJEjcKBmdyYW50cxgCIAMoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuQXBwSW52b2NhdGlvbkdyYW50EhMKC3R0bF9zZWNvbmRzGAMgASgDIjsKH0V4Y2hhbmdlSW52b2NhdGlvblRva2VuUmVzcG9uc2USGAoQaW52b2NhdGlvbl90b2tlbhgBIAEoCSKOAgoQQXBwSW52b2tlUmVxdWVzdBILCgNhcHAYAiABKAkSEQoJb3BlcmF0aW9uGAMgASgJEicKBnBhcmFtcxgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEgoKY29ubmVjdGlvbhgFIAEoCRIQCghpbnN0YW5jZRgGIAEoCRIYChBpbnZvY2F0aW9uX3Rva2VuGAcgASgJEhcKD2lkZW1wb3RlbmN5X2tleRgIIAEoCRIXCg9jcmVkZW50aWFsX21vZGUYCSABKAkSKQoId29ya2Zsb3cYCiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0SgQIARACUg5yZXF1ZXN0X2hhbmRsZSK9AQoXQXBwSW52b2tlR3JhcGhRTFJlcXVlc3QSCwoDYXBwGAEgASgJEhAKCGRvY3VtZW50GAIgASgJEioKCXZhcmlhYmxlcxgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEgoKY29ubmVjdGlvbhgEIAEoCRIQCghpbnN0YW5jZRgFIAEoCRIYChBpbnZvY2F0aW9uX3Rva2VuGAYgASgJEhcKD2lkZW1wb3RlbmN5X2tleRgHIAEoCSKqAwoVUG9zdENvbm5lY3RDcmVkZW50aWFsEgoKAmlkGAEgASgJEhIKCnN1YmplY3RfaWQYAiABKAkSEwoLaW50ZWdyYXRpb24YAyABKAkSEAoIaW5zdGFuY2UYBCABKAkSFAoMYWNjZXNzX3Rva2VuGAUgASgJEhUKDXJlZnJlc2hfdG9rZW4YBiABKAkSDgoGc2NvcGVzGAcgASgJEi4KCmV4cGlyZXNfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjUKEWxhc3RfcmVmcmVzaGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIbChNyZWZyZXNoX2Vycm9yX2NvdW50GAogASgFEhUKDW1ldGFkYXRhX2pzb24YCyABKAkSLgoKY3JlYXRlZF9hdBgMIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKY29ubmVjdGlvbhgOIAEoCSKDAQoOU3ViamVjdENvbnRleHQSCgoCaWQYASABKAkSDAoEa2luZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSEwoLYXV0aF9zb3VyY2UYBCABKAkSDQoFZW1haWwYBSABKAkSHQoVY3JlZGVudGlhbF9zdWJqZWN0X2lkGAYgASgJIjMKF0V4dGVybmFsSWRlbnRpdHlDb250ZXh0EgwKBHR5cGUYASABKAkSCgoCaWQYAiABKAkijQIKDEFnZW50VG9vbFJlZhILCgNhcHAYASABKAkSEQoJb3BlcmF0aW9uGAIgASgJEhIKCmNvbm5lY3Rpb24YAyABKAkSEAoIaW5zdGFuY2UYBCABKAkSDQoFdGl0bGUYBSABKAkSEwoLZGVzY3JpcHRpb24YBiABKAkSDgoGc3lzdGVtGAggASgJEjMKBnJ1bl9hcxgJIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdENvbnRleHQSTgoYcnVuX2FzX2V4dGVybmFsX2lkZW50aXR5GAogASgLMiwuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbElkZW50aXR5Q29udGV4dCIcCgpTdHJpbmdMaXN0Eg4KBnZhbHVlcxgBIAMoCSJbChFDcmVkZW50aWFsQ29udGV4dBIMCgRtb2RlGAEgASgJEhIKCnN1YmplY3RfaWQYAiABKAkSEgoKY29ubmVjdGlvbhgDIAEoCRIQCghpbnN0YW5jZRgEIAEoCSItCg1BY2Nlc3NDb250ZXh0Eg4KBnBvbGljeRgBIAEoCRIMCgRyb2xlGAIgASgJIiYKC0hvc3RDb250ZXh0EhcKD3B1YmxpY19iYXNlX3VybBgBIAEoCSKyBAoOUmVxdWVzdENvbnRleHQSNAoHc3ViamVjdBgBIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdENvbnRleHQSOgoKY3JlZGVudGlhbBgCIAEoCzImLmdlc3RhbHQucHJvdmlkZXIudjEuQ3JlZGVudGlhbENvbnRleHQSMgoGYWNjZXNzGAMgASgLMiIuZ2VzdGFsdC5wcm92aWRlci52MS5BY2Nlc3NDb250ZXh0EikKCHdvcmtmbG93GAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIuCgRob3N0GAUgASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5Ib3N0Q29udGV4dBI6Cg1hZ2VudF9zdWJqZWN0GAYgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5TdWJqZWN0Q29udGV4dBJNChdhZ2VudF9leHRlcm5hbF9pZGVudGl0eRgHIAEoCzIsLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxJZGVudGl0eUNvbnRleHQSRwoRZXh0ZXJuYWxfaWRlbnRpdHkYCCABKAsyLC5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsSWRlbnRpdHlDb250ZXh0EjQKCXRvb2xfcmVmcxgJIAMoCzIhLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRUb29sUmVmEhUKDXRvb2xfcmVmc19zZXQYCiABKAgi/gQKEkhUVFBTdWJqZWN0UmVxdWVzdBIPCgdiaW5kaW5nGAEgASgJEg4KBm1ldGhvZBgCIAEoCRIMCgRwYXRoGAMgASgJEhQKDGNvbnRlbnRfdHlwZRgEIAEoCRJFCgdoZWFkZXJzGAUgAygLMjQuZ2VzdGFsdC5wcm92aWRlci52MS5IVFRQU3ViamVjdFJlcXVlc3QuSGVhZGVyc0VudHJ5EkEKBXF1ZXJ5GAYgAygLMjIuZ2VzdGFsdC5wcm92aWRlci52MS5IVFRQU3ViamVjdFJlcXVlc3QuUXVlcnlFbnRyeRInCgZwYXJhbXMYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhAKCHJhd19ib2R5GAggASgMEhcKD3NlY3VyaXR5X3NjaGVtZRgJIAEoCRIYChB2ZXJpZmllZF9zdWJqZWN0GAogASgJElQKD3ZlcmlmaWVkX2NsYWltcxgLIAMoCzI7Lmdlc3RhbHQucHJvdmlkZXIudjEuSFRUUFN1YmplY3RSZXF1ZXN0LlZlcmlmaWVkQ2xhaW1zRW50cnkaTwoMSGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRIuCgV2YWx1ZRgCIAEoCzIfLmdlc3RhbHQucHJvdmlkZXIudjEuU3RyaW5nTGlzdDoCOAEaTQoKUXVlcnlFbnRyeRILCgNrZXkYASABKAkSLgoFdmFsdWUYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0cmluZ0xpc3Q6AjgBGjUKE1ZlcmlmaWVkQ2xhaW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKLAQoZUmVzb2x2ZUhUVFBTdWJqZWN0UmVxdWVzdBI4CgdyZXF1ZXN0GAEgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5IVFRQU3ViamVjdFJlcXVlc3QSNAoHY29udGV4dBgCIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuUmVxdWVzdENvbnRleHQigQEKGlJlc29sdmVIVFRQU3ViamVjdFJlc3BvbnNlEjQKB3N1YmplY3QYASABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlN1YmplY3RDb250ZXh0EhUKDXJlamVjdF9zdGF0dXMYAiABKAUSFgoOcmVqZWN0X21lc3NhZ2UYAyABKAkigAMKDkV4ZWN1dGVSZXF1ZXN0EhEKCW9wZXJhdGlvbhgBIAEoCRInCgZwYXJhbXMYAiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Eg0KBXRva2VuGAMgASgJElQKEWNvbm5lY3Rpb25fcGFyYW1zGAQgAygLMjkuZ2VzdGFsdC5wcm92aWRlci52MS5FeGVjdXRlUmVxdWVzdC5Db25uZWN0aW9uUGFyYW1zRW50cnkSFQoNaW52b2NhdGlvbl9pZBgFIAEoCRI0Cgdjb250ZXh0GAYgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5SZXF1ZXN0Q29udGV4dBIYChBpbnZvY2F0aW9uX3Rva2VuGAggASgJEhcKD2lkZW1wb3RlbmN5X2tleRgJIAEoCRo3ChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUoECAcQCFIOcmVxdWVzdF9oYW5kbGUijwIKGEdldFNlc3Npb25DYXRhbG9nUmVxdWVzdBINCgV0b2tlbhgBIAEoCRJeChFjb25uZWN0aW9uX3BhcmFtcxgCIAMoCzJDLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0U2Vzc2lvbkNhdGFsb2dSZXF1ZXN0LkNvbm5lY3Rpb25QYXJhbXNFbnRyeRIVCg1pbnZvY2F0aW9uX2lkGAMgASgJEjQKB2NvbnRleHQYBCABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlcXVlc3RDb250ZXh0GjcKFUNvbm5lY3Rpb25QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIkoKGUdldFNlc3Npb25DYXRhbG9nUmVzcG9uc2USLQoHY2F0YWxvZxgBIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuQ2F0YWxvZyJPChJQb3N0Q29ubmVjdFJlcXVlc3QSOQoFdG9rZW4YASABKAsyKi5nZXN0YWx0LnByb3ZpZGVyLnYxLlBvc3RDb25uZWN0Q3JlZGVudGlhbCKQAQoTUG9zdENvbm5lY3RSZXNwb25zZRJICghtZXRhZGF0YRgBIAMoCzI2Lmdlc3RhbHQucHJvdmlkZXIudjEuUG9zdENvbm5lY3RSZXNwb25zZS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJnChRTdGFydFByb3ZpZGVyUmVxdWVzdBIMCgRuYW1lGAEgASgJEicKBmNvbmZpZxgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSGAoQcHJvdG9jb2xfdmVyc2lvbhgEIAEoBSIxChVTdGFydFByb3ZpZGVyUmVzcG9uc2USGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoBSpoCg5Db25uZWN0aW9uTW9kZRIfChtDT05ORUNUSU9OX01PREVfVU5TUEVDSUZJRUQQABIYChRDT05ORUNUSU9OX01PREVfTk9ORRABEhsKF0NPTk5FQ1RJT05fTU9ERV9TVUJKRUNUEAIy5gQKC0FwcFByb3ZpZGVyEkwKC0dldE1ldGFkYXRhEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiUuZ2VzdGFsdC5wcm92aWRlci52MS5Qcm92aWRlck1ldGFkYXRhEmYKDVN0YXJ0UHJvdmlkZXISKS5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0YXJ0UHJvdmlkZXJSZXF1ZXN0GiouZ2VzdGFsdC5wcm92aWRlci52MS5TdGFydFByb3ZpZGVyUmVzcG9uc2USVAoHRXhlY3V0ZRIjLmdlc3RhbHQucHJvdmlkZXIudjEuRXhlY3V0ZVJlcXVlc3QaJC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZXJhdGlvblJlc3VsdBJ1ChJSZXNvbHZlSFRUUFN1YmplY3QSLi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc29sdmVIVFRQU3ViamVjdFJlcXVlc3QaLy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc29sdmVIVFRQU3ViamVjdFJlc3BvbnNlEnIKEUdldFNlc3Npb25DYXRhbG9nEi0uZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZXNzaW9uQ2F0YWxvZ1JlcXVlc3QaLi5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldFNlc3Npb25DYXRhbG9nUmVzcG9uc2USYAoLUG9zdENvbm5lY3QSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLlBvc3RDb25uZWN0UmVxdWVzdBooLmdlc3RhbHQucHJvdmlkZXIudjEuUG9zdENvbm5lY3RSZXNwb25zZTLIAgoDQXBwEoQBChdFeGNoYW5nZUludm9jYXRpb25Ub2tlbhIzLmdlc3RhbHQucHJvdmlkZXIudjEuRXhjaGFuZ2VJbnZvY2F0aW9uVG9rZW5SZXF1ZXN0GjQuZ2VzdGFsdC5wcm92aWRlci52MS5FeGNoYW5nZUludm9jYXRpb25Ub2tlblJlc3BvbnNlElUKBkludm9rZRIlLmdlc3RhbHQucHJvdmlkZXIudjEuQXBwSW52b2tlUmVxdWVzdBokLmdlc3RhbHQucHJvdmlkZXIudjEuT3BlcmF0aW9uUmVzdWx0EmMKDUludm9rZUdyYXBoUUwSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLkFwcEludm9rZUdyYXBoUUxSZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5PcGVyYXRpb25SZXN1bHRiBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("Cgx2MS9hcHAucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEifgoQQ2F0YWxvZ1BhcmFtZXRlchIMCgRuYW1lGAEgASgJEgwKBHR5cGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSJwoHZGVmYXVsdBgFIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZSLeAQoUT3BlcmF0aW9uQW5ub3RhdGlvbnMSGwoOcmVhZF9vbmx5X2hpbnQYASABKAhIAIgBARIcCg9pZGVtcG90ZW50X2hpbnQYAiABKAhIAYgBARIdChBkZXN0cnVjdGl2ZV9oaW50GAMgASgISAKIAQESHAoPb3Blbl93b3JsZF9oaW50GAQgASgISAOIAQFCEQoPX3JlYWRfb25seV9oaW50QhIKEF9pZGVtcG90ZW50X2hpbnRCEwoRX2Rlc3RydWN0aXZlX2hpbnRCEgoQX29wZW5fd29ybGRfaGludCKAAwoQQ2F0YWxvZ09wZXJhdGlvbhIKCgJpZBgBIAEoCRIOCgZtZXRob2QYAiABKAkSDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSFAoMaW5wdXRfc2NoZW1hGAUgASgJEhUKDW91dHB1dF9zY2hlbWEYBiABKAkSPgoLYW5ub3RhdGlvbnMYByABKAsyKS5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZXJhdGlvbkFubm90YXRpb25zEjkKCnBhcmFtZXRlcnMYCCADKAsyJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhdGFsb2dQYXJhbWV0ZXISFwoPcmVxdWlyZWRfc2NvcGVzGAkgAygJEgwKBHRhZ3MYCiADKAkSEQoJcmVhZF9vbmx5GAsgASgIEhQKB3Zpc2libGUYDCABKAhIAIgBARIRCgl0cmFuc3BvcnQYDSABKAkSFQoNYWxsb3dlZF9yb2xlcxgOIAMoCUIKCghfdmlzaWJsZSKPAQoHQ2F0YWxvZxIMCgRuYW1lGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIQCghpY29uX3N2ZxgEIAEoCRI5CgpvcGVyYXRpb25zGAUgAygLMiUuZ2VzdGFsdC5wcm92aWRlci52MS5DYXRhbG9nT3BlcmF0aW9uIm8KEkNvbm5lY3Rpb25QYXJhbURlZhIQCghyZXF1aXJlZBgBIAEoCBITCgtkZXNjcmlwdGlvbhgCIAEoCRIVCg1kZWZhdWx0X3ZhbHVlGAMgASgJEgwKBGZyb20YBCABKAkSDQoFZmllbGQYBSABKAkiiAQKEFByb3ZpZGVyTWV0YWRhdGESDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSPAoPY29ubmVjdGlvbl9tb2RlGAQgASgOMiMuZ2VzdGFsdC5wcm92aWRlci52MS5Db25uZWN0aW9uTW9kZRISCgphdXRoX3R5cGVzGAUgAygJElYKEWNvbm5lY3Rpb25fcGFyYW1zGAYgAygLMjsuZ2VzdGFsdC5wcm92aWRlci52MS5Qcm92aWRlck1ldGFkYXRhLkNvbm5lY3Rpb25QYXJhbXNFbnRyeRI0Cg5zdGF0aWNfY2F0YWxvZxgHIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuQ2F0YWxvZxIgChhzdXBwb3J0c19zZXNzaW9uX2NhdGFsb2cYCCABKAgSHAoUbWluX3Byb3RvY29sX3ZlcnNpb24YCyABKAUSHAoUbWF4X3Byb3RvY29sX3ZlcnNpb24YDCABKAUaYAoVQ29ubmVjdGlvblBhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRI2CgV2YWx1ZRgCIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuQ29ubmVjdGlvblBhcmFtRGVmOgI4AUoECAkQClIVc3VwcG9ydHNfcG9zdF9jb25uZWN0IsQBCg9PcGVyYXRpb25SZXN1bHQSDgoGc3RhdHVzGAEgASgFEgwKBGJvZHkYAiABKAkSQgoHaGVhZGVycxgDIAMoCzIxLmdlc3RhbHQucHJvdmlkZXIudjEuT3BlcmF0aW9uUmVzdWx0LkhlYWRlcnNFbnRyeRpPCgxIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEi4KBXZhbHVlGAIgASgLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5TdHJpbmdMaXN0OgI4ASJfChJBcHBJbnZvY2F0aW9uR3JhbnQSCwoDYXBwGAEgASgJEhIKCm9wZXJhdGlvbnMYAiADKAkSEAoIc3VyZmFjZXMYAyADKAkSFgoOYWxsX29wZXJhdGlvbnMYBCABKAgijwEKHkV4Y2hhbmdlSW52b2NhdGlvblRva2VuUmVxdWVzdBIfChdwYXJlbnRfaW52b2NhdGlvbl90b2tlbhgBIAEoCRI3CgZncmFudHMYAiADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFwcEludm9jYXRpb25HcmFudBITCgt0dGxfc2Vjb25kcxgDIAEoAyI7Ch9FeGNoYW5nZUludm9jYXRpb25Ub2tlblJlc3BvbnNlEhgKEGludm9jYXRpb25fdG9rZW4YASABKAkijgIKEEFwcEludm9rZVJlcXVlc3QSCwoDYXBwGAIgASgJEhEKCW9wZXJhdGlvbhgDIAEoCRInCgZwYXJhbXMYBCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhIKCmNvbm5lY3Rpb24YBSABKAkSEAoIaW5zdGFuY2UYBiABKAkSGAoQaW52b2NhdGlvbl90b2tlbhgHIAEoCRIXCg9pZGVtcG90ZW5jeV9rZXkYCCABKAkSFwoPY3JlZGVudGlhbF9tb2RlGAkgASgJEikKCHdvcmtmbG93GAogASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEoECAEQAlIOcmVxdWVzdF9oYW5kbGUivQEKF0FwcEludm9rZUdyYXBoUUxSZXF1ZXN0EgsKA2FwcBgBIAEoCRIQCghkb2N1bWVudBgCIAEoCRIqCgl2YXJpYWJsZXMYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhIKCmNvbm5lY3Rpb24YBCABKAkSEAoIaW5zdGFuY2UYBSABKAkSGAoQaW52b2NhdGlvbl90b2tlbhgGIAEoCRIXCg9pZGVtcG90ZW5jeV9rZXkYByABKAkigwEKDlN1YmplY3RDb250ZXh0EgoKAmlkGAEgASgJEgwKBGtpbmQYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEhMKC2F1dGhfc291cmNlGAQgASgJEg0KBWVtYWlsGAUgASgJEh0KFWNyZWRlbnRpYWxfc3ViamVjdF9pZBgGIAEoCSLJAQoMQWdlbnRUb29sUmVmEgsKA2FwcBgBIAEoCRIRCglvcGVyYXRpb24YAiABKAkSEgoKY29ubmVjdGlvbhgDIAEoCRIQCghpbnN0YW5jZRgEIAEoCRINCgV0aXRsZRgFIAEoCRITCgtkZXNjcmlwdGlvbhgGIAEoCRIOCgZzeXN0ZW0YCCABKAkSMwoGcnVuX2FzGAkgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5TdWJqZWN0Q29udGV4dEoECAcQCEoECAoQCyIcCgpTdHJpbmdMaXN0Eg4KBnZhbHVlcxgBIAMoCSJbChFDcmVkZW50aWFsQ29udGV4dBIMCgRtb2RlGAEgASgJEhIKCnN1YmplY3RfaWQYAiABKAkSEgoKY29ubmVjdGlvbhgDIAEoCRIQCghpbnN0YW5jZRgEIAEoCSItCg1BY2Nlc3NDb250ZXh0Eg4KBnBvbGljeRgBIAEoCRIMCgRyb2xlGAIgASgJIiYKC0hvc3RDb250ZXh0EhcKD3B1YmxpY19iYXNlX3VybBgBIAEoCSKmAwoOUmVxdWVzdENvbnRleHQSNAoHc3ViamVjdBgBIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdENvbnRleHQSOgoKY3JlZGVudGlhbBgCIAEoCzImLmdlc3RhbHQucHJvdmlkZXIudjEuQ3JlZGVudGlhbENvbnRleHQSMgoGYWNjZXNzGAMgASgLMiIuZ2VzdGFsdC5wcm92aWRlci52MS5BY2Nlc3NDb250ZXh0EikKCHdvcmtmbG93GAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIuCgRob3N0GAUgASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5Ib3N0Q29udGV4dBI6Cg1hZ2VudF9zdWJqZWN0GAYgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5TdWJqZWN0Q29udGV4dBI0Cgl0b29sX3JlZnMYCSADKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50VG9vbFJlZhIVCg10b29sX3JlZnNfc2V0GAogASgISgQIBxAISgQICBAJIv4EChJIVFRQU3ViamVjdFJlcXVlc3QSDwoHYmluZGluZxgBIAEoCRIOCgZtZXRob2QYAiABKAkSDAoEcGF0aBgDIAEoCRIUCgxjb250ZW50X3R5cGUYBCABKAkSRQoHaGVhZGVycxgFIAMoCzI0Lmdlc3RhbHQucHJvdmlkZXIudjEuSFRUUFN1YmplY3RSZXF1ZXN0LkhlYWRlcnNFbnRyeRJBCgVxdWVyeRgGIAMoCzIyLmdlc3RhbHQucHJvdmlkZXIudjEuSFRUUFN1YmplY3RSZXF1ZXN0LlF1ZXJ5RW50cnkSJwoGcGFyYW1zGAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIQCghyYXdfYm9keRgIIAEoDBIXCg9zZWN1cml0eV9zY2hlbWUYCSABKAkSGAoQdmVyaWZpZWRfc3ViamVjdBgKIAEoCRJUCg92ZXJpZmllZF9jbGFpbXMYCyADKAsyOy5nZXN0YWx0LnByb3ZpZGVyLnYxLkhUVFBTdWJqZWN0UmVxdWVzdC5WZXJpZmllZENsYWltc0VudHJ5Gk8KDEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSLgoFdmFsdWUYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0cmluZ0xpc3Q6AjgBGk0KClF1ZXJ5RW50cnkSCwoDa2V5GAEgASgJEi4KBXZhbHVlGAIgASgLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5TdHJpbmdMaXN0OgI4ARo1ChNWZXJpZmllZENsYWltc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiiwEKGVJlc29sdmVIVFRQU3ViamVjdFJlcXVlc3QSOAoHcmVxdWVzdBgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuSFRUUFN1YmplY3RSZXF1ZXN0EjQKB2NvbnRleHQYAiABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlcXVlc3RDb250ZXh0IoEBChpSZXNvbHZlSFRUUFN1YmplY3RSZXNwb25zZRI0CgdzdWJqZWN0GAEgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5TdWJqZWN0Q29udGV4dBIVCg1yZWplY3Rfc3RhdHVzGAIgASgFEhYKDnJlamVjdF9tZXNzYWdlGAMgASgJIoADCg5FeGVjdXRlUmVxdWVzdBIRCglvcGVyYXRpb24YASABKAkSJwoGcGFyYW1zGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBINCgV0b2tlbhgDIAEoCRJUChFjb25uZWN0aW9uX3BhcmFtcxgEIAMoCzI5Lmdlc3RhbHQucHJvdmlkZXIudjEuRXhlY3V0ZVJlcXVlc3QuQ29ubmVjdGlvblBhcmFtc0VudHJ5EhUKDWludm9jYXRpb25faWQYBSABKAkSNAoHY29udGV4dBgGIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuUmVxdWVzdENvbnRleHQSGAoQaW52b2NhdGlvbl90b2tlbhgIIAEoCRIXCg9pZGVtcG90ZW5jeV9rZXkYCSABKAkaNwoVQ29ubmVjdGlvblBhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFKBAgHEAhSDnJlcXVlc3RfaGFuZGxlIo8CChhHZXRTZXNzaW9uQ2F0YWxvZ1JlcXVlc3QSDQoFdG9rZW4YASABKAkSXgoRY29ubmVjdGlvbl9wYXJhbXMYAiADKAsyQy5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldFNlc3Npb25DYXRhbG9nUmVxdWVzdC5Db25uZWN0aW9uUGFyYW1zRW50cnkSFQoNaW52b2NhdGlvbl9pZBgDIAEoCRI0Cgdjb250ZXh0GAQgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5SZXF1ZXN0Q29udGV4dBo3ChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJKChlHZXRTZXNzaW9uQ2F0YWxvZ1Jlc3BvbnNlEi0KB2NhdGFsb2cYASABKAsyHC5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhdGFsb2ciZwoUU3RhcnRQcm92aWRlclJlcXVlc3QSDAoEbmFtZRgBIAEoCRInCgZjb25maWcYAiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhgKEHByb3RvY29sX3ZlcnNpb24YBCABKAUiMQoVU3RhcnRQcm92aWRlclJlc3BvbnNlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKAUqegoOQ29ubmVjdGlvbk1vZGUSHwobQ09OTkVDVElPTl9NT0RFX1VOU1BFQ0lGSUVEEAASGAoUQ09OTkVDVElPTl9NT0RFX05PTkUQARIbChdDT05ORUNUSU9OX01PREVfU1VCSkVDVBACIgQIAxADIgQIBBAEIgQIBRAFMoQECgtBcHBQcm92aWRlchJMCgtHZXRNZXRhZGF0YRIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRolLmdlc3RhbHQucHJvdmlkZXIudjEuUHJvdmlkZXJNZXRhZGF0YRJmCg1TdGFydFByb3ZpZGVyEikuZ2VzdGFsdC5wcm92aWRlci52MS5TdGFydFByb3ZpZGVyUmVxdWVzdBoqLmdlc3RhbHQucHJvdmlkZXIudjEuU3RhcnRQcm92aWRlclJlc3BvbnNlElQKB0V4ZWN1dGUSIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4ZWN1dGVSZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5PcGVyYXRpb25SZXN1bHQSdQoSUmVzb2x2ZUhUVFBTdWJqZWN0Ei4uZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvbHZlSFRUUFN1YmplY3RSZXF1ZXN0Gi8uZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvbHZlSFRUUFN1YmplY3RSZXNwb25zZRJyChFHZXRTZXNzaW9uQ2F0YWxvZxItLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0U2Vzc2lvbkNhdGFsb2dSZXF1ZXN0Gi4uZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZXNzaW9uQ2F0YWxvZ1Jlc3BvbnNlMsgCCgNBcHAShAEKF0V4Y2hhbmdlSW52b2NhdGlvblRva2VuEjMuZ2VzdGFsdC5wcm92aWRlci52MS5FeGNoYW5nZUludm9jYXRpb25Ub2tlblJlcXVlc3QaNC5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4Y2hhbmdlSW52b2NhdGlvblRva2VuUmVzcG9uc2USVQoGSW52b2tlEiUuZ2VzdGFsdC5wcm92aWRlci52MS5BcHBJbnZva2VSZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5PcGVyYXRpb25SZXN1bHQSYwoNSW52b2tlR3JhcGhRTBIsLmdlc3RhbHQucHJvdmlkZXIudjEuQXBwSW52b2tlR3JhcGhRTFJlcXVlc3QaJC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZXJhdGlvblJlc3VsdGIGcHJvdG8z", [file_google_protobuf_empty, file_google_protobuf_struct]);
 
 /**
  * CatalogParameter describes one input parameter surfaced in the generated
@@ -300,11 +300,6 @@ export type ProviderMetadata = Message<"gestalt.provider.v1.ProviderMetadata"> &
   supportsSessionCatalog: boolean;
 
   /**
-   * @generated from field: bool supports_post_connect = 9;
-   */
-  supportsPostConnect: boolean;
-
-  /**
    * @generated from field: int32 min_protocol_version = 11;
    */
   minProtocolVersion: number;
@@ -545,93 +540,6 @@ export const AppInvokeGraphQLRequestSchema: GenMessage<AppInvokeGraphQLRequest> 
   messageDesc(file_v1_app, 11);
 
 /**
- * PostConnectCredential is the host-managed credential payload passed into
- * post-connect hooks. Field numbers intentionally match the legacy
- * post-connect credential payload so older compiled providers can still decode
- * the request during rolling upgrades.
- *
- * @generated from message gestalt.provider.v1.PostConnectCredential
- */
-export type PostConnectCredential = Message<"gestalt.provider.v1.PostConnectCredential"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
-
-  /**
-   * @generated from field: string subject_id = 2;
-   */
-  subjectId: string;
-
-  /**
-   * @generated from field: string integration = 3;
-   */
-  integration: string;
-
-  /**
-   * @generated from field: string instance = 4;
-   */
-  instance: string;
-
-  /**
-   * @generated from field: string access_token = 5;
-   */
-  accessToken: string;
-
-  /**
-   * @generated from field: string refresh_token = 6;
-   */
-  refreshToken: string;
-
-  /**
-   * @generated from field: string scopes = 7;
-   */
-  scopes: string;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp expires_at = 8;
-   */
-  expiresAt?: Timestamp | undefined;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp last_refreshed_at = 9;
-   */
-  lastRefreshedAt?: Timestamp | undefined;
-
-  /**
-   * @generated from field: int32 refresh_error_count = 10;
-   */
-  refreshErrorCount: number;
-
-  /**
-   * @generated from field: string metadata_json = 11;
-   */
-  metadataJson: string;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp created_at = 12;
-   */
-  createdAt?: Timestamp | undefined;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp updated_at = 13;
-   */
-  updatedAt?: Timestamp | undefined;
-
-  /**
-   * @generated from field: string connection = 14;
-   */
-  connection: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.PostConnectCredential.
- * Use `create(PostConnectCredentialSchema)` to create a new message.
- */
-export const PostConnectCredentialSchema: GenMessage<PostConnectCredential> = /*@__PURE__*/
-  messageDesc(file_v1_app, 12);
-
-/**
  * SubjectContext identifies the caller that initiated an operation.
  *
  * @generated from message gestalt.provider.v1.SubjectContext
@@ -673,32 +581,7 @@ export type SubjectContext = Message<"gestalt.provider.v1.SubjectContext"> & {
  * Use `create(SubjectContextSchema)` to create a new message.
  */
 export const SubjectContextSchema: GenMessage<SubjectContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 13);
-
-/**
- * ExternalIdentityContext identifies the caller in a provider-owned external
- * identity namespace, as discovered from that caller's stored connection.
- *
- * @generated from message gestalt.provider.v1.ExternalIdentityContext
- */
-export type ExternalIdentityContext = Message<"gestalt.provider.v1.ExternalIdentityContext"> & {
-  /**
-   * @generated from field: string type = 1;
-   */
-  type: string;
-
-  /**
-   * @generated from field: string id = 2;
-   */
-  id: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ExternalIdentityContext.
- * Use `create(ExternalIdentityContextSchema)` to create a new message.
- */
-export const ExternalIdentityContextSchema: GenMessage<ExternalIdentityContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 14);
+  messageDesc(file_v1_app, 12);
 
 /**
  * @generated from message gestalt.provider.v1.AgentToolRef
@@ -743,11 +626,6 @@ export type AgentToolRef = Message<"gestalt.provider.v1.AgentToolRef"> & {
    * @generated from field: gestalt.provider.v1.SubjectContext run_as = 9;
    */
   runAs?: SubjectContext | undefined;
-
-  /**
-   * @generated from field: gestalt.provider.v1.ExternalIdentityContext run_as_external_identity = 10;
-   */
-  runAsExternalIdentity?: ExternalIdentityContext | undefined;
 };
 
 /**
@@ -755,7 +633,7 @@ export type AgentToolRef = Message<"gestalt.provider.v1.AgentToolRef"> & {
  * Use `create(AgentToolRefSchema)` to create a new message.
  */
 export const AgentToolRefSchema: GenMessage<AgentToolRef> = /*@__PURE__*/
-  messageDesc(file_v1_app, 15);
+  messageDesc(file_v1_app, 13);
 
 /**
  * StringList is a helper map value for repeated HTTP header and query values.
@@ -774,7 +652,7 @@ export type StringList = Message<"gestalt.provider.v1.StringList"> & {
  * Use `create(StringListSchema)` to create a new message.
  */
 export const StringListSchema: GenMessage<StringList> = /*@__PURE__*/
-  messageDesc(file_v1_app, 16);
+  messageDesc(file_v1_app, 14);
 
 /**
  * CredentialContext describes the resolved credential used for an operation.
@@ -808,7 +686,7 @@ export type CredentialContext = Message<"gestalt.provider.v1.CredentialContext">
  * Use `create(CredentialContextSchema)` to create a new message.
  */
 export const CredentialContextSchema: GenMessage<CredentialContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 17);
+  messageDesc(file_v1_app, 15);
 
 /**
  * AccessContext describes the host-side access decision for an operation.
@@ -832,7 +710,7 @@ export type AccessContext = Message<"gestalt.provider.v1.AccessContext"> & {
  * Use `create(AccessContextSchema)` to create a new message.
  */
 export const AccessContextSchema: GenMessage<AccessContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 18);
+  messageDesc(file_v1_app, 16);
 
 /**
  * HostContext describes stable public host metadata available to provider code.
@@ -851,7 +729,7 @@ export type HostContext = Message<"gestalt.provider.v1.HostContext"> & {
  * Use `create(HostContextSchema)` to create a new message.
  */
 export const HostContextSchema: GenMessage<HostContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 19);
+  messageDesc(file_v1_app, 17);
 
 /**
  * RequestContext bundles the caller, credential, access, and host metadata for
@@ -893,20 +771,6 @@ export type RequestContext = Message<"gestalt.provider.v1.RequestContext"> & {
   agentSubject?: SubjectContext | undefined;
 
   /**
-   * The original agent caller's provider-owned external identity, when known.
-   *
-   * @generated from field: gestalt.provider.v1.ExternalIdentityContext agent_external_identity = 7;
-   */
-  agentExternalIdentity?: ExternalIdentityContext | undefined;
-
-  /**
-   * Provider-owned external identity the invocation is authorized to assume.
-   *
-   * @generated from field: gestalt.provider.v1.ExternalIdentityContext external_identity = 8;
-   */
-  externalIdentity?: ExternalIdentityContext | undefined;
-
-  /**
    * Agent tool refs granted to the operation request, when the request is
    * executing as an agent tool.
    *
@@ -928,7 +792,7 @@ export type RequestContext = Message<"gestalt.provider.v1.RequestContext"> & {
  * Use `create(RequestContextSchema)` to create a new message.
  */
 export const RequestContextSchema: GenMessage<RequestContext> = /*@__PURE__*/
-  messageDesc(file_v1_app, 20);
+  messageDesc(file_v1_app, 18);
 
 /**
  * HTTPSubjectRequest carries one verified hosted HTTP request into an optional
@@ -998,7 +862,7 @@ export type HTTPSubjectRequest = Message<"gestalt.provider.v1.HTTPSubjectRequest
  * Use `create(HTTPSubjectRequestSchema)` to create a new message.
  */
 export const HTTPSubjectRequestSchema: GenMessage<HTTPSubjectRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 21);
+  messageDesc(file_v1_app, 19);
 
 /**
  * ResolveHTTPSubjectRequest asks a provider to map a verified hosted HTTP
@@ -1024,7 +888,7 @@ export type ResolveHTTPSubjectRequest = Message<"gestalt.provider.v1.ResolveHTTP
  * Use `create(ResolveHTTPSubjectRequestSchema)` to create a new message.
  */
 export const ResolveHTTPSubjectRequestSchema: GenMessage<ResolveHTTPSubjectRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 22);
+  messageDesc(file_v1_app, 20);
 
 /**
  * ResolveHTTPSubjectResponse returns the concrete Gestalt subject a hosted HTTP
@@ -1056,7 +920,7 @@ export type ResolveHTTPSubjectResponse = Message<"gestalt.provider.v1.ResolveHTT
  * Use `create(ResolveHTTPSubjectResponseSchema)` to create a new message.
  */
 export const ResolveHTTPSubjectResponseSchema: GenMessage<ResolveHTTPSubjectResponse> = /*@__PURE__*/
-  messageDesc(file_v1_app, 23);
+  messageDesc(file_v1_app, 21);
 
 /**
  * ExecuteRequest invokes one executable operation.
@@ -1110,7 +974,7 @@ export type ExecuteRequest = Message<"gestalt.provider.v1.ExecuteRequest"> & {
  * Use `create(ExecuteRequestSchema)` to create a new message.
  */
 export const ExecuteRequestSchema: GenMessage<ExecuteRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 24);
+  messageDesc(file_v1_app, 22);
 
 /**
  * GetSessionCatalogRequest asks a provider for request-scoped catalog
@@ -1145,7 +1009,7 @@ export type GetSessionCatalogRequest = Message<"gestalt.provider.v1.GetSessionCa
  * Use `create(GetSessionCatalogRequestSchema)` to create a new message.
  */
 export const GetSessionCatalogRequestSchema: GenMessage<GetSessionCatalogRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 25);
+  messageDesc(file_v1_app, 23);
 
 /**
  * GetSessionCatalogResponse returns request-scoped catalog extensions.
@@ -1164,46 +1028,7 @@ export type GetSessionCatalogResponse = Message<"gestalt.provider.v1.GetSessionC
  * Use `create(GetSessionCatalogResponseSchema)` to create a new message.
  */
 export const GetSessionCatalogResponseSchema: GenMessage<GetSessionCatalogResponse> = /*@__PURE__*/
-  messageDesc(file_v1_app, 26);
-
-/**
- * PostConnectRequest notifies a provider that a connection has completed.
- *
- * @generated from message gestalt.provider.v1.PostConnectRequest
- */
-export type PostConnectRequest = Message<"gestalt.provider.v1.PostConnectRequest"> & {
-  /**
-   * @generated from field: gestalt.provider.v1.PostConnectCredential token = 1;
-   */
-  token?: PostConnectCredential | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.PostConnectRequest.
- * Use `create(PostConnectRequestSchema)` to create a new message.
- */
-export const PostConnectRequestSchema: GenMessage<PostConnectRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 27);
-
-/**
- * PostConnectResponse returns provider-defined metadata captured after
- * connection.
- *
- * @generated from message gestalt.provider.v1.PostConnectResponse
- */
-export type PostConnectResponse = Message<"gestalt.provider.v1.PostConnectResponse"> & {
-  /**
-   * @generated from field: map<string, string> metadata = 1;
-   */
-  metadata: { [key: string]: string };
-};
-
-/**
- * Describes the message gestalt.provider.v1.PostConnectResponse.
- * Use `create(PostConnectResponseSchema)` to create a new message.
- */
-export const PostConnectResponseSchema: GenMessage<PostConnectResponse> = /*@__PURE__*/
-  messageDesc(file_v1_app, 28);
+  messageDesc(file_v1_app, 24);
 
 /**
  * StartProviderRequest configures an integration provider for one runtime
@@ -1233,7 +1058,7 @@ export type StartProviderRequest = Message<"gestalt.provider.v1.StartProviderReq
  * Use `create(StartProviderRequestSchema)` to create a new message.
  */
 export const StartProviderRequestSchema: GenMessage<StartProviderRequest> = /*@__PURE__*/
-  messageDesc(file_v1_app, 29);
+  messageDesc(file_v1_app, 25);
 
 /**
  * StartProviderResponse confirms the protocol version the provider is serving.
@@ -1252,7 +1077,7 @@ export type StartProviderResponse = Message<"gestalt.provider.v1.StartProviderRe
  * Use `create(StartProviderResponseSchema)` to create a new message.
  */
 export const StartProviderResponseSchema: GenMessage<StartProviderResponse> = /*@__PURE__*/
-  messageDesc(file_v1_app, 30);
+  messageDesc(file_v1_app, 26);
 
 /**
  * ConnectionMode describes which credential sources a provider accepts.
@@ -1327,14 +1152,6 @@ export const AppProvider: GenService<{
     methodKind: "unary";
     input: typeof GetSessionCatalogRequestSchema;
     output: typeof GetSessionCatalogResponseSchema;
-  },
-  /**
-   * @generated from rpc gestalt.provider.v1.AppProvider.PostConnect
-   */
-  postConnect: {
-    methodKind: "unary";
-    input: typeof PostConnectRequestSchema;
-    output: typeof PostConnectResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_app, 0);

@@ -4,7 +4,6 @@ import datetime as dt
 import functools
 import importlib
 import inspect
-import json
 import os
 import pathlib
 import signal
@@ -23,8 +22,8 @@ from . import _runtime_provider as _runtime_provider_native
 from . import _s3 as _s3_native
 from . import _telemetry
 from . import _workflow as _workflow_native
-from ._api import Access, Credential, Error, ExternalIdentity, Host, Request, Subject
-from ._app import App, ConnectedToken, _module_app
+from ._api import Access, Credential, Error, Host, Request, Subject
+from ._app import App, _module_app
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
@@ -1572,7 +1571,6 @@ def _provider_servicer(*, app: App) -> Any:
         def GetMetadata(self, _request: Any, _context: Any) -> Any:
             return app_pb2.ProviderMetadata(
                 supports_session_catalog=app.supports_session_catalog(),
-                supports_post_connect=app.supports_post_connect(),
                 min_protocol_version=CURRENT_PROTOCOL_VERSION,
                 max_protocol_version=CURRENT_PROTOCOL_VERSION,
             )
@@ -1679,23 +1677,6 @@ def _provider_servicer(*, app: App) -> Any:
                 )
 
             return app_pb2.GetSessionCatalogResponse(catalog=proto_catalog)
-
-        def PostConnect(self, request: Any, context: Any) -> Any:
-            if not app.supports_post_connect():
-                return context.abort(
-                    grpc.StatusCode.UNIMPLEMENTED,
-                    "provider does not support post connect",
-                )
-
-            try:
-                metadata = app.post_connect_metadata(_connected_token(request.token))
-            except Exception as error:
-                return context.abort(
-                    grpc.StatusCode.UNKNOWN,
-                    f"post connect: {error}",
-                )
-
-            return app_pb2.PostConnectResponse(metadata=metadata or {})
 
     return ProviderServicer()
 
@@ -2191,12 +2172,6 @@ def _plugin_request(request: Any) -> Request:
         agent_subject=_subject_from_proto(
             getattr(request, "context", None), "agent_subject"
         ),
-        external_identity=_external_identity_from_proto(
-            getattr(request, "context", None), "external_identity"
-        ),
-        agent_external_identity=_external_identity_from_proto(
-            getattr(request, "context", None), "agent_external_identity"
-        ),
         credential=_credential_from_proto(getattr(request, "context", None)),
         access=_access_from_proto(getattr(request, "context", None)),
         host=_host_from_proto(getattr(request, "context", None)),
@@ -2250,20 +2225,6 @@ def _subject_from_proto(request_context: Any, field_name: str) -> Subject:
         display_name=getattr(subject, "display_name", ""),
         auth_source=getattr(subject, "auth_source", ""),
         email=getattr(subject, "email", ""),
-    )
-
-
-def _external_identity_from_proto(
-    request_context: Any, field_name: str
-) -> ExternalIdentity:
-    if request_context is None:
-        return ExternalIdentity()
-    identity = getattr(request_context, field_name, None)
-    if identity is None:
-        return ExternalIdentity()
-    return ExternalIdentity(
-        type=getattr(identity, "type", ""),
-        id=getattr(identity, "id", ""),
     )
 
 
@@ -2404,56 +2365,6 @@ def _duration_to_timedelta(duration: Any) -> dt.timedelta | None:
     if seconds == 0 and nanos == 0:
         return None
     return dt.timedelta(seconds=seconds, microseconds=nanos // 1000)
-
-
-def _connected_token(token: Any) -> ConnectedToken:
-    metadata_json = getattr(token, "metadata_json", "") or ""
-    metadata: dict[str, str] = {}
-    if metadata_json:
-        try:
-            parsed = json.loads(metadata_json)
-        except json.JSONDecodeError:
-            metadata = {}
-        else:
-            if isinstance(parsed, dict):
-                metadata = {str(key): str(value) for key, value in parsed.items()}
-    return ConnectedToken(
-        id=getattr(token, "id", ""),
-        subject_id=getattr(token, "subject_id", ""),
-        integration=getattr(token, "integration", ""),
-        connection=getattr(token, "connection", ""),
-        instance=getattr(token, "instance", ""),
-        access_token=getattr(token, "access_token", ""),
-        refresh_token=getattr(token, "refresh_token", ""),
-        scopes=getattr(token, "scopes", ""),
-        expires_at=_timestamp_to_datetime(getattr(token, "expires_at", None)),
-        last_refreshed_at=_timestamp_to_datetime(
-            getattr(token, "last_refreshed_at", None)
-        ),
-        refresh_error_count=int(getattr(token, "refresh_error_count", 0) or 0),
-        metadata_json=metadata_json,
-        metadata=metadata,
-        created_at=_timestamp_to_datetime(getattr(token, "created_at", None)),
-        updated_at=_timestamp_to_datetime(getattr(token, "updated_at", None)),
-    )
-
-
-def _timestamp_to_datetime(value: Any) -> dt.datetime | None:
-    if value is None:
-        return None
-    seconds = getattr(value, "seconds", 0)
-    nanos = getattr(value, "nanos", 0)
-    if seconds == 0 and nanos == 0:
-        return None
-    if hasattr(value, "ToDatetime"):
-        converted = value.ToDatetime()
-        if converted.tzinfo is None:
-            return converted.replace(tzinfo=dt.timezone.utc)
-        return converted.astimezone(dt.timezone.utc)
-    return dt.datetime.fromtimestamp(
-        seconds + (nanos / 1_000_000_000),
-        tz=dt.timezone.utc,
-    )
 
 
 if __name__ == "__main__":

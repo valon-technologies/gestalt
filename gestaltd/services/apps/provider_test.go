@@ -105,17 +105,6 @@ func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string)
 	}, nil
 }
 
-func (p *roundTripProvider) PostConnect(_ context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	if token == nil {
-		return nil, fmt.Errorf("token is required")
-	}
-	return map[string]string{
-		"subject":    token.SubjectID,
-		"connection": token.Connection,
-		"instance":   token.Instance,
-	}, nil
-}
-
 func (p *roundTripProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
 	return &core.HTTPResolvedSubject{
 		ID:          "user:resolved",
@@ -196,12 +185,6 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	}
 	if !core.SupportsSessionCatalog(prov) {
 		t.Fatal("expected remote provider to support session catalogs")
-	}
-	if _, ok := prov.(core.PostConnectCapable); !ok {
-		t.Fatal("expected remote provider to implement PostConnectCapable")
-	}
-	if !core.SupportsPostConnect(prov) {
-		t.Fatal("expected remote provider to support post-connect")
 	}
 	if got := prov.AuthTypes(); len(got) != 1 || got[0] != "manual" {
 		t.Fatalf("unexpected auth types: %#v", got)
@@ -290,25 +273,6 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			}
 			if got := sessionCat.Operations[0].Tags; len(got) != 2 || got[0] != "roundtrip" || got[1] != "session" {
 				t.Fatalf("unexpected session catalog tags: %#v", got)
-			}
-
-			metadata, supported, err := core.PostConnect(ctx, prov, &core.ExternalCredential{
-				SubjectID:  principal.EffectiveCredentialSubjectID(tc.principal),
-				Connection: "workspace",
-				Instance:   "default",
-			})
-			if err != nil {
-				t.Fatalf("PostConnect: %v", err)
-			}
-			if !supported {
-				t.Fatal("expected core.PostConnect to report support")
-			}
-			if !reflect.DeepEqual(metadata, map[string]string{
-				"subject":    principal.EffectiveCredentialSubjectID(tc.principal),
-				"connection": "workspace",
-				"instance":   "default",
-			}) {
-				t.Fatalf("unexpected post connect metadata: %+v", metadata)
 			}
 
 			resolved, attempted, err := core.ResolveHTTPSubject(context.Background(), prov, &core.HTTPSubjectResolveRequest{
@@ -406,11 +370,50 @@ func TestRequestContextProto_IncludesUserEmail(t *testing.T) {
 	}
 }
 
+func TestRequestContextProto_RunAsServiceAccountDoesNotInheritUserEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		UserID:    "user-123",
+		SubjectID: principal.UserSubjectID("user-123"),
+		Kind:      principal.KindUser,
+		Identity: &core.UserIdentity{
+			Email:       "ada@example.com",
+			DisplayName: "Ada Lovelace",
+		},
+		Source: principal.SourceSession,
+	})
+	ctx, _ = invocation.ApplyDelegation(ctx, principal.FromContext(ctx), &core.RunAsSubject{
+		SubjectID:           "service_account:review-bot",
+		SubjectKind:         "service_account",
+		CredentialSubjectID: "service_account:review-bot",
+		DisplayName:         "Review Bot",
+		AuthSource:          "managed_subject",
+	})
+
+	reqCtx, err := requestContextProto(ctx, "")
+	if err != nil {
+		t.Fatalf("requestContextProto: %v", err)
+	}
+	if got := reqCtx.GetSubject().GetId(); got != "service_account:review-bot" {
+		t.Fatalf("subject id = %q, want service_account:review-bot", got)
+	}
+	if got := reqCtx.GetSubject().GetDisplayName(); got != "Review Bot" {
+		t.Fatalf("subject display name = %q, want Review Bot", got)
+	}
+	if got := reqCtx.GetSubject().GetEmail(); got != "" {
+		t.Fatalf("subject email = %q, want empty", got)
+	}
+	if got := reqCtx.GetAgentSubject().GetEmail(); got != "" {
+		t.Fatalf("agent subject email = %q, want empty", got)
+	}
+}
+
 func TestRequestContextProto_IncludesRunAsAgentSubject(t *testing.T) {
 	t.Parallel()
 
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectID: "service_account:event-handler",
 		Kind:      principal.Kind("service_account"),
 		Source:    principal.SourceAPIToken,
 	})
@@ -419,11 +422,11 @@ func TestRequestContextProto_IncludesRunAsAgentSubject(t *testing.T) {
 		SubjectKind:         "user",
 		CredentialSubjectID: "user:user-123",
 		DisplayName:         "Ada Lovelace",
-		AuthSource:          "slack",
+		AuthSource:          "source-app",
 	}, &core.RunAsSubject{
-		SubjectID:   "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectID:   "service_account:event-handler",
 		SubjectKind: "service_account",
-		AuthSource:  "github_app_webhook",
+		AuthSource:  "event_handler",
 	})
 
 	reqCtx, err := requestContextProto(ctx, "")
@@ -441,87 +444,29 @@ func TestRequestContextProto_IncludesRunAsAgentSubject(t *testing.T) {
 	}
 }
 
-func TestRequestContextProto_IncludesAgentExternalIdentity(t *testing.T) {
-	t.Parallel()
-
-	ctx := invocation.WithAgentExternalIdentityContext(context.Background(), invocation.ExternalIdentityContext{
-		Type: "github_identity",
-		ID:   "user:12345678",
-	})
-	reqCtx, err := requestContextProto(ctx, "")
-	if err != nil {
-		t.Fatalf("requestContextProto: %v", err)
-	}
-	if reqCtx == nil || reqCtx.GetAgentExternalIdentity() == nil {
-		t.Fatal("expected agent external identity context")
-	}
-	if got := reqCtx.GetAgentExternalIdentity().GetType(); got != "github_identity" {
-		t.Fatalf("agent external identity type = %q, want github_identity", got)
-	}
-	if got := reqCtx.GetAgentExternalIdentity().GetId(); got != "user:12345678" {
-		t.Fatalf("agent external identity id = %q, want user:12345678", got)
-	}
-}
-
-func TestRequestContextProto_IncludesInvocationExternalIdentity(t *testing.T) {
-	t.Parallel()
-
-	ctx := invocation.WithExternalIdentityContext(context.Background(), invocation.ExternalIdentityContext{
-		Type: "github_app_installation",
-		ID:   "repo:acme/widgets",
-	})
-	reqCtx, err := requestContextProto(ctx, "")
-	if err != nil {
-		t.Fatalf("requestContextProto: %v", err)
-	}
-	if reqCtx == nil || reqCtx.GetExternalIdentity() == nil {
-		t.Fatal("expected external identity context")
-	}
-	if got := reqCtx.GetExternalIdentity().GetType(); got != "github_app_installation" {
-		t.Fatalf("external identity type = %q, want github_app_installation", got)
-	}
-	if got := reqCtx.GetExternalIdentity().GetId(); got != "repo:acme/widgets" {
-		t.Fatalf("external identity id = %q, want repo:acme/widgets", got)
-	}
-}
-
-func TestApplyRequestContext_IncludesDelegatedExternalIdentities(t *testing.T) {
+func TestApplyRequestContext_IncludesDelegatedAgentSubject(t *testing.T) {
 	t.Parallel()
 
 	ctx := applyRequestContext(context.Background(), &proto.RequestContext{
 		Subject: &proto.SubjectContext{
-			Id:          "service_account:github-toolshed",
+			Id:          "service_account:automation",
 			Kind:        "service_account",
-			DisplayName: "GitHub Toolshed",
+			DisplayName: "Automation",
 			AuthSource:  "managed_subject",
 		},
 		AgentSubject: &proto.SubjectContext{
 			Id:          "user:user-123",
 			Kind:        "user",
 			DisplayName: "Ada Lovelace",
-			AuthSource:  "slack",
-		},
-		ExternalIdentity: &proto.ExternalIdentityContext{
-			Type: "github_app_installation",
-			Id:   "repo:acme/widgets",
-		},
-		AgentExternalIdentity: &proto.ExternalIdentityContext{
-			Type: "github_identity",
-			Id:   "user:12345678",
+			AuthSource:  "source-app",
 		},
 	})
 
-	if got := invocation.ExternalIdentityContextFromContext(ctx); got.Type != "github_app_installation" || got.ID != "repo:acme/widgets" {
-		t.Fatalf("external identity context = %#v", got)
-	}
-	if got := invocation.AgentExternalIdentityContextFromContext(ctx); got.Type != "github_identity" || got.ID != "user:12345678" {
-		t.Fatalf("agent external identity context = %#v", got)
-	}
 	audit := invocation.RunAsAuditFromContext(ctx)
 	if audit.AgentSubject == nil || audit.AgentSubject.SubjectID != "user:user-123" {
 		t.Fatalf("agent subject audit = %#v", audit.AgentSubject)
 	}
-	if audit.RunAsSubject == nil || audit.RunAsSubject.SubjectID != "service_account:github-toolshed" {
+	if audit.RunAsSubject == nil || audit.RunAsSubject.SubjectID != "service_account:automation" {
 		t.Fatalf("runAs subject audit = %#v", audit.RunAsSubject)
 	}
 }
@@ -579,18 +524,14 @@ func TestRequestContextProto_PreservesToolRefsContext(t *testing.T) {
 	t.Parallel()
 
 	ctx := invocation.WithToolRefsContext(context.Background(), []coreagent.ToolRef{{
-		App:       "github",
-		Operation: "bot.getPullRequest",
+		App:       "target",
+		Operation: "reviews.get",
 		RunAs: &core.RunAsSubject{
-			SubjectID:           "service_account:github-review",
+			SubjectID:           "service_account:review-worker",
 			SubjectKind:         "service_account",
-			CredentialSubjectID: "service_account:github-review",
-			DisplayName:         "GitHub Review",
+			CredentialSubjectID: "service_account:review-worker",
+			DisplayName:         "Review Worker",
 			AuthSource:          "managed_subject",
-		},
-		RunAsExternalIdentity: &core.ExternalIdentityRef{
-			Type: "github_identity",
-			ID:   "user:12345678",
 		},
 	}})
 
@@ -605,17 +546,14 @@ func TestRequestContextProto_PreservesToolRefsContext(t *testing.T) {
 	if len(refs) != 1 {
 		t.Fatalf("tool refs = %#v, want one ref", refs)
 	}
-	if got := refs[0].GetApp(); got != "github" {
-		t.Fatalf("tool ref app = %q, want github", got)
+	if got := refs[0].GetApp(); got != "target" {
+		t.Fatalf("tool ref app = %q, want target", got)
 	}
-	if got := refs[0].GetOperation(); got != "bot.getPullRequest" {
-		t.Fatalf("tool ref operation = %q, want bot.getPullRequest", got)
+	if got := refs[0].GetOperation(); got != "reviews.get" {
+		t.Fatalf("tool ref operation = %q, want reviews.get", got)
 	}
-	if got := refs[0].GetRunAs().GetId(); got != "service_account:github-review" {
-		t.Fatalf("tool ref runAs subject = %q, want service_account:github-review", got)
-	}
-	if got := refs[0].GetRunAsExternalIdentity().GetId(); got != "user:12345678" {
-		t.Fatalf("tool ref external identity = %q, want user:12345678", got)
+	if got := refs[0].GetRunAs().GetId(); got != "service_account:review-worker" {
+		t.Fatalf("tool ref runAs subject = %q, want service_account:review-worker", got)
 	}
 }
 
@@ -625,18 +563,14 @@ func TestApplyRequestContext_PreservesToolRefsContext(t *testing.T) {
 	ctx := applyRequestContext(context.Background(), &proto.RequestContext{
 		ToolRefsSet: true,
 		ToolRefs: []*proto.AgentToolRef{{
-			App:       "github",
-			Operation: "bot.getPullRequest",
+			App:       "target",
+			Operation: "reviews.get",
 			RunAs: &proto.SubjectContext{
-				Id:                  "service_account:github-review",
+				Id:                  "service_account:review-worker",
 				Kind:                "service_account",
-				CredentialSubjectId: "service_account:github-review",
-				DisplayName:         "GitHub Review",
+				CredentialSubjectId: "service_account:review-worker",
+				DisplayName:         "Review Worker",
 				AuthSource:          "managed_subject",
-			},
-			RunAsExternalIdentity: &proto.ExternalIdentityContext{
-				Type: "github_identity",
-				Id:   "user:12345678",
 			},
 		}},
 	})
@@ -645,17 +579,14 @@ func TestApplyRequestContext_PreservesToolRefsContext(t *testing.T) {
 	if !refs.Set || len(refs.Refs) != 1 {
 		t.Fatalf("tool refs context = %#v, want one present ref", refs)
 	}
-	if got := refs.Refs[0].App; got != "github" {
-		t.Fatalf("tool ref app = %q, want github", got)
+	if got := refs.Refs[0].App; got != "target" {
+		t.Fatalf("tool ref app = %q, want target", got)
 	}
-	if got := refs.Refs[0].Operation; got != "bot.getPullRequest" {
-		t.Fatalf("tool ref operation = %q, want bot.getPullRequest", got)
+	if got := refs.Refs[0].Operation; got != "reviews.get" {
+		t.Fatalf("tool ref operation = %q, want reviews.get", got)
 	}
-	if refs.Refs[0].RunAs == nil || refs.Refs[0].RunAs.SubjectID != "service_account:github-review" {
-		t.Fatalf("tool ref runAs = %#v, want service_account:github-review", refs.Refs[0].RunAs)
-	}
-	if refs.Refs[0].RunAsExternalIdentity == nil || refs.Refs[0].RunAsExternalIdentity.ID != "user:12345678" {
-		t.Fatalf("tool ref external identity = %#v, want user:12345678", refs.Refs[0].RunAsExternalIdentity)
+	if refs.Refs[0].RunAs == nil || refs.Refs[0].RunAs.SubjectID != "service_account:review-worker" {
+		t.Fatalf("tool ref runAs = %#v, want service_account:review-worker", refs.Refs[0].RunAs)
 	}
 }
 
@@ -736,16 +667,16 @@ func TestPrincipalFromProto_PreservesCustomAuthSource(t *testing.T) {
 	t.Parallel()
 
 	p := principalFromProto(&proto.SubjectContext{
-		Id:          "service_account:github-app-installation-127579767",
+		Id:          "service_account:external-installation-127579767",
 		Kind:        "service_account",
-		DisplayName: "GitHub App installation 127579767",
-		AuthSource:  "github_app_webhook",
+		DisplayName: "External app installation 127579767",
+		AuthSource:  "external_app_webhook",
 	})
 	if p == nil {
 		t.Fatal("expected principal")
 	}
-	if p.AuthSource() != "github_app_webhook" {
-		t.Fatalf("auth source = %q, want github_app_webhook", p.AuthSource())
+	if p.AuthSource() != "external_app_webhook" {
+		t.Fatalf("auth source = %q, want external_app_webhook", p.AuthSource())
 	}
 	if p.Kind != principal.Kind("service_account") {
 		t.Fatalf("kind = %q, want service_account", p.Kind)
@@ -785,7 +716,6 @@ type unsupportedCapabilityProviderServer struct {
 	proto.UnimplementedAppProviderServer
 	metadataErr         error
 	sessionCatalogCalls atomic.Int32
-	postConnectCalls    atomic.Int32
 }
 
 func (s *unsupportedCapabilityProviderServer) GetMetadata(context.Context, *emptypb.Empty) (*proto.ProviderMetadata, error) {
@@ -806,11 +736,6 @@ func (s *unsupportedCapabilityProviderServer) Execute(context.Context, *proto.Ex
 func (s *unsupportedCapabilityProviderServer) GetSessionCatalog(context.Context, *proto.GetSessionCatalogRequest) (*proto.GetSessionCatalogResponse, error) {
 	s.sessionCatalogCalls.Add(1)
 	return nil, status.Error(codes.Unimplemented, "session catalog is not implemented")
-}
-
-func (s *unsupportedCapabilityProviderServer) PostConnect(context.Context, *proto.PostConnectRequest) (*proto.PostConnectResponse, error) {
-	s.postConnectCalls.Add(1)
-	return nil, status.Error(codes.Unimplemented, "post connect is not implemented")
 }
 
 type unavailableMetadataProviderServer struct {
@@ -840,10 +765,6 @@ func (*unavailableMetadataProviderServer) GetSessionCatalog(context.Context, *pr
 	panic("unexpected GetSessionCatalog call")
 }
 
-func (*unavailableMetadataProviderServer) PostConnect(context.Context, *proto.PostConnectRequest, ...grpc.CallOption) (*proto.PostConnectResponse, error) {
-	panic("unexpected PostConnect call")
-}
-
 func TestRemoteProviderUnsupportedCapabilitiesDoNotDispatchRPCs(t *testing.T) {
 	t.Parallel()
 
@@ -868,10 +789,6 @@ func TestRemoteProviderUnsupportedCapabilitiesDoNotDispatchRPCs(t *testing.T) {
 			if _, ok := prov.(core.SessionCatalogProvider); !ok {
 				t.Fatal("expected remote provider to implement SessionCatalogProvider")
 			}
-			if _, ok := prov.(core.PostConnectCapable); !ok {
-				t.Fatal("expected remote provider to implement PostConnectCapable")
-			}
-
 			if core.SupportsSessionCatalog(prov) {
 				t.Fatal("expected remote provider to report no session catalog support")
 			}
@@ -892,31 +809,8 @@ func TestRemoteProviderUnsupportedCapabilitiesDoNotDispatchRPCs(t *testing.T) {
 				t.Fatalf("direct CatalogForRequest error = %v, want ErrSessionCatalogUnsupported", err)
 			}
 
-			if core.SupportsPostConnect(prov) {
-				t.Fatal("expected remote provider to report no post-connect support")
-			}
-			metadata, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{})
-			if err != nil {
-				t.Fatalf("PostConnect: %v", err)
-			}
-			if supported {
-				t.Fatal("expected core.PostConnect to report unsupported")
-			}
-			if metadata != nil {
-				t.Fatalf("PostConnect metadata = %#v, want nil", metadata)
-			}
-
-			pcp := prov.(core.PostConnectCapable)
-			_, err = pcp.PostConnect(context.Background(), &core.ExternalCredential{})
-			if !errors.Is(err, core.ErrPostConnectUnsupported) {
-				t.Fatalf("direct PostConnect error = %v, want ErrPostConnectUnsupported", err)
-			}
-
 			if got := server.sessionCatalogCalls.Load(); got != 0 {
 				t.Fatalf("GetSessionCatalog calls = %d, want 0", got)
-			}
-			if got := server.postConnectCalls.Load(); got != 0 {
-				t.Fatalf("PostConnect calls = %d, want 0", got)
 			}
 		})
 	}

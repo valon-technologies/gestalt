@@ -1,26 +1,20 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::SystemTime;
 
-use prost_types::Timestamp;
 use serde::Serialize;
 use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::agent::{AgentToolRef, agent_tool_ref_from_proto};
-use crate::api::{
-    Access, ConnectedToken, Credential, ExternalIdentity, HTTPSubjectRequest, Request, Response,
-    Subject,
-};
+use crate::api::{Access, Credential, HTTPSubjectRequest, Request, Response, Subject};
 use crate::catalog::{catalog_to_proto, object_map};
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::{Error, HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE};
 use crate::generated::v1::app_provider_server::AppProvider;
 use crate::generated::v1::{
     ExecuteRequest, GetSessionCatalogRequest, GetSessionCatalogResponse, HttpSubjectRequest,
-    OperationResult as ProtoOperationResult, PostConnectCredential, PostConnectRequest,
-    PostConnectResponse, ProviderMetadata, ResolveHttpSubjectRequest, ResolveHttpSubjectResponse,
-    StartProviderRequest, StartProviderResponse, SubjectContext,
+    OperationResult as ProtoOperationResult, ProviderMetadata, ResolveHttpSubjectRequest,
+    ResolveHttpSubjectResponse, StartProviderRequest, StartProviderResponse, SubjectContext,
 };
 use crate::protocol;
 use crate::rpc_status::{require_protocol_version, rpc_status};
@@ -116,7 +110,6 @@ where
     ) -> std::result::Result<GrpcResponse<ProviderMetadata>, Status> {
         Ok(GrpcResponse::new(ProviderMetadata {
             supports_session_catalog: self.provider.supports_session_catalog(),
-            supports_post_connect: self.provider.supports_post_connect(),
             min_protocol_version: CURRENT_PROTOCOL_VERSION,
             max_protocol_version: CURRENT_PROTOCOL_VERSION,
             ..ProviderMetadata::default()
@@ -232,28 +225,6 @@ where
             ..Default::default()
         }))
     }
-
-    async fn post_connect(
-        &self,
-        request: GrpcRequest<PostConnectRequest>,
-    ) -> std::result::Result<GrpcResponse<PostConnectResponse>, Status> {
-        if !self.provider.supports_post_connect() {
-            return Err(Status::unimplemented(
-                "provider does not support post connect",
-            ));
-        }
-
-        let request = request.into_inner();
-        let token = connected_token_from_proto(request.token.as_ref())
-            .map_err(|error| rpc_status("post connect", error))?;
-        let metadata = self
-            .provider
-            .post_connect(&token)
-            .await
-            .map_err(|error| rpc_status("post connect", error))?;
-
-        Ok(GrpcResponse::new(PostConnectResponse { metadata }))
-    }
 }
 
 fn request_context(
@@ -268,11 +239,6 @@ fn request_context(
         connection_params,
         subject: request_subject(context),
         agent_subject: request_subject_field(context, "agent_subject"),
-        external_identity: request_external_identity_field(context, "external_identity"),
-        agent_external_identity: request_external_identity_field(
-            context,
-            "agent_external_identity",
-        ),
         credential: request_credential(context),
         access: request_access(context),
         host: request_host(context),
@@ -284,52 +250,6 @@ fn request_context(
             .unwrap_or(false),
         invocation_token,
     }
-}
-
-fn connected_token_from_proto(
-    token: Option<&PostConnectCredential>,
-) -> crate::Result<ConnectedToken> {
-    let Some(token) = token else {
-        return Ok(ConnectedToken::default());
-    };
-    let metadata_json = token.metadata_json.clone();
-    Ok(ConnectedToken {
-        id: token.id.clone(),
-        subject_id: token.subject_id.clone(),
-        integration: token.integration.clone(),
-        connection: token.connection.clone(),
-        instance: token.instance.clone(),
-        access_token: token.access_token.clone(),
-        refresh_token: token.refresh_token.clone(),
-        scopes: token.scopes.clone(),
-        expires_at: time_from_timestamp(token.expires_at.as_ref())?,
-        last_refreshed_at: time_from_timestamp(token.last_refreshed_at.as_ref())?,
-        refresh_error_count: token.refresh_error_count,
-        metadata_json: metadata_json.clone(),
-        metadata: metadata_from_json(&metadata_json),
-        created_at: time_from_timestamp(token.created_at.as_ref())?,
-        updated_at: time_from_timestamp(token.updated_at.as_ref())?,
-    })
-}
-
-fn time_from_timestamp(value: Option<&Timestamp>) -> crate::Result<Option<SystemTime>> {
-    value.map(protocol::system_time_from_timestamp).transpose()
-}
-
-fn metadata_from_json(value: &str) -> BTreeMap<String, String> {
-    if value.trim().is_empty() {
-        return BTreeMap::new();
-    }
-    let Ok(Value::Object(object)) = serde_json::from_str::<Value>(value) else {
-        return BTreeMap::new();
-    };
-    object
-        .into_iter()
-        .filter_map(|(key, value)| match value {
-            Value::String(value) => Some((key, value)),
-            _ => None,
-        })
-        .collect()
 }
 
 fn request_subject(context: Option<&crate::generated::v1::RequestContext>) -> Subject {
@@ -357,26 +277,6 @@ fn request_subject_field(
         display_name: subject.display_name.clone(),
         auth_source: subject.auth_source.clone(),
         email: subject.email.clone(),
-    }
-}
-
-fn request_external_identity_field(
-    context: Option<&crate::generated::v1::RequestContext>,
-    field_name: &str,
-) -> ExternalIdentity {
-    let Some(context) = context else {
-        return ExternalIdentity::default();
-    };
-    let identity = match field_name {
-        "agent_external_identity" => context.agent_external_identity.as_ref(),
-        _ => context.external_identity.as_ref(),
-    };
-    let Some(identity) = identity else {
-        return ExternalIdentity::default();
-    };
-    ExternalIdentity {
-        r#type: identity.r#type.clone(),
-        id: identity.id.clone(),
     }
 }
 

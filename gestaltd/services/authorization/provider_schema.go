@@ -9,52 +9,47 @@ import (
 )
 
 const (
-	ProviderResourceTypePolicyStatic                   = "policy_static"
-	ProviderResourceTypeAppStatic                      = "app_static"
-	ProviderResourceTypeAppDynamic                     = "app_dynamic"
-	ProviderResourceTypeAdminPolicyStatic              = "admin_policy_static"
-	ProviderResourceTypeAdminDynamic                   = "admin_dynamic"
-	ProviderResourceTypeExternalIdentity               = "external_identity"
-	ProviderResourceTypeManagedSubject                 = "managed_subject"
-	ProviderResourceTypeEveryone                       = "everyone"
-	ProviderResourceTypeTeam                           = "team"
-	ProviderResourceTypeSlackChannel                   = "slack_channel"
-	ProviderResourceIDAdminDynamicGlobal               = "global"
-	ProviderResourceIDEveryoneGlobal                   = "global"
-	ProviderExternalIdentityRelationAssume             = "assume"
-	ProviderRelationMember                             = "member"
-	ProviderManagedSubjectRelationViewer               = "viewer"
-	ProviderManagedSubjectRelationEditor               = "editor"
-	ProviderManagedSubjectRelationAdmin                = "admin"
-	ProviderManagedSubjectActionView                   = "view"
-	ProviderManagedSubjectActionManage                 = "manage"
-	ProviderManagedSubjectActionCreateToken            = "create_token"
-	ProviderManagedSubjectActionGrant                  = "grant"
-	ProviderManagedSubjectActionConnect                = "connect"
-	ProviderManagedSubjectActionManageExternalIdentity = "manage_external_identity"
+	ProviderResourceTypePolicyStatic        = "policy_static"
+	ProviderResourceTypeAppStatic           = "app_static"
+	ProviderResourceTypeAppDynamic          = "app_dynamic"
+	ProviderResourceTypeAdminPolicyStatic   = "admin_policy_static"
+	ProviderResourceTypeAdminDynamic        = "admin_dynamic"
+	ProviderResourceTypeManagedSubject      = "managed_subject"
+	ProviderResourceTypeEveryone            = "everyone"
+	ProviderResourceTypeTeam                = "team"
+	ProviderResourceTypeSlackChannel        = "slack_channel"
+	ProviderResourceIDAdminDynamicGlobal    = "global"
+	ProviderResourceIDEveryoneGlobal        = "global"
+	ProviderRelationMember                  = "member"
+	ProviderManagedSubjectRelationViewer    = "viewer"
+	ProviderManagedSubjectRelationEditor    = "editor"
+	ProviderManagedSubjectRelationAdmin     = "admin"
+	ProviderManagedSubjectActionView        = "view"
+	ProviderManagedSubjectActionManage      = "manage"
+	ProviderManagedSubjectActionCreateToken = "create_token"
+	ProviderManagedSubjectActionGrant       = "grant"
+	ProviderManagedSubjectActionConnect     = "connect"
 
 	ProviderSubjectTypeSubject = "subject"
 	ProviderSubjectTypeUser    = "user"
 )
 
 const (
-	resourceTypePolicyStatic       = ProviderResourceTypePolicyStatic
-	resourceTypeAppStatic          = ProviderResourceTypeAppStatic
-	resourceTypeAppDynamic         = ProviderResourceTypeAppDynamic
-	resourceTypeAdminPolicyStatic  = ProviderResourceTypeAdminPolicyStatic
-	resourceTypeAdminDynamic       = ProviderResourceTypeAdminDynamic
-	resourceTypeExternalIdentity   = ProviderResourceTypeExternalIdentity
-	resourceTypeManagedSubject     = ProviderResourceTypeManagedSubject
-	resourceTypeEveryone           = ProviderResourceTypeEveryone
-	resourceTypeTeam               = ProviderResourceTypeTeam
-	resourceTypeSlackChannel       = ProviderResourceTypeSlackChannel
-	resourceIDAdminDynamicGlobal   = ProviderResourceIDAdminDynamicGlobal
-	resourceIDEveryoneGlobal       = ProviderResourceIDEveryoneGlobal
-	relationExternalIdentityAssume = ProviderExternalIdentityRelationAssume
-	relationMember                 = ProviderRelationMember
-	relationManagedSubjectViewer   = ProviderManagedSubjectRelationViewer
-	relationManagedSubjectEditor   = ProviderManagedSubjectRelationEditor
-	relationManagedSubjectAdmin    = ProviderManagedSubjectRelationAdmin
+	resourceTypePolicyStatic      = ProviderResourceTypePolicyStatic
+	resourceTypeAppStatic         = ProviderResourceTypeAppStatic
+	resourceTypeAppDynamic        = ProviderResourceTypeAppDynamic
+	resourceTypeAdminPolicyStatic = ProviderResourceTypeAdminPolicyStatic
+	resourceTypeAdminDynamic      = ProviderResourceTypeAdminDynamic
+	resourceTypeManagedSubject    = ProviderResourceTypeManagedSubject
+	resourceTypeEveryone          = ProviderResourceTypeEveryone
+	resourceTypeTeam              = ProviderResourceTypeTeam
+	resourceTypeSlackChannel      = ProviderResourceTypeSlackChannel
+	resourceIDAdminDynamicGlobal  = ProviderResourceIDAdminDynamicGlobal
+	resourceIDEveryoneGlobal      = ProviderResourceIDEveryoneGlobal
+	relationMember                = ProviderRelationMember
+	relationManagedSubjectViewer  = ProviderManagedSubjectRelationViewer
+	relationManagedSubjectEditor  = ProviderManagedSubjectRelationEditor
+	relationManagedSubjectAdmin   = ProviderManagedSubjectRelationAdmin
 
 	subjectTypeSubject = ProviderSubjectTypeSubject
 	subjectTypeUser    = ProviderSubjectTypeUser
@@ -66,7 +61,6 @@ var providerAuthorizationResourceTypes = []string{
 	ProviderResourceTypeAppDynamic,
 	ProviderResourceTypeAdminPolicyStatic,
 	ProviderResourceTypeAdminDynamic,
-	ProviderResourceTypeExternalIdentity,
 	ProviderResourceTypeManagedSubject,
 	ProviderResourceTypeEveryone,
 	ProviderResourceTypeTeam,
@@ -143,19 +137,6 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 	)
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
 		&core.AuthorizationModelResourceType{
-			Name: resourceTypeExternalIdentity,
-			Relations: []*core.AuthorizationModelRelation{{
-				Name:         relationExternalIdentityAssume,
-				SubjectTypes: []string{subjectTypeSubject, subjectTypeUser},
-			}},
-			Actions: []*core.AuthorizationModelAction{{
-				Name:      relationExternalIdentityAssume,
-				Relations: []string{relationExternalIdentityAssume},
-			}},
-		},
-	)
-	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
-		&core.AuthorizationModelResourceType{
 			Name: resourceTypeManagedSubject,
 			Relations: []*core.AuthorizationModelRelation{
 				{Name: relationManagedSubjectViewer, SubjectTypes: []string{subjectTypeSubject}},
@@ -171,7 +152,6 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 				{Name: ProviderManagedSubjectActionCreateToken, Relations: []string{relationManagedSubjectAdmin}},
 				{Name: ProviderManagedSubjectActionGrant, Relations: []string{relationManagedSubjectAdmin}},
 				{Name: ProviderManagedSubjectActionConnect, Relations: []string{relationManagedSubjectEditor, relationManagedSubjectAdmin}},
-				{Name: ProviderManagedSubjectActionManageExternalIdentity, Relations: []string{relationManagedSubjectAdmin}},
 			},
 		},
 	)

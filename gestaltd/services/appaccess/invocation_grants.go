@@ -12,18 +12,36 @@ import (
 const InvocationGrantAllApps = "*"
 
 type InvocationGrant struct {
-	AllOperations bool
-	Operations    map[string]core.ConnectionMode
-	Surfaces      map[string]struct{}
+	AllOperations        bool
+	Operations           map[string]core.ConnectionMode
+	OperationDelegations map[string]InvocationDelegation
+	Surfaces             map[string]struct{}
 }
 
 type InvocationGrants map[string]InvocationGrant
 
+type InvocationDelegation struct {
+	RunAs *core.RunAsSubject
+}
+
 type invocationGrantClaims struct {
-	AllOperations  bool              `json:"all_operations,omitempty"`
-	Operations     []string          `json:"operations,omitempty"`
-	OperationModes map[string]string `json:"operation_modes,omitempty"`
-	Surfaces       []string          `json:"surfaces,omitempty"`
+	AllOperations        bool                                      `json:"all_operations,omitempty"`
+	Operations           []string                                  `json:"operations,omitempty"`
+	OperationModes       map[string]string                         `json:"operation_modes,omitempty"`
+	OperationDelegations map[string]operationDelegationGrantClaims `json:"operation_delegation,omitempty"`
+	Surfaces             []string                                  `json:"surfaces,omitempty"`
+}
+
+type operationDelegationGrantClaims struct {
+	RunAs *runAsSubjectGrantClaims `json:"run_as,omitempty"`
+}
+
+type runAsSubjectGrantClaims struct {
+	SubjectID           string `json:"subject_id,omitempty"`
+	SubjectKind         string `json:"subject_kind,omitempty"`
+	CredentialSubjectID string `json:"credential_subject_id,omitempty"`
+	DisplayName         string `json:"display_name,omitempty"`
+	AuthSource          string `json:"auth_source,omitempty"`
 }
 
 func AllInvocationGrants() InvocationGrants {
@@ -98,6 +116,12 @@ func cloneInvocationGrants(src InvocationGrants) InvocationGrants {
 				cloned.Operations[operation] = mode
 			}
 		}
+		if len(grant.OperationDelegations) > 0 {
+			cloned.OperationDelegations = make(map[string]InvocationDelegation, len(grant.OperationDelegations))
+			for operation, delegation := range grant.OperationDelegations {
+				cloned.OperationDelegations[operation] = normalizeInvocationDelegation(delegation)
+			}
+		}
 		if len(grant.Surfaces) > 0 {
 			cloned.Surfaces = make(map[string]struct{}, len(grant.Surfaces))
 			for surface := range grant.Surfaces {
@@ -120,10 +144,11 @@ func encodeInvocationGrantClaims(src InvocationGrants) map[string]invocationGran
 	out := make(map[string]invocationGrantClaims, len(src))
 	for plugin, grant := range src {
 		out[plugin] = invocationGrantClaims{
-			AllOperations:  grant.AllOperations,
-			Operations:     sortedGrantKeys(grant.Operations),
-			OperationModes: grantOperationModes(grant.Operations),
-			Surfaces:       sortedGrantKeys(grant.Surfaces),
+			AllOperations:        grant.AllOperations,
+			Operations:           sortedGrantKeys(grant.Operations),
+			OperationModes:       grantOperationModes(grant.Operations),
+			OperationDelegations: grantOperationDelegationsClaims(grant.OperationDelegations),
+			Surfaces:             sortedGrantKeys(grant.Surfaces),
 		}
 	}
 	return out
@@ -162,6 +187,20 @@ func decodeInvocationGrantClaims(src map[string]invocationGrantClaims) Invocatio
 			}
 			decoded.Operations[operation] = core.NormalizeOptionalConnectionMode(core.ConnectionMode(mode))
 		}
+		for operation, delegationClaims := range grant.OperationDelegations {
+			operation = strings.TrimSpace(operation)
+			if operation == "" {
+				continue
+			}
+			delegation := delegationFromGrantClaims(delegationClaims)
+			if invocationDelegationEmpty(delegation) {
+				continue
+			}
+			if decoded.OperationDelegations == nil {
+				decoded.OperationDelegations = make(map[string]InvocationDelegation)
+			}
+			decoded.OperationDelegations[operation] = delegation
+		}
 		for _, surface := range grant.Surfaces {
 			surface = strings.ToLower(strings.TrimSpace(surface))
 			if surface == "" {
@@ -172,7 +211,7 @@ func decodeInvocationGrantClaims(src map[string]invocationGrantClaims) Invocatio
 			}
 			decoded.Surfaces[surface] = struct{}{}
 		}
-		if !decoded.AllOperations && len(decoded.Operations) == 0 && len(decoded.Surfaces) == 0 {
+		if !decoded.AllOperations && len(decoded.Operations) == 0 && len(decoded.OperationDelegations) == 0 && len(decoded.Surfaces) == 0 {
 			continue
 		}
 		out[app] = decoded
@@ -183,88 +222,9 @@ func decodeInvocationGrantClaims(src map[string]invocationGrantClaims) Invocatio
 	return out
 }
 
-func invocationGrantSubset(candidate, allowed InvocationGrants) bool {
-	if len(candidate) == 0 {
-		return true
-	}
-	for plugin, grant := range candidate {
-		allowedGrant, ok := grantForApp(allowed, plugin)
-		if !ok {
-			return false
-		}
-		if grant.AllOperations && !allowedGrant.AllOperations {
-			return false
-		}
-		if len(grant.Operations) > 0 && !allowedGrant.AllOperations {
-			for operation, mode := range grant.Operations {
-				allowedMode, ok := allowedGrant.Operations[operation]
-				if !ok {
-					return false
-				}
-				if mode != "" && allowedMode != "" && mode != allowedMode {
-					return false
-				}
-			}
-		}
-		for surface := range grant.Surfaces {
-			if allowedGrant.AllOperations {
-				continue
-			}
-			if _, ok := allowedGrant.Surfaces[surface]; !ok {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func inheritInvocationGrantModes(candidate, parent InvocationGrants) InvocationGrants {
-	out := cloneInvocationGrants(candidate)
-	for plugin, grant := range out {
-		parentGrant, ok := grantForApp(parent, plugin)
-		if !ok || len(grant.Operations) == 0 {
-			continue
-		}
-		for operation, mode := range grant.Operations {
-			if mode == "" {
-				grant.Operations[operation] = parentGrant.Operations[operation]
-			}
-		}
-		out[plugin] = grant
-	}
-	return out
-}
-
-func grantForApp(grants InvocationGrants, plugin string) (InvocationGrant, bool) {
-	plugin = strings.TrimSpace(plugin)
-	if len(grants) == 0 || plugin == "" {
-		return InvocationGrant{}, false
-	}
-	if grant, ok := grants[plugin]; ok {
-		return grant, true
-	}
-	grant, ok := grants[InvocationGrantAllApps]
-	return grant, ok
-}
-
 func allowsOperation(grants InvocationGrants, plugin, operation string) bool {
-	grant, ok := grantForApp(grants, plugin)
-	if !ok {
-		return false
-	}
-	if grant.AllOperations {
-		return true
-	}
-	_, ok = grant.Operations[operation]
+	_, ok := EffectiveOperationProfile(grants, plugin, operation)
 	return ok
-}
-
-func operationCredentialMode(grants InvocationGrants, plugin, operation string) core.ConnectionMode {
-	grant, ok := grantForApp(grants, plugin)
-	if !ok || grant.AllOperations {
-		return ""
-	}
-	return grant.Operations[operation]
 }
 
 func allowsSurface(grants InvocationGrants, plugin, surface string) bool {
@@ -305,4 +265,48 @@ func grantOperationModes(operations map[string]core.ConnectionMode) map[string]s
 		return nil
 	}
 	return out
+}
+
+func grantOperationDelegationsClaims(delegations map[string]InvocationDelegation) map[string]operationDelegationGrantClaims {
+	if len(delegations) == 0 {
+		return nil
+	}
+	out := make(map[string]operationDelegationGrantClaims, len(delegations))
+	for operation, delegation := range delegations {
+		delegation = normalizeInvocationDelegation(delegation)
+		if invocationDelegationEmpty(delegation) {
+			continue
+		}
+		claims := operationDelegationGrantClaims{}
+		if delegation.RunAs != nil {
+			claims.RunAs = &runAsSubjectGrantClaims{
+				SubjectID:           delegation.RunAs.SubjectID,
+				SubjectKind:         delegation.RunAs.SubjectKind,
+				CredentialSubjectID: delegation.RunAs.CredentialSubjectID,
+				DisplayName:         delegation.RunAs.DisplayName,
+				AuthSource:          delegation.RunAs.AuthSource,
+			}
+		}
+		out[operation] = claims
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func delegationFromGrantClaims(claims operationDelegationGrantClaims) InvocationDelegation {
+	var runAs *core.RunAsSubject
+	if claims.RunAs != nil {
+		runAs = core.NormalizeRunAsSubject(&core.RunAsSubject{
+			SubjectID:           claims.RunAs.SubjectID,
+			SubjectKind:         claims.RunAs.SubjectKind,
+			CredentialSubjectID: claims.RunAs.CredentialSubjectID,
+			DisplayName:         claims.RunAs.DisplayName,
+			AuthSource:          claims.RunAs.AuthSource,
+		})
+	}
+	return normalizeInvocationDelegation(InvocationDelegation{
+		RunAs: runAs,
+	})
 }

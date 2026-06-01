@@ -6149,20 +6149,16 @@ func TestValidateStructureCanonicalizesAppInvokeRunAs(t *testing.T) {
 	cfg := &Config{
 		APIVersion: ConfigAPIVersion,
 		Apps: map[string]*ProviderEntry{
-			"slack": {
+			"source": {
 				Source: ProviderSource{Path: "./manifest.yaml"},
 				Invokes: []AppInvocationDependency{{
-					App:            "github",
-					Operation:      "bot.createPullRequest",
+					App:            "target",
+					Operation:      "tasks.create",
 					CredentialMode: providermanifestv1.ConnectionModeNone,
 					RunAs: &AppInvocationRunAsConfig{
 						Subject: &AppInvocationRunAsSubjectConfig{
-							ID:          " service_account:github-toolshed ",
-							DisplayName: " Toolshed app ",
-						},
-						ExternalIdentity: &AppInvocationExternalIdentityConfig{
-							Type: " github_app_installation ",
-							ID:   " repo:{owner}/{repo} ",
+							ID:          " service_account:automation ",
+							DisplayName: " Automation app ",
 						},
 						ApplyByDefault: &applyByDefault,
 					},
@@ -6174,21 +6170,17 @@ func TestValidateStructureCanonicalizesAppInvokeRunAs(t *testing.T) {
 	if err := ValidateStructure(cfg); err != nil {
 		t.Fatalf("ValidateStructure() error = %v", err)
 	}
-	subject := cfg.Apps["slack"].Invokes[0].RunAsSubject()
+	subject := cfg.Apps["source"].Invokes[0].RunAsSubject()
 	if subject == nil {
 		t.Fatal("RunAsSubject() = nil, want subject")
 	}
-	if subject.SubjectID != "service_account:github-toolshed" {
+	if subject.SubjectID != "service_account:automation" {
 		t.Fatalf("RunAsSubject().SubjectID = %q", subject.SubjectID)
 	}
-	if subject.SubjectKind != "service_account" || subject.CredentialSubjectID != subject.SubjectID || subject.DisplayName != "Toolshed app" {
+	if subject.SubjectKind != "service_account" || subject.CredentialSubjectID != subject.SubjectID || subject.DisplayName != "Automation app" {
 		t.Fatalf("RunAsSubject() = %#v, want normalized service account subject", subject)
 	}
-	identity := cfg.Apps["slack"].Invokes[0].RunAsExternalIdentity()
-	if identity == nil || identity.Type != "github_app_installation" || identity.ID != "repo:{owner}/{repo}" {
-		t.Fatalf("RunAsExternalIdentity() = %#v, want normalized GitHub app repo identity", identity)
-	}
-	if cfg.Apps["slack"].Invokes[0].RunAsAppliesByDefault() {
+	if cfg.Apps["source"].Invokes[0].RunAsAppliesByDefault() {
 		t.Fatal("RunAsAppliesByDefault() = true, want false")
 	}
 }
@@ -6224,14 +6216,14 @@ func TestValidateStructureRejectsAppInvokeRunAsOnSurface(t *testing.T) {
 	cfg := &Config{
 		APIVersion: ConfigAPIVersion,
 		Apps: map[string]*ProviderEntry{
-			"slack": {
+			"source": {
 				Source: ProviderSource{Path: "./manifest.yaml"},
 				Invokes: []AppInvocationDependency{{
-					App:     "github",
+					App:     "target",
 					Surface: string(SpecSurfaceGraphQL),
 					RunAs: &AppInvocationRunAsConfig{
 						Subject: &AppInvocationRunAsSubjectConfig{
-							ID:   "service_account:github_app_installation:99:repo:acme/widgets",
+							ID:   "service_account:automation",
 							Kind: "service_account",
 						},
 					},
@@ -6241,8 +6233,8 @@ func TestValidateStructureRejectsAppInvokeRunAsOnSurface(t *testing.T) {
 	}
 
 	err := ValidateStructure(cfg)
-	if err == nil || !strings.Contains(err.Error(), "runAs requires an exact operation") {
-		t.Fatalf("ValidateStructure() error = %v, want runAs exact operation error", err)
+	if err == nil || !strings.Contains(err.Error(), "runAs is supported only for REST exact operation invokes") {
+		t.Fatalf("ValidateStructure() error = %v, want REST exact operation error", err)
 	}
 }
 

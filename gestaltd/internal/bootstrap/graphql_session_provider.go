@@ -57,18 +57,6 @@ func (p *graphQLSessionCatalogProvider) SupportsSessionCatalog() bool {
 	return true
 }
 
-func (p *graphQLSessionCatalogProvider) SupportsPostConnect() bool {
-	return core.SupportsPostConnect(p.Provider)
-}
-
-func (p *graphQLSessionCatalogProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
-	if !supported {
-		return nil, core.ErrPostConnectUnsupported
-	}
-	return metadata, err
-}
-
 func (p *graphQLSessionCatalogProvider) SupportsHTTPSubject() bool {
 	return core.SupportsHTTPSubject(p.Provider)
 }

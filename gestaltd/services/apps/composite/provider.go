@@ -150,18 +150,6 @@ func (p *Provider) DiscoveryConfig() *core.DiscoveryConfig {
 	return p.api.DiscoveryConfig()
 }
 
-func (p *Provider) SupportsPostConnect() bool {
-	return core.SupportsPostConnect(p.api)
-}
-
-func (p *Provider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	metadata, supported, err := core.PostConnect(ctx, p.api, token)
-	if !supported {
-		return nil, core.ErrPostConnectUnsupported
-	}
-	return metadata, err
-}
-
 func (p *Provider) SupportsHTTPSubject() bool {
 	return core.SupportsHTTPSubject(p.api)
 }

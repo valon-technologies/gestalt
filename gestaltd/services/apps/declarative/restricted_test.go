@@ -3,7 +3,6 @@ package declarative_test
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -314,13 +313,6 @@ func (s *stubOAuth) RefreshToken(ctx context.Context, refreshToken string) (*cor
 	return nil, nil
 }
 
-func (s *stubOAuth) PostConnect(_ context.Context, _ *core.ExternalCredential) (map[string]string, error) {
-	return map[string]string{
-		"gestalt.external_identity.type": "slack_identity",
-		"gestalt.external_identity.id":   "team:T123:user:U456",
-	}, nil
-}
-
 func TestCatalogRenamesAliasedOperations(t *testing.T) {
 	t.Parallel()
 
@@ -355,41 +347,6 @@ func TestCatalogRenamesAliasedOperations(t *testing.T) {
 	}
 	if cat.Operations[0].ID != "renamed_alpha" {
 		t.Errorf("expected aliased ID %q, got %q", "renamed_alpha", cat.Operations[0].ID)
-	}
-}
-
-func TestRestrictedPreservesPostConnectCapability(t *testing.T) {
-	t.Parallel()
-
-	inner := &stubOAuth{
-		stubWithOps: stubWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "slack"},
-			ops:             sampleOps(),
-		},
-	}
-
-	prov := coreintegration.NewRestricted(inner, map[string]string{"list_channels": ""})
-	if !core.SupportsPostConnect(prov) {
-		t.Fatal("expected restricted wrapper to expose post-connect support")
-	}
-
-	got, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{
-		Integration: "slack",
-		Connection:  "default",
-		AccessToken: "tok",
-	})
-	if err != nil {
-		t.Fatalf("PostConnect: %v", err)
-	}
-	if !supported {
-		t.Fatal("expected core.PostConnect to report support")
-	}
-	want := map[string]string{
-		"gestalt.external_identity.type": "slack_identity",
-		"gestalt.external_identity.id":   "team:T123:user:U456",
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("PostConnect metadata = %#v, want %#v", got, want)
 	}
 }
 

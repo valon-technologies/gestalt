@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
@@ -427,77 +426,6 @@ func TestConfiguredStaticGraphQLProviderRejectsInvalidStaticConfig(t *testing.T)
 				t.Fatalf("buildConfiguredSpecProvider error = %v, want containing %q", err, tc.wantErr)
 			}
 		})
-	}
-}
-
-type graphQLPostConnectProvider struct {
-	metadata map[string]string
-}
-
-func (p *graphQLPostConnectProvider) Name() string        { return "linear" }
-func (p *graphQLPostConnectProvider) DisplayName() string { return "Linear" }
-func (p *graphQLPostConnectProvider) Description() string { return "Linear provider" }
-func (p *graphQLPostConnectProvider) ConnectionMode() core.ConnectionMode {
-	return core.ConnectionModeSubject
-}
-func (p *graphQLPostConnectProvider) AuthTypes() []string { return []string{"oauth"} }
-func (p *graphQLPostConnectProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
-	return nil
-}
-func (p *graphQLPostConnectProvider) CredentialFields() []core.CredentialFieldDef { return nil }
-func (p *graphQLPostConnectProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
-func (p *graphQLPostConnectProvider) ConnectionForOperation(string) string        { return "" }
-func (p *graphQLPostConnectProvider) Catalog() *catalog.Catalog {
-	return &catalog.Catalog{Name: "linear"}
-}
-func (p *graphQLPostConnectProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-	return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
-}
-func (p *graphQLPostConnectProvider) InvokeGraphQL(_ context.Context, _ core.GraphQLRequest, _ string) (*core.OperationResult, error) {
-	return &core.OperationResult{Status: http.StatusOK, Body: `{"data":{}}`}, nil
-}
-func (p *graphQLPostConnectProvider) AuthorizationURL(state string, _ []string) string {
-	return "https://example.com/start?state=" + state
-}
-func (p *graphQLPostConnectProvider) ExchangeCode(_ context.Context, _ string) (*core.TokenResponse, error) {
-	return &core.TokenResponse{AccessToken: "access-token"}, nil
-}
-func (p *graphQLPostConnectProvider) RefreshToken(_ context.Context, _ string) (*core.TokenResponse, error) {
-	return &core.TokenResponse{AccessToken: "refreshed-token"}, nil
-}
-func (p *graphQLPostConnectProvider) PostConnect(_ context.Context, _ *core.ExternalCredential) (map[string]string, error) {
-	return p.metadata, nil
-}
-
-func TestGraphQLSessionCatalogProviderPreservesPostConnectCapability(t *testing.T) {
-	t.Parallel()
-
-	want := map[string]string{
-		"gestalt.external_identity.type": "slack_identity",
-		"gestalt.external_identity.id":   "team:T123:user:U456",
-	}
-	wrapped := wrapGraphQLSessionCatalogProvider(&graphQLPostConnectProvider{metadata: want}, "linear", "https://example.com/graphql", nil)
-
-	if _, ok := wrapped.(core.OAuthProvider); !ok {
-		t.Fatal("expected wrapped provider to preserve oauth support")
-	}
-	if !core.SupportsPostConnect(wrapped) {
-		t.Fatal("expected wrapped provider to preserve post-connect support")
-	}
-
-	got, supported, err := core.PostConnect(context.Background(), wrapped, &core.ExternalCredential{
-		Integration: "slack",
-		Connection:  "default",
-		AccessToken: "tok",
-	})
-	if err != nil {
-		t.Fatalf("PostConnect: %v", err)
-	}
-	if !supported {
-		t.Fatal("expected core.PostConnect to report support")
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("PostConnect metadata = %#v, want %#v", got, want)
 	}
 }
 

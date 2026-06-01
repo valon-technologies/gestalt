@@ -39,8 +39,7 @@ const JSON_CONTENT_TYPE = "application/json";
 export type ConnectionMode =
   | "unspecified"
   | "none"
-  | "subject"
-  | "user";
+  | "subject";
 
 /**
  * Metadata for a single connection parameter exposed by a provider.
@@ -91,34 +90,6 @@ export type SessionCatalogHandler = (
 ) => MaybePromise<SessionCatalog | null | undefined>;
 
 /**
- * Host-managed connection payload passed into a provider post-connect hook.
- */
-export interface ConnectedToken {
-  id: string;
-  subjectId: string;
-  integration: string;
-  connection: string;
-  instance: string;
-  accessToken: string;
-  refreshToken: string;
-  scopes: string;
-  expiresAt?: Date | undefined;
-  lastRefreshedAt?: Date | undefined;
-  refreshErrorCount: number;
-  metadataJson: string;
-  metadata: Record<string, string>;
-  createdAt?: Date | undefined;
-  updatedAt?: Date | undefined;
-}
-
-/**
- * Callback used to add derived metadata after a connection is established.
- */
-export type PostConnectHandler = (
-  token: ConnectedToken,
-) => MaybePromise<Record<string, string> | null | undefined>;
-
-/**
  * Runtime hooks required to implement an app provider.
  */
 export interface AppDefinitionOptions extends ProviderBaseOptions {
@@ -126,7 +97,6 @@ export interface AppDefinitionOptions extends ProviderBaseOptions {
   authTypes?: string[];
   connectionParams?: Record<string, ConnectionParamDefinition>;
   resolveHTTPSubject?: HTTPSubjectResolver;
-  postConnect?: PostConnectHandler;
   iconSvg?: string;
   operations: Array<OperationDefinition<any, any>>;
   sessionCatalog?: SessionCatalogHandler;
@@ -199,7 +169,6 @@ export class AppProvider extends ProviderBase {
 
   private readonly sessionCatalogHandler: SessionCatalogHandler | undefined;
   private readonly httpSubjectResolver: HTTPSubjectResolver | undefined;
-  private readonly postConnectHandler: PostConnectHandler | undefined;
   private readonly operations = new Map<string, OperationDefinition<any, any>>();
 
   constructor(options: AppDefinitionOptions) {
@@ -209,7 +178,6 @@ export class AppProvider extends ProviderBase {
     this.authTypes = [...(options.authTypes ?? [])];
     this.connectionParams = normalizeConnectionParams(options.connectionParams);
     this.httpSubjectResolver = options.resolveHTTPSubject;
-    this.postConnectHandler = options.postConnect;
     this.sessionCatalogHandler = options.sessionCatalog;
 
     for (const rawEntry of options.operations) {
@@ -238,22 +206,6 @@ export class AppProvider extends ProviderBase {
     request: Request,
   ): Promise<SessionCatalog | null | undefined> {
     return await this.sessionCatalogHandler?.(request);
-  }
-
-  /**
-   * Reports whether the provider exposes a connect-time metadata hook.
-   */
-  supportsPostConnect(): boolean {
-    return this.postConnectHandler !== undefined;
-  }
-
-  /**
-   * Computes additional connection metadata after a successful connect flow.
-   */
-  async postConnectMetadata(
-    token: ConnectedToken,
-  ): Promise<Record<string, string> | null | undefined> {
-    return await this.postConnectHandler?.(cloneConnectedToken(token));
   }
 
   /**
@@ -423,10 +375,6 @@ export function isAppProvider(
       typeof (value as { supportsSessionCatalog?: unknown }).supportsSessionCatalog === "function" &&
       "catalogForRequest" in value &&
       typeof (value as { catalogForRequest?: unknown }).catalogForRequest === "function" &&
-      "supportsPostConnect" in value &&
-      typeof (value as { supportsPostConnect?: unknown }).supportsPostConnect === "function" &&
-      "postConnectMetadata" in value &&
-      typeof (value as { postConnectMetadata?: unknown }).postConnectMetadata === "function" &&
       "resolveHTTPSubject" in value &&
       typeof (value as { resolveHTTPSubject?: unknown }).resolveHTTPSubject === "function")
   );
@@ -456,21 +404,6 @@ function normalizeConnectionParams(
     output[key] = entry;
   }
   return output;
-}
-
-function cloneConnectedToken(token: ConnectedToken): ConnectedToken {
-  return {
-    ...token,
-    metadata: {
-      ...(token.metadata ?? {}),
-    },
-    expiresAt: token.expiresAt ? new Date(token.expiresAt) : undefined,
-    lastRefreshedAt: token.lastRefreshedAt
-      ? new Date(token.lastRefreshedAt)
-      : undefined,
-    createdAt: token.createdAt ? new Date(token.createdAt) : undefined,
-    updatedAt: token.updatedAt ? new Date(token.updatedAt) : undefined,
-  };
 }
 
 function isResponse(value: unknown): value is Response<unknown> {
@@ -537,8 +470,6 @@ export function encodeConnectionMode(mode: ConnectionMode): number {
     case "none":
       return 1;
     case "subject":
-      return 2;
-    case "user":
       return 2;
     case "unspecified":
     default:

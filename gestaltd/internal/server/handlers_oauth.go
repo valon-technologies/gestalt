@@ -284,18 +284,14 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	tm.ActorUserID = state.ActorUserID
 	tm.ActorAuthSource = state.ActorAuthSource
 
-	result, err := s.runPostConnect(credentialMaterialContext(r.Context(), nil, tm), prov, tm)
+	result, err := s.runConnectionSetup(credentialMaterialContext(r.Context(), nil, tm), prov, tm)
 	if err != nil {
 		auditErr = errors.New("connection setup failed")
-		slog.ErrorContext(r.Context(), "post_connect failed", "provider", providerName, "error", err)
-		status := connectionSetupErrorStatus(err)
+		slog.ErrorContext(r.Context(), "connection setup failed", "provider", providerName, "error", err)
 		pageMessage := "Gestalt could not finish saving this connection. Start the connection again from Integrations."
-		if errors.Is(err, errDuplicateExternalIdentityCredential) {
-			pageMessage = "This account is already connected. Reconnect the existing instance or disconnect it before adding another."
-		}
 		writeCallbackError(
-			status,
-			connectionSetupAPIErrorMessage(err),
+			http.StatusBadGateway,
+			"connection setup failed",
 			providerName+" connection failed",
 			pageMessage,
 		)

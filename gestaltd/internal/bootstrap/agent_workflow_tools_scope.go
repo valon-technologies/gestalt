@@ -98,7 +98,7 @@ func workflowSystemToolInheritedAgentToolRefs(req agentSystemToolExecutionReques
 			if ref.System != coreagent.SystemToolWorkflow || ref.Operation == "" {
 				return
 			}
-			if ref.App != "" || ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+			if ref.App != "" || ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" || ref.RunAs != nil {
 				return
 			}
 		} else if ref.App == "" || ref.App == "*" || ref.Operation == "" {
@@ -168,7 +168,7 @@ func workflowSystemToolValidateCreateScope(req agentSystemToolExecutionRequest, 
 			if ref.CredentialMode != "" {
 				return fmt.Errorf("%w: %s.agent.tools[%d] credentialMode is not supported for workflow agent tools", invocation.ErrInvalidInvocation, stepPath, i)
 			}
-			if ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+			if ref.RunAs != nil {
 				return fmt.Errorf("%w: %s.agent.tools[%d] runAs is not supported for workflow agent tools", invocation.ErrInvalidInvocation, stepPath, i)
 			}
 			if !workflowSystemToolAgentAppRefAllowed(ref, req.ToolRefs, req.Tools) {
@@ -183,7 +183,7 @@ func workflowSystemToolValidateFutureSystemRef(path string, ref coreagent.ToolRe
 	if strings.TrimSpace(ref.System) != coreagent.SystemToolWorkflow || strings.TrimSpace(ref.Operation) == "" {
 		return fmt.Errorf("%w: %s workflow system refs require an exact operation", invocation.ErrInvalidInvocation, path)
 	}
-	if strings.TrimSpace(ref.App) != "" || strings.TrimSpace(ref.Connection) != "" || strings.TrimSpace(ref.Instance) != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+	if strings.TrimSpace(ref.App) != "" || strings.TrimSpace(ref.Connection) != "" || strings.TrimSpace(ref.Instance) != "" || ref.CredentialMode != "" || ref.RunAs != nil {
 		return fmt.Errorf("%w: %s system refs cannot include app, connection, instance, credentialMode, or runAs", invocation.ErrInvalidInvocation, path)
 	}
 	for i := range req.ToolRefs {

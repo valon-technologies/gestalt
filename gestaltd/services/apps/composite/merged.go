@@ -208,29 +208,6 @@ func (m *MergedProvider) SupportsSessionCatalog() bool {
 	return false
 }
 
-func (m *MergedProvider) SupportsPostConnect() bool {
-	for _, provider := range m.owned {
-		if core.SupportsPostConnect(provider) {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *MergedProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	for _, provider := range m.owned {
-		if !core.SupportsPostConnect(provider) {
-			continue
-		}
-		metadata, supported, err := core.PostConnect(ctx, provider, token)
-		if !supported {
-			continue
-		}
-		return metadata, err
-	}
-	return nil, core.ErrPostConnectUnsupported
-}
-
 func (m *MergedProvider) SupportsHTTPSubject() bool {
 	for _, provider := range m.owned {
 		if core.SupportsHTTPSubject(provider) {

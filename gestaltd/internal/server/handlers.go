@@ -452,15 +452,6 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.unlinkStoredCredentialAuthorization(r.Context(), matched[0]); err != nil {
-		if restoreErr := s.externalCredentials.RestoreCredential(r.Context(), matched[0]); restoreErr != nil {
-			slog.Error("restore disconnected integration after authz unlink failure", "integration", name, "connection", matched[0].Connection, "instance", matched[0].Instance, "token_id", matched[0].ID, "error", restoreErr)
-		}
-		auditErr = errors.New("failed to disconnect integration")
-		writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
-		return
-	}
-
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})

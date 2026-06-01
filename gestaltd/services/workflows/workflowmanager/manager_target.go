@@ -508,7 +508,7 @@ func validateWorkflowAgentToolRefs(refs []coreagent.ToolRef) error {
 		operation := strings.TrimSpace(ref.Operation)
 		connection := strings.TrimSpace(ref.Connection)
 		instance := strings.TrimSpace(ref.Instance)
-		if ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+		if ref.RunAs != nil {
 			return fmt.Errorf("%w: workflow agent tool_refs[%d] runAs delegation is not supported", invocation.ErrAuthorizationDenied, i)
 		}
 		if systemName != "" {

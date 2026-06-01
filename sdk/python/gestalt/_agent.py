@@ -8,7 +8,7 @@ from typing import Any, Protocol, TypeAlias
 
 import grpc
 
-from ._api import ExternalIdentity, Subject
+from ._api import Subject
 from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
 from ._gen.v1 import app_pb2 as _app_pb
@@ -250,7 +250,6 @@ class AgentToolRef:
     description: str = ""
     system: str = ""
     run_as: Subject | None = None
-    run_as_external_identity: ExternalIdentity | None = None
 
     def __init__(
         self,
@@ -262,7 +261,6 @@ class AgentToolRef:
         description: str = "",
         system: str = "",
         run_as: Subject | None = None,
-        run_as_external_identity: ExternalIdentity | None = None,
     ) -> None:
         self.app = app
         self.operation = operation
@@ -272,7 +270,6 @@ class AgentToolRef:
         self.description = description
         self.system = system
         self.run_as = run_as
-        self.run_as_external_identity = run_as_external_identity
 
 @dataclass(slots=True)
 class AgentProviderCapabilities:
@@ -1261,11 +1258,6 @@ def agent_tool_ref_from_proto(value: Any) -> AgentToolRef:
         run_as=subject_from_proto(value.run_as)
         if has_field(value, "run_as")
         else None,
-        run_as_external_identity=external_identity_from_proto(
-            value.run_as_external_identity
-        )
-        if has_field(value, "run_as_external_identity")
-        else None,
     )
 
 
@@ -1285,27 +1277,7 @@ def agent_tool_ref_to_proto(
         system=ref.system,
     )
     _copy_message(message, "run_as", subject_to_proto(ref.run_as))
-    _copy_message(
-        message,
-        "run_as_external_identity",
-        external_identity_to_proto(ref.run_as_external_identity),
-    )
     return message
-
-
-def external_identity_from_proto(value: Any | None) -> ExternalIdentity | None:
-    if value is None:
-        return None
-    return ExternalIdentity(type=value.type, id=value.id)
-
-
-def external_identity_to_proto(
-    value: ExternalIdentity | Mapping[str, Any] | None,
-) -> Any | None:
-    if value is None:
-        return None
-    identity = _coerce(value, ExternalIdentity, "ExternalIdentity")
-    return _app_pb.ExternalIdentityContext(type=identity.type, id=identity.id)
 
 
 def agent_turn_display_to_proto(
@@ -1701,13 +1673,6 @@ def agent_tool_ref_to_dict(tool_ref: Any) -> dict[str, Any]:
         run_as = tool_ref.get("run_as")
     if run_as is not None:
         value["run_as"] = subject_to_dict(run_as)
-    run_as_external_identity = getattr(tool_ref, "run_as_external_identity", None)
-    if isinstance(tool_ref, Mapping):
-        run_as_external_identity = tool_ref.get("run_as_external_identity")
-    if run_as_external_identity is not None:
-        value["run_as_external_identity"] = external_identity_to_dict(
-            run_as_external_identity
-        )
     return value
 
 
@@ -1726,29 +1691,7 @@ def agent_tool_ref_from_dict(value: Mapping[str, Any] | None) -> Any:
         run_as=subject_from_dict(data.get("run_as"))
         if data.get("run_as") is not None
         else None,
-        run_as_external_identity=external_identity_from_dict(
-            data.get("run_as_external_identity")
-        )
-        if data.get("run_as_external_identity") is not None
-        else None,
     )
-
-
-def external_identity_to_dict(identity: Any) -> dict[str, Any]:
-    """Convert an ``ExternalIdentity`` value to a dictionary."""
-
-    return _message_fields(identity, ("type", "id"))
-
-
-def external_identity_from_dict(value: Mapping[str, Any] | None) -> Any:
-    """Create an ``ExternalIdentity`` from a dictionary."""
-
-    data = (
-        dict(_mapping_value(value, "run_as_external_identity"))
-        if value is not None
-        else {}
-    )
-    return ExternalIdentity(type=data.get("type", ""), id=data.get("id", ""))
 
 
 def agent_message_part_to_dict(part: Any) -> dict[str, Any]:

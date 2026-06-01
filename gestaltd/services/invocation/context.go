@@ -53,11 +53,6 @@ type RunAsAuditContext struct {
 	RunAsSubject *core.RunAsSubject
 }
 
-type ExternalIdentityContext struct {
-	Type string
-	ID   string
-}
-
 type CredentialContext struct {
 	Mode       core.ConnectionMode
 	SubjectID  string
@@ -90,8 +85,6 @@ type CallerProvider struct {
 type invocationSurfaceCtxKey struct{}
 type httpBindingCtxKey struct{}
 type credentialCtxKey struct{}
-type externalIdentityCtxKey struct{}
-type agentExternalIdentityCtxKey struct{}
 type callerProviderCtxKey struct{}
 type accessCtxKey struct{}
 type hostCtxKey struct{}
@@ -155,22 +148,6 @@ func CredentialContextFromContext(ctx context.Context) CredentialContext {
 	return cred
 }
 
-func WithAgentExternalIdentityContext(ctx context.Context, identity ExternalIdentityContext) context.Context {
-	identity.Type = strings.TrimSpace(identity.Type)
-	identity.ID = strings.TrimSpace(identity.ID)
-	if identity.Type == "" || identity.ID == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, agentExternalIdentityCtxKey{}, identity)
-}
-
-func AgentExternalIdentityContextFromContext(ctx context.Context) ExternalIdentityContext {
-	identity, _ := ctx.Value(agentExternalIdentityCtxKey{}).(ExternalIdentityContext)
-	identity.Type = strings.TrimSpace(identity.Type)
-	identity.ID = strings.TrimSpace(identity.ID)
-	return identity
-}
-
 func WithCallerProvider(ctx context.Context, kind ProviderKind, name string) context.Context {
 	kind = ProviderKind(strings.TrimSpace(string(kind)))
 	name = strings.TrimSpace(name)
@@ -185,22 +162,6 @@ func CallerProviderFromContext(ctx context.Context) CallerProvider {
 	caller.Kind = ProviderKind(strings.TrimSpace(string(caller.Kind)))
 	caller.Name = strings.TrimSpace(caller.Name)
 	return caller
-}
-
-func WithExternalIdentityContext(ctx context.Context, identity ExternalIdentityContext) context.Context {
-	identity.Type = strings.TrimSpace(identity.Type)
-	identity.ID = strings.TrimSpace(identity.ID)
-	if identity.Type == "" || identity.ID == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, externalIdentityCtxKey{}, identity)
-}
-
-func ExternalIdentityContextFromContext(ctx context.Context) ExternalIdentityContext {
-	identity, _ := ctx.Value(externalIdentityCtxKey{}).(ExternalIdentityContext)
-	identity.Type = strings.TrimSpace(identity.Type)
-	identity.ID = strings.TrimSpace(identity.ID)
-	return identity
 }
 
 func WithAccessContext(ctx context.Context, access AccessContext) context.Context {
@@ -306,10 +267,6 @@ func cloneToolRefs(refs []coreagent.ToolRef) []coreagent.ToolRef {
 		if ref.RunAs != nil {
 			runAs := *ref.RunAs
 			ref.RunAs = &runAs
-		}
-		if ref.RunAsExternalIdentity != nil {
-			identity := *ref.RunAsExternalIdentity
-			ref.RunAsExternalIdentity = &identity
 		}
 		out = append(out, ref)
 	}

@@ -75,7 +75,6 @@ import {
 } from "./internal/gen/v1/app_pb.ts";
 import {
   errorMessage,
-  type ExternalIdentity,
   type MaybePromise,
   type Subject,
   type SubjectInput,
@@ -217,7 +216,6 @@ export interface AgentToolRef {
   description?: string | undefined;
   system?: string | undefined;
   runAs?: SubjectInput | undefined;
-  runAsExternalIdentity?: ExternalIdentity | undefined;
 }
 
 export interface ResolvedAgentTool {

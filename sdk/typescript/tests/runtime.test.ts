@@ -55,11 +55,9 @@ import {
   AgentToolRefSchema,
   CredentialContextSchema,
   ExecuteRequestSchema,
-  ExternalIdentityContextSchema,
   GetSessionCatalogRequestSchema,
   HostContextSchema,
   HTTPSubjectRequestSchema,
-  PostConnectRequestSchema,
   RequestContextSchema,
   ResolveHTTPSubjectRequestSchema,
   StartProviderRequestSchema,
@@ -392,12 +390,6 @@ test("loadProviderFromTarget rejects structural app objects without the full run
   async catalogForRequest() {
     return undefined;
   },
-  supportsPostConnect() {
-    return false;
-  },
-  async postConnectMetadata() {
-    return undefined;
-  },
   async resolveHTTPSubject() {
     return undefined;
   },
@@ -601,7 +593,6 @@ test("integration provider service exposes metadata, configure, execute, and ses
   const metadata = await (service.getMetadata as any)();
   expect(metadata.name).toBe("basic-provider");
   expect(metadata.supportsSessionCatalog).toBe(true);
-  expect(metadata.supportsPostConnect).toBe(true);
   expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(
@@ -746,27 +737,6 @@ test("integration provider service exposes metadata, configure, execute, and ses
     "Session Hello ops user:user-123 subject viewer",
   );
 
-  const postConnect = await (service.postConnect as any)(
-    create(PostConnectRequestSchema, {
-      token: {
-        id: "tok-123",
-        subjectId: "user:user-123",
-        integration: "basic-provider",
-        connection: "workspace",
-        instance: "__default__",
-        accessToken: "access-token",
-        metadataJson: JSON.stringify({
-          team_id: "T123",
-          user_id: "U456",
-        }),
-      },
-    }),
-  );
-  expect(postConnect.metadata).toEqual({
-    "gestalt.external_identity.type": "fixture_identity",
-    "gestalt.external_identity.id": "workspace:__default__:user:user-123",
-    configured_connection: "workspace",
-  });
 });
 
 test("integration provider service labels metadata failures", async () => {
@@ -780,7 +750,7 @@ test("integration provider service labels metadata failures", async () => {
       },
     ],
   });
-  (app as any).supportsPostConnect = () => {
+  (app as any).supportsSessionCatalog = () => {
     throw new Error("metadata exploded");
   };
 
@@ -2265,10 +2235,6 @@ test("integration provider request context includes workflow metadata", async ()
               displayName: "GitHub Review",
               authSource: "managed_subject",
             }),
-            runAsExternalIdentity: create(ExternalIdentityContextSchema, {
-              type: "github_identity",
-              id: "user:12345678",
-            }),
           }),
         ],
         toolRefsSet: true,
@@ -2336,10 +2302,6 @@ test("integration provider request context includes workflow metadata", async ()
           displayName: "GitHub Review",
           authSource: "managed_subject",
           email: "",
-        },
-        runAsExternalIdentity: {
-          type: "github_identity",
-          id: "user:12345678",
         },
       },
     ],

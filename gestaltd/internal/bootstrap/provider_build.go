@@ -470,11 +470,6 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 			closeIfPossible(pluginProv)
 			return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
 		}
-		if len(declarative.PostConnectConfigs) > 0 && core.SupportsPostConnect(pluginProv) {
-			closeIfPossible(pluginProv)
-			closeIfPossible(declarative)
-			return nil, fmt.Errorf("provider %q declares postConnect in the manifest and implements provider post-connect; remove one to avoid metadata conflicts", name)
-		}
 		apiAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, declarative.Catalog())
 		apiProv, err := applyAllowedOperations(name, apiAllowedOperations, declarative)
 		if err != nil {
@@ -508,10 +503,6 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 			return nil, err
 		}
 		return newProviderBuildResult(name, entry, manifest, pluginConfig, restricted, nil, deps)
-	}
-	if core.SupportsPostConnect(specProv) && core.SupportsPostConnect(pluginProv) {
-		closeIfPossible(specProv, pluginProv)
-		return nil, fmt.Errorf("provider %q declares postConnect in the manifest and implements provider post-connect; remove one to avoid metadata conflicts", name)
 	}
 	filteredPluginProv, err := applyAllowedOperations(name, staticAllowedOperations, pluginProv)
 	if err != nil {
@@ -600,11 +591,6 @@ type builtSpecSurface struct {
 	provider   core.Provider
 	resolved   config.ResolvedSpecSurface
 	definition *declarative.Definition
-}
-
-type postConnectOnlyProvider struct {
-	connection string
-	provider   core.Provider
 }
 
 func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
@@ -748,7 +734,6 @@ func buildConfiguredAPIProvider(ctx context.Context, name string, plan config.St
 	}
 
 	built := make([]builtSpecSurface, 0, len(resolvedSurfaces))
-	surfaceConnections := make(map[string]bool, len(resolvedSurfaces))
 	authFallback := newSpecAuthFallback()
 	for i := range resolvedSurfaces {
 		resolved := resolvedSurfaces[i]
@@ -762,27 +747,18 @@ func buildConfiguredAPIProvider(ctx context.Context, name string, plan config.St
 			resolved:   resolved,
 			definition: def,
 		})
-		if resolved.ConnectionName != "" {
-			surfaceConnections[resolved.ConnectionName] = true
-		}
 		authFallback.add(resolved.ConnectionName, def)
 	}
 
-	postConnectOnly, err := buildPostConnectOnlyProviders(name, plan, meta, cfg, deps, surfaceConnections)
-	if err != nil {
-		closeBuiltSpecSurfaces(built)
-		return nil, nil, err
-	}
-
-	if len(built) == 1 && len(postConnectOnly) == 0 {
+	if len(built) == 1 {
 		if authFallback.empty() {
 			authFallback = nil
 		}
 		return bindProviderConnection(built[0].provider, built[0].resolved.ConnectionName), authFallback, nil
 	}
 
-	boundProviders := make([]composite.BoundProvider, 0, len(built)+len(postConnectOnly))
-	providers := make([]core.Provider, 0, len(built)+len(postConnectOnly))
+	boundProviders := make([]composite.BoundProvider, 0, len(built))
+	providers := make([]core.Provider, 0, len(built))
 	for i := range built {
 		specSurface := &built[i]
 		boundProviders = append(boundProviders, composite.BoundProvider{
@@ -790,13 +766,6 @@ func buildConfiguredAPIProvider(ctx context.Context, name string, plan config.St
 			Connection: specSurface.resolved.ConnectionName,
 		})
 		providers = append(providers, specSurface.provider)
-	}
-	for i := range postConnectOnly {
-		boundProviders = append(boundProviders, composite.BoundProvider{
-			Provider:   postConnectOnly[i].provider,
-			Connection: postConnectOnly[i].connection,
-		})
-		providers = append(providers, postConnectOnly[i].provider)
 	}
 
 	merged, err := composite.NewMergedWithConnections(
@@ -808,7 +777,6 @@ func buildConfiguredAPIProvider(ctx context.Context, name string, plan config.St
 	)
 	if err != nil {
 		closeBuiltSpecSurfaces(built)
-		closePostConnectOnlyProviders(postConnectOnly)
 		return nil, nil, err
 	}
 	if authFallback.empty() {
@@ -817,60 +785,9 @@ func buildConfiguredAPIProvider(ctx context.Context, name string, plan config.St
 	return merged, authFallback, nil
 }
 
-func buildPostConnectOnlyProviders(name string, plan config.StaticConnectionPlan, meta providerMetadata, cfg specProviderConfig, deps Deps, excludedConnections map[string]bool) ([]postConnectOnlyProvider, error) {
-	var providers []postConnectOnlyProvider
-	for _, connectionName := range plan.NamedConnectionNames() {
-		if excludedConnections[connectionName] {
-			continue
-		}
-		conn, ok := plan.NamedConnectionDef(connectionName)
-		if !ok || conn.PostConnect == nil {
-			continue
-		}
-		prov, err := buildPostConnectOnlyProvider(name, connectionName, conn, meta, cfg, deps)
-		if err != nil {
-			closePostConnectOnlyProviders(providers)
-			return nil, err
-		}
-		providers = append(providers, postConnectOnlyProvider{
-			connection: connectionName,
-			provider:   prov,
-		})
-	}
-	return providers, nil
-}
-
-func buildPostConnectOnlyProvider(name, connectionName string, conn config.ConnectionDef, meta providerMetadata, cfg specProviderConfig, deps Deps) (core.Provider, error) {
-	def := &declarative.Definition{
-		Provider:    name,
-		DisplayName: meta.displayName,
-		Description: meta.description,
-		IconSVG:     meta.iconSVG,
-		BaseURL:     cfg.baseURL,
-		Headers:     manifestHeaders(cfg.manifestApp),
-	}
-	buildOpts := []declarative.BuildOption{
-		declarative.WithEgressCheck(deps.Egress.CheckFunc(cfg.allowedHosts)),
-	}
-	if cfg.providerBuildOptions != nil {
-		buildOpts = append(buildOpts, cfg.providerBuildOptions(conn)...)
-	}
-	prov, err := declarative.Build(def, declarativeNamedConnectionDef(connectionName, conn), buildOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("build post-connect provider for connection %q: %w", connectionName, err)
-	}
-	return prov, nil
-}
-
 func closeBuiltSpecSurfaces(surfaces []builtSpecSurface) {
 	for i := range surfaces {
 		closeIfPossible(surfaces[i].provider)
-	}
-}
-
-func closePostConnectOnlyProviders(providers []postConnectOnlyProvider) {
-	for i := range providers {
-		closeIfPossible(providers[i].provider)
 	}
 }
 
@@ -1139,7 +1056,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	if invTokens != nil {
 		opts = append(opts,
 			appservice.WithInvocationTokens(invTokens),
-			appservice.WithInvocationTokenSubject(name, appaccessservice.AllInvocationGrants()),
+			appservice.WithInvocationTokenSubject(name, appaccessservice.InvocationGrantsFromDependencies(appInvocationDependencies(entry.Invokes))),
 			appservice.WithWorkflowManagerGrants(workflowgrants.All()),
 		)
 	}
@@ -2017,17 +1934,16 @@ func buildAppStaticSpec(name string, entry *config.ProviderEntry, manifest *prov
 	}
 
 	return appservice.StaticProviderSpec{
-		Name:               name,
-		DisplayName:        displayName,
-		Description:        description,
-		IconSVG:            iconSVG,
-		ConnectionMode:     connMode,
-		Catalog:            staticCatalog,
-		AuthTypes:          staticAuthTypes(conn.Auth.Type),
-		ConnectionParams:   appservice.ConnectionParamDefsFromManifest(conn.ConnectionParams),
-		CredentialFields:   appservice.CredentialFieldsFromManifest(conn.Auth.Credentials),
-		DiscoveryConfig:    appservice.DiscoveryConfigFromManifest(conn.Discovery),
-		PostConnectConfigs: appservice.PostConnectConfigsFromManifestConnections(manifest.Spec.Connections),
+		Name:             name,
+		DisplayName:      displayName,
+		Description:      description,
+		IconSVG:          iconSVG,
+		ConnectionMode:   connMode,
+		Catalog:          staticCatalog,
+		AuthTypes:        staticAuthTypes(conn.Auth.Type),
+		ConnectionParams: appservice.ConnectionParamDefsFromManifest(conn.ConnectionParams),
+		CredentialFields: appservice.CredentialFieldsFromManifest(conn.Auth.Credentials),
+		DiscoveryConfig:  appservice.DiscoveryConfigFromManifest(conn.Discovery),
 	}, plan, nil
 }
 

@@ -53,14 +53,6 @@ class Subject:
 
 
 @dataclasses.dataclass(slots=True)
-class ExternalIdentity:
-    """Provider-owned identity attached to an incoming provider request."""
-
-    type: str = ""
-    id: str = ""
-
-
-@dataclasses.dataclass(slots=True)
 class Credential:
     """Credential metadata resolved by the Gestalt host for the request."""
 
@@ -103,12 +95,6 @@ class Request:
     idempotency_key: str = ""
     host: Host = dataclasses.field(default_factory=Host)
     agent_subject: Subject = dataclasses.field(default_factory=Subject)
-    agent_external_identity: ExternalIdentity = dataclasses.field(
-        default_factory=ExternalIdentity
-    )
-    external_identity: ExternalIdentity = dataclasses.field(
-        default_factory=ExternalIdentity
-    )
 
     def connection_param(self, name: str) -> str | None:
         """Return a connection parameter by name if the host supplied it."""

@@ -4,9 +4,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 )
 
@@ -18,12 +16,8 @@ func declarativeConnectionDef(conn config.ConnectionDef) declarative.ConnectionD
 	}
 }
 
-func declarativeNamedConnectionDef(name string, conn config.ConnectionDef) declarative.ConnectionDef {
-	out := declarativeConnectionDef(conn)
-	if postConnect := appservice.PostConnectConfigFromManifest(conn.PostConnect); postConnect != nil {
-		out.PostConnect = map[string]*core.PostConnectConfig{name: postConnect}
-	}
-	return out
+func declarativeNamedConnectionDef(_ string, conn config.ConnectionDef) declarative.ConnectionDef {
+	return declarativeConnectionDef(conn)
 }
 
 func declarativeConnectionAuthDef(auth config.ConnectionAuthDef) declarative.ConnectionAuthDef {

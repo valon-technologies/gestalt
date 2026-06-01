@@ -77,9 +77,6 @@ func ToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 		Title:       ref.GetTitle(),
 		Description: ref.GetDescription(),
 		RunAs:       RunAsSubjectFromProto(ref.GetRunAs()),
-		RunAsExternalIdentity: externalIdentityRefFromProto(
-			ref.GetRunAsExternalIdentity(),
-		),
 	}
 }
 
@@ -93,9 +90,6 @@ func ToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
 		Title:       ref.Title,
 		Description: ref.Description,
 		RunAs:       RunAsSubjectToProto(ref.RunAs),
-		RunAsExternalIdentity: externalIdentityRefToProto(
-			ref.RunAsExternalIdentity,
-		),
 	}
 }
 
@@ -123,27 +117,6 @@ func RunAsSubjectToProto(subject *core.RunAsSubject) *proto.SubjectContext {
 		CredentialSubjectId: normalized.CredentialSubjectID,
 		DisplayName:         normalized.DisplayName,
 		AuthSource:          normalized.AuthSource,
-	}
-}
-
-func externalIdentityRefFromProto(identity *proto.ExternalIdentityContext) *core.ExternalIdentityRef {
-	if identity == nil {
-		return nil
-	}
-	return core.NormalizeExternalIdentityRef(&core.ExternalIdentityRef{
-		Type: identity.GetType(),
-		ID:   identity.GetId(),
-	})
-}
-
-func externalIdentityRefToProto(identity *core.ExternalIdentityRef) *proto.ExternalIdentityContext {
-	normalized := core.NormalizeExternalIdentityRef(identity)
-	if normalized == nil {
-		return nil
-	}
-	return &proto.ExternalIdentityContext{
-		Type: normalized.Type,
-		Id:   normalized.ID,
 	}
 }
 

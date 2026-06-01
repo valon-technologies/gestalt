@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // ProviderKind identifies the protocol surface a provider implements.
@@ -88,32 +87,6 @@ type SessionCatalogProvider interface {
 	CatalogForRequest(ctx context.Context, token string) (*Catalog, error)
 }
 
-// ConnectedToken is the normalized connection payload passed into post-connect
-// hooks after the host completes the credential exchange.
-type ConnectedToken struct {
-	ID                string
-	SubjectID         string
-	Integration       string
-	Connection        string
-	Instance          string
-	AccessToken       string
-	RefreshToken      string
-	Scopes            string
-	ExpiresAt         *time.Time
-	LastRefreshedAt   *time.Time
-	RefreshErrorCount int
-	MetadataJSON      string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-}
-
-// PostConnectCapable is implemented by integration providers that derive
-// additional connection metadata after the host finishes the OAuth/manual
-// credential exchange.
-type PostConnectCapable interface {
-	PostConnect(ctx context.Context, token *ConnectedToken) (map[string]string, error)
-}
-
 // Subject identifies the caller that initiated an operation.
 type Subject struct {
 	ID                  string
@@ -122,12 +95,6 @@ type Subject struct {
 	DisplayName         string
 	AuthSource          string
 	Email               string
-}
-
-// ExternalIdentity identifies the caller in a provider-owned identity namespace.
-type ExternalIdentity struct {
-	Type string
-	ID   string
 }
 
 // Credential describes the resolved credential used to authorize a request.
@@ -159,8 +126,6 @@ type OperationResult struct {
 type connectionParamsKey struct{}
 type subjectKey struct{}
 type agentSubjectKey struct{}
-type externalIdentityKey struct{}
-type agentExternalIdentityKey struct{}
 type credentialKey struct{}
 type accessKey struct{}
 type hostKey struct{}
@@ -211,46 +176,6 @@ func WithAgentSubject(ctx context.Context, subject Subject) context.Context {
 func AgentSubjectFromContext(ctx context.Context) Subject {
 	subject, _ := ctx.Value(agentSubjectKey{}).(Subject)
 	return subject
-}
-
-// WithExternalIdentity returns a child context carrying the provider-owned
-// external identity this request is authorized to assume.
-func WithExternalIdentity(ctx context.Context, identity ExternalIdentity) context.Context {
-	identity.Type = strings.TrimSpace(identity.Type)
-	identity.ID = strings.TrimSpace(identity.ID)
-	if identity.Type == "" || identity.ID == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, externalIdentityKey{}, identity)
-}
-
-// ExternalIdentityFromContext returns the provider-owned external identity this
-// request is authorized to assume, when available.
-func ExternalIdentityFromContext(ctx context.Context) ExternalIdentity {
-	identity, _ := ctx.Value(externalIdentityKey{}).(ExternalIdentity)
-	identity.Type = strings.TrimSpace(identity.Type)
-	identity.ID = strings.TrimSpace(identity.ID)
-	return identity
-}
-
-// WithAgentExternalIdentity returns a child context carrying the original agent
-// caller's provider-owned external identity, when the host can derive one.
-func WithAgentExternalIdentity(ctx context.Context, identity ExternalIdentity) context.Context {
-	identity.Type = strings.TrimSpace(identity.Type)
-	identity.ID = strings.TrimSpace(identity.ID)
-	if identity.Type == "" || identity.ID == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, agentExternalIdentityKey{}, identity)
-}
-
-// AgentExternalIdentityFromContext returns the original agent caller's
-// provider-owned external identity, when available.
-func AgentExternalIdentityFromContext(ctx context.Context) ExternalIdentity {
-	identity, _ := ctx.Value(agentExternalIdentityKey{}).(ExternalIdentity)
-	identity.Type = strings.TrimSpace(identity.Type)
-	identity.ID = strings.TrimSpace(identity.ID)
-	return identity
 }
 
 // WithCredential returns a child context carrying the resolved credential
@@ -367,10 +292,6 @@ func copyAgentToolRefs(refs []AgentToolRef) []AgentToolRef {
 		if ref.RunAs != nil {
 			runAs := *ref.RunAs
 			copied.RunAs = &runAs
-		}
-		if ref.RunAsExternalIdentity != nil {
-			identity := *ref.RunAsExternalIdentity
-			copied.RunAsExternalIdentity = &identity
 		}
 		out = append(out, copied)
 	}

@@ -723,27 +723,22 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithGrantedCallerToolRefs(
 	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runAs := &core.RunAsSubject{
-		SubjectID:   "service_account:github-toolshed",
+		SubjectID:   "service_account:review-worker",
 		SubjectKind: "service_account",
 	}
-	externalIdentity := &core.ExternalIdentityRef{
-		Type: "github_app_installation",
-		ID:   "repo:valon-technologies/toolshed",
-	}
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
-		CallerAppName: "slack",
+		CallerAppName: "source",
 		Permissions: []core.AccessPermission{{
-			App:        "github",
-			Operations: []string{"bot.createPullRequest"},
+			App:        "target",
+			Operations: []string{"reviews.create"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
 			{
-				App:                   "github",
-				Operation:             "bot.createPullRequest",
-				CredentialMode:        core.ConnectionModeNone,
-				RunAs:                 runAs,
-				RunAsExternalIdentity: externalIdentity,
+				App:            "target",
+				Operation:      "reviews.create",
+				CredentialMode: core.ConnectionModeNone,
+				RunAs:          runAs,
 			},
 		},
 		Tools: []coreagent.Tool{workflowTool},
@@ -784,7 +779,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithGrantedCallerToolRefs(
 	}
 	wantRefs := []coreagent.ToolRef{
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
-		{App: "github", Operation: "bot.createPullRequest"},
+		{App: "target", Operation: "reviews.create"},
 	}
 	if !reflect.DeepEqual(upsertTarget.Steps[0].Agent.ToolRefs, wantRefs) {
 		t.Fatalf("inherited tool refs = %#v, want %#v", upsertTarget.Steps[0].Agent.ToolRefs, wantRefs)

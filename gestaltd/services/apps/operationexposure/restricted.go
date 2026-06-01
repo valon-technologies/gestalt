@@ -242,18 +242,6 @@ func (r *Restricted) DiscoveryConfig() *core.DiscoveryConfig {
 	return r.inner.DiscoveryConfig()
 }
 
-func (r *Restricted) SupportsPostConnect() bool {
-	return core.SupportsPostConnect(r.inner)
-}
-
-func (r *Restricted) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	metadata, supported, err := core.PostConnect(ctx, r.inner, token)
-	if !supported {
-		return nil, core.ErrPostConnectUnsupported
-	}
-	return metadata, err
-}
-
 func (r *Restricted) SupportsHTTPSubject() bool {
 	return core.SupportsHTTPSubject(r.inner)
 }

@@ -2,9 +2,7 @@ package composite_test
 
 import (
 	"context"
-	"errors"
 	"net/http"
-	"reflect"
 	"testing"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -109,115 +107,5 @@ func TestCompositeExecuteDelegatesDynamicAPISessionOperation(t *testing.T) {
 	}
 	if !dynamicHit {
 		t.Fatal("expected API provider to execute dynamic session-backed viewer operation")
-	}
-}
-
-type fakePostConnectProvider struct {
-	*fakeProvider
-	metadata map[string]string
-}
-
-func (p *fakePostConnectProvider) PostConnect(_ context.Context, _ *core.ExternalCredential) (map[string]string, error) {
-	return p.metadata, nil
-}
-
-func TestCompositePreservesPostConnectCapability(t *testing.T) {
-	t.Parallel()
-
-	api := &fakePostConnectProvider{
-		fakeProvider: &fakeProvider{name: "api"},
-		metadata: map[string]string{
-			"gestalt.external_identity.type": "slack_identity",
-			"gestalt.external_identity.id":   "team:T123:user:U456",
-		},
-	}
-	mcp := &fakeMCPUpstream{
-		fakeSessionProvider: &fakeSessionProvider{
-			fakeProvider: &fakeProvider{name: "mcp", connMode: core.ConnectionModeSubject},
-			sessionCat:   &catalog.Catalog{Name: "test"},
-		},
-	}
-
-	prov := composite.New("test", api, mcp)
-	if !core.SupportsPostConnect(prov) {
-		t.Fatal("expected composite provider to expose post-connect support")
-	}
-
-	got, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{
-		Integration: "slack",
-		Connection:  "default",
-		AccessToken: "tok",
-	})
-	if err != nil {
-		t.Fatalf("PostConnect: %v", err)
-	}
-	if !supported {
-		t.Fatal("expected core.PostConnect to report support")
-	}
-	if !reflect.DeepEqual(got, api.metadata) {
-		t.Fatalf("PostConnect metadata = %#v, want %#v", got, api.metadata)
-	}
-}
-
-type falseSupportPostConnectProvider struct {
-	*fakeProvider
-	called bool
-}
-
-func (p *falseSupportPostConnectProvider) SupportsPostConnect() bool {
-	return false
-}
-
-func (p *falseSupportPostConnectProvider) PostConnect(context.Context, *core.ExternalCredential) (map[string]string, error) {
-	p.called = true
-	return map[string]string{"unexpected": "true"}, nil
-}
-
-func TestCompositeSkipsPostConnectWhenProviderAdvertisesNoSupport(t *testing.T) {
-	t.Parallel()
-
-	api := &falseSupportPostConnectProvider{
-		fakeProvider: &fakeProvider{name: "api"},
-	}
-	mcp := &fakeMCPUpstream{
-		fakeSessionProvider: &fakeSessionProvider{
-			fakeProvider: &fakeProvider{name: "mcp", connMode: core.ConnectionModeSubject},
-			sessionCat:   &catalog.Catalog{Name: "test"},
-		},
-	}
-
-	prov := composite.New("test", api, mcp)
-	if core.SupportsPostConnect(prov) {
-		t.Fatal("expected composite provider to report no post-connect support")
-	}
-
-	metadata, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{
-		Integration: "slack",
-		Connection:  "default",
-		AccessToken: "tok",
-	})
-	if err != nil {
-		t.Fatalf("PostConnect: %v", err)
-	}
-	if supported {
-		t.Fatal("expected core.PostConnect to report unsupported")
-	}
-	if metadata != nil {
-		t.Fatalf("PostConnect metadata = %#v, want nil", metadata)
-	}
-	if api.called {
-		t.Fatal("explicit false support should prevent API PostConnect from being called")
-	}
-
-	pcp, ok := prov.(core.PostConnectCapable)
-	if !ok {
-		t.Fatal("expected composite provider to keep direct PostConnect method")
-	}
-	_, err = pcp.PostConnect(context.Background(), &core.ExternalCredential{})
-	if !errors.Is(err, core.ErrPostConnectUnsupported) {
-		t.Fatalf("direct PostConnect error = %v, want ErrPostConnectUnsupported", err)
-	}
-	if api.called {
-		t.Fatal("direct composite PostConnect should not call API provider with false support")
 	}
 }

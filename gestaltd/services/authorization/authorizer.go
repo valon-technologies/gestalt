@@ -158,10 +158,6 @@ func (a *Authorizer) AllowOperation(ctx context.Context, p *principal.Principal,
 	return a.AllowProvider(ctx, p, provider)
 }
 
-func (a *Authorizer) AllowExternalIdentityAssumption(_ context.Context, _ *principal.Principal, _ *core.ExternalIdentityRef) bool {
-	return false
-}
-
 func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, provider string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, true

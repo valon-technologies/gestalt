@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -29,15 +28,13 @@ type stubOutput struct {
 	SubjectEmail        string `json:"subject_email,omitempty"`
 	AgentSubjectID      string `json:"agent_subject_id,omitempty"`
 	AgentSubjectEmail   string `json:"agent_subject_email,omitempty"`
-	AgentExternalType   string `json:"agent_external_type,omitempty"`
-	AgentExternalID     string `json:"agent_external_id,omitempty"`
 	CredentialMode      string `json:"credential_mode"`
 	CredentialSubjectID string `json:"credential_subject_id"`
 	AccessPolicy        string `json:"access_policy"`
 	AccessRole          string `json:"access_role"`
 	HostBaseURL         string `json:"host_base_url"`
 	ToolRefsSet         bool   `json:"tool_refs_set,omitempty"`
-	ToolRefApp       string `json:"tool_ref_app,omitempty"`
+	ToolRefApp          string `json:"tool_ref_app,omitempty"`
 	ToolRefOperation    string `json:"tool_ref_operation,omitempty"`
 	IdempotencyKey      string `json:"idempotency_key"`
 }
@@ -80,16 +77,6 @@ var sessionCatalogStubRouter = gestalt.MustRouter(
 	),
 )
 
-var postConnectStubRouter = gestalt.MustRouter(
-	gestalt.Register(
-		gestalt.Operation[stubInput, stubOutput]{
-			ID:     "test_op",
-			Method: http.MethodPost,
-		},
-		(*postConnectStubProvider).testOp,
-	),
-)
-
 func (p *stubProvider) Configure(_ context.Context, _ string, _ map[string]any) error {
 	return nil
 }
@@ -102,8 +89,6 @@ func (p *stubProvider) testOp(_ context.Context, _ stubInput, req gestalt.Reques
 		SubjectEmail:        req.Subject.Email,
 		AgentSubjectID:      req.AgentSubject.ID,
 		AgentSubjectEmail:   req.AgentSubject.Email,
-		AgentExternalType:   req.AgentExternalIdentity.Type,
-		AgentExternalID:     req.AgentExternalIdentity.ID,
 		CredentialMode:      req.Credential.Mode,
 		CredentialSubjectID: req.Credential.SubjectID,
 		AccessPolicy:        req.Access.Policy,
@@ -146,11 +131,6 @@ func (p *startableStubProvider) Configure(_ context.Context, name string, config
 type sessionCatalogStubProvider struct {
 	stubProvider
 	sessionCatalog *gestalt.Catalog
-}
-
-type postConnectStubProvider struct {
-	stubProvider
-	metadata map[string]string
 }
 
 type panicHTTPSubjectProvider struct {
@@ -248,21 +228,6 @@ func cloneTestBool(src *bool) *bool {
 	return &value
 }
 
-func (p *postConnectStubProvider) PostConnect(_ context.Context, token *gestalt.ConnectedToken) (map[string]string, error) {
-	if token == nil {
-		return nil, errors.New("token is required")
-	}
-	metadata := map[string]string{
-		"subject":    token.SubjectID,
-		"connection": token.Connection,
-		"instance":   token.Instance,
-	}
-	for key, value := range p.metadata {
-		metadata[key] = value
-	}
-	return metadata, nil
-}
-
 func (p *panicHTTPSubjectProvider) testOp(ctx context.Context, input stubInput, req gestalt.Request) (gestalt.Response[stubOutput], error) {
 	return p.stubProvider.testOp(ctx, input, req)
 }
@@ -272,7 +237,7 @@ func (p *panicHTTPSubjectProvider) ResolveHTTPSubject(_ context.Context, _ gesta
 }
 
 func (p *rejectHTTPSubjectProvider) ResolveHTTPSubject(_ context.Context, _ gestalt.HTTPSubjectRequest) (*gestalt.Subject, error) {
-	return nil, gestalt.Error(http.StatusForbidden, "unmapped slack subject")
+	return nil, gestalt.Error(http.StatusForbidden, "unmapped test subject")
 }
 
 func TestProviderServerGetMetadata(t *testing.T) {
@@ -286,9 +251,6 @@ func TestProviderServerGetMetadata(t *testing.T) {
 		}
 		if meta.GetSupportsSessionCatalog() {
 			t.Fatal("SupportsSessionCatalog = true, want false")
-		}
-		if meta.GetSupportsPostConnect() {
-			t.Fatal("SupportsPostConnect = true, want false")
 		}
 		if meta.GetMinProtocolVersion() != proto.CurrentProtocolVersion {
 			t.Fatalf("MinProtocolVersion = %d, want %d", meta.GetMinProtocolVersion(), proto.CurrentProtocolVersion)
@@ -314,9 +276,6 @@ func TestProviderServerGetMetadata(t *testing.T) {
 		if !meta.GetSupportsSessionCatalog() {
 			t.Fatal("SupportsSessionCatalog = false, want true")
 		}
-		if meta.GetSupportsPostConnect() {
-			t.Fatal("SupportsPostConnect = true, want false")
-		}
 		if meta.GetMinProtocolVersion() != proto.CurrentProtocolVersion {
 			t.Fatalf("MinProtocolVersion = %d, want %d", meta.GetMinProtocolVersion(), proto.CurrentProtocolVersion)
 		}
@@ -325,64 +284,6 @@ func TestProviderServerGetMetadata(t *testing.T) {
 		}
 	})
 
-	t.Run("post connect provider", func(t *testing.T) {
-		client := newAppProviderClient(t, &postConnectStubProvider{}, postConnectStubRouter)
-		meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
-		if err != nil {
-			t.Fatalf("GetMetadata: %v", err)
-		}
-		if meta.GetSupportsSessionCatalog() {
-			t.Fatal("SupportsSessionCatalog = true, want false")
-		}
-		if !meta.GetSupportsPostConnect() {
-			t.Fatal("SupportsPostConnect = false, want true")
-		}
-		if meta.GetMinProtocolVersion() != proto.CurrentProtocolVersion {
-			t.Fatalf("MinProtocolVersion = %d, want %d", meta.GetMinProtocolVersion(), proto.CurrentProtocolVersion)
-		}
-		if meta.GetMaxProtocolVersion() != proto.CurrentProtocolVersion {
-			t.Fatalf("MaxProtocolVersion = %d, want %d", meta.GetMaxProtocolVersion(), proto.CurrentProtocolVersion)
-		}
-	})
-}
-
-func TestProviderServerPostConnect(t *testing.T) {
-	t.Parallel()
-
-	t.Run("supported", func(t *testing.T) {
-		client := newAppProviderClient(t, &postConnectStubProvider{
-			metadata: map[string]string{"kind": "slack_identity"},
-		}, postConnectStubRouter)
-		resp, err := client.PostConnect(context.Background(), &proto.PostConnectRequest{
-			Token: &proto.PostConnectCredential{
-				SubjectId:  "user:user-123",
-				Connection: "workspace",
-				Instance:   "default",
-			},
-		})
-		if err != nil {
-			t.Fatalf("PostConnect: %v", err)
-		}
-		if !reflect.DeepEqual(resp.GetMetadata(), map[string]string{
-			"subject":    "user:user-123",
-			"connection": "workspace",
-			"instance":   "default",
-			"kind":       "slack_identity",
-		}) {
-			t.Fatalf("metadata = %#v", resp.GetMetadata())
-		}
-	})
-
-	t.Run("unsupported", func(t *testing.T) {
-		client := newAppProviderClient(t, &stubProvider{}, stubRouter)
-		_, err := client.PostConnect(context.Background(), &proto.PostConnectRequest{})
-		if err == nil {
-			t.Fatal("PostConnect should return error for unsupported provider")
-		}
-		if status.Code(err) != codes.Unimplemented {
-			t.Fatalf("PostConnect code = %v, want %v", status.Code(err), codes.Unimplemented)
-		}
-	})
 }
 
 func TestProviderServerGetSessionCatalog(t *testing.T) {
@@ -503,7 +404,7 @@ func TestProviderServerExecute(t *testing.T) {
 			name:       "success",
 			router:     stubRouter,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","subject_email":"ada@example.com","agent_subject_id":"user:user-456","agent_subject_email":"grace@example.com","agent_external_type":"github_identity","agent_external_id":"user:12345678","credential_mode":"subject","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","host_base_url":"https://gestalt.example.test","tool_refs_set":true,"tool_ref_app":"github","tool_ref_operation":"bot.getPullRequest","idempotency_key":"tool-call-123"}`,
+			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","subject_email":"ada@example.com","agent_subject_id":"user:user-456","agent_subject_email":"grace@example.com","credential_mode":"subject","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","host_base_url":"https://gestalt.example.test","tool_refs_set":true,"tool_ref_app":"target","tool_ref_operation":"reviews.get","idempotency_key":"tool-call-123"}`,
 			request: &proto.ExecuteRequest{
 				Operation: "test_op",
 				Params: func() *structpb.Struct {
@@ -522,10 +423,6 @@ func TestProviderServerExecute(t *testing.T) {
 						Kind:  "user",
 						Email: "grace@example.com",
 					},
-					AgentExternalIdentity: &proto.ExternalIdentityContext{
-						Type: "github_identity",
-						Id:   "user:12345678",
-					},
 					Credential: &proto.CredentialContext{
 						Mode:      "subject",
 						SubjectId: "user:user-123",
@@ -538,8 +435,8 @@ func TestProviderServerExecute(t *testing.T) {
 						PublicBaseUrl: "https://gestalt.example.test",
 					},
 					ToolRefs: []*proto.AgentToolRef{{
-						App: "github",
-						Operation: "bot.getPullRequest",
+						App:       "target",
+						Operation: "reviews.get",
 					}},
 					ToolRefsSet: true,
 				},
@@ -670,8 +567,8 @@ func TestProviderServerExecute(t *testing.T) {
 		if resp.GetRejectStatus() != http.StatusForbidden {
 			t.Fatalf("RejectStatus = %d, want %d", resp.GetRejectStatus(), http.StatusForbidden)
 		}
-		if resp.GetRejectMessage() != "unmapped slack subject" {
-			t.Fatalf("RejectMessage = %q, want %q", resp.GetRejectMessage(), "unmapped slack subject")
+		if resp.GetRejectMessage() != "unmapped test subject" {
+			t.Fatalf("RejectMessage = %q, want %q", resp.GetRejectMessage(), "unmapped test subject")
 		}
 	})
 }

@@ -19,7 +19,6 @@ import (
 var (
 	_ core.OAuthProvider         = (*Base)(nil)
 	_ core.GraphQLSurfaceInvoker = (*Base)(nil)
-	_ core.PostConnectCapable    = (*Base)(nil)
 )
 
 type manualChecker interface{ IsManual() bool }
@@ -71,7 +70,6 @@ type Base struct {
 
 	ConnectionDefs      map[string]core.ConnectionParamDef
 	DiscoveryDef        *core.DiscoveryConfig
-	PostConnectConfigs  map[string]*core.PostConnectConfig
 	ManualAuthEnabled   bool
 	CredentialFieldDefs []core.CredentialFieldDef
 

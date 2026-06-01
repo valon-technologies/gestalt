@@ -188,26 +188,6 @@ pub mod app_provider_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        ///
-        pub async fn post_connect(
-            &mut self,
-            request: impl tonic::IntoRequest<super::PostConnectRequest>,
-        ) -> std::result::Result<tonic::Response<super::PostConnectResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AppProvider/PostConnect",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AppProvider",
-                "PostConnect",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
     }
 }
 /// Generated server implementations.
@@ -248,11 +228,6 @@ pub mod app_provider_server {
             &self,
             request: tonic::Request<super::GetSessionCatalogRequest>,
         ) -> std::result::Result<tonic::Response<super::GetSessionCatalogResponse>, tonic::Status>;
-        ///
-        async fn post_connect(
-            &self,
-            request: tonic::Request<super::PostConnectRequest>,
-        ) -> std::result::Result<tonic::Response<super::PostConnectResponse>, tonic::Status>;
     }
     /** AppProvider models the shared Gestalt integration-provider protocol.
     */
@@ -513,45 +488,6 @@ pub mod app_provider_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = GetSessionCatalogSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AppProvider/PostConnect" => {
-                    #[allow(non_camel_case_types)]
-                    struct PostConnectSvc<T: AppProvider>(pub Arc<T>);
-                    impl<T: AppProvider> tonic::server::UnaryService<super::PostConnectRequest> for PostConnectSvc<T> {
-                        type Response = super::PostConnectResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::PostConnectRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AppProvider>::post_connect(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = PostConnectSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

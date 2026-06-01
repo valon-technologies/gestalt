@@ -2072,17 +2072,16 @@ func (s ServerConfig) ManagementBaseURL() string {
 // ConnectionDef owns authentication and connection parameters for a named
 // connection.
 type ConnectionDef struct {
-	Ref               string                                  `yaml:"ref,omitempty"`
-	DisplayName       string                                  `yaml:"displayName,omitempty"`
-	Mode              providermanifestv1.ConnectionMode       `yaml:"mode"`
-	Exposure          string                                  `yaml:"exposure,omitempty"`
-	Auth              ConnectionAuthDef                       `yaml:"auth"`
-	ConnectionParams  map[string]ConnectionParamDef           `yaml:"params"`
-	CredentialRefresh *CredentialRefreshDef                   `yaml:"credentialRefresh,omitempty"`
-	Discovery         *providermanifestv1.ProviderDiscovery   `yaml:"-"`
-	PostConnect       *providermanifestv1.ProviderPostConnect `yaml:"-"`
-	ConnectionID      string                                  `yaml:"-"`
-	BindingResolved   bool                                    `yaml:"-"`
+	Ref               string                                `yaml:"ref,omitempty"`
+	DisplayName       string                                `yaml:"displayName,omitempty"`
+	Mode              providermanifestv1.ConnectionMode     `yaml:"mode"`
+	Exposure          string                                `yaml:"exposure,omitempty"`
+	Auth              ConnectionAuthDef                     `yaml:"auth"`
+	ConnectionParams  map[string]ConnectionParamDef         `yaml:"params"`
+	CredentialRefresh *CredentialRefreshDef                 `yaml:"credentialRefresh,omitempty"`
+	Discovery         *providermanifestv1.ProviderDiscovery `yaml:"-"`
+	ConnectionID      string                                `yaml:"-"`
+	BindingResolved   bool                                  `yaml:"-"`
 }
 
 type CredentialRefreshDef = providermanifestv1.CredentialRefreshConfig
@@ -2262,9 +2261,6 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	if src.Discovery != nil {
 		dst.Discovery = src.Discovery
 	}
-	if src.PostConnect != nil {
-		dst.PostConnect = providermanifestv1.CloneProviderPostConnect(src.PostConnect)
-	}
 	if src.ConnectionID != "" {
 		dst.ConnectionID = src.ConnectionID
 	}
@@ -2353,9 +2349,8 @@ type AppWorkflowCapabilitiesConfig struct {
 }
 
 type AppInvocationRunAsConfig struct {
-	Subject          *AppInvocationRunAsSubjectConfig     `yaml:"subject,omitempty"`
-	ExternalIdentity *AppInvocationExternalIdentityConfig `yaml:"externalIdentity,omitempty"`
-	ApplyByDefault   *bool                                `yaml:"applyByDefault,omitempty"`
+	Subject        *AppInvocationRunAsSubjectConfig `yaml:"subject,omitempty"`
+	ApplyByDefault *bool                            `yaml:"applyByDefault,omitempty"`
 }
 
 type AppInvocationRunAsSubjectConfig struct {
@@ -2364,13 +2359,6 @@ type AppInvocationRunAsSubjectConfig struct {
 	CredentialSubjectID string `yaml:"credentialSubjectId,omitempty"`
 	DisplayName         string `yaml:"displayName,omitempty"`
 	AuthSource          string `yaml:"authSource,omitempty"`
-}
-
-// TODO(#1823): Reconcile runAs.externalIdentity grants from readable refs at
-// deploy time.
-type AppInvocationExternalIdentityConfig struct {
-	Type string `yaml:"type,omitempty"`
-	ID   string `yaml:"id,omitempty"`
 }
 
 func (d AppInvocationDependency) RunAsSubject() *core.RunAsSubject {
@@ -2394,16 +2382,6 @@ func (d AppInvocationDependency) RunAsAppliesByDefault() bool {
 		return true
 	}
 	return *d.RunAs.ApplyByDefault
-}
-
-func (d AppInvocationDependency) RunAsExternalIdentity() *core.ExternalIdentityRef {
-	if d.RunAs == nil || d.RunAs.ExternalIdentity == nil {
-		return nil
-	}
-	return core.NormalizeExternalIdentityRef(&core.ExternalIdentityRef{
-		Type: d.RunAs.ExternalIdentity.Type,
-		ID:   d.RunAs.ExternalIdentity.ID,
-	})
 }
 
 func Load(path string) (*Config, error) {

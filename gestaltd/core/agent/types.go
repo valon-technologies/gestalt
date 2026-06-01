@@ -82,15 +82,14 @@ type MessagePart struct {
 }
 
 type ToolTarget struct {
-	System                string `json:",omitempty"`
-	App                   string
-	Operation             string
-	Connection            string
-	Instance              string
-	CredentialMode        core.ConnectionMode
-	Unavailable           *UnavailableToolTarget `json:",omitempty"`
-	RunAs                 *core.RunAsSubject
-	RunAsExternalIdentity *core.ExternalIdentityRef
+	System         string `json:",omitempty"`
+	App            string
+	Operation      string
+	Connection     string
+	Instance       string
+	CredentialMode core.ConnectionMode
+	Unavailable    *UnavailableToolTarget `json:",omitempty"`
+	RunAs          *core.RunAsSubject
 }
 
 type UnavailableToolTarget struct {
@@ -116,16 +115,15 @@ type Tool struct {
 }
 
 type ToolRef struct {
-	System                string `json:",omitempty"`
-	App                   string
-	Operation             string
-	Connection            string
-	Instance              string
-	CredentialMode        core.ConnectionMode
-	RunAs                 *core.RunAsSubject
-	RunAsExternalIdentity *core.ExternalIdentityRef
-	Title                 string
-	Description           string
+	System         string `json:",omitempty"`
+	App            string
+	Operation      string
+	Connection     string
+	Instance       string
+	CredentialMode core.ConnectionMode
+	RunAs          *core.RunAsSubject
+	Title          string
+	Description    string
 }
 
 type ToolSourceMode string

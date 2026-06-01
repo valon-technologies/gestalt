@@ -320,14 +320,6 @@ gestalt authorization subjects grants set service_account:release-bot github \
   --role viewer
 gestalt authorization subjects grants remove service_account:release-bot github
 
-gestalt authorization subjects external-identities list service_account:release-bot
-gestalt authorization subjects external-identities add service_account:release-bot \
-  --type google \
-  --id google-123
-gestalt authorization subjects external-identities remove service_account:release-bot \
-  --type google \
-  --id google-123
-
 gestalt authorization subjects integrations list service_account:release-bot
 gestalt authorization subjects integrations connect service_account:release-bot github
 gestalt authorization subjects integrations disconnect service_account:release-bot github
