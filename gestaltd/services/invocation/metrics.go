@@ -98,12 +98,15 @@ func operationResultStatus(result *core.OperationResult, err error) int {
 	if result != nil && validHTTPStatus(result.Status) {
 		return result.Status
 	}
-	if err == nil {
-		return 0
-	}
+	return OperationErrorHTTPStatus(err)
+}
 
+// OperationErrorHTTPStatus maps invocation sentinel errors to their HTTP-facing status.
+func OperationErrorHTTPStatus(err error) int {
 	var upstreamErr *apiexec.UpstreamHTTPError
 	switch {
+	case err == nil:
+		return 0
 	case errors.Is(err, ErrProviderNotFound), errors.Is(err, ErrOperationNotFound):
 		return http.StatusNotFound
 	case errors.Is(err, ErrNotAuthenticated):
@@ -122,6 +125,17 @@ func operationResultStatus(result *core.OperationResult, err error) int {
 		return upstreamErr.Status
 	default:
 		return http.StatusBadGateway
+	}
+}
+
+// OperationErrorResultStatus reports invocation errors that should be returned to
+// app SDK callers as operation results instead of transport errors.
+func OperationErrorResultStatus(err error) (int, bool) {
+	switch {
+	case errors.Is(err, ErrNoCredential), errors.Is(err, ErrReconnectRequired):
+		return OperationErrorHTTPStatus(err), true
+	default:
+		return 0, false
 	}
 }
 

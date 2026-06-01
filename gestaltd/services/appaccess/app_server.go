@@ -94,18 +94,7 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 	)
 
 	result, err := s.invoker.Invoke(invokeCtx, invokePrincipal, targetApp, instance, targetOperation, params)
-	if err != nil {
-		return nil, invocationStatusError(err)
-	}
-	if result == nil {
-		return nil, status.Error(codes.Internal, "plugin invocation returned no result")
-	}
-
-	return &proto.OperationResult{
-		Status:  int32(result.Status),
-		Headers: protoutil.StringSlicesToProto(result.Headers),
-		Body:    result.Body,
-	}, nil
+	return appOperationResult(result, err)
 }
 
 func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraphQLRequest) (*proto.OperationResult, error) {
@@ -146,18 +135,7 @@ func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraph
 		Document:  document,
 		Variables: variables,
 	})
-	if err != nil {
-		return nil, invocationStatusError(err)
-	}
-	if result == nil {
-		return nil, status.Error(codes.Internal, "plugin invocation returned no result")
-	}
-
-	return &proto.OperationResult{
-		Status:  int32(result.Status),
-		Headers: protoutil.StringSlicesToProto(result.Headers),
-		Body:    result.Body,
-	}, nil
+	return appOperationResult(result, err)
 }
 
 func (s *AppServer) tokenContextForInvoke(req *proto.AppInvokeRequest, targetApp, targetOperation string) (invocationTokenContext, error) {
@@ -239,6 +217,32 @@ func prepareInvocationSelectors(ctx context.Context, tokenCtx invocationTokenCon
 	return restoreInvocationTokenContext(ctx, tokenCtx, connection), instance, nil
 }
 
+func appOperationResult(result *core.OperationResult, err error) (*proto.OperationResult, error) {
+	if err != nil {
+		// Some target invocation errors are operation-level failures so SDK callers can
+		// inspect status/body; transport, authz, and malformed invoke errors remain RPC errors.
+		if statusCode, ok := invocation.OperationErrorResultStatus(err); ok {
+			return &proto.OperationResult{
+				Status: int32(statusCode),
+				Body:   err.Error(),
+			}, nil
+		}
+		return nil, invocationStatusError(err)
+	}
+	if result == nil {
+		return nil, status.Error(codes.Internal, "plugin invocation returned no result")
+	}
+	return coreOperationResultToProto(result), nil
+}
+
+func coreOperationResultToProto(result *core.OperationResult) *proto.OperationResult {
+	return &proto.OperationResult{
+		Status:  int32(result.Status),
+		Headers: protoutil.StringSlicesToProto(result.Headers),
+		Body:    result.Body,
+	}
+}
+
 func invocationStatusError(err error) error {
 	switch {
 	case err == nil:
@@ -251,7 +255,7 @@ func invocationStatusError(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, invocation.ErrInvalidInvocation):
 		return status.Error(codes.InvalidArgument, err.Error())
-	case errors.Is(err, invocation.ErrNoCredential):
+	case errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrReconnectRequired):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, invocation.ErrAmbiguousInstance):
 		return status.Error(codes.Aborted, err.Error())
