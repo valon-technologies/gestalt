@@ -9,7 +9,7 @@ import (
 type stubIndex struct {
 	store  *stubObjectStore
 	name   string
-	schema idb.ObjectStoreSchema
+	schema idb.ObjectStoreOptions
 }
 
 func (idx *stubIndex) keyPath() []string {

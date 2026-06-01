@@ -10,18 +10,16 @@ import (
 )
 
 const (
-	providerLockSchemaName          = "gestaltd-provider-lock"
-	providerLockLegacySchemaVersion = 7
-	providerLockSchemaVersion       = 8
-	providerLockMinSchemaVersion    = 5
-	providerLockRevision            = 0
-	providerLockKindWorkflow        = "workflow"
-	providerLockKindTelemetry       = "telemetry"
-	providerLockKindAudit           = "audit"
-	providerLockRuntimeExecutable   = providerReleaseRuntimeExecutable
-	providerLockRuntimeDeclarative  = providerReleaseRuntimeDeclarative
-	providerLockRuntimeUI           = providerReleaseRuntimeUI
-	providerLockRuntimeAssets       = providerLockRuntimeUI
+	providerLockSchemaName         = "gestaltd-provider-lock"
+	providerLockSchemaVersion      = 8
+	providerLockRevision           = 0
+	providerLockKindWorkflow       = "workflow"
+	providerLockKindTelemetry      = "telemetry"
+	providerLockKindAudit          = "audit"
+	providerLockRuntimeExecutable  = providerReleaseRuntimeExecutable
+	providerLockRuntimeDeclarative = providerReleaseRuntimeDeclarative
+	providerLockRuntimeUI          = providerReleaseRuntimeUI
+	providerLockRuntimeAssets      = providerLockRuntimeUI
 )
 
 type providerLockfile struct {
@@ -63,6 +61,71 @@ type portableLockEntry struct {
 	CatalogFingerprint string                       `json:"catalogFingerprint,omitempty"`
 	CatalogOperations  []string                     `json:"catalogOperations,omitempty"`
 	CatalogSessionOnly bool                         `json:"catalogSessionOnly,omitempty"`
+}
+
+type providerLockBucketSpec struct {
+	kind            string
+	name            string
+	runtimeEntries  func(*Lockfile) *map[string]LockEntry
+	portableEntries func(*providerLockfile) *map[string]portableLockEntry
+}
+
+var providerLockBucketSpecs = []providerLockBucketSpec{
+	newProviderLockBucket(providermanifestv1.KindApp, "app", func(lock *Lockfile) *map[string]LockEntry { return &lock.Providers }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.App }),
+	newProviderLockBucket(providermanifestv1.KindAuthentication, "authentication", func(lock *Lockfile) *map[string]LockEntry { return &lock.Authentication }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.Authentication }),
+	newProviderLockBucket(providermanifestv1.KindAuthorization, "authorization", func(lock *Lockfile) *map[string]LockEntry { return &lock.Authorization }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.Authorization }),
+	newProviderLockBucket(providermanifestv1.KindExternalCredentials, "externalCredentials", func(lock *Lockfile) *map[string]LockEntry { return &lock.ExternalCredentials }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.ExternalCredentials }),
+	newProviderLockBucket(providermanifestv1.KindIndexedDB, "indexeddb", func(lock *Lockfile) *map[string]LockEntry { return &lock.IndexedDBs }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.IndexedDB }),
+	newProviderLockBucket(providermanifestv1.KindCache, "cache", func(lock *Lockfile) *map[string]LockEntry { return &lock.Caches }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.Cache }),
+	newProviderLockBucket(providermanifestv1.KindS3, "s3", func(lock *Lockfile) *map[string]LockEntry { return &lock.S3 }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.S3 }),
+	newProviderLockBucket(providermanifestv1.KindWorkflow, "workflow", func(lock *Lockfile) *map[string]LockEntry { return &lock.Workflows }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.Workflow }),
+	newProviderLockBucket(providermanifestv1.KindAgent, "agent", func(lock *Lockfile) *map[string]LockEntry { return &lock.Agents }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.Agent }),
+	newProviderLockBucket(providermanifestv1.KindRuntime, "runtime", func(lock *Lockfile) *map[string]LockEntry { return &lock.Runtimes }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.Runtime }),
+	newProviderLockBucket(providermanifestv1.KindSecrets, "secrets", func(lock *Lockfile) *map[string]LockEntry { return &lock.Secrets }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.Secrets }),
+	newProviderLockBucket(providerLockKindTelemetry, "telemetry", func(lock *Lockfile) *map[string]LockEntry { return &lock.Telemetry }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.Telemetry }),
+	newProviderLockBucket(providerLockKindAudit, "audit", func(lock *Lockfile) *map[string]LockEntry { return &lock.Audit }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.Audit }),
+	newProviderLockBucket(providermanifestv1.KindUI, "ui", func(lock *Lockfile) *map[string]LockEntry { return &lock.UIs }, func(lock *providerLockfile) *map[string]portableLockEntry { return &lock.Providers.UI }),
+}
+
+func newProviderLockBucket(kind, name string, runtimeEntries func(*Lockfile) *map[string]LockEntry, portableEntries func(*providerLockfile) *map[string]portableLockEntry) providerLockBucketSpec {
+	return providerLockBucketSpec{
+		kind:            kind,
+		name:            name,
+		runtimeEntries:  runtimeEntries,
+		portableEntries: portableEntries,
+	}
+}
+
+func (bucket providerLockBucketSpec) path() string {
+	return "providers." + bucket.name
+}
+
+func (bucket providerLockBucketSpec) runtimeLockEntries(lock *Lockfile) map[string]LockEntry {
+	if lock == nil {
+		return nil
+	}
+	return *bucket.runtimeEntries(lock)
+}
+
+func (bucket providerLockBucketSpec) setRuntimeLockEntries(lock *Lockfile, entries map[string]LockEntry) {
+	*bucket.runtimeEntries(lock) = entries
+}
+
+func (bucket providerLockBucketSpec) portableLockEntries(lock *providerLockfile) map[string]portableLockEntry {
+	if lock == nil {
+		return nil
+	}
+	return *bucket.portableEntries(lock)
+}
+
+func (bucket providerLockBucketSpec) setPortableLockEntries(lock *providerLockfile, entries map[string]portableLockEntry) {
+	*bucket.portableEntries(lock) = entries
+}
+
+func forEachPortableBucketPair(expected, committed *providerLockfile, fn func(path string, expectedEntries, committedEntries map[string]portableLockEntry)) {
+	for _, bucket := range providerLockBucketSpecs {
+		fn(bucket.path(), bucket.portableLockEntries(expected), bucket.portableLockEntries(committed))
+	}
 }
 
 func newLockfile() *Lockfile {
@@ -134,86 +197,34 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 }
 
 func providerLockKinds() []string {
-	return []string{
-		providermanifestv1.KindApp,
-		providermanifestv1.KindAuthentication,
-		providermanifestv1.KindAuthorization,
-		providermanifestv1.KindExternalCredentials,
-		providermanifestv1.KindIndexedDB,
-		providermanifestv1.KindCache,
-		providermanifestv1.KindS3,
-		providermanifestv1.KindWorkflow,
-		providermanifestv1.KindAgent,
-		providermanifestv1.KindRuntime,
-		providermanifestv1.KindSecrets,
-		providerLockKindTelemetry,
-		providerLockKindAudit,
-		providermanifestv1.KindUI,
+	kinds := make([]string, 0, len(providerLockBucketSpecs))
+	for _, bucket := range providerLockBucketSpecs {
+		kinds = append(kinds, bucket.kind)
 	}
+	return kinds
 }
 
 func lockEntriesForProviderKind(lock *Lockfile, kind string) map[string]LockEntry {
-	if lock == nil {
-		return nil
+	for _, bucket := range providerLockBucketSpecs {
+		if bucket.kind == kind {
+			return bucket.runtimeLockEntries(lock)
+		}
 	}
-	switch kind {
-	case providermanifestv1.KindApp:
-		return lock.Providers
-	case providermanifestv1.KindAuthentication:
-		return lock.Authentication
-	case providermanifestv1.KindAuthorization:
-		return lock.Authorization
-	case providermanifestv1.KindExternalCredentials:
-		return lock.ExternalCredentials
-	case providermanifestv1.KindIndexedDB:
-		return lock.IndexedDBs
-	case providermanifestv1.KindCache:
-		return lock.Caches
-	case providermanifestv1.KindS3:
-		return lock.S3
-	case providermanifestv1.KindWorkflow:
-		return lock.Workflows
-	case providermanifestv1.KindAgent:
-		return lock.Agents
-	case providermanifestv1.KindRuntime:
-		return lock.Runtimes
-	case providermanifestv1.KindSecrets:
-		return lock.Secrets
-	case providerLockKindTelemetry:
-		return lock.Telemetry
-	case providerLockKindAudit:
-		return lock.Audit
-	case providermanifestv1.KindUI:
-		return lock.UIs
-	default:
-		return nil
-	}
+	return nil
 }
 
 func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 	lock = normalizeLockfile(lock)
-	return &providerLockfile{
+	portableLock := &providerLockfile{
 		Schema:                  providerLockSchemaName,
-		SchemaVersion:           providerLockSchemaVersionForLock(lock),
+		SchemaVersion:           providerLockSchemaVersion,
 		Revision:                providerLockRevision,
 		MaterializationPlatform: strings.TrimSpace(lock.MaterializationPlatform),
-		Providers: providerLockBuckets{
-			App:                 portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindApp),
-			Authentication:      portableEntriesFromLockEntries(lock.Authentication, providermanifestv1.KindAuthentication),
-			Authorization:       portableEntriesFromLockEntries(lock.Authorization, providermanifestv1.KindAuthorization),
-			ExternalCredentials: portableEntriesFromLockEntries(lock.ExternalCredentials, providermanifestv1.KindExternalCredentials),
-			IndexedDB:           portableEntriesFromLockEntries(lock.IndexedDBs, providermanifestv1.KindIndexedDB),
-			Cache:               portableEntriesFromLockEntries(lock.Caches, providermanifestv1.KindCache),
-			S3:                  portableEntriesFromLockEntries(lock.S3, providermanifestv1.KindS3),
-			Workflow:            portableEntriesFromLockEntries(lock.Workflows, providerLockKindWorkflow),
-			Agent:               portableEntriesFromLockEntries(lock.Agents, providermanifestv1.KindAgent),
-			Runtime:             portableEntriesFromLockEntries(lock.Runtimes, providermanifestv1.KindRuntime),
-			Secrets:             portableEntriesFromLockEntries(lock.Secrets, providermanifestv1.KindSecrets),
-			Telemetry:           portableEntriesFromLockEntries(lock.Telemetry, providerLockKindTelemetry),
-			Audit:               portableEntriesFromLockEntries(lock.Audit, providerLockKindAudit),
-			UI:                  portableEntriesFromLockEntries(lock.UIs, providermanifestv1.KindUI),
-		},
 	}
+	for _, bucket := range providerLockBucketSpecs {
+		bucket.setPortableLockEntries(portableLock, portableEntriesFromLockEntries(bucket.runtimeLockEntries(lock), bucket.kind))
+	}
+	return portableLock
 }
 
 func (lock *providerLockfile) toLockfile() *Lockfile {
@@ -221,20 +232,9 @@ func (lock *providerLockfile) toLockfile() *Lockfile {
 	if lock == nil {
 		return runtimeLock
 	}
-	runtimeLock.Providers = lockEntriesFromPortableEntries(lock.Providers.App)
-	runtimeLock.Authentication = lockEntriesFromPortableEntries(lock.Providers.Authentication)
-	runtimeLock.Authorization = lockEntriesFromPortableEntries(lock.Providers.Authorization)
-	runtimeLock.ExternalCredentials = lockEntriesFromPortableEntries(lock.Providers.ExternalCredentials)
-	runtimeLock.IndexedDBs = lockEntriesFromPortableEntries(lock.Providers.IndexedDB)
-	runtimeLock.Caches = lockEntriesFromPortableEntries(lock.Providers.Cache)
-	runtimeLock.S3 = lockEntriesFromPortableEntries(lock.Providers.S3)
-	runtimeLock.Workflows = lockEntriesFromPortableEntries(lock.Providers.Workflow)
-	runtimeLock.Agents = lockEntriesFromPortableEntries(lock.Providers.Agent)
-	runtimeLock.Runtimes = lockEntriesFromPortableEntries(lock.Providers.Runtime)
-	runtimeLock.Secrets = lockEntriesFromPortableEntries(lock.Providers.Secrets)
-	runtimeLock.Telemetry = lockEntriesFromPortableEntries(lock.Providers.Telemetry)
-	runtimeLock.Audit = lockEntriesFromPortableEntries(lock.Providers.Audit)
-	runtimeLock.UIs = lockEntriesFromPortableEntries(lock.Providers.UI)
+	for _, bucket := range providerLockBucketSpecs {
+		bucket.setRuntimeLockEntries(runtimeLock, lockEntriesFromPortableEntries(bucket.portableLockEntries(lock)))
+	}
 	runtimeLock.MaterializationPlatform = strings.TrimSpace(lock.MaterializationPlatform)
 	return runtimeLock
 }
@@ -246,7 +246,7 @@ func validateProviderLockfile(lock *providerLockfile) error {
 	if lock.Schema != providerLockSchemaName {
 		return fmt.Errorf("unsupported lockfile schema %q; run `gestaltd lock` to upgrade", lock.Schema)
 	}
-	if lock.SchemaVersion < providerLockMinSchemaVersion || lock.SchemaVersion > providerLockSchemaVersion {
+	if lock.SchemaVersion != providerLockSchemaVersion {
 		return fmt.Errorf("unsupported lockfile schema version %d; run `gestaltd lock` to upgrade", lock.SchemaVersion)
 	}
 	return nil
@@ -311,18 +311,6 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 		}
 	}
 	return runtimeEntries
-}
-
-func providerLockSchemaVersionForLock(lock *Lockfile) int {
-	for _, kind := range providerLockKinds() {
-		entries := lockEntriesForProviderKind(lock, kind)
-		for idx := range entries {
-			if entries[idx].SourceRef != nil {
-				return providerLockSchemaVersion
-			}
-		}
-	}
-	return providerLockLegacySchemaVersion
 }
 
 func cloneLockSourceRef(src *LockSourceRef) *LockSourceRef {

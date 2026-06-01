@@ -73,16 +73,16 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 func TestManifestKindNormalizationDoesNotMutateCallerManifest(t *testing.T) {
 	t.Parallel()
 
-	artifactPath := testArtifactPath("auth")
+	artifactPath := testArtifactPath("authentication")
 	manifest := &providermanifestv1.Manifest{
-		Kind:    "auth",
-		Source:  "github.com/acme/apps/auth",
+		Kind:    "authentication",
+		Source:  "github.com/acme/apps/authentication",
 		Version: "1.0.0",
 		Artifacts: []providermanifestv1.Artifact{{
 			OS:     testArtifactOS,
 			Arch:   testArtifactArch,
 			Path:   artifactPath,
-			SHA256: sha256Hex("auth"),
+			SHA256: sha256Hex("authentication"),
 		}},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
 	}
@@ -94,7 +94,7 @@ func TestManifestKindNormalizationDoesNotMutateCallerManifest(t *testing.T) {
 	if kind != providermanifestv1.KindAuthentication {
 		t.Fatalf("ManifestKind = %q, want %q", kind, providermanifestv1.KindAuthentication)
 	}
-	if manifest.Kind != "auth" {
+	if manifest.Kind != "authentication" {
 		t.Fatalf("ManifestKind mutated manifest kind to %q", manifest.Kind)
 	}
 
@@ -102,7 +102,7 @@ func TestManifestKindNormalizationDoesNotMutateCallerManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
-	if manifest.Kind != "auth" {
+	if manifest.Kind != "authentication" {
 		t.Fatalf("EncodeManifest mutated manifest kind to %q", manifest.Kind)
 	}
 	if !strings.Contains(string(encoded), `"kind": "authentication"`) {
@@ -782,7 +782,7 @@ func TestManifestWorkflow_RejectsPlatformProviderConnection(t *testing.T) {
 	dir := t.TempDir()
 	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
 kind: app
-source: github.com/acme/apps/platform-connection
+source: github.com/acme/apps/unsupported-connection
 version: 1.0.0
 spec:
   defaultConnection: default
@@ -795,14 +795,14 @@ spec:
         tokenUrl: https://auth.example.com/token
     bot:
       displayName: Bot
-      mode: platform
+      mode: unsupported-mode
       auth:
         type: bearer
 `))
 
 	_, _, err := ReadSourceManifestFile(manifestPath)
-	if err == nil || !strings.Contains(err.Error(), `mode "platform"`) {
-		t.Fatalf("ReadSourceManifestFile error = %v, want platform mode rejection", err)
+	if err == nil || !strings.Contains(err.Error(), `mode "unsupported-mode"`) {
+		t.Fatalf("ReadSourceManifestFile error = %v, want unsupported mode rejection", err)
 	}
 }
 
@@ -1106,7 +1106,7 @@ func TestManifestWorkflow_EncodesCanonicalProgrammaticDefaultConnection(t *testi
 		Spec: &providermanifestv1.Spec{
 			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 				"default": {
-					Mode: providermanifestv1.ConnectionModeUser,
+					Mode: providermanifestv1.ConnectionModeSubject,
 					Auth: &providermanifestv1.ProviderAuth{
 						Type:             providermanifestv1.AuthTypeOAuth2,
 						AuthorizationURL: "https://auth.example.com/authorize",

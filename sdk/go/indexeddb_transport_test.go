@@ -173,7 +173,7 @@ func TestTransport_NamedSocketEnv(t *testing.T) {
 
 	ctx := context.Background()
 	store := "named_socket_" + t.Name()
-	if _, err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+	if _, err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	s := client.ObjectStore(store)
@@ -206,7 +206,7 @@ func TestTransport_TCPTargetEnv(t *testing.T) {
 
 	ctx := context.Background()
 	store := "tcp_target_" + t.Name()
-	if _, err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+	if _, err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	if err := client.ObjectStore(store).Put(ctx, gestalt.Record{"id": "tcp", "value": "ok"}); err != nil {
@@ -244,7 +244,7 @@ func TestTransport_TCPTargetTokenEnv(t *testing.T) {
 
 	ctx := context.Background()
 	store := "tcp_target_token_" + t.Name()
-	if _, err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+	if _, err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	if err := client.ObjectStore(store).Put(ctx, gestalt.Record{"id": "tcp", "value": "token"}); err != nil {
@@ -296,7 +296,7 @@ func TestTransport_CreateObjectStorePreservesColumns(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	_, err = client.CreateObjectStore(context.Background(), "session_records", gestalt.ObjectStoreSchema{
+	_, err = client.CreateObjectStore(context.Background(), "session_records", gestalt.ObjectStoreOptions{
 		Indexes: []gestalt.IndexSchema{
 			{Name: "by_subject", KeyPath: []string{"subject_id"}},
 			{Name: "by_subject_session", KeyPath: []string{"subject_id", "session_id"}, Unique: true},
@@ -346,7 +346,7 @@ func seedStore(t *testing.T) string {
 	ctx := context.Background()
 	store := "items_" + t.Name()
 
-	_, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{
+	_, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{
 		Indexes: []gestalt.IndexSchema{
 			{Name: "by_status", KeyPath: []string{"status"}, Unique: false},
 			{Name: "by_email", KeyPath: []string{"email"}, Unique: true},
@@ -373,7 +373,7 @@ func seedStore(t *testing.T) string {
 func TestTransport_NestedJSON(t *testing.T) {
 	ctx := context.Background()
 	store := "nested_" + t.Name()
-	_, _ = testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{})
+	_, _ = testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{})
 	s := testClient.ObjectStore(store)
 
 	rec := gestalt.Record{
@@ -407,7 +407,7 @@ func TestTransport_NestedJSON(t *testing.T) {
 func TestTransport_TransactionReadCheckWriteCommit(t *testing.T) {
 	ctx := context.Background()
 	store := "tx_commit_" + t.Name()
-	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	s := testClient.ObjectStore(store)
@@ -451,7 +451,7 @@ func TestTransport_TransactionReadCheckWriteCommit(t *testing.T) {
 func TestTransport_TransactionAbortRollsBack(t *testing.T) {
 	ctx := context.Background()
 	store := "tx_abort_" + t.Name()
-	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 
@@ -473,7 +473,7 @@ func TestTransport_TransactionAbortRollsBack(t *testing.T) {
 func TestTransport_TransactionReadonlyRejectsWrite(t *testing.T) {
 	ctx := context.Background()
 	store := "tx_readonly_" + t.Name()
-	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	tx, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadonly, gestalt.TransactionOptions{})
@@ -491,7 +491,7 @@ func TestTransport_TransactionReadonlyRejectsWrite(t *testing.T) {
 func TestTransport_TransactionOperationErrorRollsBack(t *testing.T) {
 	ctx := context.Background()
 	store := "tx_op_error_" + t.Name()
-	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	tx, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadwrite, gestalt.TransactionOptions{})
@@ -595,7 +595,7 @@ func TestTransport_IndexDeleteRange(t *testing.T) {
 func TestTransport_TransactionReadwriteSerializesScope(t *testing.T) {
 	ctx := context.Background()
 	store := "tx_serialize_" + t.Name()
-	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	tx1, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadwrite, gestalt.TransactionOptions{})
@@ -659,7 +659,7 @@ func TestTransport_CursorHappyPath(t *testing.T) {
 func TestTransport_EmptyCursor(t *testing.T) {
 	ctx := context.Background()
 	store := "empty_" + t.Name()
-	_, _ = testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{})
+	_, _ = testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{})
 
 	cursor, err := testClient.ObjectStore(store).OpenCursor(ctx, nil, gestalt.CursorNext)
 	if err != nil {
@@ -834,7 +834,7 @@ func TestTransport_IndexContinueToKeyRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	store := "index_seek_" + t.Name()
 
-	_, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{
+	_, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{
 		Indexes: []gestalt.IndexSchema{{Name: "by_num", KeyPath: []string{"n"}}},
 	})
 	if err != nil {
@@ -882,7 +882,7 @@ func TestTransport_IndexCursorOrdersBinaryKeysBytewise(t *testing.T) {
 	ctx := context.Background()
 	store := "index_binary_" + t.Name()
 
-	_, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{
+	_, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{
 		Indexes: []gestalt.IndexSchema{{Name: "by_blob", KeyPath: []string{"blob"}}},
 	})
 	if err != nil {
@@ -927,7 +927,7 @@ func TestTransport_IndexCursorOrdersBinaryKeysBytewise(t *testing.T) {
 func TestTransport_CursorUpdateAcknowledgesMutation(t *testing.T) {
 	ctx := context.Background()
 	store := "update_ack_" + t.Name()
-	_, _ = testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{})
+	_, _ = testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{})
 	s := testClient.ObjectStore(store)
 
 	if err := s.Put(ctx, gestalt.Record{"id": "u1", "status": "active"}); err != nil {
@@ -966,7 +966,7 @@ func TestTransport_CursorUpdateAcknowledgesMutation(t *testing.T) {
 func TestTransport_ErrorMapping(t *testing.T) {
 	ctx := context.Background()
 	store := "errmap_" + t.Name()
-	_, _ = testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{})
+	_, _ = testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{})
 	s := testClient.ObjectStore(store)
 
 	_, err := s.Get(ctx, "nonexistent")

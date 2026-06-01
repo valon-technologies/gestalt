@@ -317,13 +317,13 @@ func (plan StaticConnectionPlan) AdvertisedConnectionNames() []string {
 }
 
 func (plan StaticConnectionPlan) ConnectionMode() core.ConnectionMode {
-	if ConnectionModeForConnection(plan.appConnection.ConnectionDef()) == core.ConnectionModeUser {
-		return core.ConnectionModeUser
+	if ConnectionModeForConnection(plan.appConnection.ConnectionDef()) == core.ConnectionModeSubject {
+		return core.ConnectionModeSubject
 	}
 	for _, name := range plan.NamedConnectionNames() {
 		mode := ConnectionModeForConnection(plan.namedConnections[name].ConnectionDef())
-		if mode == core.ConnectionModeUser {
-			return core.ConnectionModeUser
+		if mode == core.ConnectionModeSubject {
+			return core.ConnectionModeSubject
 		}
 	}
 	return core.ConnectionModeNone
@@ -332,7 +332,7 @@ func (plan StaticConnectionPlan) ConnectionMode() core.ConnectionMode {
 func (plan StaticConnectionPlan) validateConnectionModes() error {
 	addMode := func(scope string, mode core.ConnectionMode) error {
 		switch core.NormalizeConnectionMode(mode) {
-		case core.ConnectionModeNone, core.ConnectionModeUser:
+		case core.ConnectionModeNone, core.ConnectionModeSubject:
 			return nil
 		default:
 			return fmt.Errorf("%s uses unsupported connection mode %q", scope, mode)
@@ -622,7 +622,7 @@ func ConnectionModeForConnection(conn ConnectionDef) core.ConnectionMode {
 	case "", providermanifestv1.AuthTypeNone:
 		return core.ConnectionModeNone
 	default:
-		return core.ConnectionModeUser
+		return core.ConnectionModeSubject
 	}
 }
 

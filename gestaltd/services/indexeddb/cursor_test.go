@@ -20,7 +20,7 @@ func newCursorTestDB(t *testing.T) (*coretesting.StubIndexedDB, indexeddb.Indexe
 	t.Helper()
 	stub := &coretesting.StubIndexedDB{}
 
-	schema := idb.ObjectStoreSchema{
+	schema := idb.ObjectStoreOptions{
 		Indexes: []idb.IndexSchema{
 			{Name: "by_status", KeyPath: []string{"status"}, Unique: false},
 			{Name: "by_email", KeyPath: []string{"email"}, Unique: true},
@@ -91,7 +91,7 @@ func TestCursor_EmptyCursor(t *testing.T) {
 
 	stub := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	_, _ = stub.CreateObjectStore(ctx, "empty", idb.ObjectStoreSchema{})
+	_, _ = stub.CreateObjectStore(ctx, "empty", idb.ObjectStoreOptions{})
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
@@ -548,7 +548,7 @@ func TestCursor_IndexContinueToKeyRoundTrip(t *testing.T) {
 
 	stub := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	schema := idb.ObjectStoreSchema{
+	schema := idb.ObjectStoreOptions{
 		Indexes: []idb.IndexSchema{{Name: "by_num", KeyPath: []string{"n"}}},
 	}
 	if _, err := stub.CreateObjectStore(ctx, "items", schema); err != nil {
@@ -619,7 +619,7 @@ func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 	t.Parallel()
 	stub := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	_, _ = stub.CreateObjectStore(ctx, "empty", idb.ObjectStoreSchema{})
+	_, _ = stub.CreateObjectStore(ctx, "empty", idb.ObjectStoreOptions{})
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))

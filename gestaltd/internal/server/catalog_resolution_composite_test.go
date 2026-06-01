@@ -43,7 +43,7 @@ func TestResolveOperation_CompositeProviderPrefersStaticRESTWithoutSessionLookup
 	apiProv := &stubCatalogProvider{
 		stubProvider: stubProvider{
 			name:     "notion",
-			connMode: core.ConnectionModeUser,
+			connMode: core.ConnectionModeSubject,
 		},
 		cat: &catalog.Catalog{
 			Name: "notion",
@@ -57,7 +57,7 @@ func TestResolveOperation_CompositeProviderPrefersStaticRESTWithoutSessionLookup
 	mcpUpstream := &stubCompositeMCPUpstream{
 		stubProvider: stubProvider{
 			name:     "notion",
-			connMode: core.ConnectionModeUser,
+			connMode: core.ConnectionModeSubject,
 		},
 		catalogForRequestFn: func(context.Context, string) (*catalog.Catalog, error) {
 			requestCatalogCalls++
@@ -98,7 +98,7 @@ func TestResolveOperation_CompositeProviderPreservesGraphQLTransport(t *testing.
 	apiProv := &stubCatalogProvider{
 		stubProvider: stubProvider{
 			name:     "linear",
-			connMode: core.ConnectionModeUser,
+			connMode: core.ConnectionModeSubject,
 		},
 		cat: &catalog.Catalog{
 			Name: "linear",
@@ -112,7 +112,7 @@ func TestResolveOperation_CompositeProviderPreservesGraphQLTransport(t *testing.
 	mcpUpstream := &stubCompositeMCPUpstream{
 		stubProvider: stubProvider{
 			name:     "linear",
-			connMode: core.ConnectionModeUser,
+			connMode: core.ConnectionModeSubject,
 		},
 		cat: &catalog.Catalog{Name: "linear"},
 		catalogForRequestFn: func(context.Context, string) (*catalog.Catalog, error) {

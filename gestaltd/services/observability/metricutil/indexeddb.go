@@ -53,7 +53,7 @@ func (d *instrumentedIndexedDB) Transaction(ctx context.Context, stores []string
 	return d.inner.Transaction(ctx, stores, mode, opts)
 }
 
-func (d *instrumentedIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
+func (d *instrumentedIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreOptions) (idb.ObjectStore, error) {
 	store, err := d.inner.CreateObjectStore(ctx, name, schema)
 	if err != nil {
 		return nil, err

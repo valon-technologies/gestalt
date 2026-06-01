@@ -24,7 +24,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -134,8 +133,6 @@ type Server struct {
 	s3                      map[string]s3sdk.S3
 	s3ObjectAccessURLs      *s3.ObjectAccessURLManager
 	egressProxyTokens       *egressproxy.TokenManager
-	providerDevSessions     *providerdev.Manager
-	providerDevAttach       bool
 	mountedHTTPBindings     []MountedHTTPBinding
 	mountedUIs              []MountedUI
 	adminRoute              AdminRouteConfig
@@ -189,8 +186,6 @@ type Config struct {
 	MCPHandler            http.Handler
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 	S3                    map[string]s3sdk.S3
-	ProviderDevSessions   *providerdev.Manager
-	ProviderDevAttach     bool
 	MountedUIs            []MountedUI
 	Admin                 AdminRouteConfig
 	AdminUIProvider       string
@@ -392,8 +387,6 @@ func New(cfg Config) (*Server, error) {
 		s3:                     cfg.S3,
 		s3ObjectAccessURLs:     s3ObjectAccessURLs,
 		egressProxyTokens:      egressProxyTokens,
-		providerDevSessions:    cfg.ProviderDevSessions,
-		providerDevAttach:      cfg.ProviderDevAttach,
 		mountedHTTPBindings:    mountedHTTPBindings,
 		mountedUIs:             mountedUIs,
 		adminRoute:             adminRoute,

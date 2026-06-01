@@ -16,10 +16,10 @@ class ConnectionMode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     CONNECTION_MODE_UNSPECIFIED: _ClassVar[ConnectionMode]
     CONNECTION_MODE_NONE: _ClassVar[ConnectionMode]
-    CONNECTION_MODE_USER: _ClassVar[ConnectionMode]
+    CONNECTION_MODE_SUBJECT: _ClassVar[ConnectionMode]
 CONNECTION_MODE_UNSPECIFIED: ConnectionMode
 CONNECTION_MODE_NONE: ConnectionMode
-CONNECTION_MODE_USER: ConnectionMode
+CONNECTION_MODE_SUBJECT: ConnectionMode
 
 class CatalogParameter(_message.Message):
     __slots__ = ()

@@ -65,7 +65,6 @@ import (
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -1092,7 +1091,7 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 		t.Fatalf("NewInvocationTokenManager: %v", err)
 	}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	sessionVerifier := newRelayTestSessionVerifier("provider-dev-session")
+	sessionVerifier := newRelayTestSessionVerifier("relay-session")
 	publicHostServices.RegisterVerified("support", sessionVerifier, runtimehost.HostService{
 		Name:           "app",
 		MethodPrefixes: []string{"/" + proto.App_ServiceDesc.ServiceName + "/"},
@@ -1115,7 +1114,7 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 	}
 	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		AppName:      "support",
-		SessionID:    "provider-dev-session",
+		SessionID:    "relay-session",
 		Service:      "app",
 		MethodPrefix: "/" + proto.App_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
@@ -1144,7 +1143,7 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 		App:             "slack",
 		Operation:       "events.reply",
 		Instance:        "prod",
-		IdempotencyKey:  "provider-dev-call",
+		IdempotencyKey:  "relay-call",
 	})
 	if err != nil {
 		t.Fatalf("AppInvocation.Invoke via registered relay: %v", err)
@@ -1153,7 +1152,7 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 		t.Fatalf("plugin invoker call = %+v, want slack events.reply/prod", call)
 	}
 
-	sessionVerifier.setActive("provider-dev-session", false)
+	sessionVerifier.setActive("relay-session", false)
 	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer staleCancel()
 	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
@@ -1347,7 +1346,7 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 	}
 	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		AppName:      "support",
-		SessionID:    "provider-dev-session",
+		SessionID:    "relay-session",
 		Service:      "app",
 		MethodPrefix: "/" + proto.App_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
@@ -2477,7 +2476,6 @@ func cloneAccessPermissionsForTest(src []core.AccessPermission) []core.AccessPer
 	out := append([]core.AccessPermission(nil), src...)
 	for i := range out {
 		out[i].Operations = append([]string(nil), out[i].Operations...)
-		out[i].Actions = append([]string(nil), out[i].Actions...)
 	}
 	return out
 }
@@ -2687,7 +2685,7 @@ func testPluginDefsForConnections(plugin string, connections ...string) map[stri
 		}
 		entry.Connections[connection] = &config.ConnectionDef{
 			ConnectionID: plugin + ":" + connection,
-			Mode:         providermanifestv1.ConnectionModeUser,
+			Mode:         providermanifestv1.ConnectionModeSubject,
 		}
 	}
 	return map[string]*config.ProviderEntry{plugin: entry}
@@ -8190,711 +8188,6 @@ func TestAuthMiddleware_ValidSession(t *testing.T) {
 	}
 }
 
-func TestProviderDevAttachmentRoutesEnforceGateDispatcherSecretAndRedaction(t *testing.T) {
-	t.Parallel()
-
-	newManager := func(t *testing.T) *providerdev.Manager {
-		t.Helper()
-		manager, err := providerdev.NewManager([]providerdev.Target{{
-			Name:   "roadmap",
-			Source: "github.com/acme/apps/roadmap",
-			UIPath: "/roadmap",
-			RuntimeEnv: func(string) (providerdev.RuntimeEnv, error) {
-				return providerdev.RuntimeEnv{
-					Env: map[string]string{"SECRET": "do-not-return"},
-				}, nil
-			},
-		}})
-		if err != nil {
-			t.Fatalf("NewManager: %v", err)
-		}
-		return manager
-	}
-	auth := &coretesting.StubAuthProvider{
-		N: "test",
-		ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-			switch token {
-			case "owner-session":
-				return &core.UserIdentity{Email: "owner@example.test"}, nil
-			case "other-session":
-				return &core.UserIdentity{Email: "other@example.test"}, nil
-			default:
-				return nil, principal.ErrInvalidToken
-			}
-		},
-	}
-	createBody := []byte(`{"providers":[{"name":"roadmap","ui":true}]}`)
-
-	disabledTS := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = auth
-		cfg.ProviderDevSessions = newManager(t)
-	})
-	testutil.CloseOnCleanup(t, disabledTS)
-	req, err := http.NewRequest(http.MethodPost, disabledTS.URL+providerdev.PathAttachments, bytes.NewReader(createBody))
-	if err != nil {
-		t.Fatalf("new disabled request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer owner-session")
-	resp, err := disabledTS.Client().Do(req)
-	if err != nil {
-		t.Fatalf("disabled create request: %v", err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("disabled create status = %d, want 403", resp.StatusCode)
-	}
-
-	noAuthTS := newTestServer(t, func(cfg *server.Config) {
-		cfg.ProviderDevAttach = true
-		cfg.ProviderDevSessions = newManager(t)
-	})
-	testutil.CloseOnCleanup(t, noAuthTS)
-	resp, err = noAuthTS.Client().Post(noAuthTS.URL+providerdev.PathAttachments, "application/json", bytes.NewReader(createBody))
-	if err != nil {
-		t.Fatalf("no-auth create request: %v", err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("no-auth create status = %d, want 403", resp.StatusCode)
-	}
-
-	enabledTS := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = auth
-		cfg.ProviderDevAttach = true
-		cfg.ProviderDevSessions = newManager(t)
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"roadmap": {
-				AuthorizationPolicy: "provider_devs",
-				Dev: &config.ProviderEntryDevConfig{
-					Attach: config.ProviderEntryDevAttachConfig{AllowedRoles: []string{"viewer"}},
-				},
-			},
-		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{
-			Policies: map[string]config.SubjectPolicyDef{
-				"provider_devs": {Default: "allow"},
-			},
-		}, cfg.AppDefs)
-	})
-	testutil.CloseOnCleanup(t, enabledTS)
-	req, err = http.NewRequest(http.MethodPost, enabledTS.URL+providerdev.PathAttachments, bytes.NewReader(createBody))
-	if err != nil {
-		t.Fatalf("new enabled request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer owner-session")
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = enabledTS.Client().Do(req)
-	if err != nil {
-		t.Fatalf("enabled create request: %v", err)
-	}
-	payload, err := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if err != nil {
-		t.Fatalf("read create response: %v", err)
-	}
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("enabled create status = %d, want 201; body = %s", resp.StatusCode, payload)
-	}
-	var created providerdev.CreateSessionResponse
-	if err := json.Unmarshal(payload, &created); err != nil {
-		t.Fatalf("decode create response: %v", err)
-	}
-	if created.AttachID == "" || created.DispatcherSecret == "" {
-		t.Fatalf("create response missing attachId or dispatcherSecret: %s", payload)
-	}
-
-	completeReq, err := http.NewRequest(http.MethodPost, enabledTS.URL+providerdev.PathAttachments+"/"+created.AttachID+"/calls/call-1", strings.NewReader("not-json"))
-	if err != nil {
-		t.Fatalf("new complete request: %v", err)
-	}
-	completeReq.Header.Set("Authorization", "Bearer owner-session")
-	completeResp, err := enabledTS.Client().Do(completeReq)
-	if err != nil {
-		t.Fatalf("complete without dispatcher secret: %v", err)
-	}
-	_ = completeResp.Body.Close()
-	if completeResp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("complete without dispatcher secret status = %d, want 401", completeResp.StatusCode)
-	}
-
-	pollReq, err := http.NewRequest(http.MethodGet, enabledTS.URL+providerdev.PathAttachments+"/"+created.AttachID+"/poll", nil)
-	if err != nil {
-		t.Fatalf("new poll request: %v", err)
-	}
-	pollReq.Header.Set("Authorization", "Bearer owner-session")
-	pollResp, err := enabledTS.Client().Do(pollReq)
-	if err != nil {
-		t.Fatalf("poll without dispatcher secret: %v", err)
-	}
-	_ = pollResp.Body.Close()
-	if pollResp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("poll without dispatcher secret status = %d, want 401", pollResp.StatusCode)
-	}
-
-	invalidPollReq, err := http.NewRequest(http.MethodGet, enabledTS.URL+providerdev.PathAttachments+"/"+created.AttachID+"/poll", nil)
-	if err != nil {
-		t.Fatalf("new invalid-secret poll request: %v", err)
-	}
-	invalidPollReq.Header.Set("Authorization", "Bearer owner-session")
-	invalidPollReq.Header.Set(providerdev.HeaderDispatcherSecret, "wrong")
-	invalidPollResp, err := enabledTS.Client().Do(invalidPollReq)
-	if err != nil {
-		t.Fatalf("poll with invalid dispatcher secret: %v", err)
-	}
-	_ = invalidPollResp.Body.Close()
-	if invalidPollResp.StatusCode != http.StatusForbidden {
-		t.Fatalf("poll with invalid dispatcher secret status = %d, want 403", invalidPollResp.StatusCode)
-	}
-
-	for _, path := range []string{providerdev.PathAttachments, providerdev.PathAttachments + "/" + created.AttachID} {
-		req, err = http.NewRequest(http.MethodGet, enabledTS.URL+path, nil)
-		if err != nil {
-			t.Fatalf("new GET %s request: %v", path, err)
-		}
-		req.Header.Set("Authorization", "Bearer owner-session")
-		resp, err = enabledTS.Client().Do(req)
-		if err != nil {
-			t.Fatalf("GET %s: %v", path, err)
-		}
-		payload, err = io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if err != nil {
-			t.Fatalf("read GET %s response: %v", path, err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("GET %s status = %d, want 200; body = %s", path, resp.StatusCode, payload)
-		}
-		body := string(payload)
-		if !strings.Contains(body, created.AttachID) {
-			t.Fatalf("GET %s response missing attachId %q: %s", path, created.AttachID, body)
-		}
-		for _, forbidden := range []string{created.DispatcherSecret, "do-not-return", "allowedHosts", "SECRET"} {
-			if forbidden != "" && strings.Contains(body, forbidden) {
-				t.Fatalf("GET %s leaked %q in %s", path, forbidden, body)
-			}
-		}
-	}
-
-	req, err = http.NewRequest(http.MethodGet, enabledTS.URL+providerdev.PathAttachments, nil)
-	if err != nil {
-		t.Fatalf("new other list request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer other-session")
-	resp, err = enabledTS.Client().Do(req)
-	if err != nil {
-		t.Fatalf("other list request: %v", err)
-	}
-	payload, err = io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if err != nil {
-		t.Fatalf("read other list response: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("other list status = %d, want 200; body = %s", resp.StatusCode, payload)
-	}
-	if strings.Contains(string(payload), created.AttachID) {
-		t.Fatalf("other principal list leaked attachId %q: %s", created.AttachID, payload)
-	}
-
-	req, err = http.NewRequest(http.MethodGet, enabledTS.URL+providerdev.PathAttachments+"/"+created.AttachID, nil)
-	if err != nil {
-		t.Fatalf("new other get request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer other-session")
-	resp, err = enabledTS.Client().Do(req)
-	if err != nil {
-		t.Fatalf("other get request: %v", err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("other get status = %d, want 403", resp.StatusCode)
-	}
-
-	req, err = http.NewRequest(http.MethodDelete, enabledTS.URL+providerdev.PathAttachments+"/"+created.AttachID, nil)
-	if err != nil {
-		t.Fatalf("new delete request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer owner-session")
-	resp, err = enabledTS.Client().Do(req)
-	if err != nil {
-		t.Fatalf("delete request: %v", err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("delete status = %d, want 200", resp.StatusCode)
-	}
-}
-
-func TestProviderDevAttachmentCreateRequiresAttachActionPermission(t *testing.T) {
-	t.Parallel()
-
-	newManager := func(t *testing.T) *providerdev.Manager {
-		t.Helper()
-		manager, err := providerdev.NewManager([]providerdev.Target{{
-			Name:   "roadmap",
-			Source: "github.com/acme/apps/roadmap",
-		}})
-		if err != nil {
-			t.Fatalf("NewManager: %v", err)
-		}
-		return manager
-	}
-	newToken := func(t *testing.T) (string, string) {
-		t.Helper()
-		plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-		if err != nil {
-			t.Fatalf("GenerateToken: %v", err)
-		}
-		return plaintext, hashed
-	}
-	svc := testutil.NewStubServices(t)
-	broadToken, broadHash := newToken(t)
-	seedAPIToken(t, svc, broadToken, broadHash, "broad-user")
-	invokeToken, invokeHash := newToken(t)
-	seedAPITokenWithPermissions(t, svc, invokeToken, invokeHash, "invoke-user", []core.AccessPermission{{App: "roadmap"}})
-	attachToken, attachHash := newToken(t)
-	seedAPITokenWithPermissions(t, svc, attachToken, attachHash, "attach-user", []core.AccessPermission{{
-		App:     "roadmap",
-		Actions: []string{core.ProviderActionDevAttach},
-	}})
-	subjectToken, subjectHash := newToken(t)
-	seedSubjectAPITokenWithPermissions(t, svc, subjectHash, "service_account:roadmap-dev", "roadmap-dev", []core.AccessPermission{{
-		App:     "roadmap",
-		Actions: []string{core.ProviderActionDevAttach},
-	}})
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(context.Context, string) (*core.UserIdentity, error) {
-				return nil, fmt.Errorf("not a session token")
-			},
-		}
-		cfg.Services = svc
-		cfg.ProviderDevAttach = true
-		cfg.ProviderDevSessions = newManager(t)
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"roadmap": {
-				AuthorizationPolicy: "provider_devs",
-				Dev: &config.ProviderEntryDevConfig{
-					Attach: config.ProviderEntryDevAttachConfig{AllowedRoles: []string{"viewer"}},
-				},
-			},
-		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{
-			Policies: map[string]config.SubjectPolicyDef{
-				"provider_devs": {Default: "allow"},
-			},
-		}, cfg.AppDefs)
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	create := func(t *testing.T, token string) (int, string) {
-		t.Helper()
-		req, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachments, strings.NewReader(`{"providers":[{"name":"roadmap"}]}`))
-		if err != nil {
-			t.Fatalf("new create request: %v", err)
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := ts.Client().Do(req)
-		if err != nil {
-			t.Fatalf("create request: %v", err)
-		}
-		body, err := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if err != nil {
-			t.Fatalf("read create response: %v", err)
-		}
-		return resp.StatusCode, string(body)
-	}
-
-	for name, token := range map[string]string{
-		"broad token":       broadToken,
-		"invoke permission": invokeToken,
-		"subject token":     subjectToken,
-	} {
-		status, body := create(t, token)
-		if status != http.StatusForbidden {
-			t.Fatalf("%s create status = %d, want 403; body = %s", name, status, body)
-		}
-	}
-
-	status, body := create(t, attachToken)
-	if status != http.StatusCreated {
-		t.Fatalf("attach action create status = %d, want 201; body = %s", status, body)
-	}
-	if !strings.Contains(body, `"attachId"`) || !strings.Contains(body, `"dispatcherSecret"`) {
-		t.Fatalf("attach action create response missing attachId/dispatcherSecret: %s", body)
-	}
-}
-
-func TestProviderDevAttachAuthorizationBrowserApprovalCreatesDispatcherSession(t *testing.T) {
-	t.Parallel()
-
-	manager, err := providerdev.NewManager([]providerdev.Target{{
-		Name:   "roadmap",
-		Source: "github.com/acme/apps/roadmap",
-		RuntimeEnv: func(string) (providerdev.RuntimeEnv, error) {
-			return providerdev.RuntimeEnv{Env: map[string]string{"SESSION_ENV": "ok"}}, nil
-		},
-	}})
-	if err != nil {
-		t.Fatalf("NewManager: %v", err)
-	}
-	auth := &coretesting.StubAuthProvider{
-		N: "test",
-		ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-			if token == "owner-session" {
-				return &core.UserIdentity{Email: "owner@example.test"}, nil
-			}
-			return nil, principal.ErrInvalidToken
-		},
-	}
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = auth
-		cfg.ProviderDevAttach = true
-		cfg.ProviderDevSessions = manager
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"roadmap": {
-				AuthorizationPolicy: "provider_devs",
-				Dev: &config.ProviderEntryDevConfig{
-					Attach: config.ProviderEntryDevAttachConfig{AllowedRoles: []string{"viewer"}},
-				},
-			},
-		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{
-			Policies: map[string]config.SubjectPolicyDef{
-				"provider_devs": {Default: "allow"},
-			},
-		}, cfg.AppDefs)
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	createReq, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachAuthorizations, strings.NewReader(`{"providers":[{"name":"roadmap"}]}`))
-	if err != nil {
-		t.Fatalf("new attach authorization request: %v", err)
-	}
-	createReq.Header.Set("Content-Type", "application/json")
-	createResp, err := ts.Client().Do(createReq)
-	if err != nil {
-		t.Fatalf("create attach authorization: %v", err)
-	}
-	createBody, err := io.ReadAll(createResp.Body)
-	_ = createResp.Body.Close()
-	if err != nil {
-		t.Fatalf("read attach authorization response: %v", err)
-	}
-	if createResp.StatusCode != http.StatusCreated {
-		t.Fatalf("create attach authorization status = %d, want 201; body = %s", createResp.StatusCode, createBody)
-	}
-	var authorization providerdev.CreateAttachAuthorizationResponse
-	if err := json.Unmarshal(createBody, &authorization); err != nil {
-		t.Fatalf("decode attach authorization response: %v", err)
-	}
-	if authorization.AuthorizationID == "" || authorization.ClientSecret == "" || authorization.VerificationCode == "" || authorization.ApprovalURL == "" {
-		t.Fatalf("attach authorization response missing fields: %s", createBody)
-	}
-
-	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
-		return http.ErrUseLastResponse
-	}}
-	showReq, err := http.NewRequest(http.MethodGet, authorization.ApprovalURL, nil)
-	if err != nil {
-		t.Fatalf("new show approval request: %v", err)
-	}
-	showResp, err := noRedirect.Do(showReq)
-	if err != nil {
-		t.Fatalf("show approval without browser session: %v", err)
-	}
-	_ = showResp.Body.Close()
-	if showResp.StatusCode != http.StatusFound {
-		t.Fatalf("show approval without browser session status = %d, want 302", showResp.StatusCode)
-	}
-	if location := showResp.Header.Get("Location"); !strings.HasPrefix(location, "/api/v1/auth/login?next=") {
-		t.Fatalf("show approval redirect = %q, want browser login", location)
-	}
-
-	bearerOnlyReq, err := http.NewRequest(http.MethodGet, authorization.ApprovalURL, nil)
-	if err != nil {
-		t.Fatalf("new bearer-only approval request: %v", err)
-	}
-	bearerOnlyReq.Header.Set("Authorization", "Bearer owner-session")
-	bearerOnlyResp, err := noRedirect.Do(bearerOnlyReq)
-	if err != nil {
-		t.Fatalf("show approval with bearer only: %v", err)
-	}
-	_ = bearerOnlyResp.Body.Close()
-	if bearerOnlyResp.StatusCode != http.StatusFound {
-		t.Fatalf("show approval with bearer only status = %d, want 302", bearerOnlyResp.StatusCode)
-	}
-
-	showReq, err = http.NewRequest(http.MethodGet, authorization.ApprovalURL, nil)
-	if err != nil {
-		t.Fatalf("new authenticated approval request: %v", err)
-	}
-	showReq.AddCookie(&http.Cookie{Name: "session_token", Value: "owner-session"})
-	showResp, err = ts.Client().Do(showReq)
-	if err != nil {
-		t.Fatalf("show approval with browser session: %v", err)
-	}
-	showBody, err := io.ReadAll(showResp.Body)
-	_ = showResp.Body.Close()
-	if err != nil {
-		t.Fatalf("read approval page: %v", err)
-	}
-	if showResp.StatusCode != http.StatusOK {
-		t.Fatalf("show approval with browser session status = %d, want 200; body = %s", showResp.StatusCode, showBody)
-	}
-	if showResp.Header.Get("Cache-Control") != "no-store" || !strings.Contains(string(showBody), "roadmap") {
-		t.Fatalf("approval page missing no-store or provider name: headers=%v body=%s", showResp.Header, showBody)
-	}
-	wantAction := `action="./` + authorization.AuthorizationID + `/approve"`
-	if !strings.Contains(string(showBody), wantAction) {
-		t.Fatalf("approval page action = %s, want relative action %q", showBody, wantAction)
-	}
-	if strings.Contains(string(showBody), authorization.VerificationCode) {
-		t.Fatalf("approval page leaked verification code: %s", showBody)
-	}
-
-	wrongCode := "000-000"
-	if authorization.VerificationCode == wrongCode {
-		wrongCode = "111-111"
-	}
-	approveReq, err := http.NewRequest(http.MethodPost, authorization.ApprovalURL+"/approve", strings.NewReader(url.Values{"verificationCode": {wrongCode}}.Encode()))
-	if err != nil {
-		t.Fatalf("new wrong-code approve request: %v", err)
-	}
-	approveReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	approveReq.AddCookie(&http.Cookie{Name: "session_token", Value: "owner-session"})
-	approveResp, err := ts.Client().Do(approveReq)
-	if err != nil {
-		t.Fatalf("approve attach authorization with wrong code: %v", err)
-	}
-	_ = approveResp.Body.Close()
-	if approveResp.StatusCode != http.StatusForbidden {
-		t.Fatalf("wrong-code approve status = %d, want 403", approveResp.StatusCode)
-	}
-
-	approveReq, err = http.NewRequest(http.MethodPost, authorization.ApprovalURL+"/approve", strings.NewReader(url.Values{"verificationCode": {authorization.VerificationCode}}.Encode()))
-	if err != nil {
-		t.Fatalf("new approve request: %v", err)
-	}
-	approveReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	approveReq.AddCookie(&http.Cookie{Name: "session_token", Value: "owner-session"})
-	approveResp, err = ts.Client().Do(approveReq)
-	if err != nil {
-		t.Fatalf("approve attach authorization: %v", err)
-	}
-	approveBody, err := io.ReadAll(approveResp.Body)
-	_ = approveResp.Body.Close()
-	if err != nil {
-		t.Fatalf("read approve response: %v", err)
-	}
-	if approveResp.StatusCode != http.StatusOK {
-		t.Fatalf("approve status = %d, want 200; body = %s", approveResp.StatusCode, approveBody)
-	}
-	if approveResp.Header.Get("Cache-Control") != "no-store" {
-		t.Fatalf("approve Cache-Control = %q, want no-store", approveResp.Header.Get("Cache-Control"))
-	}
-
-	pollReq, err := http.NewRequest(http.MethodGet, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/poll", nil)
-	if err != nil {
-		t.Fatalf("new poll request: %v", err)
-	}
-	pollResp, err := ts.Client().Do(pollReq)
-	if err != nil {
-		t.Fatalf("poll without authorization secret: %v", err)
-	}
-	_ = pollResp.Body.Close()
-	if pollResp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("poll without authorization secret status = %d, want 401", pollResp.StatusCode)
-	}
-
-	pollReq, err = http.NewRequest(http.MethodGet, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/poll", nil)
-	if err != nil {
-		t.Fatalf("new authorized poll request: %v", err)
-	}
-	pollReq.Header.Set(providerdev.HeaderAuthorizationSecret, authorization.ClientSecret)
-	pollResp, err = ts.Client().Do(pollReq)
-	if err != nil {
-		t.Fatalf("poll approval: %v", err)
-	}
-	pollBody, err := io.ReadAll(pollResp.Body)
-	_ = pollResp.Body.Close()
-	if err != nil {
-		t.Fatalf("read poll response: %v", err)
-	}
-	if pollResp.StatusCode != http.StatusOK {
-		t.Fatalf("poll status = %d, want 200; body = %s", pollResp.StatusCode, pollBody)
-	}
-	var poll providerdev.PollAttachAuthorizationResponse
-	if err := json.Unmarshal(pollBody, &poll); err != nil {
-		t.Fatalf("decode poll response: %v", err)
-	}
-	if !poll.Approved {
-		t.Fatalf("poll response missing approval: %s", pollBody)
-	}
-
-	approveReq, err = http.NewRequest(http.MethodPost, authorization.ApprovalURL+"/approve", strings.NewReader(url.Values{"verificationCode": {authorization.VerificationCode}}.Encode()))
-	if err != nil {
-		t.Fatalf("new second approve request: %v", err)
-	}
-	approveReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	approveReq.AddCookie(&http.Cookie{Name: "session_token", Value: "owner-session"})
-	approveResp, err = ts.Client().Do(approveReq)
-	if err != nil {
-		t.Fatalf("approve attach authorization again: %v", err)
-	}
-	_ = approveResp.Body.Close()
-	if approveResp.StatusCode != http.StatusOK {
-		t.Fatalf("second approve status = %d, want 200", approveResp.StatusCode)
-	}
-	pollReq, err = http.NewRequest(http.MethodGet, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/poll", nil)
-	if err != nil {
-		t.Fatalf("new second authorized poll request: %v", err)
-	}
-	pollReq.Header.Set(providerdev.HeaderAuthorizationSecret, authorization.ClientSecret)
-	pollResp, err = ts.Client().Do(pollReq)
-	if err != nil {
-		t.Fatalf("poll approval after second approve: %v", err)
-	}
-	pollBody, err = io.ReadAll(pollResp.Body)
-	_ = pollResp.Body.Close()
-	if err != nil {
-		t.Fatalf("read second poll response: %v", err)
-	}
-	var secondPoll providerdev.PollAttachAuthorizationResponse
-	if err := json.Unmarshal(pollBody, &secondPoll); err != nil {
-		t.Fatalf("decode second poll response: %v", err)
-	}
-	if !secondPoll.Approved {
-		t.Fatalf("second poll response missing approval: %s", pollBody)
-	}
-
-	missingSecretReq, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/attachments", strings.NewReader(`{"providers":[{"name":"roadmap"}]}`))
-	if err != nil {
-		t.Fatalf("new missing-secret authorized session request: %v", err)
-	}
-	missingSecretReq.Header.Set("Content-Type", "application/json")
-	missingSecretResp, err := ts.Client().Do(missingSecretReq)
-	if err != nil {
-		t.Fatalf("create authorized session without secret: %v", err)
-	}
-	missingSecretBody, err := io.ReadAll(missingSecretResp.Body)
-	_ = missingSecretResp.Body.Close()
-	if err != nil {
-		t.Fatalf("read missing-secret session response: %v", err)
-	}
-	if missingSecretResp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("missing-secret session status = %d, want 401; body = %s", missingSecretResp.StatusCode, missingSecretBody)
-	}
-
-	changedRequestReq, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/attachments", strings.NewReader(`{"providers":[{"name":"other"}]}`))
-	if err != nil {
-		t.Fatalf("new changed-request authorized session request: %v", err)
-	}
-	changedRequestReq.Header.Set("Content-Type", "application/json")
-	changedRequestReq.Header.Set(providerdev.HeaderAuthorizationSecret, authorization.ClientSecret)
-	changedRequestResp, err := ts.Client().Do(changedRequestReq)
-	if err != nil {
-		t.Fatalf("create authorized session with changed request: %v", err)
-	}
-	changedRequestBody, err := io.ReadAll(changedRequestResp.Body)
-	_ = changedRequestResp.Body.Close()
-	if err != nil {
-		t.Fatalf("read changed-request session response: %v", err)
-	}
-	if changedRequestResp.StatusCode != http.StatusForbidden {
-		t.Fatalf("changed-request session status = %d, want 403; body = %s", changedRequestResp.StatusCode, changedRequestBody)
-	}
-
-	sessionReq, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/attachments", strings.NewReader(`{"providers":[{"name":"roadmap"}]}`))
-	if err != nil {
-		t.Fatalf("new authorized session request: %v", err)
-	}
-	sessionReq.Header.Set("Content-Type", "application/json")
-	sessionReq.Header.Set(providerdev.HeaderAuthorizationSecret, authorization.ClientSecret)
-	sessionResp, err := ts.Client().Do(sessionReq)
-	if err != nil {
-		t.Fatalf("create authorized session: %v", err)
-	}
-	sessionBody, err := io.ReadAll(sessionResp.Body)
-	_ = sessionResp.Body.Close()
-	if err != nil {
-		t.Fatalf("read authorized session response: %v", err)
-	}
-	if sessionResp.StatusCode != http.StatusCreated {
-		t.Fatalf("authorized session status = %d, want 201; body = %s", sessionResp.StatusCode, sessionBody)
-	}
-	var session providerdev.CreateSessionResponse
-	if err := json.Unmarshal(sessionBody, &session); err != nil {
-		t.Fatalf("decode authorized session response: %v", err)
-	}
-	if session.AttachID == "" || session.DispatcherSecret == "" {
-		t.Fatalf("authorized session missing attachId/dispatcherSecret: %s", sessionBody)
-	}
-
-	deleteReq, err := http.NewRequest(http.MethodDelete, ts.URL+providerdev.PathAttachments+"/"+session.AttachID, nil)
-	if err != nil {
-		t.Fatalf("new dispatcher delete request: %v", err)
-	}
-	deleteReq.Header.Set(providerdev.HeaderDispatcherSecret, session.DispatcherSecret)
-	deleteResp, err := ts.Client().Do(deleteReq)
-	if err != nil {
-		t.Fatalf("delete by dispatcher secret: %v", err)
-	}
-	deleteBody, err := io.ReadAll(deleteResp.Body)
-	_ = deleteResp.Body.Close()
-	if err != nil {
-		t.Fatalf("read delete response: %v", err)
-	}
-	if deleteResp.StatusCode != http.StatusOK {
-		t.Fatalf("delete by dispatcher secret status = %d, want 200; body = %s", deleteResp.StatusCode, deleteBody)
-	}
-}
-
-func TestProviderDevAttachAuthorizationApprovalURLPreservesPublicBasePath(t *testing.T) {
-	t.Parallel()
-
-	manager, err := providerdev.NewManager([]providerdev.Target{{Name: "roadmap"}})
-	if err != nil {
-		t.Fatalf("NewManager: %v", err)
-	}
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
-		cfg.PublicBaseURL = "https://gestalt.example.test/team-a"
-		cfg.ProviderDevAttach = true
-		cfg.ProviderDevSessions = manager
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	createReq, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachAuthorizations, strings.NewReader(`{"providers":[{"name":"roadmap"}]}`))
-	if err != nil {
-		t.Fatalf("new attach authorization request: %v", err)
-	}
-	createReq.Header.Set("Content-Type", "application/json")
-	createResp, err := ts.Client().Do(createReq)
-	if err != nil {
-		t.Fatalf("create attach authorization: %v", err)
-	}
-	createBody, err := io.ReadAll(createResp.Body)
-	_ = createResp.Body.Close()
-	if err != nil {
-		t.Fatalf("read attach authorization response: %v", err)
-	}
-	if createResp.StatusCode != http.StatusCreated {
-		t.Fatalf("create attach authorization status = %d, want 201; body = %s", createResp.StatusCode, createBody)
-	}
-	var authorization providerdev.CreateAttachAuthorizationResponse
-	if err := json.Unmarshal(createBody, &authorization); err != nil {
-		t.Fatalf("decode attach authorization response: %v", err)
-	}
-	if !strings.HasPrefix(authorization.ApprovalURL, "https://gestalt.example.test/team-a/api/v1/provider-dev/attach-authorizations/") {
-		t.Fatalf("approvalUrl = %q, want public base path preserved", authorization.ApprovalURL)
-	}
-}
-
 func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 	t.Parallel()
 
@@ -9049,7 +8342,7 @@ func TestAuthMiddleware_NoAuth(t *testing.T) {
 	}
 }
 
-func TestPluginRouteAuth_HTTPRoutesUseNamedProviderOverride(t *testing.T) {
+func TestPluginRouteAuth_HTTPRoutesUseNamedAuthProvider(t *testing.T) {
 	t.Parallel()
 
 	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
@@ -9630,7 +8923,7 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 	seedSubjectToken(t, svc, "service_account:triage-bot", "svc", "workspace", "default", "identity-svc-token")
 
 	svcProvider := &stubIntegrationWithOps{
-		StubIntegration: coretesting.StubIntegration{N: "svc", DN: "Service", ConnMode: core.ConnectionModeUser},
+		StubIntegration: coretesting.StubIntegration{N: "svc", DN: "Service", ConnMode: core.ConnectionModeSubject},
 		ops:             []core.Operation{{Name: "run", Method: http.MethodGet}},
 	}
 	weatherProvider := &stubIntegrationWithOps{
@@ -9656,7 +8949,7 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 			Connections: map[string]*config.ConnectionDef{
 				"workspace": {
 					ConnectionID: "svc:workspace",
-					Mode:         providermanifestv1.ConnectionModeUser,
+					Mode:         providermanifestv1.ConnectionModeSubject,
 				},
 			},
 		},
@@ -9791,7 +9084,7 @@ func TestSubjectAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelectors
 	seedSubjectAPIToken(t, authSvc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 
 	provider := &stubIntegrationWithCatalog{
-		StubIntegration: coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeUser},
+		StubIntegration: coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeSubject},
 		catalog: serverTestCatalog("svc", []catalog.CatalogOperation{
 			{ID: "run", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
 			{ID: "admin", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
@@ -9850,7 +9143,7 @@ func TestSubjectAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelectors
 	var sessionCatalogToken string
 	sessionProvider := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "svc-session", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "svc-session", ConnMode: core.ConnectionModeSubject},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			sessionCatalogToken = token
@@ -9974,7 +9267,7 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 			Connections: map[string]*config.ConnectionDef{
 				testDefaultConnection: {
 					ConnectionID: "manual-connected:" + testDefaultConnection,
-					Mode:         providermanifestv1.ConnectionModeUser,
+					Mode:         providermanifestv1.ConnectionModeSubject,
 				},
 			},
 		},
@@ -9982,7 +9275,7 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 			Connections: map[string]*config.ConnectionDef{
 				testDefaultConnection: {
 					ConnectionID: "manual-multi:" + testDefaultConnection,
-					Mode:         providermanifestv1.ConnectionModeUser,
+					Mode:         providermanifestv1.ConnectionModeSubject,
 				},
 			},
 		},
@@ -10120,11 +9413,11 @@ func TestListIntegrations_StaleRefreshFailuresRequireReconnect(t *testing.T) {
 		Connections: map[string]*config.ConnectionDef{
 			testDefaultConnection: {
 				ConnectionID: "named-stale:" + testDefaultConnection,
-				Mode:         providermanifestv1.ConnectionModeUser,
+				Mode:         providermanifestv1.ConnectionModeSubject,
 			},
 			"archive": {
 				ConnectionID: "named-stale:archive",
-				Mode:         providermanifestv1.ConnectionModeUser,
+				Mode:         providermanifestv1.ConnectionModeSubject,
 			},
 		},
 	}
@@ -10367,7 +9660,7 @@ func TestListIntegrations_ShowsCredentialedConnectionsInUserFacingMetadata(t *te
 				},
 				Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 					"default": {
-						Mode: providermanifestv1.ConnectionModeUser,
+						Mode: providermanifestv1.ConnectionModeSubject,
 						Auth: &providermanifestv1.ProviderAuth{
 							Type: providermanifestv1.AuthTypeManual,
 						},
@@ -10906,7 +10199,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 						"MCP": {
 							DisplayName: "MCP",
-							Mode:        providermanifestv1.ConnectionModeUser,
+							Mode:        providermanifestv1.ConnectionModeSubject,
 							Auth: &providermanifestv1.ProviderAuth{
 								Type: providermanifestv1.AuthTypeNone,
 							},
@@ -12056,7 +11349,7 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 		},
 		catalog: &catalog.Catalog{
 			Name: "test-int",
@@ -12188,7 +11481,7 @@ func TestListOperations_FallsBackToStaticCatalogWhenSessionCatalogErrors(t *test
 
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "notion", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "notion", ConnMode: core.ConnectionModeSubject},
 		},
 		catalog: &catalog.Catalog{
 			Name: "notion",
@@ -12264,7 +11557,7 @@ func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
 
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeSubject},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			switch token {
@@ -12337,7 +11630,7 @@ func TestListOperations_RetriesDefaultConnectionAfterBrokerCatalogError(t *testi
 
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeSubject},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			switch token {
@@ -12418,7 +11711,7 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog(t *testing.T) {
 	var gotAccess invocation.AccessContext
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 		},
 		catalog: &catalog.Catalog{
 			Name: "test-int",
@@ -12513,7 +11806,7 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog_DynamicGrant(t *t
 	var gotAccess invocation.AccessContext
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 		},
 		catalog: &catalog.Catalog{
 			Name: "test-int",
@@ -12609,7 +11902,7 @@ func TestExecuteOperation_HumanAuthorizationUsesCatalogRoles(t *testing.T) {
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "test-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
 					called = true
 					return &core.OperationResult{Status: http.StatusOK, Body: operation}, nil
@@ -12703,7 +11996,7 @@ func TestExecuteOperation_HumanAuthorizationUsesCanonicalSubjectOnCollision(t *t
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sample-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
 					called = true
 					return &core.OperationResult{Status: http.StatusOK, Body: operation}, nil
@@ -12796,7 +12089,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 
 		stub := &stubIntegrationWithSessionCatalog{
 			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 			},
 		}
 
@@ -12854,7 +12147,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 
 		stub := &stubIntegrationWithSessionCatalog{
 			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 			},
 		}
 
@@ -12893,7 +12186,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 
 		stub := &stubIntegrationWithSessionCatalog{
 			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
+				StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeSubject},
 			},
 			catalog: &catalog.Catalog{
 				Name: "sample-int",
@@ -13144,7 +12437,7 @@ func TestExecuteOperation_RejectsExplicitConnectionForStaticOperation(t *testing
 	apiBackend := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "sample-api",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				called = true
 				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
@@ -13166,7 +12459,7 @@ func TestExecuteOperation_RejectsExplicitConnectionForStaticOperation(t *testing
 	}
 	prov := composite.New("sample-svc", apiProv, &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "sample-mcp", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "sample-mcp", ConnMode: core.ConnectionModeSubject},
 		},
 	})
 
@@ -13283,7 +12576,7 @@ func TestExecuteOperation_AllowsExplicitConnectionAliasForStaticOperation(t *tes
 	apiBackend := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "sample-api",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{
 					Status: http.StatusOK,
@@ -13393,9 +12686,9 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		Spec: &providermanifestv1.Spec{
 			DefaultConnection: "default",
 			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-				"default": {Mode: providermanifestv1.ConnectionModeUser},
+				"default": {Mode: providermanifestv1.ConnectionModeSubject},
 				"bot": {
-					Mode: providermanifestv1.ConnectionModeUser,
+					Mode: providermanifestv1.ConnectionModeSubject,
 					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 				},
 			},
@@ -13473,7 +12766,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		ResolvedManifest: manifest,
 		Connections: map[string]*config.ConnectionDef{
 			"bot": {
-				Mode: providermanifestv1.ConnectionModeUser,
+				Mode: providermanifestv1.ConnectionModeSubject,
 			},
 		},
 	}
@@ -13516,7 +12809,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if err != nil {
 		t.Fatalf("BuildConnectionRuntime: %v", err)
 	}
-	if runtimeInfo, ok := connectionRuntime.Resolve("slack", "bot"); !ok || runtimeInfo.Mode != core.ConnectionModeUser {
+	if runtimeInfo, ok := connectionRuntime.Resolve("slack", "bot"); !ok || runtimeInfo.Mode != core.ConnectionModeSubject {
 		t.Fatalf("runtime bot connection = (%+v, %v), want user-owned bot connection", runtimeInfo, ok)
 	}
 	broker := invocation.NewBroker(
@@ -13834,7 +13127,7 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 
 	sessionStub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeSubject},
 		},
 		catalog: serverTestCatalog("sample-int", []catalog.CatalogOperation{
 			{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
@@ -13903,7 +13196,7 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 
 	sessionStub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 		},
 	}
 
@@ -13931,7 +13224,7 @@ func TestSubjectAuthorization_ExecuteOperation_UsesSubjectCredentialAndSessionSe
 	stub := &stubIntegrationWithCatalog{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "svc",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{
 					Status: http.StatusOK,
@@ -14484,7 +13777,7 @@ func TestSubjectAuthorization_ExecuteOperation_MissingSubjectCredentialReturns41
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "svc",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 		},
 		ops: []core.Operation{{Name: "run", Method: http.MethodGet}},
 	}
@@ -14630,7 +13923,7 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 		var resolvedToken atomic.Value
 		sessionStub := &stubIntegrationWithSessionCatalog{
 			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 			},
 			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 				sessionCatalogCalls.Add(1)
@@ -14671,7 +13964,7 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 
 		sessionStub := &stubIntegrationWithSessionCatalog{
 			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 			},
 			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 				sessionCatalogCalls.Add(1)
@@ -14752,7 +14045,7 @@ func TestExecuteOperation_UsesFallbackSessionCatalogConnectionAfterEarlierError(
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sample-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
 					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
@@ -14837,7 +14130,7 @@ func TestExecuteOperation_PinsSessionCatalogConnectionIntoExecution(t *testing.T
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sample-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
 					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
@@ -14912,7 +14205,7 @@ func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t 
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sample-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
 					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
@@ -14995,7 +14288,7 @@ func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *tes
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sample-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
 					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
@@ -15071,7 +14364,7 @@ func TestExecuteOperation_DoesNotFallbackPastConfiguredCatalogConnection(t *test
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sample-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
 					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
@@ -16246,7 +15539,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			IntegrationName:    "pagerduty",
 			IntegrationDisplay: "PagerDuty",
 			IntegrationDesc:    "PagerDuty",
-			ConnMode:           core.ConnectionModeUser,
+			ConnMode:           core.ConnectionModeSubject,
 			HTTPClient:         identitySrv.Client(),
 			PostConnectConfigs: map[string]*core.PostConnectConfig{
 				"default": {
@@ -16812,7 +16105,7 @@ func TestCreateAndListAPITokens(t *testing.T) {
 	}
 }
 
-func TestCreateAPIToken_WithActionPermissions(t *testing.T) {
+func TestCreateAPITokenRejectsUnknownPermissionFields(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -16824,7 +16117,7 @@ func TestCreateAPIToken_WithActionPermissions(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"name":"attach-token","permissions":[{"app":"roadmap","actions":["provider_dev.attach"]}]}`)
+	body := bytes.NewBufferString(`{"name":"action-token","permissions":[{"app":"roadmap","actions":["legacy.action"]}]}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -16833,44 +16126,15 @@ func TestCreateAPIToken_WithActionPermissions(t *testing.T) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusCreated {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("create status = %d, want 201: %s", resp.StatusCode, respBody)
-	}
-	var created struct {
-		ID          string                  `json:"id"`
-		Token       string                  `json:"token"`
-		Permissions []core.AccessPermission `json:"permissions"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode create response: %v", err)
-	}
-	if created.ID == "" || created.Token == "" {
-		t.Fatalf("create response missing id/token: %+v", created)
-	}
-	if len(created.Permissions) != 1 || created.Permissions[0].App != "roadmap" || len(created.Permissions[0].Actions) != 1 || created.Permissions[0].Actions[0] != core.ProviderActionDevAttach || len(created.Permissions[0].Operations) != 0 {
-		t.Fatalf("created permissions = %#v", created.Permissions)
-	}
-
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
-	resp, err = http.DefaultClient.Do(req)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		t.Fatalf("list request: %v", err)
+		t.Fatalf("read create response: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("list status = %d, want 200: %s", resp.StatusCode, respBody)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("create status = %d, want 400: %s", resp.StatusCode, respBody)
 	}
-	var listed []struct {
-		ID          string                  `json:"id"`
-		Permissions []core.AccessPermission `json:"permissions"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
-		t.Fatalf("decode list response: %v", err)
-	}
-	if len(listed) != 1 || listed[0].ID != created.ID || len(listed[0].Permissions) != 1 || len(listed[0].Permissions[0].Actions) != 1 || listed[0].Permissions[0].Actions[0] != core.ProviderActionDevAttach {
-		t.Fatalf("listed tokens = %#v", listed)
+	if !strings.Contains(string(respBody), "invalid JSON body") {
+		t.Fatalf("create response = %s, want invalid JSON body error", respBody)
 	}
 }
 
@@ -17944,7 +17208,7 @@ func TestVisibleFalseGenericRouteSkipsSessionCatalogCredentialResolution(t *test
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "events",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 			},
 		},
 		catalog: serverTestCatalog("events", []catalog.CatalogOperation{
@@ -18247,7 +17511,7 @@ func TestHostedHTTPBinding_CredentialModeNoneBypassesProviderTokenLookup(t *test
 	provider := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "events",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(ctx context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 				if op != "handle_event" {
 					t.Fatalf("operation = %q, want %q", op, "handle_event")
@@ -18342,7 +17606,7 @@ func TestHostedHTTPBinding_MergedStaticOperationSkipsSessionCatalogResolution(t 
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "github",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 			},
 		},
 		catalogForRequestFn: func(context.Context, string) (*catalog.Catalog, error) {
@@ -19041,11 +18305,13 @@ type stubNonOAuthProvider struct {
 	execFn  func(context.Context, string, map[string]any, string) (*core.OperationResult, error)
 }
 
-func (s *stubNonOAuthProvider) Name() string                        { return s.name }
-func (s *stubNonOAuthProvider) DisplayName() string                 { return s.name }
-func (s *stubNonOAuthProvider) Description() string                 { return "" }
-func (s *stubNonOAuthProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
-func (s *stubNonOAuthProvider) AuthTypes() []string                 { return nil }
+func (s *stubNonOAuthProvider) Name() string        { return s.name }
+func (s *stubNonOAuthProvider) DisplayName() string { return s.name }
+func (s *stubNonOAuthProvider) Description() string { return "" }
+func (s *stubNonOAuthProvider) ConnectionMode() core.ConnectionMode {
+	return core.ConnectionModeSubject
+}
+func (s *stubNonOAuthProvider) AuthTypes() []string { return nil }
 func (s *stubNonOAuthProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return nil
 }
@@ -22252,7 +21518,7 @@ func TestMCPEndpoint_ServiceAccountAuthorizationAndAudit(t *testing.T) {
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	prov := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeSubject},
 			ops: []core.Operation{
 				{Name: "run_query", Description: "Execute a SQL query"},
 				{Name: "delete_table", Description: "Delete a table"},
@@ -23278,13 +22544,13 @@ func TestLogout_NoAuthNilProvider(t *testing.T) {
 	}
 }
 
-func TestExecuteOperation_ConnectionModeUserUsesSubjectCredential(t *testing.T) {
+func TestExecuteOperation_ConnectionModeSubjectUsesSubjectCredential(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "svc",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"token":%q}`, token)}, nil
 			},

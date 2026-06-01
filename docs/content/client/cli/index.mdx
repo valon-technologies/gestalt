@@ -362,11 +362,9 @@ gestalt authorization relationships list \
   --resource-id github
 ```
 
-Subject token creation accepts `--permission app:operation`,
-`--action app:action`, `--scopes`, or `--permissions-file` with a raw JSON
-permissions array. These inputs are mutually exclusive except
-`--permission` and `--action`, which can be combined. Provider-dev attach uses
-`--action app:provider_dev.attach`.
+Subject token creation accepts `--permission app:operation`, `--scopes`, or
+`--permissions-file` with a raw JSON permissions array. These inputs are
+mutually exclusive except repeated `--permission` flags, which can be combined.
 
 ### Local Quickstart
 

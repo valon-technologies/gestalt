@@ -467,7 +467,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     ..Default::default()
                 }),
                 credential: Some(CredentialContext {
-                    mode: "user".to_string(),
+                    mode: "subject".to_string(),
                     ..Default::default()
                 }),
                 access: Some(AccessContext {
@@ -525,7 +525,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"user","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123","tool_refs_set":true,"tool_ref_app":"github","tool_ref_operation":"bot.getPullRequest","tool_ref_run_as":"service_account:github-review","tool_ref_external_id":"user:12345678"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"subject","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123","tool_refs_set":true,"tool_ref_app":"github","tool_ref_operation":"bot.getPullRequest","tool_ref_run_as":"service_account:github-review","tool_ref_external_id":"user:12345678"}"#
     );
 
     let session_catalog = client
@@ -543,7 +543,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     ..Default::default()
                 }),
                 credential: Some(CredentialContext {
-                    mode: "user".to_string(),
+                    mode: "subject".to_string(),
                     ..Default::default()
                 }),
                 access: Some(AccessContext {
@@ -567,7 +567,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(catalog.name, "session-example");
     assert_eq!(
         catalog.display_name,
-        "acme|user:user-123|ada@example.com|user|viewer|https://gestalt.example.test|schedule"
+        "acme|user:user-123|ada@example.com|subject|viewer|https://gestalt.example.test|schedule"
     );
 
     let resolved = client

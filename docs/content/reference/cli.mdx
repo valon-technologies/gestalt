@@ -51,11 +51,6 @@ import { Callout } from 'nextra/components'
 | `gestaltd provider repo remove NAME` | Remove a provider repository from the user-level store. Pass `--config PATH` to remove it from project config instead. |
 | `gestaltd serve --path PATH` | Run a local source app or UI bundle inside a synthesized Gestalt config. Serves `/admin` and any configured or inferred public UIs. |
 | `gestaltd serve --path PATH --config PATH` | Layer supporting providers, apps, and UI mounts on top of the synthesized local baseline. Repeat `--config` to merge left-to-right. |
-| `gestaltd serve --remote URL --path PATH` | Attach one local source app to an authenticated remote `gestaltd` session. The remote server matches by manifest `source` and keeps its configured auth, authorization, connections, app config, and host services. |
-| `gestaltd serve --remote URL --config PATH` | Attach every source-backed app in the layered config. Use repeated `--config` files when you need explicit local config overrides or multiple local apps. |
-| `gestaltd provider attach list --remote URL` | List your active remote provider-dev attachments on that server. |
-| `gestaltd provider attach show --remote URL ATTACH_ID` | Inspect one active remote provider-dev attachment. |
-| `gestaltd provider attach detach --remote URL ATTACH_ID` | Detach a stuck remote provider-dev attachment owned by your authenticated principal. |
 | `gestaltd provider validate --path PATH` | Validate a local source app or UI bundle inside the same synthesized Gestalt config used by `gestaltd serve --path`. |
 | `gestaltd provider validate --config PATH` | Validate the target provider together with selected supporting providers and `null` deletions from layered config overlays. |
 | `gestaltd provider package --version VERSION` | Build provider release archives from a source directory. Executable source providers use SDK-native source packages or `build.command` and default to the host platform; UI and declarative providers default to a generic archive. Pass `--platform ...` with `os/arch` targets or `--platform all` for multi-platform builds. |
@@ -102,7 +97,7 @@ gestaltd serve \
 ```
 
 Watch mode applies only to config-based serve. It cannot be combined with
-`--locked`, `--path`, or `--remote`.
+`--locked` or `--path`.
 
 ## Examples
 
@@ -141,13 +136,6 @@ gestaltd provider validate --path ./apps/support --config ./dev/support.yaml --c
 gestaltd serve --path ./apps/support
 gestaltd serve --path ./ui/dashboard
 gestaltd serve --path ./apps/support --config ./dev/support.yaml --port 8080
-gestaltd serve --remote https://gestalt.example.com --path ./apps/support
-gestaltd serve --remote https://gestalt.example.com --path ./apps/support --name support
-gestaltd serve --remote https://gestalt.example.com --remote-token <token-with-provider_dev.attach> --path ./apps/support
-gestaltd serve --remote https://gestalt.example.com --config ./remote.yaml --config ./local-overrides.yaml
-gestaltd provider attach list --remote https://gestalt.example.com
-gestaltd provider attach show --remote https://gestalt.example.com att_123
-gestaltd provider attach detach --remote https://gestalt.example.com att_123
 gestaltd provider package --version 0.0.1-alpha.1
 gestaltd provider package --version 0.0.1-alpha.1 --platform all
 gestaltd provider package --version 0.0.1-alpha.1 --platform linux/amd64,linux/arm64
@@ -159,75 +147,6 @@ scalar values win, lists replace inherited lists, and `null` deletes inherited
 keys. By default, lockfiles and artifact paths stay rooted at the leftmost
 config file. `--lockfile` overrides only the lockfile path. `--artifacts-dir`
 keeps the same config-relative resolution used by `sync` and `serve`.
-
-`gestaltd serve --remote` is environment-agnostic: the URL is just the remote
-`gestaltd` instance to attach to. The local command only replaces source-backed
-plugin implementations for the authenticated principal that created the session.
-The remote server must opt in with `server.dev.attachmentState`; otherwise the
-command fails before local code is attached. Use `attachmentState: indexeddb` on
-shared or load-balanced servers so attachment metadata and queued provider calls
-are stored in the configured host IndexedDB. Process-local remote attachment
-state is not a supported server mode.
-For the interactive happy path, `gestaltd serve --remote` creates a short-lived
-attach approval request and opens the remote server in your browser. Approving
-that page with your normal browser session creates an owner-scoped attachment
-only when your resolved role is allowed by the app's provider-dev attach
-configuration. The terminal prints a verification code, and the browser approval
-page requires that code before approval succeeds. `--remote-token` and
-`GESTALT_API_KEY` are the non-interactive direct-attach path; those API tokens
-must include `permissions[].actions: ["provider_dev.attach"]` for every attached
-app. Stored CLI credentials from `gestaltd auth login` are not used for
-direct attach; when no explicit token is provided, `gestaltd serve --remote` uses
-browser approval.
-With `--remote URL --path PATH` and no `--config`, the local command sends the
-manifest `source` and the local implementation only; the remote server chooses
-the configured app with the same manifest `source` and preserves that
-remote plugin's config. If multiple remote apps share the same source, or the
-manifest has no source, pass `--name` to choose the configured remote app.
-All non-local apps and remote host services continue to resolve through the
-remote instance.
-
-After browser approval or attach-token authentication, the remote creates an
-attachment and the CLI uses the returned `attachId` plus a one-time dispatcher
-secret for poll/complete traffic. The dispatcher secret is not shown by list/get
-diagnostics and is not needed for owner cleanup detach. Remote attach requests
-mark an attached provider with `ui: true` when the local dispatcher will serve
-that provider's mounted UI assets; diagnostic responses report the mounted
-`uiPath` but never return local UI contents. Use
-`gestaltd provider attach list --remote URL`,
-`gestaltd provider attach show --remote URL ATTACH_ID`, and
-`gestaltd provider attach detach --remote URL ATTACH_ID` to inspect or clean up
-attachments owned by your authenticated principal. These diagnostic commands use
-`--remote-token`, `GESTALT_API_KEY`, or a matching stored Gestalt CLI
-credential, and they do not require `provider_dev.attach` because they cannot
-create a new attachment.
-
-API-token attach creation requires an explicit token action permission:
-
-```json
-{
-  "name": "slack local dev",
-  "permissions": [
-    {
-      "app": "slack",
-      "actions": ["provider_dev.attach"]
-    }
-  ]
-}
-```
-
-Normal provider scopes and operation permissions do not grant remote attach, and
-`provider_dev.attach` does not grant normal invocation access. Subject-owned API
-tokens are not accepted for remote attach v1.
-
-When `--config` is present, source-backed app entries in the layered local
-config are treated as explicit local overrides. Their app config is sent to
-the remote session instead of inheriting the remote server's config. Remote mode
-allows missing local environment substitutions while loading config so unrelated
-deploy-only env vars do not block attach.
-Remote mode tunnels app RPC, catalog, post-connect, host-service calls, and
-app-owned UI assets for mounted UIs that already exist on the remote server.
-Raw GraphQL surfaces are not tunneled in v1.
 
 For source-backed providers, `gestaltd serve --path` starts the manifest `run`
 argv when one is declared. If `run` is omitted, it serves or starts the declared

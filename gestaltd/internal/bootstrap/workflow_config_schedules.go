@@ -493,7 +493,7 @@ func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target cor
 	case "":
 	case core.ConnectionModeNone:
 		return nil
-	case core.ConnectionModeUser:
+	case core.ConnectionModeSubject:
 		if hasRunAs {
 			return nil
 		}
@@ -509,7 +509,7 @@ func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target cor
 	switch mode {
 	case core.ConnectionModeNone:
 		return nil
-	case core.ConnectionModeUser:
+	case core.ConnectionModeSubject:
 		if hasRunAs {
 			return nil
 		}
@@ -611,8 +611,8 @@ func workflowConfigConnectionSelectorMode(plan config.StaticConnectionPlan, appN
 		if err != nil {
 			return core.ConnectionModeNone, err
 		}
-		if mode == core.ConnectionModeUser {
-			return core.ConnectionModeUser, nil
+		if mode == core.ConnectionModeSubject {
+			return core.ConnectionModeSubject, nil
 		}
 	}
 	return core.ConnectionModeNone, nil

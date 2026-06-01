@@ -132,10 +132,10 @@ func TestExternalCredentialAuthConfigRefreshTokenRoundTripsOverTransport(t *test
 		},
 	}
 
-	if err := remote.ValidateCredentialConfig(context.Background(), &core.ValidateExternalCredentialConfigRequest{Mode: core.ConnectionModeUser, Auth: auth}); err != nil {
+	if err := remote.ValidateCredentialConfig(context.Background(), &core.ValidateExternalCredentialConfigRequest{Mode: core.ConnectionModeSubject, Auth: auth}); err != nil {
 		t.Fatalf("ValidateCredentialConfig: %v", err)
 	}
-	if _, err := remote.ResolveCredential(context.Background(), &core.ResolveExternalCredentialRequest{Mode: core.ConnectionModeUser, Auth: auth}); err != nil {
+	if _, err := remote.ResolveCredential(context.Background(), &core.ResolveExternalCredentialRequest{Mode: core.ConnectionModeSubject, Auth: auth}); err != nil {
 		t.Fatalf("ResolveCredential: %v", err)
 	}
 	if _, err := remote.ExchangeCredential(context.Background(), &core.ExchangeExternalCredentialRequest{Auth: auth}); err != nil {

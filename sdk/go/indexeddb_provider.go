@@ -8,7 +8,7 @@ import "context"
 // bindings.
 type IndexedDBProvider interface {
 	Provider
-	CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error
+	CreateObjectStore(ctx context.Context, name string, schema ObjectStoreOptions) error
 	DeleteObjectStore(ctx context.Context, name string) error
 
 	Get(ctx context.Context, req IndexedDBObjectStoreRequest) (Record, error)

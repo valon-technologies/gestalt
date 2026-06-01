@@ -11,7 +11,7 @@ const (
 	StoreAuthorizationDynamicFragments = "authz_dynamic_fragments"
 )
 
-var UsersSchema = idb.ObjectStoreSchema{
+var UsersSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
 		{Name: "by_email", KeyPath: []string{"email"}, Unique: true},
 		{Name: "by_normalized_email", KeyPath: []string{"normalized_email"}},
@@ -26,7 +26,7 @@ var UsersSchema = idb.ObjectStoreSchema{
 	},
 }
 
-var APITokensSchema = idb.ObjectStoreSchema{
+var APITokensSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
 		{Name: "by_hash", KeyPath: []string{"hashed_token"}, Unique: true},
 		{Name: "by_owner", KeyPath: []string{"owner_kind", "owner_id"}},
@@ -47,7 +47,7 @@ var APITokensSchema = idb.ObjectStoreSchema{
 	},
 }
 
-var ManagedSubjectsSchema = idb.ObjectStoreSchema{
+var ManagedSubjectsSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
 		{Name: "by_kind", KeyPath: []string{"kind"}},
 		{Name: "by_kind_deleted", KeyPath: []string{"kind", "deleted"}},
@@ -67,7 +67,7 @@ var ManagedSubjectsSchema = idb.ObjectStoreSchema{
 	},
 }
 
-var AuthorizationDynamicFragmentsSchema = idb.ObjectStoreSchema{
+var AuthorizationDynamicFragmentsSchema = idb.ObjectStoreOptions{
 	Indexes: []idb.IndexSchema{
 		{Name: "by_owner", KeyPath: []string{"owner_kind", "owner_id"}, Unique: true},
 		{Name: "by_scope", KeyPath: []string{"scope"}},

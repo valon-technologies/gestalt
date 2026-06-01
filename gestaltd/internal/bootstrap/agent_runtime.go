@@ -879,7 +879,6 @@ func agentRunAsPrincipal(base *principal.Principal, runAs *core.RunAsSubject) *p
 		Kind:                principal.Kind(strings.TrimSpace(runAs.SubjectKind)),
 		Scopes:              append([]string(nil), base.Scopes...),
 		TokenPermissions:    principal.ClonePermissionSet(base.TokenPermissions),
-		ActionPermissions:   principal.CloneActionPermissionSet(base.ActionPermissions),
 		Identity:            base.Identity,
 	}
 	principal.SetAuthSource(value, runAs.AuthSource)

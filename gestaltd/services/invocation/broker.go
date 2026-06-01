@@ -86,10 +86,6 @@ type CapabilityLister interface {
 	ListCapabilities() []core.Capability
 }
 
-type ProviderOverrideResolver interface {
-	ResolveProviderOverride(ctx context.Context, p *principal.Principal, providerName string) (core.Provider, bool, error)
-}
-
 // UserStore is the user persistence surface the broker needs to canonicalize
 // session identities before resolving user-scoped credentials.
 type UserStore interface {
@@ -122,7 +118,6 @@ type Broker struct {
 	connMapper        ConnectionMapper
 	mcpMapper         ConnectionMapper
 	connectionRuntime ConnectionRuntimeResolver
-	providerOverrides ProviderOverrideResolver
 	logger            *slog.Logger
 	tracerProvider    trace.TracerProvider
 }
@@ -143,10 +138,6 @@ func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
 
 func WithAuthorizer(a authorization.RuntimeAuthorizer) BrokerOption {
 	return func(b *Broker) { b.authorizer = a }
-}
-
-func WithProviderOverrides(r ProviderOverrideResolver) BrokerOption {
-	return func(b *Broker) { b.providerOverrides = r }
 }
 
 func WithLogger(l *slog.Logger) BrokerOption {
@@ -283,18 +274,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		}
 	}
 
-	execProv := prov
-	if b.providerOverrides != nil {
-		override, ok, err := b.providerOverrides.ResolveProviderOverride(ctx, p, providerName)
-		if err != nil {
-			return fail(fmt.Errorf("%w: provider override: %v", ErrInternal, err))
-		}
-		if ok {
-			execProv = override
-		}
-	}
-
-	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, execProv, providerName, operation, conn, instance)
+	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
 	if err != nil {
 		return fail(err)
 	}
@@ -318,14 +298,14 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	operationConnection := resolvedConnection
 	if strings.TrimSpace(conn) != "" {
 		if operationConnection == "" {
-			operationConnection, err = ResolveOperationConnection(execProv, opMeta.ID, params)
+			operationConnection, err = ResolveOperationConnection(prov, opMeta.ID, params)
 			if err != nil {
 				return fail(err)
 			}
 		}
 		operationConnection = core.ResolveConnectionAlias(operationConnection)
 		explicitConnection := core.ResolveConnectionAlias(conn)
-		overrideAllowed := transport == catalog.TransportApp || OperationConnectionOverrideAllowed(execProv, opMeta.ID, params)
+		overrideAllowed := transport == catalog.TransportApp || OperationConnectionOverrideAllowed(prov, opMeta.ID, params)
 		overrideDenied := !overrideAllowed
 		if operationConnection != "" && operationConnection != explicitConnection && overrideDenied {
 			return fail(fmt.Errorf(
@@ -345,7 +325,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		conn = b.mcpConnection(providerName)
 	}
 	if conn == "" && transport != catalog.TransportMCPPassthrough {
-		operationConnection, err = ResolveOperationConnection(execProv, opMeta.ID, params)
+		operationConnection, err = ResolveOperationConnection(prov, opMeta.ID, params)
 		if err != nil {
 			return fail(err)
 		}
@@ -358,7 +338,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
 	if transport == catalog.TransportMCPPassthrough {
-		toolResult, err := CallDirectTool(ctx, b, p, execProv, providerName, operation, conn, instance, params, mcpupstream.CallToolMetaFromContext(ctx))
+		toolResult, err := CallDirectTool(ctx, b, p, prov, providerName, operation, conn, instance, params, mcpupstream.CallToolMetaFromContext(ctx))
 		if err != nil {
 			return fail(err)
 		}
@@ -378,7 +358,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 	ctx = b.withAgentExternalIdentity(ctx, providerName, conn)
 
-	result, err = execProv.Execute(ctx, operation, params, accessToken)
+	result, err = prov.Execute(ctx, operation, params, accessToken)
 	if err != nil {
 		return fail(err)
 	}
@@ -720,7 +700,7 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 		}
 		return nil, fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 	}
-	if effectiveConnectionMode(ctx, prov) != core.ConnectionModeUser {
+	if effectiveConnectionMode(ctx, prov) != core.ConnectionModeSubject {
 		return targets, nil
 	}
 	if b == nil || core.ExternalCredentialProviderMissing(b.externalCreds) {
@@ -805,12 +785,12 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 		return ctx, "", nil
 
-	case core.ConnectionModeUser:
+	case core.ConnectionModeSubject:
 		subjectID := principal.EffectiveCredentialSubjectID(p)
 		if subjectID == "" {
 			return ctx, "", fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
 		}
-		return b.resolveSubjectCredential(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
+		return b.resolveSubjectCredential(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeSubject, subjectID)
 
 	default:
 		return ctx, "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
@@ -839,7 +819,7 @@ func (b *Broker) ResolveRuntimeConnectionCredential(ctx context.Context, p *prin
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 		return ctx, ConnectionRuntimeCredential{}, info, nil
 
-	case core.ConnectionModeUser:
+	case core.ConnectionModeSubject:
 		if err := b.resolveUserPrincipal(ctx, p); err != nil {
 			return ctx, ConnectionRuntimeCredential{}, info, err
 		}
@@ -848,7 +828,7 @@ func (b *Broker) ResolveRuntimeConnectionCredential(ctx context.Context, p *prin
 		if subjectID == "" {
 			return ctx, ConnectionRuntimeCredential{}, info, fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
 		}
-		resolvedCtx, credential, err := b.resolveSubjectRuntimeCredential(ctx, nil, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
+		resolvedCtx, credential, err := b.resolveSubjectRuntimeCredential(ctx, nil, subjectID, providerName, connection, instance, core.ConnectionModeSubject, subjectID)
 		return resolvedCtx, credential, info, err
 
 	default:
@@ -1054,5 +1034,5 @@ func (b *Broker) ResolveSubjectToken(ctx context.Context, prov core.Provider, su
 	if subjectID == "" {
 		return ctx, "", fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
 	}
-	return b.resolveSubjectCredential(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
+	return b.resolveSubjectCredential(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeSubject, subjectID)
 }

@@ -676,7 +676,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		}
 		defer func() { _ = db.Close() }()
 
-		if _, err := db.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil && !errors.Is(err, gestalt.ErrAlreadyExists) {
+		if _, err := db.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{}); err != nil && !errors.Is(err, gestalt.ErrAlreadyExists) {
 			return nil, err
 		}
 		if err := db.ObjectStore(store).Put(ctx, map[string]any{"id": id, "value": value}); err != nil {
@@ -709,7 +709,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		defer func() { _ = client.Close() }()
 
 		obj := s3sdk.Object(client, key)
-		if _, err := obj.WriteString(ctx, value, &gestalt.WriteOptions{ContentType: "text/plain"}); err != nil {
+		if _, err := obj.WriteString(ctx, value, &gestalt.WriteRequest{ContentType: "text/plain"}); err != nil {
 			return nil, err
 		}
 		text, err := obj.Text(ctx, nil)
@@ -720,7 +720,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return nil, err
 		}
-		page, err := client.ListObjects(ctx, gestalt.ListOptions{Prefix: key})
+		page, err := client.ListObjects(ctx, gestalt.ListRequest{Prefix: key})
 		if err != nil {
 			return nil, err
 		}

@@ -157,7 +157,7 @@ fn test_cli_authorization_subjects_tokens_create_groups_native_permissions() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"name":"deploy","permissions":[{"actions":["provider_dev.attach"],"operations":["issues.create"],"app":"github"},{"operations":["chat.postMessage"],"app":"slack"}]}"#.to_string(),
+        r#"{"name":"deploy","permissions":[{"operations":["issues.create"],"app":"github"},{"operations":["chat.postMessage"],"app":"slack"}]}"#.to_string(),
     ))
     .with_body(r#"{"id":"tok-1","name":"deploy","token":"plain-secret"}"#)
     .create();
@@ -174,8 +174,6 @@ fn test_cli_authorization_subjects_tokens_create_groups_native_permissions() {
             "deploy",
             "--permission",
             "github:issues.create",
-            "--action",
-            "github:provider_dev.attach",
             "--permission",
             "slack:chat.postMessage",
         ])
@@ -352,7 +350,7 @@ fn test_cli_authorization_subjects_tokens_list_table_shows_permissions() {
         StatusCode::OK
     )
     .with_body(
-        r#"[{"id":"tok-1","name":"deploy","scopes":"","permissions":[{"app":"github","operations":["issues.list"],"actions":["provider_dev.attach"]}],"createdAt":"2026-05-12T00:00:00Z"}]"#,
+        r#"[{"id":"tok-1","name":"deploy","scopes":"","permissions":[{"app":"github","operations":["issues.list"]}],"createdAt":"2026-05-12T00:00:00Z"}]"#,
     )
     .create();
 
@@ -362,8 +360,7 @@ fn test_cli_authorization_subjects_tokens_list_table_shows_permissions() {
         .assert()
         .success()
         .stdout(predicate::str::contains("github"))
-        .stdout(predicate::str::contains("issues.list"))
-        .stdout(predicate::str::contains("provider_dev.attach"));
+        .stdout(predicate::str::contains("issues.list"));
 
     mock.assert();
 }

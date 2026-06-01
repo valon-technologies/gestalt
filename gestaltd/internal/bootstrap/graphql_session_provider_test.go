@@ -438,7 +438,7 @@ func (p *graphQLPostConnectProvider) Name() string        { return "linear" }
 func (p *graphQLPostConnectProvider) DisplayName() string { return "Linear" }
 func (p *graphQLPostConnectProvider) Description() string { return "Linear provider" }
 func (p *graphQLPostConnectProvider) ConnectionMode() core.ConnectionMode {
-	return core.ConnectionModeUser
+	return core.ConnectionModeSubject
 }
 func (p *graphQLPostConnectProvider) AuthTypes() []string { return []string{"oauth"} }
 func (p *graphQLPostConnectProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {

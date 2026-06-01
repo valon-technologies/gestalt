@@ -37,7 +37,7 @@ func TestCompositeCatalogForRequestMergesAPISessionAndMCPSession(t *testing.T) {
 	}
 	mcp := &fakeMCPUpstream{
 		fakeSessionProvider: &fakeSessionProvider{
-			fakeProvider: &fakeProvider{name: "mcp", connMode: core.ConnectionModeUser},
+			fakeProvider: &fakeProvider{name: "mcp", connMode: core.ConnectionModeSubject},
 			sessionCat: &catalog.Catalog{
 				Name: "test",
 				Operations: []catalog.CatalogOperation{{
@@ -133,7 +133,7 @@ func TestCompositePreservesPostConnectCapability(t *testing.T) {
 	}
 	mcp := &fakeMCPUpstream{
 		fakeSessionProvider: &fakeSessionProvider{
-			fakeProvider: &fakeProvider{name: "mcp", connMode: core.ConnectionModeUser},
+			fakeProvider: &fakeProvider{name: "mcp", connMode: core.ConnectionModeSubject},
 			sessionCat:   &catalog.Catalog{Name: "test"},
 		},
 	}
@@ -181,7 +181,7 @@ func TestCompositeSkipsPostConnectWhenProviderAdvertisesNoSupport(t *testing.T) 
 	}
 	mcp := &fakeMCPUpstream{
 		fakeSessionProvider: &fakeSessionProvider{
-			fakeProvider: &fakeProvider{name: "mcp", connMode: core.ConnectionModeUser},
+			fakeProvider: &fakeProvider{name: "mcp", connMode: core.ConnectionModeSubject},
 			sessionCat:   &catalog.Catalog{Name: "test"},
 		},
 	}

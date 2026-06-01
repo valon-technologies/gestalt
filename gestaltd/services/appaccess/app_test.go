@@ -181,9 +181,9 @@ func TestAppServerInvokeCredentialModeForForwardedToken(t *testing.T) {
 			want:        core.ConnectionModeNone,
 		},
 		{
-			name:        "explicit user mode",
-			requestMode: "user",
-			want:        core.ConnectionModeUser,
+			name:        "explicit subject mode",
+			requestMode: "subject",
+			want:        core.ConnectionModeSubject,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

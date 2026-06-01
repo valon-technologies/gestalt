@@ -319,7 +319,7 @@ fn test_cli_updates_single_app_schedule_preserves_step_fields() {
                 "app":{
                     "name":"dummy",
                     "operation":"doit",
-                    "credentialMode":"user",
+                    "credentialMode":"subject",
                     "input":{"literal":{"k":"v"}}
                 },
                 "when":{"value":{"runInput":"enabled"},"equals":true},
@@ -357,7 +357,7 @@ fn test_cli_updates_single_app_schedule_preserves_step_fields() {
                     "app":{
                         "name":"dummy",
                         "operation":"doit.updated",
-                        "credentialMode":"user",
+                        "credentialMode":"subject",
                         "connection":"prod",
                         "input":{"literal":{"k":"v"}}
                     },

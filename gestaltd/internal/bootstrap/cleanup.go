@@ -7,7 +7,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
-	"github.com/valon-technologies/gestalt/server/services/providerdev"
 )
 
 // CloseProviders closes all registered providers that implement io.Closer.
@@ -33,11 +32,4 @@ func CloseProviders(providers *registry.ProviderMap[core.Provider]) error {
 	}
 
 	return errors.Join(errs...)
-}
-
-func closeProviderDevSessions(manager *providerdev.Manager) error {
-	if manager == nil {
-		return nil
-	}
-	return manager.Close()
 }

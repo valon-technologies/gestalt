@@ -70,9 +70,6 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateAdminConfig(cfg); err != nil {
 		return err
 	}
-	if err := validateProviderDevConfig(cfg); err != nil {
-		return err
-	}
 	if cfg.Server.APITokenTTL != "" {
 		if _, err := ParseDuration(cfg.Server.APITokenTTL); err != nil {
 			return fmt.Errorf("config validation: server.apiTokenTtl: %w", err)
@@ -169,20 +166,6 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		}
 	}
 	return validateWorkflowsConfig(cfg)
-}
-
-func validateProviderDevConfig(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	state := DevAttachmentState(strings.TrimSpace(string(cfg.Server.Dev.AttachmentState)))
-	cfg.Server.Dev.AttachmentState = state
-	switch state {
-	case "", DevAttachmentStateIndexedDB:
-		return nil
-	default:
-		return fmt.Errorf("config validation: server.dev.attachmentState %q is not supported; use %q", state, DevAttachmentStateIndexedDB)
-	}
 }
 
 func validateAPIVersion(cfg *Config) error {
@@ -335,7 +318,7 @@ func normalizeConnectionBindings(cfg *Config) error {
 				if binding.ConnectionID == "" {
 					binding.ConnectionID = inlineConnectionID(kind, name, localName)
 				}
-				if !binding.BindingResolved && ConnectionModeForConnection(*binding) == core.ConnectionModeUser && connectionBindingRequiresUserCredential(binding) {
+				if !binding.BindingResolved && ConnectionModeForConnection(*binding) == core.ConnectionModeSubject && connectionBindingRequiresUserCredential(binding) {
 					return fmt.Errorf("config validation: %s.%s.connections.%s user-owned inline connections are not supported; define a top-level connection and reference it with ref", kind, name, localName)
 				}
 				continue
@@ -724,7 +707,7 @@ func validateTopLevelConnections(cfg *Config) error {
 		}
 		mode := ConnectionModeForConnection(*conn)
 		switch mode {
-		case core.ConnectionModeNone, core.ConnectionModeUser:
+		case core.ConnectionModeNone, core.ConnectionModeSubject:
 		default:
 			return fmt.Errorf("config validation: connections.%s mode %q is not supported", id, conn.Mode)
 		}
@@ -911,7 +894,7 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 			return fmt.Errorf("config validation: apps.%s.invokes[%d] may set only one of .operation or .surface", name, i)
 		case entry.Invokes[i].Surface != "" && entry.Invokes[i].Surface != string(SpecSurfaceGraphQL):
 			return fmt.Errorf("config validation: apps.%s.invokes[%d].surface %q is not supported", name, i, entry.Invokes[i].Surface)
-		case entry.Invokes[i].CredentialMode != "" && entry.Invokes[i].CredentialMode != providermanifestv1.ConnectionModeNone && entry.Invokes[i].CredentialMode != providermanifestv1.ConnectionModeUser:
+		case entry.Invokes[i].CredentialMode != "" && entry.Invokes[i].CredentialMode != providermanifestv1.ConnectionModeNone && entry.Invokes[i].CredentialMode != providermanifestv1.ConnectionModeSubject:
 			return fmt.Errorf("config validation: apps.%s.invokes[%d].credentialMode %q is not supported", name, i, entry.Invokes[i].CredentialMode)
 		}
 		if err := normalizeAppInvocationRunAs("apps."+name+".invokes["+strconv.Itoa(i)+"]", &entry.Invokes[i]); err != nil {
@@ -2340,7 +2323,7 @@ func normalizeWorkflowStepAppCallConfig(path string, app *WorkflowStepAppCallCon
 	}
 	switch app.CredentialMode {
 	case "":
-	case providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
+	case providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeSubject:
 		if !allowCredentialMode {
 			return fmt.Errorf("config validation: %s.credentialMode is not supported", path)
 		}

@@ -26,14 +26,14 @@ type Pinger interface {
 type ObjectHandle interface {
 	Stat(ctx context.Context) (ObjectMeta, error)
 	Exists(ctx context.Context) (bool, error)
-	Stream(ctx context.Context, opts *ReadOptions) (ObjectMeta, io.ReadCloser, error)
-	Bytes(ctx context.Context, opts *ReadOptions) ([]byte, error)
-	Text(ctx context.Context, opts *ReadOptions) (string, error)
-	JSON(ctx context.Context, opts *ReadOptions) (any, error)
-	Write(ctx context.Context, body io.Reader, opts *WriteOptions) (ObjectMeta, error)
-	WriteBytes(ctx context.Context, body []byte, opts *WriteOptions) (ObjectMeta, error)
-	WriteString(ctx context.Context, body string, opts *WriteOptions) (ObjectMeta, error)
-	WriteJSON(ctx context.Context, value any, opts *WriteOptions) (ObjectMeta, error)
+	Stream(ctx context.Context, req *ReadRequest) (ObjectMeta, io.ReadCloser, error)
+	Bytes(ctx context.Context, req *ReadRequest) ([]byte, error)
+	Text(ctx context.Context, req *ReadRequest) (string, error)
+	JSON(ctx context.Context, req *ReadRequest) (any, error)
+	Write(ctx context.Context, req WriteRequest) (ObjectMeta, error)
+	WriteBytes(ctx context.Context, body []byte, req *WriteRequest) (ObjectMeta, error)
+	WriteString(ctx context.Context, body string, req *WriteRequest) (ObjectMeta, error)
+	WriteJSON(ctx context.Context, value any, req *WriteRequest) (ObjectMeta, error)
 	Delete(ctx context.Context) error
-	Presign(ctx context.Context, opts *PresignOptions) (PresignResult, error)
+	Presign(ctx context.Context, req *PresignRequest) (PresignResult, error)
 }

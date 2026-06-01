@@ -24,7 +24,6 @@ type (
 	IndexSchema               = indexeddb.IndexSchema
 	ColumnType                = indexeddb.ColumnType
 	ColumnDef                 = indexeddb.ColumnDef
-	ObjectStoreSchema         = indexeddb.ObjectStoreSchema
 	ObjectStoreOptions        = indexeddb.ObjectStoreOptions
 )
 

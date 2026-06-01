@@ -58,10 +58,7 @@ message Catalog {
 enum ConnectionMode {
   CONNECTION_MODE_UNSPECIFIED = 0;
   CONNECTION_MODE_NONE = 1;
-  CONNECTION_MODE_USER = 2;
-  reserved 3, 4, 5;
-  reserved "CONNECTION_MODE_IDENTITY", "CONNECTION_MODE_EITHER";
-  reserved "CONNECTION_MODE_PLATFORM";
+  CONNECTION_MODE_SUBJECT = 2;
 }
 
 // ConnectionParamDef describes one provider-defined connection parameter.
@@ -183,9 +180,6 @@ message ExternalIdentityContext {
 }
 
 message AgentToolRef {
-  reserved 7;
-  reserved "credential_mode";
-
   string app = 1;
   string operation = 2;
   string connection = 3;

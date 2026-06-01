@@ -156,6 +156,22 @@ func TestNewMergedConnectionModeNone(t *testing.T) {
 	}
 }
 
+func TestNewMergedConnectionModePreservesUnsupportedMode(t *testing.T) {
+	t.Parallel()
+
+	unsupportedMode := core.ConnectionMode("unsupported")
+	merged, err := composite.NewMergedWithConnections("test", "Test", "desc", "",
+		composite.BoundProvider{Provider: &fakeProvider{name: "a", connMode: core.ConnectionModeSubject, ops: []core.Operation{{Name: "a"}}}},
+		composite.BoundProvider{Provider: &fakeProvider{name: "b", connMode: unsupportedMode, ops: []core.Operation{{Name: "b"}}}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := merged.ConnectionMode(); got != unsupportedMode {
+		t.Errorf("expected %q, got %q", unsupportedMode, got)
+	}
+}
+
 func TestMergedCatalogIncludesConstructorMetadata(t *testing.T) {
 	t.Parallel()
 

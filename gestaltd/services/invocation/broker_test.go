@@ -108,7 +108,7 @@ func TestBrokerResolveToken_NonUserSubjectUsesOwnExternalCredential(t *testing.T
 	svc := testutil.NewStubServices(t)
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "slack",
-		ConnMode: core.ConnectionModeUser,
+		ConnMode: core.ConnectionModeSubject,
 	})
 	broker := NewBroker(providers, svc.Users, svc.ExternalCredentials)
 	subjectID := "service_account:workflow-roadmap"
@@ -159,85 +159,6 @@ func TestBrokerResolveToken_NonUserSubjectUsesOwnExternalCredential(t *testing.T
 	}
 }
 
-func TestBrokerInvokeProviderOverrideResolvesOperationConnectionFromOverride(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	cat := &catalog.Catalog{
-		Name: "slack",
-		Operations: []catalog.CatalogOperation{{
-			ID:     "send",
-			Method: "POST",
-		}},
-	}
-	baseProvider := &brokerOperationConnectionProvider{
-		StubIntegration: &coretesting.StubIntegration{
-			N:          "slack",
-			ConnMode:   core.ConnectionModeUser,
-			CatalogVal: cat,
-			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: 200, Body: token}, nil
-			},
-		},
-		operationConnections: map[string]string{"send": "default"},
-	}
-	overrideProvider := &brokerOperationConnectionProvider{
-		StubIntegration: &coretesting.StubIntegration{
-			N:          "slack",
-			ConnMode:   core.ConnectionModeUser,
-			CatalogVal: cat,
-			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: 200, Body: token}, nil
-			},
-		},
-		operationConnections: map[string]string{"send": "default"},
-		selector: core.OperationConnectionSelector{
-			Parameter: "actor",
-			Default:   "user",
-			Values: map[string]string{
-				"bot":  "bot",
-				"user": "default",
-			},
-		},
-	}
-	broker := NewBroker(
-		testutil.NewProviderRegistry(t, baseProvider),
-		svc.Users,
-		svc.ExternalCredentials,
-		WithProviderOverrides(staticProviderOverrideResolver{provider: overrideProvider}),
-	)
-	subjectID := principal.UserSubjectID("u-override")
-	for connection, token := range map[string]string{
-		"default": "user-token",
-		"bot":     "bot-token",
-	} {
-		if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-			SubjectID:   subjectID,
-			Integration: "slack",
-			Connection:  connection,
-			Instance:    "default",
-			AccessToken: token,
-		}); err != nil {
-			t.Fatalf("PutCredential(%s): %v", connection, err)
-		}
-	}
-
-	result, err := broker.Invoke(
-		context.Background(),
-		&principal.Principal{SubjectID: subjectID, UserID: "u-override", Kind: principal.KindUser},
-		"slack",
-		"",
-		"send",
-		map[string]any{"actor": "bot"},
-	)
-	if err != nil {
-		t.Fatalf("Invoke: %v", err)
-	}
-	if result.Body != "bot-token" {
-		t.Fatalf("token = %q, want bot-token", result.Body)
-	}
-}
-
 func TestBrokerInvokeRejectsExplicitOperationConnectionOverride(t *testing.T) {
 	t.Parallel()
 
@@ -253,7 +174,7 @@ func TestBrokerInvokeRejectsExplicitOperationConnectionOverride(t *testing.T) {
 	provider := &brokerOperationConnectionProvider{
 		StubIntegration: &coretesting.StubIntegration{
 			N:          "gmail",
-			ConnMode:   core.ConnectionModeUser,
+			ConnMode:   core.ConnectionModeSubject,
 			CatalogVal: cat,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				executed = true
@@ -461,14 +382,6 @@ func TestOperationConnectionOverrideAllowedForPluginTransportOperations(t *testi
 	if OperationConnectionOverrideAllowed(prov, "chat.postMessage", nil) {
 		t.Fatal("REST operation should not allow explicit connection override")
 	}
-}
-
-type staticProviderOverrideResolver struct {
-	provider core.Provider
-}
-
-func (r staticProviderOverrideResolver) ResolveProviderOverride(context.Context, *principal.Principal, string) (core.Provider, bool, error) {
-	return r.provider, r.provider != nil, nil
 }
 
 type brokerOperationConnectionProvider struct {

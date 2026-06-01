@@ -69,7 +69,7 @@ func newTestUpstreamFromServer(t *testing.T, name string, srv *mcpserver.MCPServ
 		t.Fatalf("listing tools: %v", err)
 	}
 
-	return newFromClient(name, client, core.ConnectionModeUser, toolsResult.Tools)
+	return newFromClient(name, client, core.ConnectionModeSubject, toolsResult.Tools)
 }
 
 func newAuthenticatedHTTPTestServer(t *testing.T, expectedAuth string) *httptest.Server {
@@ -273,7 +273,7 @@ func TestUpstream_ProviderMetadata(t *testing.T) {
 	if u.Name() != "clickhouse" {
 		t.Fatalf("Name = %q", u.Name())
 	}
-	if u.ConnectionMode() != core.ConnectionModeUser {
+	if u.ConnectionMode() != core.ConnectionModeSubject {
 		t.Fatalf("ConnectionMode = %q", u.ConnectionMode())
 	}
 	if got := u.AuthTypes(); len(got) != 0 {
@@ -291,7 +291,7 @@ func TestUpstream_MetadataOverridesDecorateCatalogs(t *testing.T) {
 		context.Background(),
 		"clickhouse",
 		ts.URL,
-		core.ConnectionModeUser,
+		core.ConnectionModeSubject,
 		nil,
 		nil,
 		WithMetadataOverrides("Override", "Override description", "<svg/>"),
@@ -333,7 +333,7 @@ func TestUpstream_MetadataOverridesDecorateCatalogs(t *testing.T) {
 func TestUpstream_SetIconSVGDecoratesCatalogWithoutStaticCatalog(t *testing.T) {
 	t.Parallel()
 
-	u, err := New(context.Background(), "clickhouse", "https://example.com/mcp", core.ConnectionModeUser, nil, nil)
+	u, err := New(context.Background(), "clickhouse", "https://example.com/mcp", core.ConnectionModeSubject, nil, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestUpstream_LazyDiscoveryUsesRequestToken(t *testing.T) {
 	ts := newAuthenticatedHTTPTestServer(t, "Bearer secret-token")
 	t.Cleanup(ts.Close)
 
-	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil, nil)
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeSubject, nil, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -453,7 +453,7 @@ func TestUpstream_RequestTokenOverridesStaticAuthorizationHeader(t *testing.T) {
 	})
 	t.Cleanup(ts.Close)
 
-	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, map[string]string{
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeSubject, map[string]string{
 		"Authorization": "Bearer wrong-token",
 		headerName:      headerValue,
 	}, nil)
@@ -485,7 +485,7 @@ func TestUpstream_EgressCheckBlocksDeniedHost(t *testing.T) {
 	ts := newAuthenticatedHTTPTestServer(t, "Bearer tok")
 	t.Cleanup(ts.Close)
 
-	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil,
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeSubject, nil,
 		func(_ string) error {
 			return fmt.Errorf("%w: denied", egress.ErrEgressDenied)
 		},
@@ -510,7 +510,7 @@ func TestUpstream_EgressCheckAllowsPermittedHost(t *testing.T) {
 	ts := newAuthenticatedHTTPTestServer(t, "Bearer secret-token")
 	t.Cleanup(ts.Close)
 
-	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil,
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeSubject, nil,
 		func(host string) error {
 			checkedHost = host
 			return nil

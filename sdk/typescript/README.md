@@ -118,13 +118,13 @@ Gestalt catalog.
 Source-mode runtime:
 
 ```sh
-gestalt-ts-runtime ROOT plugin:./provider.ts#app
+gestalt-ts-runtime ROOT app:./provider.ts#app
 ```
 
 Release build:
 
 ```sh
-gestalt-ts-build ROOT plugin:./provider.ts#app OUTPUT PROVIDER_NAME GOOS GOARCH
+gestalt-ts-build ROOT app:./provider.ts#app OUTPUT PROVIDER_NAME GOOS GOARCH
 ```
 
 The build entrypoint compiles a standalone executable with Bun and bundles the

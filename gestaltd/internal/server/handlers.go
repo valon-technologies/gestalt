@@ -178,25 +178,17 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		surfaceProv := prov
-		if override, ok, err := s.providerOverrideForContext(r.Context(), p, name); err != nil {
-			slog.ErrorContext(r.Context(), "resolving provider dev override", "provider", name, "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to resolve provider dev override")
-			return
-		} else if ok {
-			surfaceProv = override
-		}
 		info := integrationInfo{
 			Name:            name,
-			DisplayName:     surfaceProv.DisplayName(),
-			Description:     surfaceProv.Description(),
+			DisplayName:     prov.DisplayName(),
+			Description:     prov.Description(),
 			Connections:     []connectionDefInfo{},
 			Status:          connectionStatusUnknown,
 			CredentialState: credentialStateUnknown,
 			HealthState:     healthStateUnknown,
 			Actions:         []string{},
 		}
-		if cat := surfaceProv.Catalog(); cat != nil {
+		if cat := prov.Catalog(); cat != nil {
 			info.IconSVG = cat.IconSVG
 		}
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
@@ -206,7 +198,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		authTypes := s.populateIntegrationSettings(&info, prov, instances, p)
 		s.applyIntegrationConnectionStatus(&info, prov, instances, authTypes, p)
 		info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
-		if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, surfaceProv, info) {
+		if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, prov, info) {
 			continue
 		}
 		out = append(out, info)
@@ -563,12 +555,6 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, errOperationAccess.Error())
 		return
 	}
-	if override, ok, err := s.providerOverrideForContext(r.Context(), p, name); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	} else if ok {
-		prov = override
-	}
 	requestedConnection := r.URL.Query().Get(httpConnectionParam)
 	if requestedConnection != "" {
 		var ok bool
@@ -659,14 +645,6 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, errOperationAccess.Error())
 		return
 	}
-	surfaceProv := prov
-	if override, ok, err := s.providerOverrideForContext(r.Context(), p, providerName); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	} else if ok {
-		surfaceProv = override
-	}
-
 	requestedConnectionInput := r.URL.Query().Get(httpConnectionParam)
 	requestedConnection := requestedConnectionInput
 	if requestedConnection != "" {
@@ -747,12 +725,12 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	if visible, ok := staticCatalogOperationVisibleByDefault(surfaceProv, operationName); ok && !visible {
+	if visible, ok := staticCatalogOperationVisibleByDefault(prov, operationName); ok && !visible {
 		s.writeInvocationError(w, r, providerName, operationName, invocation.ErrOperationNotFound)
 		return
 	}
 	sessionConnections := s.catalogSelectorConfig().SessionCatalogConnections(providerName, connection)
-	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, surfaceProv, providerName, resolver, p, operationName, sessionConnections, instance)
+	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, providerName, resolver, p, operationName, sessionConnections, instance)
 	if err != nil {
 		s.writeInvocationError(w, r, providerName, operationName, err)
 		return
@@ -761,7 +739,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		s.writeInvocationError(w, r, providerName, operationName, invocation.ErrOperationNotFound)
 		return
 	}
-	if err := s.validatePublicOperationInvocation(providerName, surfaceProv, opMeta, params, connection); err != nil {
+	if err := s.validatePublicOperationInvocation(providerName, prov, opMeta, params, connection); err != nil {
 		s.writeInvocationError(w, r, providerName, operationName, err)
 		return
 	}
@@ -776,7 +754,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	}
 	operationConnection := resolvedConnection
 	if operationConnection == "" {
-		operationConnection, err = invocation.ResolveOperationConnection(surfaceProv, opMeta.ID, params)
+		operationConnection, err = invocation.ResolveOperationConnection(prov, opMeta.ID, params)
 		if err != nil {
 			s.writeInvocationError(w, r, providerName, operationName, err)
 			return
@@ -788,7 +766,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
 			return
 		}
-		if operationConnection := config.ResolveConnectionAlias(operationConnection); operationConnection != "" && operationConnection != connection && !invocation.OperationConnectionOverrideAllowed(surfaceProv, opMeta.ID, params) {
+		if operationConnection := config.ResolveConnectionAlias(operationConnection); operationConnection != "" && operationConnection != connection && !invocation.OperationConnectionOverrideAllowed(prov, opMeta.ID, params) {
 			writeError(
 				w,
 				http.StatusBadRequest,

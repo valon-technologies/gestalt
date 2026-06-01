@@ -13,7 +13,7 @@
       "type": "string",
       "enum": [
         "app",
-        "auth",
+        "authentication",
         "authorization",
         "externalcredentials",
         "indexeddb",
@@ -347,8 +347,7 @@
           "type": "string",
           "enum": [
             "none",
-            "subject",
-            "user"
+            "subject"
           ]
         },
         "requestBody": {
@@ -398,8 +397,7 @@
           "type": "string",
           "enum": [
             "none",
-            "subject",
-            "user"
+            "subject"
           ]
         },
         "auth": {

@@ -1101,7 +1101,7 @@ func TestNewServer_ServiceAccountListToolsFiltersStaticAndSessionTools(t *testin
 	}
 
 	prov := &directCallerProvider{
-		StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeUser},
+		StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeSubject},
 		cat:             staticCat,
 		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			if token != "identity-token" {
@@ -1250,7 +1250,7 @@ func TestNewServer_HumanListToolsUsesCanonicalSubjectForStaticCollisions(t *test
 	t.Parallel()
 
 	prov := &directCallerProvider{
-		StubIntegration: coretesting.StubIntegration{N: "sampledb", ConnMode: core.ConnectionModeUser},
+		StubIntegration: coretesting.StubIntegration{N: "sampledb", ConnMode: core.ConnectionModeSubject},
 		cat: &catalog.Catalog{
 			Name: "sampledb",
 			Operations: []catalog.CatalogOperation{
@@ -1558,7 +1558,7 @@ func TestNewServer_SessionCatalogSuppressionHidesStaticMCPTool(t *testing.T) {
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "sampledb",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 		},
 		cat: &catalog.Catalog{
 			Name: "sampledb",
@@ -2009,7 +2009,7 @@ func TestNewServer_ServiceAccountCallToolUsesBoundConnectionForSessionOnlyProvid
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "clickhouse",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 		},
 		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			sessionCatalogCalls++
@@ -2101,7 +2101,7 @@ func TestNewServer_ServiceAccountCallToolUsesRequestedInstance(t *testing.T) {
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "sampledb",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 		},
 		cat: &catalog.Catalog{
 			Name: "sampledb",
@@ -2214,7 +2214,7 @@ func TestNewServer_HumanCallToolUsesInstanceMetadataForStaticCollisions(t *testi
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "sampledb",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 		},
 		cat: &catalog.Catalog{
 			Name: "sampledb",
@@ -2497,7 +2497,7 @@ func TestNewServer_DefaultHydrationFailureHidesStaticCollisionWithoutAuthorizer(
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "sampledb",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 		},
 		cat: &catalog.Catalog{
 			Name: "sampledb",
@@ -2535,7 +2535,7 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "sampledb",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				seenToken = token
 				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
@@ -2614,7 +2614,7 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 		collisionProv := &directCallerProvider{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sampledb",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 					seenToken = token
 					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
@@ -2684,7 +2684,7 @@ func TestNewServer_HumanCallToolUsesNormalizedRequestedInstanceWithoutOverwritin
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "sampledb",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 		},
 		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			sessionCatalogCalls++
@@ -2881,7 +2881,7 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	pluginProv := &flatProvider{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "app",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{Status: http.StatusOK, Body: token}, nil
 			},
@@ -2891,7 +2891,7 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	apiProv := &flatProvider{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "api",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{Status: http.StatusOK, Body: token}, nil
 			},

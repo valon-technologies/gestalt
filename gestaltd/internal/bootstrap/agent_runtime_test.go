@@ -314,7 +314,7 @@ func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 		"simple": {
 			"vertex": {
 				ConnectionID: "vertex-kimi-k2-6",
-				Mode:         core.ConnectionModeUser,
+				Mode:         core.ConnectionModeSubject,
 				AuthConfig:   core.ExternalCredentialAuthConfig{Type: "bearer", Token: "vertex-token"},
 				Params:       map[string]string{"endpoint": "https://vertex.example.invalid"},
 			},
@@ -357,8 +357,8 @@ func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 	if got.Connection != "vertex" {
 		t.Fatalf("Connection = %q, want vertex", got.Connection)
 	}
-	if got.Mode != core.ConnectionModeUser {
-		t.Fatalf("Mode = %q, want %q", got.Mode, core.ConnectionModeUser)
+	if got.Mode != core.ConnectionModeSubject {
+		t.Fatalf("Mode = %q, want %q", got.Mode, core.ConnectionModeSubject)
 	}
 	if got.Headers["Authorization"] != core.BearerScheme+"vertex-token" {
 		t.Fatalf("Authorization header = %q, want bearer token", got.Headers["Authorization"])
@@ -3353,7 +3353,7 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 	linearProvider := &failingSessionCatalogIntegration{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "linear",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
 				ID:    "viewer",
 				Title: "Current Linear viewer",

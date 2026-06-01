@@ -87,7 +87,7 @@ func (d *countingIndexedDB) Transaction(ctx context.Context, stores []string, mo
 	return d.inner.Transaction(ctx, stores, mode, opts)
 }
 
-func (d *countingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
+func (d *countingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreOptions) (idb.ObjectStore, error) {
 	return d.inner.CreateObjectStore(ctx, name, schema)
 }
 
@@ -131,7 +131,7 @@ func (d *createContextRecordingIndexedDB) Transaction(ctx context.Context, store
 	return d.inner.Transaction(ctx, stores, mode, opts)
 }
 
-func (d *createContextRecordingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
+func (d *createContextRecordingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreOptions) (idb.ObjectStore, error) {
 	d.mu.Lock()
 	d.createContexts[name] = ctx
 	d.mu.Unlock()
@@ -700,6 +700,33 @@ func TestAPITokenService(t *testing.T) {
 		}
 		if got.Scopes != "read:tokens" {
 			t.Errorf("Scopes = %q, want %q", got.Scopes, "read:tokens")
+		}
+	})
+
+	t.Run("ValidateAPIToken_unknown_permission_fields_fail_closed", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestServices(t)
+		ctx := context.Background()
+
+		user := mustCreateUser(t, svc, "legacy-action@test.com")
+		if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(ctx, idb.Record{
+			"id":                    "api-legacy-action",
+			"owner_kind":            core.APITokenOwnerKindUser,
+			"owner_id":              user.ID,
+			"credential_subject_id": principal.UserSubjectID(user.ID),
+			"name":                  "legacy-action",
+			"hashed_token":          "sha256:legacy-action",
+			"permissions_json":      `[{"app":"roadmap","actions":["legacy.action"]}]`,
+		}); err != nil {
+			t.Fatalf("Add legacy token: %v", err)
+		}
+
+		got, err := svc.APITokens.ValidateAPIToken(ctx, "sha256:legacy-action")
+		if err != nil {
+			t.Fatalf("ValidateAPIToken: %v", err)
+		}
+		if got.Permissions == nil || len(got.Permissions) != 0 {
+			t.Fatalf("Permissions = %#v, want explicit empty permissions", got.Permissions)
 		}
 	})
 
