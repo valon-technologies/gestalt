@@ -128,7 +128,7 @@ func TestResolveCatalog_StaticCatalog(t *testing.T) {
 			name:        "widget-api",
 			displayName: "Widget API",
 			description: "Manages widgets",
-			connMode:    core.ConnectionModeUser,
+			connMode:    core.ConnectionModeSubject,
 		},
 		cat: &catalog.Catalog{
 			Name:        "widget-api",
@@ -219,7 +219,7 @@ func TestResolveCatalog_SessionAndStaticMerge(t *testing.T) {
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "combo-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 			cat: &catalog.Catalog{
 				Name: "combo-api",
@@ -316,7 +316,7 @@ func TestResolveCatalog_CredentialModeNoneOverrideSkipsSessionTokenResolution(t 
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "override-none-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 		},
 		sessionCatFn: func(ctx context.Context, token string) (*catalog.Catalog, error) {
@@ -358,7 +358,7 @@ func TestResolveCatalogAndOperationMetrics(t *testing.T) {
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "metric-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 			cat: &catalog.Catalog{
 				Name: "metric-api",
@@ -428,7 +428,7 @@ func TestResolveCatalog_SameIDCollision_SessionWins(t *testing.T) {
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "clash-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 			cat: &catalog.Catalog{
 				Name: "clash-api",
@@ -485,7 +485,7 @@ func TestFilterCatalogForPrincipal_HumanFilteringUsesResolvedRole(t *testing.T) 
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "sample-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 			cat: &catalog.Catalog{
 				Name: "sample-api",
@@ -551,7 +551,7 @@ func TestFilterCatalogForPrincipal_HumanDefaultAllowKeepsUnannotatedOperations(t
 	prov := &stubCatalogProvider{
 		stubProvider: stubProvider{
 			name:     "sample-api",
-			connMode: core.ConnectionModeUser,
+			connMode: core.ConnectionModeSubject,
 		},
 		cat: &catalog.Catalog{
 			Name: "sample-api",
@@ -599,7 +599,7 @@ func TestFilterCatalogForPrincipal_HumanDefaultAllowTreatsUnmatchedUsersAsViewer
 	prov := &stubCatalogProvider{
 		stubProvider: stubProvider{
 			name:     "sample-api",
-			connMode: core.ConnectionModeUser,
+			connMode: core.ConnectionModeSubject,
 		},
 		cat: &catalog.Catalog{
 			Name: "sample-api",
@@ -650,7 +650,7 @@ func TestFilterCatalogForPrincipal_HumanUnboundProviderKeepsRoleAnnotatedOperati
 	prov := &stubCatalogProvider{
 		stubProvider: stubProvider{
 			name:     "sample-api",
-			connMode: core.ConnectionModeUser,
+			connMode: core.ConnectionModeSubject,
 		},
 		cat: &catalog.Catalog{
 			Name: "sample-api",
@@ -689,7 +689,7 @@ func TestFilterCatalogForPrincipal_SubjectFilteringUsesMergedCatalog(t *testing.
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "clash-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 			cat: &catalog.Catalog{
 				Name: "clash-api",
@@ -756,7 +756,7 @@ func TestResolveCatalog_TokenResolutionFailure_NonFatal(t *testing.T) {
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "auth-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 			cat: &catalog.Catalog{
 				Name: "auth-api",
@@ -801,7 +801,7 @@ func TestResolveCatalogStrict_SessionCatalogUnavailableReturnsTypedError(t *test
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "strict-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 			cat: &catalog.Catalog{
 				Name: "strict-api",
@@ -841,7 +841,7 @@ func TestResolveCatalogForTargetsWithMetadata_PrefersLaterSuccessfulTarget(t *te
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "multi-target-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 			cat: &catalog.Catalog{
 				Name: "multi-target-api",
@@ -912,7 +912,7 @@ func TestResolveCatalogForTargetsWithMetadata_FallsBackAfterMixedErrors(t *testi
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "mixed-errors-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 			cat: &catalog.Catalog{
 				Name: "mixed-errors-api",
@@ -974,7 +974,7 @@ func TestResolveOperation_DoesNotFallBackOnSessionCatalogError(t *testing.T) {
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "session-op-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 			cat: &catalog.Catalog{
 				Name: "session-op-api",
@@ -1013,7 +1013,7 @@ func TestResolveOperation_FallsBackWhenSessionCatalogUnsupported(t *testing.T) {
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "session-op-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 			cat: &catalog.Catalog{
 				Name: "session-op-api",
@@ -1057,7 +1057,7 @@ func TestResolveCatalog_NilResolver(t *testing.T) {
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "noauth-api",
-				connMode: core.ConnectionModeUser,
+				connMode: core.ConnectionModeSubject,
 			},
 			cat: &catalog.Catalog{
 				Name: "noauth-api",
@@ -1094,7 +1094,7 @@ func TestResolveCatalog_IconOnlyCatalogPreserved(t *testing.T) {
 			name:        "icon-api",
 			displayName: "Icon API",
 			description: "Has icon and operations",
-			connMode:    core.ConnectionModeUser,
+			connMode:    core.ConnectionModeSubject,
 			ops: []core.Operation{
 				{
 					Name:        "do_thing",

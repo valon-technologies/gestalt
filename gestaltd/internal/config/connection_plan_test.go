@@ -12,8 +12,8 @@ func TestBuildStaticConnectionPlan_PrefersNamedDefaultConnection(t *testing.T) {
 
 	plan, err := BuildStaticConnectionPlan(&ProviderEntry{}, &providermanifestv1.Spec{
 		Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-			"default": {Mode: providermanifestv1.ConnectionModeUser},
-			"bot":     {Mode: providermanifestv1.ConnectionModeUser},
+			"default": {Mode: providermanifestv1.ConnectionModeSubject},
+			"bot":     {Mode: providermanifestv1.ConnectionModeSubject},
 		},
 		Surfaces: &providermanifestv1.ProviderSurfaces{
 			REST: &providermanifestv1.RESTSurface{

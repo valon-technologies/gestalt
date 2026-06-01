@@ -123,7 +123,7 @@ class AppOperationTests(unittest.TestCase):
                 token="tok-abc",
                 connection_params={"region": "us-east-1"},
                 subject=Subject(id="user:user-123", kind="user"),
-                credential=Credential(mode="user"),
+                credential=Credential(mode="subject"),
                 access=Access(role="admin"),
                 invocation_token="invoke-123",
             ),
@@ -132,7 +132,7 @@ class AppOperationTests(unittest.TestCase):
         self.assertEqual(body["token"], "tok-abc")
         self.assertEqual(body["region"], "us-east-1")
         self.assertEqual(body["subject_id"], "user:user-123")
-        self.assertEqual(body["credential_mode"], "user")
+        self.assertEqual(body["credential_mode"], "subject")
         self.assertEqual(body["access_role"], "admin")
         self.assertEqual(body["invocation_token"], "invoke-123")
 

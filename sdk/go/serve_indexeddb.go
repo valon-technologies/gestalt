@@ -29,7 +29,7 @@ type indexedDBProviderServer struct {
 }
 
 func (s indexedDBProviderServer) CreateObjectStore(ctx context.Context, req *proto.CreateObjectStoreRequest) (*emptypb.Empty, error) {
-	return &emptypb.Empty{}, providerRPCError("indexeddb create object store", s.provider.CreateObjectStore(ctx, req.GetName(), objectStoreSchemaFromProto(req.GetSchema())))
+	return &emptypb.Empty{}, providerRPCError("indexeddb create object store", s.provider.CreateObjectStore(ctx, req.GetName(), objectStoreOptionsFromProto(req.GetSchema())))
 }
 
 func (s indexedDBProviderServer) DeleteObjectStore(ctx context.Context, req *proto.DeleteObjectStoreRequest) (*emptypb.Empty, error) {
@@ -324,11 +324,11 @@ func (s indexedDBProviderServer) Transaction(stream proto.IndexedDB_TransactionS
 	}
 }
 
-func objectStoreSchemaFromProto(schema *proto.ObjectStoreSchema) ObjectStoreSchema {
+func objectStoreOptionsFromProto(schema *proto.ObjectStoreSchema) ObjectStoreOptions {
 	if schema == nil {
-		return ObjectStoreSchema{}
+		return ObjectStoreOptions{}
 	}
-	out := ObjectStoreSchema{
+	out := ObjectStoreOptions{
 		Indexes: make([]IndexSchema, len(schema.GetIndexes())),
 		Columns: make([]ColumnDef, len(schema.GetColumns())),
 	}
@@ -347,7 +347,7 @@ func objectStoreSchemaFromProto(schema *proto.ObjectStoreSchema) ObjectStoreSche
 	return out
 }
 
-func objectStoreSchemaToProto(schema ObjectStoreSchema) *proto.ObjectStoreSchema {
+func objectStoreOptionsToProto(schema ObjectStoreOptions) *proto.ObjectStoreSchema {
 	indexes := make([]*proto.IndexSchema, len(schema.Indexes))
 	for i, idx := range schema.Indexes {
 		indexes[i] = &proto.IndexSchema{Name: idx.Name, KeyPath: idx.KeyPath, Unique: idx.Unique}

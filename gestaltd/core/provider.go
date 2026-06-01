@@ -12,17 +12,12 @@ type ConnectionMode string
 const (
 	ConnectionModeNone    ConnectionMode = "none"
 	ConnectionModeSubject ConnectionMode = "subject"
-
-	// ConnectionModeUser is the legacy name for subject-scoped credentials.
-	ConnectionModeUser = ConnectionModeSubject
-
-	connectionModeLegacyUser ConnectionMode = "user"
 )
 
 func NormalizeConnectionMode(mode ConnectionMode) ConnectionMode {
 	normalized := normalizeConnectionModeValue(mode)
 	switch normalized {
-	case "", ConnectionModeSubject, connectionModeLegacyUser:
+	case "", ConnectionModeSubject:
 		return ConnectionModeSubject
 	case ConnectionModeNone:
 		return ConnectionModeNone

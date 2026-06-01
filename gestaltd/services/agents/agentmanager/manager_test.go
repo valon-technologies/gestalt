@@ -1581,7 +1581,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderUnavailable(
 			StubIntegration: coretesting.StubIntegration{
 				N:        "linear",
 				DN:       "Linear",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 			},
 		},
 		err: invocation.ErrNoCredential,
@@ -2334,7 +2334,7 @@ func TestResolveToolsUsesExplicitProviderCredentialMode(t *testing.T) {
 	provider := &catalogCountingProvider{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "slack",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
 				ID:      "events.reply",
 				Title:   "Reply",

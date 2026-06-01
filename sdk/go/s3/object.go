@@ -10,7 +10,7 @@ import (
 )
 
 type objectAccessURLCreator interface {
-	CreateObjectAccessURL(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error)
+	CreateObjectAccessURL(ctx context.Context, req PresignRequest) (PresignResult, error)
 }
 
 // Object returns a convenience handle for one object key on client.
@@ -57,19 +57,19 @@ func (o *ObjectHandleRef) Exists(ctx context.Context) (bool, error) {
 }
 
 // Stream opens a streaming reader for the current object.
-func (o *ObjectHandleRef) Stream(ctx context.Context, opts *ReadOptions) (ObjectMeta, io.ReadCloser, error) {
+func (o *ObjectHandleRef) Stream(ctx context.Context, req *ReadRequest) (ObjectMeta, io.ReadCloser, error) {
 	if o == nil || o.client == nil {
 		return ObjectMeta{}, nil, fmt.Errorf("s3: object client is required")
 	}
-	req := ReadRequest{Ref: o.ref}
-	if opts != nil {
-		req.Range = opts.Range
-		req.IfMatch = opts.IfMatch
-		req.IfNoneMatch = opts.IfNoneMatch
-		req.IfModifiedSince = opts.IfModifiedSince
-		req.IfUnmodifiedSince = opts.IfUnmodifiedSince
+	readReq := ReadRequest{}
+	if req != nil {
+		readReq = *req
 	}
-	result, err := o.client.ReadObject(ctx, req)
+	if err := requireMatchingRef(readReq.Ref, o.ref); err != nil {
+		return ObjectMeta{}, nil, err
+	}
+	readReq.Ref = o.ref
+	result, err := o.client.ReadObject(ctx, readReq)
 	if err != nil {
 		return ObjectMeta{}, nil, err
 	}
@@ -77,8 +77,8 @@ func (o *ObjectHandleRef) Stream(ctx context.Context, opts *ReadOptions) (Object
 }
 
 // Bytes reads the entire current object into memory.
-func (o *ObjectHandleRef) Bytes(ctx context.Context, opts *ReadOptions) ([]byte, error) {
-	_, body, err := o.Stream(ctx, opts)
+func (o *ObjectHandleRef) Bytes(ctx context.Context, req *ReadRequest) ([]byte, error) {
+	_, body, err := o.Stream(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -87,8 +87,8 @@ func (o *ObjectHandleRef) Bytes(ctx context.Context, opts *ReadOptions) ([]byte,
 }
 
 // Text reads the entire current object as UTF-8 text.
-func (o *ObjectHandleRef) Text(ctx context.Context, opts *ReadOptions) (string, error) {
-	data, err := o.Bytes(ctx, opts)
+func (o *ObjectHandleRef) Text(ctx context.Context, req *ReadRequest) (string, error) {
+	data, err := o.Bytes(ctx, req)
 	if err != nil {
 		return "", err
 	}
@@ -96,8 +96,8 @@ func (o *ObjectHandleRef) Text(ctx context.Context, opts *ReadOptions) (string, 
 }
 
 // JSON reads and decodes the entire current object as JSON.
-func (o *ObjectHandleRef) JSON(ctx context.Context, opts *ReadOptions) (any, error) {
-	data, err := o.Bytes(ctx, opts)
+func (o *ObjectHandleRef) JSON(ctx context.Context, req *ReadRequest) (any, error) {
+	data, err := o.Bytes(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -108,47 +108,48 @@ func (o *ObjectHandleRef) JSON(ctx context.Context, opts *ReadOptions) (any, err
 	return value, nil
 }
 
-// Write uploads a new object body from body.
-func (o *ObjectHandleRef) Write(ctx context.Context, body io.Reader, opts *WriteOptions) (ObjectMeta, error) {
+// Write uploads the body in req to the current object.
+func (o *ObjectHandleRef) Write(ctx context.Context, req WriteRequest) (ObjectMeta, error) {
 	if o == nil || o.client == nil {
 		return ObjectMeta{}, fmt.Errorf("s3: object client is required")
 	}
-	req := WriteRequest{Ref: o.ref, Body: body}
-	if opts != nil {
-		req.ContentType = opts.ContentType
-		req.CacheControl = opts.CacheControl
-		req.ContentDisposition = opts.ContentDisposition
-		req.ContentEncoding = opts.ContentEncoding
-		req.ContentLanguage = opts.ContentLanguage
-		req.Metadata = opts.Metadata
-		req.IfMatch = opts.IfMatch
-		req.IfNoneMatch = opts.IfNoneMatch
+	if err := requireMatchingRef(req.Ref, o.ref); err != nil {
+		return ObjectMeta{}, err
 	}
+	req.Ref = o.ref
 	return o.client.WriteObject(ctx, req)
 }
 
 // WriteBytes uploads body as raw bytes.
-func (o *ObjectHandleRef) WriteBytes(ctx context.Context, body []byte, opts *WriteOptions) (ObjectMeta, error) {
-	return o.Write(ctx, bytes.NewReader(body), opts)
+func (o *ObjectHandleRef) WriteBytes(ctx context.Context, body []byte, req *WriteRequest) (ObjectMeta, error) {
+	writeReq, err := objectWriteRequest(o.ref, req)
+	if err != nil {
+		return ObjectMeta{}, err
+	}
+	writeReq.Body = bytes.NewReader(body)
+	return o.Write(ctx, writeReq)
 }
 
 // WriteString uploads body as text.
-func (o *ObjectHandleRef) WriteString(ctx context.Context, body string, opts *WriteOptions) (ObjectMeta, error) {
-	return o.WriteBytes(ctx, []byte(body), opts)
+func (o *ObjectHandleRef) WriteString(ctx context.Context, body string, req *WriteRequest) (ObjectMeta, error) {
+	return o.WriteBytes(ctx, []byte(body), req)
 }
 
 // WriteJSON uploads value as JSON, defaulting the content type when omitted.
-func (o *ObjectHandleRef) WriteJSON(ctx context.Context, value any, opts *WriteOptions) (ObjectMeta, error) {
+func (o *ObjectHandleRef) WriteJSON(ctx context.Context, value any, req *WriteRequest) (ObjectMeta, error) {
 	body, err := json.Marshal(value)
 	if err != nil {
 		return ObjectMeta{}, err
 	}
-	if opts == nil {
-		opts = &WriteOptions{ContentType: "application/json"}
-	} else if opts.ContentType == "" {
-		opts.ContentType = "application/json"
+	writeReq, err := objectWriteRequest(o.ref, req)
+	if err != nil {
+		return ObjectMeta{}, err
 	}
-	return o.WriteBytes(ctx, body, opts)
+	if writeReq.ContentType == "" {
+		writeReq.ContentType = "application/json"
+	}
+	writeReq.Body = bytes.NewReader(body)
+	return o.Write(ctx, writeReq)
 }
 
 // Delete removes the current object.
@@ -160,34 +161,59 @@ func (o *ObjectHandleRef) Delete(ctx context.Context) error {
 }
 
 // Presign creates a presigned URL for the current object.
-func (o *ObjectHandleRef) Presign(ctx context.Context, opts *PresignOptions) (PresignResult, error) {
+func (o *ObjectHandleRef) Presign(ctx context.Context, req *PresignRequest) (PresignResult, error) {
 	if o == nil || o.client == nil {
 		return PresignResult{}, fmt.Errorf("s3: object client is required")
 	}
-	req := PresignRequest{Ref: o.ref}
-	if opts != nil {
-		req.Method = opts.Method
-		req.Expires = opts.Expires
-		req.ContentType = opts.ContentType
-		req.ContentDisposition = opts.ContentDisposition
-		req.Headers = opts.Headers
+	presignReq := PresignRequest{}
+	if req != nil {
+		presignReq = *req
 	}
-	return o.client.PresignObject(ctx, req)
+	if err := requireMatchingRef(presignReq.Ref, o.ref); err != nil {
+		return PresignResult{}, err
+	}
+	presignReq.Ref = o.ref
+	return o.client.PresignObject(ctx, presignReq)
 }
 
 // CreateAccessURL creates a host-mediated object-access URL for the current object.
-func (o *ObjectHandleRef) CreateAccessURL(ctx context.Context, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
+func (o *ObjectHandleRef) CreateAccessURL(ctx context.Context, req *PresignRequest) (PresignResult, error) {
 	if o == nil || o.client == nil {
-		return ObjectAccessURL{}, fmt.Errorf("s3: object client is required")
+		return PresignResult{}, fmt.Errorf("s3: object client is required")
 	}
 	creator, ok := o.client.(objectAccessURLCreator)
 	if !ok {
-		return ObjectAccessURL{}, ErrUnsupported
+		return PresignResult{}, ErrUnsupported
 	}
-	return creator.CreateObjectAccessURL(ctx, o.ref, opts)
+	presignReq := PresignRequest{}
+	if req != nil {
+		presignReq = *req
+	}
+	if err := requireMatchingRef(presignReq.Ref, o.ref); err != nil {
+		return PresignResult{}, err
+	}
+	presignReq.Ref = o.ref
+	return creator.CreateObjectAccessURL(ctx, presignReq)
 }
 
-// CreateAccessUrl is an alias for CreateAccessURL.
-func (o *ObjectHandleRef) CreateAccessUrl(ctx context.Context, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
-	return o.CreateAccessURL(ctx, opts)
+func requireMatchingRef(requestRef, handleRef ObjectRef) error {
+	if requestRef == (ObjectRef{}) || requestRef == handleRef {
+		return nil
+	}
+	return fmt.Errorf("s3: request ref %q does not match object handle ref %q", requestRef.Key, handleRef.Key)
+}
+
+func objectWriteRequest(handleRef ObjectRef, req *WriteRequest) (WriteRequest, error) {
+	writeReq := WriteRequest{}
+	if req != nil {
+		writeReq = *req
+	}
+	if writeReq.Body != nil {
+		return WriteRequest{}, fmt.Errorf("s3: request body must be empty when body is supplied separately")
+	}
+	if err := requireMatchingRef(writeReq.Ref, handleRef); err != nil {
+		return WriteRequest{}, err
+	}
+	writeReq.Ref = handleRef
+	return writeReq, nil
 }

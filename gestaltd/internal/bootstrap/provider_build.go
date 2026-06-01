@@ -247,7 +247,7 @@ func (b *preparedProviderBuilds) Start(
 
 func validateProviderConnectionMode(provider string, mode core.ConnectionMode) error {
 	switch core.NormalizeConnectionMode(mode) {
-	case core.ConnectionModeNone, core.ConnectionModeUser:
+	case core.ConnectionModeNone, core.ConnectionModeSubject:
 		return nil
 	default:
 		return fmt.Errorf("unsupported connection mode %q for provider %q", mode, provider)

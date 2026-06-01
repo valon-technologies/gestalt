@@ -49,7 +49,7 @@ test("workflow run context matches runtime shape", () => {
         app: {
           name: "slack",
           operation: "chat.postMessage",
-          credentialMode: "user",
+          credentialMode: "subject",
         },
       }],
     },
@@ -74,7 +74,7 @@ test("workflow run context matches runtime shape", () => {
       kind: "app",
       app: "slack",
       operation: "chat.postMessage",
-      credentialMode: "user",
+      credentialMode: "subject",
     }],
   });
   expect(ctx.trigger).toEqual({ kind: "manual" });

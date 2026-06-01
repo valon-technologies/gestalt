@@ -47,38 +47,19 @@ func (c *rpcClient) HeadObject(ctx context.Context, ref s3.ObjectRef) (s3.Object
 
 // ReadObject implements s3.S3 using request-oriented parameters.
 func (c *rpcClient) ReadObject(ctx context.Context, req s3.ReadRequest) (s3.ReadResult, error) {
-	opts := &s3.ReadOptions{
-		Range: req.Range, IfMatch: req.IfMatch, IfNoneMatch: req.IfNoneMatch,
-		IfModifiedSince: req.IfModifiedSince, IfUnmodifiedSince: req.IfUnmodifiedSince,
-	}
-	meta, body, err := c.readObjectStream(ctx, req.Ref, opts)
+	meta, body, err := c.readObjectStream(ctx, req)
 	if err != nil {
 		return s3.ReadResult{}, err
 	}
 	return s3.ReadResult{Meta: meta, Body: body}, nil
 }
 
-// readObjectStream opens a streaming object reader (legacy convenience shape).
-func (c *rpcClient) readObjectStream(ctx context.Context, ref s3.ObjectRef, opts *s3.ReadOptions) (s3.ObjectMeta, io.ReadCloser, error) {
+func (c *rpcClient) readObjectStream(ctx context.Context, req s3.ReadRequest) (s3.ObjectMeta, io.ReadCloser, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	readCtx, cancel := context.WithCancel(ctx)
-	req := &proto.ReadObjectRequest{
-		Ref: objectRefToProto(ref),
-	}
-	if opts != nil {
-		req.Range = byteRangeToProto(opts.Range)
-		req.IfMatch = opts.IfMatch
-		req.IfNoneMatch = opts.IfNoneMatch
-		if opts.IfModifiedSince != nil {
-			req.IfModifiedSince = timestamppb.New(*opts.IfModifiedSince)
-		}
-		if opts.IfUnmodifiedSince != nil {
-			req.IfUnmodifiedSince = timestamppb.New(*opts.IfUnmodifiedSince)
-		}
-	}
-	stream, err := c.grpc.ReadObject(readCtx, req)
+	stream, err := c.grpc.ReadObject(readCtx, readRequestToProto(req))
 	if err != nil {
 		cancel()
 		return s3.ObjectMeta{}, nil, s3.ClientError(err)
@@ -98,38 +79,22 @@ func (c *rpcClient) readObjectStream(ctx context.Context, ref s3.ObjectRef, opts
 
 // WriteObject implements s3.S3.
 func (c *rpcClient) WriteObject(ctx context.Context, req s3.WriteRequest) (s3.ObjectMeta, error) {
-	opts := &s3.WriteOptions{
-		ContentType: req.ContentType, CacheControl: req.CacheControl,
-		ContentDisposition: req.ContentDisposition, ContentEncoding: req.ContentEncoding,
-		ContentLanguage: req.ContentLanguage, Metadata: req.Metadata,
-		IfMatch: req.IfMatch, IfNoneMatch: req.IfNoneMatch,
-	}
-	return c.writeObjectStream(ctx, req.Ref, req.Body, opts)
+	return c.writeObjectStream(ctx, req)
 }
 
-func (c *rpcClient) writeObjectStream(ctx context.Context, ref s3.ObjectRef, body io.Reader, opts *s3.WriteOptions) (s3.ObjectMeta, error) {
+func (c *rpcClient) writeObjectStream(ctx context.Context, req s3.WriteRequest) (s3.ObjectMeta, error) {
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
 	stream, err := c.grpc.WriteObject(ctx)
 	if err != nil {
 		return s3.ObjectMeta{}, s3.ClientError(err)
 	}
-	open := &proto.WriteObjectOpen{Ref: objectRefToProto(ref)}
-	if opts != nil {
-		open.ContentType = opts.ContentType
-		open.CacheControl = opts.CacheControl
-		open.ContentDisposition = opts.ContentDisposition
-		open.ContentEncoding = opts.ContentEncoding
-		open.ContentLanguage = opts.ContentLanguage
-		open.Metadata = s3.CloneStringMap(opts.Metadata)
-		open.IfMatch = opts.IfMatch
-		open.IfNoneMatch = opts.IfNoneMatch
-	}
 	if err := stream.Send(&proto.WriteObjectRequest{
-		Msg: &proto.WriteObjectRequest_Open{Open: open},
+		Msg: &proto.WriteObjectRequest_Open{Open: writeRequestToProtoOpen(req)},
 	}); err != nil {
 		return s3.ObjectMeta{}, s3.ClientError(err)
 	}
+	body := req.Body
 	if body == nil {
 		body = bytes.NewReader(nil)
 	}
@@ -202,16 +167,7 @@ func (c *rpcClient) CopyObject(ctx context.Context, req s3.CopyRequest) (s3.Obje
 
 // PresignObject implements s3.S3.
 func (c *rpcClient) PresignObject(ctx context.Context, req s3.PresignRequest) (s3.PresignResult, error) {
-	pb := &proto.PresignObjectRequest{
-		Ref: objectRefToProto(req.Ref),
-	}
-	var requestedMethod s3.PresignMethod = req.Method
-	pb.Method = presignMethodToProto(req.Method)
-	pb.ExpiresSeconds = int64(req.Expires / time.Second)
-	pb.ContentType = req.ContentType
-	pb.ContentDisposition = req.ContentDisposition
-	pb.Headers = s3.CloneStringMap(req.Headers)
-	return c.presignObject(ctx, pb, requestedMethod)
+	return c.presignObject(ctx, presignRequestToProto(req), req.Method)
 }
 
 func (c *rpcClient) presignObject(ctx context.Context, req *proto.PresignObjectRequest, requestedMethod s3.PresignMethod) (s3.PresignResult, error) {
@@ -225,41 +181,14 @@ func (c *rpcClient) presignObject(ctx context.Context, req *proto.PresignObjectR
 }
 
 // CreateObjectAccessURL creates a host-mediated object-access URL.
-func (c *rpcClient) CreateObjectAccessURL(ctx context.Context, ref s3.ObjectRef, opts *s3.ObjectAccessURLOptions) (s3.ObjectAccessURL, error) {
+func (c *rpcClient) CreateObjectAccessURL(ctx context.Context, req s3.PresignRequest) (s3.PresignResult, error) {
 	ctx, cancel := c.callCtx(ctx)
 	defer cancel()
-	req := &proto.CreateObjectAccessURLRequest{
-		Ref: objectRefToProto(ref),
-	}
-	var requestedMethod s3.PresignMethod
-	if opts != nil {
-		requestedMethod = opts.Method
-		req.Method = presignMethodToProto(opts.Method)
-		req.ExpiresSeconds = int64(opts.Expires / time.Second)
-		req.ContentType = opts.ContentType
-		req.ContentDisposition = opts.ContentDisposition
-		req.Headers = s3.CloneStringMap(opts.Headers)
-	}
-	resp, err := c.objectAccessClient.CreateObjectAccessURL(ctx, req)
+	resp, err := c.objectAccessClient.CreateObjectAccessURL(ctx, objectAccessURLRequestToProto(req))
 	if err != nil {
-		return s3.ObjectAccessURL{}, s3.ClientError(err)
+		return s3.PresignResult{}, s3.ClientError(err)
 	}
-	return objectAccessURLFromProto(resp, requestedMethod), nil
-}
-
-// CreateObjectAccessUrl is an alias for CreateObjectAccessURL.
-func (c *rpcClient) CreateObjectAccessUrl(ctx context.Context, ref s3.ObjectRef, opts *s3.ObjectAccessURLOptions) (s3.ObjectAccessURL, error) {
-	return c.CreateObjectAccessURL(ctx, ref, opts)
-}
-
-// CreateAccessURL is a short alias for CreateObjectAccessURL.
-func (c *rpcClient) CreateAccessURL(ctx context.Context, ref s3.ObjectRef, opts *s3.ObjectAccessURLOptions) (s3.ObjectAccessURL, error) {
-	return c.CreateObjectAccessURL(ctx, ref, opts)
-}
-
-// CreateAccessUrl is an alias for CreateAccessURL.
-func (c *rpcClient) CreateAccessUrl(ctx context.Context, ref s3.ObjectRef, opts *s3.ObjectAccessURLOptions) (s3.ObjectAccessURL, error) {
-	return c.CreateObjectAccessURL(ctx, ref, opts)
+	return objectAccessURLFromProto(resp, req.Method), nil
 }
 
 type s3ReadCloser struct {
@@ -404,31 +333,49 @@ func byteRangeFromProto(r *proto.ByteRange) *s3.ByteRange {
 	return out
 }
 
-func readOptionsFromProto(req *proto.ReadObjectRequest) *s3.ReadOptions {
+func readRequestFromProto(req *proto.ReadObjectRequest) s3.ReadRequest {
 	if req == nil {
-		return nil
+		return s3.ReadRequest{}
 	}
-	opts := &s3.ReadOptions{
+	out := s3.ReadRequest{
+		Ref:         objectRefFromProto(req.GetRef()),
 		Range:       byteRangeFromProto(req.GetRange()),
 		IfMatch:     req.GetIfMatch(),
 		IfNoneMatch: req.GetIfNoneMatch(),
 	}
 	if ts := req.GetIfModifiedSince(); ts != nil {
 		t := ts.AsTime()
-		opts.IfModifiedSince = &t
+		out.IfModifiedSince = &t
 	}
 	if ts := req.GetIfUnmodifiedSince(); ts != nil {
 		t := ts.AsTime()
-		opts.IfUnmodifiedSince = &t
+		out.IfUnmodifiedSince = &t
 	}
-	return opts
+	return out
 }
 
-func writeOptionsFromProto(open *proto.WriteObjectOpen) *s3.WriteOptions {
-	if open == nil {
-		return nil
+func readRequestToProto(req s3.ReadRequest) *proto.ReadObjectRequest {
+	out := &proto.ReadObjectRequest{
+		Ref:         objectRefToProto(req.Ref),
+		Range:       byteRangeToProto(req.Range),
+		IfMatch:     req.IfMatch,
+		IfNoneMatch: req.IfNoneMatch,
 	}
-	return &s3.WriteOptions{
+	if req.IfModifiedSince != nil {
+		out.IfModifiedSince = timestamppb.New(*req.IfModifiedSince)
+	}
+	if req.IfUnmodifiedSince != nil {
+		out.IfUnmodifiedSince = timestamppb.New(*req.IfUnmodifiedSince)
+	}
+	return out
+}
+
+func writeRequestFromProto(open *proto.WriteObjectOpen) s3.WriteRequest {
+	if open == nil {
+		return s3.WriteRequest{}
+	}
+	return s3.WriteRequest{
+		Ref:                objectRefFromProto(open.GetRef()),
 		ContentType:        open.GetContentType(),
 		CacheControl:       open.GetCacheControl(),
 		ContentDisposition: open.GetContentDisposition(),
@@ -437,6 +384,20 @@ func writeOptionsFromProto(open *proto.WriteObjectOpen) *s3.WriteOptions {
 		Metadata:           s3.CloneStringMap(open.GetMetadata()),
 		IfMatch:            open.GetIfMatch(),
 		IfNoneMatch:        open.GetIfNoneMatch(),
+	}
+}
+
+func writeRequestToProtoOpen(req s3.WriteRequest) *proto.WriteObjectOpen {
+	return &proto.WriteObjectOpen{
+		Ref:                objectRefToProto(req.Ref),
+		ContentType:        req.ContentType,
+		CacheControl:       req.CacheControl,
+		ContentDisposition: req.ContentDisposition,
+		ContentEncoding:    req.ContentEncoding,
+		ContentLanguage:    req.ContentLanguage,
+		Metadata:           s3.CloneStringMap(req.Metadata),
+		IfMatch:            req.IfMatch,
+		IfNoneMatch:        req.IfNoneMatch,
 	}
 }
 
@@ -481,16 +442,39 @@ func presignMethodToProto(method s3.PresignMethod) proto.PresignMethod {
 	}
 }
 
-func presignOptionsFromProto(req *proto.PresignObjectRequest) *s3.PresignOptions {
+func presignRequestFromProto(req *proto.PresignObjectRequest) s3.PresignRequest {
 	if req == nil {
-		return nil
+		return s3.PresignRequest{}
 	}
-	return &s3.PresignOptions{
+	return s3.PresignRequest{
+		Ref:                objectRefFromProto(req.GetRef()),
 		Method:             presignMethodFromProto(req.GetMethod()),
 		Expires:            time.Duration(req.GetExpiresSeconds()) * time.Second,
 		ContentType:        req.GetContentType(),
 		ContentDisposition: req.GetContentDisposition(),
 		Headers:            s3.CloneStringMap(req.GetHeaders()),
+	}
+}
+
+func presignRequestToProto(req s3.PresignRequest) *proto.PresignObjectRequest {
+	return &proto.PresignObjectRequest{
+		Ref:                objectRefToProto(req.Ref),
+		Method:             presignMethodToProto(req.Method),
+		ExpiresSeconds:     int64(req.Expires / time.Second),
+		ContentType:        req.ContentType,
+		ContentDisposition: req.ContentDisposition,
+		Headers:            s3.CloneStringMap(req.Headers),
+	}
+}
+
+func objectAccessURLRequestToProto(req s3.PresignRequest) *proto.CreateObjectAccessURLRequest {
+	return &proto.CreateObjectAccessURLRequest{
+		Ref:                objectRefToProto(req.Ref),
+		Method:             presignMethodToProto(req.Method),
+		ExpiresSeconds:     int64(req.Expires / time.Second),
+		ContentType:        req.ContentType,
+		ContentDisposition: req.ContentDisposition,
+		Headers:            s3.CloneStringMap(req.Headers),
 	}
 }
 
@@ -540,15 +524,15 @@ func presignResultFromProto(resp *proto.PresignObjectResponse, requested s3.Pres
 	return out
 }
 
-func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, requested s3.PresignMethod) s3.ObjectAccessURL {
+func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, requested s3.PresignMethod) s3.PresignResult {
 	if resp == nil {
-		return s3.ObjectAccessURL{}
+		return s3.PresignResult{}
 	}
 	method := presignMethodFromProto(resp.GetMethod())
 	if method == "" {
 		method = requested
 	}
-	out := s3.ObjectAccessURL{
+	out := s3.PresignResult{
 		URL:     resp.GetUrl(),
 		Method:  method,
 		Headers: s3.CloneStringMap(resp.GetHeaders()),

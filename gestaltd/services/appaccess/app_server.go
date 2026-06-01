@@ -201,7 +201,7 @@ func (s *AppServer) tokenContextForSurfaceInvoke(req *proto.AppInvokeGraphQLRequ
 func appInvokeCredentialMode(raw string) (core.ConnectionMode, error) {
 	mode := core.NormalizeOptionalConnectionMode(core.ConnectionMode(raw))
 	switch mode {
-	case "", core.ConnectionModeNone, core.ConnectionModeUser:
+	case "", core.ConnectionModeNone, core.ConnectionModeSubject:
 		return mode, nil
 	default:
 		return "", status.Errorf(codes.InvalidArgument, "credential_mode %q is not supported", strings.TrimSpace(raw))

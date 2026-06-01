@@ -629,7 +629,7 @@ func (r *RelationalDB) HealthCheck(ctx context.Context) error {
   return r.db.PingContext(ctx)
 }
 
-func (r *RelationalDB) CreateObjectStore(ctx context.Context, name string, schema gestalt.ObjectStoreSchema) error {
+func (r *RelationalDB) CreateObjectStore(ctx context.Context, name string, schema gestalt.ObjectStoreOptions) error {
   return nil
 }
 

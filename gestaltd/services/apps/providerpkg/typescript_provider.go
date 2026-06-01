@@ -22,7 +22,6 @@ const (
 	typeScriptSDKDirEnvVar = "GESTALT_TYPESCRIPT_SDK_DIR"
 	typeScriptProviderKey  = "provider"
 	typeScriptPluginKey    = "app"
-	typeScriptAuthKey      = "auth"
 	typeScriptCacheKey     = "cache"
 	typeScriptIndexedDBKey = "indexeddb"
 	typeScriptS3Key        = "s3"
@@ -371,9 +370,9 @@ func normalizeTypeScriptProviderKind(value string) string {
 	switch strings.TrimSpace(strings.ToLower(value)) {
 	case "", "app":
 		return "integration"
-	case "authentication", "auth":
+	case "authentication":
 		return "authentication"
-	case "authorization", "authz":
+	case "authorization":
 		return "authorization"
 	case "cache":
 		return "cache"

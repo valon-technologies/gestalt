@@ -382,7 +382,7 @@ func TestDecodeInvocationGrantClaimsIgnoresModesForUndeclaredOperations(t *testi
 		"slack": {
 			Operations: []string{"chat.postMessage"},
 			OperationModes: map[string]string{
-				"chat.postMessage": "user",
+				"chat.postMessage": "subject",
 				"events.reply":     "none",
 			},
 		},
@@ -392,8 +392,8 @@ func TestDecodeInvocationGrantClaimsIgnoresModesForUndeclaredOperations(t *testi
 	if _, ok := slackGrant.Operations["events.reply"]; ok {
 		t.Fatal("decodeInvocationGrantClaims should not add operations that only appear in operation_modes")
 	}
-	if got := slackGrant.Operations["chat.postMessage"]; got != core.ConnectionModeUser {
-		t.Fatalf("chat.postMessage mode = %q, want %q", got, core.ConnectionModeUser)
+	if got := slackGrant.Operations["chat.postMessage"]; got != core.ConnectionModeSubject {
+		t.Fatalf("chat.postMessage mode = %q, want %q", got, core.ConnectionModeSubject)
 	}
 }
 

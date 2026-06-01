@@ -108,7 +108,7 @@ func TestBrokerResolveToken_NonUserSubjectUsesOwnExternalCredential(t *testing.T
 	svc := testutil.NewStubServices(t)
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "slack",
-		ConnMode: core.ConnectionModeUser,
+		ConnMode: core.ConnectionModeSubject,
 	})
 	broker := NewBroker(providers, svc.Users, svc.ExternalCredentials)
 	subjectID := "service_account:workflow-roadmap"
@@ -173,7 +173,7 @@ func TestBrokerInvokeProviderOverrideResolvesOperationConnectionFromOverride(t *
 	baseProvider := &brokerOperationConnectionProvider{
 		StubIntegration: &coretesting.StubIntegration{
 			N:          "slack",
-			ConnMode:   core.ConnectionModeUser,
+			ConnMode:   core.ConnectionModeSubject,
 			CatalogVal: cat,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{Status: 200, Body: token}, nil
@@ -184,7 +184,7 @@ func TestBrokerInvokeProviderOverrideResolvesOperationConnectionFromOverride(t *
 	overrideProvider := &brokerOperationConnectionProvider{
 		StubIntegration: &coretesting.StubIntegration{
 			N:          "slack",
-			ConnMode:   core.ConnectionModeUser,
+			ConnMode:   core.ConnectionModeSubject,
 			CatalogVal: cat,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{Status: 200, Body: token}, nil
@@ -253,7 +253,7 @@ func TestBrokerInvokeRejectsExplicitOperationConnectionOverride(t *testing.T) {
 	provider := &brokerOperationConnectionProvider{
 		StubIntegration: &coretesting.StubIntegration{
 			N:          "gmail",
-			ConnMode:   core.ConnectionModeUser,
+			ConnMode:   core.ConnectionModeSubject,
 			CatalogVal: cat,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				executed = true

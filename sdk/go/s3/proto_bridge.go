@@ -17,14 +17,14 @@ func ObjectMetaFromProto(meta *proto.S3ObjectMeta) ObjectMeta {
 	return objectMetaFromProto(meta)
 }
 
-// ReadOptionsFromProto decodes read options from a protobuf read request.
-func ReadOptionsFromProto(req *proto.ReadObjectRequest) *ReadOptions {
-	return readOptionsFromProto(req)
+// ReadRequestFromProto decodes a protobuf read request.
+func ReadRequestFromProto(req *proto.ReadObjectRequest) ReadRequest {
+	return readRequestFromProto(req)
 }
 
-// WriteOptionsFromProto decodes write options.
-func WriteOptionsFromProto(open *proto.WriteObjectOpen) *WriteOptions {
-	return writeOptionsFromProto(open)
+// WriteRequestFromProto decodes a protobuf write-open message.
+func WriteRequestFromProto(open *proto.WriteObjectOpen) WriteRequest {
+	return writeRequestFromProto(open)
 }
 
 // ListPageFromProto decodes a list page.
@@ -37,9 +37,9 @@ func ListPageToProto(page ListPage) *proto.ListObjectsResponse {
 	return listPageToProto(page)
 }
 
-// PresignOptionsFromProto decodes presign options.
-func PresignOptionsFromProto(req *proto.PresignObjectRequest) *PresignOptions {
-	return presignOptionsFromProto(req)
+// PresignRequestFromProto decodes a protobuf presign request.
+func PresignRequestFromProto(req *proto.PresignObjectRequest) PresignRequest {
+	return presignRequestFromProto(req)
 }
 
 // PresignResultToProto encodes a presign result.
@@ -52,7 +52,7 @@ func PresignResultFromProto(resp *proto.PresignObjectResponse, requested Presign
 	return presignResultFromProto(resp, requested)
 }
 
-// ObjectAccessURLFromProto decodes an object access URL response.
-func ObjectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, requested PresignMethod) ObjectAccessURL {
+// PresignResultFromObjectAccessURLProto decodes an object access URL response.
+func PresignResultFromObjectAccessURLProto(resp *proto.CreateObjectAccessURLResponse, requested PresignMethod) PresignResult {
 	return objectAccessURLFromProto(resp, requested)
 }

@@ -31,7 +31,7 @@ language.
     defer s3.Close()
 
     avatar := s3.Object("uploads", "avatars/user-123.png")
-    if _, err := avatar.WriteBytes(ctx, pngBytes, &gestalt.WriteOptions{
+    if _, err := avatar.WriteBytes(ctx, pngBytes, &gestalt.WriteRequest{
       ContentType: "image/png",
     }); err != nil {
       log.Fatal(err)
@@ -157,36 +157,36 @@ interface to the underlying gRPC service:
       }, nil
     }
 
-    func (p *Provider) ReadObject(ctx context.Context, ref gestalt.ObjectRef, opts *gestalt.ReadOptions) (gestalt.ObjectMeta, io.ReadCloser, error) {
-      _ = opts
-      meta, err := p.HeadObject(ctx, ref)
+    func (p *Provider) ReadObject(ctx context.Context, req gestalt.ReadRequest) (gestalt.ReadResult, error) {
+      meta, err := p.HeadObject(ctx, req.Ref)
       if err != nil {
-        return gestalt.ObjectMeta{}, nil, err
+        return gestalt.ReadResult{}, err
       }
-      return meta, io.NopCloser(bytes.NewReader(nil)), nil
+      return gestalt.ReadResult{
+        Meta: meta,
+        Body: io.NopCloser(bytes.NewReader(nil)),
+      }, nil
     }
 
-    func (p *Provider) WriteObject(ctx context.Context, ref gestalt.ObjectRef, body io.Reader, opts *gestalt.WriteOptions) (gestalt.ObjectMeta, error) {
-      _ = body
-      _ = opts
-      return p.HeadObject(ctx, ref)
+    func (p *Provider) WriteObject(ctx context.Context, req gestalt.WriteRequest) (gestalt.ObjectMeta, error) {
+      _ = req.Body
+      return p.HeadObject(ctx, req.Ref)
     }
 
     func (p *Provider) DeleteObject(context.Context, gestalt.ObjectRef) error {
       return nil
     }
 
-    func (p *Provider) ListObjects(context.Context, gestalt.ListOptions) (gestalt.ListPage, error) {
+    func (p *Provider) ListObjects(context.Context, gestalt.ListRequest) (gestalt.ListPage, error) {
       return gestalt.ListPage{}, nil
     }
 
-    func (p *Provider) CopyObject(ctx context.Context, source gestalt.ObjectRef, destination gestalt.ObjectRef, opts *gestalt.CopyOptions) (gestalt.ObjectMeta, error) {
-      _ = source
-      _ = opts
-      return p.HeadObject(ctx, destination)
+    func (p *Provider) CopyObject(ctx context.Context, req gestalt.CopyRequest) (gestalt.ObjectMeta, error) {
+      _ = req.Source
+      return p.HeadObject(ctx, req.Destination)
     }
 
-    func (p *Provider) PresignObject(context.Context, gestalt.ObjectRef, *gestalt.PresignOptions) (gestalt.PresignResult, error) {
+    func (p *Provider) PresignObject(context.Context, gestalt.PresignRequest) (gestalt.PresignResult, error) {
       return gestalt.PresignResult{
         URL:       "https://example.invalid/object",
         Method:    gestalt.PresignMethodGet,

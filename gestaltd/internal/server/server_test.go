@@ -2687,7 +2687,7 @@ func testPluginDefsForConnections(plugin string, connections ...string) map[stri
 		}
 		entry.Connections[connection] = &config.ConnectionDef{
 			ConnectionID: plugin + ":" + connection,
-			Mode:         providermanifestv1.ConnectionModeUser,
+			Mode:         providermanifestv1.ConnectionModeSubject,
 		}
 	}
 	return map[string]*config.ProviderEntry{plugin: entry}
@@ -9630,7 +9630,7 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 	seedSubjectToken(t, svc, "service_account:triage-bot", "svc", "workspace", "default", "identity-svc-token")
 
 	svcProvider := &stubIntegrationWithOps{
-		StubIntegration: coretesting.StubIntegration{N: "svc", DN: "Service", ConnMode: core.ConnectionModeUser},
+		StubIntegration: coretesting.StubIntegration{N: "svc", DN: "Service", ConnMode: core.ConnectionModeSubject},
 		ops:             []core.Operation{{Name: "run", Method: http.MethodGet}},
 	}
 	weatherProvider := &stubIntegrationWithOps{
@@ -9656,7 +9656,7 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 			Connections: map[string]*config.ConnectionDef{
 				"workspace": {
 					ConnectionID: "svc:workspace",
-					Mode:         providermanifestv1.ConnectionModeUser,
+					Mode:         providermanifestv1.ConnectionModeSubject,
 				},
 			},
 		},
@@ -9791,7 +9791,7 @@ func TestSubjectAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelectors
 	seedSubjectAPIToken(t, authSvc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 
 	provider := &stubIntegrationWithCatalog{
-		StubIntegration: coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeUser},
+		StubIntegration: coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeSubject},
 		catalog: serverTestCatalog("svc", []catalog.CatalogOperation{
 			{ID: "run", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
 			{ID: "admin", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
@@ -9850,7 +9850,7 @@ func TestSubjectAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelectors
 	var sessionCatalogToken string
 	sessionProvider := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "svc-session", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "svc-session", ConnMode: core.ConnectionModeSubject},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			sessionCatalogToken = token
@@ -9974,7 +9974,7 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 			Connections: map[string]*config.ConnectionDef{
 				testDefaultConnection: {
 					ConnectionID: "manual-connected:" + testDefaultConnection,
-					Mode:         providermanifestv1.ConnectionModeUser,
+					Mode:         providermanifestv1.ConnectionModeSubject,
 				},
 			},
 		},
@@ -9982,7 +9982,7 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 			Connections: map[string]*config.ConnectionDef{
 				testDefaultConnection: {
 					ConnectionID: "manual-multi:" + testDefaultConnection,
-					Mode:         providermanifestv1.ConnectionModeUser,
+					Mode:         providermanifestv1.ConnectionModeSubject,
 				},
 			},
 		},
@@ -10120,11 +10120,11 @@ func TestListIntegrations_StaleRefreshFailuresRequireReconnect(t *testing.T) {
 		Connections: map[string]*config.ConnectionDef{
 			testDefaultConnection: {
 				ConnectionID: "named-stale:" + testDefaultConnection,
-				Mode:         providermanifestv1.ConnectionModeUser,
+				Mode:         providermanifestv1.ConnectionModeSubject,
 			},
 			"archive": {
 				ConnectionID: "named-stale:archive",
-				Mode:         providermanifestv1.ConnectionModeUser,
+				Mode:         providermanifestv1.ConnectionModeSubject,
 			},
 		},
 	}
@@ -10367,7 +10367,7 @@ func TestListIntegrations_ShowsCredentialedConnectionsInUserFacingMetadata(t *te
 				},
 				Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 					"default": {
-						Mode: providermanifestv1.ConnectionModeUser,
+						Mode: providermanifestv1.ConnectionModeSubject,
 						Auth: &providermanifestv1.ProviderAuth{
 							Type: providermanifestv1.AuthTypeManual,
 						},
@@ -10906,7 +10906,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 						"MCP": {
 							DisplayName: "MCP",
-							Mode:        providermanifestv1.ConnectionModeUser,
+							Mode:        providermanifestv1.ConnectionModeSubject,
 							Auth: &providermanifestv1.ProviderAuth{
 								Type: providermanifestv1.AuthTypeNone,
 							},
@@ -12056,7 +12056,7 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 		},
 		catalog: &catalog.Catalog{
 			Name: "test-int",
@@ -12188,7 +12188,7 @@ func TestListOperations_FallsBackToStaticCatalogWhenSessionCatalogErrors(t *test
 
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "notion", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "notion", ConnMode: core.ConnectionModeSubject},
 		},
 		catalog: &catalog.Catalog{
 			Name: "notion",
@@ -12264,7 +12264,7 @@ func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
 
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeSubject},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			switch token {
@@ -12337,7 +12337,7 @@ func TestListOperations_RetriesDefaultConnectionAfterBrokerCatalogError(t *testi
 
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeSubject},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			switch token {
@@ -12418,7 +12418,7 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog(t *testing.T) {
 	var gotAccess invocation.AccessContext
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 		},
 		catalog: &catalog.Catalog{
 			Name: "test-int",
@@ -12513,7 +12513,7 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog_DynamicGrant(t *t
 	var gotAccess invocation.AccessContext
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 		},
 		catalog: &catalog.Catalog{
 			Name: "test-int",
@@ -12609,7 +12609,7 @@ func TestExecuteOperation_HumanAuthorizationUsesCatalogRoles(t *testing.T) {
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "test-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
 					called = true
 					return &core.OperationResult{Status: http.StatusOK, Body: operation}, nil
@@ -12703,7 +12703,7 @@ func TestExecuteOperation_HumanAuthorizationUsesCanonicalSubjectOnCollision(t *t
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sample-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
 					called = true
 					return &core.OperationResult{Status: http.StatusOK, Body: operation}, nil
@@ -12796,7 +12796,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 
 		stub := &stubIntegrationWithSessionCatalog{
 			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 			},
 		}
 
@@ -12854,7 +12854,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 
 		stub := &stubIntegrationWithSessionCatalog{
 			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 			},
 		}
 
@@ -12893,7 +12893,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 
 		stub := &stubIntegrationWithSessionCatalog{
 			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
+				StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeSubject},
 			},
 			catalog: &catalog.Catalog{
 				Name: "sample-int",
@@ -13144,7 +13144,7 @@ func TestExecuteOperation_RejectsExplicitConnectionForStaticOperation(t *testing
 	apiBackend := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "sample-api",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				called = true
 				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
@@ -13166,7 +13166,7 @@ func TestExecuteOperation_RejectsExplicitConnectionForStaticOperation(t *testing
 	}
 	prov := composite.New("sample-svc", apiProv, &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "sample-mcp", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "sample-mcp", ConnMode: core.ConnectionModeSubject},
 		},
 	})
 
@@ -13283,7 +13283,7 @@ func TestExecuteOperation_AllowsExplicitConnectionAliasForStaticOperation(t *tes
 	apiBackend := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "sample-api",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{
 					Status: http.StatusOK,
@@ -13393,9 +13393,9 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		Spec: &providermanifestv1.Spec{
 			DefaultConnection: "default",
 			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-				"default": {Mode: providermanifestv1.ConnectionModeUser},
+				"default": {Mode: providermanifestv1.ConnectionModeSubject},
 				"bot": {
-					Mode: providermanifestv1.ConnectionModeUser,
+					Mode: providermanifestv1.ConnectionModeSubject,
 					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 				},
 			},
@@ -13473,7 +13473,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		ResolvedManifest: manifest,
 		Connections: map[string]*config.ConnectionDef{
 			"bot": {
-				Mode: providermanifestv1.ConnectionModeUser,
+				Mode: providermanifestv1.ConnectionModeSubject,
 			},
 		},
 	}
@@ -13516,7 +13516,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if err != nil {
 		t.Fatalf("BuildConnectionRuntime: %v", err)
 	}
-	if runtimeInfo, ok := connectionRuntime.Resolve("slack", "bot"); !ok || runtimeInfo.Mode != core.ConnectionModeUser {
+	if runtimeInfo, ok := connectionRuntime.Resolve("slack", "bot"); !ok || runtimeInfo.Mode != core.ConnectionModeSubject {
 		t.Fatalf("runtime bot connection = (%+v, %v), want user-owned bot connection", runtimeInfo, ok)
 	}
 	broker := invocation.NewBroker(
@@ -13834,7 +13834,7 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 
 	sessionStub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeSubject},
 		},
 		catalog: serverTestCatalog("sample-int", []catalog.CatalogOperation{
 			{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
@@ -13903,7 +13903,7 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 
 	sessionStub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 		},
 	}
 
@@ -13931,7 +13931,7 @@ func TestSubjectAuthorization_ExecuteOperation_UsesSubjectCredentialAndSessionSe
 	stub := &stubIntegrationWithCatalog{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "svc",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{
 					Status: http.StatusOK,
@@ -14484,7 +14484,7 @@ func TestSubjectAuthorization_ExecuteOperation_MissingSubjectCredentialReturns41
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "svc",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 		},
 		ops: []core.Operation{{Name: "run", Method: http.MethodGet}},
 	}
@@ -14630,7 +14630,7 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 		var resolvedToken atomic.Value
 		sessionStub := &stubIntegrationWithSessionCatalog{
 			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 			},
 			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 				sessionCatalogCalls.Add(1)
@@ -14671,7 +14671,7 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 
 		sessionStub := &stubIntegrationWithSessionCatalog{
 			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeSubject},
 			},
 			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 				sessionCatalogCalls.Add(1)
@@ -14752,7 +14752,7 @@ func TestExecuteOperation_UsesFallbackSessionCatalogConnectionAfterEarlierError(
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sample-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
 					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
@@ -14837,7 +14837,7 @@ func TestExecuteOperation_PinsSessionCatalogConnectionIntoExecution(t *testing.T
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sample-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
 					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
@@ -14912,7 +14912,7 @@ func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t 
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sample-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
 					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
@@ -14995,7 +14995,7 @@ func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *tes
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sample-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
 					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
@@ -15071,7 +15071,7 @@ func TestExecuteOperation_DoesNotFallbackPastConfiguredCatalogConnection(t *test
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sample-int",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
 					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
@@ -16246,7 +16246,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			IntegrationName:    "pagerduty",
 			IntegrationDisplay: "PagerDuty",
 			IntegrationDesc:    "PagerDuty",
-			ConnMode:           core.ConnectionModeUser,
+			ConnMode:           core.ConnectionModeSubject,
 			HTTPClient:         identitySrv.Client(),
 			PostConnectConfigs: map[string]*core.PostConnectConfig{
 				"default": {
@@ -17944,7 +17944,7 @@ func TestVisibleFalseGenericRouteSkipsSessionCatalogCredentialResolution(t *test
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "events",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 			},
 		},
 		catalog: serverTestCatalog("events", []catalog.CatalogOperation{
@@ -18247,7 +18247,7 @@ func TestHostedHTTPBinding_CredentialModeNoneBypassesProviderTokenLookup(t *test
 	provider := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "events",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(ctx context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 				if op != "handle_event" {
 					t.Fatalf("operation = %q, want %q", op, "handle_event")
@@ -18342,7 +18342,7 @@ func TestHostedHTTPBinding_MergedStaticOperationSkipsSessionCatalogResolution(t 
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "github",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 			},
 		},
 		catalogForRequestFn: func(context.Context, string) (*catalog.Catalog, error) {
@@ -19041,11 +19041,13 @@ type stubNonOAuthProvider struct {
 	execFn  func(context.Context, string, map[string]any, string) (*core.OperationResult, error)
 }
 
-func (s *stubNonOAuthProvider) Name() string                        { return s.name }
-func (s *stubNonOAuthProvider) DisplayName() string                 { return s.name }
-func (s *stubNonOAuthProvider) Description() string                 { return "" }
-func (s *stubNonOAuthProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
-func (s *stubNonOAuthProvider) AuthTypes() []string                 { return nil }
+func (s *stubNonOAuthProvider) Name() string        { return s.name }
+func (s *stubNonOAuthProvider) DisplayName() string { return s.name }
+func (s *stubNonOAuthProvider) Description() string { return "" }
+func (s *stubNonOAuthProvider) ConnectionMode() core.ConnectionMode {
+	return core.ConnectionModeSubject
+}
+func (s *stubNonOAuthProvider) AuthTypes() []string { return nil }
 func (s *stubNonOAuthProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return nil
 }
@@ -22252,7 +22254,7 @@ func TestMCPEndpoint_ServiceAccountAuthorizationAndAudit(t *testing.T) {
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	prov := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeSubject},
 			ops: []core.Operation{
 				{Name: "run_query", Description: "Execute a SQL query"},
 				{Name: "delete_table", Description: "Delete a table"},
@@ -23278,13 +23280,13 @@ func TestLogout_NoAuthNilProvider(t *testing.T) {
 	}
 }
 
-func TestExecuteOperation_ConnectionModeUserUsesSubjectCredential(t *testing.T) {
+func TestExecuteOperation_ConnectionModeSubjectUsesSubjectCredential(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "svc",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"token":%q}`, token)}, nil
 			},

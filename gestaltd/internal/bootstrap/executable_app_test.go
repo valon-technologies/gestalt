@@ -2551,11 +2551,11 @@ paths:
 						},
 						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 							"api": {
-								Mode: providermanifestv1.ConnectionModeUser,
+								Mode: providermanifestv1.ConnectionModeSubject,
 								Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 							},
 							"identity": {
-								Mode: providermanifestv1.ConnectionModeUser,
+								Mode: providermanifestv1.ConnectionModeSubject,
 								Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 								PostConnect: &providermanifestv1.ProviderPostConnect{
 									Request: providermanifestv1.ProviderPostConnectRequest{
@@ -3391,15 +3391,15 @@ func TestBuildStartupProviderSpecPreservesStaticCatalogConnectionRouting(t *test
 	manifest.Spec.DefaultConnection = config.AppConnectionAlias
 	manifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
 		"api": {
-			Mode: providermanifestv1.ConnectionModeUser,
+			Mode: providermanifestv1.ConnectionModeSubject,
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 		},
 		"openapi": {
-			Mode: providermanifestv1.ConnectionModeUser,
+			Mode: providermanifestv1.ConnectionModeSubject,
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 		},
 		"mcp": {
-			Mode: providermanifestv1.ConnectionModeUser,
+			Mode: providermanifestv1.ConnectionModeSubject,
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 		},
 	}
@@ -3437,8 +3437,8 @@ func TestBuildStartupProviderSpecPreservesStaticCatalogConnectionRouting(t *test
 	})
 	manifest = newExecutableManifest("Schema", "GraphQL startup routing")
 	manifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
-		"dev":  {Mode: providermanifestv1.ConnectionModeUser},
-		"prod": {Mode: providermanifestv1.ConnectionModeUser},
+		"dev":  {Mode: providermanifestv1.ConnectionModeSubject},
+		"prod": {Mode: providermanifestv1.ConnectionModeSubject},
 	}
 	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
 		GraphQL: &providermanifestv1.GraphQLSurface{URL: "https://{graphql_host}/graphql"},
@@ -3468,8 +3468,8 @@ func TestStartupProviderProxyResolvesDeclarativeConnectionSelectorBeforeProvider
 		Spec: &providermanifestv1.Spec{
 			DefaultConnection: "default",
 			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-				"default": {Mode: providermanifestv1.ConnectionModeUser},
-				"bot":     {Mode: providermanifestv1.ConnectionModeUser},
+				"default": {Mode: providermanifestv1.ConnectionModeSubject},
+				"bot":     {Mode: providermanifestv1.ConnectionModeSubject},
 			},
 			Surfaces: &providermanifestv1.ProviderSurfaces{
 				REST: &providermanifestv1.RESTSurface{
@@ -3699,8 +3699,8 @@ func TestPluginManifestNamedOAuthKeepsProviderTokenMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("providers.Get(echoauth): %v", err)
 	}
-	if prov.ConnectionMode() != core.ConnectionModeUser {
-		t.Fatalf("ConnectionMode = %q, want %q", prov.ConnectionMode(), core.ConnectionModeUser)
+	if prov.ConnectionMode() != core.ConnectionModeSubject {
+		t.Fatalf("ConnectionMode = %q, want %q", prov.ConnectionMode(), core.ConnectionModeSubject)
 	}
 }
 
@@ -3716,11 +3716,11 @@ func TestPreparedProviderStub_RejectsMixedConnectionModes(t *testing.T) {
 					Spec: &providermanifestv1.Spec{
 						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 							"default": {
-								Mode: providermanifestv1.ConnectionModeUser,
+								Mode: providermanifestv1.ConnectionModeSubject,
 								Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 							},
 							"workspace": {
-								Mode: providermanifestv1.ConnectionModeUser,
+								Mode: providermanifestv1.ConnectionModeSubject,
 								Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 							},
 						},

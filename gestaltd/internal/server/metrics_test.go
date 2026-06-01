@@ -29,11 +29,13 @@ type manualMetricsProvider struct {
 	name string
 }
 
-func (p *manualMetricsProvider) Name() string                        { return p.name }
-func (p *manualMetricsProvider) DisplayName() string                 { return p.name }
-func (p *manualMetricsProvider) Description() string                 { return "" }
-func (p *manualMetricsProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
-func (p *manualMetricsProvider) AuthTypes() []string                 { return []string{"manual"} }
+func (p *manualMetricsProvider) Name() string        { return p.name }
+func (p *manualMetricsProvider) DisplayName() string { return p.name }
+func (p *manualMetricsProvider) Description() string { return "" }
+func (p *manualMetricsProvider) ConnectionMode() core.ConnectionMode {
+	return core.ConnectionModeSubject
+}
+func (p *manualMetricsProvider) AuthTypes() []string { return []string{"manual"} }
 func (p *manualMetricsProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return nil
 }
@@ -833,7 +835,7 @@ func TestHTTPDiscoveryMetrics(t *testing.T) {
 
 	prov := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: providerName, ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: providerName, ConnMode: core.ConnectionModeSubject},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			if token != "identity-token" {
@@ -898,7 +900,7 @@ func TestHTTPDiscoveryMetrics_FailureRecordsErrorCount(t *testing.T) {
 
 	prov := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: providerName, ConnMode: core.ConnectionModeUser},
+			StubIntegration: coretesting.StubIntegration{N: providerName, ConnMode: core.ConnectionModeSubject},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			if token != "identity-token" {

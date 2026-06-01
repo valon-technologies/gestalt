@@ -34,14 +34,15 @@ func (s s3ProviderServer) HeadObject(ctx context.Context, req *proto.HeadObjectR
 }
 
 func (s s3ProviderServer) ReadObject(req *proto.ReadObjectRequest, stream proto.S3_ReadObjectServer) error {
-	meta, body, err := s.provider.ReadObject(stream.Context(), objectRefFromProto(req.GetRef()), readOptionsFromProto(req))
+	result, err := s.provider.ReadObject(stream.Context(), readRequestFromProto(req))
 	if err != nil {
 		return providerRPCError("s3 read object", err)
 	}
+	body := result.Body
 	if body != nil {
 		defer func() { _ = body.Close() }()
 	}
-	if err := stream.Send(&proto.ReadObjectChunk{Result: &proto.ReadObjectChunk_Meta{Meta: objectMetaToProto(meta)}}); err != nil {
+	if err := stream.Send(&proto.ReadObjectChunk{Result: &proto.ReadObjectChunk_Meta{Meta: objectMetaToProto(result.Meta)}}); err != nil {
 		return err
 	}
 	if body == nil {
@@ -96,7 +97,9 @@ func (s s3ProviderServer) WriteObject(stream proto.S3_WriteObjectServer) error {
 			}
 		}
 	}()
-	meta, writeErr := s.provider.WriteObject(stream.Context(), objectRefFromProto(open.GetRef()), pr, writeOptionsFromProto(open))
+	writeReq := writeRequestFromProto(open)
+	writeReq.Body = pr
+	meta, writeErr := s.provider.WriteObject(stream.Context(), writeReq)
 	closeErr := pr.Close()
 	recvErr := <-done
 	switch {
@@ -118,7 +121,7 @@ func (s s3ProviderServer) DeleteObject(ctx context.Context, req *proto.DeleteObj
 }
 
 func (s s3ProviderServer) ListObjects(ctx context.Context, req *proto.ListObjectsRequest) (*proto.ListObjectsResponse, error) {
-	page, err := s.provider.ListObjects(ctx, ListOptions{
+	page, err := s.provider.ListObjects(ctx, ListRequest{
 		Prefix:            req.GetPrefix(),
 		Delimiter:         req.GetDelimiter(),
 		ContinuationToken: req.GetContinuationToken(),
@@ -132,7 +135,9 @@ func (s s3ProviderServer) ListObjects(ctx context.Context, req *proto.ListObject
 }
 
 func (s s3ProviderServer) CopyObject(ctx context.Context, req *proto.CopyObjectRequest) (*proto.CopyObjectResponse, error) {
-	meta, err := s.provider.CopyObject(ctx, objectRefFromProto(req.GetSource()), objectRefFromProto(req.GetDestination()), &CopyOptions{
+	meta, err := s.provider.CopyObject(ctx, CopyRequest{
+		Source:      objectRefFromProto(req.GetSource()),
+		Destination: objectRefFromProto(req.GetDestination()),
 		IfMatch:     req.GetIfMatch(),
 		IfNoneMatch: req.GetIfNoneMatch(),
 	})
@@ -143,7 +148,7 @@ func (s s3ProviderServer) CopyObject(ctx context.Context, req *proto.CopyObjectR
 }
 
 func (s s3ProviderServer) PresignObject(ctx context.Context, req *proto.PresignObjectRequest) (*proto.PresignObjectResponse, error) {
-	result, err := s.provider.PresignObject(ctx, objectRefFromProto(req.GetRef()), presignOptionsFromProto(req))
+	result, err := s.provider.PresignObject(ctx, presignRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("s3 presign object", err)
 	}

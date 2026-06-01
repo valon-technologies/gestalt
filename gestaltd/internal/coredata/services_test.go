@@ -87,7 +87,7 @@ func (d *countingIndexedDB) Transaction(ctx context.Context, stores []string, mo
 	return d.inner.Transaction(ctx, stores, mode, opts)
 }
 
-func (d *countingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
+func (d *countingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreOptions) (idb.ObjectStore, error) {
 	return d.inner.CreateObjectStore(ctx, name, schema)
 }
 
@@ -131,7 +131,7 @@ func (d *createContextRecordingIndexedDB) Transaction(ctx context.Context, store
 	return d.inner.Transaction(ctx, stores, mode, opts)
 }
 
-func (d *createContextRecordingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreSchema) (idb.ObjectStore, error) {
+func (d *createContextRecordingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema idb.ObjectStoreOptions) (idb.ObjectStore, error) {
 	d.mu.Lock()
 	d.createContexts[name] = ctx
 	d.mu.Unlock()

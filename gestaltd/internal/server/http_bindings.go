@@ -189,7 +189,7 @@ func validateMountedHTTPBinding(pluginName, bindingName string, binding *config.
 	binding.Method = method
 	binding.CredentialMode = providermanifestv1.NormalizeOptionalConnectionMode(binding.CredentialMode)
 	switch binding.CredentialMode {
-	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
+	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeSubject:
 	default:
 		return fmt.Errorf("%s.credentialMode %q is not supported", path, binding.CredentialMode)
 	}

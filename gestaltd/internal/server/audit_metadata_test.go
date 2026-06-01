@@ -353,7 +353,7 @@ func TestAuditMetadata_ServiceAccountSubjectAndCredentialPath(t *testing.T) {
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "audit-subject-prov",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				if token != "identity-token" {
 					t.Fatalf("unexpected token %q", token)

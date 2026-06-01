@@ -1044,11 +1044,11 @@ func recordsResponseFromRecords(recs []idb.Record) (*proto.RecordsResponse, erro
 	return &proto.RecordsResponse{Records: pbRecords}, nil
 }
 
-func protoToSchema(ps *proto.ObjectStoreSchema) idb.ObjectStoreSchema {
+func protoToSchema(ps *proto.ObjectStoreSchema) idb.ObjectStoreOptions {
 	if ps == nil {
-		return idb.ObjectStoreSchema{}
+		return idb.ObjectStoreOptions{}
 	}
-	schema := idb.ObjectStoreSchema{
+	schema := idb.ObjectStoreOptions{
 		Indexes: make([]idb.IndexSchema, len(ps.GetIndexes())),
 		Columns: make([]idb.ColumnDef, len(ps.GetColumns())),
 	}

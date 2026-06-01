@@ -60,18 +60,24 @@ func (p *Provider) mcpConnectionMode() core.ConnectionMode {
 	return core.ConnectionModeNone
 }
 
-var connectionModeRank = map[core.ConnectionMode]int{
-	core.ConnectionModeNone: 0,
-	core.ConnectionModeUser: 1,
-}
-
 func stricterConnectionMode(a, b core.ConnectionMode) core.ConnectionMode {
 	a = core.NormalizeConnectionMode(a)
 	b = core.NormalizeConnectionMode(b)
-	if connectionModeRank[b] > connectionModeRank[a] {
+	if connectionModeRank(b) > connectionModeRank(a) {
 		return b
 	}
 	return a
+}
+
+func connectionModeRank(mode core.ConnectionMode) int {
+	switch mode {
+	case core.ConnectionModeNone:
+		return 0
+	case core.ConnectionModeSubject:
+		return 1
+	default:
+		return 2
+	}
 }
 
 func (p *Provider) Catalog() *catalog.Catalog { return p.buildCatalog() }

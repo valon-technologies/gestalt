@@ -412,7 +412,7 @@ func (s *Server) connectionInfoFromAuth(integration, _ string, name, instanceCon
 	}
 	displayMode := mode
 	if displayMode == core.ConnectionModeNone && len(authTypes) > 0 {
-		displayMode = core.ConnectionModeUser
+		displayMode = core.ConnectionModeSubject
 	}
 	status := noAuthConnectionStatus()
 	if displayMode != core.ConnectionModeNone {

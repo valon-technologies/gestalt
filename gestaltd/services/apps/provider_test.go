@@ -29,7 +29,7 @@ func (p *roundTripProvider) Configure(_ context.Context, _ string, _ map[string]
 func (p *roundTripProvider) Name() string                        { return "roundtrip" }
 func (p *roundTripProvider) DisplayName() string                 { return "Round Trip" }
 func (p *roundTripProvider) Description() string                 { return "test provider" }
-func (p *roundTripProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
+func (p *roundTripProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeSubject }
 func (p *roundTripProvider) AuthTypes() []string                 { return []string{"manual"} }
 func (p *roundTripProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return map[string]core.ConnectionParamDef{
@@ -130,7 +130,7 @@ func roundTripStaticSpec() StaticProviderSpec {
 		Name:           "roundtrip",
 		DisplayName:    "Round Trip",
 		Description:    "test provider",
-		ConnectionMode: core.ConnectionModeUser,
+		ConnectionMode: core.ConnectionModeSubject,
 		Catalog: &catalog.Catalog{
 			Name:        "roundtrip",
 			DisplayName: "Round Trip",
@@ -152,7 +152,7 @@ func manualOnlyStaticSpec() StaticProviderSpec {
 		Name:           "manual-only",
 		DisplayName:    "Manual Only",
 		Description:    "manual authentication provider",
-		ConnectionMode: core.ConnectionModeUser,
+		ConnectionMode: core.ConnectionModeSubject,
 		Catalog: &catalog.Catalog{
 			Name:        "manual-only",
 			DisplayName: "Manual Only",
@@ -187,7 +187,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	if prov.DisplayName() != "Round Trip" {
 		t.Fatalf("unexpected display name: %q", prov.DisplayName())
 	}
-	if prov.ConnectionMode() != core.ConnectionModeUser {
+	if prov.ConnectionMode() != core.ConnectionModeSubject {
 		t.Fatalf("unexpected connection mode: %q", prov.ConnectionMode())
 	}
 
@@ -250,7 +250,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			ctx := core.WithConnectionParams(context.Background(), map[string]string{"tenant": "acme"})
 			ctx = principal.WithPrincipal(ctx, tc.principal)
 			ctx = invocation.WithCredentialContext(ctx, invocation.CredentialContext{
-				Mode:       core.ConnectionModeUser,
+				Mode:       core.ConnectionModeSubject,
 				SubjectID:  principal.EffectiveCredentialSubjectID(tc.principal),
 				Connection: "workspace",
 				Instance:   "default",

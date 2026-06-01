@@ -12,7 +12,7 @@ type stubObjectStore struct {
 	db      *StubIndexedDB
 	mu      sync.RWMutex
 	records map[string]idb.Record
-	schema  idb.ObjectStoreSchema
+	schema  idb.ObjectStoreOptions
 }
 
 func (o *stubObjectStore) clone(db *StubIndexedDB) *stubObjectStore {

@@ -468,7 +468,7 @@ impl AgentHostRpc for TestAgentHostService {
             connection_id: "vertex-ai".to_string(),
             connection: request.connection,
             instance: request.instance,
-            mode: "platform".to_string(),
+            mode: "subject".to_string(),
             headers: BTreeMap::from([("authorization".to_string(), "Bearer token".to_string())]),
             params: BTreeMap::from([("endpoint".to_string(), "vertex-endpoint".to_string())]),
             ..Default::default()

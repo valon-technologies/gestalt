@@ -720,7 +720,7 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 		}
 		return nil, fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 	}
-	if effectiveConnectionMode(ctx, prov) != core.ConnectionModeUser {
+	if effectiveConnectionMode(ctx, prov) != core.ConnectionModeSubject {
 		return targets, nil
 	}
 	if b == nil || core.ExternalCredentialProviderMissing(b.externalCreds) {
@@ -805,12 +805,12 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 		return ctx, "", nil
 
-	case core.ConnectionModeUser:
+	case core.ConnectionModeSubject:
 		subjectID := principal.EffectiveCredentialSubjectID(p)
 		if subjectID == "" {
 			return ctx, "", fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
 		}
-		return b.resolveSubjectCredential(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
+		return b.resolveSubjectCredential(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeSubject, subjectID)
 
 	default:
 		return ctx, "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
@@ -839,7 +839,7 @@ func (b *Broker) ResolveRuntimeConnectionCredential(ctx context.Context, p *prin
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 		return ctx, ConnectionRuntimeCredential{}, info, nil
 
-	case core.ConnectionModeUser:
+	case core.ConnectionModeSubject:
 		if err := b.resolveUserPrincipal(ctx, p); err != nil {
 			return ctx, ConnectionRuntimeCredential{}, info, err
 		}
@@ -848,7 +848,7 @@ func (b *Broker) ResolveRuntimeConnectionCredential(ctx context.Context, p *prin
 		if subjectID == "" {
 			return ctx, ConnectionRuntimeCredential{}, info, fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
 		}
-		resolvedCtx, credential, err := b.resolveSubjectRuntimeCredential(ctx, nil, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
+		resolvedCtx, credential, err := b.resolveSubjectRuntimeCredential(ctx, nil, subjectID, providerName, connection, instance, core.ConnectionModeSubject, subjectID)
 		return resolvedCtx, credential, info, err
 
 	default:
@@ -1054,5 +1054,5 @@ func (b *Broker) ResolveSubjectToken(ctx context.Context, prov core.Provider, su
 	if subjectID == "" {
 		return ctx, "", fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
 	}
-	return b.resolveSubjectCredential(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
+	return b.resolveSubjectCredential(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeSubject, subjectID)
 }

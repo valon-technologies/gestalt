@@ -307,12 +307,12 @@ details. Those come from the deployment bindings.
         return gestalt.Response[NightlyReportOutput]{}, err
       }
       obj := s3.Object(input.Bucket, "nightly/"+req.IdempotencyKey+".json")
-      if _, err := obj.WriteBytes(ctx, body, &gestalt.WriteOptions{
+      if _, err := obj.WriteBytes(ctx, body, &gestalt.WriteRequest{
         ContentType: "application/json",
       }); err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
-      access, err := obj.CreateAccessUrl(ctx, &gestalt.ObjectAccessURLOptions{
+      access, err := obj.CreateAccessURL(ctx, &gestalt.PresignRequest{
         Method:  gestalt.PresignMethodGet,
         Expires: 15 * time.Minute,
       })

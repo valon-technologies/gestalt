@@ -1192,7 +1192,7 @@ func TestSignalOrStartRunAppStepCredentialModeUsesDeclaredInvoke(t *testing.T) {
 	manager := New(Config{
 		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "github",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name: "github",
 				Operations: []catalog.CatalogOperation{
@@ -1243,7 +1243,7 @@ func TestSignalOrStartRunAppStepCredentialModeKeepsBlankModeBlank(t *testing.T) 
 	manager := New(Config{
 		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "github",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name:       "github",
 				Operations: []catalog.CatalogOperation{{ID: "reviewPullRequest", Method: "POST"}},

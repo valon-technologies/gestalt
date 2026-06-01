@@ -21,7 +21,7 @@ const PROVIDER_KIND_DEFINITIONS = {
     label: "authentication provider",
   },
   authorization: {
-    tokens: ["authorization", "authz"],
+    tokens: ["authorization"],
     formatToken: "authorization",
     defaultExportNames: ["authorization", "provider"],
     label: "authorization provider",

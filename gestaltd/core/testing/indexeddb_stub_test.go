@@ -13,7 +13,7 @@ func TestStubCursorAdvanceSkipsRequestedRows(t *testing.T) {
 
 	db := &StubIndexedDB{}
 	ctx := context.Background()
-	if _, err := db.CreateObjectStore(ctx, "items", idb.ObjectStoreSchema{}); err != nil {
+	if _, err := db.CreateObjectStore(ctx, "items", idb.ObjectStoreOptions{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 
@@ -47,7 +47,7 @@ func TestStubIndexCursorOrdersBinaryKeysBytewise(t *testing.T) {
 
 	db := &StubIndexedDB{}
 	ctx := context.Background()
-	if _, err := db.CreateObjectStore(ctx, "items", idb.ObjectStoreSchema{
+	if _, err := db.CreateObjectStore(ctx, "items", idb.ObjectStoreOptions{
 		Indexes: []idb.IndexSchema{{Name: "by_blob", KeyPath: []string{"blob"}}},
 	}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
@@ -90,7 +90,7 @@ func TestStubTransactionAbortsOnOperationError(t *testing.T) {
 
 	db := &StubIndexedDB{}
 	ctx := context.Background()
-	if _, err := db.CreateObjectStore(ctx, "users", idb.ObjectStoreSchema{
+	if _, err := db.CreateObjectStore(ctx, "users", idb.ObjectStoreOptions{
 		Indexes: []idb.IndexSchema{{Name: "by_email", KeyPath: []string{"email"}, Unique: true}},
 	}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)

@@ -37,7 +37,7 @@ func effectiveConnectionMode(ctx context.Context, prov core.Provider) core.Conne
 func normalizeCredentialModeOverride(mode core.ConnectionMode) core.ConnectionMode {
 	normalized := core.NormalizeOptionalConnectionMode(mode)
 	switch normalized {
-	case core.ConnectionModeNone, core.ConnectionModeUser:
+	case core.ConnectionModeNone, core.ConnectionModeSubject:
 		return normalized
 	default:
 		return ""

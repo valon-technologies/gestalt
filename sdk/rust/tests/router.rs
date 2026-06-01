@@ -337,7 +337,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
                     ..Default::default()
                 }),
                 credential: Some(CredentialContext {
-                    mode: "user".to_owned(),
+                    mode: "subject".to_owned(),
                     ..Default::default()
                 }),
                 access: None,
@@ -353,7 +353,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
     assert_eq!(success.status, 200);
     assert_eq!(
         success.body,
-        r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"user","idempotency_key":"tool-call-123"}"#
+        r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"subject","idempotency_key":"tool-call-123"}"#
     );
 
     let unknown = client

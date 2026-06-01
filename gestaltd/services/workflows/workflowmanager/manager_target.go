@@ -127,7 +127,7 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 	}
 	credentialMode := core.NormalizeOptionalConnectionMode(target.CredentialMode)
 	switch credentialMode {
-	case "", core.ConnectionModeNone, core.ConnectionModeUser:
+	case "", core.ConnectionModeNone, core.ConnectionModeSubject:
 	default:
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: workflow target credential_mode %q is not supported", invocation.ErrInvalidInvocation, credentialMode)
 	}

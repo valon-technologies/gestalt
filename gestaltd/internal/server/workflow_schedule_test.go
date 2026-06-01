@@ -698,7 +698,7 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{
@@ -1078,7 +1078,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{
@@ -1087,7 +1087,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 			},
 		}, &coretesting.StubIntegration{
 			N:        "analytics",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name: "analytics",
 				Operations: []catalog.CatalogOperation{
@@ -1355,7 +1355,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{
@@ -1470,7 +1470,7 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingTarget(t *testing.T) {
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{
@@ -1530,7 +1530,7 @@ func TestWorkflowScheduleCreateFailureHidesInternalError(t *testing.T) {
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{
@@ -1603,7 +1603,7 @@ func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{
@@ -1686,7 +1686,7 @@ func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing
 		cfg.Providers = testutil.NewProviderRegistry(t,
 			&coretesting.StubIntegration{
 				N:        "roadmap",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				CatalogVal: &catalog.Catalog{
 					Name: "roadmap",
 					Operations: []catalog.CatalogOperation{
@@ -1696,7 +1696,7 @@ func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing
 			},
 			&coretesting.StubIntegration{
 				N:        "analytics",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				CatalogVal: &catalog.Catalog{
 					Name: "analytics",
 					Operations: []catalog.CatalogOperation{
@@ -1783,7 +1783,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 		cfg.Providers = testutil.NewProviderRegistry(t,
 			&coretesting.StubIntegration{
 				N:        "roadmap",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				CatalogVal: &catalog.Catalog{
 					Name: "roadmap",
 					Operations: []catalog.CatalogOperation{
@@ -1793,7 +1793,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 			},
 			&coretesting.StubIntegration{
 				N:        "analytics",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				CatalogVal: &catalog.Catalog{
 					Name: "analytics",
 					Operations: []catalog.CatalogOperation{
@@ -2002,7 +2002,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 		cfg.Providers = testutil.NewProviderRegistry(t,
 			&coretesting.StubIntegration{
 				N:        "roadmap",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				CatalogVal: &catalog.Catalog{
 					Name: "roadmap",
 					Operations: []catalog.CatalogOperation{
@@ -2012,7 +2012,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 			},
 			&coretesting.StubIntegration{
 				N:        "analytics",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				CatalogVal: &catalog.Catalog{
 					Name: "analytics",
 					Operations: []catalog.CatalogOperation{
@@ -2102,7 +2102,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 		cfg.Providers = testutil.NewProviderRegistry(t,
 			&coretesting.StubIntegration{
 				N:        "roadmap",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				CatalogVal: &catalog.Catalog{
 					Name: "roadmap",
 					Operations: []catalog.CatalogOperation{
@@ -2112,7 +2112,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 			},
 			&coretesting.StubIntegration{
 				N:        "analytics",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				CatalogVal: &catalog.Catalog{
 					Name: "analytics",
 					Operations: []catalog.CatalogOperation{
@@ -2392,7 +2392,7 @@ func TestGlobalWorkflowRejectsInvalidJSONBodies(t *testing.T) {
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{
@@ -2503,7 +2503,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 		cfg.Providers = testutil.NewProviderRegistry(t,
 			&coretesting.StubIntegration{
 				N:        "roadmap",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				CatalogVal: &catalog.Catalog{
 					Name: "roadmap",
 					Operations: []catalog.CatalogOperation{
@@ -2513,7 +2513,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 			},
 			&coretesting.StubIntegration{
 				N:        "analytics",
-				ConnMode: core.ConnectionModeUser,
+				ConnMode: core.ConnectionModeSubject,
 				CatalogVal: &catalog.Catalog{
 					Name: "analytics",
 					Operations: []catalog.CatalogOperation{
@@ -2671,7 +2671,7 @@ func TestWorkflowEventTriggerCreateRequiresMatchType(t *testing.T) {
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{
@@ -2727,14 +2727,14 @@ func TestWorkflowEventPublishFansOutAcrossWorkflowProviders(t *testing.T) {
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name:       "roadmap",
 				Operations: []catalog.CatalogOperation{{ID: "sync", Method: http.MethodPost}},
 			},
 		}, &coretesting.StubIntegration{
 			N:        "slack",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name:       "slack",
 				Operations: []catalog.CatalogOperation{{ID: "chat.postMessage", Method: http.MethodPost}},
@@ -2844,7 +2844,7 @@ func TestWorkflowEventPublishRequiresType(t *testing.T) {
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name:       "roadmap",
 				Operations: []catalog.CatalogOperation{{ID: "sync", Method: http.MethodPost}},

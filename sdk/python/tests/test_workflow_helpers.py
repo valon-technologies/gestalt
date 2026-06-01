@@ -309,7 +309,7 @@ class WorkflowHelperTests(unittest.TestCase):
                         app=gestalt.WorkflowStepAppCall(
                             name="slack",
                             operation="chat.postMessage",
-                            credential_mode="user",
+                            credential_mode="subject",
                         ),
                     )
                 ]
@@ -342,7 +342,7 @@ class WorkflowHelperTests(unittest.TestCase):
                         "kind": "app",
                         "app": "slack",
                         "operation": "chat.postMessage",
-                        "credentialMode": "user",
+                        "credentialMode": "subject",
                     }
                 ],
             },

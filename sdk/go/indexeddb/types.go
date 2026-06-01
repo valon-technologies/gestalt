@@ -71,9 +71,6 @@ type ObjectStoreOptions struct {
 	Columns []ColumnDef
 }
 
-// ObjectStoreSchema is an alias for ObjectStoreOptions (legacy name).
-type ObjectStoreSchema = ObjectStoreOptions
-
 // KeyRange represents a range over keys (maps to IDBKeyRange).
 type KeyRange struct {
 	Lower     any
