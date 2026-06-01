@@ -1572,27 +1572,27 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 }
 
 type lifecyclePaths struct {
-	configPaths                []string
-	configFlags                string
-	lockFlags                  string
+	configPaths                 []string
+	configFlags                 string
+	lockFlags                   string
 	lockMaterializationPlatform string
-	pluginScope                string
-	configPath             string
-	configDir              string
-	artifactsDir           string
-	lockfilePath           string
-	providersDir           string
-	authDir                string
-	authorizationDir       string
-	externalCredentialsDir string
-	secretsDir             string
-	telemetryDir           string
-	auditDir               string
-	cacheDir               string
-	workflowDir            string
-	agentDir               string
-	runtimeDir             string
-	uiDir                  string
+	pluginScope                 string
+	configPath                  string
+	configDir                   string
+	artifactsDir                string
+	lockfilePath                string
+	providersDir                string
+	authDir                     string
+	authorizationDir            string
+	externalCredentialsDir      string
+	secretsDir                  string
+	telemetryDir                string
+	auditDir                    string
+	cacheDir                    string
+	workflowDir                 string
+	agentDir                    string
+	runtimeDir                  string
+	uiDir                       string
 }
 
 func primaryConfigPath(paths []string) string {
