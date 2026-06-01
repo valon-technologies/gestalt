@@ -13,10 +13,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	integration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/egress"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 const declarativeHTTPTimeout = 30 * time.Second
 const declarativeJSONContentType = "application/json; charset=utf-8"
+const declarativeDefaultConnection = "default"
 
 type declarativeOptions struct {
 	displayName          string
@@ -70,6 +73,7 @@ type DeclarativeProvider struct {
 	operationConnections map[string]string
 	connectionSelectors  map[string]core.OperationConnectionSelector
 	operationLocks       map[string]bool
+	tokenParsers         map[string]egress.TokenParser
 }
 
 func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *http.Client, opts ...DeclarativeProviderOption) (*DeclarativeProvider, error) {
@@ -120,9 +124,6 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 	if auth != nil {
 		authType = auth.Type
 		authorizationURL = auth.AuthorizationURL
-		if auth.AuthMapping != nil && (len(auth.AuthMapping.Headers) > 0 || auth.AuthMapping.Basic != nil) {
-			base.TokenParser = integration.MappedCredentialParser(auth.AuthMapping)
-		}
 	}
 	base.SetCatalog(cat)
 
@@ -133,6 +134,7 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 		operationConnections: maps.Clone(options.operationConnections),
 		connectionSelectors:  cloneOperationConnectionSelectors(options.connectionSelectors),
 		operationLocks:       maps.Clone(options.operationLocks),
+		tokenParsers:         connectionTokenParsers(manifest.Spec.Connections),
 	}, nil
 }
 
@@ -144,7 +146,11 @@ func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, par
 	if !declarativeHasOperation(p.Base.Catalog(), operation) {
 		return &core.OperationResult{Status: http.StatusNotFound, Body: `{"error":"unknown operation"}`}, nil
 	}
-	return p.Base.Execute(ctx, operation, params, token)
+	base, err := p.baseForConnection(ctx, operation, params)
+	if err != nil {
+		return nil, err
+	}
+	return base.Execute(ctx, operation, params, token)
 }
 
 func (p *DeclarativeProvider) ConnectionForOperation(operation string) string {
@@ -169,6 +175,68 @@ func (p *DeclarativeProvider) OperationConnectionOverrideAllowed(operation strin
 		}
 	}
 	return !p.operationLocks[operation]
+}
+
+func (p *DeclarativeProvider) baseForConnection(ctx context.Context, operation string, params map[string]any) (*integration.Base, error) {
+	connection, resolved, err := p.connectionForExecution(ctx, operation, params)
+	if err != nil {
+		return nil, err
+	}
+	if !resolved {
+		connection = declarativeDefaultConnection
+	}
+	base := *p.Base
+	if parser, ok := p.tokenParsers[connection]; ok {
+		base.TokenParser = parser
+	}
+	return &base, nil
+}
+
+func (p *DeclarativeProvider) connectionForExecution(ctx context.Context, operation string, params map[string]any) (string, bool, error) {
+	for _, connection := range []string{
+		invocation.CredentialContextFromContext(ctx).Connection,
+		invocation.ConnectionFromContext(ctx),
+	} {
+		connection = core.ResolveConnectionAlias(strings.TrimSpace(connection))
+		if connection == "" {
+			continue
+		}
+		return connection, true, nil
+	}
+	connection, err := p.ResolveConnectionForOperation(operation, params)
+	if err != nil {
+		return "", false, err
+	}
+	connection = core.ResolveConnectionAlias(strings.TrimSpace(connection))
+	if connection == "" {
+		return "", false, nil
+	}
+	return connection, true, nil
+}
+
+func connectionTokenParsers(connections map[string]*providermanifestv1.ManifestConnectionDef) map[string]egress.TokenParser {
+	if len(connections) == 0 {
+		return nil
+	}
+	parsers := make(map[string]egress.TokenParser)
+	for name, conn := range connections {
+		if conn == nil {
+			continue
+		}
+		name = core.ResolveConnectionAlias(strings.TrimSpace(name))
+		if name == "" {
+			continue
+		}
+		if conn.Auth != nil {
+			parsers[name] = integration.AuthMappingTokenParser(conn.Auth.AuthMapping)
+		} else {
+			parsers[name] = nil
+		}
+	}
+	if len(parsers) == 0 {
+		return nil
+	}
+	return parsers
 }
 
 func selectorConnection(selector core.OperationConnectionSelector, params map[string]any) (string, bool, error) {
