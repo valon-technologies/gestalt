@@ -35,9 +35,9 @@ func lockConfigWithStatePaths(configFlags []string, state operator.StatePaths, p
 		return err
 	}
 
-	platArgs := make([]struct{ GOOS, GOARCH string }, len(platforms))
+	platArgs := make([]operator.LockPlatform, len(platforms))
 	for i, p := range platforms {
-		platArgs[i] = struct{ GOOS, GOARCH string }{p.GOOS, p.GOARCH}
+		platArgs[i] = operator.LockPlatform{GOOS: p.GOOS, GOARCH: p.GOARCH}
 	}
 
 	if check {

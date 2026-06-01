@@ -2499,7 +2499,7 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			}
 
 			lc := NewLifecycle()
-			lock, err := lc.PrepareAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH string }{
+			lock, err := lc.PrepareAtPathWithPlatforms(configPath, "", []LockPlatform{
 				{GOOS: extraPlatform.goos, GOARCH: extraPlatform.goarch},
 			})
 			if err == nil {
@@ -5758,9 +5758,9 @@ func TestManagedCacheSourcesPrepareAtPathWithPlatformsHashesExtraPlatformArchive
 			cacheSource := "github.com/acme/tools/cache-session"
 			version := "1.0.0"
 
-			extraPlatform := struct{ GOOS, GOARCH string }{GOOS: "linux", GOARCH: "amd64"}
+			extraPlatform := LockPlatform{GOOS: "linux", GOARCH: "amd64"}
 			if runtime.GOOS == extraPlatform.GOOS && runtime.GOARCH == extraPlatform.GOARCH {
-				extraPlatform = struct{ GOOS, GOARCH string }{GOOS: "darwin", GOARCH: "arm64"}
+				extraPlatform = LockPlatform{GOOS: "darwin", GOARCH: "arm64"}
 			}
 			extraPlatformKey := providerpkg.PlatformString(extraPlatform.GOOS, extraPlatform.GOARCH)
 			currentArchivePath := buildExecutableArchive(t, dir, "cache-src", cacheSource, version, providermanifestv1.KindCache, "cache-app", "fake-cache-binary")
@@ -5887,7 +5887,7 @@ func TestManagedCacheSourcesPrepareAtPathWithPlatformsHashesExtraPlatformArchive
 			if client != nil {
 				lc = lc.WithHTTPClient(client)
 			}
-			lock, err := lc.PrepareAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH string }{extraPlatform})
+			lock, err := lc.PrepareAtPathWithPlatforms(configPath, "", []LockPlatform{extraPlatform})
 			if err != nil {
 				t.Fatalf("PrepareAtPathWithPlatforms: %v", err)
 			}
@@ -5938,9 +5938,9 @@ func TestLockAtPathsWithPlatformsUsesRequestedMaterializationPlatform(t *testing
 	cacheSource := "github.com/acme/tools/cache-session"
 	version := "1.0.0"
 
-	requestedPlatform := struct{ GOOS, GOARCH string }{GOOS: "linux", GOARCH: "amd64"}
+	requestedPlatform := LockPlatform{GOOS: "linux", GOARCH: "amd64"}
 	if runtime.GOOS == requestedPlatform.GOOS && runtime.GOARCH == requestedPlatform.GOARCH {
-		requestedPlatform = struct{ GOOS, GOARCH string }{GOOS: "darwin", GOARCH: "arm64"}
+		requestedPlatform = LockPlatform{GOOS: "darwin", GOARCH: "arm64"}
 	}
 	requestedPlatformKey := providerpkg.PlatformString(requestedPlatform.GOOS, requestedPlatform.GOARCH)
 	hostPlatformKey := providerpkg.CurrentPlatformString()
@@ -6038,7 +6038,7 @@ func TestLockAtPathsWithPlatformsUsesRequestedMaterializationPlatform(t *testing
 	}
 
 	lc := NewLifecycle().WithHTTPClient(srv.Client())
-	if _, err := lc.LockAtPathsWithPlatforms([]string{configPath}, StatePaths{}, []struct{ GOOS, GOARCH string }{requestedPlatform}); err != nil {
+	if _, err := lc.LockAtPathsWithPlatforms([]string{configPath}, StatePaths{}, []LockPlatform{requestedPlatform}); err != nil {
 		t.Fatalf("LockAtPathsWithPlatforms: %v", err)
 	}
 
@@ -6073,18 +6073,18 @@ func TestLockAtPathsWithPlatformsUsesRequestedMaterializationPlatform(t *testing
 	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, nil); err != nil {
 		t.Fatalf("CheckLockAtPathsWithStatePaths without --platform: %v", err)
 	}
-	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, []struct{ GOOS, GOARCH string }{requestedPlatform}); err != nil {
+	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, []LockPlatform{requestedPlatform}); err != nil {
 		t.Fatalf("CheckLockAtPathsWithStatePaths with --platform: %v", err)
 	}
 
-	wrongPlatform := struct{ GOOS, GOARCH string }{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}
+	wrongPlatform := LockPlatform{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}
 	if wrongPlatform.GOOS == requestedPlatform.GOOS && wrongPlatform.GOARCH == requestedPlatform.GOARCH {
-		wrongPlatform = struct{ GOOS, GOARCH string }{GOOS: "linux", GOARCH: "amd64"}
+		wrongPlatform = LockPlatform{GOOS: "linux", GOARCH: "amd64"}
 		if wrongPlatform.GOOS == requestedPlatform.GOOS && wrongPlatform.GOARCH == requestedPlatform.GOARCH {
-			wrongPlatform = struct{ GOOS, GOARCH string }{GOOS: "darwin", GOARCH: "arm64"}
+			wrongPlatform = LockPlatform{GOOS: "darwin", GOARCH: "arm64"}
 		}
 	}
-	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, []struct{ GOOS, GOARCH string }{wrongPlatform}); err == nil {
+	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, []LockPlatform{wrongPlatform}); err == nil {
 		t.Fatal("CheckLockAtPathsWithStatePaths with mismatched --platform should fail")
 	} else if !strings.Contains(err.Error(), "materialized for platform") {
 		t.Fatalf("CheckLockAtPathsWithStatePaths mismatch error = %v, want materialized-for-platform hint", err)

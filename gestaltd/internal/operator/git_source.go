@@ -288,7 +288,7 @@ func (l *Lifecycle) lockGitSnapshotSource(ctx context.Context, cfg *config.Confi
 	metadataProvider := *app
 	metadataProvider.Source = config.NewMetadataSource(snapshot.MetadataURL)
 	metadataProvider.Source.Auth = app.Source.Auth
-	installed, entry, err := l.installMetadataSourcePackage(ctx, expectedKind, name, subject, destDir, &metadataProvider, paths)
+	installed, entry, err := l.installMetadataSourcePackage(ctx, expectedKind, name, subject, destDir, paths.configDir, pathsMaterializationPlatform(paths), &metadataProvider)
 	if err != nil {
 		return LockEntry{}, nil, fmt.Errorf("%s source.git snapshot %s: %w", subject, snapshot.MetadataURL, err)
 	}
