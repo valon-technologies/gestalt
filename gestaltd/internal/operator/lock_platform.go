@@ -25,6 +25,9 @@ func resolveMaterializationPlatform(platform string) string {
 	return platform
 }
 
+// pathsMaterializationPlatform returns the OS/arch used for archive resolution and
+// materialization. It reads lifecyclePaths.lockMaterializationPlatform, which is
+// set only during committed lock / lock --check (see prepareCommittedLockAtPaths).
 func pathsMaterializationPlatform(paths lifecyclePaths) string {
 	return resolveMaterializationPlatform(paths.lockMaterializationPlatform)
 }
