@@ -14,7 +14,7 @@ import (
 const (
 	localConfigDirName = ".gestaltd"
 
-	defaultHTTPBinProvider = config.DefaultProviderRepo + "/apps/httpbin"
+	defaultHTTPBinProvider = config.DefaultProviderRepo + "/app/httpbin"
 	defaultHTTPBinVersion  = "0.0.1-alpha.1"
 )
 
