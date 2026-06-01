@@ -2306,6 +2306,27 @@ test("integration provider request context includes workflow metadata", async ()
       },
     ],
   });
+
+  const omittedToolRefs = await (service.execute as any)(
+    create(ExecuteRequestSchema, {
+      operation: "inspect",
+      params: {},
+      token: "token-123",
+      context: create(RequestContextSchema, {
+        host: create(HostContextSchema, {
+          publicBaseUrl: "https://gestalt.example.test",
+        }),
+      }),
+    }),
+  );
+
+  expect(JSON.parse(omittedToolRefs.body)).toMatchObject({
+    host: {
+      publicBaseUrl: "https://gestalt.example.test",
+    },
+    toolRefsSet: false,
+    toolRefs: [],
+  });
 });
 
 test("s3 writeObject closes unread request frames when provider returns early", async () => {
