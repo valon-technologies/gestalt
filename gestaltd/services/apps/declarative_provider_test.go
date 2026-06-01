@@ -17,6 +17,8 @@ func TestDeclarativeProvider_HTTPRequestMaterialization(t *testing.T) {
 	t.Parallel()
 
 	t.Run("post uses explicit JSON content type", func(t *testing.T) {
+		t.Parallel()
+
 		var gotContentType string
 		var gotHeader string
 		var gotBody map[string]any
@@ -88,96 +90,106 @@ func TestDeclarativeProvider_HTTPRequestMaterialization(t *testing.T) {
 	})
 
 	t.Run("named connection auth mapping", func(t *testing.T) {
-		var gotAPIKey string
-		var gotDefaultKey string
-		var gotAuthorization string
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			gotAPIKey = r.Header.Get("X-API-Key")
-			gotDefaultKey = r.Header.Get("X-Default-Key")
-			gotAuthorization = r.Header.Get("Authorization")
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
-		}))
-		testutil.CloseOnCleanup(t, srv)
+		t.Parallel()
 
-		manifest := &providermanifestv1.Manifest{
-			Kind:    providermanifestv1.KindApp,
-			Source:  "github.com/test/declarative",
-			Version: "0.0.1-alpha.1",
-			Spec: &providermanifestv1.Spec{
-				Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-					"default": {
-						Mode: providermanifestv1.ConnectionModeSubject,
-						Auth: &providermanifestv1.ProviderAuth{
-							Type: providermanifestv1.AuthTypeManual,
-							Credentials: []providermanifestv1.CredentialField{{
-								Name:  "api_key",
-								Label: "API Key",
-							}},
-							AuthMapping: &providermanifestv1.AuthMapping{
-								Headers: map[string]providermanifestv1.AuthValue{
-									"X-Default-Key": {
-										ValueFrom: &providermanifestv1.AuthValueFrom{
-											CredentialFieldRef: &providermanifestv1.CredentialFieldRef{Name: "api_key"},
+		newProvider := func(t *testing.T, opts ...DeclarativeProviderOption) (*DeclarativeProvider, func() (apiKey, defaultKey, authorization string)) {
+			t.Helper()
+
+			var gotAPIKey string
+			var gotDefaultKey string
+			var gotAuthorization string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotAPIKey = r.Header.Get("X-API-Key")
+				gotDefaultKey = r.Header.Get("X-Default-Key")
+				gotAuthorization = r.Header.Get("Authorization")
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+			}))
+			testutil.CloseOnCleanup(t, srv)
+
+			manifest := &providermanifestv1.Manifest{
+				Kind:    providermanifestv1.KindApp,
+				Source:  "github.com/test/declarative",
+				Version: "0.0.1-alpha.1",
+				Spec: &providermanifestv1.Spec{
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"default": {
+							Mode: providermanifestv1.ConnectionModeSubject,
+							Auth: &providermanifestv1.ProviderAuth{
+								Type: providermanifestv1.AuthTypeManual,
+								Credentials: []providermanifestv1.CredentialField{{
+									Name:  "api_key",
+									Label: "API Key",
+								}},
+								AuthMapping: &providermanifestv1.AuthMapping{
+									Headers: map[string]providermanifestv1.AuthValue{
+										"X-Default-Key": {
+											ValueFrom: &providermanifestv1.AuthValueFrom{
+												CredentialFieldRef: &providermanifestv1.CredentialFieldRef{Name: "api_key"},
+											},
+										},
+									},
+								},
+							},
+						},
+						"plain": {
+							Mode: providermanifestv1.ConnectionModeSubject,
+							Auth: &providermanifestv1.ProviderAuth{
+								Type: providermanifestv1.AuthTypeBearer,
+							},
+						},
+						"prod": {
+							Mode: providermanifestv1.ConnectionModeSubject,
+							Auth: &providermanifestv1.ProviderAuth{
+								Type: providermanifestv1.AuthTypeManual,
+								Credentials: []providermanifestv1.CredentialField{{
+									Name:  "api_key",
+									Label: "API Key",
+								}},
+								AuthMapping: &providermanifestv1.AuthMapping{
+									Headers: map[string]providermanifestv1.AuthValue{
+										"X-API-Key": {
+											ValueFrom: &providermanifestv1.AuthValueFrom{
+												CredentialFieldRef: &providermanifestv1.CredentialFieldRef{Name: "api_key"},
+											},
 										},
 									},
 								},
 							},
 						},
 					},
-					"plain": {
-						Mode: providermanifestv1.ConnectionModeSubject,
-						Auth: &providermanifestv1.ProviderAuth{
-							Type: providermanifestv1.AuthTypeBearer,
-						},
-					},
-					"prod": {
-						Mode: providermanifestv1.ConnectionModeSubject,
-						Auth: &providermanifestv1.ProviderAuth{
-							Type: providermanifestv1.AuthTypeManual,
-							Credentials: []providermanifestv1.CredentialField{{
-								Name:  "api_key",
-								Label: "API Key",
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL: srv.URL,
+							Operations: []providermanifestv1.ProviderOperation{{
+								Name:   "schema.versions",
+								Method: http.MethodGet,
+								Path:   "/v1/schema/versions",
 							}},
-							AuthMapping: &providermanifestv1.AuthMapping{
-								Headers: map[string]providermanifestv1.AuthValue{
-									"X-API-Key": {
-										ValueFrom: &providermanifestv1.AuthValueFrom{
-											CredentialFieldRef: &providermanifestv1.CredentialFieldRef{Name: "api_key"},
-										},
-									},
-								},
-							},
 						},
 					},
 				},
-				Surfaces: &providermanifestv1.ProviderSurfaces{
-					REST: &providermanifestv1.RESTSurface{
-						BaseURL: srv.URL,
-						Operations: []providermanifestv1.ProviderOperation{{
-							Name:   "schema.versions",
-							Method: http.MethodGet,
-							Path:   "/v1/schema/versions",
-						}},
-					},
-				},
-			},
+			}
+			prov, err := NewDeclarativeProvider(manifest, srv.Client(), opts...)
+			if err != nil {
+				t.Fatalf("NewDeclarativeProvider: %v", err)
+			}
+			return prov, func() (apiKey, defaultKey, authorization string) {
+				return gotAPIKey, gotDefaultKey, gotAuthorization
+			}
 		}
 		token := `{"api_key":"prod-key"}`
 
 		t.Run("default connection fallback", func(t *testing.T) {
-			gotAPIKey = ""
-			gotDefaultKey = ""
-			gotAuthorization = ""
-			prov, err := NewDeclarativeProvider(manifest, srv.Client())
-			if err != nil {
-				t.Fatalf("NewDeclarativeProvider: %v", err)
-			}
+			t.Parallel()
+
+			prov, requestHeaders := newProvider(t)
 
 			if _, err := prov.Execute(context.Background(), "schema.versions", nil, `{"api_key":"default-key"}`); err != nil {
 				t.Fatalf("Execute: %v", err)
 			}
 
+			gotAPIKey, gotDefaultKey, gotAuthorization := requestHeaders()
 			if gotDefaultKey != "default-key" {
 				t.Fatalf("X-Default-Key = %q, want default-key", gotDefaultKey)
 			}
@@ -190,13 +202,9 @@ func TestDeclarativeProvider_HTTPRequestMaterialization(t *testing.T) {
 		})
 
 		t.Run("credential context", func(t *testing.T) {
-			gotAPIKey = ""
-			gotDefaultKey = ""
-			gotAuthorization = ""
-			prov, err := NewDeclarativeProvider(manifest, srv.Client())
-			if err != nil {
-				t.Fatalf("NewDeclarativeProvider: %v", err)
-			}
+			t.Parallel()
+
+			prov, requestHeaders := newProvider(t)
 			ctx := invocation.WithCredentialContext(context.Background(), invocation.CredentialContext{
 				Mode:       core.ConnectionModeSubject,
 				SubjectID:  "service_account:data-schema-explorer",
@@ -208,6 +216,7 @@ func TestDeclarativeProvider_HTTPRequestMaterialization(t *testing.T) {
 				t.Fatalf("Execute: %v", err)
 			}
 
+			gotAPIKey, gotDefaultKey, _ := requestHeaders()
 			if gotAPIKey != "prod-key" {
 				t.Fatalf("X-API-Key = %q, want prod-key", gotAPIKey)
 			}
@@ -217,22 +226,17 @@ func TestDeclarativeProvider_HTTPRequestMaterialization(t *testing.T) {
 		})
 
 		t.Run("operation connection fallback", func(t *testing.T) {
-			gotAPIKey = ""
-			gotDefaultKey = ""
-			gotAuthorization = ""
-			prov, err := NewDeclarativeProvider(
-				manifest,
-				srv.Client(),
+			t.Parallel()
+
+			prov, requestHeaders := newProvider(t,
 				WithDeclarativeOperationConnections(map[string]string{"schema.versions": "prod"}, nil, nil),
 			)
-			if err != nil {
-				t.Fatalf("NewDeclarativeProvider: %v", err)
-			}
 
 			if _, err := prov.Execute(context.Background(), "schema.versions", nil, token); err != nil {
 				t.Fatalf("Execute: %v", err)
 			}
 
+			gotAPIKey, gotDefaultKey, _ := requestHeaders()
 			if gotAPIKey != "prod-key" {
 				t.Fatalf("X-API-Key = %q, want prod-key", gotAPIKey)
 			}
@@ -242,13 +246,9 @@ func TestDeclarativeProvider_HTTPRequestMaterialization(t *testing.T) {
 		})
 
 		t.Run("unmapped connection uses generic credential materialization", func(t *testing.T) {
-			gotAPIKey = ""
-			gotDefaultKey = ""
-			gotAuthorization = ""
-			prov, err := NewDeclarativeProvider(manifest, srv.Client())
-			if err != nil {
-				t.Fatalf("NewDeclarativeProvider: %v", err)
-			}
+			t.Parallel()
+
+			prov, requestHeaders := newProvider(t)
 			ctx := invocation.WithCredentialContext(context.Background(), invocation.CredentialContext{
 				Mode:       core.ConnectionModeSubject,
 				SubjectID:  "service_account:data-schema-explorer",
@@ -260,6 +260,7 @@ func TestDeclarativeProvider_HTTPRequestMaterialization(t *testing.T) {
 				t.Fatalf("Execute: %v", err)
 			}
 
+			gotAPIKey, gotDefaultKey, gotAuthorization := requestHeaders()
 			if gotAuthorization != "Bearer plain-token" {
 				t.Fatalf("Authorization = %q, want Bearer plain-token", gotAuthorization)
 			}
