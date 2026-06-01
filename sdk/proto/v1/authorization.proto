@@ -12,22 +12,91 @@ message Subject {
   google.protobuf.Struct properties = 3;
 }
 
+message Action {
+  string name = 1;
+  google.protobuf.Struct properties = 2;
+}
+
 message Resource {
   string type = 1;
   string id = 2;
   google.protobuf.Struct properties = 3;
 }
 
-message SubjectSet {
-  Resource resource = 1;
-  string relation = 2;
+message CheckAccessRequest {
+  Subject subject = 1;
+  Action action = 2;
+  Resource resource = 3;
 }
 
-// RelationshipTarget identifies the left side of an authorization relationship.
-//
-// Subject preserves the existing user/group/service-principal tuple shape.
-// Resource and SubjectSet allow Zanzibar-style usersets, for example:
-// document:roadmap#viewer@group:eng#member.
+message CheckAccessResponse {
+  bool allowed = 1;
+  string model_id = 2;
+}
+
+message CheckAccessManyRequest {
+  repeated CheckAccessRequest requests = 1;
+}
+
+message CheckAccessManyResponse {
+  repeated CheckAccessResponse decisions = 1;
+}
+
+message ListRelationshipsRequest {
+  RelationshipFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message RelationshipFilter {
+  RelationshipTarget target = 1;
+  string relation = 2;
+  Resource resource = 3;
+  RelationshipTargetType target_type = 4;
+  string target_entity_type = 5;
+  string resource_type = 6;
+  SourceLayer source_layer = 7;
+}
+
+message ListRelationshipsResponse {
+  repeated Relationship relationships = 1;
+  string next_page_token = 2;
+}
+
+message AddRelationshipRequest {
+  Relationship relationship = 1;
+}
+
+message AddRelationshipResponse {
+  Relationship relationship = 1;
+}
+
+message DeleteRelationshipRequest {
+  RelationshipTuple relationship_tuple = 1;
+}
+
+message DeleteRelationshipResponse {}
+
+message SetRelationshipsRequest {
+  repeated Relationship relationships = 1;
+}
+
+message SetRelationshipsResponse {
+  repeated Relationship relationships = 1;
+}
+
+message Relationship {
+  RelationshipTuple tuple = 1;
+  google.protobuf.Struct properties = 2;
+  SourceLayer source_layer = 3;
+}
+
+message RelationshipTuple {
+  RelationshipTarget target = 1;
+  string relation = 2;
+  Resource resource = 3;
+}
+
 message RelationshipTarget {
   oneof kind {
     Subject subject = 1;
@@ -36,199 +105,28 @@ message RelationshipTarget {
   }
 }
 
-message Action {
-  string name = 1;
-  google.protobuf.Struct properties = 2;
-}
-
-message AccessEvaluationRequest {
-  Subject subject = 1;
-  Action action = 2;
-  Resource resource = 3;
-  google.protobuf.Struct context = 4;
-}
-
-message AccessDecision {
-  bool allowed = 1;
-  google.protobuf.Struct context = 2;
-  string model_id = 3;
-}
-
-message AccessEvaluationsRequest {
-  repeated AccessEvaluationRequest requests = 1;
-}
-
-message AccessEvaluationsResponse {
-  repeated AccessDecision decisions = 1;
-}
-
-message ResourceSearchRequest {
-  Subject subject = 1;
-  Action action = 2;
-  string resource_type = 3;
-  google.protobuf.Struct context = 4;
-  int32 page_size = 5;
-  string page_token = 6;
-}
-
-message ResourceSearchResponse {
-  repeated Resource resources = 1;
-  string next_page_token = 2;
-  string model_id = 3;
-}
-
-message SubjectSearchRequest {
+message SubjectSet {
   Resource resource = 1;
-  Action action = 2;
-  string subject_type = 3;
-  google.protobuf.Struct context = 4;
-  int32 page_size = 5;
-  string page_token = 6;
-}
-
-message SubjectSearchResponse {
-  repeated Subject subjects = 1;
-  string next_page_token = 2;
-  string model_id = 3;
-}
-
-message EffectiveSubjectSearchRequest {
-  Resource resource = 1;
-  Action action = 2;
-  google.protobuf.Struct context = 3;
-  int32 page_size = 4;
-  string page_token = 5;
-}
-
-message EffectiveSubjectSearchResponse {
-  repeated RelationshipTarget targets = 1;
-  string next_page_token = 2;
-  string model_id = 3;
-  bool truncated = 4;
-}
-
-message ActionSearchRequest {
-  Subject subject = 1;
-  Resource resource = 2;
-  google.protobuf.Struct context = 3;
-  int32 page_size = 4;
-  string page_token = 5;
-}
-
-message ActionSearchResponse {
-  repeated Action actions = 1;
-  string next_page_token = 2;
-  string model_id = 3;
-}
-
-message AuthorizationMetadata {
-  repeated string capabilities = 1;
-  string active_model_id = 2;
-}
-
-message Relationship {
-  // Deprecated for generalized Zanzibar tuples. Writers should prefer target.
-  // Providers accepting both fields must reject mismatched subject and target values.
-  Subject subject = 1;
   string relation = 2;
-  Resource resource = 3;
-  google.protobuf.Struct properties = 4;
-  // Generalized tuple target. For compatibility, subject-only tuples may still
-  // be written using subject without setting target.
-  RelationshipTarget target = 5;
 }
 
-message RelationshipKey {
-  // Deprecated for generalized Zanzibar tuples. Callers should prefer target.
-  Subject subject = 1;
-  string relation = 2;
-  Resource resource = 3;
-  RelationshipTarget target = 4;
+enum RelationshipTargetType {
+  RELATIONSHIP_TARGET_TYPE_UNSPECIFIED = 0;
+  RELATIONSHIP_TARGET_TYPE_SUBJECT = 1;
+  RELATIONSHIP_TARGET_TYPE_RESOURCE = 2;
+  RELATIONSHIP_TARGET_TYPE_SUBJECT_SET = 3;
 }
 
-message ReadRelationshipsRequest {
-  // Direct tuple filter only. This RPC does not expand computed usersets or
-  // inheritance rewrites.
-  Subject subject = 1;
-  string relation = 2;
-  Resource resource = 3;
-  int32 page_size = 4;
-  string page_token = 5;
-  string model_id = 6;
-  RelationshipTarget target = 7;
-}
-
-message ReadRelationshipsResponse {
-  repeated Relationship relationships = 1;
-  string next_page_token = 2;
-  string model_id = 3;
-}
-
-message WriteRelationshipsRequest {
-  repeated Relationship writes = 1;
-  repeated RelationshipKey deletes = 2;
-  string model_id = 3;
+enum SourceLayer {
+  SOURCE_LAYER_UNSPECIFIED = 0;
+  SOURCE_LAYER_STATIC_CONFIG = 1;
+  SOURCE_LAYER_RUNTIME = 2;
 }
 
 message AuthorizationModel {
-  int32 version = 1;
-  repeated AuthorizationModelResourceType resource_types = 2;
-}
-
-message AuthorizationModelResourceType {
-  string name = 1;
-  repeated AuthorizationModelRelation relations = 2;
-  repeated AuthorizationModelAction actions = 3;
-}
-
-message AuthorizationModelRelation {
-  string name = 1;
-  repeated string subject_types = 2;
-  repeated AuthorizationModelAllowedTarget allowed_targets = 3;
-  AuthorizationModelRewrite rewrite = 4;
-}
-
-message AuthorizationModelAction {
-  string name = 1;
-  repeated string relations = 2;
-  AuthorizationModelRewrite rewrite = 3;
-}
-
-message AuthorizationModelAllowedTarget {
-  oneof kind {
-    string subject_type = 1;
-    string resource_type = 2;
-    AuthorizationModelSubjectSetTarget subject_set = 3;
-  }
-}
-
-message AuthorizationModelSubjectSetTarget {
-  string resource_type = 1;
-  string relation = 2;
-}
-
-message AuthorizationModelRewrite {
-  oneof kind {
-    AuthorizationModelRewriteThis this = 1;
-    AuthorizationModelComputedUserset computed_userset = 2;
-    AuthorizationModelTupleToUserset tuple_to_userset = 3;
-    AuthorizationModelRewriteUnion union = 4;
-  }
-}
-
-message AuthorizationModelRewriteThis {}
-
-message AuthorizationModelComputedUserset {
-  string relation = 1;
-}
-
-message AuthorizationModelTupleToUserset {
-  string tupleset_relation = 1;
-  string computed_relation = 2;
-}
-
-message AuthorizationModelRewriteUnion {
-  repeated AuthorizationModelRewrite children = 1;
+  string id = 1;
+  string version = 2;
+  repeated AuthorizationModelResourceType resource_types = 3;
 }
 
 message AuthorizationModelRef {
@@ -237,69 +135,71 @@ message AuthorizationModelRef {
   google.protobuf.Timestamp created_at = 3;
 }
 
-message ExpandRequest {
-  Resource resource = 1;
+message AuthorizationModelResourceType {
+  string name = 1;
+  repeated AuthorizationModelRelation relations = 2;
+  repeated AuthorizationModelAction actions = 3;
+  SourceLayer source_layer = 4;
+}
+
+message AuthorizationModelRelation {
+  string name = 1;
+  repeated AuthorizationModelAllowedTarget allowed_targets = 2;
+}
+
+message AuthorizationModelAction {
+  string name = 1;
+  repeated string relations = 2;
+}
+
+message AuthorizationModelAllowedTarget {
+  oneof kind {
+    string subject_type = 1;
+    string resource_type = 2;
+    SubjectSetType subject_set_type = 3;
+  }
+}
+
+message SubjectSetType {
+  string resource_type = 1;
   string relation = 2;
-  google.protobuf.Struct context = 3;
-  int32 max_depth = 4;
-  string model_id = 5;
 }
 
-message ExpandNode {
-  RelationshipTarget target = 1;
-  string relation = 2;
-  repeated ExpandNode children = 3;
-}
-
-message ExpandResponse {
-  ExpandNode root = 1;
-  bool truncated = 2;
-  bool cycle_detected = 3;
-  bool max_depth_reached = 4;
-  string model_id = 5;
-}
-
-message GetActiveModelResponse {
+message GetActiveModelRefResponse {
   AuthorizationModelRef model = 1;
 }
 
-message ListModelsRequest {
-  int32 page_size = 1;
-  string page_token = 2;
-}
-
-message ListModelsResponse {
-  repeated AuthorizationModelRef models = 1;
-  string next_page_token = 2;
-}
-
-message WriteModelRequest {
+message SetActiveModelRequest {
   AuthorizationModel model = 1;
 }
 
+message SetActiveModelResponse {
+  AuthorizationModelRef model = 1;
+}
+
+message ListActiveModelResourceTypesRequest {
+  string model_id = 1;
+  AuthorizationModelResourceTypeFilter filter = 2;
+}
+
+message AuthorizationModelResourceTypeFilter {
+  string name = 1;
+  SourceLayer source_layer = 2;
+}
+
+message ListActiveModelResourceTypesResponse {
+  repeated AuthorizationModelResourceType resource_types = 1;
+}
+
 service AuthorizationProvider {
-  rpc Evaluate(AccessEvaluationRequest) returns (AccessDecision);
-  rpc EvaluateMany(AccessEvaluationsRequest) returns (AccessEvaluationsResponse);
-  // Direct search over stored relationships. Implementations must not expand
-  // inherited or computed permissions here.
-  rpc SearchResources(ResourceSearchRequest) returns (ResourceSearchResponse);
-  // Direct search over stored relationships. Implementations must not expand
-  // inherited or computed permissions here.
-  rpc SearchSubjects(SubjectSearchRequest) returns (SubjectSearchResponse);
-  // Effective search that evaluates rewrites and inherited relations.
-  rpc EffectiveSearchResources(ResourceSearchRequest) returns (ResourceSearchResponse);
-  // Effective search that evaluates rewrites and inherited relations.
-  rpc EffectiveSearchSubjects(EffectiveSubjectSearchRequest) returns (EffectiveSubjectSearchResponse);
-  rpc SearchActions(ActionSearchRequest) returns (ActionSearchResponse);
-  // Expands one resource relation into the relationship targets that contribute
-  // to it. Responses may be partial when truncated or max_depth_reached is true.
-  rpc Expand(ExpandRequest) returns (ExpandResponse);
-  rpc GetMetadata(google.protobuf.Empty) returns (AuthorizationMetadata);
+  rpc ListRelationships(ListRelationshipsRequest) returns (ListRelationshipsResponse);
+  rpc AddRelationship(AddRelationshipRequest) returns (AddRelationshipResponse);
+  rpc DeleteRelationship(DeleteRelationshipRequest) returns (DeleteRelationshipResponse);
+  rpc SetRelationships(SetRelationshipsRequest) returns (SetRelationshipsResponse);
+  rpc GetActiveModelRef(google.protobuf.Empty) returns (GetActiveModelRefResponse);
+  rpc SetActiveModel(SetActiveModelRequest) returns (SetActiveModelResponse);
+  rpc ListActiveModelResourceTypes(ListActiveModelResourceTypesRequest) returns (ListActiveModelResourceTypesResponse);
 
-  rpc ReadRelationships(ReadRelationshipsRequest) returns (ReadRelationshipsResponse);
-  rpc WriteRelationships(WriteRelationshipsRequest) returns (google.protobuf.Empty);
-
-  rpc GetActiveModel(google.protobuf.Empty) returns (GetActiveModelResponse);
-  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
-  rpc WriteModel(WriteModelRequest) returns (AuthorizationModelRef);
+  rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse);
+  rpc CheckAccessMany(CheckAccessManyRequest) returns (CheckAccessManyResponse);
 }
