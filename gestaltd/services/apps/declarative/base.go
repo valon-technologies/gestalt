@@ -149,6 +149,10 @@ func (b *Base) httpClient() *http.Client {
 }
 
 func (b *Base) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
+	return b.ExecuteWithTokenParser(ctx, operation, params, token, b.TokenParser)
+}
+
+func (b *Base) ExecuteWithTokenParser(ctx context.Context, operation string, params map[string]any, token string, parser egress.TokenParser) (*core.OperationResult, error) {
 	if b.ExecuteFunc != nil {
 		return b.ExecuteFunc(ctx, operation, params, token)
 	}
@@ -158,9 +162,9 @@ func (b *Base) Execute(ctx context.Context, operation string, params map[string]
 		return nil, fmt.Errorf("unknown operation: %s", operation)
 	}
 	if catOp.Query != "" {
-		return b.executeGraphQL(ctx, operation, catOp.Query, catOp.OperationName, params, token)
+		return b.executeGraphQL(ctx, operation, catOp.Query, catOp.OperationName, params, token, parser)
 	}
-	return b.executeREST(ctx, operation, catOp, params, token)
+	return b.executeREST(ctx, operation, catOp, params, token, parser)
 }
 
 func (b *Base) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
@@ -168,7 +172,7 @@ func (b *Base) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, t
 	if document == "" {
 		return nil, fmt.Errorf("graphql document is required")
 	}
-	return b.executeGraphQL(ctx, "graphql", document, request.OperationName, request.Variables, token)
+	return b.executeGraphQL(ctx, "graphql", document, request.OperationName, request.Variables, token, b.TokenParser)
 }
 
 func (b *Base) egressAuthStyle() egress.AuthStyle {
@@ -184,6 +188,6 @@ func (b *Base) egressAuthStyle() egress.AuthStyle {
 	}
 }
 
-func (b *Base) materializeCredential(token string) (egress.CredentialMaterialization, error) {
-	return egress.MaterializeCredential(token, b.egressAuthStyle(), b.TokenParser)
+func (b *Base) materializeCredential(token string, parser egress.TokenParser) (egress.CredentialMaterialization, error) {
+	return egress.MaterializeCredential(token, b.egressAuthStyle(), parser)
 }
