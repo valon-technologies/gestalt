@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -44,7 +45,7 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req createTokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeCreateTokenRequest(r.Body, &req); err != nil {
 		auditErr = errors.New("invalid JSON body")
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
@@ -108,26 +109,25 @@ func (s *Server) normalizeAPITokenPermissions(values []core.AccessPermission) ([
 		if _, err := s.providers.Get(app); err != nil {
 			return nil, fmt.Errorf("unknown permission app %q", app)
 		}
-		operations, err := normalizeAPITokenPermissionNames(fmt.Sprintf("permissions[%d].operations", i), value.Operations, nil)
-		if err != nil {
-			return nil, err
-		}
-		actions, err := normalizeAPITokenPermissionNames(fmt.Sprintf("permissions[%d].actions", i), value.Actions, map[string]struct{}{
-			core.ProviderActionDevAttach: {},
-		})
+		operations, err := normalizeAPITokenPermissionNames(fmt.Sprintf("permissions[%d].operations", i), value.Operations)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, core.AccessPermission{
 			App:        app,
 			Operations: operations,
-			Actions:    actions,
 		})
 	}
 	return out, nil
 }
 
-func normalizeAPITokenPermissionNames(label string, values []string, allowed map[string]struct{}) ([]string, error) {
+func decodeCreateTokenRequest(r io.Reader, req *createTokenRequest) error {
+	decoder := json.NewDecoder(r)
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(req)
+}
+
+func normalizeAPITokenPermissionNames(label string, values []string) ([]string, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -137,11 +137,6 @@ func normalizeAPITokenPermissionNames(label string, values []string, allowed map
 		value = strings.TrimSpace(value)
 		if value == "" {
 			return nil, fmt.Errorf("%s[%d] is required", label, i)
-		}
-		if allowed != nil {
-			if _, ok := allowed[value]; !ok {
-				return nil, fmt.Errorf("%s[%d] has unsupported action %q", label, i, value)
-			}
 		}
 		if _, ok := seen[value]; ok {
 			continue

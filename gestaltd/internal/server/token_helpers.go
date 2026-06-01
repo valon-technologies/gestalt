@@ -79,7 +79,6 @@ func cloneAccessPermissions(src []core.AccessPermission) []core.AccessPermission
 	out := append([]core.AccessPermission(nil), src...)
 	for i := range out {
 		out[i].Operations = append([]string(nil), out[i].Operations...)
-		out[i].Actions = append([]string(nil), out[i].Actions...)
 	}
 	return out
 }

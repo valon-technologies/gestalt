@@ -86,10 +86,6 @@ type CapabilityLister interface {
 	ListCapabilities() []core.Capability
 }
 
-type ProviderOverrideResolver interface {
-	ResolveProviderOverride(ctx context.Context, p *principal.Principal, providerName string) (core.Provider, bool, error)
-}
-
 // UserStore is the user persistence surface the broker needs to canonicalize
 // session identities before resolving user-scoped credentials.
 type UserStore interface {
@@ -122,7 +118,6 @@ type Broker struct {
 	connMapper        ConnectionMapper
 	mcpMapper         ConnectionMapper
 	connectionRuntime ConnectionRuntimeResolver
-	providerOverrides ProviderOverrideResolver
 	logger            *slog.Logger
 	tracerProvider    trace.TracerProvider
 }
@@ -143,10 +138,6 @@ func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
 
 func WithAuthorizer(a authorization.RuntimeAuthorizer) BrokerOption {
 	return func(b *Broker) { b.authorizer = a }
-}
-
-func WithProviderOverrides(r ProviderOverrideResolver) BrokerOption {
-	return func(b *Broker) { b.providerOverrides = r }
 }
 
 func WithLogger(l *slog.Logger) BrokerOption {
@@ -283,18 +274,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		}
 	}
 
-	execProv := prov
-	if b.providerOverrides != nil {
-		override, ok, err := b.providerOverrides.ResolveProviderOverride(ctx, p, providerName)
-		if err != nil {
-			return fail(fmt.Errorf("%w: provider override: %v", ErrInternal, err))
-		}
-		if ok {
-			execProv = override
-		}
-	}
-
-	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, execProv, providerName, operation, conn, instance)
+	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
 	if err != nil {
 		return fail(err)
 	}
@@ -318,14 +298,14 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	operationConnection := resolvedConnection
 	if strings.TrimSpace(conn) != "" {
 		if operationConnection == "" {
-			operationConnection, err = ResolveOperationConnection(execProv, opMeta.ID, params)
+			operationConnection, err = ResolveOperationConnection(prov, opMeta.ID, params)
 			if err != nil {
 				return fail(err)
 			}
 		}
 		operationConnection = core.ResolveConnectionAlias(operationConnection)
 		explicitConnection := core.ResolveConnectionAlias(conn)
-		overrideAllowed := transport == catalog.TransportApp || OperationConnectionOverrideAllowed(execProv, opMeta.ID, params)
+		overrideAllowed := transport == catalog.TransportApp || OperationConnectionOverrideAllowed(prov, opMeta.ID, params)
 		overrideDenied := !overrideAllowed
 		if operationConnection != "" && operationConnection != explicitConnection && overrideDenied {
 			return fail(fmt.Errorf(
@@ -345,7 +325,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		conn = b.mcpConnection(providerName)
 	}
 	if conn == "" && transport != catalog.TransportMCPPassthrough {
-		operationConnection, err = ResolveOperationConnection(execProv, opMeta.ID, params)
+		operationConnection, err = ResolveOperationConnection(prov, opMeta.ID, params)
 		if err != nil {
 			return fail(err)
 		}
@@ -358,7 +338,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
 	if transport == catalog.TransportMCPPassthrough {
-		toolResult, err := CallDirectTool(ctx, b, p, execProv, providerName, operation, conn, instance, params, mcpupstream.CallToolMetaFromContext(ctx))
+		toolResult, err := CallDirectTool(ctx, b, p, prov, providerName, operation, conn, instance, params, mcpupstream.CallToolMetaFromContext(ctx))
 		if err != nil {
 			return fail(err)
 		}
@@ -378,7 +358,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 	ctx = b.withAgentExternalIdentity(ctx, providerName, conn)
 
-	result, err = execProv.Execute(ctx, operation, params, accessToken)
+	result, err = prov.Execute(ctx, operation, params, accessToken)
 	if err != nil {
 		return fail(err)
 	}

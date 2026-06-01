@@ -100,8 +100,6 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		APITokenTTL:           apiTokenTTL,
 		Readiness:             runtimeReadinessStatus(result.ProvidersReady, workflowProvidersReady, result.Services),
 		PrometheusMetrics:     result.Telemetry.PrometheusHandler(),
-		ProviderDevSessions:   result.ProviderDevSessions,
-		ProviderDevAttach:     cfg.Server.Dev.AttachmentState != "",
 		PublicHostServices:    result.PublicHostServices,
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,

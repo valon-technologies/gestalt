@@ -703,6 +703,33 @@ func TestAPITokenService(t *testing.T) {
 		}
 	})
 
+	t.Run("ValidateAPIToken_unknown_permission_fields_fail_closed", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestServices(t)
+		ctx := context.Background()
+
+		user := mustCreateUser(t, svc, "legacy-action@test.com")
+		if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(ctx, idb.Record{
+			"id":                    "api-legacy-action",
+			"owner_kind":            core.APITokenOwnerKindUser,
+			"owner_id":              user.ID,
+			"credential_subject_id": principal.UserSubjectID(user.ID),
+			"name":                  "legacy-action",
+			"hashed_token":          "sha256:legacy-action",
+			"permissions_json":      `[{"app":"roadmap","actions":["legacy.action"]}]`,
+		}); err != nil {
+			t.Fatalf("Add legacy token: %v", err)
+		}
+
+		got, err := svc.APITokens.ValidateAPIToken(ctx, "sha256:legacy-action")
+		if err != nil {
+			t.Fatalf("ValidateAPIToken: %v", err)
+		}
+		if got.Permissions == nil || len(got.Permissions) != 0 {
+			t.Fatalf("Permissions = %#v, want explicit empty permissions", got.Permissions)
+		}
+	})
+
 	t.Run("StoreAndValidate_subject_owner_defaults_credential_subject", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)

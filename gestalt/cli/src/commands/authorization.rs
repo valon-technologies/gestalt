@@ -916,30 +916,23 @@ fn token_permissions(args: &AuthorizationSubjectTokenCreateArgs) -> Result<Optio
         return Ok(Some(items));
     }
 
-    if args.permission.is_empty() && args.action.is_empty() {
+    if args.permission.is_empty() {
         return Ok(None);
     }
 
-    let mut by_app: BTreeMap<String, (Vec<String>, Vec<String>)> = BTreeMap::new();
+    let mut by_app: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for value in &args.permission {
         let (app, operation) = parse_scoped_value(value, "permission")?;
-        by_app.entry(app).or_default().0.push(operation);
-    }
-    for value in &args.action {
-        let (app, action) = parse_scoped_value(value, "action")?;
-        by_app.entry(app).or_default().1.push(action);
+        by_app.entry(app).or_default().push(operation);
     }
 
     let permissions = by_app
         .into_iter()
-        .map(|(app, (operations, actions))| {
+        .map(|(app, operations)| {
             let mut permission = object();
             permission.insert("app".to_string(), json!(app));
             if !operations.is_empty() {
                 permission.insert("operations".to_string(), json!(operations));
-            }
-            if !actions.is_empty() {
-                permission.insert("actions".to_string(), json!(actions));
             }
             Value::Object(permission)
         })
@@ -1199,13 +1192,9 @@ fn permissions_cell(item: &Value) -> String {
 fn permission_cell(item: &Value) -> String {
     let app = string_cell(item, "app");
     let operations = string_array_cell(item, "operations");
-    let actions = string_array_cell(item, "actions");
     let mut parts = Vec::new();
     if operations != "-" {
         parts.push(format!("operations={operations}"));
-    }
-    if actions != "-" {
-        parts.push(format!("actions={actions}"));
     }
     if parts.is_empty() {
         app

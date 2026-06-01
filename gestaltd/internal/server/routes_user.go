@@ -78,10 +78,6 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 
 		s.mountAuthorizationSubjectRoutes(r)
 
-		r.Post("/provider-dev/attachments", s.createProviderDevSession)
-		r.Get("/provider-dev/attachments", s.listProviderDevAttachments)
-		r.Get("/provider-dev/attachments/{attachmentID}", s.getProviderDevAttachment)
-
 	})
 
 	r.With(s.pluginRouteAuthMiddleware("name")).Get("/apps/{name}/operations", s.listOperations)

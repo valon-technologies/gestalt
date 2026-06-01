@@ -508,19 +508,15 @@ pub struct AuthorizationSubjectTokenCreateArgs {
     pub name: String,
 
     /// Legacy token scopes
-    #[arg(long, conflicts_with_all = ["permission", "action", "permissions_file"])]
+    #[arg(long, conflicts_with_all = ["permission", "permissions_file"])]
     pub scopes: Option<String>,
 
     /// Operation permission in app:operation form
     #[arg(long = "permission", conflicts_with = "permissions_file")]
     pub permission: Vec<String>,
 
-    /// Action permission in app:action form
-    #[arg(long = "action", conflicts_with = "permissions_file")]
-    pub action: Vec<String>,
-
     /// JSON file containing a raw permissions array
-    #[arg(long = "permissions-file", conflicts_with_all = ["permission", "action", "scopes"])]
+    #[arg(long = "permissions-file", conflicts_with_all = ["permission", "scopes"])]
     pub permissions_file: Option<String>,
 }
 

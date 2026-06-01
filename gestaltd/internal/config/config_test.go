@@ -216,68 +216,6 @@ apps:
 	}
 }
 
-func TestLoadConfigValidatesProviderDevAttachmentState(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name      string
-		yaml      string
-		wantErr   string
-		wantState DevAttachmentState
-	}{
-		{
-			name: "unsupported attachment state",
-			yaml: `
-server:
-  dev:
-    attachmentState: sharedRelay
-`,
-			wantErr: `server.dev.attachmentState "sharedRelay" is not supported`,
-		},
-		{
-			name: "process local attachment state is rejected",
-			yaml: `
-server:
-  dev:
-    attachmentState: processLocal
-`,
-			wantErr: `server.dev.attachmentState "processLocal" is not supported`,
-		},
-		{
-			name: "indexeddb remote attach",
-			yaml: `
-server:
-  dev:
-    attachmentState: indexeddb
-`,
-			wantState: DevAttachmentStateIndexedDB,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			path := mustWriteConfigFile(t, tc.yaml)
-			cfg, err := Load(path)
-			if tc.wantErr != "" {
-				if err == nil {
-					t.Fatal("Load: expected error, got nil")
-				}
-				if !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("Load error = %v, want containing %q", err, tc.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Load: %v", err)
-			}
-			if got := cfg.Server.Dev.AttachmentState; got != tc.wantState {
-				t.Fatalf("dev.attachmentState = %q, want %q", got, tc.wantState)
-			}
-		})
-	}
-}
-
 func TestLoadConfigParsesAppHTTPSecuritySchemesAndBindings(t *testing.T) {
 	t.Parallel()
 

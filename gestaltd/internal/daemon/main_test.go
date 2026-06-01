@@ -44,23 +44,18 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "provider",
 			args:      []string{"provider", "--help"},
-			wantParts: []string{"gestaltd provider <command> [flags]", "add", "attach", "info", "list", "remove", "repo", "search", "upgrade", "validate", "release"},
-			notWant:   []string{"  dev         "},
+			wantParts: []string{"gestaltd provider <command> [flags]", "add", "info", "list", "remove", "repo", "search", "upgrade", "validate", "release"},
+			notWant:   []string{"  dev         ", "attach"},
 		},
 		{
 			name:      "serve",
 			args:      []string{"serve", "--help"},
-			wantParts: []string{"gestaltd serve --path PATH", "gestaltd serve --remote URL", "--app NAME", "--port PORT", "--watch"},
+			wantParts: []string{"gestaltd serve --path PATH", "--app NAME", "--port PORT", "--watch"},
 		},
 		{
 			name:      "provider repo",
 			args:      []string{"provider", "repo", "--help"},
 			wantParts: []string{"gestaltd provider repo <command> [flags]", "add", "list", "remove", "update"},
-		},
-		{
-			name:      "provider attach",
-			args:      []string{"provider", "attach", "--help"},
-			wantParts: []string{"gestaltd provider attach <command> [flags]", "list", "show", "detach"},
 		},
 		{
 			name:      "provider validate",
@@ -242,11 +237,6 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 			name:     "serve watch rejects locked",
 			args:     []string{"serve", "--watch", "--locked"},
 			wantPart: "--watch cannot be combined with --locked",
-		},
-		{
-			name:     "serve watch rejects remote",
-			args:     []string{"serve", "--remote", "https://gestalt.example.com", "--path", ".", "--watch"},
-			wantPart: "--watch cannot be combined with --remote",
 		},
 		{
 			name:     "serve watch rejects path",

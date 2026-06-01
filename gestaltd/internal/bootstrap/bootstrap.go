@@ -35,7 +35,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -248,7 +247,6 @@ type Result struct {
 	SecretManager         core.SecretManager
 	Telemetry             core.TelemetryProvider
 	Runtimes              RuntimeInspector
-	ProviderDevSessions   *providerdev.Manager
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 
 	runtimeRegistry                     *runtimeRegistry
@@ -382,7 +380,6 @@ func (r *Result) Close(ctx context.Context) error {
 		authCloseErr,
 		closeAuthorizationProvider(r.AuthorizationProvider),
 		externalCredentialsCloseErr,
-		closeProviderDevSessions(r.ProviderDevSessions),
 		CloseProviders(r.Providers),
 		r.Services.Close(),
 		closeIndexedDBs(r.ExtraIndexedDBs...),
@@ -1155,17 +1152,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			return nil, err
 		}
 	}
-	providerDevSessions, err := buildProviderDevManager(cfg, providers, prepared.Deps)
-	if err != nil {
-		failPendingStartupProviders(prepared.Deps, err)
-		return nil, err
-	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
-		invocation.WithProviderOverrides(providerDevSessions),
 	)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)
@@ -1289,7 +1280,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		SecretManager:                prepared.SecretManager,
 		Telemetry:                    prepared.Telemetry,
 		Runtimes:                     prepared.runtimeRegistry,
-		ProviderDevSessions:          providerDevSessions,
 		PublicHostServices:           publicHostServices,
 		runtimeRegistry:              prepared.runtimeRegistry,
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,

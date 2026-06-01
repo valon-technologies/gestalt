@@ -17,8 +17,6 @@ func runProvider(args []string) error {
 	case "-h", "--help", "help":
 		printProviderUsage(os.Stderr)
 		return flag.ErrHelp
-	case "attach":
-		return runProviderAttach(args[1:])
 	case "add":
 		return runProviderAdd(args[1:])
 	case "info":
@@ -51,7 +49,6 @@ func printProviderUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
-	writeUsageLine(w, "  attach      List, inspect, or detach remote provider-dev attachments")
 	writeUsageLine(w, "  add         Add a provider package to config and update lock state")
 	writeUsageLine(w, "  info        Show provider package metadata from configured repositories")
 	writeUsageLine(w, "  list        List configured providers and lock status")

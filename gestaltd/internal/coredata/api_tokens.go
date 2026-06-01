@@ -1,6 +1,7 @@
 package coredata
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -159,8 +160,12 @@ func recordToAPIToken(rec idb.Record) *core.APIToken {
 	}
 	if raw := recString(rec, "permissions_json"); raw != "" {
 		var permissions []core.AccessPermission
-		if err := json.Unmarshal([]byte(raw), &permissions); err == nil {
+		decoder := json.NewDecoder(bytes.NewBufferString(raw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&permissions); err == nil {
 			token.Permissions = permissions
+		} else {
+			token.Permissions = []core.AccessPermission{}
 		}
 	}
 	return token

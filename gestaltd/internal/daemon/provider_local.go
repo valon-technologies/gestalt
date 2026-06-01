@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,44 +13,32 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
-	"os/signal"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
-	"github.com/valon-technologies/gestalt/server/services/providerdev"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/ui"
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	providerDevHost          = "127.0.0.1"
-	providerDevIndexedDBName = "main"
-	providerLocalPluginDir   = "app"
-	providerLocalSiblingUI   = "ui"
-	gestaltAPIKeyEnv         = "GESTALT_API_KEY"
+	providerLocalHost          = "127.0.0.1"
+	providerLocalIndexedDBName = "main"
+	providerLocalPluginDir     = "app"
+	providerLocalSiblingUI     = "ui"
 )
 
 type providerLocalCommandOptions struct {
 	Path        string
 	ConfigPaths []string
 	Name        string
-	App         string
 	Port        int
-	Remote      string
-	RemoteToken string
 }
 
 type providerLocalSession struct {
@@ -134,353 +121,6 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	}
 	logProviderLocalSummary("local provider ready", session)
 	return runServer(env)
-}
-
-type providerRemoteTarget struct {
-	Name                string
-	Source              string
-	Entry               *config.ProviderEntry
-	InheritRemoteConfig bool
-}
-
-type storedGestaltCLICredential struct {
-	APIURL   string `json:"api_url"`
-	APIToken string `json:"api_token"`
-}
-
-var providerRemoteOpenBrowser = openProviderRemoteBrowser
-
-func runProviderRemoteDev(opts providerLocalCommandOptions) error {
-	configPaths, cleanup, err := prepareProviderRemoteConfigPaths(opts)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-
-	cfg, err := config.LoadPartialAllowMissingEnvPaths(configPaths)
-	if err != nil {
-		return fmt.Errorf("loading serve remote config: %w", err)
-	}
-	inheritRemoteConfig := opts.Path != "" && len(opts.ConfigPaths) == 0
-	targets, err := collectProviderRemoteTargets(cfg, opts.Name, inheritRemoteConfig)
-	if err != nil {
-		return err
-	}
-	if len(targets) == 0 {
-		return errors.New("gestaltd serve --remote requires at least one source-backed app in --config or --path")
-	}
-
-	if _, err := providerRemoteBaseURL(opts.Remote); err != nil {
-		return fmt.Errorf("invalid --remote %q: %w", opts.Remote, err)
-	}
-	remoteToken := resolveProviderRemoteAttachToken(opts)
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	client := providerdev.Client{
-		BaseURL: opts.Remote,
-		Token:   remoteToken,
-	}
-	requestedProviders := make([]providerdev.AttachProvider, 0, len(targets))
-	localUIHandlersByTarget := map[int]http.Handler{}
-	for i, target := range targets {
-		spec, _, err := bootstrap.BuildStartupProviderSpec(target.Name, target.Entry)
-		if err != nil {
-			return fmt.Errorf("build serve remote spec for apps.%s: %w", target.Name, err)
-		}
-		attachName := target.Name
-		if target.InheritRemoteConfig && opts.Name == "" {
-			attachName = ""
-		}
-		requested := providerdev.AttachProvider{
-			Name:   attachName,
-			Source: target.Source,
-			Spec:   spec,
-		}
-		if !target.InheritRemoteConfig {
-			pluginConfig, err := config.NodeToMap(target.Entry.Config)
-			if err != nil {
-				return fmt.Errorf("build serve remote config for apps.%s: %w", target.Name, err)
-			}
-			if pluginConfig == nil {
-				pluginConfig = map[string]any{}
-			}
-			requested.Config = &pluginConfig
-		}
-		uiHandler, hasUI, err := providerRemoteUIHandler(cfg, target)
-		if err != nil {
-			return fmt.Errorf("prepare serve remote ui for apps.%s: %w", target.Name, err)
-		}
-		if hasUI {
-			requested.UI = true
-			localUIHandlersByTarget[i] = uiHandler
-		}
-		requestedProviders = append(requestedProviders, requested)
-	}
-	sessionReq := providerdev.CreateSessionRequest{Providers: requestedProviders}
-	session, err := createProviderRemoteSession(ctx, &client, sessionReq)
-	if err != nil {
-		return err
-	}
-	attachID := strings.TrimSpace(session.AttachID)
-	if attachID == "" {
-		return fmt.Errorf("remote serve did not return attachId")
-	}
-	defer func() { _ = client.CloseSession(context.Background(), attachID) }()
-
-	sessionProviders := make(map[string]providerdev.CreateSessionProvider, len(session.Providers))
-	for _, provider := range session.Providers {
-		sessionProviders[provider.Name] = provider
-	}
-	localUIHandlers := make(map[string]http.Handler, len(localUIHandlersByTarget))
-	for i := range targets {
-		remoteName := targets[i].Name
-		if targets[i].InheritRemoteConfig && opts.Name == "" {
-			if len(targets) != 1 || len(session.Providers) != 1 {
-				return fmt.Errorf("remote serve could not resolve unique provider for source %q; pass --name", targets[i].Source)
-			}
-			remoteName = session.Providers[0].Name
-			targets[i].Name = remoteName
-		}
-		if handler, ok := localUIHandlersByTarget[i]; ok {
-			localUIHandlers[remoteName] = handler
-		}
-	}
-
-	processes := make([]*runtimehost.AppProcess, 0, len(targets))
-	providerClients := make(map[string]proto.AppProviderClient, len(targets))
-	cleanupProcesses := func() {
-		for _, process := range processes {
-			_ = process.Close()
-		}
-	}
-	defer cleanupProcesses()
-
-	for _, target := range targets {
-		sessionProvider, ok := sessionProviders[target.Name]
-		if !ok {
-			return fmt.Errorf("remote serve did not return runtime env for provider %q", target.Name)
-		}
-		process, err := startProviderRemoteProcess(ctx, target, sessionProvider)
-		if err != nil {
-			return err
-		}
-		processes = append(processes, process)
-		providerClients[target.Name] = process.Integration()
-	}
-
-	slog.Info("local providers attached to remote",
-		"remote", strings.TrimRight(opts.Remote, "/"),
-		"attachId", attachID,
-		"providers", providerRemoteTargetNames(targets),
-		"ui_providers", providerRemoteUIProviderNames(localUIHandlers),
-		"config_files", configPaths,
-	)
-	return client.RunDispatcher(ctx, attachID, providerClients, providerdev.WithUIHandlers(localUIHandlers))
-}
-
-func resolveProviderRemoteAttachToken(opts providerLocalCommandOptions) string {
-	if token := strings.TrimSpace(opts.RemoteToken); token != "" {
-		return token
-	}
-	if token := strings.TrimSpace(os.Getenv(gestaltAPIKeyEnv)); token != "" {
-		return token
-	}
-	return ""
-}
-
-func createProviderRemoteSession(ctx context.Context, client *providerdev.Client, req providerdev.CreateSessionRequest) (*providerdev.CreateSessionResponse, error) {
-	if strings.TrimSpace(client.Token) != "" {
-		session, err := client.CreateSession(ctx, req)
-		if err == nil {
-			return session, nil
-		}
-		return nil, providerRemoteCreateSessionError(err)
-	}
-	return createProviderRemoteSessionWithBrowser(ctx, client, req)
-}
-
-func createProviderRemoteSessionWithBrowser(ctx context.Context, client *providerdev.Client, req providerdev.CreateSessionRequest) (*providerdev.CreateSessionResponse, error) {
-	authorization, err := client.CreateAttachAuthorization(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("create remote serve browser approval: %w", err)
-	}
-	fmt.Fprintf(os.Stderr, "Approve provider-dev attach in your browser:\n\n  %s\n\nVerification code: %s\n\nOnly approve if the browser asks for this code.\n\n", authorization.ApprovalURL, authorization.VerificationCode)
-	if err := providerRemoteOpenBrowser(authorization.ApprovalURL); err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open browser automatically: %v\nOpen the URL above to continue.\n\n", err)
-	}
-
-	timer := time.NewTimer(0)
-	defer timer.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-timer.C:
-		}
-		status, err := client.PollAttachAuthorization(ctx, authorization.AuthorizationID)
-		if err != nil {
-			return nil, fmt.Errorf("poll remote serve browser approval: %w", err)
-		}
-		if status.Approved {
-			return client.CreateAuthorizedSession(ctx, authorization.AuthorizationID, req)
-		}
-		if !authorization.ExpiresAt.IsZero() && time.Now().After(authorization.ExpiresAt) {
-			return nil, errors.New("remote serve browser approval expired")
-		}
-		timer.Reset(time.Second)
-	}
-}
-
-func openProviderRemoteBrowser(rawURL string) error {
-	switch runtime.GOOS {
-	case "darwin":
-		return exec.Command("open", rawURL).Start()
-	case "windows":
-		return exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL).Start()
-	default:
-		return exec.Command("xdg-open", rawURL).Start()
-	}
-}
-
-type providerRemoteTokenErrors struct {
-	AuthMissing                  func(remoteOrigin string) error
-	StoredCredentialUnscoped     func(remoteOrigin, credentialPath string) error
-	StoredCredentialMismatch     func(remoteOrigin, storedOrigin, credentialPath string) error
-	StoredCredentialMissingToken func(credentialPath string) error
-}
-
-func resolveProviderRemoteTokenWithErrors(remote, explicitToken string, tokenErrors providerRemoteTokenErrors) (string, error) {
-	remoteBaseURL, err := providerRemoteBaseURL(remote)
-	if err != nil {
-		return "", fmt.Errorf("invalid --remote %q: %w", remote, err)
-	}
-	if token := strings.TrimSpace(explicitToken); token != "" {
-		return token, nil
-	}
-	if token := strings.TrimSpace(os.Getenv(gestaltAPIKeyEnv)); token != "" {
-		return token, nil
-	}
-
-	credential, credentialPath, ok, err := loadStoredGestaltCLICredential()
-	if err != nil {
-		return "", err
-	}
-	if !ok {
-		return "", tokenErrors.AuthMissing(remoteBaseURL)
-	}
-	if strings.TrimSpace(credential.APIURL) == "" {
-		return "", tokenErrors.StoredCredentialUnscoped(remoteBaseURL, credentialPath)
-	}
-	storedBaseURL, err := providerRemoteBaseURL(credential.APIURL)
-	if err != nil {
-		return "", fmt.Errorf("stored Gestalt CLI credential has invalid api_url in %s: %w", credentialPath, err)
-	}
-	if storedBaseURL != remoteBaseURL {
-		return "", tokenErrors.StoredCredentialMismatch(remoteBaseURL, storedBaseURL, credentialPath)
-	}
-	if token := strings.TrimSpace(credential.APIToken); token != "" {
-		return token, nil
-	}
-	return "", tokenErrors.StoredCredentialMissingToken(credentialPath)
-}
-
-func loadStoredGestaltCLICredential() (storedGestaltCLICredential, string, bool, error) {
-	path, err := storedGestaltCLICredentialPath()
-	if err != nil {
-		return storedGestaltCLICredential{}, "", false, err
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return storedGestaltCLICredential{}, path, false, nil
-		}
-		return storedGestaltCLICredential{}, path, false, fmt.Errorf("read stored Gestalt CLI credential from %s: %w", path, err)
-	}
-	var credential storedGestaltCLICredential
-	if err := json.Unmarshal(data, &credential); err != nil {
-		return storedGestaltCLICredential{}, path, false, fmt.Errorf("parse stored Gestalt CLI credential from %s: %w", path, err)
-	}
-	return credential, path, true, nil
-}
-
-func storedGestaltCLICredentialPath() (string, error) {
-	if xdgConfigHome := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdgConfigHome != "" {
-		return filepath.Join(xdgConfigHome, "gestalt", "credentials.json"), nil
-	}
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("locate stored Gestalt CLI credential: %w", err)
-	}
-	return filepath.Join(homeDir, ".config", "gestalt", "credentials.json"), nil
-}
-
-func providerRemoteBaseURL(rawURL string) (string, error) {
-	trimmed := strings.TrimSpace(rawURL)
-	if trimmed == "" {
-		return "", errors.New("URL is required")
-	}
-	parsed, err := url.Parse(trimmed)
-	if err != nil {
-		return "", err
-	}
-	scheme := strings.ToLower(parsed.Scheme)
-	if scheme != "http" && scheme != "https" {
-		return "", errors.New("URL scheme must be http or https")
-	}
-	host := strings.ToLower(parsed.Hostname())
-	if host == "" {
-		return "", errors.New("URL must include a host")
-	}
-	port := parsed.Port()
-	if (scheme == "http" && port == "80") || (scheme == "https" && port == "443") {
-		port = ""
-	}
-	if port != "" {
-		host = net.JoinHostPort(host, port)
-	} else if strings.Contains(host, ":") {
-		host = "[" + host + "]"
-	}
-	baseURL := scheme + "://" + host
-	if path := strings.TrimRight(parsed.EscapedPath(), "/"); path != "" {
-		baseURL += path
-	}
-	return baseURL, nil
-}
-
-func providerRemoteCreateSessionError(err error) error {
-	if err == nil {
-		return nil
-	}
-	if !strings.Contains(err.Error(), "provider dev attach access denied") {
-		return err
-	}
-	return fmt.Errorf(`%w
-
-remote provider-dev attach was denied. The remote app must grant dev.attach.allowedRoles for your resolved role, and API token callers must use a user token with permissions[].actions including provider_dev.attach for every attached app.
-
-provider scopes, operation permissions, and subject-owned API tokens do not grant direct remote attach. Run without --remote-token/%s to use browser approval when the server supports it`, err, gestaltAPIKeyEnv)
-}
-
-func providerRemoteTargetNames(targets []providerRemoteTarget) []string {
-	names := make([]string, 0, len(targets))
-	for _, target := range targets {
-		names = append(names, target.Name)
-	}
-	return names
-}
-
-func providerRemoteUIProviderNames(handlers map[string]http.Handler) []string {
-	if len(handlers) == 0 {
-		return nil
-	}
-	names := make([]string, 0, len(handlers))
-	for name := range handlers {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	return names
 }
 
 type validatedConfigResult struct {
@@ -693,261 +333,6 @@ func prepareUILocalSession(sessionDir, baseConfigPath string, state operator.Sta
 	}, nil
 }
 
-func prepareProviderRemoteConfigPaths(opts providerLocalCommandOptions) ([]string, func(), error) {
-	cleanup := func() {}
-	if strings.TrimSpace(opts.App) != "" && strings.TrimSpace(opts.Path) != "" {
-		return nil, cleanup, errors.New("--app cannot be combined with --path")
-	}
-	if strings.TrimSpace(opts.Path) == "" {
-		if len(opts.ConfigPaths) == 0 {
-			return nil, cleanup, errors.New("gestaltd serve --remote requires --config or --path")
-		}
-		return append([]string(nil), opts.ConfigPaths...), cleanup, nil
-	}
-
-	manifestPath, manifest, err := resolveProviderTargetManifest(opts.Path)
-	if err != nil {
-		return nil, cleanup, err
-	}
-	kind, err := providerpkg.ManifestKind(manifest)
-	if err != nil {
-		return nil, cleanup, err
-	}
-	if kind != providermanifestv1.KindApp {
-		return nil, cleanup, fmt.Errorf("gestaltd serve --remote only supports kind: app in v1 (got %q)", kind)
-	}
-	targetManifestPath, err := canonicalPath(manifestPath)
-	if err != nil {
-		return nil, cleanup, err
-	}
-	resolvedKey, err := resolveProviderRemotePluginKey(opts.ConfigPaths, targetManifestPath, manifest, opts.Name)
-	if err != nil {
-		return nil, cleanup, err
-	}
-
-	sessionDir, err := os.MkdirTemp("", "gestaltd-provider-remote-*")
-	if err != nil {
-		return nil, cleanup, fmt.Errorf("create provider remote session dir: %w", err)
-	}
-	cleanup = func() { _ = os.RemoveAll(sessionDir) }
-	overlayPath := filepath.Join(sessionDir, "provider-remote-target.yaml")
-	if err := writeProviderRemotePluginOverlayConfig(overlayPath, resolvedKey, targetManifestPath); err != nil {
-		cleanup()
-		return nil, func() {}, err
-	}
-	configPaths := append([]string(nil), opts.ConfigPaths...)
-	configPaths = append(configPaths, overlayPath)
-	return configPaths, cleanup, nil
-}
-
-func collectProviderRemoteTargets(cfg *config.Config, explicitName string, inheritRemoteConfig bool) ([]providerRemoteTarget, error) {
-	if cfg == nil {
-		return nil, nil
-	}
-	var targets []providerRemoteTarget
-	names := make([]string, 0, len(cfg.Apps))
-	for name := range cfg.Apps {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	for _, name := range names {
-		if explicitName != "" && name != explicitName {
-			continue
-		}
-		entry := cfg.Apps[name]
-		if entry == nil || !entry.HasLocalSource() {
-			continue
-		}
-		manifestPath, manifest, err := ensureProviderRemoteManifestResolved(name, entry)
-		if err != nil {
-			return nil, err
-		}
-		if manifest == nil || manifestPath == "" {
-			return nil, fmt.Errorf("apps.%s must resolve to a local source manifest", name)
-		}
-		kind, err := providerpkg.ManifestKind(manifest)
-		if err != nil {
-			return nil, err
-		}
-		if kind != providermanifestv1.KindApp {
-			return nil, fmt.Errorf("gestaltd serve --remote only supports apps in v1 (apps.%s has kind %q)", name, kind)
-		}
-		source := strings.TrimSpace(manifest.Source)
-		if inheritRemoteConfig && explicitName == "" && source == "" {
-			return nil, fmt.Errorf("apps.%s manifest source is required for gestaltd serve --remote --path without --name", name)
-		}
-		targets = append(targets, providerRemoteTarget{
-			Name:                name,
-			Source:              source,
-			Entry:               entry,
-			InheritRemoteConfig: inheritRemoteConfig,
-		})
-	}
-	if explicitName != "" && len(targets) == 0 {
-		return nil, fmt.Errorf("no source-backed apps.%s entry found in serve remote config", explicitName)
-	}
-	return targets, nil
-}
-
-func ensureProviderRemoteManifestResolved(name string, entry *config.ProviderEntry) (string, *providermanifestv1.Manifest, error) {
-	if entry == nil {
-		return "", nil, fmt.Errorf("apps.%s is not configured", name)
-	}
-	if entry.ResolvedManifest != nil && entry.ResolvedManifestPath != "" {
-		return entry.ResolvedManifestPath, entry.ResolvedManifest, nil
-	}
-	sourcePath := strings.TrimSpace(entry.SourcePath())
-	if sourcePath == "" {
-		return "", nil, fmt.Errorf("apps.%s must use a local source path", name)
-	}
-	info, err := os.Stat(sourcePath)
-	if err != nil {
-		return "", nil, fmt.Errorf("stat apps.%s source %q: %w", name, sourcePath, err)
-	}
-	manifestPath := sourcePath
-	if info.IsDir() {
-		manifestPath, err = providerpkg.FindManifestFile(sourcePath)
-		if err != nil {
-			return "", nil, err
-		}
-	} else if !providerpkg.IsManifestFile(sourcePath) {
-		return "", nil, fmt.Errorf("apps.%s source %q must point to a provider manifest file or directory", name, sourcePath)
-	}
-	manifestPath, err = canonicalPath(manifestPath)
-	if err != nil {
-		return "", nil, err
-	}
-	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		return "", nil, err
-	}
-	entry.ResolvedManifestPath = manifestPath
-	entry.ResolvedManifest = manifest
-	return manifestPath, manifest, nil
-}
-
-func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget, remote providerdev.CreateSessionProvider) (*runtimehost.AppProcess, error) {
-	entry := target.Entry
-	command := entry.Command
-	args := slices.Clone(entry.Args)
-	workdir := ""
-	env := cloneStringMap(entry.Env)
-	var cleanup func()
-	if command == "" {
-		if entry.ResolvedManifestPath == "" {
-			return nil, fmt.Errorf("apps.%s resolved manifest path is required for source provider execution", target.Name)
-		}
-		var err error
-		execution, err := providerpkg.SourceManifestExecution(entry.ResolvedManifestPath, providermanifestv1.KindApp, providerpkg.SourceBuildOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("apps.%s: prepare source provider execution: %w", target.Name, err)
-		}
-		command = execution.Command
-		args = execution.Args
-		workdir = execution.Workdir
-		cleanup = execution.Cleanup
-	}
-	env = mergeStringMaps(env, remote.Env)
-
-	// Remote dev runs arbitrary local source trees. The app sandbox is tuned
-	// for staged executables and can hide source files from TypeScript/Python
-	// runtimes, so v1 leaves local source execution unsandboxed.
-	process, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
-		Command:      command,
-		Args:         args,
-		Workdir:      workdir,
-		Env:          env,
-		HostBinary:   entry.HostBinary,
-		Cleanup:      cleanup,
-		ProviderName: target.Name,
-		Stdout:       os.Stdout,
-		Stderr:       os.Stderr,
-	})
-	if err != nil {
-		if cleanup != nil {
-			cleanup()
-		}
-		return nil, fmt.Errorf("start local provider apps.%s: %w", target.Name, err)
-	}
-	return process, nil
-}
-
-func providerRemoteUIHandler(cfg *config.Config, target providerRemoteTarget) (http.Handler, bool, error) {
-	uiManifestPath, ok, err := providerRemoteUIManifestPath(cfg, target)
-	if err != nil || !ok {
-		return nil, ok, err
-	}
-	handler, err := sourceUIHandler(uiManifestPath)
-	if err != nil {
-		return nil, true, err
-	}
-	return handler, true, nil
-}
-
-func providerRemoteUIManifestPath(cfg *config.Config, target providerRemoteTarget) (string, bool, error) {
-	entry := target.Entry
-	if entry == nil {
-		return "", false, nil
-	}
-	if uiName := strings.TrimSpace(entry.UI); uiName != "" {
-		if cfg == nil || cfg.Providers.UI == nil || cfg.Providers.UI[uiName] == nil {
-			return "", false, fmt.Errorf("apps.%s.ui references unknown ui %q", target.Name, uiName)
-		}
-		uiEntry := cfg.Providers.UI[uiName]
-		manifestPath, ok, err := sourceUIManifestPathFromEntry(uiEntry)
-		if err != nil || ok {
-			return manifestPath, ok, err
-		}
-	}
-	if entry.ResolvedManifest != nil && entry.ResolvedManifest.Spec != nil && entry.ResolvedManifest.Spec.UI != nil {
-		ownedUIPath := strings.TrimSpace(entry.ResolvedManifest.Spec.UI.Path)
-		if ownedUIPath == "" {
-			return "", false, nil
-		}
-		if strings.TrimSpace(entry.ResolvedManifestPath) == "" {
-			return "", false, fmt.Errorf("resolved manifest path is required for owned ui")
-		}
-		manifestPath, err := canonicalPath(filepath.Join(filepath.Dir(entry.ResolvedManifestPath), filepath.FromSlash(ownedUIPath)))
-		if err != nil {
-			return "", false, err
-		}
-		return manifestPath, true, nil
-	}
-	siblingPath, err := findSiblingUIManifestPath(entry.ResolvedManifestPath, entry.ResolvedManifest)
-	if err != nil {
-		return "", false, err
-	}
-	return siblingPath, siblingPath != "", nil
-}
-
-func sourceUIManifestPathFromEntry(entry *config.UIEntry) (string, bool, error) {
-	if entry == nil {
-		return "", false, nil
-	}
-	sourcePath := strings.TrimSpace(entry.SourcePath())
-	if sourcePath == "" {
-		return "", false, nil
-	}
-	info, err := os.Stat(sourcePath)
-	if err != nil {
-		return "", false, fmt.Errorf("stat ui source %q: %w", sourcePath, err)
-	}
-	manifestPath := sourcePath
-	if info.IsDir() {
-		manifestPath, err = providerpkg.FindManifestFile(sourcePath)
-		if err != nil {
-			return "", false, err
-		}
-	} else if !providerpkg.IsManifestFile(sourcePath) {
-		return "", false, fmt.Errorf("ui source %q must point to a provider manifest file or directory", sourcePath)
-	}
-	manifestPath, err = canonicalPath(manifestPath)
-	if err != nil {
-		return "", false, err
-	}
-	return manifestPath, true, nil
-}
-
 func sourceUIHandler(manifestPath string) (http.Handler, error) {
 	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
@@ -1009,10 +394,6 @@ func resolveProviderLocalPluginKey(configPaths []string, targetManifestPath stri
 	return resolveProviderPluginKey(configPaths, targetManifestPath, manifest, explicitName, loadConfiguredPlugins)
 }
 
-func resolveProviderRemotePluginKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest, explicitName string) (string, error) {
-	return resolveProviderPluginKey(configPaths, targetManifestPath, manifest, explicitName, loadConfiguredPluginsAllowMissingEnv)
-}
-
 func resolveProviderPluginKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest, explicitName string, loadApps func([]string) (map[string]*config.ProviderEntry, error)) (string, error) {
 	plugins, err := loadApps(configPaths)
 	if err != nil {
@@ -1064,7 +445,7 @@ func writeProviderLocalBaseConfig(path, dbPath string) error {
 			"encryptionKey": encryptionKey,
 			"providers": map[string]any{
 				"externalCredentials": config.DefaultProviderInstance,
-				"indexeddb":           providerDevIndexedDBName,
+				"indexeddb":           providerLocalIndexedDBName,
 			},
 		},
 		"providers": map[string]any{
@@ -1074,7 +455,7 @@ func writeProviderLocalBaseConfig(path, dbPath string) error {
 				},
 			},
 			"indexeddb": map[string]any{
-				providerDevIndexedDBName: map[string]any{
+				providerLocalIndexedDBName: map[string]any{
 					"source": providerLocalIndexedDBSourceConfig(),
 					"config": map[string]any{
 						"dsn": "sqlite://" + dbPath,
@@ -1112,7 +493,7 @@ func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string,
 		"server": map[string]any{
 			"baseUrl": providerLocalBaseURL(port),
 			"public": map[string]any{
-				"host": providerDevHost,
+				"host": providerLocalHost,
 				"port": port,
 			},
 		},
@@ -1132,19 +513,6 @@ func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string,
 	return writeYAMLFile(path, cfg)
 }
 
-func writeProviderRemotePluginOverlayConfig(path, pluginKey, manifestPath string) error {
-	cfg := map[string]any{
-		"apiVersion": config.ConfigAPIVersion,
-		"apps": map[string]any{
-			pluginKey: map[string]any{
-				"source":  providerLocalSourceOverride(manifestPath),
-				"runtime": nil,
-			},
-		},
-	}
-	return writeYAMLFile(path, cfg)
-}
-
 func writeProviderLocalUIOverlayConfig(path, uiKey, manifestPath string, port int, mountPath string) error {
 	uiEntry := map[string]any{
 		"source": providerLocalSourceOverride(manifestPath),
@@ -1158,7 +526,7 @@ func writeProviderLocalUIOverlayConfig(path, uiKey, manifestPath string, port in
 		"server": map[string]any{
 			"baseUrl": providerLocalBaseURL(port),
 			"public": map[string]any{
-				"host": providerDevHost,
+				"host": providerLocalHost,
 				"port": port,
 			},
 		},
@@ -1298,7 +666,7 @@ func providerLocalPublicURL(cfg *config.Config) string {
 func providerLocalBaseURL(port int) string {
 	return (&url.URL{
 		Scheme: "http",
-		Host:   net.JoinHostPort(providerDevHost, fmt.Sprint(port)),
+		Host:   net.JoinHostPort(providerLocalHost, fmt.Sprint(port)),
 	}).String()
 }
 
@@ -1344,7 +712,7 @@ func logProviderLocalSummary(message string, session *providerLocalSession) {
 }
 
 func reserveLocalPort() (int, error) {
-	listener, err := net.Listen("tcp", net.JoinHostPort(providerDevHost, "0"))
+	listener, err := net.Listen("tcp", net.JoinHostPort(providerLocalHost, "0"))
 	if err != nil {
 		return 0, fmt.Errorf("reserve local provider port: %w", err)
 	}
@@ -1362,30 +730,6 @@ func randomHex(numBytes int) (string, error) {
 		return "", fmt.Errorf("generate encryption key: %w", err)
 	}
 	return hex.EncodeToString(key), nil
-}
-
-func cloneStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(values))
-	for key, value := range values {
-		out[key] = value
-	}
-	return out
-}
-
-func mergeStringMaps(base map[string]string, overlay map[string]string) map[string]string {
-	if len(overlay) == 0 {
-		return base
-	}
-	if base == nil {
-		base = make(map[string]string, len(overlay))
-	}
-	for key, value := range overlay {
-		base[key] = value
-	}
-	return base
 }
 
 func canonicalPath(path string) (string, error) {
@@ -1505,20 +849,6 @@ func loadConfiguredPlugins(configPaths []string) (map[string]*config.ProviderEnt
 		return map[string]*config.ProviderEntry{}, nil
 	}
 	cfg, err := config.LoadPaths(configPaths)
-	if err != nil {
-		return nil, fmt.Errorf("load provider overlay config: %w", err)
-	}
-	if cfg.Apps == nil {
-		return map[string]*config.ProviderEntry{}, nil
-	}
-	return cfg.Apps, nil
-}
-
-func loadConfiguredPluginsAllowMissingEnv(configPaths []string) (map[string]*config.ProviderEntry, error) {
-	if len(configPaths) == 0 {
-		return map[string]*config.ProviderEntry{}, nil
-	}
-	cfg, err := config.LoadPartialAllowMissingEnvPaths(configPaths)
 	if err != nil {
 		return nil, fmt.Errorf("load provider overlay config: %w", err)
 	}
