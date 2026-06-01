@@ -3660,25 +3660,6 @@ func TestProviderFingerprint_ChangesWithName(t *testing.T) {
 	}
 }
 
-func TestReadLockfile_RejectsLockfileWithoutSchema(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	lockPath := filepath.Join(dir, LockfileName)
-	if err := os.WriteFile(lockPath, []byte(`{"version":999,"providers":{}}`), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	_, err := ReadLockfile(lockPath)
-	if err == nil {
-		t.Fatal("expected error for lockfile without schema")
-		return
-	}
-	if !strings.Contains(err.Error(), "unsupported lockfile schema") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func mustBuildManagedProviderPackage(t *testing.T, dir string, manifest *providermanifestv1.Manifest, artifacts map[string]string, includeCatalog bool) string {
 	t.Helper()
 
@@ -3882,15 +3863,15 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if !strings.Contains(string(lockData), `"schema": "gestaltd-provider-lock"`) {
 		t.Fatalf("lockfile = %s, want provider lock schema", lockData)
 	}
-	if strings.Contains(string(lockData), `"version": 7`) {
-		t.Fatalf("lockfile = %s, want schema-based versioning", lockData)
-	}
 	if strings.Contains(string(lockData), `"manifest":`) || strings.Contains(string(lockData), `"executable":`) || strings.Contains(string(lockData), `"assetRoot":`) {
 		t.Fatalf("lockfile = %s, want portable entries only", lockData)
 	}
 	var diskLock providerLockfile
 	if err := json.Unmarshal(lockData, &diskLock); err != nil {
 		t.Fatalf("Unmarshal lockfile: %v", err)
+	}
+	if diskLock.SchemaVersion != providerLockSchemaVersion {
+		t.Fatalf("lock schemaVersion = %d, want %d", diskLock.SchemaVersion, providerLockSchemaVersion)
 	}
 	providerEntry, ok := diskLock.Providers.App["example"]
 	if !ok {

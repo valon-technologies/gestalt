@@ -268,6 +268,10 @@ func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state S
 		return err
 	}
 	if !bytes.Equal(current, expected) {
+		driftReport := formatLockDriftReport(diagnoseLockfileDrift(lock, currentLock))
+		if driftReport != "" {
+			return fmt.Errorf("lockfile is out of date; run `%s`\n%s", formatLockCommand(paths), driftReport)
+		}
 		return fmt.Errorf("lockfile is out of date; run `%s`", formatLockCommand(paths))
 	}
 	return nil
