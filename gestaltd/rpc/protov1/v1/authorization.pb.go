@@ -24,6 +24,107 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type RelationshipTargetType int32
+
+const (
+	RelationshipTargetType_RELATIONSHIP_TARGET_TYPE_UNSPECIFIED RelationshipTargetType = 0
+	RelationshipTargetType_RELATIONSHIP_TARGET_TYPE_SUBJECT     RelationshipTargetType = 1
+	RelationshipTargetType_RELATIONSHIP_TARGET_TYPE_RESOURCE    RelationshipTargetType = 2
+	RelationshipTargetType_RELATIONSHIP_TARGET_TYPE_SUBJECT_SET RelationshipTargetType = 3
+)
+
+// Enum value maps for RelationshipTargetType.
+var (
+	RelationshipTargetType_name = map[int32]string{
+		0: "RELATIONSHIP_TARGET_TYPE_UNSPECIFIED",
+		1: "RELATIONSHIP_TARGET_TYPE_SUBJECT",
+		2: "RELATIONSHIP_TARGET_TYPE_RESOURCE",
+		3: "RELATIONSHIP_TARGET_TYPE_SUBJECT_SET",
+	}
+	RelationshipTargetType_value = map[string]int32{
+		"RELATIONSHIP_TARGET_TYPE_UNSPECIFIED": 0,
+		"RELATIONSHIP_TARGET_TYPE_SUBJECT":     1,
+		"RELATIONSHIP_TARGET_TYPE_RESOURCE":    2,
+		"RELATIONSHIP_TARGET_TYPE_SUBJECT_SET": 3,
+	}
+)
+
+func (x RelationshipTargetType) Enum() *RelationshipTargetType {
+	p := new(RelationshipTargetType)
+	*p = x
+	return p
+}
+
+func (x RelationshipTargetType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RelationshipTargetType) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_authorization_proto_enumTypes[0].Descriptor()
+}
+
+func (RelationshipTargetType) Type() protoreflect.EnumType {
+	return &file_v1_authorization_proto_enumTypes[0]
+}
+
+func (x RelationshipTargetType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RelationshipTargetType.Descriptor instead.
+func (RelationshipTargetType) EnumDescriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{0}
+}
+
+type SourceLayer int32
+
+const (
+	SourceLayer_SOURCE_LAYER_UNSPECIFIED   SourceLayer = 0
+	SourceLayer_SOURCE_LAYER_STATIC_CONFIG SourceLayer = 1
+	SourceLayer_SOURCE_LAYER_RUNTIME       SourceLayer = 2
+)
+
+// Enum value maps for SourceLayer.
+var (
+	SourceLayer_name = map[int32]string{
+		0: "SOURCE_LAYER_UNSPECIFIED",
+		1: "SOURCE_LAYER_STATIC_CONFIG",
+		2: "SOURCE_LAYER_RUNTIME",
+	}
+	SourceLayer_value = map[string]int32{
+		"SOURCE_LAYER_UNSPECIFIED":   0,
+		"SOURCE_LAYER_STATIC_CONFIG": 1,
+		"SOURCE_LAYER_RUNTIME":       2,
+	}
+)
+
+func (x SourceLayer) Enum() *SourceLayer {
+	p := new(SourceLayer)
+	*p = x
+	return p
+}
+
+func (x SourceLayer) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SourceLayer) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_authorization_proto_enumTypes[1].Descriptor()
+}
+
+func (SourceLayer) Type() protoreflect.EnumType {
+	return &file_v1_authorization_proto_enumTypes[1]
+}
+
+func (x SourceLayer) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SourceLayer.Descriptor instead.
+func (SourceLayer) EnumDescriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{1}
+}
+
 type Subject struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
@@ -84,6 +185,58 @@ func (x *Subject) GetProperties() *structpb.Struct {
 	return nil
 }
 
+type Action struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Properties    *structpb.Struct       `protobuf:"bytes,2,opt,name=properties,proto3" json:"properties,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Action) Reset() {
+	*x = Action{}
+	mi := &file_v1_authorization_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Action) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Action) ProtoMessage() {}
+
+func (x *Action) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Action.ProtoReflect.Descriptor instead.
+func (*Action) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Action) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Action) GetProperties() *structpb.Struct {
+	if x != nil {
+		return x.Properties
+	}
+	return nil
+}
+
 type Resource struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
@@ -95,7 +248,7 @@ type Resource struct {
 
 func (x *Resource) Reset() {
 	*x = Resource{}
-	mi := &file_v1_authorization_proto_msgTypes[1]
+	mi := &file_v1_authorization_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -107,7 +260,7 @@ func (x *Resource) String() string {
 func (*Resource) ProtoMessage() {}
 
 func (x *Resource) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[1]
+	mi := &file_v1_authorization_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -120,7 +273,7 @@ func (x *Resource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Resource.ProtoReflect.Descriptor instead.
 func (*Resource) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{1}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Resource) GetType() string {
@@ -144,29 +297,30 @@ func (x *Resource) GetProperties() *structpb.Struct {
 	return nil
 }
 
-type SubjectSet struct {
+type CheckAccessRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Resource      *Resource              `protobuf:"bytes,1,opt,name=resource,proto3" json:"resource,omitempty"`
-	Relation      string                 `protobuf:"bytes,2,opt,name=relation,proto3" json:"relation,omitempty"`
+	Subject       *Subject               `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	Action        *Action                `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
+	Resource      *Resource              `protobuf:"bytes,3,opt,name=resource,proto3" json:"resource,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SubjectSet) Reset() {
-	*x = SubjectSet{}
-	mi := &file_v1_authorization_proto_msgTypes[2]
+func (x *CheckAccessRequest) Reset() {
+	*x = CheckAccessRequest{}
+	mi := &file_v1_authorization_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SubjectSet) String() string {
+func (x *CheckAccessRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SubjectSet) ProtoMessage() {}
+func (*CheckAccessRequest) ProtoMessage() {}
 
-func (x *SubjectSet) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[2]
+func (x *CheckAccessRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -177,30 +331,752 @@ func (x *SubjectSet) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SubjectSet.ProtoReflect.Descriptor instead.
-func (*SubjectSet) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{2}
+// Deprecated: Use CheckAccessRequest.ProtoReflect.Descriptor instead.
+func (*CheckAccessRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *SubjectSet) GetResource() *Resource {
+func (x *CheckAccessRequest) GetSubject() *Subject {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
+}
+
+func (x *CheckAccessRequest) GetAction() *Action {
+	if x != nil {
+		return x.Action
+	}
+	return nil
+}
+
+func (x *CheckAccessRequest) GetResource() *Resource {
 	if x != nil {
 		return x.Resource
 	}
 	return nil
 }
 
-func (x *SubjectSet) GetRelation() string {
+type CheckAccessResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Allowed       bool                   `protobuf:"varint,1,opt,name=allowed,proto3" json:"allowed,omitempty"`
+	ModelId       string                 `protobuf:"bytes,2,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckAccessResponse) Reset() {
+	*x = CheckAccessResponse{}
+	mi := &file_v1_authorization_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckAccessResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckAccessResponse) ProtoMessage() {}
+
+func (x *CheckAccessResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckAccessResponse.ProtoReflect.Descriptor instead.
+func (*CheckAccessResponse) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CheckAccessResponse) GetAllowed() bool {
+	if x != nil {
+		return x.Allowed
+	}
+	return false
+}
+
+func (x *CheckAccessResponse) GetModelId() string {
+	if x != nil {
+		return x.ModelId
+	}
+	return ""
+}
+
+type CheckAccessManyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Requests      []*CheckAccessRequest  `protobuf:"bytes,1,rep,name=requests,proto3" json:"requests,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckAccessManyRequest) Reset() {
+	*x = CheckAccessManyRequest{}
+	mi := &file_v1_authorization_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckAccessManyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckAccessManyRequest) ProtoMessage() {}
+
+func (x *CheckAccessManyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckAccessManyRequest.ProtoReflect.Descriptor instead.
+func (*CheckAccessManyRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CheckAccessManyRequest) GetRequests() []*CheckAccessRequest {
+	if x != nil {
+		return x.Requests
+	}
+	return nil
+}
+
+type CheckAccessManyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Decisions     []*CheckAccessResponse `protobuf:"bytes,1,rep,name=decisions,proto3" json:"decisions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckAccessManyResponse) Reset() {
+	*x = CheckAccessManyResponse{}
+	mi := &file_v1_authorization_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckAccessManyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckAccessManyResponse) ProtoMessage() {}
+
+func (x *CheckAccessManyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckAccessManyResponse.ProtoReflect.Descriptor instead.
+func (*CheckAccessManyResponse) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *CheckAccessManyResponse) GetDecisions() []*CheckAccessResponse {
+	if x != nil {
+		return x.Decisions
+	}
+	return nil
+}
+
+type ListRelationshipsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Filter        *RelationshipFilter    `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRelationshipsRequest) Reset() {
+	*x = ListRelationshipsRequest{}
+	mi := &file_v1_authorization_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRelationshipsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRelationshipsRequest) ProtoMessage() {}
+
+func (x *ListRelationshipsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRelationshipsRequest.ProtoReflect.Descriptor instead.
+func (*ListRelationshipsRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListRelationshipsRequest) GetFilter() *RelationshipFilter {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+func (x *ListRelationshipsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListRelationshipsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type RelationshipFilter struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Target           *RelationshipTarget    `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	Relation         string                 `protobuf:"bytes,2,opt,name=relation,proto3" json:"relation,omitempty"`
+	Resource         *Resource              `protobuf:"bytes,3,opt,name=resource,proto3" json:"resource,omitempty"`
+	TargetType       RelationshipTargetType `protobuf:"varint,4,opt,name=target_type,json=targetType,proto3,enum=gestalt.provider.v1.RelationshipTargetType" json:"target_type,omitempty"`
+	TargetEntityType string                 `protobuf:"bytes,5,opt,name=target_entity_type,json=targetEntityType,proto3" json:"target_entity_type,omitempty"`
+	ResourceType     string                 `protobuf:"bytes,6,opt,name=resource_type,json=resourceType,proto3" json:"resource_type,omitempty"`
+	SourceLayer      SourceLayer            `protobuf:"varint,7,opt,name=source_layer,json=sourceLayer,proto3,enum=gestalt.provider.v1.SourceLayer" json:"source_layer,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RelationshipFilter) Reset() {
+	*x = RelationshipFilter{}
+	mi := &file_v1_authorization_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RelationshipFilter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RelationshipFilter) ProtoMessage() {}
+
+func (x *RelationshipFilter) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RelationshipFilter.ProtoReflect.Descriptor instead.
+func (*RelationshipFilter) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RelationshipFilter) GetTarget() *RelationshipTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *RelationshipFilter) GetRelation() string {
 	if x != nil {
 		return x.Relation
 	}
 	return ""
 }
 
-// RelationshipTarget identifies the left side of an authorization relationship.
-//
-// Subject preserves the existing user/group/service-principal tuple shape.
-// Resource and SubjectSet allow Zanzibar-style usersets, for example:
-// document:roadmap#viewer@group:eng#member.
+func (x *RelationshipFilter) GetResource() *Resource {
+	if x != nil {
+		return x.Resource
+	}
+	return nil
+}
+
+func (x *RelationshipFilter) GetTargetType() RelationshipTargetType {
+	if x != nil {
+		return x.TargetType
+	}
+	return RelationshipTargetType_RELATIONSHIP_TARGET_TYPE_UNSPECIFIED
+}
+
+func (x *RelationshipFilter) GetTargetEntityType() string {
+	if x != nil {
+		return x.TargetEntityType
+	}
+	return ""
+}
+
+func (x *RelationshipFilter) GetResourceType() string {
+	if x != nil {
+		return x.ResourceType
+	}
+	return ""
+}
+
+func (x *RelationshipFilter) GetSourceLayer() SourceLayer {
+	if x != nil {
+		return x.SourceLayer
+	}
+	return SourceLayer_SOURCE_LAYER_UNSPECIFIED
+}
+
+type ListRelationshipsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Relationships []*Relationship        `protobuf:"bytes,1,rep,name=relationships,proto3" json:"relationships,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRelationshipsResponse) Reset() {
+	*x = ListRelationshipsResponse{}
+	mi := &file_v1_authorization_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRelationshipsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRelationshipsResponse) ProtoMessage() {}
+
+func (x *ListRelationshipsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRelationshipsResponse.ProtoReflect.Descriptor instead.
+func (*ListRelationshipsResponse) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListRelationshipsResponse) GetRelationships() []*Relationship {
+	if x != nil {
+		return x.Relationships
+	}
+	return nil
+}
+
+func (x *ListRelationshipsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type AddRelationshipRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Relationship  *Relationship          `protobuf:"bytes,1,opt,name=relationship,proto3" json:"relationship,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddRelationshipRequest) Reset() {
+	*x = AddRelationshipRequest{}
+	mi := &file_v1_authorization_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddRelationshipRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddRelationshipRequest) ProtoMessage() {}
+
+func (x *AddRelationshipRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddRelationshipRequest.ProtoReflect.Descriptor instead.
+func (*AddRelationshipRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *AddRelationshipRequest) GetRelationship() *Relationship {
+	if x != nil {
+		return x.Relationship
+	}
+	return nil
+}
+
+type AddRelationshipResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Relationship  *Relationship          `protobuf:"bytes,1,opt,name=relationship,proto3" json:"relationship,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddRelationshipResponse) Reset() {
+	*x = AddRelationshipResponse{}
+	mi := &file_v1_authorization_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddRelationshipResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddRelationshipResponse) ProtoMessage() {}
+
+func (x *AddRelationshipResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddRelationshipResponse.ProtoReflect.Descriptor instead.
+func (*AddRelationshipResponse) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *AddRelationshipResponse) GetRelationship() *Relationship {
+	if x != nil {
+		return x.Relationship
+	}
+	return nil
+}
+
+type DeleteRelationshipRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	RelationshipTuple *RelationshipTuple     `protobuf:"bytes,1,opt,name=relationship_tuple,json=relationshipTuple,proto3" json:"relationship_tuple,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *DeleteRelationshipRequest) Reset() {
+	*x = DeleteRelationshipRequest{}
+	mi := &file_v1_authorization_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteRelationshipRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteRelationshipRequest) ProtoMessage() {}
+
+func (x *DeleteRelationshipRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteRelationshipRequest.ProtoReflect.Descriptor instead.
+func (*DeleteRelationshipRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *DeleteRelationshipRequest) GetRelationshipTuple() *RelationshipTuple {
+	if x != nil {
+		return x.RelationshipTuple
+	}
+	return nil
+}
+
+type DeleteRelationshipResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteRelationshipResponse) Reset() {
+	*x = DeleteRelationshipResponse{}
+	mi := &file_v1_authorization_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteRelationshipResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteRelationshipResponse) ProtoMessage() {}
+
+func (x *DeleteRelationshipResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteRelationshipResponse.ProtoReflect.Descriptor instead.
+func (*DeleteRelationshipResponse) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{13}
+}
+
+type SetRelationshipsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Relationships []*Relationship        `protobuf:"bytes,1,rep,name=relationships,proto3" json:"relationships,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetRelationshipsRequest) Reset() {
+	*x = SetRelationshipsRequest{}
+	mi := &file_v1_authorization_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetRelationshipsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetRelationshipsRequest) ProtoMessage() {}
+
+func (x *SetRelationshipsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetRelationshipsRequest.ProtoReflect.Descriptor instead.
+func (*SetRelationshipsRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SetRelationshipsRequest) GetRelationships() []*Relationship {
+	if x != nil {
+		return x.Relationships
+	}
+	return nil
+}
+
+type SetRelationshipsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Relationships []*Relationship        `protobuf:"bytes,1,rep,name=relationships,proto3" json:"relationships,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetRelationshipsResponse) Reset() {
+	*x = SetRelationshipsResponse{}
+	mi := &file_v1_authorization_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetRelationshipsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetRelationshipsResponse) ProtoMessage() {}
+
+func (x *SetRelationshipsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetRelationshipsResponse.ProtoReflect.Descriptor instead.
+func (*SetRelationshipsResponse) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *SetRelationshipsResponse) GetRelationships() []*Relationship {
+	if x != nil {
+		return x.Relationships
+	}
+	return nil
+}
+
+type Relationship struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tuple         *RelationshipTuple     `protobuf:"bytes,1,opt,name=tuple,proto3" json:"tuple,omitempty"`
+	Properties    *structpb.Struct       `protobuf:"bytes,2,opt,name=properties,proto3" json:"properties,omitempty"`
+	SourceLayer   SourceLayer            `protobuf:"varint,3,opt,name=source_layer,json=sourceLayer,proto3,enum=gestalt.provider.v1.SourceLayer" json:"source_layer,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Relationship) Reset() {
+	*x = Relationship{}
+	mi := &file_v1_authorization_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Relationship) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Relationship) ProtoMessage() {}
+
+func (x *Relationship) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Relationship.ProtoReflect.Descriptor instead.
+func (*Relationship) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *Relationship) GetTuple() *RelationshipTuple {
+	if x != nil {
+		return x.Tuple
+	}
+	return nil
+}
+
+func (x *Relationship) GetProperties() *structpb.Struct {
+	if x != nil {
+		return x.Properties
+	}
+	return nil
+}
+
+func (x *Relationship) GetSourceLayer() SourceLayer {
+	if x != nil {
+		return x.SourceLayer
+	}
+	return SourceLayer_SOURCE_LAYER_UNSPECIFIED
+}
+
+type RelationshipTuple struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Target        *RelationshipTarget    `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	Relation      string                 `protobuf:"bytes,2,opt,name=relation,proto3" json:"relation,omitempty"`
+	Resource      *Resource              `protobuf:"bytes,3,opt,name=resource,proto3" json:"resource,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RelationshipTuple) Reset() {
+	*x = RelationshipTuple{}
+	mi := &file_v1_authorization_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RelationshipTuple) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RelationshipTuple) ProtoMessage() {}
+
+func (x *RelationshipTuple) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RelationshipTuple.ProtoReflect.Descriptor instead.
+func (*RelationshipTuple) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RelationshipTuple) GetTarget() *RelationshipTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *RelationshipTuple) GetRelation() string {
+	if x != nil {
+		return x.Relation
+	}
+	return ""
+}
+
+func (x *RelationshipTuple) GetResource() *Resource {
+	if x != nil {
+		return x.Resource
+	}
+	return nil
+}
+
 type RelationshipTarget struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Kind:
@@ -215,7 +1091,7 @@ type RelationshipTarget struct {
 
 func (x *RelationshipTarget) Reset() {
 	*x = RelationshipTarget{}
-	mi := &file_v1_authorization_proto_msgTypes[3]
+	mi := &file_v1_authorization_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -227,7 +1103,7 @@ func (x *RelationshipTarget) String() string {
 func (*RelationshipTarget) ProtoMessage() {}
 
 func (x *RelationshipTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[3]
+	mi := &file_v1_authorization_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -240,7 +1116,7 @@ func (x *RelationshipTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelationshipTarget.ProtoReflect.Descriptor instead.
 func (*RelationshipTarget) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{3}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *RelationshipTarget) GetKind() isRelationshipTarget_Kind {
@@ -299,999 +1175,28 @@ func (*RelationshipTarget_Resource) isRelationshipTarget_Kind() {}
 
 func (*RelationshipTarget_SubjectSet) isRelationshipTarget_Kind() {}
 
-type Action struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Properties    *structpb.Struct       `protobuf:"bytes,2,opt,name=properties,proto3" json:"properties,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Action) Reset() {
-	*x = Action{}
-	mi := &file_v1_authorization_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Action) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Action) ProtoMessage() {}
-
-func (x *Action) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Action.ProtoReflect.Descriptor instead.
-func (*Action) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *Action) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *Action) GetProperties() *structpb.Struct {
-	if x != nil {
-		return x.Properties
-	}
-	return nil
-}
-
-type AccessEvaluationRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Subject       *Subject               `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
-	Action        *Action                `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
-	Resource      *Resource              `protobuf:"bytes,3,opt,name=resource,proto3" json:"resource,omitempty"`
-	Context       *structpb.Struct       `protobuf:"bytes,4,opt,name=context,proto3" json:"context,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AccessEvaluationRequest) Reset() {
-	*x = AccessEvaluationRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AccessEvaluationRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AccessEvaluationRequest) ProtoMessage() {}
-
-func (x *AccessEvaluationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AccessEvaluationRequest.ProtoReflect.Descriptor instead.
-func (*AccessEvaluationRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *AccessEvaluationRequest) GetSubject() *Subject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *AccessEvaluationRequest) GetAction() *Action {
-	if x != nil {
-		return x.Action
-	}
-	return nil
-}
-
-func (x *AccessEvaluationRequest) GetResource() *Resource {
-	if x != nil {
-		return x.Resource
-	}
-	return nil
-}
-
-func (x *AccessEvaluationRequest) GetContext() *structpb.Struct {
-	if x != nil {
-		return x.Context
-	}
-	return nil
-}
-
-type AccessDecision struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Allowed       bool                   `protobuf:"varint,1,opt,name=allowed,proto3" json:"allowed,omitempty"`
-	Context       *structpb.Struct       `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
-	ModelId       string                 `protobuf:"bytes,3,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AccessDecision) Reset() {
-	*x = AccessDecision{}
-	mi := &file_v1_authorization_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AccessDecision) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AccessDecision) ProtoMessage() {}
-
-func (x *AccessDecision) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AccessDecision.ProtoReflect.Descriptor instead.
-func (*AccessDecision) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *AccessDecision) GetAllowed() bool {
-	if x != nil {
-		return x.Allowed
-	}
-	return false
-}
-
-func (x *AccessDecision) GetContext() *structpb.Struct {
-	if x != nil {
-		return x.Context
-	}
-	return nil
-}
-
-func (x *AccessDecision) GetModelId() string {
-	if x != nil {
-		return x.ModelId
-	}
-	return ""
-}
-
-type AccessEvaluationsRequest struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	Requests      []*AccessEvaluationRequest `protobuf:"bytes,1,rep,name=requests,proto3" json:"requests,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AccessEvaluationsRequest) Reset() {
-	*x = AccessEvaluationsRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AccessEvaluationsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AccessEvaluationsRequest) ProtoMessage() {}
-
-func (x *AccessEvaluationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AccessEvaluationsRequest.ProtoReflect.Descriptor instead.
-func (*AccessEvaluationsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *AccessEvaluationsRequest) GetRequests() []*AccessEvaluationRequest {
-	if x != nil {
-		return x.Requests
-	}
-	return nil
-}
-
-type AccessEvaluationsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Decisions     []*AccessDecision      `protobuf:"bytes,1,rep,name=decisions,proto3" json:"decisions,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AccessEvaluationsResponse) Reset() {
-	*x = AccessEvaluationsResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AccessEvaluationsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AccessEvaluationsResponse) ProtoMessage() {}
-
-func (x *AccessEvaluationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AccessEvaluationsResponse.ProtoReflect.Descriptor instead.
-func (*AccessEvaluationsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *AccessEvaluationsResponse) GetDecisions() []*AccessDecision {
-	if x != nil {
-		return x.Decisions
-	}
-	return nil
-}
-
-type ResourceSearchRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Subject       *Subject               `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
-	Action        *Action                `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
-	ResourceType  string                 `protobuf:"bytes,3,opt,name=resource_type,json=resourceType,proto3" json:"resource_type,omitempty"`
-	Context       *structpb.Struct       `protobuf:"bytes,4,opt,name=context,proto3" json:"context,omitempty"`
-	PageSize      int32                  `protobuf:"varint,5,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,6,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ResourceSearchRequest) Reset() {
-	*x = ResourceSearchRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ResourceSearchRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ResourceSearchRequest) ProtoMessage() {}
-
-func (x *ResourceSearchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ResourceSearchRequest.ProtoReflect.Descriptor instead.
-func (*ResourceSearchRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *ResourceSearchRequest) GetSubject() *Subject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *ResourceSearchRequest) GetAction() *Action {
-	if x != nil {
-		return x.Action
-	}
-	return nil
-}
-
-func (x *ResourceSearchRequest) GetResourceType() string {
-	if x != nil {
-		return x.ResourceType
-	}
-	return ""
-}
-
-func (x *ResourceSearchRequest) GetContext() *structpb.Struct {
-	if x != nil {
-		return x.Context
-	}
-	return nil
-}
-
-func (x *ResourceSearchRequest) GetPageSize() int32 {
-	if x != nil {
-		return x.PageSize
-	}
-	return 0
-}
-
-func (x *ResourceSearchRequest) GetPageToken() string {
-	if x != nil {
-		return x.PageToken
-	}
-	return ""
-}
-
-type ResourceSearchResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Resources     []*Resource            `protobuf:"bytes,1,rep,name=resources,proto3" json:"resources,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	ModelId       string                 `protobuf:"bytes,3,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ResourceSearchResponse) Reset() {
-	*x = ResourceSearchResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ResourceSearchResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ResourceSearchResponse) ProtoMessage() {}
-
-func (x *ResourceSearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ResourceSearchResponse.ProtoReflect.Descriptor instead.
-func (*ResourceSearchResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *ResourceSearchResponse) GetResources() []*Resource {
-	if x != nil {
-		return x.Resources
-	}
-	return nil
-}
-
-func (x *ResourceSearchResponse) GetNextPageToken() string {
-	if x != nil {
-		return x.NextPageToken
-	}
-	return ""
-}
-
-func (x *ResourceSearchResponse) GetModelId() string {
-	if x != nil {
-		return x.ModelId
-	}
-	return ""
-}
-
-type SubjectSearchRequest struct {
+type SubjectSet struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Resource      *Resource              `protobuf:"bytes,1,opt,name=resource,proto3" json:"resource,omitempty"`
-	Action        *Action                `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
-	SubjectType   string                 `protobuf:"bytes,3,opt,name=subject_type,json=subjectType,proto3" json:"subject_type,omitempty"`
-	Context       *structpb.Struct       `protobuf:"bytes,4,opt,name=context,proto3" json:"context,omitempty"`
-	PageSize      int32                  `protobuf:"varint,5,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,6,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Relation      string                 `protobuf:"bytes,2,opt,name=relation,proto3" json:"relation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SubjectSearchRequest) Reset() {
-	*x = SubjectSearchRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SubjectSearchRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SubjectSearchRequest) ProtoMessage() {}
-
-func (x *SubjectSearchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SubjectSearchRequest.ProtoReflect.Descriptor instead.
-func (*SubjectSearchRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *SubjectSearchRequest) GetResource() *Resource {
-	if x != nil {
-		return x.Resource
-	}
-	return nil
-}
-
-func (x *SubjectSearchRequest) GetAction() *Action {
-	if x != nil {
-		return x.Action
-	}
-	return nil
-}
-
-func (x *SubjectSearchRequest) GetSubjectType() string {
-	if x != nil {
-		return x.SubjectType
-	}
-	return ""
-}
-
-func (x *SubjectSearchRequest) GetContext() *structpb.Struct {
-	if x != nil {
-		return x.Context
-	}
-	return nil
-}
-
-func (x *SubjectSearchRequest) GetPageSize() int32 {
-	if x != nil {
-		return x.PageSize
-	}
-	return 0
-}
-
-func (x *SubjectSearchRequest) GetPageToken() string {
-	if x != nil {
-		return x.PageToken
-	}
-	return ""
-}
-
-type SubjectSearchResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Subjects      []*Subject             `protobuf:"bytes,1,rep,name=subjects,proto3" json:"subjects,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	ModelId       string                 `protobuf:"bytes,3,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SubjectSearchResponse) Reset() {
-	*x = SubjectSearchResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SubjectSearchResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SubjectSearchResponse) ProtoMessage() {}
-
-func (x *SubjectSearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SubjectSearchResponse.ProtoReflect.Descriptor instead.
-func (*SubjectSearchResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *SubjectSearchResponse) GetSubjects() []*Subject {
-	if x != nil {
-		return x.Subjects
-	}
-	return nil
-}
-
-func (x *SubjectSearchResponse) GetNextPageToken() string {
-	if x != nil {
-		return x.NextPageToken
-	}
-	return ""
-}
-
-func (x *SubjectSearchResponse) GetModelId() string {
-	if x != nil {
-		return x.ModelId
-	}
-	return ""
-}
-
-type EffectiveSubjectSearchRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Resource      *Resource              `protobuf:"bytes,1,opt,name=resource,proto3" json:"resource,omitempty"`
-	Action        *Action                `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
-	Context       *structpb.Struct       `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
-	PageSize      int32                  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *EffectiveSubjectSearchRequest) Reset() {
-	*x = EffectiveSubjectSearchRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *EffectiveSubjectSearchRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*EffectiveSubjectSearchRequest) ProtoMessage() {}
-
-func (x *EffectiveSubjectSearchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use EffectiveSubjectSearchRequest.ProtoReflect.Descriptor instead.
-func (*EffectiveSubjectSearchRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *EffectiveSubjectSearchRequest) GetResource() *Resource {
-	if x != nil {
-		return x.Resource
-	}
-	return nil
-}
-
-func (x *EffectiveSubjectSearchRequest) GetAction() *Action {
-	if x != nil {
-		return x.Action
-	}
-	return nil
-}
-
-func (x *EffectiveSubjectSearchRequest) GetContext() *structpb.Struct {
-	if x != nil {
-		return x.Context
-	}
-	return nil
-}
-
-func (x *EffectiveSubjectSearchRequest) GetPageSize() int32 {
-	if x != nil {
-		return x.PageSize
-	}
-	return 0
-}
-
-func (x *EffectiveSubjectSearchRequest) GetPageToken() string {
-	if x != nil {
-		return x.PageToken
-	}
-	return ""
-}
-
-type EffectiveSubjectSearchResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Targets       []*RelationshipTarget  `protobuf:"bytes,1,rep,name=targets,proto3" json:"targets,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	ModelId       string                 `protobuf:"bytes,3,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	Truncated     bool                   `protobuf:"varint,4,opt,name=truncated,proto3" json:"truncated,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *EffectiveSubjectSearchResponse) Reset() {
-	*x = EffectiveSubjectSearchResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *EffectiveSubjectSearchResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*EffectiveSubjectSearchResponse) ProtoMessage() {}
-
-func (x *EffectiveSubjectSearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use EffectiveSubjectSearchResponse.ProtoReflect.Descriptor instead.
-func (*EffectiveSubjectSearchResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *EffectiveSubjectSearchResponse) GetTargets() []*RelationshipTarget {
-	if x != nil {
-		return x.Targets
-	}
-	return nil
-}
-
-func (x *EffectiveSubjectSearchResponse) GetNextPageToken() string {
-	if x != nil {
-		return x.NextPageToken
-	}
-	return ""
-}
-
-func (x *EffectiveSubjectSearchResponse) GetModelId() string {
-	if x != nil {
-		return x.ModelId
-	}
-	return ""
-}
-
-func (x *EffectiveSubjectSearchResponse) GetTruncated() bool {
-	if x != nil {
-		return x.Truncated
-	}
-	return false
-}
-
-type ActionSearchRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Subject       *Subject               `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
-	Resource      *Resource              `protobuf:"bytes,2,opt,name=resource,proto3" json:"resource,omitempty"`
-	Context       *structpb.Struct       `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
-	PageSize      int32                  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActionSearchRequest) Reset() {
-	*x = ActionSearchRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActionSearchRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActionSearchRequest) ProtoMessage() {}
-
-func (x *ActionSearchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActionSearchRequest.ProtoReflect.Descriptor instead.
-func (*ActionSearchRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *ActionSearchRequest) GetSubject() *Subject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *ActionSearchRequest) GetResource() *Resource {
-	if x != nil {
-		return x.Resource
-	}
-	return nil
-}
-
-func (x *ActionSearchRequest) GetContext() *structpb.Struct {
-	if x != nil {
-		return x.Context
-	}
-	return nil
-}
-
-func (x *ActionSearchRequest) GetPageSize() int32 {
-	if x != nil {
-		return x.PageSize
-	}
-	return 0
-}
-
-func (x *ActionSearchRequest) GetPageToken() string {
-	if x != nil {
-		return x.PageToken
-	}
-	return ""
-}
-
-type ActionSearchResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Actions       []*Action              `protobuf:"bytes,1,rep,name=actions,proto3" json:"actions,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	ModelId       string                 `protobuf:"bytes,3,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActionSearchResponse) Reset() {
-	*x = ActionSearchResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActionSearchResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActionSearchResponse) ProtoMessage() {}
-
-func (x *ActionSearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActionSearchResponse.ProtoReflect.Descriptor instead.
-func (*ActionSearchResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *ActionSearchResponse) GetActions() []*Action {
-	if x != nil {
-		return x.Actions
-	}
-	return nil
-}
-
-func (x *ActionSearchResponse) GetNextPageToken() string {
-	if x != nil {
-		return x.NextPageToken
-	}
-	return ""
-}
-
-func (x *ActionSearchResponse) GetModelId() string {
-	if x != nil {
-		return x.ModelId
-	}
-	return ""
-}
-
-type AuthorizationMetadata struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Capabilities  []string               `protobuf:"bytes,1,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
-	ActiveModelId string                 `protobuf:"bytes,2,opt,name=active_model_id,json=activeModelId,proto3" json:"active_model_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuthorizationMetadata) Reset() {
-	*x = AuthorizationMetadata{}
-	mi := &file_v1_authorization_proto_msgTypes[17]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuthorizationMetadata) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuthorizationMetadata) ProtoMessage() {}
-
-func (x *AuthorizationMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[17]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuthorizationMetadata.ProtoReflect.Descriptor instead.
-func (*AuthorizationMetadata) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{17}
-}
-
-func (x *AuthorizationMetadata) GetCapabilities() []string {
-	if x != nil {
-		return x.Capabilities
-	}
-	return nil
-}
-
-func (x *AuthorizationMetadata) GetActiveModelId() string {
-	if x != nil {
-		return x.ActiveModelId
-	}
-	return ""
-}
-
-type Relationship struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Deprecated for generalized Zanzibar tuples. Writers should prefer target.
-	// Providers accepting both fields must reject mismatched subject and target values.
-	Subject    *Subject         `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
-	Relation   string           `protobuf:"bytes,2,opt,name=relation,proto3" json:"relation,omitempty"`
-	Resource   *Resource        `protobuf:"bytes,3,opt,name=resource,proto3" json:"resource,omitempty"`
-	Properties *structpb.Struct `protobuf:"bytes,4,opt,name=properties,proto3" json:"properties,omitempty"`
-	// Generalized tuple target. For compatibility, subject-only tuples may still
-	// be written using subject without setting target.
-	Target        *RelationshipTarget `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Relationship) Reset() {
-	*x = Relationship{}
-	mi := &file_v1_authorization_proto_msgTypes[18]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Relationship) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Relationship) ProtoMessage() {}
-
-func (x *Relationship) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[18]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Relationship.ProtoReflect.Descriptor instead.
-func (*Relationship) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{18}
-}
-
-func (x *Relationship) GetSubject() *Subject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *Relationship) GetRelation() string {
-	if x != nil {
-		return x.Relation
-	}
-	return ""
-}
-
-func (x *Relationship) GetResource() *Resource {
-	if x != nil {
-		return x.Resource
-	}
-	return nil
-}
-
-func (x *Relationship) GetProperties() *structpb.Struct {
-	if x != nil {
-		return x.Properties
-	}
-	return nil
-}
-
-func (x *Relationship) GetTarget() *RelationshipTarget {
-	if x != nil {
-		return x.Target
-	}
-	return nil
-}
-
-type RelationshipKey struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Deprecated for generalized Zanzibar tuples. Callers should prefer target.
-	Subject       *Subject            `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
-	Relation      string              `protobuf:"bytes,2,opt,name=relation,proto3" json:"relation,omitempty"`
-	Resource      *Resource           `protobuf:"bytes,3,opt,name=resource,proto3" json:"resource,omitempty"`
-	Target        *RelationshipTarget `protobuf:"bytes,4,opt,name=target,proto3" json:"target,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RelationshipKey) Reset() {
-	*x = RelationshipKey{}
+func (x *SubjectSet) Reset() {
+	*x = SubjectSet{}
 	mi := &file_v1_authorization_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RelationshipKey) String() string {
+func (x *SubjectSet) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RelationshipKey) ProtoMessage() {}
+func (*SubjectSet) ProtoMessage() {}
 
-func (x *RelationshipKey) ProtoReflect() protoreflect.Message {
+func (x *SubjectSet) ProtoReflect() protoreflect.Message {
 	mi := &file_v1_authorization_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1303,264 +1208,37 @@ func (x *RelationshipKey) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RelationshipKey.ProtoReflect.Descriptor instead.
-func (*RelationshipKey) Descriptor() ([]byte, []int) {
+// Deprecated: Use SubjectSet.ProtoReflect.Descriptor instead.
+func (*SubjectSet) Descriptor() ([]byte, []int) {
 	return file_v1_authorization_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *RelationshipKey) GetSubject() *Subject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *RelationshipKey) GetRelation() string {
-	if x != nil {
-		return x.Relation
-	}
-	return ""
-}
-
-func (x *RelationshipKey) GetResource() *Resource {
+func (x *SubjectSet) GetResource() *Resource {
 	if x != nil {
 		return x.Resource
 	}
 	return nil
 }
 
-func (x *RelationshipKey) GetTarget() *RelationshipTarget {
-	if x != nil {
-		return x.Target
-	}
-	return nil
-}
-
-type ReadRelationshipsRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Direct tuple filter only. This RPC does not expand computed usersets or
-	// inheritance rewrites.
-	Subject       *Subject            `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
-	Relation      string              `protobuf:"bytes,2,opt,name=relation,proto3" json:"relation,omitempty"`
-	Resource      *Resource           `protobuf:"bytes,3,opt,name=resource,proto3" json:"resource,omitempty"`
-	PageSize      int32               `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string              `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	ModelId       string              `protobuf:"bytes,6,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	Target        *RelationshipTarget `protobuf:"bytes,7,opt,name=target,proto3" json:"target,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ReadRelationshipsRequest) Reset() {
-	*x = ReadRelationshipsRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[20]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReadRelationshipsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReadRelationshipsRequest) ProtoMessage() {}
-
-func (x *ReadRelationshipsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[20]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReadRelationshipsRequest.ProtoReflect.Descriptor instead.
-func (*ReadRelationshipsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{20}
-}
-
-func (x *ReadRelationshipsRequest) GetSubject() *Subject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *ReadRelationshipsRequest) GetRelation() string {
+func (x *SubjectSet) GetRelation() string {
 	if x != nil {
 		return x.Relation
-	}
-	return ""
-}
-
-func (x *ReadRelationshipsRequest) GetResource() *Resource {
-	if x != nil {
-		return x.Resource
-	}
-	return nil
-}
-
-func (x *ReadRelationshipsRequest) GetPageSize() int32 {
-	if x != nil {
-		return x.PageSize
-	}
-	return 0
-}
-
-func (x *ReadRelationshipsRequest) GetPageToken() string {
-	if x != nil {
-		return x.PageToken
-	}
-	return ""
-}
-
-func (x *ReadRelationshipsRequest) GetModelId() string {
-	if x != nil {
-		return x.ModelId
-	}
-	return ""
-}
-
-func (x *ReadRelationshipsRequest) GetTarget() *RelationshipTarget {
-	if x != nil {
-		return x.Target
-	}
-	return nil
-}
-
-type ReadRelationshipsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Relationships []*Relationship        `protobuf:"bytes,1,rep,name=relationships,proto3" json:"relationships,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	ModelId       string                 `protobuf:"bytes,3,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ReadRelationshipsResponse) Reset() {
-	*x = ReadRelationshipsResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[21]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReadRelationshipsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReadRelationshipsResponse) ProtoMessage() {}
-
-func (x *ReadRelationshipsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[21]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReadRelationshipsResponse.ProtoReflect.Descriptor instead.
-func (*ReadRelationshipsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{21}
-}
-
-func (x *ReadRelationshipsResponse) GetRelationships() []*Relationship {
-	if x != nil {
-		return x.Relationships
-	}
-	return nil
-}
-
-func (x *ReadRelationshipsResponse) GetNextPageToken() string {
-	if x != nil {
-		return x.NextPageToken
-	}
-	return ""
-}
-
-func (x *ReadRelationshipsResponse) GetModelId() string {
-	if x != nil {
-		return x.ModelId
-	}
-	return ""
-}
-
-type WriteRelationshipsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Writes        []*Relationship        `protobuf:"bytes,1,rep,name=writes,proto3" json:"writes,omitempty"`
-	Deletes       []*RelationshipKey     `protobuf:"bytes,2,rep,name=deletes,proto3" json:"deletes,omitempty"`
-	ModelId       string                 `protobuf:"bytes,3,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *WriteRelationshipsRequest) Reset() {
-	*x = WriteRelationshipsRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WriteRelationshipsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WriteRelationshipsRequest) ProtoMessage() {}
-
-func (x *WriteRelationshipsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WriteRelationshipsRequest.ProtoReflect.Descriptor instead.
-func (*WriteRelationshipsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{22}
-}
-
-func (x *WriteRelationshipsRequest) GetWrites() []*Relationship {
-	if x != nil {
-		return x.Writes
-	}
-	return nil
-}
-
-func (x *WriteRelationshipsRequest) GetDeletes() []*RelationshipKey {
-	if x != nil {
-		return x.Deletes
-	}
-	return nil
-}
-
-func (x *WriteRelationshipsRequest) GetModelId() string {
-	if x != nil {
-		return x.ModelId
 	}
 	return ""
 }
 
 type AuthorizationModel struct {
 	state         protoimpl.MessageState            `protogen:"open.v1"`
-	Version       int32                             `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	ResourceTypes []*AuthorizationModelResourceType `protobuf:"bytes,2,rep,name=resource_types,json=resourceTypes,proto3" json:"resource_types,omitempty"`
+	Id            string                            `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Version       string                            `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	ResourceTypes []*AuthorizationModelResourceType `protobuf:"bytes,3,rep,name=resource_types,json=resourceTypes,proto3" json:"resource_types,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AuthorizationModel) Reset() {
 	*x = AuthorizationModel{}
-	mi := &file_v1_authorization_proto_msgTypes[23]
+	mi := &file_v1_authorization_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1572,7 +1250,7 @@ func (x *AuthorizationModel) String() string {
 func (*AuthorizationModel) ProtoMessage() {}
 
 func (x *AuthorizationModel) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[23]
+	mi := &file_v1_authorization_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1585,14 +1263,21 @@ func (x *AuthorizationModel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizationModel.ProtoReflect.Descriptor instead.
 func (*AuthorizationModel) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{23}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{20}
 }
 
-func (x *AuthorizationModel) GetVersion() int32 {
+func (x *AuthorizationModel) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AuthorizationModel) GetVersion() string {
 	if x != nil {
 		return x.Version
 	}
-	return 0
+	return ""
 }
 
 func (x *AuthorizationModel) GetResourceTypes() []*AuthorizationModelResourceType {
@@ -1602,18 +1287,79 @@ func (x *AuthorizationModel) GetResourceTypes() []*AuthorizationModelResourceTyp
 	return nil
 }
 
+type AuthorizationModelRef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthorizationModelRef) Reset() {
+	*x = AuthorizationModelRef{}
+	mi := &file_v1_authorization_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthorizationModelRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthorizationModelRef) ProtoMessage() {}
+
+func (x *AuthorizationModelRef) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthorizationModelRef.ProtoReflect.Descriptor instead.
+func (*AuthorizationModelRef) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *AuthorizationModelRef) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AuthorizationModelRef) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *AuthorizationModelRef) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
 type AuthorizationModelResourceType struct {
 	state         protoimpl.MessageState        `protogen:"open.v1"`
 	Name          string                        `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Relations     []*AuthorizationModelRelation `protobuf:"bytes,2,rep,name=relations,proto3" json:"relations,omitempty"`
 	Actions       []*AuthorizationModelAction   `protobuf:"bytes,3,rep,name=actions,proto3" json:"actions,omitempty"`
+	SourceLayer   SourceLayer                   `protobuf:"varint,4,opt,name=source_layer,json=sourceLayer,proto3,enum=gestalt.provider.v1.SourceLayer" json:"source_layer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AuthorizationModelResourceType) Reset() {
 	*x = AuthorizationModelResourceType{}
-	mi := &file_v1_authorization_proto_msgTypes[24]
+	mi := &file_v1_authorization_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1625,7 +1371,7 @@ func (x *AuthorizationModelResourceType) String() string {
 func (*AuthorizationModelResourceType) ProtoMessage() {}
 
 func (x *AuthorizationModelResourceType) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[24]
+	mi := &file_v1_authorization_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1638,7 +1384,7 @@ func (x *AuthorizationModelResourceType) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizationModelResourceType.ProtoReflect.Descriptor instead.
 func (*AuthorizationModelResourceType) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{24}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *AuthorizationModelResourceType) GetName() string {
@@ -1662,19 +1408,24 @@ func (x *AuthorizationModelResourceType) GetActions() []*AuthorizationModelActio
 	return nil
 }
 
+func (x *AuthorizationModelResourceType) GetSourceLayer() SourceLayer {
+	if x != nil {
+		return x.SourceLayer
+	}
+	return SourceLayer_SOURCE_LAYER_UNSPECIFIED
+}
+
 type AuthorizationModelRelation struct {
 	state          protoimpl.MessageState             `protogen:"open.v1"`
 	Name           string                             `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	SubjectTypes   []string                           `protobuf:"bytes,2,rep,name=subject_types,json=subjectTypes,proto3" json:"subject_types,omitempty"`
-	AllowedTargets []*AuthorizationModelAllowedTarget `protobuf:"bytes,3,rep,name=allowed_targets,json=allowedTargets,proto3" json:"allowed_targets,omitempty"`
-	Rewrite        *AuthorizationModelRewrite         `protobuf:"bytes,4,opt,name=rewrite,proto3" json:"rewrite,omitempty"`
+	AllowedTargets []*AuthorizationModelAllowedTarget `protobuf:"bytes,2,rep,name=allowed_targets,json=allowedTargets,proto3" json:"allowed_targets,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
 func (x *AuthorizationModelRelation) Reset() {
 	*x = AuthorizationModelRelation{}
-	mi := &file_v1_authorization_proto_msgTypes[25]
+	mi := &file_v1_authorization_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1686,7 +1437,7 @@ func (x *AuthorizationModelRelation) String() string {
 func (*AuthorizationModelRelation) ProtoMessage() {}
 
 func (x *AuthorizationModelRelation) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[25]
+	mi := &file_v1_authorization_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1699,7 +1450,7 @@ func (x *AuthorizationModelRelation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizationModelRelation.ProtoReflect.Descriptor instead.
 func (*AuthorizationModelRelation) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{25}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *AuthorizationModelRelation) GetName() string {
@@ -1709,13 +1460,6 @@ func (x *AuthorizationModelRelation) GetName() string {
 	return ""
 }
 
-func (x *AuthorizationModelRelation) GetSubjectTypes() []string {
-	if x != nil {
-		return x.SubjectTypes
-	}
-	return nil
-}
-
 func (x *AuthorizationModelRelation) GetAllowedTargets() []*AuthorizationModelAllowedTarget {
 	if x != nil {
 		return x.AllowedTargets
@@ -1723,25 +1467,17 @@ func (x *AuthorizationModelRelation) GetAllowedTargets() []*AuthorizationModelAl
 	return nil
 }
 
-func (x *AuthorizationModelRelation) GetRewrite() *AuthorizationModelRewrite {
-	if x != nil {
-		return x.Rewrite
-	}
-	return nil
-}
-
 type AuthorizationModelAction struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	Name          string                     `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Relations     []string                   `protobuf:"bytes,2,rep,name=relations,proto3" json:"relations,omitempty"`
-	Rewrite       *AuthorizationModelRewrite `protobuf:"bytes,3,opt,name=rewrite,proto3" json:"rewrite,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Relations     []string               `protobuf:"bytes,2,rep,name=relations,proto3" json:"relations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AuthorizationModelAction) Reset() {
 	*x = AuthorizationModelAction{}
-	mi := &file_v1_authorization_proto_msgTypes[26]
+	mi := &file_v1_authorization_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1753,7 +1489,7 @@ func (x *AuthorizationModelAction) String() string {
 func (*AuthorizationModelAction) ProtoMessage() {}
 
 func (x *AuthorizationModelAction) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[26]
+	mi := &file_v1_authorization_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1766,7 +1502,7 @@ func (x *AuthorizationModelAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizationModelAction.ProtoReflect.Descriptor instead.
 func (*AuthorizationModelAction) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{26}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *AuthorizationModelAction) GetName() string {
@@ -1783,20 +1519,13 @@ func (x *AuthorizationModelAction) GetRelations() []string {
 	return nil
 }
 
-func (x *AuthorizationModelAction) GetRewrite() *AuthorizationModelRewrite {
-	if x != nil {
-		return x.Rewrite
-	}
-	return nil
-}
-
 type AuthorizationModelAllowedTarget struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Kind:
 	//
 	//	*AuthorizationModelAllowedTarget_SubjectType
 	//	*AuthorizationModelAllowedTarget_ResourceType
-	//	*AuthorizationModelAllowedTarget_SubjectSet
+	//	*AuthorizationModelAllowedTarget_SubjectSetType
 	Kind          isAuthorizationModelAllowedTarget_Kind `protobuf_oneof:"kind"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1804,7 +1533,7 @@ type AuthorizationModelAllowedTarget struct {
 
 func (x *AuthorizationModelAllowedTarget) Reset() {
 	*x = AuthorizationModelAllowedTarget{}
-	mi := &file_v1_authorization_proto_msgTypes[27]
+	mi := &file_v1_authorization_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1816,7 +1545,7 @@ func (x *AuthorizationModelAllowedTarget) String() string {
 func (*AuthorizationModelAllowedTarget) ProtoMessage() {}
 
 func (x *AuthorizationModelAllowedTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[27]
+	mi := &file_v1_authorization_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1829,7 +1558,7 @@ func (x *AuthorizationModelAllowedTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizationModelAllowedTarget.ProtoReflect.Descriptor instead.
 func (*AuthorizationModelAllowedTarget) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{27}
+	return file_v1_authorization_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *AuthorizationModelAllowedTarget) GetKind() isAuthorizationModelAllowedTarget_Kind {
@@ -1857,10 +1586,10 @@ func (x *AuthorizationModelAllowedTarget) GetResourceType() string {
 	return ""
 }
 
-func (x *AuthorizationModelAllowedTarget) GetSubjectSet() *AuthorizationModelSubjectSetTarget {
+func (x *AuthorizationModelAllowedTarget) GetSubjectSetType() *SubjectSetType {
 	if x != nil {
-		if x, ok := x.Kind.(*AuthorizationModelAllowedTarget_SubjectSet); ok {
-			return x.SubjectSet
+		if x, ok := x.Kind.(*AuthorizationModelAllowedTarget_SubjectSetType); ok {
+			return x.SubjectSetType
 		}
 	}
 	return nil
@@ -1878,17 +1607,17 @@ type AuthorizationModelAllowedTarget_ResourceType struct {
 	ResourceType string `protobuf:"bytes,2,opt,name=resource_type,json=resourceType,proto3,oneof"`
 }
 
-type AuthorizationModelAllowedTarget_SubjectSet struct {
-	SubjectSet *AuthorizationModelSubjectSetTarget `protobuf:"bytes,3,opt,name=subject_set,json=subjectSet,proto3,oneof"`
+type AuthorizationModelAllowedTarget_SubjectSetType struct {
+	SubjectSetType *SubjectSetType `protobuf:"bytes,3,opt,name=subject_set_type,json=subjectSetType,proto3,oneof"`
 }
 
 func (*AuthorizationModelAllowedTarget_SubjectType) isAuthorizationModelAllowedTarget_Kind() {}
 
 func (*AuthorizationModelAllowedTarget_ResourceType) isAuthorizationModelAllowedTarget_Kind() {}
 
-func (*AuthorizationModelAllowedTarget_SubjectSet) isAuthorizationModelAllowedTarget_Kind() {}
+func (*AuthorizationModelAllowedTarget_SubjectSetType) isAuthorizationModelAllowedTarget_Kind() {}
 
-type AuthorizationModelSubjectSetTarget struct {
+type SubjectSetType struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ResourceType  string                 `protobuf:"bytes,1,opt,name=resource_type,json=resourceType,proto3" json:"resource_type,omitempty"`
 	Relation      string                 `protobuf:"bytes,2,opt,name=relation,proto3" json:"relation,omitempty"`
@@ -1896,21 +1625,21 @@ type AuthorizationModelSubjectSetTarget struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AuthorizationModelSubjectSetTarget) Reset() {
-	*x = AuthorizationModelSubjectSetTarget{}
-	mi := &file_v1_authorization_proto_msgTypes[28]
+func (x *SubjectSetType) Reset() {
+	*x = SubjectSetType{}
+	mi := &file_v1_authorization_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AuthorizationModelSubjectSetTarget) String() string {
+func (x *SubjectSetType) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AuthorizationModelSubjectSetTarget) ProtoMessage() {}
+func (*SubjectSetType) ProtoMessage() {}
 
-func (x *AuthorizationModelSubjectSetTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[28]
+func (x *SubjectSetType) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1921,609 +1650,47 @@ func (x *AuthorizationModelSubjectSetTarget) ProtoReflect() protoreflect.Message
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AuthorizationModelSubjectSetTarget.ProtoReflect.Descriptor instead.
-func (*AuthorizationModelSubjectSetTarget) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{28}
+// Deprecated: Use SubjectSetType.ProtoReflect.Descriptor instead.
+func (*SubjectSetType) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{26}
 }
 
-func (x *AuthorizationModelSubjectSetTarget) GetResourceType() string {
+func (x *SubjectSetType) GetResourceType() string {
 	if x != nil {
 		return x.ResourceType
 	}
 	return ""
 }
 
-func (x *AuthorizationModelSubjectSetTarget) GetRelation() string {
+func (x *SubjectSetType) GetRelation() string {
 	if x != nil {
 		return x.Relation
 	}
 	return ""
 }
 
-type AuthorizationModelRewrite struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Kind:
-	//
-	//	*AuthorizationModelRewrite_This
-	//	*AuthorizationModelRewrite_ComputedUserset
-	//	*AuthorizationModelRewrite_TupleToUserset
-	//	*AuthorizationModelRewrite_Union
-	Kind          isAuthorizationModelRewrite_Kind `protobuf_oneof:"kind"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuthorizationModelRewrite) Reset() {
-	*x = AuthorizationModelRewrite{}
-	mi := &file_v1_authorization_proto_msgTypes[29]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuthorizationModelRewrite) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuthorizationModelRewrite) ProtoMessage() {}
-
-func (x *AuthorizationModelRewrite) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[29]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuthorizationModelRewrite.ProtoReflect.Descriptor instead.
-func (*AuthorizationModelRewrite) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{29}
-}
-
-func (x *AuthorizationModelRewrite) GetKind() isAuthorizationModelRewrite_Kind {
-	if x != nil {
-		return x.Kind
-	}
-	return nil
-}
-
-func (x *AuthorizationModelRewrite) GetThis() *AuthorizationModelRewriteThis {
-	if x != nil {
-		if x, ok := x.Kind.(*AuthorizationModelRewrite_This); ok {
-			return x.This
-		}
-	}
-	return nil
-}
-
-func (x *AuthorizationModelRewrite) GetComputedUserset() *AuthorizationModelComputedUserset {
-	if x != nil {
-		if x, ok := x.Kind.(*AuthorizationModelRewrite_ComputedUserset); ok {
-			return x.ComputedUserset
-		}
-	}
-	return nil
-}
-
-func (x *AuthorizationModelRewrite) GetTupleToUserset() *AuthorizationModelTupleToUserset {
-	if x != nil {
-		if x, ok := x.Kind.(*AuthorizationModelRewrite_TupleToUserset); ok {
-			return x.TupleToUserset
-		}
-	}
-	return nil
-}
-
-func (x *AuthorizationModelRewrite) GetUnion() *AuthorizationModelRewriteUnion {
-	if x != nil {
-		if x, ok := x.Kind.(*AuthorizationModelRewrite_Union); ok {
-			return x.Union
-		}
-	}
-	return nil
-}
-
-type isAuthorizationModelRewrite_Kind interface {
-	isAuthorizationModelRewrite_Kind()
-}
-
-type AuthorizationModelRewrite_This struct {
-	This *AuthorizationModelRewriteThis `protobuf:"bytes,1,opt,name=this,proto3,oneof"`
-}
-
-type AuthorizationModelRewrite_ComputedUserset struct {
-	ComputedUserset *AuthorizationModelComputedUserset `protobuf:"bytes,2,opt,name=computed_userset,json=computedUserset,proto3,oneof"`
-}
-
-type AuthorizationModelRewrite_TupleToUserset struct {
-	TupleToUserset *AuthorizationModelTupleToUserset `protobuf:"bytes,3,opt,name=tuple_to_userset,json=tupleToUserset,proto3,oneof"`
-}
-
-type AuthorizationModelRewrite_Union struct {
-	Union *AuthorizationModelRewriteUnion `protobuf:"bytes,4,opt,name=union,proto3,oneof"`
-}
-
-func (*AuthorizationModelRewrite_This) isAuthorizationModelRewrite_Kind() {}
-
-func (*AuthorizationModelRewrite_ComputedUserset) isAuthorizationModelRewrite_Kind() {}
-
-func (*AuthorizationModelRewrite_TupleToUserset) isAuthorizationModelRewrite_Kind() {}
-
-func (*AuthorizationModelRewrite_Union) isAuthorizationModelRewrite_Kind() {}
-
-type AuthorizationModelRewriteThis struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuthorizationModelRewriteThis) Reset() {
-	*x = AuthorizationModelRewriteThis{}
-	mi := &file_v1_authorization_proto_msgTypes[30]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuthorizationModelRewriteThis) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuthorizationModelRewriteThis) ProtoMessage() {}
-
-func (x *AuthorizationModelRewriteThis) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[30]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuthorizationModelRewriteThis.ProtoReflect.Descriptor instead.
-func (*AuthorizationModelRewriteThis) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{30}
-}
-
-type AuthorizationModelComputedUserset struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Relation      string                 `protobuf:"bytes,1,opt,name=relation,proto3" json:"relation,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuthorizationModelComputedUserset) Reset() {
-	*x = AuthorizationModelComputedUserset{}
-	mi := &file_v1_authorization_proto_msgTypes[31]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuthorizationModelComputedUserset) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuthorizationModelComputedUserset) ProtoMessage() {}
-
-func (x *AuthorizationModelComputedUserset) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[31]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuthorizationModelComputedUserset.ProtoReflect.Descriptor instead.
-func (*AuthorizationModelComputedUserset) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{31}
-}
-
-func (x *AuthorizationModelComputedUserset) GetRelation() string {
-	if x != nil {
-		return x.Relation
-	}
-	return ""
-}
-
-type AuthorizationModelTupleToUserset struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	TuplesetRelation string                 `protobuf:"bytes,1,opt,name=tupleset_relation,json=tuplesetRelation,proto3" json:"tupleset_relation,omitempty"`
-	ComputedRelation string                 `protobuf:"bytes,2,opt,name=computed_relation,json=computedRelation,proto3" json:"computed_relation,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *AuthorizationModelTupleToUserset) Reset() {
-	*x = AuthorizationModelTupleToUserset{}
-	mi := &file_v1_authorization_proto_msgTypes[32]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuthorizationModelTupleToUserset) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuthorizationModelTupleToUserset) ProtoMessage() {}
-
-func (x *AuthorizationModelTupleToUserset) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[32]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuthorizationModelTupleToUserset.ProtoReflect.Descriptor instead.
-func (*AuthorizationModelTupleToUserset) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{32}
-}
-
-func (x *AuthorizationModelTupleToUserset) GetTuplesetRelation() string {
-	if x != nil {
-		return x.TuplesetRelation
-	}
-	return ""
-}
-
-func (x *AuthorizationModelTupleToUserset) GetComputedRelation() string {
-	if x != nil {
-		return x.ComputedRelation
-	}
-	return ""
-}
-
-type AuthorizationModelRewriteUnion struct {
-	state         protoimpl.MessageState       `protogen:"open.v1"`
-	Children      []*AuthorizationModelRewrite `protobuf:"bytes,1,rep,name=children,proto3" json:"children,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuthorizationModelRewriteUnion) Reset() {
-	*x = AuthorizationModelRewriteUnion{}
-	mi := &file_v1_authorization_proto_msgTypes[33]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuthorizationModelRewriteUnion) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuthorizationModelRewriteUnion) ProtoMessage() {}
-
-func (x *AuthorizationModelRewriteUnion) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[33]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuthorizationModelRewriteUnion.ProtoReflect.Descriptor instead.
-func (*AuthorizationModelRewriteUnion) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{33}
-}
-
-func (x *AuthorizationModelRewriteUnion) GetChildren() []*AuthorizationModelRewrite {
-	if x != nil {
-		return x.Children
-	}
-	return nil
-}
-
-type AuthorizationModelRef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuthorizationModelRef) Reset() {
-	*x = AuthorizationModelRef{}
-	mi := &file_v1_authorization_proto_msgTypes[34]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuthorizationModelRef) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuthorizationModelRef) ProtoMessage() {}
-
-func (x *AuthorizationModelRef) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[34]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuthorizationModelRef.ProtoReflect.Descriptor instead.
-func (*AuthorizationModelRef) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{34}
-}
-
-func (x *AuthorizationModelRef) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *AuthorizationModelRef) GetVersion() string {
-	if x != nil {
-		return x.Version
-	}
-	return ""
-}
-
-func (x *AuthorizationModelRef) GetCreatedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CreatedAt
-	}
-	return nil
-}
-
-type ExpandRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Resource      *Resource              `protobuf:"bytes,1,opt,name=resource,proto3" json:"resource,omitempty"`
-	Relation      string                 `protobuf:"bytes,2,opt,name=relation,proto3" json:"relation,omitempty"`
-	Context       *structpb.Struct       `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
-	MaxDepth      int32                  `protobuf:"varint,4,opt,name=max_depth,json=maxDepth,proto3" json:"max_depth,omitempty"`
-	ModelId       string                 `protobuf:"bytes,5,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ExpandRequest) Reset() {
-	*x = ExpandRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[35]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ExpandRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ExpandRequest) ProtoMessage() {}
-
-func (x *ExpandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[35]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ExpandRequest.ProtoReflect.Descriptor instead.
-func (*ExpandRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{35}
-}
-
-func (x *ExpandRequest) GetResource() *Resource {
-	if x != nil {
-		return x.Resource
-	}
-	return nil
-}
-
-func (x *ExpandRequest) GetRelation() string {
-	if x != nil {
-		return x.Relation
-	}
-	return ""
-}
-
-func (x *ExpandRequest) GetContext() *structpb.Struct {
-	if x != nil {
-		return x.Context
-	}
-	return nil
-}
-
-func (x *ExpandRequest) GetMaxDepth() int32 {
-	if x != nil {
-		return x.MaxDepth
-	}
-	return 0
-}
-
-func (x *ExpandRequest) GetModelId() string {
-	if x != nil {
-		return x.ModelId
-	}
-	return ""
-}
-
-type ExpandNode struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Target        *RelationshipTarget    `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
-	Relation      string                 `protobuf:"bytes,2,opt,name=relation,proto3" json:"relation,omitempty"`
-	Children      []*ExpandNode          `protobuf:"bytes,3,rep,name=children,proto3" json:"children,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ExpandNode) Reset() {
-	*x = ExpandNode{}
-	mi := &file_v1_authorization_proto_msgTypes[36]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ExpandNode) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ExpandNode) ProtoMessage() {}
-
-func (x *ExpandNode) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[36]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ExpandNode.ProtoReflect.Descriptor instead.
-func (*ExpandNode) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{36}
-}
-
-func (x *ExpandNode) GetTarget() *RelationshipTarget {
-	if x != nil {
-		return x.Target
-	}
-	return nil
-}
-
-func (x *ExpandNode) GetRelation() string {
-	if x != nil {
-		return x.Relation
-	}
-	return ""
-}
-
-func (x *ExpandNode) GetChildren() []*ExpandNode {
-	if x != nil {
-		return x.Children
-	}
-	return nil
-}
-
-type ExpandResponse struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Root            *ExpandNode            `protobuf:"bytes,1,opt,name=root,proto3" json:"root,omitempty"`
-	Truncated       bool                   `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
-	CycleDetected   bool                   `protobuf:"varint,3,opt,name=cycle_detected,json=cycleDetected,proto3" json:"cycle_detected,omitempty"`
-	MaxDepthReached bool                   `protobuf:"varint,4,opt,name=max_depth_reached,json=maxDepthReached,proto3" json:"max_depth_reached,omitempty"`
-	ModelId         string                 `protobuf:"bytes,5,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *ExpandResponse) Reset() {
-	*x = ExpandResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[37]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ExpandResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ExpandResponse) ProtoMessage() {}
-
-func (x *ExpandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[37]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ExpandResponse.ProtoReflect.Descriptor instead.
-func (*ExpandResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{37}
-}
-
-func (x *ExpandResponse) GetRoot() *ExpandNode {
-	if x != nil {
-		return x.Root
-	}
-	return nil
-}
-
-func (x *ExpandResponse) GetTruncated() bool {
-	if x != nil {
-		return x.Truncated
-	}
-	return false
-}
-
-func (x *ExpandResponse) GetCycleDetected() bool {
-	if x != nil {
-		return x.CycleDetected
-	}
-	return false
-}
-
-func (x *ExpandResponse) GetMaxDepthReached() bool {
-	if x != nil {
-		return x.MaxDepthReached
-	}
-	return false
-}
-
-func (x *ExpandResponse) GetModelId() string {
-	if x != nil {
-		return x.ModelId
-	}
-	return ""
-}
-
-type GetActiveModelResponse struct {
+type GetActiveModelRefResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Model         *AuthorizationModelRef `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetActiveModelResponse) Reset() {
-	*x = GetActiveModelResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[38]
+func (x *GetActiveModelRefResponse) Reset() {
+	*x = GetActiveModelRefResponse{}
+	mi := &file_v1_authorization_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetActiveModelResponse) String() string {
+func (x *GetActiveModelRefResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetActiveModelResponse) ProtoMessage() {}
+func (*GetActiveModelRefResponse) ProtoMessage() {}
 
-func (x *GetActiveModelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[38]
+func (x *GetActiveModelRefResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2534,144 +1701,40 @@ func (x *GetActiveModelResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetActiveModelResponse.ProtoReflect.Descriptor instead.
-func (*GetActiveModelResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{38}
+// Deprecated: Use GetActiveModelRefResponse.ProtoReflect.Descriptor instead.
+func (*GetActiveModelRefResponse) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{27}
 }
 
-func (x *GetActiveModelResponse) GetModel() *AuthorizationModelRef {
+func (x *GetActiveModelRefResponse) GetModel() *AuthorizationModelRef {
 	if x != nil {
 		return x.Model
 	}
 	return nil
 }
 
-type ListModelsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListModelsRequest) Reset() {
-	*x = ListModelsRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[39]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListModelsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListModelsRequest) ProtoMessage() {}
-
-func (x *ListModelsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[39]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListModelsRequest.ProtoReflect.Descriptor instead.
-func (*ListModelsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{39}
-}
-
-func (x *ListModelsRequest) GetPageSize() int32 {
-	if x != nil {
-		return x.PageSize
-	}
-	return 0
-}
-
-func (x *ListModelsRequest) GetPageToken() string {
-	if x != nil {
-		return x.PageToken
-	}
-	return ""
-}
-
-type ListModelsResponse struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	Models        []*AuthorizationModelRef `protobuf:"bytes,1,rep,name=models,proto3" json:"models,omitempty"`
-	NextPageToken string                   `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListModelsResponse) Reset() {
-	*x = ListModelsResponse{}
-	mi := &file_v1_authorization_proto_msgTypes[40]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListModelsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListModelsResponse) ProtoMessage() {}
-
-func (x *ListModelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[40]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListModelsResponse.ProtoReflect.Descriptor instead.
-func (*ListModelsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{40}
-}
-
-func (x *ListModelsResponse) GetModels() []*AuthorizationModelRef {
-	if x != nil {
-		return x.Models
-	}
-	return nil
-}
-
-func (x *ListModelsResponse) GetNextPageToken() string {
-	if x != nil {
-		return x.NextPageToken
-	}
-	return ""
-}
-
-type WriteModelRequest struct {
+type SetActiveModelRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Model         *AuthorizationModel    `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *WriteModelRequest) Reset() {
-	*x = WriteModelRequest{}
-	mi := &file_v1_authorization_proto_msgTypes[41]
+func (x *SetActiveModelRequest) Reset() {
+	*x = SetActiveModelRequest{}
+	mi := &file_v1_authorization_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *WriteModelRequest) String() string {
+func (x *SetActiveModelRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*WriteModelRequest) ProtoMessage() {}
+func (*SetActiveModelRequest) ProtoMessage() {}
 
-func (x *WriteModelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authorization_proto_msgTypes[41]
+func (x *SetActiveModelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2682,14 +1745,206 @@ func (x *WriteModelRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use WriteModelRequest.ProtoReflect.Descriptor instead.
-func (*WriteModelRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authorization_proto_rawDescGZIP(), []int{41}
+// Deprecated: Use SetActiveModelRequest.ProtoReflect.Descriptor instead.
+func (*SetActiveModelRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{28}
 }
 
-func (x *WriteModelRequest) GetModel() *AuthorizationModel {
+func (x *SetActiveModelRequest) GetModel() *AuthorizationModel {
 	if x != nil {
 		return x.Model
+	}
+	return nil
+}
+
+type SetActiveModelResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Model         *AuthorizationModelRef `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetActiveModelResponse) Reset() {
+	*x = SetActiveModelResponse{}
+	mi := &file_v1_authorization_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetActiveModelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetActiveModelResponse) ProtoMessage() {}
+
+func (x *SetActiveModelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetActiveModelResponse.ProtoReflect.Descriptor instead.
+func (*SetActiveModelResponse) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *SetActiveModelResponse) GetModel() *AuthorizationModelRef {
+	if x != nil {
+		return x.Model
+	}
+	return nil
+}
+
+type ListActiveModelResourceTypesRequest struct {
+	state         protoimpl.MessageState                `protogen:"open.v1"`
+	ModelId       string                                `protobuf:"bytes,1,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	Filter        *AuthorizationModelResourceTypeFilter `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListActiveModelResourceTypesRequest) Reset() {
+	*x = ListActiveModelResourceTypesRequest{}
+	mi := &file_v1_authorization_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListActiveModelResourceTypesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListActiveModelResourceTypesRequest) ProtoMessage() {}
+
+func (x *ListActiveModelResourceTypesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListActiveModelResourceTypesRequest.ProtoReflect.Descriptor instead.
+func (*ListActiveModelResourceTypesRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ListActiveModelResourceTypesRequest) GetModelId() string {
+	if x != nil {
+		return x.ModelId
+	}
+	return ""
+}
+
+func (x *ListActiveModelResourceTypesRequest) GetFilter() *AuthorizationModelResourceTypeFilter {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+type AuthorizationModelResourceTypeFilter struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	SourceLayer   SourceLayer            `protobuf:"varint,2,opt,name=source_layer,json=sourceLayer,proto3,enum=gestalt.provider.v1.SourceLayer" json:"source_layer,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthorizationModelResourceTypeFilter) Reset() {
+	*x = AuthorizationModelResourceTypeFilter{}
+	mi := &file_v1_authorization_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthorizationModelResourceTypeFilter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthorizationModelResourceTypeFilter) ProtoMessage() {}
+
+func (x *AuthorizationModelResourceTypeFilter) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthorizationModelResourceTypeFilter.ProtoReflect.Descriptor instead.
+func (*AuthorizationModelResourceTypeFilter) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *AuthorizationModelResourceTypeFilter) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AuthorizationModelResourceTypeFilter) GetSourceLayer() SourceLayer {
+	if x != nil {
+		return x.SourceLayer
+	}
+	return SourceLayer_SOURCE_LAYER_UNSPECIFIED
+}
+
+type ListActiveModelResourceTypesResponse struct {
+	state         protoimpl.MessageState            `protogen:"open.v1"`
+	ResourceTypes []*AuthorizationModelResourceType `protobuf:"bytes,1,rep,name=resource_types,json=resourceTypes,proto3" json:"resource_types,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListActiveModelResourceTypesResponse) Reset() {
+	*x = ListActiveModelResourceTypesResponse{}
+	mi := &file_v1_authorization_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListActiveModelResourceTypesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListActiveModelResourceTypesResponse) ProtoMessage() {}
+
+func (x *ListActiveModelResourceTypesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authorization_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListActiveModelResourceTypesResponse.ProtoReflect.Descriptor instead.
+func (*ListActiveModelResourceTypesResponse) Descriptor() ([]byte, []int) {
+	return file_v1_authorization_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ListActiveModelResourceTypesResponse) GetResourceTypes() []*AuthorizationModelResourceType {
+	if x != nil {
+		return x.ResourceTypes
 	}
 	return nil
 }
@@ -2704,210 +1959,138 @@ const file_v1_authorization_proto_rawDesc = "" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x127\n" +
 	"\n" +
 	"properties\x18\x03 \x01(\v2\x17.google.protobuf.StructR\n" +
+	"properties\"U\n" +
+	"\x06Action\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
+	"\n" +
+	"properties\x18\x02 \x01(\v2\x17.google.protobuf.StructR\n" +
 	"properties\"g\n" +
 	"\bResource\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x127\n" +
 	"\n" +
 	"properties\x18\x03 \x01(\v2\x17.google.protobuf.StructR\n" +
-	"properties\"c\n" +
+	"properties\"\xbc\x01\n" +
+	"\x12CheckAccessRequest\x126\n" +
+	"\asubject\x18\x01 \x01(\v2\x1c.gestalt.provider.v1.SubjectR\asubject\x123\n" +
+	"\x06action\x18\x02 \x01(\v2\x1b.gestalt.provider.v1.ActionR\x06action\x129\n" +
+	"\bresource\x18\x03 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\"J\n" +
+	"\x13CheckAccessResponse\x12\x18\n" +
+	"\aallowed\x18\x01 \x01(\bR\aallowed\x12\x19\n" +
+	"\bmodel_id\x18\x02 \x01(\tR\amodelId\"]\n" +
+	"\x16CheckAccessManyRequest\x12C\n" +
+	"\brequests\x18\x01 \x03(\v2'.gestalt.provider.v1.CheckAccessRequestR\brequests\"a\n" +
+	"\x17CheckAccessManyResponse\x12F\n" +
+	"\tdecisions\x18\x01 \x03(\v2(.gestalt.provider.v1.CheckAccessResponseR\tdecisions\"\x97\x01\n" +
+	"\x18ListRelationshipsRequest\x12?\n" +
+	"\x06filter\x18\x01 \x01(\v2'.gestalt.provider.v1.RelationshipFilterR\x06filter\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"SubjectSet\x129\n" +
-	"\bresource\x18\x01 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\x12\x1a\n" +
-	"\brelation\x18\x02 \x01(\tR\brelation\"\xd7\x01\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\x92\x03\n" +
+	"\x12RelationshipFilter\x12?\n" +
+	"\x06target\x18\x01 \x01(\v2'.gestalt.provider.v1.RelationshipTargetR\x06target\x12\x1a\n" +
+	"\brelation\x18\x02 \x01(\tR\brelation\x129\n" +
+	"\bresource\x18\x03 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\x12L\n" +
+	"\vtarget_type\x18\x04 \x01(\x0e2+.gestalt.provider.v1.RelationshipTargetTypeR\n" +
+	"targetType\x12,\n" +
+	"\x12target_entity_type\x18\x05 \x01(\tR\x10targetEntityType\x12#\n" +
+	"\rresource_type\x18\x06 \x01(\tR\fresourceType\x12C\n" +
+	"\fsource_layer\x18\a \x01(\x0e2 .gestalt.provider.v1.SourceLayerR\vsourceLayer\"\x8c\x01\n" +
+	"\x19ListRelationshipsResponse\x12G\n" +
+	"\rrelationships\x18\x01 \x03(\v2!.gestalt.provider.v1.RelationshipR\rrelationships\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"_\n" +
+	"\x16AddRelationshipRequest\x12E\n" +
+	"\frelationship\x18\x01 \x01(\v2!.gestalt.provider.v1.RelationshipR\frelationship\"`\n" +
+	"\x17AddRelationshipResponse\x12E\n" +
+	"\frelationship\x18\x01 \x01(\v2!.gestalt.provider.v1.RelationshipR\frelationship\"r\n" +
+	"\x19DeleteRelationshipRequest\x12U\n" +
+	"\x12relationship_tuple\x18\x01 \x01(\v2&.gestalt.provider.v1.RelationshipTupleR\x11relationshipTuple\"\x1c\n" +
+	"\x1aDeleteRelationshipResponse\"b\n" +
+	"\x17SetRelationshipsRequest\x12G\n" +
+	"\rrelationships\x18\x01 \x03(\v2!.gestalt.provider.v1.RelationshipR\rrelationships\"c\n" +
+	"\x18SetRelationshipsResponse\x12G\n" +
+	"\rrelationships\x18\x01 \x03(\v2!.gestalt.provider.v1.RelationshipR\rrelationships\"\xca\x01\n" +
+	"\fRelationship\x12<\n" +
+	"\x05tuple\x18\x01 \x01(\v2&.gestalt.provider.v1.RelationshipTupleR\x05tuple\x127\n" +
+	"\n" +
+	"properties\x18\x02 \x01(\v2\x17.google.protobuf.StructR\n" +
+	"properties\x12C\n" +
+	"\fsource_layer\x18\x03 \x01(\x0e2 .gestalt.provider.v1.SourceLayerR\vsourceLayer\"\xab\x01\n" +
+	"\x11RelationshipTuple\x12?\n" +
+	"\x06target\x18\x01 \x01(\v2'.gestalt.provider.v1.RelationshipTargetR\x06target\x12\x1a\n" +
+	"\brelation\x18\x02 \x01(\tR\brelation\x129\n" +
+	"\bresource\x18\x03 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\"\xd7\x01\n" +
 	"\x12RelationshipTarget\x128\n" +
 	"\asubject\x18\x01 \x01(\v2\x1c.gestalt.provider.v1.SubjectH\x00R\asubject\x12;\n" +
 	"\bresource\x18\x02 \x01(\v2\x1d.gestalt.provider.v1.ResourceH\x00R\bresource\x12B\n" +
 	"\vsubject_set\x18\x03 \x01(\v2\x1f.gestalt.provider.v1.SubjectSetH\x00R\n" +
 	"subjectSetB\x06\n" +
-	"\x04kind\"U\n" +
-	"\x06Action\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
+	"\x04kind\"c\n" +
 	"\n" +
-	"properties\x18\x02 \x01(\v2\x17.google.protobuf.StructR\n" +
-	"properties\"\xf4\x01\n" +
-	"\x17AccessEvaluationRequest\x126\n" +
-	"\asubject\x18\x01 \x01(\v2\x1c.gestalt.provider.v1.SubjectR\asubject\x123\n" +
-	"\x06action\x18\x02 \x01(\v2\x1b.gestalt.provider.v1.ActionR\x06action\x129\n" +
-	"\bresource\x18\x03 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\x121\n" +
-	"\acontext\x18\x04 \x01(\v2\x17.google.protobuf.StructR\acontext\"x\n" +
-	"\x0eAccessDecision\x12\x18\n" +
-	"\aallowed\x18\x01 \x01(\bR\aallowed\x121\n" +
-	"\acontext\x18\x02 \x01(\v2\x17.google.protobuf.StructR\acontext\x12\x19\n" +
-	"\bmodel_id\x18\x03 \x01(\tR\amodelId\"d\n" +
-	"\x18AccessEvaluationsRequest\x12H\n" +
-	"\brequests\x18\x01 \x03(\v2,.gestalt.provider.v1.AccessEvaluationRequestR\brequests\"^\n" +
-	"\x19AccessEvaluationsResponse\x12A\n" +
-	"\tdecisions\x18\x01 \x03(\v2#.gestalt.provider.v1.AccessDecisionR\tdecisions\"\x98\x02\n" +
-	"\x15ResourceSearchRequest\x126\n" +
-	"\asubject\x18\x01 \x01(\v2\x1c.gestalt.provider.v1.SubjectR\asubject\x123\n" +
-	"\x06action\x18\x02 \x01(\v2\x1b.gestalt.provider.v1.ActionR\x06action\x12#\n" +
-	"\rresource_type\x18\x03 \x01(\tR\fresourceType\x121\n" +
-	"\acontext\x18\x04 \x01(\v2\x17.google.protobuf.StructR\acontext\x12\x1b\n" +
-	"\tpage_size\x18\x05 \x01(\x05R\bpageSize\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x06 \x01(\tR\tpageToken\"\x98\x01\n" +
-	"\x16ResourceSearchResponse\x12;\n" +
-	"\tresources\x18\x01 \x03(\v2\x1d.gestalt.provider.v1.ResourceR\tresources\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x19\n" +
-	"\bmodel_id\x18\x03 \x01(\tR\amodelId\"\x98\x02\n" +
-	"\x14SubjectSearchRequest\x129\n" +
-	"\bresource\x18\x01 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\x123\n" +
-	"\x06action\x18\x02 \x01(\v2\x1b.gestalt.provider.v1.ActionR\x06action\x12!\n" +
-	"\fsubject_type\x18\x03 \x01(\tR\vsubjectType\x121\n" +
-	"\acontext\x18\x04 \x01(\v2\x17.google.protobuf.StructR\acontext\x12\x1b\n" +
-	"\tpage_size\x18\x05 \x01(\x05R\bpageSize\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x06 \x01(\tR\tpageToken\"\x94\x01\n" +
-	"\x15SubjectSearchResponse\x128\n" +
-	"\bsubjects\x18\x01 \x03(\v2\x1c.gestalt.provider.v1.SubjectR\bsubjects\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x19\n" +
-	"\bmodel_id\x18\x03 \x01(\tR\amodelId\"\xfe\x01\n" +
-	"\x1dEffectiveSubjectSearchRequest\x129\n" +
-	"\bresource\x18\x01 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\x123\n" +
-	"\x06action\x18\x02 \x01(\v2\x1b.gestalt.provider.v1.ActionR\x06action\x121\n" +
-	"\acontext\x18\x03 \x01(\v2\x17.google.protobuf.StructR\acontext\x12\x1b\n" +
-	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x05 \x01(\tR\tpageToken\"\xc4\x01\n" +
-	"\x1eEffectiveSubjectSearchResponse\x12A\n" +
-	"\atargets\x18\x01 \x03(\v2'.gestalt.provider.v1.RelationshipTargetR\atargets\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x19\n" +
-	"\bmodel_id\x18\x03 \x01(\tR\amodelId\x12\x1c\n" +
-	"\ttruncated\x18\x04 \x01(\bR\ttruncated\"\xf7\x01\n" +
-	"\x13ActionSearchRequest\x126\n" +
-	"\asubject\x18\x01 \x01(\v2\x1c.gestalt.provider.v1.SubjectR\asubject\x129\n" +
-	"\bresource\x18\x02 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\x121\n" +
-	"\acontext\x18\x03 \x01(\v2\x17.google.protobuf.StructR\acontext\x12\x1b\n" +
-	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x05 \x01(\tR\tpageToken\"\x90\x01\n" +
-	"\x14ActionSearchResponse\x125\n" +
-	"\aactions\x18\x01 \x03(\v2\x1b.gestalt.provider.v1.ActionR\aactions\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x19\n" +
-	"\bmodel_id\x18\x03 \x01(\tR\amodelId\"c\n" +
-	"\x15AuthorizationMetadata\x12\"\n" +
-	"\fcapabilities\x18\x01 \x03(\tR\fcapabilities\x12&\n" +
-	"\x0factive_model_id\x18\x02 \x01(\tR\ractiveModelId\"\x97\x02\n" +
-	"\fRelationship\x126\n" +
-	"\asubject\x18\x01 \x01(\v2\x1c.gestalt.provider.v1.SubjectR\asubject\x12\x1a\n" +
-	"\brelation\x18\x02 \x01(\tR\brelation\x129\n" +
-	"\bresource\x18\x03 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\x127\n" +
-	"\n" +
-	"properties\x18\x04 \x01(\v2\x17.google.protobuf.StructR\n" +
-	"properties\x12?\n" +
-	"\x06target\x18\x05 \x01(\v2'.gestalt.provider.v1.RelationshipTargetR\x06target\"\xe1\x01\n" +
-	"\x0fRelationshipKey\x126\n" +
-	"\asubject\x18\x01 \x01(\v2\x1c.gestalt.provider.v1.SubjectR\asubject\x12\x1a\n" +
-	"\brelation\x18\x02 \x01(\tR\brelation\x129\n" +
-	"\bresource\x18\x03 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\x12?\n" +
-	"\x06target\x18\x04 \x01(\v2'.gestalt.provider.v1.RelationshipTargetR\x06target\"\xc1\x02\n" +
-	"\x18ReadRelationshipsRequest\x126\n" +
-	"\asubject\x18\x01 \x01(\v2\x1c.gestalt.provider.v1.SubjectR\asubject\x12\x1a\n" +
-	"\brelation\x18\x02 \x01(\tR\brelation\x129\n" +
-	"\bresource\x18\x03 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\x12\x1b\n" +
-	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x05 \x01(\tR\tpageToken\x12\x19\n" +
-	"\bmodel_id\x18\x06 \x01(\tR\amodelId\x12?\n" +
-	"\x06target\x18\a \x01(\v2'.gestalt.provider.v1.RelationshipTargetR\x06target\"\xa7\x01\n" +
-	"\x19ReadRelationshipsResponse\x12G\n" +
-	"\rrelationships\x18\x01 \x03(\v2!.gestalt.provider.v1.RelationshipR\rrelationships\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x19\n" +
-	"\bmodel_id\x18\x03 \x01(\tR\amodelId\"\xb1\x01\n" +
-	"\x19WriteRelationshipsRequest\x129\n" +
-	"\x06writes\x18\x01 \x03(\v2!.gestalt.provider.v1.RelationshipR\x06writes\x12>\n" +
-	"\adeletes\x18\x02 \x03(\v2$.gestalt.provider.v1.RelationshipKeyR\adeletes\x12\x19\n" +
-	"\bmodel_id\x18\x03 \x01(\tR\amodelId\"\x8a\x01\n" +
-	"\x12AuthorizationModel\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x05R\aversion\x12Z\n" +
-	"\x0eresource_types\x18\x02 \x03(\v23.gestalt.provider.v1.AuthorizationModelResourceTypeR\rresourceTypes\"\xcc\x01\n" +
-	"\x1eAuthorizationModelResourceType\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12M\n" +
-	"\trelations\x18\x02 \x03(\v2/.gestalt.provider.v1.AuthorizationModelRelationR\trelations\x12G\n" +
-	"\aactions\x18\x03 \x03(\v2-.gestalt.provider.v1.AuthorizationModelActionR\aactions\"\xfe\x01\n" +
-	"\x1aAuthorizationModelRelation\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12#\n" +
-	"\rsubject_types\x18\x02 \x03(\tR\fsubjectTypes\x12]\n" +
-	"\x0fallowed_targets\x18\x03 \x03(\v24.gestalt.provider.v1.AuthorizationModelAllowedTargetR\x0eallowedTargets\x12H\n" +
-	"\arewrite\x18\x04 \x01(\v2..gestalt.provider.v1.AuthorizationModelRewriteR\arewrite\"\x96\x01\n" +
-	"\x18AuthorizationModelAction\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
-	"\trelations\x18\x02 \x03(\tR\trelations\x12H\n" +
-	"\arewrite\x18\x03 \x01(\v2..gestalt.provider.v1.AuthorizationModelRewriteR\arewrite\"\xd1\x01\n" +
-	"\x1fAuthorizationModelAllowedTarget\x12#\n" +
-	"\fsubject_type\x18\x01 \x01(\tH\x00R\vsubjectType\x12%\n" +
-	"\rresource_type\x18\x02 \x01(\tH\x00R\fresourceType\x12Z\n" +
-	"\vsubject_set\x18\x03 \x01(\v27.gestalt.provider.v1.AuthorizationModelSubjectSetTargetH\x00R\n" +
-	"subjectSetB\x06\n" +
-	"\x04kind\"e\n" +
-	"\"AuthorizationModelSubjectSetTarget\x12#\n" +
-	"\rresource_type\x18\x01 \x01(\tR\fresourceType\x12\x1a\n" +
-	"\brelation\x18\x02 \x01(\tR\brelation\"\x82\x03\n" +
-	"\x19AuthorizationModelRewrite\x12H\n" +
-	"\x04this\x18\x01 \x01(\v22.gestalt.provider.v1.AuthorizationModelRewriteThisH\x00R\x04this\x12c\n" +
-	"\x10computed_userset\x18\x02 \x01(\v26.gestalt.provider.v1.AuthorizationModelComputedUsersetH\x00R\x0fcomputedUserset\x12a\n" +
-	"\x10tuple_to_userset\x18\x03 \x01(\v25.gestalt.provider.v1.AuthorizationModelTupleToUsersetH\x00R\x0etupleToUserset\x12K\n" +
-	"\x05union\x18\x04 \x01(\v23.gestalt.provider.v1.AuthorizationModelRewriteUnionH\x00R\x05unionB\x06\n" +
-	"\x04kind\"\x1f\n" +
-	"\x1dAuthorizationModelRewriteThis\"?\n" +
-	"!AuthorizationModelComputedUserset\x12\x1a\n" +
-	"\brelation\x18\x01 \x01(\tR\brelation\"|\n" +
-	" AuthorizationModelTupleToUserset\x12+\n" +
-	"\x11tupleset_relation\x18\x01 \x01(\tR\x10tuplesetRelation\x12+\n" +
-	"\x11computed_relation\x18\x02 \x01(\tR\x10computedRelation\"l\n" +
-	"\x1eAuthorizationModelRewriteUnion\x12J\n" +
-	"\bchildren\x18\x01 \x03(\v2..gestalt.provider.v1.AuthorizationModelRewriteR\bchildren\"|\n" +
+	"SubjectSet\x129\n" +
+	"\bresource\x18\x01 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\x12\x1a\n" +
+	"\brelation\x18\x02 \x01(\tR\brelation\"\x9a\x01\n" +
+	"\x12AuthorizationModel\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12Z\n" +
+	"\x0eresource_types\x18\x03 \x03(\v23.gestalt.provider.v1.AuthorizationModelResourceTypeR\rresourceTypes\"|\n" +
 	"\x15AuthorizationModelRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x129\n" +
 	"\n" +
-	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xd1\x01\n" +
-	"\rExpandRequest\x129\n" +
-	"\bresource\x18\x01 \x01(\v2\x1d.gestalt.provider.v1.ResourceR\bresource\x12\x1a\n" +
-	"\brelation\x18\x02 \x01(\tR\brelation\x121\n" +
-	"\acontext\x18\x03 \x01(\v2\x17.google.protobuf.StructR\acontext\x12\x1b\n" +
-	"\tmax_depth\x18\x04 \x01(\x05R\bmaxDepth\x12\x19\n" +
-	"\bmodel_id\x18\x05 \x01(\tR\amodelId\"\xa6\x01\n" +
-	"\n" +
-	"ExpandNode\x12?\n" +
-	"\x06target\x18\x01 \x01(\v2'.gestalt.provider.v1.RelationshipTargetR\x06target\x12\x1a\n" +
-	"\brelation\x18\x02 \x01(\tR\brelation\x12;\n" +
-	"\bchildren\x18\x03 \x03(\v2\x1f.gestalt.provider.v1.ExpandNodeR\bchildren\"\xd1\x01\n" +
-	"\x0eExpandResponse\x123\n" +
-	"\x04root\x18\x01 \x01(\v2\x1f.gestalt.provider.v1.ExpandNodeR\x04root\x12\x1c\n" +
-	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12%\n" +
-	"\x0ecycle_detected\x18\x03 \x01(\bR\rcycleDetected\x12*\n" +
-	"\x11max_depth_reached\x18\x04 \x01(\bR\x0fmaxDepthReached\x12\x19\n" +
-	"\bmodel_id\x18\x05 \x01(\tR\amodelId\"Z\n" +
-	"\x16GetActiveModelResponse\x12@\n" +
-	"\x05model\x18\x01 \x01(\v2*.gestalt.provider.v1.AuthorizationModelRefR\x05model\"O\n" +
-	"\x11ListModelsRequest\x12\x1b\n" +
-	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x02 \x01(\tR\tpageToken\"\x80\x01\n" +
-	"\x12ListModelsResponse\x12B\n" +
-	"\x06models\x18\x01 \x03(\v2*.gestalt.provider.v1.AuthorizationModelRefR\x06models\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"R\n" +
-	"\x11WriteModelRequest\x12=\n" +
-	"\x05model\x18\x01 \x01(\v2'.gestalt.provider.v1.AuthorizationModelR\x05model2\xaa\v\n" +
-	"\x15AuthorizationProvider\x12]\n" +
-	"\bEvaluate\x12,.gestalt.provider.v1.AccessEvaluationRequest\x1a#.gestalt.provider.v1.AccessDecision\x12m\n" +
-	"\fEvaluateMany\x12-.gestalt.provider.v1.AccessEvaluationsRequest\x1a..gestalt.provider.v1.AccessEvaluationsResponse\x12j\n" +
-	"\x0fSearchResources\x12*.gestalt.provider.v1.ResourceSearchRequest\x1a+.gestalt.provider.v1.ResourceSearchResponse\x12g\n" +
-	"\x0eSearchSubjects\x12).gestalt.provider.v1.SubjectSearchRequest\x1a*.gestalt.provider.v1.SubjectSearchResponse\x12s\n" +
-	"\x18EffectiveSearchResources\x12*.gestalt.provider.v1.ResourceSearchRequest\x1a+.gestalt.provider.v1.ResourceSearchResponse\x12\x82\x01\n" +
-	"\x17EffectiveSearchSubjects\x122.gestalt.provider.v1.EffectiveSubjectSearchRequest\x1a3.gestalt.provider.v1.EffectiveSubjectSearchResponse\x12d\n" +
-	"\rSearchActions\x12(.gestalt.provider.v1.ActionSearchRequest\x1a).gestalt.provider.v1.ActionSearchResponse\x12Q\n" +
-	"\x06Expand\x12\".gestalt.provider.v1.ExpandRequest\x1a#.gestalt.provider.v1.ExpandResponse\x12Q\n" +
-	"\vGetMetadata\x12\x16.google.protobuf.Empty\x1a*.gestalt.provider.v1.AuthorizationMetadata\x12r\n" +
-	"\x11ReadRelationships\x12-.gestalt.provider.v1.ReadRelationshipsRequest\x1a..gestalt.provider.v1.ReadRelationshipsResponse\x12\\\n" +
-	"\x12WriteRelationships\x12..gestalt.provider.v1.WriteRelationshipsRequest\x1a\x16.google.protobuf.Empty\x12U\n" +
-	"\x0eGetActiveModel\x12\x16.google.protobuf.Empty\x1a+.gestalt.provider.v1.GetActiveModelResponse\x12]\n" +
-	"\n" +
-	"ListModels\x12&.gestalt.provider.v1.ListModelsRequest\x1a'.gestalt.provider.v1.ListModelsResponse\x12`\n" +
-	"\n" +
-	"WriteModel\x12&.gestalt.provider.v1.WriteModelRequest\x1a*.gestalt.provider.v1.AuthorizationModelRefB\xde\x01\n" +
+	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x91\x02\n" +
+	"\x1eAuthorizationModelResourceType\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12M\n" +
+	"\trelations\x18\x02 \x03(\v2/.gestalt.provider.v1.AuthorizationModelRelationR\trelations\x12G\n" +
+	"\aactions\x18\x03 \x03(\v2-.gestalt.provider.v1.AuthorizationModelActionR\aactions\x12C\n" +
+	"\fsource_layer\x18\x04 \x01(\x0e2 .gestalt.provider.v1.SourceLayerR\vsourceLayer\"\x8f\x01\n" +
+	"\x1aAuthorizationModelRelation\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12]\n" +
+	"\x0fallowed_targets\x18\x02 \x03(\v24.gestalt.provider.v1.AuthorizationModelAllowedTargetR\x0eallowedTargets\"L\n" +
+	"\x18AuthorizationModelAction\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
+	"\trelations\x18\x02 \x03(\tR\trelations\"\xc6\x01\n" +
+	"\x1fAuthorizationModelAllowedTarget\x12#\n" +
+	"\fsubject_type\x18\x01 \x01(\tH\x00R\vsubjectType\x12%\n" +
+	"\rresource_type\x18\x02 \x01(\tH\x00R\fresourceType\x12O\n" +
+	"\x10subject_set_type\x18\x03 \x01(\v2#.gestalt.provider.v1.SubjectSetTypeH\x00R\x0esubjectSetTypeB\x06\n" +
+	"\x04kind\"Q\n" +
+	"\x0eSubjectSetType\x12#\n" +
+	"\rresource_type\x18\x01 \x01(\tR\fresourceType\x12\x1a\n" +
+	"\brelation\x18\x02 \x01(\tR\brelation\"]\n" +
+	"\x19GetActiveModelRefResponse\x12@\n" +
+	"\x05model\x18\x01 \x01(\v2*.gestalt.provider.v1.AuthorizationModelRefR\x05model\"V\n" +
+	"\x15SetActiveModelRequest\x12=\n" +
+	"\x05model\x18\x01 \x01(\v2'.gestalt.provider.v1.AuthorizationModelR\x05model\"Z\n" +
+	"\x16SetActiveModelResponse\x12@\n" +
+	"\x05model\x18\x01 \x01(\v2*.gestalt.provider.v1.AuthorizationModelRefR\x05model\"\x93\x01\n" +
+	"#ListActiveModelResourceTypesRequest\x12\x19\n" +
+	"\bmodel_id\x18\x01 \x01(\tR\amodelId\x12Q\n" +
+	"\x06filter\x18\x02 \x01(\v29.gestalt.provider.v1.AuthorizationModelResourceTypeFilterR\x06filter\"\x7f\n" +
+	"$AuthorizationModelResourceTypeFilter\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12C\n" +
+	"\fsource_layer\x18\x02 \x01(\x0e2 .gestalt.provider.v1.SourceLayerR\vsourceLayer\"\x82\x01\n" +
+	"$ListActiveModelResourceTypesResponse\x12Z\n" +
+	"\x0eresource_types\x18\x01 \x03(\v23.gestalt.provider.v1.AuthorizationModelResourceTypeR\rresourceTypes*\xb9\x01\n" +
+	"\x16RelationshipTargetType\x12(\n" +
+	"$RELATIONSHIP_TARGET_TYPE_UNSPECIFIED\x10\x00\x12$\n" +
+	" RELATIONSHIP_TARGET_TYPE_SUBJECT\x10\x01\x12%\n" +
+	"!RELATIONSHIP_TARGET_TYPE_RESOURCE\x10\x02\x12(\n" +
+	"$RELATIONSHIP_TARGET_TYPE_SUBJECT_SET\x10\x03*e\n" +
+	"\vSourceLayer\x12\x1c\n" +
+	"\x18SOURCE_LAYER_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aSOURCE_LAYER_STATIC_CONFIG\x10\x01\x12\x18\n" +
+	"\x14SOURCE_LAYER_RUNTIME\x10\x022\x8f\b\n" +
+	"\x15AuthorizationProvider\x12r\n" +
+	"\x11ListRelationships\x12-.gestalt.provider.v1.ListRelationshipsRequest\x1a..gestalt.provider.v1.ListRelationshipsResponse\x12l\n" +
+	"\x0fAddRelationship\x12+.gestalt.provider.v1.AddRelationshipRequest\x1a,.gestalt.provider.v1.AddRelationshipResponse\x12u\n" +
+	"\x12DeleteRelationship\x12..gestalt.provider.v1.DeleteRelationshipRequest\x1a/.gestalt.provider.v1.DeleteRelationshipResponse\x12o\n" +
+	"\x10SetRelationships\x12,.gestalt.provider.v1.SetRelationshipsRequest\x1a-.gestalt.provider.v1.SetRelationshipsResponse\x12[\n" +
+	"\x11GetActiveModelRef\x12\x16.google.protobuf.Empty\x1a..gestalt.provider.v1.GetActiveModelRefResponse\x12i\n" +
+	"\x0eSetActiveModel\x12*.gestalt.provider.v1.SetActiveModelRequest\x1a+.gestalt.provider.v1.SetActiveModelResponse\x12\x93\x01\n" +
+	"\x1cListActiveModelResourceTypes\x128.gestalt.provider.v1.ListActiveModelResourceTypesRequest\x1a9.gestalt.provider.v1.ListActiveModelResourceTypesResponse\x12`\n" +
+	"\vCheckAccess\x12'.gestalt.provider.v1.CheckAccessRequest\x1a(.gestalt.provider.v1.CheckAccessResponse\x12l\n" +
+	"\x0fCheckAccessMany\x12+.gestalt.provider.v1.CheckAccessManyRequest\x1a,.gestalt.provider.v1.CheckAccessManyResponseB\xde\x01\n" +
 	"\x17com.gestalt.provider.v1B\x12AuthorizationProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -2922,152 +2105,113 @@ func file_v1_authorization_proto_rawDescGZIP() []byte {
 	return file_v1_authorization_proto_rawDescData
 }
 
-var file_v1_authorization_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
+var file_v1_authorization_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_v1_authorization_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_v1_authorization_proto_goTypes = []any{
-	(*Subject)(nil),                            // 0: gestalt.provider.v1.Subject
-	(*Resource)(nil),                           // 1: gestalt.provider.v1.Resource
-	(*SubjectSet)(nil),                         // 2: gestalt.provider.v1.SubjectSet
-	(*RelationshipTarget)(nil),                 // 3: gestalt.provider.v1.RelationshipTarget
-	(*Action)(nil),                             // 4: gestalt.provider.v1.Action
-	(*AccessEvaluationRequest)(nil),            // 5: gestalt.provider.v1.AccessEvaluationRequest
-	(*AccessDecision)(nil),                     // 6: gestalt.provider.v1.AccessDecision
-	(*AccessEvaluationsRequest)(nil),           // 7: gestalt.provider.v1.AccessEvaluationsRequest
-	(*AccessEvaluationsResponse)(nil),          // 8: gestalt.provider.v1.AccessEvaluationsResponse
-	(*ResourceSearchRequest)(nil),              // 9: gestalt.provider.v1.ResourceSearchRequest
-	(*ResourceSearchResponse)(nil),             // 10: gestalt.provider.v1.ResourceSearchResponse
-	(*SubjectSearchRequest)(nil),               // 11: gestalt.provider.v1.SubjectSearchRequest
-	(*SubjectSearchResponse)(nil),              // 12: gestalt.provider.v1.SubjectSearchResponse
-	(*EffectiveSubjectSearchRequest)(nil),      // 13: gestalt.provider.v1.EffectiveSubjectSearchRequest
-	(*EffectiveSubjectSearchResponse)(nil),     // 14: gestalt.provider.v1.EffectiveSubjectSearchResponse
-	(*ActionSearchRequest)(nil),                // 15: gestalt.provider.v1.ActionSearchRequest
-	(*ActionSearchResponse)(nil),               // 16: gestalt.provider.v1.ActionSearchResponse
-	(*AuthorizationMetadata)(nil),              // 17: gestalt.provider.v1.AuthorizationMetadata
-	(*Relationship)(nil),                       // 18: gestalt.provider.v1.Relationship
-	(*RelationshipKey)(nil),                    // 19: gestalt.provider.v1.RelationshipKey
-	(*ReadRelationshipsRequest)(nil),           // 20: gestalt.provider.v1.ReadRelationshipsRequest
-	(*ReadRelationshipsResponse)(nil),          // 21: gestalt.provider.v1.ReadRelationshipsResponse
-	(*WriteRelationshipsRequest)(nil),          // 22: gestalt.provider.v1.WriteRelationshipsRequest
-	(*AuthorizationModel)(nil),                 // 23: gestalt.provider.v1.AuthorizationModel
-	(*AuthorizationModelResourceType)(nil),     // 24: gestalt.provider.v1.AuthorizationModelResourceType
-	(*AuthorizationModelRelation)(nil),         // 25: gestalt.provider.v1.AuthorizationModelRelation
-	(*AuthorizationModelAction)(nil),           // 26: gestalt.provider.v1.AuthorizationModelAction
-	(*AuthorizationModelAllowedTarget)(nil),    // 27: gestalt.provider.v1.AuthorizationModelAllowedTarget
-	(*AuthorizationModelSubjectSetTarget)(nil), // 28: gestalt.provider.v1.AuthorizationModelSubjectSetTarget
-	(*AuthorizationModelRewrite)(nil),          // 29: gestalt.provider.v1.AuthorizationModelRewrite
-	(*AuthorizationModelRewriteThis)(nil),      // 30: gestalt.provider.v1.AuthorizationModelRewriteThis
-	(*AuthorizationModelComputedUserset)(nil),  // 31: gestalt.provider.v1.AuthorizationModelComputedUserset
-	(*AuthorizationModelTupleToUserset)(nil),   // 32: gestalt.provider.v1.AuthorizationModelTupleToUserset
-	(*AuthorizationModelRewriteUnion)(nil),     // 33: gestalt.provider.v1.AuthorizationModelRewriteUnion
-	(*AuthorizationModelRef)(nil),              // 34: gestalt.provider.v1.AuthorizationModelRef
-	(*ExpandRequest)(nil),                      // 35: gestalt.provider.v1.ExpandRequest
-	(*ExpandNode)(nil),                         // 36: gestalt.provider.v1.ExpandNode
-	(*ExpandResponse)(nil),                     // 37: gestalt.provider.v1.ExpandResponse
-	(*GetActiveModelResponse)(nil),             // 38: gestalt.provider.v1.GetActiveModelResponse
-	(*ListModelsRequest)(nil),                  // 39: gestalt.provider.v1.ListModelsRequest
-	(*ListModelsResponse)(nil),                 // 40: gestalt.provider.v1.ListModelsResponse
-	(*WriteModelRequest)(nil),                  // 41: gestalt.provider.v1.WriteModelRequest
-	(*structpb.Struct)(nil),                    // 42: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),              // 43: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),                      // 44: google.protobuf.Empty
+	(RelationshipTargetType)(0),                  // 0: gestalt.provider.v1.RelationshipTargetType
+	(SourceLayer)(0),                             // 1: gestalt.provider.v1.SourceLayer
+	(*Subject)(nil),                              // 2: gestalt.provider.v1.Subject
+	(*Action)(nil),                               // 3: gestalt.provider.v1.Action
+	(*Resource)(nil),                             // 4: gestalt.provider.v1.Resource
+	(*CheckAccessRequest)(nil),                   // 5: gestalt.provider.v1.CheckAccessRequest
+	(*CheckAccessResponse)(nil),                  // 6: gestalt.provider.v1.CheckAccessResponse
+	(*CheckAccessManyRequest)(nil),               // 7: gestalt.provider.v1.CheckAccessManyRequest
+	(*CheckAccessManyResponse)(nil),              // 8: gestalt.provider.v1.CheckAccessManyResponse
+	(*ListRelationshipsRequest)(nil),             // 9: gestalt.provider.v1.ListRelationshipsRequest
+	(*RelationshipFilter)(nil),                   // 10: gestalt.provider.v1.RelationshipFilter
+	(*ListRelationshipsResponse)(nil),            // 11: gestalt.provider.v1.ListRelationshipsResponse
+	(*AddRelationshipRequest)(nil),               // 12: gestalt.provider.v1.AddRelationshipRequest
+	(*AddRelationshipResponse)(nil),              // 13: gestalt.provider.v1.AddRelationshipResponse
+	(*DeleteRelationshipRequest)(nil),            // 14: gestalt.provider.v1.DeleteRelationshipRequest
+	(*DeleteRelationshipResponse)(nil),           // 15: gestalt.provider.v1.DeleteRelationshipResponse
+	(*SetRelationshipsRequest)(nil),              // 16: gestalt.provider.v1.SetRelationshipsRequest
+	(*SetRelationshipsResponse)(nil),             // 17: gestalt.provider.v1.SetRelationshipsResponse
+	(*Relationship)(nil),                         // 18: gestalt.provider.v1.Relationship
+	(*RelationshipTuple)(nil),                    // 19: gestalt.provider.v1.RelationshipTuple
+	(*RelationshipTarget)(nil),                   // 20: gestalt.provider.v1.RelationshipTarget
+	(*SubjectSet)(nil),                           // 21: gestalt.provider.v1.SubjectSet
+	(*AuthorizationModel)(nil),                   // 22: gestalt.provider.v1.AuthorizationModel
+	(*AuthorizationModelRef)(nil),                // 23: gestalt.provider.v1.AuthorizationModelRef
+	(*AuthorizationModelResourceType)(nil),       // 24: gestalt.provider.v1.AuthorizationModelResourceType
+	(*AuthorizationModelRelation)(nil),           // 25: gestalt.provider.v1.AuthorizationModelRelation
+	(*AuthorizationModelAction)(nil),             // 26: gestalt.provider.v1.AuthorizationModelAction
+	(*AuthorizationModelAllowedTarget)(nil),      // 27: gestalt.provider.v1.AuthorizationModelAllowedTarget
+	(*SubjectSetType)(nil),                       // 28: gestalt.provider.v1.SubjectSetType
+	(*GetActiveModelRefResponse)(nil),            // 29: gestalt.provider.v1.GetActiveModelRefResponse
+	(*SetActiveModelRequest)(nil),                // 30: gestalt.provider.v1.SetActiveModelRequest
+	(*SetActiveModelResponse)(nil),               // 31: gestalt.provider.v1.SetActiveModelResponse
+	(*ListActiveModelResourceTypesRequest)(nil),  // 32: gestalt.provider.v1.ListActiveModelResourceTypesRequest
+	(*AuthorizationModelResourceTypeFilter)(nil), // 33: gestalt.provider.v1.AuthorizationModelResourceTypeFilter
+	(*ListActiveModelResourceTypesResponse)(nil), // 34: gestalt.provider.v1.ListActiveModelResourceTypesResponse
+	(*structpb.Struct)(nil),                      // 35: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),                // 36: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),                        // 37: google.protobuf.Empty
 }
 var file_v1_authorization_proto_depIdxs = []int32{
-	42, // 0: gestalt.provider.v1.Subject.properties:type_name -> google.protobuf.Struct
-	42, // 1: gestalt.provider.v1.Resource.properties:type_name -> google.protobuf.Struct
-	1,  // 2: gestalt.provider.v1.SubjectSet.resource:type_name -> gestalt.provider.v1.Resource
-	0,  // 3: gestalt.provider.v1.RelationshipTarget.subject:type_name -> gestalt.provider.v1.Subject
-	1,  // 4: gestalt.provider.v1.RelationshipTarget.resource:type_name -> gestalt.provider.v1.Resource
-	2,  // 5: gestalt.provider.v1.RelationshipTarget.subject_set:type_name -> gestalt.provider.v1.SubjectSet
-	42, // 6: gestalt.provider.v1.Action.properties:type_name -> google.protobuf.Struct
-	0,  // 7: gestalt.provider.v1.AccessEvaluationRequest.subject:type_name -> gestalt.provider.v1.Subject
-	4,  // 8: gestalt.provider.v1.AccessEvaluationRequest.action:type_name -> gestalt.provider.v1.Action
-	1,  // 9: gestalt.provider.v1.AccessEvaluationRequest.resource:type_name -> gestalt.provider.v1.Resource
-	42, // 10: gestalt.provider.v1.AccessEvaluationRequest.context:type_name -> google.protobuf.Struct
-	42, // 11: gestalt.provider.v1.AccessDecision.context:type_name -> google.protobuf.Struct
-	5,  // 12: gestalt.provider.v1.AccessEvaluationsRequest.requests:type_name -> gestalt.provider.v1.AccessEvaluationRequest
-	6,  // 13: gestalt.provider.v1.AccessEvaluationsResponse.decisions:type_name -> gestalt.provider.v1.AccessDecision
-	0,  // 14: gestalt.provider.v1.ResourceSearchRequest.subject:type_name -> gestalt.provider.v1.Subject
-	4,  // 15: gestalt.provider.v1.ResourceSearchRequest.action:type_name -> gestalt.provider.v1.Action
-	42, // 16: gestalt.provider.v1.ResourceSearchRequest.context:type_name -> google.protobuf.Struct
-	1,  // 17: gestalt.provider.v1.ResourceSearchResponse.resources:type_name -> gestalt.provider.v1.Resource
-	1,  // 18: gestalt.provider.v1.SubjectSearchRequest.resource:type_name -> gestalt.provider.v1.Resource
-	4,  // 19: gestalt.provider.v1.SubjectSearchRequest.action:type_name -> gestalt.provider.v1.Action
-	42, // 20: gestalt.provider.v1.SubjectSearchRequest.context:type_name -> google.protobuf.Struct
-	0,  // 21: gestalt.provider.v1.SubjectSearchResponse.subjects:type_name -> gestalt.provider.v1.Subject
-	1,  // 22: gestalt.provider.v1.EffectiveSubjectSearchRequest.resource:type_name -> gestalt.provider.v1.Resource
-	4,  // 23: gestalt.provider.v1.EffectiveSubjectSearchRequest.action:type_name -> gestalt.provider.v1.Action
-	42, // 24: gestalt.provider.v1.EffectiveSubjectSearchRequest.context:type_name -> google.protobuf.Struct
-	3,  // 25: gestalt.provider.v1.EffectiveSubjectSearchResponse.targets:type_name -> gestalt.provider.v1.RelationshipTarget
-	0,  // 26: gestalt.provider.v1.ActionSearchRequest.subject:type_name -> gestalt.provider.v1.Subject
-	1,  // 27: gestalt.provider.v1.ActionSearchRequest.resource:type_name -> gestalt.provider.v1.Resource
-	42, // 28: gestalt.provider.v1.ActionSearchRequest.context:type_name -> google.protobuf.Struct
-	4,  // 29: gestalt.provider.v1.ActionSearchResponse.actions:type_name -> gestalt.provider.v1.Action
-	0,  // 30: gestalt.provider.v1.Relationship.subject:type_name -> gestalt.provider.v1.Subject
-	1,  // 31: gestalt.provider.v1.Relationship.resource:type_name -> gestalt.provider.v1.Resource
-	42, // 32: gestalt.provider.v1.Relationship.properties:type_name -> google.protobuf.Struct
-	3,  // 33: gestalt.provider.v1.Relationship.target:type_name -> gestalt.provider.v1.RelationshipTarget
-	0,  // 34: gestalt.provider.v1.RelationshipKey.subject:type_name -> gestalt.provider.v1.Subject
-	1,  // 35: gestalt.provider.v1.RelationshipKey.resource:type_name -> gestalt.provider.v1.Resource
-	3,  // 36: gestalt.provider.v1.RelationshipKey.target:type_name -> gestalt.provider.v1.RelationshipTarget
-	0,  // 37: gestalt.provider.v1.ReadRelationshipsRequest.subject:type_name -> gestalt.provider.v1.Subject
-	1,  // 38: gestalt.provider.v1.ReadRelationshipsRequest.resource:type_name -> gestalt.provider.v1.Resource
-	3,  // 39: gestalt.provider.v1.ReadRelationshipsRequest.target:type_name -> gestalt.provider.v1.RelationshipTarget
-	18, // 40: gestalt.provider.v1.ReadRelationshipsResponse.relationships:type_name -> gestalt.provider.v1.Relationship
-	18, // 41: gestalt.provider.v1.WriteRelationshipsRequest.writes:type_name -> gestalt.provider.v1.Relationship
-	19, // 42: gestalt.provider.v1.WriteRelationshipsRequest.deletes:type_name -> gestalt.provider.v1.RelationshipKey
-	24, // 43: gestalt.provider.v1.AuthorizationModel.resource_types:type_name -> gestalt.provider.v1.AuthorizationModelResourceType
-	25, // 44: gestalt.provider.v1.AuthorizationModelResourceType.relations:type_name -> gestalt.provider.v1.AuthorizationModelRelation
-	26, // 45: gestalt.provider.v1.AuthorizationModelResourceType.actions:type_name -> gestalt.provider.v1.AuthorizationModelAction
-	27, // 46: gestalt.provider.v1.AuthorizationModelRelation.allowed_targets:type_name -> gestalt.provider.v1.AuthorizationModelAllowedTarget
-	29, // 47: gestalt.provider.v1.AuthorizationModelRelation.rewrite:type_name -> gestalt.provider.v1.AuthorizationModelRewrite
-	29, // 48: gestalt.provider.v1.AuthorizationModelAction.rewrite:type_name -> gestalt.provider.v1.AuthorizationModelRewrite
-	28, // 49: gestalt.provider.v1.AuthorizationModelAllowedTarget.subject_set:type_name -> gestalt.provider.v1.AuthorizationModelSubjectSetTarget
-	30, // 50: gestalt.provider.v1.AuthorizationModelRewrite.this:type_name -> gestalt.provider.v1.AuthorizationModelRewriteThis
-	31, // 51: gestalt.provider.v1.AuthorizationModelRewrite.computed_userset:type_name -> gestalt.provider.v1.AuthorizationModelComputedUserset
-	32, // 52: gestalt.provider.v1.AuthorizationModelRewrite.tuple_to_userset:type_name -> gestalt.provider.v1.AuthorizationModelTupleToUserset
-	33, // 53: gestalt.provider.v1.AuthorizationModelRewrite.union:type_name -> gestalt.provider.v1.AuthorizationModelRewriteUnion
-	29, // 54: gestalt.provider.v1.AuthorizationModelRewriteUnion.children:type_name -> gestalt.provider.v1.AuthorizationModelRewrite
-	43, // 55: gestalt.provider.v1.AuthorizationModelRef.created_at:type_name -> google.protobuf.Timestamp
-	1,  // 56: gestalt.provider.v1.ExpandRequest.resource:type_name -> gestalt.provider.v1.Resource
-	42, // 57: gestalt.provider.v1.ExpandRequest.context:type_name -> google.protobuf.Struct
-	3,  // 58: gestalt.provider.v1.ExpandNode.target:type_name -> gestalt.provider.v1.RelationshipTarget
-	36, // 59: gestalt.provider.v1.ExpandNode.children:type_name -> gestalt.provider.v1.ExpandNode
-	36, // 60: gestalt.provider.v1.ExpandResponse.root:type_name -> gestalt.provider.v1.ExpandNode
-	34, // 61: gestalt.provider.v1.GetActiveModelResponse.model:type_name -> gestalt.provider.v1.AuthorizationModelRef
-	34, // 62: gestalt.provider.v1.ListModelsResponse.models:type_name -> gestalt.provider.v1.AuthorizationModelRef
-	23, // 63: gestalt.provider.v1.WriteModelRequest.model:type_name -> gestalt.provider.v1.AuthorizationModel
-	5,  // 64: gestalt.provider.v1.AuthorizationProvider.Evaluate:input_type -> gestalt.provider.v1.AccessEvaluationRequest
-	7,  // 65: gestalt.provider.v1.AuthorizationProvider.EvaluateMany:input_type -> gestalt.provider.v1.AccessEvaluationsRequest
-	9,  // 66: gestalt.provider.v1.AuthorizationProvider.SearchResources:input_type -> gestalt.provider.v1.ResourceSearchRequest
-	11, // 67: gestalt.provider.v1.AuthorizationProvider.SearchSubjects:input_type -> gestalt.provider.v1.SubjectSearchRequest
-	9,  // 68: gestalt.provider.v1.AuthorizationProvider.EffectiveSearchResources:input_type -> gestalt.provider.v1.ResourceSearchRequest
-	13, // 69: gestalt.provider.v1.AuthorizationProvider.EffectiveSearchSubjects:input_type -> gestalt.provider.v1.EffectiveSubjectSearchRequest
-	15, // 70: gestalt.provider.v1.AuthorizationProvider.SearchActions:input_type -> gestalt.provider.v1.ActionSearchRequest
-	35, // 71: gestalt.provider.v1.AuthorizationProvider.Expand:input_type -> gestalt.provider.v1.ExpandRequest
-	44, // 72: gestalt.provider.v1.AuthorizationProvider.GetMetadata:input_type -> google.protobuf.Empty
-	20, // 73: gestalt.provider.v1.AuthorizationProvider.ReadRelationships:input_type -> gestalt.provider.v1.ReadRelationshipsRequest
-	22, // 74: gestalt.provider.v1.AuthorizationProvider.WriteRelationships:input_type -> gestalt.provider.v1.WriteRelationshipsRequest
-	44, // 75: gestalt.provider.v1.AuthorizationProvider.GetActiveModel:input_type -> google.protobuf.Empty
-	39, // 76: gestalt.provider.v1.AuthorizationProvider.ListModels:input_type -> gestalt.provider.v1.ListModelsRequest
-	41, // 77: gestalt.provider.v1.AuthorizationProvider.WriteModel:input_type -> gestalt.provider.v1.WriteModelRequest
-	6,  // 78: gestalt.provider.v1.AuthorizationProvider.Evaluate:output_type -> gestalt.provider.v1.AccessDecision
-	8,  // 79: gestalt.provider.v1.AuthorizationProvider.EvaluateMany:output_type -> gestalt.provider.v1.AccessEvaluationsResponse
-	10, // 80: gestalt.provider.v1.AuthorizationProvider.SearchResources:output_type -> gestalt.provider.v1.ResourceSearchResponse
-	12, // 81: gestalt.provider.v1.AuthorizationProvider.SearchSubjects:output_type -> gestalt.provider.v1.SubjectSearchResponse
-	10, // 82: gestalt.provider.v1.AuthorizationProvider.EffectiveSearchResources:output_type -> gestalt.provider.v1.ResourceSearchResponse
-	14, // 83: gestalt.provider.v1.AuthorizationProvider.EffectiveSearchSubjects:output_type -> gestalt.provider.v1.EffectiveSubjectSearchResponse
-	16, // 84: gestalt.provider.v1.AuthorizationProvider.SearchActions:output_type -> gestalt.provider.v1.ActionSearchResponse
-	37, // 85: gestalt.provider.v1.AuthorizationProvider.Expand:output_type -> gestalt.provider.v1.ExpandResponse
-	17, // 86: gestalt.provider.v1.AuthorizationProvider.GetMetadata:output_type -> gestalt.provider.v1.AuthorizationMetadata
-	21, // 87: gestalt.provider.v1.AuthorizationProvider.ReadRelationships:output_type -> gestalt.provider.v1.ReadRelationshipsResponse
-	44, // 88: gestalt.provider.v1.AuthorizationProvider.WriteRelationships:output_type -> google.protobuf.Empty
-	38, // 89: gestalt.provider.v1.AuthorizationProvider.GetActiveModel:output_type -> gestalt.provider.v1.GetActiveModelResponse
-	40, // 90: gestalt.provider.v1.AuthorizationProvider.ListModels:output_type -> gestalt.provider.v1.ListModelsResponse
-	34, // 91: gestalt.provider.v1.AuthorizationProvider.WriteModel:output_type -> gestalt.provider.v1.AuthorizationModelRef
-	78, // [78:92] is the sub-list for method output_type
-	64, // [64:78] is the sub-list for method input_type
-	64, // [64:64] is the sub-list for extension type_name
-	64, // [64:64] is the sub-list for extension extendee
-	0,  // [0:64] is the sub-list for field type_name
+	35, // 0: gestalt.provider.v1.Subject.properties:type_name -> google.protobuf.Struct
+	35, // 1: gestalt.provider.v1.Action.properties:type_name -> google.protobuf.Struct
+	35, // 2: gestalt.provider.v1.Resource.properties:type_name -> google.protobuf.Struct
+	2,  // 3: gestalt.provider.v1.CheckAccessRequest.subject:type_name -> gestalt.provider.v1.Subject
+	3,  // 4: gestalt.provider.v1.CheckAccessRequest.action:type_name -> gestalt.provider.v1.Action
+	4,  // 5: gestalt.provider.v1.CheckAccessRequest.resource:type_name -> gestalt.provider.v1.Resource
+	5,  // 6: gestalt.provider.v1.CheckAccessManyRequest.requests:type_name -> gestalt.provider.v1.CheckAccessRequest
+	6,  // 7: gestalt.provider.v1.CheckAccessManyResponse.decisions:type_name -> gestalt.provider.v1.CheckAccessResponse
+	10, // 8: gestalt.provider.v1.ListRelationshipsRequest.filter:type_name -> gestalt.provider.v1.RelationshipFilter
+	20, // 9: gestalt.provider.v1.RelationshipFilter.target:type_name -> gestalt.provider.v1.RelationshipTarget
+	4,  // 10: gestalt.provider.v1.RelationshipFilter.resource:type_name -> gestalt.provider.v1.Resource
+	0,  // 11: gestalt.provider.v1.RelationshipFilter.target_type:type_name -> gestalt.provider.v1.RelationshipTargetType
+	1,  // 12: gestalt.provider.v1.RelationshipFilter.source_layer:type_name -> gestalt.provider.v1.SourceLayer
+	18, // 13: gestalt.provider.v1.ListRelationshipsResponse.relationships:type_name -> gestalt.provider.v1.Relationship
+	18, // 14: gestalt.provider.v1.AddRelationshipRequest.relationship:type_name -> gestalt.provider.v1.Relationship
+	18, // 15: gestalt.provider.v1.AddRelationshipResponse.relationship:type_name -> gestalt.provider.v1.Relationship
+	19, // 16: gestalt.provider.v1.DeleteRelationshipRequest.relationship_tuple:type_name -> gestalt.provider.v1.RelationshipTuple
+	18, // 17: gestalt.provider.v1.SetRelationshipsRequest.relationships:type_name -> gestalt.provider.v1.Relationship
+	18, // 18: gestalt.provider.v1.SetRelationshipsResponse.relationships:type_name -> gestalt.provider.v1.Relationship
+	19, // 19: gestalt.provider.v1.Relationship.tuple:type_name -> gestalt.provider.v1.RelationshipTuple
+	35, // 20: gestalt.provider.v1.Relationship.properties:type_name -> google.protobuf.Struct
+	1,  // 21: gestalt.provider.v1.Relationship.source_layer:type_name -> gestalt.provider.v1.SourceLayer
+	20, // 22: gestalt.provider.v1.RelationshipTuple.target:type_name -> gestalt.provider.v1.RelationshipTarget
+	4,  // 23: gestalt.provider.v1.RelationshipTuple.resource:type_name -> gestalt.provider.v1.Resource
+	2,  // 24: gestalt.provider.v1.RelationshipTarget.subject:type_name -> gestalt.provider.v1.Subject
+	4,  // 25: gestalt.provider.v1.RelationshipTarget.resource:type_name -> gestalt.provider.v1.Resource
+	21, // 26: gestalt.provider.v1.RelationshipTarget.subject_set:type_name -> gestalt.provider.v1.SubjectSet
+	4,  // 27: gestalt.provider.v1.SubjectSet.resource:type_name -> gestalt.provider.v1.Resource
+	24, // 28: gestalt.provider.v1.AuthorizationModel.resource_types:type_name -> gestalt.provider.v1.AuthorizationModelResourceType
+	36, // 29: gestalt.provider.v1.AuthorizationModelRef.created_at:type_name -> google.protobuf.Timestamp
+	25, // 30: gestalt.provider.v1.AuthorizationModelResourceType.relations:type_name -> gestalt.provider.v1.AuthorizationModelRelation
+	26, // 31: gestalt.provider.v1.AuthorizationModelResourceType.actions:type_name -> gestalt.provider.v1.AuthorizationModelAction
+	1,  // 32: gestalt.provider.v1.AuthorizationModelResourceType.source_layer:type_name -> gestalt.provider.v1.SourceLayer
+	27, // 33: gestalt.provider.v1.AuthorizationModelRelation.allowed_targets:type_name -> gestalt.provider.v1.AuthorizationModelAllowedTarget
+	28, // 34: gestalt.provider.v1.AuthorizationModelAllowedTarget.subject_set_type:type_name -> gestalt.provider.v1.SubjectSetType
+	23, // 35: gestalt.provider.v1.GetActiveModelRefResponse.model:type_name -> gestalt.provider.v1.AuthorizationModelRef
+	22, // 36: gestalt.provider.v1.SetActiveModelRequest.model:type_name -> gestalt.provider.v1.AuthorizationModel
+	23, // 37: gestalt.provider.v1.SetActiveModelResponse.model:type_name -> gestalt.provider.v1.AuthorizationModelRef
+	33, // 38: gestalt.provider.v1.ListActiveModelResourceTypesRequest.filter:type_name -> gestalt.provider.v1.AuthorizationModelResourceTypeFilter
+	1,  // 39: gestalt.provider.v1.AuthorizationModelResourceTypeFilter.source_layer:type_name -> gestalt.provider.v1.SourceLayer
+	24, // 40: gestalt.provider.v1.ListActiveModelResourceTypesResponse.resource_types:type_name -> gestalt.provider.v1.AuthorizationModelResourceType
+	9,  // 41: gestalt.provider.v1.AuthorizationProvider.ListRelationships:input_type -> gestalt.provider.v1.ListRelationshipsRequest
+	12, // 42: gestalt.provider.v1.AuthorizationProvider.AddRelationship:input_type -> gestalt.provider.v1.AddRelationshipRequest
+	14, // 43: gestalt.provider.v1.AuthorizationProvider.DeleteRelationship:input_type -> gestalt.provider.v1.DeleteRelationshipRequest
+	16, // 44: gestalt.provider.v1.AuthorizationProvider.SetRelationships:input_type -> gestalt.provider.v1.SetRelationshipsRequest
+	37, // 45: gestalt.provider.v1.AuthorizationProvider.GetActiveModelRef:input_type -> google.protobuf.Empty
+	30, // 46: gestalt.provider.v1.AuthorizationProvider.SetActiveModel:input_type -> gestalt.provider.v1.SetActiveModelRequest
+	32, // 47: gestalt.provider.v1.AuthorizationProvider.ListActiveModelResourceTypes:input_type -> gestalt.provider.v1.ListActiveModelResourceTypesRequest
+	5,  // 48: gestalt.provider.v1.AuthorizationProvider.CheckAccess:input_type -> gestalt.provider.v1.CheckAccessRequest
+	7,  // 49: gestalt.provider.v1.AuthorizationProvider.CheckAccessMany:input_type -> gestalt.provider.v1.CheckAccessManyRequest
+	11, // 50: gestalt.provider.v1.AuthorizationProvider.ListRelationships:output_type -> gestalt.provider.v1.ListRelationshipsResponse
+	13, // 51: gestalt.provider.v1.AuthorizationProvider.AddRelationship:output_type -> gestalt.provider.v1.AddRelationshipResponse
+	15, // 52: gestalt.provider.v1.AuthorizationProvider.DeleteRelationship:output_type -> gestalt.provider.v1.DeleteRelationshipResponse
+	17, // 53: gestalt.provider.v1.AuthorizationProvider.SetRelationships:output_type -> gestalt.provider.v1.SetRelationshipsResponse
+	29, // 54: gestalt.provider.v1.AuthorizationProvider.GetActiveModelRef:output_type -> gestalt.provider.v1.GetActiveModelRefResponse
+	31, // 55: gestalt.provider.v1.AuthorizationProvider.SetActiveModel:output_type -> gestalt.provider.v1.SetActiveModelResponse
+	34, // 56: gestalt.provider.v1.AuthorizationProvider.ListActiveModelResourceTypes:output_type -> gestalt.provider.v1.ListActiveModelResourceTypesResponse
+	6,  // 57: gestalt.provider.v1.AuthorizationProvider.CheckAccess:output_type -> gestalt.provider.v1.CheckAccessResponse
+	8,  // 58: gestalt.provider.v1.AuthorizationProvider.CheckAccessMany:output_type -> gestalt.provider.v1.CheckAccessManyResponse
+	50, // [50:59] is the sub-list for method output_type
+	41, // [41:50] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_v1_authorization_proto_init() }
@@ -3075,34 +2219,29 @@ func file_v1_authorization_proto_init() {
 	if File_v1_authorization_proto != nil {
 		return
 	}
-	file_v1_authorization_proto_msgTypes[3].OneofWrappers = []any{
+	file_v1_authorization_proto_msgTypes[18].OneofWrappers = []any{
 		(*RelationshipTarget_Subject)(nil),
 		(*RelationshipTarget_Resource)(nil),
 		(*RelationshipTarget_SubjectSet)(nil),
 	}
-	file_v1_authorization_proto_msgTypes[27].OneofWrappers = []any{
+	file_v1_authorization_proto_msgTypes[25].OneofWrappers = []any{
 		(*AuthorizationModelAllowedTarget_SubjectType)(nil),
 		(*AuthorizationModelAllowedTarget_ResourceType)(nil),
-		(*AuthorizationModelAllowedTarget_SubjectSet)(nil),
-	}
-	file_v1_authorization_proto_msgTypes[29].OneofWrappers = []any{
-		(*AuthorizationModelRewrite_This)(nil),
-		(*AuthorizationModelRewrite_ComputedUserset)(nil),
-		(*AuthorizationModelRewrite_TupleToUserset)(nil),
-		(*AuthorizationModelRewrite_Union)(nil),
+		(*AuthorizationModelAllowedTarget_SubjectSetType)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_authorization_proto_rawDesc), len(file_v1_authorization_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   42,
+			NumEnums:      2,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_v1_authorization_proto_goTypes,
 		DependencyIndexes: file_v1_authorization_proto_depIdxs,
+		EnumInfos:         file_v1_authorization_proto_enumTypes,
 		MessageInfos:      file_v1_authorization_proto_msgTypes,
 	}.Build()
 	File_v1_authorization_proto = out.File
