@@ -185,45 +185,6 @@ class _AuthoredS3Provider(S3Provider):
         )
 
 
-class _LegacyS3Provider(S3Provider):
-    def HeadObject(self, request, _context):
-        return s3_pb2.HeadObjectResponse(
-            meta=s3_pb2.S3ObjectMeta(
-                ref=request.ref,
-                etag="legacy",
-                size=6,
-                content_type="text/plain",
-            )
-        )
-
-    def ReadObject(self, request, _context):
-        yield s3_pb2.ReadObjectChunk(
-            meta=s3_pb2.S3ObjectMeta(
-                ref=request.ref,
-                etag="legacy-read",
-                size=6,
-                content_type="text/plain",
-            )
-        )
-        yield s3_pb2.ReadObjectChunk(data=b"legacy")
-
-    def WriteObject(self, request_iterator, _context):
-        first = next(request_iterator)
-        body = b"".join(
-            bytes(message.data)
-            for message in request_iterator
-            if message.WhichOneof("msg") == "data"
-        )
-        return s3_pb2.WriteObjectResponse(
-            meta=s3_pb2.S3ObjectMeta(
-                ref=first.open.ref,
-                etag="legacy-write",
-                size=len(body),
-                content_type=first.open.content_type,
-            )
-        )
-
-
 class _RunningProvider:
     def __init__(self, provider: S3Provider) -> None:
         _runtime._ensure_grpc_runtime()
@@ -439,58 +400,6 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
         self.assertIsInstance(target, AppProviderAdapter)
         adapter = cast(AppProviderAdapter, target)
         self.assertEqual(adapter.kind, ProviderKind.S3)
-
-
-class S3LegacyProviderRuntimeTests(unittest.TestCase):
-    def test_raw_generated_unary_method_fallback_still_serves_legacy_provider(
-        self,
-    ) -> None:
-        running = _RunningProvider(_LegacyS3Provider())
-        self.addCleanup(running.close)
-        stub = s3_pb2_grpc.S3Stub(running.channel)
-
-        response = stub.HeadObject(
-            s3_pb2.HeadObjectRequest(
-                ref=s3_pb2.S3ObjectRef(key="object.txt")
-            )
-        )
-
-        self.assertEqual(response.meta.etag, "legacy")
-        self.assertEqual(response.meta.ref.key, "object.txt")
-
-    def test_raw_generated_streaming_method_fallback_still_serves_legacy_provider(
-        self,
-    ) -> None:
-        running = _RunningProvider(_LegacyS3Provider())
-        self.addCleanup(running.close)
-        stub = s3_pb2_grpc.S3Stub(running.channel)
-
-        read_frames = list(
-            stub.ReadObject(
-                s3_pb2.ReadObjectRequest(
-                    ref=s3_pb2.S3ObjectRef(key="object.txt")
-                )
-            )
-        )
-        self.assertEqual(read_frames[0].meta.etag, "legacy-read")
-        self.assertEqual(read_frames[1].data, b"legacy")
-
-        written = stub.WriteObject(
-            iter(
-                [
-                    s3_pb2.WriteObjectRequest(
-                        open=s3_pb2.WriteObjectOpen(
-                            ref=s3_pb2.S3ObjectRef(key="written.txt"),
-                            content_type="text/plain",
-                        )
-                    ),
-                    s3_pb2.WriteObjectRequest(data=b"leg"),
-                    s3_pb2.WriteObjectRequest(data=b"acy"),
-                ]
-            )
-        )
-        self.assertEqual(written.meta.etag, "legacy-write")
-        self.assertEqual(written.meta.size, 6)
 
 
 if __name__ == "__main__":

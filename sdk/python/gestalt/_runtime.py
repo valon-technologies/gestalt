@@ -544,19 +544,6 @@ def _register_s3_services(server: Any, provider: AppProvider) -> None:
 def _s3_servicer(*, provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
     s3_provider = cast(S3Provider, provider)
-    legacy = _service_wrapper(
-        provider,
-        s3_pb2_grpc.S3Servicer,
-        (
-            "HeadObject",
-            "ReadObject",
-            "WriteObject",
-            "DeleteObject",
-            "ListObjects",
-            "CopyObject",
-            "PresignObject",
-        ),
-    )
 
     class S3Servicer(s3_pb2_grpc.S3Servicer):
         def __init__(self) -> None:
@@ -564,10 +551,6 @@ def _s3_servicer(*, provider: AppProvider) -> Any:
 
         @_s3_grpc_handler("s3 head object")
         def HeadObject(self, request: Any, context: Any) -> Any:
-            if handler := _s3_legacy_handler(
-                s3_provider, legacy, "HeadObject", "head_object"
-            ):
-                return handler(request, context)
             meta = s3_provider.head_object(
                 _s3_native._object_ref_from_proto(request.ref)
             )
@@ -576,12 +559,6 @@ def _s3_servicer(*, provider: AppProvider) -> Any:
             )
 
         def ReadObject(self, request: Any, context: Any) -> Any:
-            if handler := _s3_legacy_handler(
-                s3_provider, legacy, "ReadObject", "read_object"
-            ):
-                yield from handler(request, context)
-                return
-
             body: Any = None
             try:
                 result = s3_provider.read_object(
@@ -602,11 +579,6 @@ def _s3_servicer(*, provider: AppProvider) -> Any:
 
         @_s3_grpc_handler("s3 write object")
         def WriteObject(self, request_iterator: Any, context: Any) -> Any:
-            if handler := _s3_legacy_handler(
-                s3_provider, legacy, "WriteObject", "write_object"
-            ):
-                return handler(request_iterator, context)
-
             try:
                 first = next(request_iterator)
             except StopIteration:
@@ -635,19 +607,11 @@ def _s3_servicer(*, provider: AppProvider) -> Any:
 
         @_s3_grpc_handler("s3 delete object")
         def DeleteObject(self, request: Any, context: Any) -> Any:
-            if handler := _s3_legacy_handler(
-                s3_provider, legacy, "DeleteObject", "delete_object"
-            ):
-                return handler(request, context)
             s3_provider.delete_object(_s3_native._object_ref_from_proto(request.ref))
             return empty_pb2.Empty()
 
         @_s3_grpc_handler("s3 list objects")
         def ListObjects(self, request: Any, context: Any) -> Any:
-            if handler := _s3_legacy_handler(
-                s3_provider, legacy, "ListObjects", "list_objects"
-            ):
-                return handler(request, context)
             page = s3_provider.list_objects(
                 _s3_native._list_options_from_proto(request)
             )
@@ -655,10 +619,6 @@ def _s3_servicer(*, provider: AppProvider) -> Any:
 
         @_s3_grpc_handler("s3 copy object")
         def CopyObject(self, request: Any, context: Any) -> Any:
-            if handler := _s3_legacy_handler(
-                s3_provider, legacy, "CopyObject", "copy_object"
-            ):
-                return handler(request, context)
             meta = s3_provider.copy_object(
                 _s3_native._object_ref_from_proto(request.source),
                 _s3_native._object_ref_from_proto(request.destination),
@@ -670,10 +630,6 @@ def _s3_servicer(*, provider: AppProvider) -> Any:
 
         @_s3_grpc_handler("s3 presign object")
         def PresignObject(self, request: Any, context: Any) -> Any:
-            if handler := _s3_legacy_handler(
-                s3_provider, legacy, "PresignObject", "presign_object"
-            ):
-                return handler(request, context)
             result = s3_provider.presign_object(
                 _s3_native._object_ref_from_proto(request.ref),
                 _s3_native._presign_options_from_proto(request),
@@ -681,19 +637,6 @@ def _s3_servicer(*, provider: AppProvider) -> Any:
             return _s3_native._presign_result_to_proto(result)
 
     return S3Servicer()
-
-
-def _s3_legacy_handler(
-    provider: S3Provider,
-    legacy: Any,
-    rpc_method_name: str,
-    sdk_method_name: str,
-) -> Any:
-    if _provider_overrides(provider, sdk_method_name, S3Provider):
-        return None
-    if getattr(provider, rpc_method_name, None) is None:
-        return None
-    return getattr(legacy, rpc_method_name)
 
 
 def _s3_grpc_handler(label: str):
@@ -1466,50 +1409,6 @@ def _register_cache_services(server: Any, provider: AppProvider) -> None:
         _cache_servicer(provider=provider),
         server,
     )
-
-
-def _service_wrapper(
-    provider: AppProvider,
-    base_cls: type[Any],
-    method_names: tuple[str | tuple[str, str], ...],
-) -> Any:
-    methods: dict[str, Any] = {"__slots__": ("_provider",)}
-
-    def __init__(self, inner: AppProvider) -> None:
-        self._provider = inner
-
-    methods["__init__"] = __init__
-
-    for method in method_names:
-        if isinstance(method, tuple):
-            method_name, sdk_method_name = method
-        else:
-            method_name = sdk_method_name = method
-        base_method = getattr(base_cls, method_name)
-
-        def _delegated(
-            self,
-            *args: Any,
-            _method_name: str = method_name,
-            _sdk_method_name: str = sdk_method_name,
-            _base_method: Any = base_method,
-        ) -> Any:
-            handler = getattr(self._provider, _sdk_method_name, None)
-            if handler is not None:
-                return _call_provider_handler(handler, *args)
-            handler = getattr(self._provider, _method_name, None)
-            if handler is None:
-                return _base_method(self, *args)
-            return handler(*args)
-
-        methods[method_name] = _delegated
-
-    wrapped_cls = type(
-        f"Wrapped{base_cls.__name__}",
-        (base_cls,),
-        methods,
-    )
-    return wrapped_cls(provider)
 
 
 def _call_provider_handler(handler: Any, *args: Any) -> Any:

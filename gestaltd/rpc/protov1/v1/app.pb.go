@@ -2209,7 +2209,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
 	"\rdefault_value\x18\x03 \x01(\tR\fdefaultValue\x12\x12\n" +
 	"\x04from\x18\x04 \x01(\tR\x04from\x12\x14\n" +
-	"\x05field\x18\x05 \x01(\tR\x05field\"\xb0\x05\n" +
+	"\x05field\x18\x05 \x01(\tR\x05field\"\x93\x05\n" +
 	"\x10ProviderMetadata\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
@@ -2224,8 +2224,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x14max_protocol_version\x18\f \x01(\x05R\x12maxProtocolVersion\x1al\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12=\n" +
-	"\x05value\x18\x02 \x01(\v2'.gestalt.provider.v1.ConnectionParamDefR\x05value:\x028\x01J\x04\b\t\x10\n" +
-	"R\x15supports_post_connect\"\xe7\x01\n" +
+	"\x05value\x18\x02 \x01(\v2'.gestalt.provider.v1.ConnectionParamDefR\x05value:\x028\x01\"\xe7\x01\n" +
 	"\x0fOperationResult\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\tR\x04body\x12K\n" +
@@ -2246,7 +2245,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\vttl_seconds\x18\x03 \x01(\x03R\n" +
 	"ttlSeconds\"L\n" +
 	"\x1fExchangeInvocationTokenResponse\x12)\n" +
-	"\x10invocation_token\x18\x01 \x01(\tR\x0finvocationToken\"\xf7\x02\n" +
+	"\x10invocation_token\x18\x01 \x01(\tR\x0finvocationToken\"\xe1\x02\n" +
 	"\x10AppInvokeRequest\x12\x10\n" +
 	"\x03app\x18\x02 \x01(\tR\x03app\x12\x1c\n" +
 	"\toperation\x18\x03 \x01(\tR\toperation\x12/\n" +
@@ -2259,7 +2258,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x0fidempotency_key\x18\b \x01(\tR\x0eidempotencyKey\x12'\n" +
 	"\x0fcredential_mode\x18\t \x01(\tR\x0ecredentialMode\x123\n" +
 	"\bworkflow\x18\n" +
-	" \x01(\v2\x17.google.protobuf.StructR\bworkflowJ\x04\b\x01\x10\x02R\x0erequest_handle\"\x8e\x02\n" +
+	" \x01(\v2\x17.google.protobuf.StructR\bworkflow\"\x8e\x02\n" +
 	"\x17AppInvokeGraphQLRequest\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x12\x1a\n" +
 	"\bdocument\x18\x02 \x01(\tR\bdocument\x125\n" +
@@ -2277,7 +2276,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\vauth_source\x18\x04 \x01(\tR\n" +
 	"authSource\x12\x14\n" +
 	"\x05email\x18\x05 \x01(\tR\x05email\x122\n" +
-	"\x15credential_subject_id\x18\x06 \x01(\tR\x13credentialSubjectId\"\x92\x02\n" +
+	"\x15credential_subject_id\x18\x06 \x01(\tR\x13credentialSubjectId\"\x86\x02\n" +
 	"\fAgentToolRef\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x12\x1c\n" +
 	"\toperation\x18\x02 \x01(\tR\toperation\x12\x1e\n" +
@@ -2288,8 +2287,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x05title\x18\x05 \x01(\tR\x05title\x12 \n" +
 	"\vdescription\x18\x06 \x01(\tR\vdescription\x12\x16\n" +
 	"\x06system\x18\b \x01(\tR\x06system\x12:\n" +
-	"\x06run_as\x18\t \x01(\v2#.gestalt.provider.v1.SubjectContextR\x05runAsJ\x04\b\a\x10\bJ\x04\b\n" +
-	"\x10\v\"$\n" +
+	"\x06run_as\x18\t \x01(\v2#.gestalt.provider.v1.SubjectContextR\x05runAs\"$\n" +
 	"\n" +
 	"StringList\x12\x16\n" +
 	"\x06values\x18\x01 \x03(\tR\x06values\"\x82\x01\n" +
@@ -2305,7 +2303,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x06policy\x18\x01 \x01(\tR\x06policy\x12\x12\n" +
 	"\x04role\x18\x02 \x01(\tR\x04role\"5\n" +
 	"\vHostContext\x12&\n" +
-	"\x0fpublic_base_url\x18\x01 \x01(\tR\rpublicBaseUrl\"\xf8\x03\n" +
+	"\x0fpublic_base_url\x18\x01 \x01(\tR\rpublicBaseUrl\"\xec\x03\n" +
 	"\x0eRequestContext\x12=\n" +
 	"\asubject\x18\x01 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12F\n" +
 	"\n" +
@@ -2317,7 +2315,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\ragent_subject\x18\x06 \x01(\v2#.gestalt.provider.v1.SubjectContextR\fagentSubject\x12>\n" +
 	"\ttool_refs\x18\t \x03(\v2!.gestalt.provider.v1.AgentToolRefR\btoolRefs\x12\"\n" +
 	"\rtool_refs_set\x18\n" +
-	" \x01(\bR\vtoolRefsSetJ\x04\b\a\x10\bJ\x04\b\b\x10\t\"\x98\x06\n" +
+	" \x01(\bR\vtoolRefsSet\"\x98\x06\n" +
 	"\x12HTTPSubjectRequest\x12\x18\n" +
 	"\abinding\x18\x01 \x01(\tR\abinding\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12\x12\n" +
@@ -2347,7 +2345,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x1aResolveHTTPSubjectResponse\x12=\n" +
 	"\asubject\x18\x01 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12#\n" +
 	"\rreject_status\x18\x02 \x01(\x05R\frejectStatus\x12%\n" +
-	"\x0ereject_message\x18\x03 \x01(\tR\rrejectMessage\"\xf0\x03\n" +
+	"\x0ereject_message\x18\x03 \x01(\tR\rrejectMessage\"\xda\x03\n" +
 	"\x0eExecuteRequest\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x12/\n" +
 	"\x06params\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x14\n" +
@@ -2359,7 +2357,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x0fidempotency_key\x18\t \x01(\tR\x0eidempotencyKey\x1aC\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\a\x10\bR\x0erequest_handle\"\xcb\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xcb\x02\n" +
 	"\x18GetSessionCatalogRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12p\n" +
 	"\x11connection_params\x18\x02 \x03(\v2C.gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntryR\x10connectionParams\x12#\n" +
@@ -2375,11 +2373,11 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\x12)\n" +
 	"\x10protocol_version\x18\x04 \x01(\x05R\x0fprotocolVersion\"B\n" +
 	"\x15StartProviderResponse\x12)\n" +
-	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion*z\n" +
+	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion*h\n" +
 	"\x0eConnectionMode\x12\x1f\n" +
 	"\x1bCONNECTION_MODE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14CONNECTION_MODE_NONE\x10\x01\x12\x1b\n" +
-	"\x17CONNECTION_MODE_SUBJECT\x10\x02\"\x04\b\x03\x10\x03\"\x04\b\x04\x10\x04\"\x04\b\x05\x10\x052\x84\x04\n" +
+	"\x17CONNECTION_MODE_SUBJECT\x10\x022\x84\x04\n" +
 	"\vAppProvider\x12L\n" +
 	"\vGetMetadata\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderMetadata\x12f\n" +
 	"\rStartProvider\x12).gestalt.provider.v1.StartProviderRequest\x1a*.gestalt.provider.v1.StartProviderResponse\x12T\n" +

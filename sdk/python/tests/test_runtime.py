@@ -16,7 +16,6 @@ from google.protobuf import json_format
 from google.protobuf import struct_pb2 as _struct_pb2
 
 from gestalt import (
-    AgentProvider,
     App,
     AppProviderAdapter,
     AuthenticationProvider,
@@ -57,7 +56,6 @@ from gestalt import (
     _bootstrap,
     _runtime,
 )
-from gestalt._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
 from gestalt._gen.v1 import app_pb2 as _app_pb2
 from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
 from gestalt._gen.v1 import authentication_pb2 as _authentication_pb2
@@ -69,7 +67,6 @@ from gestalt._gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from gestalt._gen.v1 import workflow_pb2 as _workflow_pb2
 from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
-agent_pb2_grpc: Any = _agent_pb2_grpc
 authentication_pb2: Any = _authentication_pb2
 cache_pb2: Any = _cache_pb2
 empty_pb2: Any = _empty_pb2
@@ -1260,26 +1257,6 @@ class RuntimeRuntimeTests(unittest.TestCase):
         servable = cast(AppProviderAdapter, servable)
         self.assertEqual(servable.kind, ProviderKind.RUNTIME)
         self.assertIs(servable.provider, provider)
-
-
-class AgentRuntimeTests(unittest.TestCase):
-    class StubAgentProvider(AgentProvider):
-        pass
-
-    def test_agent_wrapper_accepts_snake_case_one_arg_handler(self) -> None:
-        class Provider(AgentProvider):
-            def create_session(self, request: Any) -> Any:
-                return {"request": request}
-
-        wrapped = _runtime._service_wrapper(
-            Provider(),
-            agent_pb2_grpc.AgentProviderServicer,
-            (("CreateSession", "create_session"),),
-        )
-
-        self.assertEqual(
-            wrapped.CreateSession("request", object()), {"request": "request"}
-        )
 
 
 class WorkflowRuntimeTests(unittest.TestCase):
