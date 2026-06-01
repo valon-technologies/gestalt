@@ -199,7 +199,7 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 		Context:          reqCtx,
 	})
 	if err != nil {
-		return nil, err
+		return nil, remoteProviderExecuteError(err)
 	}
 	return &core.OperationResult{
 		Status:  int(resp.GetStatus()),

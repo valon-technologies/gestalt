@@ -48,7 +48,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 	}
 	result, err := s.provider.Execute(ctx, req.GetOperation(), protoutil.MapFromStruct(req.GetParams()), req.GetToken())
 	if err != nil {
-		return nil, status.Errorf(codes.Unknown, "execute: %v", err)
+		return nil, providerExecuteError(err)
 	}
 	return &proto.OperationResult{
 		Status:  int32(result.Status),

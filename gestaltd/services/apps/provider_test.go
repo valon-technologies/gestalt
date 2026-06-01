@@ -42,6 +42,9 @@ func (p *roundTripProvider) DiscoveryConfig() *core.DiscoveryConfig      { retur
 func (p *roundTripProvider) ConnectionForOperation(string) string        { return "" }
 
 func (p *roundTripProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
+	if operation == "missing_credential" {
+		return nil, fmt.Errorf("%w: no external credential stored for integration %q", invocation.ErrNoCredential, "roundtrip")
+	}
 	subjectID := ""
 	subjectKind := ""
 	authSource := ""
@@ -301,6 +304,15 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 
 		if _, err := prov.Execute(ctx, "echo", map[string]any{"message": "hi"}, "secret-token"); err == nil {
 			t.Fatal("expected Execute to fail for unserializable workflow context")
+		}
+	})
+
+	t.Run("missing credential error", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := prov.Execute(context.Background(), "missing_credential", nil, "")
+		if !errors.Is(err, invocation.ErrNoCredential) {
+			t.Fatalf("Execute error = %v, want ErrNoCredential", err)
 		}
 	})
 
