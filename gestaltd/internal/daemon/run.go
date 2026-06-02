@@ -256,7 +256,6 @@ func runLock(args []string) error {
 	var configPaths repeatedStringFlag
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
-	platformFlag := fs.String("platform", "", "additional platforms to verify hashes for (comma-separated os/arch or \"all\")")
 	check := fs.Bool("check", false, "fail if the lockfile would change")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -267,7 +266,7 @@ func runLock(args []string) error {
 
 	return lockConfigWithStatePaths(configPaths, operator.StatePaths{
 		LockfilePath: *lockfilePath,
-	}, *platformFlag, *check)
+	}, *check)
 }
 
 func runSync(args []string) error {
@@ -434,7 +433,7 @@ func maskEmpty(s string) string {
 func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
-	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--platform PLATFORMS] [--check]")
+	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--check]")
 	writeUsageLine(w, "  gestaltd serve [--app NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
@@ -476,7 +475,7 @@ func printServeUsage(w io.Writer) {
 
 func printLockUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--platform PLATFORMS] [--check]")
+	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Resolve provider metadata, validate config against staged scratch artifacts,")
 	writeUsageLine(w, "and write canonical lock metadata without preparing final artifacts.")
@@ -485,7 +484,6 @@ func printLockUsage(w io.Writer) {
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --config          Path to a config file; repeat to layer left-to-right")
 	writeUsageLine(w, "  --lockfile        Path to lockfile; defaults to gestalt.lock.json next to the primary config")
-	writeUsageLine(w, "  --platform        Additional platforms to verify (comma-separated os/arch or \"all\")")
 	writeUsageLine(w, "  --check           Fail if the lockfile would change")
 }
 

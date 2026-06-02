@@ -10,7 +10,7 @@ import (
 
 const (
 	providerLockSchemaName         = "gestaltd-provider-lock"
-	providerLockSchemaVersion      = 8
+	providerLockSchemaVersion      = 9
 	providerLockRevision           = 0
 	providerLockKindWorkflow       = "workflow"
 	providerLockKindTelemetry      = "telemetry"
@@ -192,14 +192,6 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 		lock.UIs = make(map[string]LockEntry)
 	}
 	return lock
-}
-
-func providerLockKinds() []string {
-	kinds := make([]string, 0, len(providerLockBucketSpecs))
-	for _, bucket := range providerLockBucketSpecs {
-		kinds = append(kinds, bucket.kind)
-	}
-	return kinds
 }
 
 func lockEntriesForProviderKind(lock *Lockfile, kind string) map[string]LockEntry {

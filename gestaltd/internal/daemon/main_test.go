@@ -24,17 +24,18 @@ func TestE2ECLIHelp(t *testing.T) {
 			name:      "root",
 			args:      []string{"--help"},
 			wantParts: []string{"gestaltd validate", "gestaltd lock", "gestaltd sync --locked", "gestaltd agent <command> [flags]", "gestaltd provider <command> [flags]", "gestaltd serve", "--locked", "[--config PATH]...", "--lockfile PATH"},
-			notWant:   []string{"gestaltd bundle", "gestaltd dev", "gestaltd init", "\n  init"},
+			notWant:   []string{"gestaltd lock [--config PATH]... [--lockfile PATH] [--platform", "gestaltd bundle", "gestaltd dev", "gestaltd init", "\n  init"},
 		},
 		{
 			name:      "validate",
 			args:      []string{"validate", "--help"},
-			wantParts: []string{"gestaltd validate", "scoped validation of one app closure", "--app NAME", "--lockfile PATH"},
+			wantParts: []string{"gestaltd validate", "scoped validation of one app closure", "--app NAME", "--lockfile PATH", "--platform os/arch"},
 		},
 		{
 			name:      "lock",
 			args:      []string{"lock", "--help"},
-			wantParts: []string{"gestaltd lock", "write canonical lock metadata", "--platform", "--check"},
+			wantParts: []string{"gestaltd lock", "write canonical lock metadata", "--check"},
+			notWant:   []string{"--platform"},
 		},
 		{
 			name:      "sync",
@@ -84,6 +85,18 @@ func TestE2ECLIHelp(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRunLockRejectsPlatformFlag(t *testing.T) {
+	t.Parallel()
+
+	out, err := exec.Command(gestaltdBin, "lock", "--platform", "linux/amd64").CombinedOutput()
+	if err == nil {
+		t.Fatalf("gestaltd lock --platform unexpectedly succeeded:\n%s", out)
+	}
+	if !strings.Contains(string(out), "flag provided but not defined: -platform") {
+		t.Fatalf("gestaltd lock --platform output = %s, want unknown flag error", out)
 	}
 }
 

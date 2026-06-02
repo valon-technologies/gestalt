@@ -492,7 +492,7 @@ func runProviderUpgrade(args []string) error {
 		}
 		return nil
 	}
-	if err := lockConfigWithStatePaths(configPaths, operator.StatePaths{LockfilePath: *lockfilePath}, "", false); err != nil {
+	if err := lockConfigWithStatePaths(configPaths, operator.StatePaths{LockfilePath: *lockfilePath}, false); err != nil {
 		return err
 	}
 	fmt.Println("Refreshed provider lock state")

@@ -2,9 +2,9 @@ package operator
 
 import (
 	"archive/tar"
+	"bytes"
 	"cmp"
 	"compress/gzip"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -2493,60 +2493,6 @@ server:
 	}
 }
 
-func TestHashPlatformInEntries_HashesMountedUIAndProviderArchives(t *testing.T) {
-	t.Parallel()
-
-	archiveBytes := []byte("mounted-ui-archive")
-	sum := sha256.Sum256(archiveBytes)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write(archiveBytes)
-	}))
-	defer srv.Close()
-
-	lock := &Lockfile{
-		Caches: map[string]LockEntry{
-			"session": {
-				Source: "github.com/testowner/cache/session",
-				Archives: map[string]LockArchive{
-					providerpkg.CurrentPlatformString(): {URL: srv.URL},
-				},
-			},
-		},
-		S3: map[string]LockEntry{
-			"assets": {
-				Source: "github.com/testowner/providers/s3",
-				Archives: map[string]LockArchive{
-					providerpkg.CurrentPlatformString(): {URL: srv.URL},
-				},
-			},
-		},
-		UIs: map[string]LockEntry{
-			"roadmap": {
-				Source: "github.com/testowner/web/roadmap",
-				Archives: map[string]LockArchive{
-					platformKeyGeneric: {URL: srv.URL},
-				},
-			},
-		},
-	}
-
-	if err := NewLifecycle().hashPlatformInEntries(context.Background(), lock, lifecyclePaths{}, providerpkg.CurrentPlatformString(), map[string]string{}); err != nil {
-		t.Fatalf("hashPlatformInEntries: %v", err)
-	}
-
-	got := lock.UIs["roadmap"].Archives[platformKeyGeneric].SHA256
-	want := hex.EncodeToString(sum[:])
-	if got != want {
-		t.Fatalf("ui SHA256 = %q, want %q", got, want)
-	}
-	if got := lock.Caches["session"].Archives[providerpkg.CurrentPlatformString()].SHA256; got != want {
-		t.Fatalf("cache SHA256 = %q, want %q", got, want)
-	}
-	if got := lock.S3["assets"].Archives[providerpkg.CurrentPlatformString()].SHA256; got != want {
-		t.Fatalf("S3 SHA256 = %q, want %q", got, want)
-	}
-}
-
 func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *testing.T) {
 	t.Parallel()
 
@@ -3376,7 +3322,10 @@ func TestPortableStaticValidationManifestRelativizesLocalSurfaces(t *testing.T) 
 		},
 	}
 
-	got := portableStaticValidationManifest(manifest, manifestPath)
+	got, err := portableStaticValidationManifest(manifest, manifestPath, false)
+	if err != nil {
+		t.Fatalf("portableStaticValidationManifest: %v", err)
+	}
 	if got == manifest {
 		t.Fatal("portableStaticValidationManifest returned original manifest after changing local references")
 	}
@@ -3391,6 +3340,179 @@ func TestPortableStaticValidationManifestRelativizesLocalSurfaces(t *testing.T) 
 	}
 	if manifest.Spec.Surfaces.OpenAPI.Document == "openapi.yaml" {
 		t.Fatal("portableStaticValidationManifest mutated original manifest")
+	}
+}
+
+func TestPortableStaticValidationManifestProjectsReleaseRuntimeFields(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "manifest.yaml")
+	baseManifest := func(artifactPath string, args []string, artifacts []providermanifestv1.Artifact) *providermanifestv1.Manifest {
+		return &providermanifestv1.Manifest{
+			Kind:      providermanifestv1.KindApp,
+			Source:    "github.com/acme/provider",
+			Version:   "1.2.3",
+			Artifacts: artifacts,
+			Entrypoint: &providermanifestv1.Entrypoint{
+				ArtifactPath: artifactPath,
+				Args:         args,
+			},
+			Spec: &providermanifestv1.Spec{
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					OpenAPI: &providermanifestv1.OpenAPISurface{
+						Document: filepath.Join(dir, "openapi.yaml"),
+					},
+				},
+			},
+		}
+	}
+
+	darwinManifest := baseManifest(
+		"artifacts/darwin/arm64/provider",
+		[]string{"serve-darwin"},
+		[]providermanifestv1.Artifact{{
+			OS:     "darwin",
+			Arch:   "arm64",
+			Path:   "artifacts/darwin/arm64/provider",
+			SHA256: "darwin-sha",
+		}},
+	)
+	linuxManifest := baseManifest(
+		"artifacts/linux/amd64/provider",
+		[]string{"serve-linux"},
+		[]providermanifestv1.Artifact{{
+			OS:     "linux",
+			Arch:   "amd64",
+			Path:   "artifacts/linux/amd64/provider",
+			SHA256: "linux-sha",
+		}},
+	)
+
+	darwinProjected, err := portableStaticValidationManifest(darwinManifest, manifestPath, true)
+	if err != nil {
+		t.Fatalf("project darwin manifest: %v", err)
+	}
+	linuxProjected, err := portableStaticValidationManifest(linuxManifest, manifestPath, true)
+	if err != nil {
+		t.Fatalf("project linux manifest: %v", err)
+	}
+	if len(darwinProjected.Artifacts) != 0 {
+		t.Fatalf("projected artifacts = %+v, want nil", darwinProjected.Artifacts)
+	}
+	if darwinProjected.Entrypoint == nil || darwinProjected.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
+		t.Fatalf("projected entrypoint = %+v, want placeholder", darwinProjected.Entrypoint)
+	}
+	if len(darwinProjected.Entrypoint.Args) != 0 {
+		t.Fatalf("projected entrypoint args = %+v, want nil", darwinProjected.Entrypoint.Args)
+	}
+	if darwinProjected.Spec.Surfaces.OpenAPI.Document != "openapi.yaml" {
+		t.Fatalf("projected OpenAPI document = %q, want openapi.yaml", darwinProjected.Spec.Surfaces.OpenAPI.Document)
+	}
+	darwinJSON, err := json.Marshal(darwinProjected)
+	if err != nil {
+		t.Fatalf("marshal darwin projection: %v", err)
+	}
+	linuxJSON, err := json.Marshal(linuxProjected)
+	if err != nil {
+		t.Fatalf("marshal linux projection: %v", err)
+	}
+	if !bytes.Equal(darwinJSON, linuxJSON) {
+		t.Fatalf("projected manifests differ:\ndarwin: %s\nlinux: %s", darwinJSON, linuxJSON)
+	}
+	if darwinManifest.Entrypoint.ArtifactPath == staticValidationEntrypointPlaceholder || len(darwinManifest.Artifacts) == 0 {
+		t.Fatal("portableStaticValidationManifest mutated source manifest")
+	}
+
+	localProjected, err := portableStaticValidationManifest(darwinManifest, manifestPath, false)
+	if err != nil {
+		t.Fatalf("project local manifest: %v", err)
+	}
+	if len(localProjected.Artifacts) != 1 {
+		t.Fatalf("local artifacts = %+v, want preserved runtime artifacts", localProjected.Artifacts)
+	}
+	if localProjected.Entrypoint == nil || localProjected.Entrypoint.ArtifactPath != "artifacts/darwin/arm64/provider" || len(localProjected.Entrypoint.Args) != 1 {
+		t.Fatalf("local entrypoint = %+v, want original entrypoint", localProjected.Entrypoint)
+	}
+
+	declarative := &providermanifestv1.Manifest{
+		Kind:      providermanifestv1.KindApp,
+		Version:   "1.2.3",
+		Artifacts: []providermanifestv1.Artifact{{Path: "generic.tar.gz", SHA256: "generic-sha"}},
+		Spec:      &providermanifestv1.Spec{},
+	}
+	declarativeProjected, err := portableStaticValidationManifest(declarative, "", true)
+	if err != nil {
+		t.Fatalf("project declarative manifest: %v", err)
+	}
+	if declarativeProjected.Entrypoint != nil {
+		t.Fatalf("declarative entrypoint = %+v, want nil", declarativeProjected.Entrypoint)
+	}
+	if len(declarativeProjected.Artifacts) != 0 {
+		t.Fatalf("declarative artifacts = %+v, want nil", declarativeProjected.Artifacts)
+	}
+}
+
+func TestAttachStaticValidationMetadataProjectsOnlyReleaseSources(t *testing.T) {
+	t.Parallel()
+
+	manifest := func(binary string) *providermanifestv1.Manifest {
+		return &providermanifestv1.Manifest{
+			Kind:    providermanifestv1.KindApp,
+			Version: "1.2.3",
+			Artifacts: []providermanifestv1.Artifact{{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				Path:   binary,
+				SHA256: "sha",
+			}},
+			Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: binary},
+			Spec:       &providermanifestv1.Spec{},
+		}
+	}
+	cfg := &config.Config{
+		Apps: map[string]*config.ProviderEntry{
+			"release": {
+				Source:           config.NewMetadataSource("https://example.invalid/provider-release.yaml"),
+				ResolvedManifest: manifest("release-provider"),
+			},
+			"local": {
+				Source:           config.ProviderSource{Path: "./local"},
+				ResolvedManifest: manifest("local-provider"),
+			},
+			"git": {
+				Source:           config.NewGitSource(config.GitSourceDef{Repo: "github.com/acme/provider", Ref: "main"}),
+				ResolvedManifest: manifest("git-provider"),
+			},
+		},
+	}
+	lock := &Lockfile{
+		Providers: map[string]LockEntry{
+			"release": {},
+			"local":   {},
+			"git":     {},
+		},
+	}
+
+	if err := attachStaticValidationMetadata(lock, cfg, nil); err != nil {
+		t.Fatalf("attachStaticValidationMetadata: %v", err)
+	}
+
+	releaseManifest := lock.Providers["release"].StaticManifest
+	if len(releaseManifest.Artifacts) != 0 {
+		t.Fatalf("release artifacts = %+v, want nil", releaseManifest.Artifacts)
+	}
+	if releaseManifest.Entrypoint == nil || releaseManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
+		t.Fatalf("release entrypoint = %+v, want placeholder", releaseManifest.Entrypoint)
+	}
+	for _, name := range []string{"local", "git"} {
+		staticManifest := lock.Providers[name].StaticManifest
+		if len(staticManifest.Artifacts) != 1 {
+			t.Fatalf("%s artifacts = %+v, want preserved runtime artifact", name, staticManifest.Artifacts)
+		}
+		if staticManifest.Entrypoint == nil || staticManifest.Entrypoint.ArtifactPath != name+"-provider" {
+			t.Fatalf("%s entrypoint = %+v, want original entrypoint", name, staticManifest.Entrypoint)
+		}
 	}
 }
 
@@ -3873,6 +3995,22 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if diskLock.SchemaVersion != providerLockSchemaVersion {
 		t.Fatalf("lock schemaVersion = %d, want %d", diskLock.SchemaVersion, providerLockSchemaVersion)
 	}
+	if diskLock.SchemaVersion != 9 {
+		t.Fatalf("lock schemaVersion = %d, want explicit v9 schema", diskLock.SchemaVersion)
+	}
+	diskLock.SchemaVersion = 8
+	oldLockData, err := json.Marshal(diskLock)
+	if err != nil {
+		t.Fatalf("Marshal old schema lock: %v", err)
+	}
+	oldLockPath := filepath.Join(dir, "old-schema.lock.json")
+	if err := os.WriteFile(oldLockPath, oldLockData, 0o644); err != nil {
+		t.Fatalf("write old schema lock: %v", err)
+	}
+	if _, err := ReadLockfile(oldLockPath); err == nil || !strings.Contains(err.Error(), "unsupported lockfile schema version 8") {
+		t.Fatalf("ReadLockfile old schema error = %v, want schema version rejection", err)
+	}
+	diskLock.SchemaVersion = providerLockSchemaVersion
 	providerEntry, ok := diskLock.Providers.App["example"]
 	if !ok {
 		t.Fatal(`disk lock providers.plugin["example"] not found`)
@@ -3990,35 +4128,5 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	}
 	if got.Providers["example"].Manifest != "" || got.UIs["roadmap"].AssetRoot != "" {
 		t.Fatal("portable lock schema should not populate local path fields on read")
-	}
-}
-
-func TestHashArchiveEntry_HashesFallbackArchive(t *testing.T) {
-	t.Parallel()
-
-	const payload = "generic app archive"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(payload))
-	}))
-	defer server.Close()
-
-	entry := LockEntry{
-		Source: server.URL,
-		Archives: map[string]LockArchive{
-			platformKeyGeneric: {URL: server.URL},
-		},
-	}
-
-	if err := NewLifecycle().hashArchiveEntry(context.Background(), providermanifestv1.KindUI, "roadmap", &entry, lifecyclePaths{}, "linux/amd64", nil); err != nil {
-		t.Fatalf("hashArchiveEntry: %v", err)
-	}
-
-	got := entry.Archives[platformKeyGeneric]
-	if got.URL != server.URL {
-		t.Fatalf("generic URL = %q, want %q", got.URL, server.URL)
-	}
-	want := sha256.Sum256([]byte(payload))
-	if got.SHA256 != hex.EncodeToString(want[:]) {
-		t.Fatalf("generic SHA256 = %q, want %q", got.SHA256, hex.EncodeToString(want[:]))
 	}
 }

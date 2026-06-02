@@ -11,6 +11,9 @@ import { Callout } from 'nextra/components'
 </Callout>
 
 `gestaltd` manages server lifecycle and provider releases.
+For release-backed providers, `gestaltd lock` writes platform-independent static
+metadata while `sync --locked` and locked serve select the runtime archive for
+the platform where they run.
 
 ## Server commands
 

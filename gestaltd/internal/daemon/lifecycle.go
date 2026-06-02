@@ -16,34 +16,12 @@ func operatorLifecycle() *operator.Lifecycle {
 	})
 }
 
-func lockConfigWithStatePaths(configFlags []string, state operator.StatePaths, platformFlag string, check bool) error {
+func lockConfigWithStatePaths(configFlags []string, state operator.StatePaths, check bool) error {
 	configPaths := operator.ResolveConfigPaths(configFlags)
-	if platformFlag == "" && check {
-		return operatorLifecycle().CheckLockAtPathsWithStatePaths(configPaths, state, nil)
-	}
-	if platformFlag == "" {
-		_, err := operatorLifecycle().LockAtPathsWithStatePaths(configPaths, state)
-		return err
-	}
-
-	value, err := expandReleasePlatformValue(platformFlag)
-	if err != nil {
-		return err
-	}
-	platforms, err := parseReleasePlatforms(value)
-	if err != nil {
-		return err
-	}
-
-	platArgs := make([]struct{ GOOS, GOARCH string }, len(platforms))
-	for i, p := range platforms {
-		platArgs[i] = struct{ GOOS, GOARCH string }{p.GOOS, p.GOARCH}
-	}
-
 	if check {
-		return operatorLifecycle().CheckLockAtPathsWithStatePaths(configPaths, state, platArgs)
+		return operatorLifecycle().CheckLockAtPathsWithStatePaths(configPaths, state)
 	}
-	_, err = operatorLifecycle().LockAtPathsWithPlatforms(configPaths, state, platArgs)
+	_, err := operatorLifecycle().LockAtPathsWithStatePaths(configPaths, state)
 	return err
 }
 
