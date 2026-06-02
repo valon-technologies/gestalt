@@ -206,15 +206,25 @@ func schemaExposesReservedHTTPParams(root, schema any, seenRefs map[string]struc
 	}
 	if rawRef, ok := obj["$ref"].(string); ok && strings.TrimSpace(rawRef) != "" {
 		ref := strings.TrimSpace(rawRef)
-		if _, seen := seenRefs[ref]; seen {
-			return false
+		if _, seen := seenRefs[ref]; !seen {
+			if target, ok := resolveLocalJSONRef(root, ref); ok {
+				seenRefs[ref] = struct{}{}
+				if schemaExposesReservedHTTPParams(root, target, seenRefs) {
+					return true
+				}
+			}
 		}
-		target, ok := resolveLocalJSONRef(root, ref)
+	}
+	for _, keyword := range []string{"$defs", "definitions"} {
+		defs, ok := obj[keyword].(map[string]any)
 		if !ok {
-			return true
+			continue
 		}
-		seenRefs[ref] = struct{}{}
-		return schemaExposesReservedHTTPParams(root, target, seenRefs)
+		for _, def := range defs {
+			if schemaExposesReservedHTTPParams(root, def, seenRefs) {
+				return true
+			}
+		}
 	}
 	for _, keyword := range []string{"allOf", "anyOf", "oneOf"} {
 		branches, ok := obj[keyword].([]any)

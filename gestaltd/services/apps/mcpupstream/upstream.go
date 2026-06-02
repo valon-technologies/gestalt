@@ -2,12 +2,17 @@ package mcpupstream
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	neturl "net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -25,6 +30,11 @@ const httpTimeout = 30 * time.Second
 var (
 	_ core.Provider               = (*Upstream)(nil)
 	_ core.SessionCatalogProvider = (*Upstream)(nil)
+)
+
+const (
+	defaultCatalogCacheTTL        = 60 * time.Second
+	defaultCatalogCacheMaxEntries = 256
 )
 
 type managedMCPClient struct {
@@ -52,6 +62,7 @@ type Upstream struct {
 	cat         *catalog.Catalog
 	client      mcpclient.MCPClient
 	exposure    *operationexposure.Policy
+	cache       *catalogDiscoveryCache
 	checkEgress func(string) error
 }
 
@@ -77,6 +88,19 @@ func WithConnectionName(connection string) Option {
 	}
 }
 
+func WithCatalogCache(ttl time.Duration, maxEntries int) Option {
+	return func(u *Upstream) {
+		if ttl <= 0 {
+			u.cache = nil
+			return
+		}
+		if maxEntries <= 0 {
+			maxEntries = defaultCatalogCacheMaxEntries
+		}
+		u.cache = newCatalogDiscoveryCache(ttl, maxEntries)
+	}
+}
+
 func New(_ context.Context, name string, url string, connMode core.ConnectionMode, headers map[string]string, checkEgress func(string) error, opts ...Option) (*Upstream, error) {
 	if url == "" {
 		return nil, fmt.Errorf("mcpupstream %s: url is required", name)
@@ -89,6 +113,7 @@ func New(_ context.Context, name string, url string, connMode core.ConnectionMod
 		url:         url,
 		connMode:    connMode,
 		headers:     normalizeHeaders(headers),
+		cache:       newCatalogDiscoveryCache(defaultCatalogCacheTTL, defaultCatalogCacheMaxEntries),
 		checkEgress: checkEgress,
 	}
 	for _, opt := range opts {
@@ -147,6 +172,11 @@ func (u *Upstream) Execute(ctx context.Context, operation string, params map[str
 }
 
 func (u *Upstream) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	if u.cache != nil {
+		return u.cache.Get(ctx, u.catalogCacheKey(ctx, token), func() (*catalog.Catalog, error) {
+			return u.discover(ctx, token)
+		})
+	}
 	return u.discover(ctx, token)
 }
 
@@ -307,6 +337,152 @@ func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog
 		return nil, err
 	}
 	return u.decorateCatalog(u.exposure.ApplyCatalog(cat)), nil
+}
+
+func (u *Upstream) catalogCacheKey(ctx context.Context, token string) string {
+	partition := core.CatalogCachePartitionFromContext(ctx)
+	parts := []string{
+		u.name,
+		u.url,
+		partition.Provider,
+		partition.Connection,
+		partition.Instance,
+		tokenCacheDigest(token),
+	}
+	return strings.Join(parts, "\x00")
+}
+
+type catalogDiscoveryCache struct {
+	mu         sync.Mutex
+	ttl        time.Duration
+	maxEntries int
+	entries    map[string]catalogDiscoveryCacheEntry
+	inflight   map[string]*catalogDiscoveryInflight
+	sequence   uint64
+	now        func() time.Time
+}
+
+type catalogDiscoveryCacheEntry struct {
+	cat       *catalog.Catalog
+	expiresAt time.Time
+	sequence  uint64
+}
+
+type catalogDiscoveryInflight struct {
+	done chan struct{}
+	cat  *catalog.Catalog
+	err  error
+}
+
+func newCatalogDiscoveryCache(ttl time.Duration, maxEntries int) *catalogDiscoveryCache {
+	if maxEntries <= 0 {
+		maxEntries = defaultCatalogCacheMaxEntries
+	}
+	return &catalogDiscoveryCache{
+		ttl:        ttl,
+		maxEntries: maxEntries,
+		entries:    make(map[string]catalogDiscoveryCacheEntry),
+		inflight:   make(map[string]*catalogDiscoveryInflight),
+		now:        time.Now,
+	}
+}
+
+func (c *catalogDiscoveryCache) Get(ctx context.Context, key string, load func() (*catalog.Catalog, error)) (*catalog.Catalog, error) {
+	if c == nil || c.ttl <= 0 || c.maxEntries <= 0 {
+		return load()
+	}
+
+	c.mu.Lock()
+	now := c.now()
+	if entry, ok := c.entries[key]; ok {
+		if now.Before(entry.expiresAt) {
+			cat := cloneCatalog(entry.cat)
+			c.mu.Unlock()
+			return cat, nil
+		}
+		delete(c.entries, key)
+	}
+	if flight, ok := c.inflight[key]; ok {
+		c.mu.Unlock()
+		select {
+		case <-flight.done:
+			return cloneCatalog(flight.cat), flight.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	flight := &catalogDiscoveryInflight{done: make(chan struct{})}
+	c.inflight[key] = flight
+	c.mu.Unlock()
+
+	cat, err := load()
+
+	c.mu.Lock()
+	delete(c.inflight, key)
+	flight.cat = cloneCatalog(cat)
+	flight.err = err
+	if err == nil {
+		c.sequence++
+		c.entries[key] = catalogDiscoveryCacheEntry{
+			cat:       cloneCatalog(cat),
+			expiresAt: c.now().Add(c.ttl),
+			sequence:  c.sequence,
+		}
+		c.evictLocked(c.now())
+	}
+	close(flight.done)
+	c.mu.Unlock()
+
+	return cat, err
+}
+
+func (c *catalogDiscoveryCache) evictLocked(now time.Time) {
+	for key, entry := range c.entries {
+		if !now.Before(entry.expiresAt) {
+			delete(c.entries, key)
+		}
+	}
+	for len(c.entries) > c.maxEntries {
+		var oldestKey string
+		var oldestSequence uint64
+		for key, entry := range c.entries {
+			if oldestKey == "" || entry.sequence < oldestSequence {
+				oldestKey = key
+				oldestSequence = entry.sequence
+			}
+		}
+		if oldestKey == "" {
+			return
+		}
+		delete(c.entries, oldestKey)
+	}
+}
+
+func cloneCatalog(cat *catalog.Catalog) *catalog.Catalog {
+	if cat == nil {
+		return nil
+	}
+	return cat.Clone()
+}
+
+var (
+	tokenCacheSecretOnce sync.Once
+	tokenCacheSecret     [32]byte
+)
+
+func tokenCacheDigest(token string) string {
+	if token == "" {
+		return ""
+	}
+	tokenCacheSecretOnce.Do(func() {
+		if _, err := rand.Read(tokenCacheSecret[:]); err != nil {
+			sum := sha256.Sum256([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
+			tokenCacheSecret = sum
+		}
+	})
+	mac := hmac.New(sha256.New, tokenCacheSecret[:])
+	_, _ = mac.Write([]byte(token))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func (u *Upstream) resolveInnerName(name string) (string, bool) {

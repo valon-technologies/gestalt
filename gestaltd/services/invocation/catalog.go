@@ -226,6 +226,7 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 			Connection: strings.TrimSpace(connection),
 			Instance:   strings.TrimSpace(instance),
 		})
+		ctx = withCatalogCachePartition(ctx, provName, connection, instance)
 		cat, _, err := core.CatalogForRequest(ctx, prov, "")
 		return cat, true, err
 	}
@@ -235,10 +236,12 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 			if err != nil {
 				return nil, true, err
 			}
+			enrichedCtx = withCatalogCachePartition(enrichedCtx, provName, connection, instance)
 			cat, _, err := core.CatalogForRequest(enrichedCtx, prov, token)
 			return cat, true, err
 		}
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
+		ctx = withCatalogCachePartition(ctx, provName, connection, instance)
 		cat, _, err := core.CatalogForRequest(ctx, prov, "")
 		return cat, true, err
 	}
@@ -250,8 +253,24 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 	if err != nil {
 		return nil, true, err
 	}
+	ctx = withCatalogCachePartition(ctx, provName, connection, instance)
 	cat, _, err := core.CatalogForRequest(ctx, prov, token)
 	return cat, true, err
+}
+
+func withCatalogCachePartition(ctx context.Context, provName, connection, instance string) context.Context {
+	cred := CredentialContextFromContext(ctx)
+	if strings.TrimSpace(cred.Connection) != "" {
+		connection = cred.Connection
+	}
+	if strings.TrimSpace(cred.Instance) != "" {
+		instance = cred.Instance
+	}
+	return core.WithCatalogCachePartition(ctx, core.CatalogCachePartition{
+		Provider:   provName,
+		Connection: connection,
+		Instance:   instance,
+	})
 }
 
 func resolveSessionOperation(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, operation string, connections []string, instance string) (catalog.CatalogOperation, string, bool, error) {

@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/httpbinding"
+	"github.com/valon-technologies/gestalt/server/services/apps/mcphttp"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
@@ -53,7 +54,7 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 			}
 		}
 
-		operationIDs, err := providerOperationIDs(providers, pluginName)
+		catalogInfo, err := providerHTTPBindingCatalogInfoFor(providers, pluginName)
 		if err != nil {
 			return nil, fmt.Errorf("resolve http bindings for %s: %w", pluginName, err)
 		}
@@ -78,13 +79,20 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 			}
 			method := strings.ToUpper(strings.TrimSpace(binding.Method))
 			target := strings.TrimSpace(binding.Target)
-			if len(operationIDs) > 0 {
-				if _, ok := operationIDs[target]; !ok {
+			if len(catalogInfo.operations) > 0 {
+				targetOp, ok := catalogInfo.operations[target]
+				if !ok {
 					return nil, fmt.Errorf("http binding %s.%s target %q is not in provider catalog", pluginName, bindingName, target)
 				}
-				if relativePathConflictsWithGenericOperation(relativePath, operationIDs) {
+				if targetOp.Transport == catalog.TransportMCPPassthrough && !mcphttp.VisibleOnHTTP(targetOp) {
+					return nil, fmt.Errorf("http binding %s.%s target %q uses reserved REST control parameters", pluginName, bindingName, target)
+				}
+				if relativePathConflictsWithGenericOperation(relativePath, catalogInfo.operations) {
 					return nil, fmt.Errorf("http binding %s.%s path %q conflicts with the generic operation route", pluginName, bindingName, binding.Path)
 				}
+			}
+			if catalogInfo.supportsSessionCatalog && relativePathIsGenericOperation(relativePath) {
+				return nil, fmt.Errorf("http binding %s.%s path %q may conflict with a session catalog operation route", pluginName, bindingName, binding.Path)
 			}
 			securityName := strings.TrimSpace(binding.Security)
 			scheme := schemes[securityName]
@@ -136,39 +144,50 @@ func mountedHTTPBindingPath(pluginName, relativePath string) string {
 	return base + relativePath
 }
 
-func relativePathConflictsWithGenericOperation(relativePath string, operationIDs map[string]struct{}) bool {
+func relativePathIsGenericOperation(relativePath string) bool {
 	trimmed := strings.Trim(strings.TrimSpace(relativePath), "/")
-	if trimmed == "" || strings.Contains(trimmed, "/") {
+	return trimmed != "" && !strings.Contains(trimmed, "/")
+}
+
+func relativePathConflictsWithGenericOperation(relativePath string, operations map[string]catalog.CatalogOperation) bool {
+	if !relativePathIsGenericOperation(relativePath) {
 		return false
 	}
-	_, ok := operationIDs[trimmed]
+	trimmed := strings.Trim(strings.TrimSpace(relativePath), "/")
+	_, ok := operations[trimmed]
 	return ok
 }
 
-func providerOperationIDs(providers *registry.ProviderMap[core.Provider], pluginName string) (map[string]struct{}, error) {
+type providerHTTPBindingCatalogInfo struct {
+	operations             map[string]catalog.CatalogOperation
+	supportsSessionCatalog bool
+}
+
+func providerHTTPBindingCatalogInfoFor(providers *registry.ProviderMap[core.Provider], pluginName string) (providerHTTPBindingCatalogInfo, error) {
 	if providers == nil {
-		return nil, nil
+		return providerHTTPBindingCatalogInfo{}, nil
 	}
 	provider, err := providers.Get(pluginName)
 	if err != nil {
-		return nil, err
+		return providerHTTPBindingCatalogInfo{}, err
 	}
 	if provider == nil {
-		return nil, nil
+		return providerHTTPBindingCatalogInfo{}, nil
+	}
+	info := providerHTTPBindingCatalogInfo{
+		supportsSessionCatalog: core.SupportsSessionCatalog(provider),
 	}
 	cat := provider.Catalog()
 	if cat == nil {
-		return nil, nil
+		return info, nil
 	}
-	ids := make(map[string]struct{}, len(cat.Operations))
+	operations := make(map[string]catalog.CatalogOperation, len(cat.Operations))
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
-		if op.Transport == catalog.TransportMCPPassthrough {
-			continue
-		}
-		ids[strings.TrimSpace(op.ID)] = struct{}{}
+		operations[strings.TrimSpace(op.ID)] = *op
 	}
-	return ids, nil
+	info.operations = operations
+	return info, nil
 }
 
 func validateMountedHTTPSecurityScheme(pluginName, schemeName string, scheme *config.HTTPSecurityScheme) error {

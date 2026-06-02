@@ -286,3 +286,10 @@ MCP surfaces expose upstream tools through the generic REST facade at
 HTTP-safe MCP tools as POST operations with `transport: mcp-passthrough`, and
 responses use the MCP `CallToolResult` envelope. Dynamic MCP tool catalogs are
 loaded lazily when request-scoped discovery is needed.
+Dynamic MCP tool catalog discovery is cached per provider, connection, instance,
+and token digest; catalog changes may take up to 60 seconds to appear.
+Tools that declare `_connection` or `_instance` in local catalog parameters or
+local JSON Schema input properties are hidden from the REST facade because those
+names are reserved for Gestalt HTTP selectors. Gestalt does not fetch external
+JSON Schema `$ref` targets for this check; external refs remain visible unless
+the local schema also declares a reserved selector name.

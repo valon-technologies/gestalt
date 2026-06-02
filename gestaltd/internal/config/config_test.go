@@ -2650,6 +2650,40 @@ server:
 		}
 	})
 
+	t.Run("loads app mcp surface overrides", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apps:
+  notion:
+    source:
+      path: ./app/manifest.yaml
+    surfaces:
+      mcp:
+        url: https://mcp.example.test/mcp
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+  `)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Apps["notion"].Surfaces == nil || cfg.Apps["notion"].Surfaces.MCP == nil {
+			t.Fatal("Apps[notion].Surfaces.MCP is nil")
+		}
+		if got := cfg.Apps["notion"].Surfaces.MCP.URL; got != "https://mcp.example.test/mcp" {
+			t.Fatalf("Apps[notion].Surfaces.MCP.URL = %q, want https://mcp.example.test/mcp", got)
+		}
+	})
+
 	t.Run("loads app indexeddb db override", func(t *testing.T) {
 		t.Parallel()
 

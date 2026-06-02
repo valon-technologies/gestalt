@@ -200,6 +200,11 @@ GraphQL surfaces expose a raw GraphQL passthrough immediately. When `allowedOper
 MCP surfaces are exposed to MCP clients through Gestalt's `/mcp` endpoint and to
 REST clients through the generic REST facade at `POST /api/v1/{app}/{operation}`.
 REST-visible MCP tools are listed as `transport: mcp-passthrough` operations.
+The REST facade hides MCP tools that locally declare `_connection` or `_instance`
+inputs, because those names are reserved HTTP selectors. External JSON Schema
+`$ref` targets are not fetched for this check, so a tool with only an external
+input schema remains visible unless local schema siblings declare a reserved
+selector.
 
 #### `spec.surfaces.rest`
 

@@ -8,9 +8,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -652,5 +657,182 @@ func TestUpstream_DiscoverToolsPreservesOutputSchema(t *testing.T) {
 	}
 	if parsed["type"] != "object" {
 		t.Fatalf("expected type=object, got %v", parsed["type"])
+	}
+}
+
+func TestCatalogDiscoveryCache(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	cache := newCatalogDiscoveryCache(time.Minute, 2)
+	cache.now = func() time.Time { return now }
+
+	var loads int
+	load := func() (*catalog.Catalog, error) {
+		loads++
+		return &catalog.Catalog{
+			Name: "cached",
+			Operations: []catalog.CatalogOperation{{
+				ID: fmt.Sprintf("op_%d", loads),
+			}},
+		}, nil
+	}
+
+	first, err := cache.Get(context.Background(), "token-a", load)
+	if err != nil {
+		t.Fatalf("first Get: %v", err)
+	}
+	first.Operations[0].ID = "mutated"
+	second, err := cache.Get(context.Background(), "token-a", load)
+	if err != nil {
+		t.Fatalf("second Get: %v", err)
+	}
+	if loads != 1 {
+		t.Fatalf("loads after cache hit = %d, want 1", loads)
+	}
+	if second.Operations[0].ID != "op_1" {
+		t.Fatalf("cached catalog was mutated: %q", second.Operations[0].ID)
+	}
+
+	_, err = cache.Get(context.Background(), "token-b", load)
+	if err != nil {
+		t.Fatalf("different key Get: %v", err)
+	}
+	if loads != 2 {
+		t.Fatalf("loads after different key = %d, want 2", loads)
+	}
+
+	now = now.Add(time.Minute + time.Second)
+	expired, err := cache.Get(context.Background(), "token-a", load)
+	if err != nil {
+		t.Fatalf("expired Get: %v", err)
+	}
+	if loads != 3 {
+		t.Fatalf("loads after expiry = %d, want 3", loads)
+	}
+	if expired.Operations[0].ID != "op_3" {
+		t.Fatalf("expired catalog op = %q, want op_3", expired.Operations[0].ID)
+	}
+}
+
+func TestCatalogCacheKeyPartitionsConnectionInstanceAndToken(t *testing.T) {
+	t.Parallel()
+
+	u := &Upstream{name: "svc", url: "https://mcp.example.test/mcp"}
+	ctxA := core.WithCatalogCachePartition(context.Background(), core.CatalogCachePartition{Provider: "svc", Connection: "workspace-a", Instance: "instance-a"})
+	ctxB := core.WithCatalogCachePartition(context.Background(), core.CatalogCachePartition{Provider: "svc", Connection: "workspace-b", Instance: "instance-a"})
+	ctxC := core.WithCatalogCachePartition(context.Background(), core.CatalogCachePartition{Provider: "svc", Connection: "workspace-a", Instance: "instance-b"})
+
+	keyA := u.catalogCacheKey(ctxA, "token-a")
+	cases := map[string]string{
+		"different connection": u.catalogCacheKey(ctxB, "token-a"),
+		"different instance":   u.catalogCacheKey(ctxC, "token-a"),
+		"different token":      u.catalogCacheKey(ctxA, "token-b"),
+	}
+	for name, key := range cases {
+		if key == keyA {
+			t.Fatalf("%s cache key matched base key %q", name, keyA)
+		}
+	}
+	if strings.Contains(keyA, "token-a") {
+		t.Fatalf("cache key contains raw token: %q", keyA)
+	}
+	tokenADigest := tokenCacheDigest("token-a")
+	tokenADigestAgain := tokenCacheDigest("token-a")
+	tokenBDigest := tokenCacheDigest("token-b")
+	if tokenADigest != tokenADigestAgain {
+		t.Fatal("token digest is not stable within the process")
+	}
+	if tokenADigest == tokenBDigest {
+		t.Fatal("different tokens produced the same digest")
+	}
+}
+
+func TestCatalogDiscoveryCacheDoesNotCacheFailures(t *testing.T) {
+	t.Parallel()
+
+	cache := newCatalogDiscoveryCache(time.Minute, 2)
+	var loads int
+	_, err := cache.Get(context.Background(), "token-a", func() (*catalog.Catalog, error) {
+		loads++
+		return nil, errors.New("upstream unavailable")
+	})
+	if err == nil {
+		t.Fatal("first Get: expected error, got nil")
+	}
+	_, err = cache.Get(context.Background(), "token-a", func() (*catalog.Catalog, error) {
+		loads++
+		return &catalog.Catalog{Name: "recovered"}, nil
+	})
+	if err != nil {
+		t.Fatalf("second Get: %v", err)
+	}
+	if loads != 2 {
+		t.Fatalf("loads = %d, want 2", loads)
+	}
+}
+
+func TestCatalogDiscoveryCacheEvictsOldestEntry(t *testing.T) {
+	t.Parallel()
+
+	cache := newCatalogDiscoveryCache(time.Minute, 1)
+	var loads int
+	load := func(name string) func() (*catalog.Catalog, error) {
+		return func() (*catalog.Catalog, error) {
+			loads++
+			return &catalog.Catalog{Name: name}, nil
+		}
+	}
+	if _, err := cache.Get(context.Background(), "token-a", load("a")); err != nil {
+		t.Fatalf("token-a Get: %v", err)
+	}
+	if _, err := cache.Get(context.Background(), "token-b", load("b")); err != nil {
+		t.Fatalf("token-b Get: %v", err)
+	}
+	if _, err := cache.Get(context.Background(), "token-a", load("a-again")); err != nil {
+		t.Fatalf("token-a second Get: %v", err)
+	}
+	if loads != 3 {
+		t.Fatalf("loads = %d, want 3", loads)
+	}
+}
+
+func TestCatalogDiscoveryCacheCoalescesConcurrentMisses(t *testing.T) {
+	t.Parallel()
+
+	cache := newCatalogDiscoveryCache(time.Minute, 2)
+	var loads atomic.Int32
+	release := make(chan struct{})
+	started := make(chan struct{})
+	load := func() (*catalog.Catalog, error) {
+		if loads.Add(1) == 1 {
+			close(started)
+		}
+		<-release
+		return &catalog.Catalog{Name: "coalesced"}, nil
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := cache.Get(context.Background(), "token-a", load)
+			errs <- err
+		}()
+	}
+	<-started
+	close(release)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("Get returned error: %v", err)
+		}
+	}
+	if got := loads.Load(); got != 1 {
+		t.Fatalf("loads = %d, want 1", got)
 	}
 }

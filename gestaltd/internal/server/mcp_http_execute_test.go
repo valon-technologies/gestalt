@@ -59,9 +59,15 @@ func TestExecuteOperation_AllowsMCPHTTPPassthrough(t *testing.T) {
 				Transport:   catalog.TransportMCPPassthrough,
 			},
 			{
-				ID:          "external_ref",
-				Description: "Uses an unresolved external JSON Schema ref",
-				InputSchema: json.RawMessage(`{"$ref":"https://example.test/schema.json"}`),
+				ID:          "reserved_external_ref_defs",
+				Description: "Uses an external ref with local reserved definitions",
+				InputSchema: json.RawMessage(`{"$defs":{"Args":{"type":"object","properties":{"_connection":{"type":"string"}}}},"$ref":"https://schemas.example.test/tool-input.json"}`),
+				Transport:   catalog.TransportMCPPassthrough,
+			},
+			{
+				ID:          "zz_external_ref",
+				Description: "Uses an external JSON Schema ref",
+				InputSchema: json.RawMessage(`{"$ref":"https://schemas.example.test/tool-input.json"}`),
 				Transport:   catalog.TransportMCPPassthrough,
 			},
 			{
@@ -117,11 +123,14 @@ func TestExecuteOperation_AllowsMCPHTTPPassthrough(t *testing.T) {
 	if err := json.NewDecoder(opsResp.Body).Decode(&ops); err != nil {
 		t.Fatalf("decode operations: %v", err)
 	}
-	if len(ops) != 1 {
-		t.Fatalf("operations length = %d, want 1: %#v", len(ops), ops)
+	if len(ops) != 2 {
+		t.Fatalf("operations length = %d, want 2: %#v", len(ops), ops)
 	}
 	if ops[0].ID != "run_query" {
 		t.Fatalf("operation ID = %q, want run_query", ops[0].ID)
+	}
+	if ops[1].ID != "zz_external_ref" {
+		t.Fatalf("second operation ID = %q, want zz_external_ref", ops[1].ID)
 	}
 	if ops[0].Method != http.MethodPost {
 		t.Fatalf("operation method = %q, want POST", ops[0].Method)
@@ -180,6 +189,19 @@ func TestExecuteOperation_AllowsMCPHTTPPassthrough(t *testing.T) {
 		t.Fatalf("called sql arg = %#v, want SELECT 1", calledArgs["sql"])
 	}
 
+	externalRefResp, err := http.Post(ts.URL+"/api/v1/test-int/zz_external_ref", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("POST zz_external_ref: %v", err)
+	}
+	defer func() { _ = externalRefResp.Body.Close() }()
+	if externalRefResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(externalRefResp.Body)
+		t.Fatalf("POST zz_external_ref expected 200, got %d: %s", externalRefResp.StatusCode, body)
+	}
+	if calledName != "zz_external_ref" {
+		t.Fatalf("calledName = %q, want zz_external_ref", calledName)
+	}
+
 	prov.callFn = func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
 		return &mcpgo.CallToolResult{
 			Content:           []mcpgo.Content{mcpgo.NewTextContent("query failed")},
@@ -220,6 +242,6 @@ func TestExecuteOperation_AllowsMCPHTTPPassthrough(t *testing.T) {
 	assertHiddenMCPHTTP("reserved_param", `{"_instance":"tool-value"}`)
 	assertHiddenMCPHTTP("reserved_ref", `{"_connection":"tool-value"}`)
 	assertHiddenMCPHTTP("reserved_allof", `{"_instance":"tool-value"}`)
-	assertHiddenMCPHTTP("external_ref", `{}`)
+	assertHiddenMCPHTTP("reserved_external_ref_defs", `{"_connection":"tool-value"}`)
 	assertHiddenMCPHTTP("invalid_schema", `{}`)
 }
