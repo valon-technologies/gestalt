@@ -100,6 +100,24 @@ For deterministic production deployments, run `gestaltd lock` and
 `gestaltd sync --locked` before runtime, then bake the lockfile and prepared
 artifacts into a derived image:
 
+```sh
+gestaltd sync \
+  --locked \
+  --verbose \
+  --output-format=json \
+  --config deploy/config.yaml \
+  --artifacts-dir deploy \
+  --cache-dir /cache/gestaltd-archives \
+  > gestaltd-sync.json
+```
+
+`--output-format=json` writes one compact metrics document to stdout on
+successful sync, while source-build output and errors go to stderr. Without
+`--verbose` or `--output-format=json`, successful `gestaltd sync --locked`
+stays quiet.
+`--cache-dir` enables a content-addressed cache for verified remote release
+archives keyed by their locked SHA-256.
+
 ```dockerfile
 FROM valontechnologies/gestaltd:latest-alpine
 COPY deploy/ /app/

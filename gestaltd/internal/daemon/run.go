@@ -280,6 +280,9 @@ func runSync(args []string) error {
 	check := fs.Bool("check", false, "fail if artifacts would need to be materialized")
 	parallelism := fs.Int("parallelism", defaultSyncParallelism(), "maximum concurrent local UI source preparations")
 	cacheDir := fs.String("cache-dir", "", "path to opt-in remote archive cache")
+	verboseLong := fs.Bool("verbose", false, "emit detailed sync diagnostics")
+	verboseShort := fs.Bool("v", false, "emit detailed sync diagnostics")
+	outputFormat := fs.String("output-format", syncOutputFormatText, "output format: text or json")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -289,14 +292,45 @@ func runSync(args []string) error {
 	if *parallelism < 1 {
 		return fmt.Errorf("invalid --parallelism %d: must be at least 1", *parallelism)
 	}
+	if err := validateSyncOutputFormat(*outputFormat); err != nil {
+		return err
+	}
 	if !*locked {
 		return fmt.Errorf("gestaltd sync currently requires --locked")
 	}
 
-	return syncConfigWithStatePathsOptions(configPaths, operator.StatePaths{
+	verbose := *verboseLong || *verboseShort
+	observabilityRequested := verbose || *outputFormat == syncOutputFormatJSON
+	var metrics *operator.SyncMetricsRecorder
+	observability := operator.SyncObservability{}
+	if observabilityRequested {
+		metrics = operator.NewSyncMetricsRecorder()
+		observability.Recorder = metrics
+	}
+	if *outputFormat == syncOutputFormatJSON {
+		observability.BuildOutput = providerpkg.CommandOutput{Stdout: os.Stderr, Stderr: os.Stderr}
+	}
+	opts := operator.SyncOptions{
+		Parallelism:     *parallelism,
+		ArchiveCacheDir: *cacheDir,
+		Observability:   observability,
+	}
+
+	if err := syncConfigWithStatePathsOptions(configPaths, operator.StatePaths{
 		ArtifactsDir: *artifactsDir,
 		LockfilePath: *lockfilePath,
-	}, *check, operator.SyncOptions{Parallelism: *parallelism, ArchiveCacheDir: *cacheDir})
+	}, *check, opts); err != nil {
+		return err
+	}
+
+	switch {
+	case *outputFormat == syncOutputFormatJSON:
+		return writeSyncJSON(os.Stdout, metrics.Snapshot())
+	case verbose:
+		return writeSyncText(os.Stderr, metrics.Snapshot(), true)
+	default:
+		return nil
+	}
 }
 
 func defaultSyncParallelism() int {
@@ -434,7 +468,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
-	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--check]")
+	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
 	writeUsageLine(w, "  gestaltd serve [--app NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
@@ -489,12 +523,14 @@ func printLockUsage(w io.Writer) {
 
 func printSyncUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--check]")
+	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Materialize prepared artifacts from the existing lockfile.")
 	writeUsageLine(w, "Does not resolve new metadata or rewrite the lockfile.")
 	writeUsageLine(w, "--cache-dir reuses verified remote release archives; --check remains read-only.")
 	writeUsageLine(w, "--parallelism caps concurrent local source UI preparation.")
+	writeUsageLine(w, "--output-format=json writes one machine-readable metrics document to stdout on success.")
+	writeUsageLine(w, "-v/--verbose adds cache, download, timing, and output-size diagnostics.")
 	writeUsageLine(w, "When repeated, --config files merge left-to-right.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
@@ -504,6 +540,8 @@ func printSyncUsage(w io.Writer) {
 	writeUsageLine(w, "  --locked          Require an existing lockfile")
 	writeUsageLine(w, "  --parallelism     Maximum concurrent local source UI preparations")
 	writeUsageLine(w, "  --cache-dir       Opt-in cache for verified remote release archives; relative paths use the current working directory")
+	writeUsageLine(w, "  --output-format   Output format: text or json")
+	writeUsageLine(w, "  -v, --verbose     Emit detailed sync diagnostics")
 	writeUsageLine(w, "  --check           Fail if artifacts would need to be materialized")
 }
 

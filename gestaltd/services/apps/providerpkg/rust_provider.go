@@ -123,7 +123,7 @@ func BuildRustComponentTempBinary(root, kind, goos, goarch string) (string, func
 
 func buildRustTempBinary(root, pluginName, kind, goos, goarch string) (string, func(), error) {
 	return buildGoTempBinary("gestalt-rust-provider-bin-*", rustBinaryName(kind), goos, func(outputPath string) error {
-		_, err := buildRustBinary(root, outputPath, pluginName, kind, goos, goarch)
+		_, err := buildRustBinary(root, outputPath, pluginName, kind, goos, goarch, CommandOutput{})
 		return err
 	})
 }
@@ -152,21 +152,29 @@ func ValidateRustComponentRelease(root, kind, goos, goarch string) error {
 }
 
 func BuildRustProviderBinary(root, outputPath, pluginName, goos, goarch string) (string, error) {
-	return buildRustBinary(root, outputPath, pluginName, providermanifestv1.KindApp, goos, goarch)
+	return buildRustProviderBinary(root, outputPath, pluginName, goos, goarch, CommandOutput{})
+}
+
+func buildRustProviderBinary(root, outputPath, pluginName, goos, goarch string, output CommandOutput) (string, error) {
+	return buildRustBinary(root, outputPath, pluginName, providermanifestv1.KindApp, goos, goarch, output)
 }
 
 func BuildRustComponentBinary(root, outputPath, kind, goos, goarch string) (string, error) {
+	return buildRustComponentBinary(root, outputPath, kind, goos, goarch, CommandOutput{})
+}
+
+func buildRustComponentBinary(root, outputPath, kind, goos, goarch string, output CommandOutput) (string, error) {
 	if err := validateRustComponentKind(kind); err != nil {
 		return "", err
 	}
-	return buildRustBinary(root, outputPath, sourceAppName(root), kind, goos, goarch)
+	return buildRustBinary(root, outputPath, sourceAppName(root), kind, goos, goarch, output)
 }
 
 func validateRustComponentKind(kind string) error {
 	return validateSourceComponentKind(kind)
 }
 
-func buildRustBinary(root, outputPath, pluginName, kind, goos, goarch string) (string, error) {
+func buildRustBinary(root, outputPath, pluginName, kind, goos, goarch string, output CommandOutput) (string, error) {
 	target, err := detectRustPackage(root)
 	if err != nil {
 		return "", err
@@ -197,8 +205,8 @@ func buildRustBinary(root, outputPath, pluginName, kind, goos, goarch string) (s
 		"--target-dir", targetDir,
 	)
 	cmd.Env = os.Environ()
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = commandStdout(output)
+	cmd.Stderr = commandStderr(output)
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("cargo build: %w", err)
 	}

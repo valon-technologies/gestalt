@@ -20,11 +20,11 @@ type sourceCatalogOptions struct {
 }
 
 func PrepareSourceManifest(manifestPath string) ([]byte, *providermanifestv1.Manifest, error) {
-	return prepareSourceManifest(manifestPath, false)
+	return prepareSourceManifest(manifestPath, false, SourceBuildOptions{})
 }
 
-func prepareSourceManifestForPreparedInstall(manifestPath string) ([]byte, *providermanifestv1.Manifest, error) {
-	return prepareSourceManifest(manifestPath, true)
+func prepareSourceManifestForPreparedInstallWithOptions(manifestPath string, opts SourceBuildOptions) ([]byte, *providermanifestv1.Manifest, error) {
+	return prepareSourceManifest(manifestPath, true, opts)
 }
 
 // Local prepare may create catalog.yaml from run; packaging must regenerate it
@@ -33,7 +33,7 @@ func explicitRunStaleCatalog(manifest *providermanifestv1.Manifest) bool {
 	return HasExplicitSourceRun(manifest)
 }
 
-func prepareSourceManifest(manifestPath string, packaging bool) ([]byte, *providermanifestv1.Manifest, error) {
+func prepareSourceManifest(manifestPath string, packaging bool, buildOpts SourceBuildOptions) ([]byte, *providermanifestv1.Manifest, error) {
 	absoluteManifestPath, err := filepath.Abs(manifestPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve manifest path: %w", err)
@@ -53,7 +53,7 @@ func prepareSourceManifest(manifestPath string, packaging bool) ([]byte, *provid
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := ensurePrepareOnlyBuild(manifestPath, manifest, SourceBuildOptions{}); err != nil {
+	if err := ensurePrepareOnlyBuild(manifestPath, manifest, buildOpts); err != nil {
 		return nil, nil, err
 	}
 	catalogOptions := sourceCatalogOptions{SkipExplicitRun: packaging}

@@ -102,10 +102,18 @@ func pythonExecutionCommand(root, target, runtimeKind string) (string, []string,
 }
 
 func BuildPythonProviderBinary(sourceDir, binaryPath, pluginName, target, goos, goarch string) (string, error) {
-	return BuildPythonComponentBinary(sourceDir, binaryPath, pluginName, target, pythonRuntimeKindIntegration, goos, goarch)
+	return buildPythonProviderBinary(sourceDir, binaryPath, pluginName, target, goos, goarch, CommandOutput{})
+}
+
+func buildPythonProviderBinary(sourceDir, binaryPath, pluginName, target, goos, goarch string, output CommandOutput) (string, error) {
+	return buildPythonComponentBinary(sourceDir, binaryPath, pluginName, target, pythonRuntimeKindIntegration, goos, goarch, output)
 }
 
 func BuildPythonComponentBinary(sourceDir, binaryPath, pluginName, target, runtimeKind, goos, goarch string) (string, error) {
+	return buildPythonComponentBinary(sourceDir, binaryPath, pluginName, target, runtimeKind, goos, goarch, CommandOutput{})
+}
+
+func buildPythonComponentBinary(sourceDir, binaryPath, pluginName, target, runtimeKind, goos, goarch string, output CommandOutput) (string, error) {
 	interpreter, err := DetectPythonInterpreter(sourceDir, goos, goarch)
 	if err != nil {
 		return "", fmt.Errorf("detect Python release interpreter for %s/%s: %w", goos, goarch, err)
@@ -118,8 +126,8 @@ func BuildPythonComponentBinary(sourceDir, binaryPath, pluginName, target, runti
 		return "", fmt.Errorf("prepare Python release build environment: %w", err)
 	}
 	cmd.Env = env
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = commandStdout(output)
+	cmd.Stderr = commandStderr(output)
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("python release build: %w (ensure gestalt and PyInstaller are installed in the selected Python environment)", err)
 	}

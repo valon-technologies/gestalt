@@ -59,6 +59,28 @@ gestaltd lock --config deploy/config.yaml
 gestaltd sync --locked --config deploy/config.yaml --artifacts-dir deploy
 ```
 
+Successful `gestaltd sync --locked` stays quiet by default. In CI, use
+`--output-format=json` when you want machine-readable sync timing and cache
+metrics. Stdout contains only the JSON document on success, while build output
+and errors remain on stderr:
+
+```sh
+gestaltd sync \
+  --locked \
+  --verbose \
+  --output-format=json \
+  --config deploy/config.yaml \
+  --artifacts-dir deploy \
+  --cache-dir /cache/gestaltd-archives \
+  > gestaltd-sync.json
+```
+
+The archive cache is content-addressed by the locked archive SHA-256. A
+lockfile bump misses only for archives whose SHA changes; unchanged remote
+release archives can still be reused from the cache. Omitting `--cache-dir`
+disables the archive cache, and `sync --locked --check` remains read-only and
+does not populate it.
+
 If the deployment builds local source providers during `sync`, you can opt into
 the generic Gestalt build cache during the build stage:
 

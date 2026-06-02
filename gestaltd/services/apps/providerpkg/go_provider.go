@@ -48,12 +48,16 @@ func BuildGoProviderTempBinary(root, goos, goarch string) (string, func(), error
 }
 
 func BuildGoProviderBinary(root, outputPath, pluginName, goos, goarch string) error {
+	return buildGoProviderBinary(root, outputPath, pluginName, goos, goarch, CommandOutput{})
+}
+
+func buildGoProviderBinary(root, outputPath, pluginName, goos, goarch string, output CommandOutput) error {
 	return buildGoSourceBinary(root, outputPath, goos, goarch, ErrNoGoProviderPackage, goProviderSourceExists, "gestalt-go-provider-*.go", "Go provider wrapper", func(importPath string) (goExecutableWrapperData, error) {
 		return goExecutableWrapperData{
 			ImportPath: importPath,
 			ServeCall:  fmt.Sprintf("gestalt.ServeProvider(ctx, providerpkg.New(), providerpkg.Router.WithName(%q))", pluginName),
 		}, nil
-	})
+	}, output)
 }
 
 func DetectGoComponentImportPath(root, kind, goos, goarch string) (string, error) {
@@ -70,6 +74,10 @@ func BuildGoComponentTempBinary(root, kind, goos, goarch string) (string, func()
 }
 
 func BuildGoComponentBinary(root, outputPath, kind, goos, goarch string) error {
+	return buildGoComponentBinary(root, outputPath, kind, goos, goarch, CommandOutput{})
+}
+
+func buildGoComponentBinary(root, outputPath, kind, goos, goarch string, output CommandOutput) error {
 	if err := validateSourceComponentKind(kind); err != nil {
 		return err
 	}
@@ -82,7 +90,7 @@ func BuildGoComponentBinary(root, outputPath, kind, goos, goarch string) error {
 			ImportPath: importPath,
 			ServeCall:  serveCall,
 		}, nil
-	})
+	}, output)
 }
 
 func SourceComponentExecutionCommand(root, kind, goos, goarch string) (string, []string, func(), error) {
@@ -146,24 +154,28 @@ func ValidateSourceComponentRelease(root, kind, goos, goarch string) error {
 }
 
 func BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch string) (string, error) {
+	return buildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch, CommandOutput{})
+}
+
+func buildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch string, output CommandOutput) (string, error) {
 	sourceKind, target, err := detectSourceComponent(root, kind, goos, goarch)
 	if err != nil {
 		return "", err
 	}
 	switch sourceKind {
 	case sourceProviderKindGo:
-		return "", BuildGoComponentBinary(root, outputPath, kind, goos, goarch)
+		return "", buildGoComponentBinary(root, outputPath, kind, goos, goarch, output)
 	case sourceProviderKindRust:
-		return BuildRustComponentBinary(root, outputPath, kind, goos, goarch)
+		return buildRustComponentBinary(root, outputPath, kind, goos, goarch, output)
 	case sourceProviderKindPython:
 		runtimeKind, err := pythonRuntimeKind(kind)
 		if err != nil {
 			return "", err
 		}
 		pluginName := sourceAppName(root)
-		return BuildPythonComponentBinary(root, outputPath, pluginName, target, runtimeKind, goos, goarch)
+		return buildPythonComponentBinary(root, outputPath, pluginName, target, runtimeKind, goos, goarch, output)
 	case sourceProviderKindTypeScript:
-		return BuildTypeScriptComponentBinary(root, outputPath, kind, target, goos, goarch)
+		return buildTypeScriptComponentBinary(root, outputPath, kind, target, goos, goarch, output)
 	default:
 		return "", ErrNoSourceComponentPackage
 	}
@@ -311,14 +323,14 @@ func newGoSourceWrapper(root, goos, goarch string, noSourceErr error, sourceExis
 	return newGoWrapper(tempPattern, description, goExecutableWrapperTemplate, data)
 }
 
-func buildGoSourceBinary(root, outputPath, goos, goarch string, noSourceErr error, sourceExists func(string) bool, tempPattern, description string, wrapperData func(string) (goExecutableWrapperData, error)) error {
+func buildGoSourceBinary(root, outputPath, goos, goarch string, noSourceErr error, sourceExists func(string) bool, tempPattern, description string, wrapperData func(string) (goExecutableWrapperData, error), output CommandOutput) error {
 	wrapperPath, cleanup, err := newGoSourceWrapper(root, goos, goarch, noSourceErr, sourceExists, tempPattern, description, wrapperData)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	return buildGoWrapperBinary(root, outputPath, wrapperPath, goos, goarch)
+	return buildGoWrapperBinary(root, outputPath, wrapperPath, goos, goarch, output)
 }
 
 func newGoWrapper(tempPattern, description string, tmpl *template.Template, data any) (string, func(), error) {
@@ -366,11 +378,11 @@ func buildGoTempBinary(tempDirPattern, binaryBaseName, goos string, build func(o
 	return binaryPath, cleanup, nil
 }
 
-func buildGoWrapperBinary(root, outputPath, wrapperPath, goos, goarch string) error {
+func buildGoWrapperBinary(root, outputPath, wrapperPath, goos, goarch string, output CommandOutput) error {
 	cmd := exec.Command("go", "-C", root, "build", goReadonlyFlag, "-trimpath", "-ldflags", "-s -w", "-o", outputPath, wrapperPath)
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = commandStdout(output)
+	cmd.Stderr = commandStderr(output)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("go build: %w", err)
 	}

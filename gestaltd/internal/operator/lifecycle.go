@@ -121,6 +121,7 @@ type StatePaths struct {
 type SyncOptions struct {
 	Parallelism     int
 	ArchiveCacheDir string
+	Observability   SyncObservability
 }
 
 func DefaultSyncParallelism() int {
@@ -1058,6 +1059,10 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 
 func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StatePaths, mode artifactMode, opts SyncOptions) error {
 	opts = normalizeSyncOptions(opts)
+	recorder := opts.Observability.Recorder
+	if recorder != nil {
+		recorder.Begin(syncActionForArtifactMode(mode), configPaths, mode == artifactModeCheck, opts.Parallelism)
+	}
 	cfg, err := loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return fmt.Errorf("loading config: %v", err)
@@ -1071,6 +1076,11 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	if mode == artifactModeMaterialize && opts.ArchiveCacheDir != "" {
 		paths.archiveCacheDir = resolveCLIArtifactsDir(opts.ArchiveCacheDir)
+	}
+	paths.syncMetrics = recorder
+	paths.syncBuildOutput = opts.Observability.BuildOutput
+	if recorder != nil {
+		recorder.SetPaths(paths.artifactsDir, paths.lockfilePath, paths.archiveCacheDir, opts.ArchiveCacheDir != "", mode == artifactModeMaterialize && paths.archiveCacheDir != "")
 	}
 	lock, err := ReadLockfile(paths.lockfilePath)
 	if err != nil {
@@ -1098,8 +1108,14 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if err := config.ValidateRuntime(cfg); err != nil {
 		return err
 	}
+	if recorder != nil {
+		recorder.FinishLoadPhase()
+	}
 	if err := l.applyPreparedProviders(paths, lock, cfg, mode, opts); err != nil {
 		return err
+	}
+	if recorder != nil {
+		recorder.FinishMaterializePhase()
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return err
@@ -1107,7 +1123,19 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if err := appservice.ValidateEffectiveCatalogsAndDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 		return err
 	}
+	if recorder != nil {
+		recorder.FinishValidatePhase()
+		recorder.RecordOutputStats(mode == artifactModeMaterialize, preparedArtifactDestDirs(paths, cfg))
+		recorder.Finish()
+	}
 	return nil
+}
+
+func syncActionForArtifactMode(mode artifactMode) string {
+	if mode == artifactModeCheck {
+		return syncActionCheck
+	}
+	return syncActionMaterialize
 }
 
 func (l *Lifecycle) resolveConfigSecrets(ctx context.Context, cfg *config.Config) error {
@@ -1512,6 +1540,8 @@ type lifecyclePaths struct {
 	runtimeDir             string
 	uiDir                  string
 	archiveCacheDir        string
+	syncMetrics            *SyncMetricsRecorder
+	syncBuildOutput        providerpkg.CommandOutput
 }
 
 func primaryConfigPath(paths []string) string {
@@ -2933,7 +2963,7 @@ func resolveArchiveForPlatform(entry LockEntry, platform string) (LockArchive, s
 }
 
 func prepareLocalSourceInstall(kind, name, manifestPath, destDir string) (*preparedInstall, error) {
-	_, cleanupInstall, commitInstall, err := stageLocalSourceInstall(kind, name, manifestPath, destDir)
+	_, cleanupInstall, commitInstall, err := stageLocalSourceInstall(kind, name, manifestPath, destDir, providerpkg.StageSourcePreparedInstallOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -2948,7 +2978,7 @@ func prepareLocalSourceInstall(kind, name, manifestPath, destDir string) (*prepa
 	return install, nil
 }
 
-func stageLocalSourceInstall(kind, name, manifestPath, destDir string) (*preparedInstall, func() error, func() error, error) {
+func stageLocalSourceInstall(kind, name, manifestPath, destDir string, opts providerpkg.StageSourcePreparedInstallOptions) (*preparedInstall, func() error, func() error, error) {
 	if strings.TrimSpace(manifestPath) == "" {
 		return nil, nil, nil, fmt.Errorf("manifest path for %s %q is required", kind, name)
 	}
@@ -2978,10 +3008,11 @@ func stageLocalSourceInstall(kind, name, manifestPath, destDir string) (*prepare
 		stageKind = providermanifestv1.KindApp
 	}
 	if _, err := providerpkg.StageSourcePreparedInstallDir(manifestPath, tempDir, providerpkg.StageSourcePreparedInstallOptions{
-		Kind:    stageKind,
-		AppName: name,
-		GOOS:    runtime.GOOS,
-		GOARCH:  runtime.GOARCH,
+		Kind:        stageKind,
+		AppName:     name,
+		GOOS:        runtime.GOOS,
+		GOARCH:      runtime.GOARCH,
+		BuildOutput: opts.BuildOutput,
 	}); err != nil {
 		_ = cleanupInstall()
 		return nil, nil, nil, fmt.Errorf("prepare manifest for %s %q: %w", kind, name, err)
@@ -3143,7 +3174,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("resolve archive for %s: %w", subject, err)
 	}
-	download, err := downloadArchiveForSourceWithCache(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation, archive.SHA256, "")
+	download, err := downloadArchiveForSourceWithCache(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation, archive.SHA256, "", nil)
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("download metadata source package for %s: %w", subject, err)
 	}
@@ -3417,6 +3448,9 @@ func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile,
 	}
 	if err := synthesizePluginOwnedUIEntries(cfg); err != nil {
 		return err
+	}
+	if paths.syncMetrics != nil {
+		paths.syncMetrics.SetArtifactCount(len(preparedArtifactDestDirs(paths, cfg)))
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		lockEntries := lockEntriesForKind(lock, collection.kind)
@@ -4159,7 +4193,7 @@ func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecy
 		return nil
 	}
 	if provider.HasLocalSource() {
-		install, cleanup, _, err := stageLocalSourceInstall(kind, name, provider.SourcePath(), destDir)
+		install, cleanup, _, err := stageLocalSourceInstall(kind, name, provider.SourcePath(), destDir, providerpkg.StageSourcePreparedInstallOptions{})
 		if err != nil {
 			if cleanup != nil {
 				_ = cleanup()
@@ -4213,7 +4247,7 @@ func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecy
 		}
 	}
 	if provider.HasGitSource() && found && len(entry.Archives) == 0 {
-		install, cleanup, _, err := l.stageGitSourceInstall(ctx, paths, kind, name, destDir, provider)
+		install, cleanup, _, err := l.stageGitSourceInstall(ctx, paths, kind, name, destDir, provider, providerpkg.StageSourcePreparedInstallOptions{})
 		if err != nil {
 			if cleanup != nil {
 				_ = cleanup()
@@ -4753,7 +4787,7 @@ func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name 
 		if !mode.canMaterialize() {
 			return nil, preparedArtifactStaleError(paths, "prepared artifact for %s is missing or stale", subject)
 		}
-		stagedInstall, cleanupStaged, commitStaged, err := stageLocalSourceInstall(kind, name, provider.SourcePath(), destDir)
+		stagedInstall, cleanupStaged, commitStaged, err := stageLocalSourceInstall(kind, name, provider.SourcePath(), destDir, paths.stageOptions())
 		if cleanupStaged != nil {
 			defer func() { _ = cleanupStaged() }()
 		}
@@ -4917,9 +4951,9 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 				}
 				if stagedInstall == nil {
 					if provider.HasGitSource() {
-						stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindUI, logicalName, destDir, provider)
+						stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindUI, logicalName, destDir, provider, paths.stageOptions())
 					} else {
-						stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindUI, logicalName, provider.SourcePath(), destDir)
+						stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindUI, logicalName, provider.SourcePath(), destDir, paths.stageOptions())
 					}
 					if err != nil {
 						return "", err
@@ -5049,9 +5083,9 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 			}
 			if stagedInstall == nil {
 				if app.HasGitSource() {
-					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindApp, name, destDir, app)
+					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindApp, name, destDir, app, paths.stageOptions())
 				} else {
-					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindApp, name, app.SourcePath(), destDir)
+					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindApp, name, app.SourcePath(), destDir, paths.stageOptions())
 				}
 				if err != nil {
 					return err
@@ -5138,9 +5172,9 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 			}
 			if stagedInstall == nil {
 				if app.HasGitSource() {
-					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, kind, name, destDir, app)
+					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, kind, name, destDir, app, paths.stageOptions())
 				} else {
-					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(kind, name, app.SourcePath(), destDir)
+					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(kind, name, app.SourcePath(), destDir, paths.stageOptions())
 				}
 				if err != nil {
 					return err
@@ -5344,7 +5378,11 @@ func (l *Lifecycle) downloadLockedArchive(ctx context.Context, paths lifecyclePa
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("resolve locked archive digest for %s: %w", subject, err)
 	}
-	download, err := downloadArchiveForSourceWithCache(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation, expectedSHA, cacheDir)
+	var observer archiveDownloadObserver
+	if paths.syncMetrics != nil {
+		observer = newSyncArchiveDownloadObserver(paths.syncMetrics, subject)
+	}
+	download, err := downloadArchiveForSourceWithCache(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation, expectedSHA, cacheDir, observer)
 	if err != nil {
 		return nil, "", nil, lockedArchiveDownloadError{err: fmt.Errorf("download locked source archive for %s: %w", subject, err)}
 	}
