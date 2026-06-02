@@ -50,6 +50,25 @@ if TYPE_CHECKING:
         BeginLoginResponse,
         CompleteLoginRequest,
     )
+    from ._authorization import (
+        AddRelationshipRequest,
+        AddRelationshipResponse,
+        CheckAccessManyRequest,
+        CheckAccessManyResponse,
+        CheckAccessRequest,
+        CheckAccessResponse,
+        DeleteRelationshipRequest,
+        DeleteRelationshipResponse,
+        GetActiveModelRefResponse,
+        ListActiveModelResourceTypesRequest,
+        ListActiveModelResourceTypesResponse,
+        ListRelationshipsRequest,
+        ListRelationshipsResponse,
+        SetActiveModelRequest,
+        SetActiveModelResponse,
+        SetAuthorizationStateRequest,
+        SetAuthorizationStateResponse,
+    )
     from ._cache import CacheEntry
     from ._runtime_provider import (
         GetRuntimeSessionRequest,
@@ -112,6 +131,7 @@ class ProviderKind(str, Enum):
     """Runtime kinds supported by the Python SDK."""
 
     INTEGRATION = "integration"
+    AUTHORIZATION = "authorization"
     AUTHENTICATION = "authentication"
     CACHE = "cache"
     S3 = "s3"
@@ -248,6 +268,74 @@ class AuthenticationProvider(AppProvider):
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.AUTHENTICATION)
+
+
+class AuthorizationProvider(AppProvider):
+    """Base class for authorization providers."""
+
+    def check_access(self, request: CheckAccessRequest) -> CheckAccessResponse:
+        """Return whether a single access request is allowed."""
+
+        raise NotImplementedError
+
+    def check_access_many(
+        self, request: CheckAccessManyRequest
+    ) -> CheckAccessManyResponse:
+        """Return decisions for a batch of access requests."""
+
+        raise NotImplementedError
+
+    def list_relationships(
+        self, request: ListRelationshipsRequest
+    ) -> ListRelationshipsResponse:
+        """List relationships matching the supplied filter."""
+
+        raise NotImplementedError
+
+    def add_relationship(
+        self, request: AddRelationshipRequest
+    ) -> AddRelationshipResponse:
+        """Add a relationship and return the stored relationship."""
+
+        raise NotImplementedError
+
+    def delete_relationship(
+        self, request: DeleteRelationshipRequest
+    ) -> DeleteRelationshipResponse | None:
+        """Delete a relationship tuple."""
+
+        raise NotImplementedError
+
+    def set_authorization_state(
+        self, request: SetAuthorizationStateRequest
+    ) -> SetAuthorizationStateResponse:
+        """Atomically replace the model and relationships."""
+
+        raise NotImplementedError
+
+    def get_active_model_ref(self) -> GetActiveModelRefResponse:
+        """Return the active authorization model reference."""
+
+        raise NotImplementedError
+
+    def set_active_model(self, request: SetActiveModelRequest) -> SetActiveModelResponse:
+        """Set the active authorization model."""
+
+        raise NotImplementedError
+
+    def list_active_model_resource_types(
+        self, request: ListActiveModelResourceTypesRequest
+    ) -> ListActiveModelResourceTypesResponse:
+        """List resource types in the active authorization model."""
+
+        raise NotImplementedError
+
+    def serve(self) -> None:
+        """Start the authorization runtime."""
+
+        from . import _runtime
+
+        _runtime.serve(self, runtime_kind=ProviderKind.AUTHORIZATION)
 
 
 class ExternalTokenValidator:

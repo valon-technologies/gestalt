@@ -17,6 +17,7 @@ from typing import Any, Final, cast
 
 from . import _agent as _agent_native
 from . import _authentication as _auth_native
+from . import _authorization as _authorization_native
 from . import _runtime_provider as _runtime_provider_native
 from . import _s3 as _s3_native
 from . import _telemetry
@@ -34,6 +35,7 @@ from ._providers import (
     AppProvider,
     AppProviderAdapter,
     AuthenticationProvider,
+    AuthorizationProvider,
     CacheProvider,
     Closer,
     ExternalTokenValidator,
@@ -64,6 +66,7 @@ runtime_pb2: Any = cast(Any, None)
 runtime_pb2_grpc: Any = cast(Any, None)
 authentication_pb2: Any = cast(Any, None)
 authentication_pb2_grpc: Any = cast(Any, None)
+authorization_pb2_grpc: Any = cast(Any, None)
 cache_pb2: Any = cast(Any, None)
 cache_pb2_grpc: Any = cast(Any, None)
 s3_pb2_grpc: Any = cast(Any, None)
@@ -88,6 +91,7 @@ def _ensure_grpc_runtime() -> None:
     global json_format
     global authentication_pb2
     global authentication_pb2_grpc
+    global authorization_pb2_grpc
     global cache_pb2
     global cache_pb2_grpc
     global duration_pb2
@@ -119,6 +123,7 @@ def _ensure_grpc_runtime() -> None:
     from ._gen.v1 import app_pb2_grpc as _app_pb2_grpc
     from ._gen.v1 import authentication_pb2 as _authentication_pb2
     from ._gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
+    from ._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
     from ._gen.v1 import cache_pb2 as _cache_pb2
     from ._gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
     from ._gen.v1 import runtime_pb2 as _runtime_pb2
@@ -143,6 +148,7 @@ def _ensure_grpc_runtime() -> None:
     runtime_pb2_grpc = _runtime_pb2_grpc
     authentication_pb2 = _authentication_pb2
     authentication_pb2_grpc = _authentication_pb2_grpc
+    authorization_pb2_grpc = _authorization_pb2_grpc
     cache_pb2 = _cache_pb2
     cache_pb2_grpc = _cache_pb2_grpc
     s3_pb2_grpc = _s3_pb2_grpc
@@ -330,6 +336,10 @@ def _load_target(args: RuntimeArgs) -> App | AppProviderAdapter | AppProvider:
         target, AuthenticationProvider
     ):
         return _authentication_runtime_plugin(target)
+    if resolved_kind == ProviderKind.AUTHORIZATION and isinstance(
+        target, AuthorizationProvider
+    ):
+        return _authorization_runtime_plugin(target)
     if resolved_kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
         return _cache_runtime_plugin(target)
     if resolved_kind == ProviderKind.S3 and isinstance(target, S3Provider):
@@ -344,7 +354,7 @@ def _load_target(args: RuntimeArgs) -> App | AppProviderAdapter | AppProvider:
         return _secrets_runtime_plugin(target)
     if isinstance(target, AppProvider):
         raise RuntimeError(
-            "providers must be wrapped in gestalt.AppProviderAdapter unless runtime_kind is authentication, cache, s3, agent, runtime, workflow, or secrets"
+            "providers must be wrapped in gestalt.AppProviderAdapter unless runtime_kind is authorization, authentication, cache, s3, agent, runtime, workflow, or secrets"
         )
     raise RuntimeError(f"{args.target} did not resolve to a supported gestalt target")
 
@@ -446,6 +456,10 @@ def _servable_target(
         target, AuthenticationProvider
     ):
         return _authentication_runtime_plugin(target)
+    if kind == ProviderKind.AUTHORIZATION and isinstance(
+        target, AuthorizationProvider
+    ):
+        return _authorization_runtime_plugin(target)
     if kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
         return _cache_runtime_plugin(target)
     if kind == ProviderKind.S3 and isinstance(target, S3Provider):
@@ -479,6 +493,28 @@ def _register_authentication_services(server: Any, provider: AppProvider) -> Non
     )
     authentication_pb2_grpc.add_AuthenticationProviderServicer_to_server(
         _authentication_servicer(provider=provider),
+        server,
+    )
+
+
+def _authorization_runtime_plugin(
+    provider: AuthorizationProvider,
+) -> AppProviderAdapter:
+    return AppProviderAdapter(
+        kind=ProviderKind.AUTHORIZATION,
+        provider=provider,
+        register_services=_register_authorization_services,
+    )
+
+
+def _register_authorization_services(server: Any, provider: AppProvider) -> None:
+    _ensure_grpc_runtime()
+    runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
+        _runtime_servicer(provider=provider, kind=ProviderKind.AUTHORIZATION),
+        server,
+    )
+    authorization_pb2_grpc.add_AuthorizationProviderServicer_to_server(
+        _authorization_servicer(provider=provider),
         server,
     )
 
@@ -1543,6 +1579,123 @@ def _authentication_servicer(*, provider: AppProvider) -> Any:
     return AuthenticationServicer()
 
 
+def _authorization_servicer(*, provider: AppProvider) -> Any:
+    _ensure_grpc_runtime()
+    authorization_provider = cast(AuthorizationProvider, provider)
+
+    class AuthorizationServicer(
+        authorization_pb2_grpc.AuthorizationProviderServicer
+    ):
+        @_grpc_handler("authorization check access")
+        def CheckAccess(self, request: Any, context: Any) -> Any:
+            response = authorization_provider.check_access(
+                _authorization_native.check_access_request_from_proto(request)
+            )
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "authorization provider returned nil response",
+                )
+            return _authorization_native.check_access_response_to_proto(response)
+
+        @_grpc_handler("authorization check access many")
+        def CheckAccessMany(self, request: Any, context: Any) -> Any:
+            response = authorization_provider.check_access_many(
+                _authorization_native.check_access_many_request_from_proto(request)
+            )
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "authorization provider returned nil response",
+                )
+            return _authorization_native.check_access_many_response_to_proto(response)
+
+        @_grpc_handler("authorization list relationships")
+        def ListRelationships(self, request: Any, context: Any) -> Any:
+            response = authorization_provider.list_relationships(
+                _authorization_native.list_relationships_request_from_proto(request)
+            )
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "authorization provider returned nil response",
+                )
+            return _authorization_native.list_relationships_response_to_proto(response)
+
+        @_grpc_handler("authorization add relationship")
+        def AddRelationship(self, request: Any, context: Any) -> Any:
+            response = authorization_provider.add_relationship(
+                _authorization_native.add_relationship_request_from_proto(request)
+            )
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "authorization provider returned nil response",
+                )
+            return _authorization_native.add_relationship_response_to_proto(response)
+
+        @_grpc_handler("authorization delete relationship")
+        def DeleteRelationship(self, request: Any, _context: Any) -> Any:
+            response = authorization_provider.delete_relationship(
+                _authorization_native.delete_relationship_request_from_proto(request)
+            )
+            return _authorization_native.delete_relationship_response_to_proto(response)
+
+        @_grpc_handler("authorization set authorization state")
+        def SetAuthorizationState(self, request: Any, context: Any) -> Any:
+            response = authorization_provider.set_authorization_state(
+                _authorization_native.set_authorization_state_request_from_proto(request)
+            )
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "authorization provider returned nil response",
+                )
+            return _authorization_native.set_authorization_state_response_to_proto(response)
+
+        @_grpc_handler("authorization get active model ref")
+        def GetActiveModelRef(self, _request: Any, context: Any) -> Any:
+            response = authorization_provider.get_active_model_ref()
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "authorization provider returned nil response",
+                )
+            return _authorization_native.get_active_model_ref_response_to_proto(response)
+
+        @_grpc_handler("authorization set active model")
+        def SetActiveModel(self, request: Any, context: Any) -> Any:
+            response = authorization_provider.set_active_model(
+                _authorization_native.set_active_model_request_from_proto(request)
+            )
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "authorization provider returned nil response",
+                )
+            return _authorization_native.set_active_model_response_to_proto(response)
+
+        @_grpc_handler("authorization list active model resource types")
+        def ListActiveModelResourceTypes(self, request: Any, context: Any) -> Any:
+            response = authorization_provider.list_active_model_resource_types(
+                _authorization_native.list_active_model_resource_types_request_from_proto(
+                    request
+                )
+            )
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "authorization provider returned nil response",
+                )
+            return (
+                _authorization_native.list_active_model_resource_types_response_to_proto(
+                    response
+                )
+            )
+
+    return AuthorizationServicer()
+
+
 def _provider_overrides(
     provider: AppProvider,
     method_name: str,
@@ -1805,6 +1958,7 @@ def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
     normalized = _normalized_runtime_kind(kind)
     return {
         ProviderKind.INTEGRATION: runtime_pb2.ProviderKind.PROVIDER_KIND_APP,
+        ProviderKind.AUTHORIZATION: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHORIZATION,
         ProviderKind.AUTHENTICATION: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHENTICATION,
         ProviderKind.CACHE: runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE,
         ProviderKind.S3: runtime_pb2.ProviderKind.PROVIDER_KIND_S3,
