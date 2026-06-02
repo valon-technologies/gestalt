@@ -25,6 +25,7 @@ import { Callout } from 'nextra/components'
 | `gestaltd lock --config PATH` | Resolve published provider sources and write canonical lock metadata. Repeat `--config` to layer overrides. |
 | `gestaltd lock --check --config PATH` | Verify that the checked-in lockfile matches the current config without rewriting it. |
 | `gestaltd sync --locked --config PATH` | Materialize prepared provider artifacts from an existing lockfile. Local source UI preparation uses bounded parallelism by default. |
+| `gestaltd sync --locked --cache-dir DIR --config PATH` | Reuse verified remote release archives across sync runs. `DIR` resolves like a normal CLI path. |
 | `gestaltd sync --locked --check --config PATH` | Verify that prepared artifacts exist and match the lockfile without rewriting them. |
 | `gestaltd validate --config PATH` | Validate config without serving. Repeat `--config` to layer overrides. |
 | `gestaltd validate --lockfile PATH` | Accept the same explicit lockfile path used by `lock`, `sync`, and `serve` without mutating it. |
@@ -77,6 +78,13 @@ update the lockfile by default. `provider add` and `provider remove` accept
 `GOMAXPROCS`; `--parallelism 1` forces sequential preparation. Other provider
 types and `sync --locked --check` remain sequential.
 
+`gestaltd sync --locked --cache-dir DIR` enables an opt-in cache for verified
+remote release archives. The cache key is the locked archive SHA-256, and
+cached archives are rehashed before use. The cache does not store prepared
+artifact directories, local source builds, local archive paths, or metadata
+responses. `sync --locked --check` remains read-only and does not populate the
+cache.
+
 ## Config Watch Mode
 
 Use `gestaltd serve --watch` for config-based local development when your
@@ -105,6 +113,7 @@ Watch mode applies only to config-based serve. It cannot be combined with
 gestaltd
 gestaltd lock --config ./config.yaml
 gestaltd sync --locked --config ./config.yaml
+gestaltd sync --locked --config ./config.yaml --cache-dir ./.gestaltd-archive-cache
 gestaltd sync --locked --config ./config.yaml --parallelism 2
 gestaltd serve --locked --config ./config.yaml
 gestaltd validate --config ./config.yaml

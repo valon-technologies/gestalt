@@ -2632,6 +2632,16 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 					t.Fatalf("extra archive request count after sync = %d, want 0", got)
 				}
 			}
+			if tc.localSource && tc.remoteArchives {
+				cacheDir := filepath.Join(dir, "archive-cache-local-metadata")
+				assertRemoteArchiveCacheRoundTrip(t, lc, configPath, cacheDir, wantCurrentSHA, &currentArchiveCount, func() error {
+					return os.RemoveAll(appRoot)
+				}, func() {
+					if handlerErr := nextHandlerErr(); handlerErr != nil {
+						t.Fatal(handlerErr)
+					}
+				})
+			}
 			cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
 			if err != nil {
 				t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
@@ -2887,6 +2897,17 @@ packages:
 		t.Fatalf("archive request count after sync = %d, want %d", got, archiveBefore+1)
 	}
 
+	cacheDir := filepath.Join(dir, "archive-cache")
+	resetAppRoot := func() error { return os.RemoveAll(appRoot) }
+	drainHandlerErr := func() {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	assertCheckSyncDoesNotPopulateArchiveCache(t, lc, configPath, cacheDir, resetAppRoot)
+	assertRemoteArchiveCacheRoundTrip(t, lc, configPath, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
+	assertRemoteArchiveCacheRepair(t, lc, configPath, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
+
 	archiveBeforeLoad := archiveCount.Load()
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
 	if err != nil {
@@ -3104,6 +3125,7 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 		t.Fatalf("read workflow archive: %v", err)
 	}
 	archiveSHA := sha256.Sum256(archiveData)
+	archiveSHAHex := hex.EncodeToString(archiveSHA[:])
 
 	var metadataCount atomic.Int64
 	var archiveCount atomic.Int64
@@ -3139,7 +3161,7 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 				Artifacts: map[string]providerReleaseArtifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePathURL),
-						SHA256: hex.EncodeToString(archiveSHA[:]),
+						SHA256: archiveSHAHex,
 					},
 				},
 			}
@@ -3242,6 +3264,14 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	if got := archiveCount.Load() - archiveBefore; got != 1 {
 		t.Fatalf("archive request count during sync = %d, want 1", got)
 	}
+	cacheDir := filepath.Join(dir, "archive-cache")
+	assertRemoteArchiveCacheRoundTrip(t, lc, configPath, cacheDir, archiveSHAHex, &archiveCount, func() error {
+		return os.RemoveAll(workflowRoot)
+	}, func() {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	})
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
@@ -3449,6 +3479,7 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 		t.Fatalf("read ui archive: %v", err)
 	}
 	archiveSHA := sha256.Sum256(archiveData)
+	archiveSHAHex := hex.EncodeToString(archiveSHA[:])
 
 	var metadataCount atomic.Int64
 	var archiveCount atomic.Int64
@@ -3484,7 +3515,7 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 				Artifacts: map[string]providerReleaseArtifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePathURL),
-						SHA256: hex.EncodeToString(archiveSHA[:]),
+						SHA256: archiveSHAHex,
 					},
 				},
 			}
@@ -3591,6 +3622,14 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	if got := archiveCount.Load() - archiveBefore; got != 1 {
 		t.Fatalf("archive request count during sync = %d, want 1", got)
 	}
+	cacheDir := filepath.Join(dir, "archive-cache")
+	assertRemoteArchiveCacheRoundTrip(t, lc, configPath, cacheDir, archiveSHAHex, &archiveCount, func() error {
+		return os.RemoveAll(uiRoot)
+	}, func() {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	})
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)

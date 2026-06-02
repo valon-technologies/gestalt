@@ -39,7 +39,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "sync",
 			args:      []string{"sync", "--help"},
-			wantParts: []string{"gestaltd sync --locked", "Materialize prepared artifacts", "--artifacts-dir", "--parallelism", "--check"},
+			wantParts: []string{"gestaltd sync --locked", "Materialize prepared artifacts", "--artifacts-dir", "--parallelism", "--cache-dir", "--check"},
 		},
 		{
 			name:      "provider",
@@ -113,6 +113,11 @@ func TestRunSyncParallelismValidation(t *testing.T) {
 		{
 			name:      "two accepted",
 			args:      []string{"--parallelism", "2"},
+			wantError: "gestaltd sync currently requires --locked",
+		},
+		{
+			name:      "cache dir accepted",
+			args:      []string{"--cache-dir", filepath.Join(t.TempDir(), "cache")},
 			wantError: "gestaltd sync currently requires --locked",
 		},
 	} {
