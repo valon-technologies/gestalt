@@ -879,26 +879,44 @@ func TestLockAtPathsValidatesCommittedProviderInvokes(t *testing.T) {
 	callerSource := writeLocalRelease("caller", "github.com/acme/tools/caller", "1.0.0")
 	targetSource := writeLocalRelease("target", "github.com/acme/tools/target", "1.0.0")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
-	configYAML := fmt.Sprintf(`
+	writeConfig := func(callerInvokes string) {
+		t.Helper()
+
+		configYAML := fmt.Sprintf(`
 apiVersion: gestaltd.config/v6
 %sapps:
   target:
     source: %s
   caller:
-    source: %s
-    invokes:
-      - app: target
-        operation: missing
+    source: %s%s
 server:
   providers:
     indexeddb: sqlite
   artifactsDir: %s
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), targetSource, callerSource, filepath.ToSlash(filepath.Join(dir, "artifacts")))
-	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
+`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), targetSource, callerSource, callerInvokes, filepath.ToSlash(filepath.Join(dir, "artifacts")))
+		if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+	}
+	writeConfig("")
+
+	lock, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	callerStatic := lock.Providers["caller"].StaticManifest
+	if callerStatic == nil || callerStatic.Entrypoint == nil || callerStatic.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
+		t.Fatalf("caller static manifest entrypoint = %+v, want placeholder", callerStatic)
 	}
 
+	writeConfig(`
+    invokes:
+      - app: target
+        operation: missing`)
+	if _, err := NewLifecycle().LoadForStaticValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{}, StaticValidationOptions{}); err == nil || !strings.Contains(err.Error(), "unknown effective operation") || strings.Contains(err.Error(), "invokes is only supported") {
+		t.Fatalf("LoadForStaticValidationAtPathsWithStatePaths error = %v, want executable committed provider invokes validation error", err)
+	}
 	if _, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), "unknown effective operation") {
 		t.Fatalf("LockAtPathsWithStatePaths error = %v, want committed provider invokes validation error", err)
 	}
@@ -967,7 +985,7 @@ server:
 		t.Fatalf("write stale lockfile: %v", err)
 	}
 
-	err = lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, nil)
+	err = lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
 	if err == nil {
 		t.Fatal("CheckLockAtPathsWithStatePaths unexpectedly succeeded")
 	}
@@ -1109,7 +1127,7 @@ apps:
 	if err := os.Remove(scopedLockPath); err != nil {
 		t.Fatalf("remove empty scoped lockfile: %v", err)
 	}
-	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}, nil); err != nil {
+	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}); err != nil {
 		t.Fatalf("CheckLockAtPathsWithStatePaths should allow missing local-only scoped lockfile: %v", err)
 	}
 
@@ -2499,16 +2517,14 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			}
 
 			lc := NewLifecycle()
-			lock, err := lc.PrepareAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH string }{
-				{GOOS: extraPlatform.goos, GOARCH: extraPlatform.goarch},
-			})
+			lock, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
 			if err == nil {
 				if handlerErr := nextHandlerErr(); handlerErr != nil {
 					t.Fatal(handlerErr)
 				}
 			}
 			if err != nil {
-				t.Fatalf("PrepareAtPathWithPlatforms: %v", err)
+				t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 			}
 			if handlerErr := nextHandlerErr(); handlerErr != nil {
 				t.Fatal(handlerErr)
@@ -2657,7 +2673,7 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			if cfg.Apps["alpha"].ResolvedManifest.Source != packageSource {
 				t.Fatalf("ResolvedManifest.Source = %q, want %q", cfg.Apps["alpha"].ResolvedManifest.Source, packageSource)
 			}
-			executablePath := resolveLockPath(artifactsDir, entry.Executable)
+			executablePath := filepath.Join(artifactsDir, PreparedProvidersDir, "alpha", filepath.FromSlash(artifactRelPath("provider")))
 			if cfg.Apps["alpha"].Command != executablePath {
 				t.Fatalf("app command = %q, want %q", cfg.Apps["alpha"].Command, executablePath)
 			}
@@ -4995,7 +5011,7 @@ func TestLockAndSyncSkipRuntimeOnlySecretRefs(t *testing.T) {
 	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 	}
-	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, nil); err != nil {
+	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
 		t.Fatalf("CheckLockAtPathsWithStatePaths: %v", err)
 	}
 	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
@@ -5437,7 +5453,7 @@ packages:
 		t.Fatalf("app archive request count = %d, want 1", got)
 	}
 
-	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, nil); err != nil {
+	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
@@ -5778,7 +5794,7 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	}
 }
 
-func TestManagedCacheSourcesPrepareAtPathWithPlatformsHashesExtraPlatformArchives(t *testing.T) {
+func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -5926,9 +5942,9 @@ func TestManagedCacheSourcesPrepareAtPathWithPlatformsHashesExtraPlatformArchive
 			if client != nil {
 				lc = lc.WithHTTPClient(client)
 			}
-			lock, err := lc.PrepareAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH string }{extraPlatform})
+			lock, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
 			if err != nil {
-				t.Fatalf("PrepareAtPathWithPlatforms: %v", err)
+				t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 			}
 
 			entry, ok := lock.Caches["session"]
@@ -5937,6 +5953,15 @@ func TestManagedCacheSourcesPrepareAtPathWithPlatformsHashesExtraPlatformArchive
 			}
 			if entry.Source != wantSource {
 				t.Fatalf("lock source = %q, want %q", entry.Source, wantSource)
+			}
+			if entry.StaticManifest == nil {
+				t.Fatal("lock static manifest is nil")
+			}
+			if len(entry.StaticManifest.Artifacts) != 0 {
+				t.Fatalf("lock static manifest artifacts = %+v, want nil", entry.StaticManifest.Artifacts)
+			}
+			if entry.StaticManifest.Entrypoint == nil || entry.StaticManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
+				t.Fatalf("lock static manifest entrypoint = %+v, want placeholder", entry.StaticManifest.Entrypoint)
 			}
 			wantCurrentSHA := hex.EncodeToString(currentArchiveSum[:])
 			wantExtraSHA := hex.EncodeToString(extraArchiveSum[:])
@@ -5956,6 +5981,16 @@ func TestManagedCacheSourcesPrepareAtPathWithPlatformsHashesExtraPlatformArchive
 			}
 			if got := readBack.Caches["session"].Source; got != wantSource {
 				t.Fatalf("readBack source = %q, want %q", got, wantSource)
+			}
+			readBackManifest := readBack.Caches["session"].StaticManifest
+			if readBackManifest == nil {
+				t.Fatal("readBack static manifest is nil")
+			}
+			if len(readBackManifest.Artifacts) != 0 {
+				t.Fatalf("readBack static manifest artifacts = %+v, want nil", readBackManifest.Artifacts)
+			}
+			if readBackManifest.Entrypoint == nil || readBackManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
+				t.Fatalf("readBack static manifest entrypoint = %+v, want placeholder", readBackManifest.Entrypoint)
 			}
 			if got := readBack.Caches["session"].Archives[providerpkg.CurrentPlatformString()].SHA256; got != wantCurrentSHA {
 				t.Fatalf("readBack current-platform SHA256 = %q, want %q", got, wantCurrentSHA)

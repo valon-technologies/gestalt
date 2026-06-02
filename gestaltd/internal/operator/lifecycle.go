@@ -25,6 +25,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"gopkg.in/yaml.v3"
 )
@@ -44,7 +45,8 @@ const (
 	PreparedRuntimeDir             = ".gestaltd/runtime"
 	PreparedUIDir                  = ".gestaltd/ui"
 
-	platformKeyGeneric = "generic"
+	platformKeyGeneric                    = "generic"
+	staticValidationEntrypointPlaceholder = "static-validation-placeholder"
 )
 
 type Lockfile struct {
@@ -215,22 +217,12 @@ func (l *Lifecycle) PrepareAtPathsWithStatePaths(configPaths []string, state Sta
 }
 
 func (l *Lifecycle) LockAtPathsWithStatePaths(configPaths []string, state StatePaths) (*Lockfile, error) {
-	return l.LockAtPathsWithPlatforms(configPaths, state, nil)
-}
-
-func (l *Lifecycle) LockAtPathsWithPlatforms(configPaths []string, state StatePaths, platforms []struct{ GOOS, GOARCH string }) (*Lockfile, error) {
-	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state)
+	lock, _, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state)
 	if cleanup != nil {
 		defer cleanup()
 	}
 	if err != nil {
 		return nil, err
-	}
-	if len(platforms) > 0 {
-		tokenForSource := buildSourceTokenMap(cfg)
-		if err := l.downloadPlatformArchives(context.Background(), lock, paths, platforms, tokenForSource); err != nil {
-			return nil, err
-		}
 	}
 	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
 		return nil, err
@@ -239,19 +231,13 @@ func (l *Lifecycle) LockAtPathsWithPlatforms(configPaths []string, state StatePa
 	return providerLockfileFromLockfile(lock).toLockfile(), nil
 }
 
-func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state StatePaths, platforms []struct{ GOOS, GOARCH string }) error {
+func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state StatePaths) error {
 	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state)
 	if cleanup != nil {
 		defer cleanup()
 	}
 	if err != nil {
 		return err
-	}
-	if len(platforms) > 0 {
-		tokenForSource := buildSourceTokenMap(cfg)
-		if err := l.downloadPlatformArchives(context.Background(), lock, paths, platforms, tokenForSource); err != nil {
-			return err
-		}
 	}
 	expected, err := canonicalLockfileJSON(lock)
 	if err != nil {
@@ -292,34 +278,6 @@ func (l *Lifecycle) SyncAtPathsWithStatePathsOptions(configPaths []string, state
 
 func (l *Lifecycle) CheckSyncAtPathsWithStatePathsOptions(configPaths []string, state StatePaths, opts SyncOptions) error {
 	return l.syncAtPathsWithStatePaths(configPaths, state, artifactModeCheck, opts)
-}
-
-// PrepareAtPathWithPlatforms runs preparation and additionally downloads and hashes
-// archives for the specified extra platforms.
-func (l *Lifecycle) PrepareAtPathWithPlatforms(configPath, artifactsDir string, platforms []struct{ GOOS, GOARCH string }) (*Lockfile, error) {
-	return l.PrepareAtPathsWithPlatforms([]string{configPath}, StatePaths{ArtifactsDir: artifactsDir}, platforms)
-}
-
-// PrepareAtPathsWithPlatforms runs preparation and additionally downloads and hashes
-// archives for the specified extra platforms.
-func (l *Lifecycle) PrepareAtPathsWithPlatforms(configPaths []string, state StatePaths, platforms []struct{ GOOS, GOARCH string }) (*Lockfile, error) {
-	lock, cfg, paths, err := l.prepareAtPathsAndWriteLock(configPaths, state)
-	if err != nil {
-		return nil, err
-	}
-	if len(platforms) == 0 {
-		return lock, nil
-	}
-
-	tokenForSource := buildSourceTokenMap(cfg)
-	if err := l.downloadPlatformArchives(context.Background(), lock, paths, platforms, tokenForSource); err != nil {
-		return nil, err
-	}
-
-	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
-		return nil, err
-	}
-	return lock, nil
 }
 
 func (l *Lifecycle) prepareAtPathsAndWriteLock(configPaths []string, state StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
@@ -899,48 +857,6 @@ func cloneProviderRepositories(repos []providerregistry.NamedRepository) []provi
 		return nil
 	}
 	return append([]providerregistry.NamedRepository(nil), repos...)
-}
-
-func buildSourceTokenMap(cfg *config.Config) map[string]string {
-	tokens := make(map[string]string)
-	addEntry := func(entry *config.ProviderEntry) {
-		if entry == nil || entry.Source.Auth == nil {
-			return
-		}
-		location := strings.TrimSpace(entry.SourceRemoteLocation())
-		if location == "" {
-			return
-		}
-		tokens[location] = entry.Source.Auth.Token
-		if entry.Source.IsGit() {
-			if snapshot, err := resolveGitSnapshotSource(cfg, entry); err == nil && snapshot.MetadataURL != "" {
-				tokens[snapshot.MetadataURL] = entry.Source.Auth.Token
-			}
-		}
-	}
-	for _, entry := range cfg.Apps {
-		addEntry(entry)
-	}
-	for _, entry := range cfg.Runtime.Providers {
-		if entry != nil {
-			addEntry(&entry.ProviderEntry)
-		}
-	}
-	for _, collection := range hostProviderCollections(cfg) {
-		for _, entry := range collection.entries {
-			addEntry(entry)
-		}
-	}
-	for _, def := range cfg.Providers.IndexedDB {
-		addEntry(def)
-	}
-	for _, def := range cfg.Providers.S3 {
-		addEntry(def)
-	}
-	for _, entry := range cfg.Providers.UI {
-		addEntry(&entry.ProviderEntry)
-	}
-	return tokens
 }
 
 func defaultLockfilePath(configPath string) string {
@@ -2870,35 +2786,6 @@ func archivePolicySubject(kind, name string) string {
 	}
 }
 
-func lockEntryDestDir(paths lifecyclePaths, kind, name string) string {
-	switch kind {
-	case providermanifestv1.KindApp:
-		return providerDestDir(paths, name)
-	case providermanifestv1.KindAuthentication:
-		return authDestDir(paths, name)
-	case providermanifestv1.KindAuthorization:
-		return authorizationDestDir(paths, name)
-	case providermanifestv1.KindSecrets:
-		return secretsDestDir(paths, name)
-	case providermanifestv1.KindCache:
-		return cacheDestDir(paths, name)
-	case providermanifestv1.KindIndexedDB:
-		return indexeddbDestDir(paths, name)
-	case providermanifestv1.KindS3:
-		return s3DestDir(paths, name)
-	case providermanifestv1.KindWorkflow:
-		return workflowDestDir(paths, name)
-	case providerLockKindTelemetry:
-		return telemetryDestDir(paths, name)
-	case providerLockKindAudit:
-		return auditDestDir(paths, name)
-	case providermanifestv1.KindUI:
-		return uiDestDir(paths, name)
-	default:
-		return ""
-	}
-}
-
 func readLockEntryManifest(paths lifecyclePaths, entry LockEntry, destDir string) (*providermanifestv1.Manifest, error) {
 	if strings.TrimSpace(entry.Manifest) != "" {
 		manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
@@ -3801,19 +3688,26 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 	if lock == nil || cfg == nil {
 		return nil
 	}
-	attach := func(entries map[string]LockEntry, name string, entry *config.ProviderEntry) {
+	attach := func(entries map[string]LockEntry, name string, entry *config.ProviderEntry) error {
 		if entries == nil || entry == nil || entry.ResolvedManifest == nil {
-			return
+			return nil
 		}
 		lockEntry, ok := entries[name]
 		if !ok {
-			return
+			return nil
 		}
-		lockEntry.StaticManifest = portableStaticValidationManifest(entry.ResolvedManifest, entry.ResolvedManifestPath)
+		staticManifest, err := portableStaticValidationManifest(entry.ResolvedManifest, entry.ResolvedManifestPath, entry.HasReleaseMetadataSource())
+		if err != nil {
+			return fmt.Errorf("project static validation manifest for %s: %w", name, err)
+		}
+		lockEntry.StaticManifest = staticManifest
 		entries[name] = lockEntry
+		return nil
 	}
 	for name, entry := range cfg.Apps {
-		attach(lock.Providers, name, entry)
+		if err := attach(lock.Providers, name, entry); err != nil {
+			return err
+		}
 		if entry == nil || entry.ResolvedManifest == nil {
 			continue
 		}
@@ -3838,23 +3732,33 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 	for _, collection := range hostProviderCollections(cfg) {
 		entries := lockEntriesForKind(lock, collection.kind)
 		for name, entry := range collection.entries {
-			attach(entries, name, entry)
+			if err := attach(entries, name, entry); err != nil {
+				return err
+			}
 		}
 	}
 	for name, entry := range cfg.Runtime.Providers {
 		if entry != nil {
-			attach(lock.Runtimes, name, &entry.ProviderEntry)
+			if err := attach(lock.Runtimes, name, &entry.ProviderEntry); err != nil {
+				return err
+			}
 		}
 	}
 	for name, entry := range cfg.Providers.IndexedDB {
-		attach(lock.IndexedDBs, name, entry)
+		if err := attach(lock.IndexedDBs, name, entry); err != nil {
+			return err
+		}
 	}
 	for name, entry := range cfg.Providers.S3 {
-		attach(lock.S3, name, entry)
+		if err := attach(lock.S3, name, entry); err != nil {
+			return err
+		}
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry != nil {
-			attach(lock.UIs, name, &entry.ProviderEntry)
+			if err := attach(lock.UIs, name, &entry.ProviderEntry); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -3934,7 +3838,25 @@ func synthesizedCommittedOwnedUIEntry(paths lifecyclePaths, cfg *config.Config, 
 	return providerRequiresCommittedLock(cfg.Apps[owner])
 }
 
-func portableStaticValidationManifest(manifest *providermanifestv1.Manifest, manifestPath string) *providermanifestv1.Manifest {
+func portableStaticValidationManifest(manifest *providermanifestv1.Manifest, manifestPath string, releaseBacked bool) (*providermanifestv1.Manifest, error) {
+	if manifest == nil {
+		return nil, nil
+	}
+	if releaseBacked {
+		cloned, err := packageio.CloneManifest(manifest)
+		if err != nil {
+			return nil, err
+		}
+		cloned.Artifacts = nil
+		if cloned.Entrypoint != nil {
+			cloned.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: staticValidationEntrypointPlaceholder}
+		}
+		return relativizeStaticValidationManifest(cloned, manifestPath), nil
+	}
+	return relativizeStaticValidationManifest(manifest, manifestPath), nil
+}
+
+func relativizeStaticValidationManifest(manifest *providermanifestv1.Manifest, manifestPath string) *providermanifestv1.Manifest {
 	if manifest == nil || manifest.Spec == nil || manifest.Spec.Surfaces == nil || strings.TrimSpace(manifestPath) == "" {
 		return manifest
 	}
@@ -4268,7 +4190,7 @@ func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecy
 		if len(entry.Archives) > 0 {
 			_, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 			if !ok {
-				return fmt.Errorf("no archive for platform %s for %s %q; run `%s --platform %s`", platform, kind, name, formatLockCommand(paths), platform)
+				return fmt.Errorf("no archive for platform %s for %s %q; publish an explicit %s archive with `gestaltd provider package --platform %s` or use a generic package where allowed", platform, kind, name, platform, platform)
 			}
 			if err := validateStaticLockedArchivePolicy(archivePolicySubject(kind, name), archivePolicyKind(kind), entry, platform, resolvedKey); err != nil {
 				return err
@@ -4476,7 +4398,7 @@ func fallbackStaticValidationManifest(kind string, entry LockEntry) *providerman
 		Spec:    &providermanifestv1.Spec{},
 	}
 	if lockEntryRuntime(entry, kind) == providerReleaseRuntimeExecutable {
-		manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: "static-validation-placeholder"}
+		manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: staticValidationEntrypointPlaceholder}
 	}
 	return manifest
 }
@@ -5409,14 +5331,14 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifec
 func (l *Lifecycle) downloadLockedArchive(ctx context.Context, paths lifecyclePaths, app *config.ProviderEntry, entry LockEntry, platform, subject, cacheDir string) (*providerpkg.DownloadResult, string, func(), error) {
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
-		return nil, "", nil, fmt.Errorf("no archive for platform %s for %s; run `%s --platform %s`", platform, subject, formatLockCommand(paths), platform)
+		return nil, "", nil, fmt.Errorf("no archive for platform %s for %s; publish an explicit %s archive with `gestaltd provider package --platform %s` or use a generic package where allowed", platform, subject, platform, platform)
 	}
 	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("resolve locked source archive for %s: %w", subject, err)
 	}
 	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
-		return nil, "", nil, fmt.Errorf("no verified hash for platform %s for %s; run `%s --platform %s`", platform, subject, formatLockCommand(paths), platform)
+		return nil, "", nil, fmt.Errorf("no verified hash for platform %s for %s; publish release metadata with a sha256 for that archive before locking", platform, subject)
 	}
 	expectedSHA, err := expectedSHAForLockedArchive(paths, entry, resolvedKey, archiveLocation, archive)
 	if err != nil {
@@ -5453,68 +5375,6 @@ func expectedSHAForLockedArchive(paths lifecyclePaths, entry LockEntry, resolved
 		return "", nil
 	}
 	return sha, nil
-}
-
-func (l *Lifecycle) downloadPlatformArchives(ctx context.Context, lock *Lockfile, paths lifecyclePaths, platforms []struct{ GOOS, GOARCH string }, tokenForSource map[string]string) error {
-	for _, plat := range platforms {
-		platformKey := providerpkg.PlatformString(plat.GOOS, plat.GOARCH)
-		if err := l.hashPlatformInEntries(ctx, lock, paths, platformKey, tokenForSource); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (l *Lifecycle) hashPlatformInEntries(ctx context.Context, lock *Lockfile, paths lifecyclePaths, platformKey string, tokenForSource map[string]string) error {
-	for _, kind := range providerLockKinds() {
-		lockEntries := lockEntriesForProviderKind(lock, kind)
-		for name := range lockEntries {
-			entry := lockEntries[name]
-			if err := l.hashArchiveEntry(ctx, kind, name, &entry, paths, platformKey, tokenForSource); err != nil {
-				return err
-			}
-			lockEntries[name] = entry
-		}
-	}
-	return nil
-}
-
-func (l *Lifecycle) hashArchiveEntry(ctx context.Context, kind, name string, entry *LockEntry, paths lifecyclePaths, platformKey string, tokenForSource map[string]string) error {
-	if entry.Archives == nil {
-		return nil
-	}
-	archive, resolvedKey, ok := resolveArchiveForPlatform(*entry, platformKey)
-	if !ok || archive.URL == "" || archive.SHA256 != "" {
-		return nil
-	}
-	policyKind := archivePolicyKind(kind)
-	var manifest *providermanifestv1.Manifest
-	if policyKind == providermanifestv1.KindApp {
-		var manifestErr error
-		manifest, manifestErr = readLockEntryManifest(paths, *entry, lockEntryDestDir(paths, kind, name))
-		if manifestErr != nil {
-			return fmt.Errorf("load manifest for %s: %w", archivePolicySubject(kind, name), manifestErr)
-		}
-	}
-	if err := validateLockedArchivePolicy(archivePolicySubject(kind, name), policyKind, manifest, *entry, platformKey, resolvedKey); err != nil {
-		return err
-	}
-	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
-	if err != nil {
-		return fmt.Errorf("resolve archive for platform %s, source %s: %w", platformKey, entry.Source, err)
-	}
-	if !archiveReferenceNeedsIntegrityHash(archiveLocation) {
-		return nil
-	}
-	token := tokenForSource[entry.Source]
-	dl, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), token, archiveLocation)
-	if err != nil {
-		return fmt.Errorf("download archive for platform %s, source %s: %w", platformKey, entry.Source, err)
-	}
-	archive.SHA256 = dl.SHA256Hex
-	dl.Cleanup()
-	entry.Archives[resolvedKey] = archive
-	return nil
 }
 
 func resolveProviderIcon(manifest *providermanifestv1.Manifest, manifestPath string, app *config.ProviderEntry) {
