@@ -56,6 +56,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/composite"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/services/apps/mcp"
+	"github.com/valon-technologies/gestalt/server/services/apps/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/paraminterp"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -8810,8 +8811,11 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 		got[integration.Name] = integration.MountedPath
 	}
 
-	if !reflect.DeepEqual(sortedKeys(got), []string{"ops-visible", "settings-visible", "ui-visible"}) {
-		t.Fatalf("integration names = %v, want %v", sortedKeys(got), []string{"ops-visible", "settings-visible", "ui-visible"})
+	if !reflect.DeepEqual(sortedKeys(got), []string{"hidden", "ops-visible", "settings-visible", "ui-visible"}) {
+		t.Fatalf("integration names = %v, want %v", sortedKeys(got), []string{"hidden", "ops-visible", "settings-visible", "ui-visible"})
+	}
+	if got["hidden"] != "" {
+		t.Fatalf("hidden mounted path = %q, want empty", got["hidden"])
 	}
 	if got["ops-visible"] != "" {
 		t.Fatalf("ops-visible mounted path = %q, want empty", got["ops-visible"])
@@ -8919,8 +8923,8 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if len(integrations) != 2 {
-		t.Fatalf("expected 2 integrations, got %+v", integrations)
+	if len(integrations) != 3 {
+		t.Fatalf("expected 3 integrations, got %+v", integrations)
 	}
 
 	got := map[string]struct {
@@ -8948,14 +8952,14 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 	if _, ok := got["secret"]; ok {
 		t.Fatalf("unauthorized integration was visible: %+v", integrations)
 	}
-	if _, ok := got["mcp-only"]; ok {
-		t.Fatalf("mcp-only integration should not be visible over HTTP: %+v", integrations)
-	}
 	if got["svc"].Status != "ready" || got["svc"].CredentialState != "connected" {
 		t.Fatalf("expected service account integration to be connected, got %+v", got["svc"])
 	}
 	if got["weather"].Status != "ready" || got["weather"].CredentialState != "not_required" {
 		t.Fatalf("expected connection-mode none integration to be connected, got %+v", got["weather"])
+	}
+	if got["mcp-only"].Status != "ready" || got["mcp-only"].CredentialState != "not_required" {
+		t.Fatalf("expected mcp-only integration to be visible and not require credentials, got %+v", got["mcp-only"])
 	}
 	var svcInstances []map[string]any
 	for _, conn := range got["svc"].Connections {
@@ -11155,14 +11159,17 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
 		t.Fatalf("decoding response: %v", err)
 	}
-	if len(ops) != 2 {
-		t.Fatalf("expected 2 operations, got %d", len(ops))
+	if len(ops) != 3 {
+		t.Fatalf("expected 3 operations, got %d", len(ops))
 	}
-	if ops[0]["id"] != "alpha_rest" {
-		t.Fatalf("expected first id 'alpha_rest', got %v", ops[0]["id"])
+	if ops[0]["id"] != "alpha_mcp" {
+		t.Fatalf("expected first id 'alpha_mcp', got %v", ops[0]["id"])
 	}
-	if ops[1]["id"] != "zeta_rest" {
-		t.Fatalf("expected second id 'zeta_rest', got %v", ops[1]["id"])
+	if ops[1]["id"] != "alpha_rest" {
+		t.Fatalf("expected second id 'alpha_rest', got %v", ops[1]["id"])
+	}
+	if ops[2]["id"] != "zeta_rest" {
+		t.Fatalf("expected third id 'zeta_rest', got %v", ops[2]["id"])
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/test-int/operations?_connection="+altCatalogConnection+"&_instance="+altInstance, nil)
@@ -11180,14 +11187,17 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
 		t.Fatalf("decoding override response: %v", err)
 	}
-	if len(ops) != 2 {
-		t.Fatalf("expected 2 override operations, got %d", len(ops))
+	if len(ops) != 3 {
+		t.Fatalf("expected 3 override operations, got %d", len(ops))
 	}
-	if ops[0]["id"] != "beta_rest_alt" {
-		t.Fatalf("expected first id 'beta_rest_alt', got %v", ops[0]["id"])
+	if ops[0]["id"] != "beta_mcp_alt" {
+		t.Fatalf("expected first id 'beta_mcp_alt', got %v", ops[0]["id"])
 	}
-	if ops[1]["id"] != "zeta_rest" {
-		t.Fatalf("expected second id 'zeta_rest', got %v", ops[1]["id"])
+	if ops[1]["id"] != "beta_rest_alt" {
+		t.Fatalf("expected second id 'beta_rest_alt', got %v", ops[1]["id"])
+	}
+	if ops[2]["id"] != "zeta_rest" {
+		t.Fatalf("expected third id 'zeta_rest', got %v", ops[2]["id"])
 	}
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/test-int/operations?connection="+altCatalogConnection+"&instance="+altInstance, nil)
 	resp, err = http.DefaultClient.Do(req)
@@ -11204,14 +11214,17 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
 		t.Fatalf("decoding query override response: %v", err)
 	}
-	if len(ops) != 2 {
-		t.Fatalf("expected 2 query override operations, got %d", len(ops))
+	if len(ops) != 3 {
+		t.Fatalf("expected 3 query override operations, got %d", len(ops))
 	}
-	if ops[0]["id"] != "alpha_rest" {
-		t.Fatalf("expected first id 'alpha_rest' for query override, got %v", ops[0]["id"])
+	if ops[0]["id"] != "alpha_mcp" {
+		t.Fatalf("expected first id 'alpha_mcp' for query override, got %v", ops[0]["id"])
 	}
-	if ops[1]["id"] != "zeta_rest" {
-		t.Fatalf("expected second id 'zeta_rest' for query override, got %v", ops[1]["id"])
+	if ops[1]["id"] != "alpha_rest" {
+		t.Fatalf("expected second id 'alpha_rest' for query override, got %v", ops[1]["id"])
+	}
+	if ops[2]["id"] != "zeta_rest" {
+		t.Fatalf("expected third id 'zeta_rest' for query override, got %v", ops[2]["id"])
 	}
 }
 
@@ -13620,10 +13633,10 @@ func TestSubjectAuthorization_UserOnlyRoutesReturn403ForNonUserSubjects(t *testi
 	}
 }
 
-func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
+func TestExecuteOperation_AllowsSessionPassthrough(t *testing.T) {
 	t.Parallel()
 
-	assertMCPOnly := func(t *testing.T, ts *httptest.Server) {
+	assertOK := func(t *testing.T, ts *httptest.Server) {
 		t.Helper()
 
 		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/session_only", bytes.NewBufferString(`{}`))
@@ -13634,17 +13647,17 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 		}
 		defer func() { _ = resp.Body.Close() }()
 
-		if resp.StatusCode != http.StatusBadRequest {
+		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 		}
 
-		var errResp map[string]string
-		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
-			t.Fatalf("decode error response: %v", err)
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode response: %v", err)
 		}
-		if errResp["error"] != "this integration is accessible only via MCP" {
-			t.Fatalf("expected MCP-only error, got %q", errResp["error"])
+		if body["isError"] != false {
+			t.Fatalf("isError = %v, want false", body["isError"])
 		}
 	}
 
@@ -13686,7 +13699,7 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		assertMCPOnly(t, ts)
+		assertOK(t, ts)
 		if got := sessionCatalogCalls.Load(); got != 1 {
 			t.Fatalf("session catalog calls = %d, want 1", got)
 		}
@@ -17510,6 +17523,18 @@ func (s *stubIntegrationWithSessionCatalog) CatalogForRequest(ctx context.Contex
 
 func (s *stubIntegrationWithSessionCatalog) AuthTypes() []string { return []string{"manual"} }
 func (s *stubIntegrationWithSessionCatalog) Close() error        { return nil }
+func (s *stubIntegrationWithSessionCatalog) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
+	if op, ok := invocation.CatalogOperationFromContext(ctx, s.N, operation); ok {
+		if invocation.OperationTransport(op) != catalog.TransportMCPPassthrough {
+			return s.StubIntegration.Execute(ctx, operation, params, token)
+		}
+		return mcpupstream.ExecuteTool(ctx, s, operation, params, token)
+	}
+	if op, ok := catalog.OperationByID(s.catalog, operation); ok && invocation.OperationTransport(op) == catalog.TransportMCPPassthrough {
+		return mcpupstream.ExecuteTool(ctx, s, operation, params, token)
+	}
+	return s.StubIntegration.Execute(ctx, operation, params, token)
+}
 func (s *stubIntegrationWithSessionCatalog) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 	if s.callFn != nil {
 		return s.callFn(ctx, name, args)

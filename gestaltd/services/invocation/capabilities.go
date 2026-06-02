@@ -47,15 +47,7 @@ func providerCatalog(prov core.Provider) *catalog.Catalog {
 }
 
 func CatalogOperation(cat *catalog.Catalog, operation string) (catalog.CatalogOperation, bool) {
-	if cat == nil || strings.TrimSpace(operation) == "" {
-		return catalog.CatalogOperation{}, false
-	}
-	for i := range cat.Operations {
-		if cat.Operations[i].ID == operation {
-			return cat.Operations[i], true
-		}
-	}
-	return catalog.CatalogOperation{}, false
+	return catalog.OperationByID(cat, operation)
 }
 
 func CatalogOperationTransport(cat *catalog.Catalog, operation string) (string, bool) {

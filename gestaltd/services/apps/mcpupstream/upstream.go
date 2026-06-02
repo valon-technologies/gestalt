@@ -7,6 +7,7 @@ import (
 	"net/http"
 	neturl "net/url"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -45,6 +46,7 @@ type Upstream struct {
 	desc        string
 	iconSVG     string
 	url         string
+	connection  string
 	connMode    core.ConnectionMode
 	headers     map[string]string
 	cat         *catalog.Catalog
@@ -66,6 +68,12 @@ func WithMetadataOverrides(displayName, description, iconSVG string) Option {
 		if iconSVG != "" {
 			u.iconSVG = iconSVG
 		}
+	}
+}
+
+func WithConnectionName(connection string) Option {
+	return func(u *Upstream) {
+		u.connection = strings.TrimSpace(connection)
 	}
 }
 
@@ -111,15 +119,31 @@ func (u *Upstream) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 }
 func (u *Upstream) CredentialFields() []core.CredentialFieldDef { return nil }
 func (u *Upstream) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
-func (u *Upstream) ConnectionForOperation(string) string        { return "" }
-func (u *Upstream) Catalog() *catalog.Catalog                   { return u.decorateCatalog(u.cat) }
+func (u *Upstream) ConnectionForOperation(operation string) string {
+	if u.connection == "" {
+		return ""
+	}
+	if u.cat != nil {
+		if _, ok := catalog.OperationByID(u.cat, operation); !ok {
+			return ""
+		}
+	}
+	if _, ok := u.resolveInnerName(operation); !ok {
+		return ""
+	}
+	return u.connection
+}
+func (u *Upstream) ResolveConnectionForOperation(operation string, _ map[string]any) (string, error) {
+	return u.ConnectionForOperation(operation), nil
+}
+func (u *Upstream) Catalog() *catalog.Catalog { return u.decorateCatalog(u.cat) }
 
 func (u *Upstream) SetDisplayName(s string) { u.display = s }
 func (u *Upstream) SetDescription(s string) { u.desc = s }
 func (u *Upstream) SetIconSVG(svg string)   { u.iconSVG = svg }
 
-func (u *Upstream) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-	return nil, core.ErrMCPOnly
+func (u *Upstream) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
+	return ExecuteTool(ctx, u, operation, params, token)
 }
 
 func (u *Upstream) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {

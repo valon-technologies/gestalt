@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/composite"
 	coreintegration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/services/apps/mcp"
+	"github.com/valon-technologies/gestalt/server/services/apps/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -46,8 +47,8 @@ func (u *stubMCPUpstream) CatalogForRequest(_ context.Context, _ string) (*catal
 	return u.cat, nil
 }
 func (u *stubMCPUpstream) Close() error { return nil }
-func (u *stubMCPUpstream) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
-	return nil, core.ErrMCPOnly
+func (u *stubMCPUpstream) Execute(ctx context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
+	return mcpupstream.ExecuteTool(ctx, u, operation, params, "")
 }
 
 func (u *stubMCPUpstream) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
