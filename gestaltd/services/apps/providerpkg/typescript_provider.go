@@ -81,10 +81,10 @@ func typeScriptExecutionCommand(root, target string) (string, []string, func(), 
 	if err != nil {
 		return "", nil, nil, err
 	}
-	if err := ensureTypeScriptProjectDependencies(bunPath, root); err != nil {
+	if err := ensureTypeScriptProjectDependencies(bunPath, root, CommandOutput{}); err != nil {
 		return "", nil, nil, err
 	}
-	sdkPath, err := prepareLocalTypeScriptSDK(bunPath)
+	sdkPath, err := prepareLocalTypeScriptSDK(bunPath, CommandOutput{})
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -108,27 +108,35 @@ func typeScriptExecutionCommand(root, target string) (string, []string, func(), 
 }
 
 func BuildTypeScriptProviderBinary(sourceDir, binaryPath, pluginName, target, goos, goarch string) (string, error) {
-	return buildTypeScriptBinary(sourceDir, binaryPath, pluginName, target, goos, goarch)
+	return buildTypeScriptProviderBinary(sourceDir, binaryPath, pluginName, target, goos, goarch, CommandOutput{})
+}
+
+func buildTypeScriptProviderBinary(sourceDir, binaryPath, pluginName, target, goos, goarch string, output CommandOutput) (string, error) {
+	return buildTypeScriptBinary(sourceDir, binaryPath, pluginName, target, goos, goarch, output)
 }
 
 func BuildTypeScriptComponentBinary(sourceDir, binaryPath, kind, target, goos, goarch string) (string, error) {
+	return buildTypeScriptComponentBinary(sourceDir, binaryPath, kind, target, goos, goarch, CommandOutput{})
+}
+
+func buildTypeScriptComponentBinary(sourceDir, binaryPath, kind, target, goos, goarch string, output CommandOutput) (string, error) {
 	if err := validateSourceComponentKind(kind); err != nil {
 		return "", err
 	}
-	return buildTypeScriptBinary(sourceDir, binaryPath, sourceAppName(sourceDir), target, goos, goarch)
+	return buildTypeScriptBinary(sourceDir, binaryPath, sourceAppName(sourceDir), target, goos, goarch, output)
 }
 
-func buildTypeScriptBinary(sourceDir, binaryPath, pluginName, target, goos, goarch string) (string, error) {
+func buildTypeScriptBinary(sourceDir, binaryPath, pluginName, target, goos, goarch string, output CommandOutput) (string, error) {
 	bunPath, err := DetectBunExecutable()
 	if err != nil {
 		return "", fmt.Errorf("detect Bun executable: %w", err)
 	}
-	if err := ensureTypeScriptProjectDependencies(bunPath, sourceDir); err != nil {
+	if err := ensureTypeScriptProjectDependencies(bunPath, sourceDir, output); err != nil {
 		return "", fmt.Errorf("prepare TypeScript provider dependencies: %w", err)
 	}
 
 	var args []string
-	sdkPath, err := prepareLocalTypeScriptSDK(bunPath)
+	sdkPath, err := prepareLocalTypeScriptSDK(bunPath, output)
 	if err != nil {
 		return "", fmt.Errorf("prepare local TypeScript SDK: %w", err)
 	}
@@ -161,8 +169,8 @@ func buildTypeScriptBinary(sourceDir, binaryPath, pluginName, target, goos, goar
 
 	cmd := exec.Command(bunPath, args...)
 	cmd.Dir = sourceDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = commandStdout(output)
+	cmd.Stderr = commandStderr(output)
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("TypeScript release build: %w (ensure Bun and @valon-technologies/gestalt are available)", err)
 	}
@@ -224,26 +232,26 @@ func bunExecutableCandidates() []string {
 	return candidates
 }
 
-func prepareLocalTypeScriptSDK(bunPath string) (string, error) {
+func prepareLocalTypeScriptSDK(bunPath string, output CommandOutput) (string, error) {
 	sdkPath := localTypeScriptSDKPath()
 	if sdkPath == "" {
 		return "", nil
 	}
-	if err := ensureLocalTypeScriptSDKDependencies(bunPath, sdkPath); err != nil {
+	if err := ensureLocalTypeScriptSDKDependencies(bunPath, sdkPath, output); err != nil {
 		return "", err
 	}
 	return sdkPath, nil
 }
 
-func ensureTypeScriptProjectDependencies(bunPath, root string) error {
-	return ensureTypeScriptDependencies(bunPath, root, "TypeScript provider")
+func ensureTypeScriptProjectDependencies(bunPath, root string, output CommandOutput) error {
+	return ensureTypeScriptDependencies(bunPath, root, "TypeScript provider", output)
 }
 
-func ensureLocalTypeScriptSDKDependencies(bunPath, sdkPath string) error {
-	return ensureTypeScriptDependencies(bunPath, sdkPath, "local TypeScript SDK")
+func ensureLocalTypeScriptSDKDependencies(bunPath, sdkPath string, output CommandOutput) error {
+	return ensureTypeScriptDependencies(bunPath, sdkPath, "local TypeScript SDK", output)
 }
 
-func ensureTypeScriptDependencies(bunPath, root, label string) error {
+func ensureTypeScriptDependencies(bunPath, root, label string, output CommandOutput) error {
 	nodeModulesPath := filepath.Join(root, "node_modules")
 	if info, err := os.Stat(nodeModulesPath); err == nil {
 		if info.IsDir() {
@@ -264,8 +272,8 @@ func ensureTypeScriptDependencies(bunPath, root, label string) error {
 
 	cmd := exec.Command(bunPath, args...)
 	cmd.Dir = root
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = commandStdout(output)
+	cmd.Stderr = commandStderr(output)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("bun install for %s: %w", label, err)
 	}

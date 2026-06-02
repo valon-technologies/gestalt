@@ -23,6 +23,7 @@ type SourceBuildOptions struct {
 	GOOS   string
 	GOARCH string
 	LibC   string
+	Output CommandOutput
 }
 
 type SourceExecutionIntent int
@@ -105,8 +106,8 @@ func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, 
 	cmd := exec.Command(build.Command[0], build.Command[1:]...)
 	cmd.Dir = workdir
 	cmd.Env = sourceBuildEnv(os.Environ(), opts)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = commandStdout(opts.Output)
+	cmd.Stderr = commandStderr(opts.Output)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("run %s.command: %w", build.Label, err)
 	}

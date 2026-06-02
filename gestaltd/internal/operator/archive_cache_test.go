@@ -220,7 +220,7 @@ func TestDownloadArchiveWithCacheFallsBackWhenStoreFails(t *testing.T) {
 	}
 	defer func() { _ = os.Chmod(shardDir, 0o755) }()
 
-	download, err := downloadArchiveForSourceWithCache(context.Background(), srv.Client(), "", srv.URL, sha, cache.dir)
+	download, err := downloadArchiveForSourceWithCache(context.Background(), srv.Client(), "", srv.URL, sha, cache.dir, nil)
 	if err != nil {
 		t.Fatalf("downloadArchiveForSourceWithCache: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestDownloadArchiveWithCacheVerifiesExpectedSHA(t *testing.T) {
 	defer srv.Close()
 
 	cache := archiveCache{dir: filepath.Join(dir, "cache")}
-	download, err := downloadArchiveForSourceWithCache(context.Background(), srv.Client(), "", srv.URL, wrongSHA, cache.dir)
+	download, err := downloadArchiveForSourceWithCache(context.Background(), srv.Client(), "", srv.URL, wrongSHA, cache.dir, nil)
 	if err == nil {
 		if download != nil {
 			download.Cleanup()
@@ -272,12 +272,98 @@ func TestDownloadArchiveWithCacheVerifiesExpectedSHA(t *testing.T) {
 		t.Fatalf("matching cache archive stat err = %v, want not exist", err)
 	}
 
-	_, err = downloadArchiveForSourceWithCache(context.Background(), srv.Client(), "", srv.URL, "abc123", cache.dir)
+	_, err = downloadArchiveForSourceWithCache(context.Background(), srv.Client(), "", srv.URL, "abc123", cache.dir, nil)
 	if err == nil || !strings.Contains(err.Error(), "invalid archive sha256") {
 		t.Fatalf("downloadArchiveForSourceWithCache invalid digest error = %v, want invalid archive sha256", err)
 	}
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("request count after invalid digest = %d, want 1", got)
+	}
+}
+
+func TestDownloadArchiveWithCacheRecordsMetrics(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	data := []byte("archive bytes")
+	sha := testSHA256Hex(data)
+	var requests atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write(data)
+	}))
+	defer srv.Close()
+
+	cacheDir := filepath.Join(dir, "cache")
+	coldMetrics := NewSyncMetricsRecorder()
+	coldMetrics.SetPaths("", "", cacheDir, true, true)
+	download, err := downloadArchiveForSourceWithCache(context.Background(), srv.Client(), "", srv.URL, sha, cacheDir, newSyncArchiveDownloadObserver(coldMetrics, "provider alpha"))
+	if err != nil {
+		t.Fatalf("cold downloadArchiveForSourceWithCache: %v", err)
+	}
+	download.Cleanup()
+	cold := coldMetrics.Snapshot()
+	if cold.Archives.Requests != 1 || cold.Archives.Cache.Eligible != 1 || cold.Archives.Cache.Misses != 1 || cold.Archives.Downloads.Count != 1 || cold.Archives.Cache.Puts != 1 {
+		t.Fatalf("cold metrics = %+v, want one eligible miss, download, and put", cold.Archives)
+	}
+	if len(cold.Archives.SlowestFetches) != 1 {
+		t.Fatalf("cold slowest fetches len = %d, want 1", len(cold.Archives.SlowestFetches))
+	}
+	if got := cold.Archives.SlowestFetches[0]; got.Subject != "provider alpha" || got.CacheResult != syncArchiveCacheResultMiss || !got.Downloaded || got.Bytes != int64(len(data)) {
+		t.Fatalf("cold slowest fetch = %+v, want miss/downloaded/%d bytes", got, len(data))
+	}
+
+	warmMetrics := NewSyncMetricsRecorder()
+	warmMetrics.SetPaths("", "", cacheDir, true, true)
+	download, err = downloadArchiveForSourceWithCache(context.Background(), srv.Client(), "", srv.URL, sha, cacheDir, newSyncArchiveDownloadObserver(warmMetrics, "provider alpha"))
+	if err != nil {
+		t.Fatalf("warm downloadArchiveForSourceWithCache: %v", err)
+	}
+	download.Cleanup()
+	warm := warmMetrics.Snapshot()
+	if warm.Archives.Requests != 1 || warm.Archives.Cache.Eligible != 1 || warm.Archives.Cache.Hits != 1 || warm.Archives.Downloads.Count != 0 {
+		t.Fatalf("warm metrics = %+v, want one eligible hit and no download", warm.Archives)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("request count = %d, want only cold download to hit server", got)
+	}
+}
+
+func TestDownloadArchiveMetricsClassifiesDisabledAndUncacheable(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	data := []byte("archive bytes")
+	sha := testSHA256Hex(data)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(data)
+	}))
+	defer srv.Close()
+
+	disabledMetrics := NewSyncMetricsRecorder()
+	download, err := downloadArchiveForSourceWithCache(context.Background(), srv.Client(), "", srv.URL, sha, "", newSyncArchiveDownloadObserver(disabledMetrics, "provider alpha"))
+	if err != nil {
+		t.Fatalf("disabled cache downloadArchiveForSourceWithCache: %v", err)
+	}
+	download.Cleanup()
+	disabled := disabledMetrics.Snapshot()
+	if disabled.Archives.Cache.Eligible != 1 || disabled.Archives.Cache.Disabled != 1 || disabled.Archives.Cache.Uncacheable != 0 || disabled.Archives.Downloads.Count != 1 {
+		t.Fatalf("disabled cache metrics = %+v, want eligible disabled remote download", disabled.Archives)
+	}
+
+	localPath := filepath.Join(dir, "local.tar.gz")
+	if err := os.WriteFile(localPath, data, 0o644); err != nil {
+		t.Fatalf("write local archive: %v", err)
+	}
+	localMetrics := NewSyncMetricsRecorder()
+	download, err = downloadArchiveForSourceWithCache(context.Background(), nil, "", localPath, sha, filepath.Join(dir, "cache"), newSyncArchiveDownloadObserver(localMetrics, "provider alpha"))
+	if err != nil {
+		t.Fatalf("local downloadArchiveForSourceWithCache: %v", err)
+	}
+	download.Cleanup()
+	local := localMetrics.Snapshot()
+	if local.Archives.Cache.Eligible != 0 || local.Archives.Cache.Uncacheable != 1 || local.Archives.Downloads.Count != 0 {
+		t.Fatalf("local metrics = %+v, want uncacheable local copy with no remote download", local.Archives)
 	}
 }
 

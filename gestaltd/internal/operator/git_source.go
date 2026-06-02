@@ -312,12 +312,12 @@ func (l *Lifecycle) prepareGitSourceInstall(ctx context.Context, paths lifecycle
 	return install, nil
 }
 
-func (l *Lifecycle) stageGitSourceInstall(ctx context.Context, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry) (*preparedInstall, func() error, func() error, error) {
+func (l *Lifecycle) stageGitSourceInstall(ctx context.Context, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, opts providerpkg.StageSourcePreparedInstallOptions) (*preparedInstall, func() error, func() error, error) {
 	manifestPath, err := l.gitSourceManifestPath(ctx, paths, app)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return stageLocalSourceInstall(kind, name, manifestPath, destDir)
+	return stageLocalSourceInstall(kind, name, manifestPath, destDir, opts)
 }
 
 func gitLocalLockEntryFromPreparedInstall(paths lifecyclePaths, kind, fingerprintName string, app *config.ProviderEntry, install *preparedInstall, ui bool) (LockEntry, error) {

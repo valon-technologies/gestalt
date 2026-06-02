@@ -46,41 +46,74 @@ const (
 	archiveCacheRejected
 )
 
-func downloadArchiveForSourceWithCache(ctx context.Context, client *http.Client, token, archiveURL, expectedSHA, cacheDir string) (*providerpkg.DownloadResult, error) {
+type archiveDownloadObserver interface {
+	beginArchiveFetch(sourceKind, sha string, cacheEligible, useCache bool) *archiveFetchTracker
+}
+
+func downloadArchiveForSourceWithCache(ctx context.Context, client *http.Client, token, archiveURL, expectedSHA, cacheDir string, observer archiveDownloadObserver) (*providerpkg.DownloadResult, error) {
 	sha, hasExpectedSHA, err := normalizeArchiveSHA256(expectedSHA)
 	if err != nil {
 		return nil, err
 	}
 
-	useCache := cacheDir != "" && hasExpectedSHA && isRemoteReleaseMetadataLocation(archiveURL)
+	remoteArchive := isRemoteReleaseMetadataLocation(archiveURL)
+	sourceKind := syncArchiveSourceLocal
+	if remoteArchive {
+		sourceKind = syncArchiveSourceRemoteReleaseMetadata
+	}
+	cacheConfigured := cacheDir != ""
+	cacheEligible := hasExpectedSHA && remoteArchive
+	useCache := cacheConfigured && cacheEligible
+	var tracker *archiveFetchTracker
+	if observer != nil {
+		tracker = observer.beginArchiveFetch(sourceKind, sha, cacheEligible, useCache)
+	}
+	defer tracker.record()
 	if useCache {
 		cache := archiveCache{dir: cacheDir}
 		cached, result, err := cache.Get(sha)
 		if err != nil {
+			tracker.setCacheLookupResult(archiveCacheRejected)
 			return nil, fmt.Errorf("read archive cache: %w", err)
 		}
 		switch result {
 		case archiveCacheHit:
+			tracker.setCacheLookupResult(result)
+			tracker.setBytesFromPath(cached.LocalPath)
 			return cached, nil
 		case archiveCacheMiss, archiveCacheInvalid:
+			tracker.setCacheLookupResult(result)
 		case archiveCacheRejected:
+			tracker.setCacheLookupResult(result)
 			return nil, fmt.Errorf("read archive cache: rejected cached archive")
 		}
 	}
 
+	tracker.startDownload()
 	download, err := downloadArchiveForSource(ctx, client, token, archiveURL)
 	if err != nil {
+		tracker.cancel()
 		return nil, err
 	}
 	if err := verifyArchiveSHA256(download.SHA256Hex, sha); err != nil {
 		download.Cleanup()
+		tracker.cancel()
 		return nil, err
 	}
 	if useCache {
 		// The verified temp download is still usable; a write-only cache miss should not fail sync.
-		_ = (archiveCache{dir: cacheDir}).Put(download.LocalPath, sha)
+		tracker.setCachePut((archiveCache{dir: cacheDir}).Put(download.LocalPath, sha) != nil)
 	}
+	tracker.finishDownload(remoteArchive, download.LocalPath)
 	return download, nil
+}
+
+func archiveFileSize(path string) int64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return info.Size()
 }
 
 func normalizeArchiveSHA256(raw string) (string, bool, error) {

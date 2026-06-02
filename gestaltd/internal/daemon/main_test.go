@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/url"
 	"os"
 	"os/exec"
@@ -9,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
 func TestE2ECLIHelp(t *testing.T) {
@@ -40,7 +44,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "sync",
 			args:      []string{"sync", "--help"},
-			wantParts: []string{"gestaltd sync --locked", "Materialize prepared artifacts", "--artifacts-dir", "--parallelism", "--cache-dir", "--check"},
+			wantParts: []string{"gestaltd sync --locked", "Materialize prepared artifacts", "--artifacts-dir", "--parallelism", "--cache-dir", "--output-format", "-v, --verbose", "--check"},
 		},
 		{
 			name:      "provider",
@@ -100,6 +104,18 @@ func TestRunLockRejectsPlatformFlag(t *testing.T) {
 	}
 }
 
+func TestE2ECLITopLevelVersionShortFlag(t *testing.T) {
+	t.Parallel()
+
+	out, err := exec.Command(gestaltdBin, "-v").CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd -v: %v\n%s", err, out)
+	}
+	if got := strings.TrimSpace(string(out)); got == "" {
+		t.Fatalf("gestaltd -v output is empty")
+	}
+}
+
 func TestRunSyncParallelismValidation(t *testing.T) {
 	t.Parallel()
 
@@ -133,6 +149,41 @@ func TestRunSyncParallelismValidation(t *testing.T) {
 			args:      []string{"--cache-dir", filepath.Join(t.TempDir(), "cache")},
 			wantError: "gestaltd sync currently requires --locked",
 		},
+		{
+			name:      "verbose long accepted",
+			args:      []string{"--verbose"},
+			wantError: "gestaltd sync currently requires --locked",
+		},
+		{
+			name:      "verbose short accepted",
+			args:      []string{"-v"},
+			wantError: "gestaltd sync currently requires --locked",
+		},
+		{
+			name:      "repeated verbose short accepted",
+			args:      []string{"-v", "-v"},
+			wantError: "gestaltd sync currently requires --locked",
+		},
+		{
+			name:      "condensed verbose short rejected",
+			args:      []string{"-vv"},
+			wantError: "flag provided but not defined: -vv",
+		},
+		{
+			name:      "output format text accepted",
+			args:      []string{"--output-format", "text"},
+			wantError: "gestaltd sync currently requires --locked",
+		},
+		{
+			name:      "output format json accepted",
+			args:      []string{"--output-format=json"},
+			wantError: "gestaltd sync currently requires --locked",
+		},
+		{
+			name:      "output format invalid",
+			args:      []string{"--output-format", "yaml"},
+			wantError: `invalid --output-format "yaml"; expected "text" or "json"`,
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -143,6 +194,180 @@ func TestRunSyncParallelismValidation(t *testing.T) {
 				t.Fatalf("runSync(%v) error = %v, want %q", tc.args, err, tc.wantError)
 			}
 		})
+	}
+}
+
+func TestE2ESyncJSONStdoutCleanWithSourceBuildOutput(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	appDir := setupAppDir(t, dir)
+	buildScriptPath := filepath.Join(appDir, "build.sh")
+	buildScript, err := os.ReadFile(buildScriptPath)
+	if err != nil {
+		t.Fatalf("read build script: %v", err)
+	}
+	if err := os.WriteFile(buildScriptPath, []byte("printf 'BUILD_STDOUT_SENTINEL\\n'\n"+string(buildScript)), 0o755); err != nil {
+		t.Fatalf("write build script: %v", err)
+	}
+	configPath := writeE2EConfig(t, dir, appDir, 18080)
+	unrelated, err := os.Create(filepath.Join(dir, "unrelated-large.bin"))
+	if err != nil {
+		t.Fatalf("create unrelated sparse file: %v", err)
+	}
+	if err := unrelated.Truncate(1 << 30); err != nil {
+		_ = unrelated.Close()
+		t.Fatalf("truncate unrelated sparse file: %v", err)
+	}
+	if err := unrelated.Close(); err != nil {
+		t.Fatalf("close unrelated sparse file: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "lock", "--config", configPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock: %v\n%s", err, out)
+	}
+	if err := os.RemoveAll(filepath.Join(dir, ".gestaltd", "providers", "example")); err != nil {
+		t.Fatalf("remove prepared provider: %v", err)
+	}
+
+	cmd := exec.Command(gestaltdBin, "sync", "--locked", "--verbose", "--output-format=json", "--config", configPath)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("gestaltd sync json: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "BUILD_STDOUT_SENTINEL") {
+		t.Fatalf("JSON stdout contained source build output:\n%s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "BUILD_STDOUT_SENTINEL") {
+		t.Fatalf("stderr missing source build output sentinel:\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	}
+	var doc syncOutputDocument
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("sync stdout is not JSON: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if doc.Command != "sync" || doc.Sync.Action != "materialize" {
+		t.Fatalf("sync JSON command/action = %q/%q, want sync/materialize", doc.Command, doc.Sync.Action)
+	}
+	if !doc.Output.Measured {
+		t.Fatalf("sync JSON output.measured = false, want true")
+	}
+	if doc.Output.Bytes >= 1<<30 {
+		t.Fatalf("sync JSON output bytes = %d, want unrelated artifacts-dir file excluded", doc.Output.Bytes)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	cmd = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--output-format=json", "--config", configPath)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("gestaltd sync check json: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	doc = syncOutputDocument{}
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("sync check stdout is not JSON: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if doc.Sync.Action != "check" || !doc.Inputs.Check {
+		t.Fatalf("sync check JSON action/check = %q/%t, want check/true", doc.Sync.Action, doc.Inputs.Check)
+	}
+	if doc.Output.Measured {
+		t.Fatalf("sync check JSON output.measured = true, want false")
+	}
+	if doc.Archives.Cache.Puts != 0 || doc.Archives.Cache.PutFailures != 0 {
+		t.Fatalf("sync check JSON cache puts/failures = %d/%d, want 0/0", doc.Archives.Cache.Puts, doc.Archives.Cache.PutFailures)
+	}
+}
+
+func TestE2ESyncDefaultSuccessIsQuiet(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	appDir := setupAppDir(t, dir)
+	configPath := writeE2EConfig(t, dir, appDir, 18080)
+
+	out, err := exec.Command(gestaltdBin, "lock", "--config", configPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock: %v\n%s", err, out)
+	}
+	if err := os.RemoveAll(filepath.Join(dir, ".gestaltd", "providers", "example")); err != nil {
+		t.Fatalf("remove prepared provider: %v", err)
+	}
+
+	cmd := exec.Command(gestaltdBin, "sync", "--locked", "--config", configPath)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("gestaltd sync: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("default sync stdout = %q, want empty", got)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("default sync stderr = %q, want empty", got)
+	}
+}
+
+func TestE2ESyncJSONFailureLeavesStdoutEmpty(t *testing.T) {
+	t.Parallel()
+
+	missingConfig := filepath.Join(t.TempDir(), "missing.yaml")
+	cmd := exec.Command(gestaltdBin, "sync", "--locked", "--output-format=json", "--config", missingConfig)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err == nil {
+		t.Fatalf("gestaltd sync json with missing config unexpectedly succeeded\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "" {
+		t.Fatalf("failed JSON sync stdout = %q, want empty\nstderr:\n%s", got, stderr.String())
+	}
+}
+
+func TestE2ESyncJSONStdoutCleanWithPrepareOnlyBuildOutput(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	appDir := setupPrebuiltAppDir(t, dir)
+	manifestPath := componentProviderManifestPath(t, appDir)
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read source manifest: %v", err)
+	}
+	manifest.Build = &providermanifestv1.SourceBuild{
+		Command:     []string{"sh", "-c", "printf 'PREPARE_ONLY_STDOUT_SENTINEL\\n'"},
+		PrepareOnly: true,
+	}
+	writeManifestFile(t, appDir, manifest)
+	configPath := writeE2EConfig(t, dir, appDir, 18080)
+
+	out, err := exec.Command(gestaltdBin, "lock", "--config", configPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock: %v\n%s", err, out)
+	}
+	if err := os.RemoveAll(filepath.Join(dir, ".gestaltd", "providers", "example")); err != nil {
+		t.Fatalf("remove prepared provider: %v", err)
+	}
+
+	cmd := exec.Command(gestaltdBin, "sync", "--locked", "--output-format=json", "--config", configPath)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("gestaltd sync json: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "PREPARE_ONLY_STDOUT_SENTINEL") {
+		t.Fatalf("JSON stdout contained prepare-only build output:\n%s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "PREPARE_ONLY_STDOUT_SENTINEL") {
+		t.Fatalf("stderr missing prepare-only build output sentinel:\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	}
+	var doc syncOutputDocument
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("sync stdout is not JSON: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 }
 

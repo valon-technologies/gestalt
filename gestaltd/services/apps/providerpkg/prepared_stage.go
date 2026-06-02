@@ -27,6 +27,7 @@ type StagePreparedInstallOptions struct {
 	AppName         string
 	GOOS            string
 	GOARCH          string
+	BuildOutput     CommandOutput
 }
 
 type StageSourcePreparedInstallOptions struct {
@@ -35,6 +36,7 @@ type StageSourcePreparedInstallOptions struct {
 	AppName         string
 	GOOS            string
 	GOARCH          string
+	BuildOutput     CommandOutput
 }
 
 type StagedPreparedInstall struct {
@@ -69,12 +71,12 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 	if err := ValidateExplicitRunPackaging(filepath.Dir(manifestPath), manifest); err != nil {
 		return nil, err
 	}
-	targetOpts := SourceBuildOptions{GOOS: opts.GOOS, GOARCH: opts.GOARCH}
-	hostBuiltForCatalog, err := ensureHostBuildForSourceStaticCatalog(manifestPath, manifest)
+	targetOpts := SourceBuildOptions{GOOS: opts.GOOS, GOARCH: opts.GOARCH, Output: opts.BuildOutput}
+	hostBuiltForCatalog, err := ensureHostBuildForSourceStaticCatalog(manifestPath, manifest, SourceBuildOptions{Output: opts.BuildOutput})
 	if err != nil {
 		return nil, err
 	}
-	_, srcManifest, err := prepareSourceManifestForPreparedInstall(manifestPath)
+	_, srcManifest, err := prepareSourceManifestForPreparedInstallWithOptions(manifestPath, SourceBuildOptions{Output: opts.BuildOutput})
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s: %w", manifestPath, err)
 	}
@@ -88,10 +90,11 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 		AppName:         opts.AppName,
 		GOOS:            opts.GOOS,
 		GOARCH:          opts.GOARCH,
+		BuildOutput:     opts.BuildOutput,
 	})
 }
 
-func ensureHostBuildForSourceStaticCatalog(manifestPath string, manifest *providermanifestv1.Manifest) (bool, error) {
+func ensureHostBuildForSourceStaticCatalog(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) (bool, error) {
 	shouldPrepare, err := sourceStaticCatalogShouldBePreparedForPackaging(manifestPath, manifest)
 	if err != nil {
 		return false, err
@@ -99,7 +102,7 @@ func ensureHostBuildForSourceStaticCatalog(manifestPath string, manifest *provid
 	if !SourceBuildProducesOutput(manifest) || !shouldPrepare {
 		return false, nil
 	}
-	if err := EnsureSourceBuildOutput(manifestPath, manifest, SourceBuildOptions{}); err != nil {
+	if err := EnsureSourceBuildOutput(manifestPath, manifest, opts); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -152,7 +155,7 @@ func StagePreparedInstallDir(manifestPath, stagingDir string, opts StagePrepared
 	if err := ValidateExplicitRunPackaging(filepath.Dir(manifestPath), manifest); err != nil {
 		return nil, err
 	}
-	_, srcManifest, err := prepareSourceManifestForPreparedInstall(manifestPath)
+	_, srcManifest, err := prepareSourceManifestForPreparedInstallWithOptions(manifestPath, SourceBuildOptions{Output: opts.BuildOutput})
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s: %w", manifestPath, err)
 	}
@@ -200,7 +203,7 @@ func stagePreparedInstallDir(manifestPath, stagingDir string, srcManifest *provi
 	if buildKind != "" {
 		binaryName := stagedReleaseBinaryName(pluginName, goos)
 		binaryPath := filepath.Join(stagingDir, binaryName)
-		if _, err := buildPreparedInstallBinary(sourceDir, binaryPath, pluginName, buildKind, goos, goarch); err != nil {
+		if _, err := buildPreparedInstallBinary(sourceDir, binaryPath, pluginName, buildKind, goos, goarch, opts.BuildOutput); err != nil {
 			return nil, err
 		}
 		digest, digestErr := FileSHA256(binaryPath)
@@ -333,12 +336,12 @@ func artifactExistsForEntrypoint(root string, entry *providermanifestv1.Entrypoi
 	return err == nil
 }
 
-func buildPreparedInstallBinary(root, outputPath, pluginName, kind, goos, goarch string) (string, error) {
+func buildPreparedInstallBinary(root, outputPath, pluginName, kind, goos, goarch string, output CommandOutput) (string, error) {
 	switch kind {
 	case providermanifestv1.KindApp:
-		return BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch)
+		return buildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch, output)
 	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch)
+		return buildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch, output)
 	default:
 		return "", fmt.Errorf("unsupported release build target kind %q", kind)
 	}
