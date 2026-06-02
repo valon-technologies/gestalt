@@ -306,11 +306,11 @@ func TestDownloadArchiveWithCacheRecordsMetrics(t *testing.T) {
 	if cold.Archives.Requests != 1 || cold.Archives.Cache.Eligible != 1 || cold.Archives.Cache.Misses != 1 || cold.Archives.Downloads.Count != 1 || cold.Archives.Cache.Puts != 1 {
 		t.Fatalf("cold metrics = %+v, want one eligible miss, download, and put", cold.Archives)
 	}
-	if len(cold.Archives.SlowestFetches) != 1 {
-		t.Fatalf("cold slowest fetches len = %d, want 1", len(cold.Archives.SlowestFetches))
+	if len(cold.Archives.Fetches) != 1 {
+		t.Fatalf("cold fetches len = %d, want 1", len(cold.Archives.Fetches))
 	}
-	if got := cold.Archives.SlowestFetches[0]; got.Subject != "provider alpha" || got.CacheResult != syncArchiveCacheResultMiss || !got.Downloaded || got.Bytes != int64(len(data)) {
-		t.Fatalf("cold slowest fetch = %+v, want miss/downloaded/%d bytes", got, len(data))
+	if got := cold.Archives.Fetches[0]; got.Subject != "provider alpha" || got.CacheResult != syncArchiveCacheResultMiss || !got.Downloaded || got.Bytes != int64(len(data)) {
+		t.Fatalf("cold fetch = %+v, want miss/downloaded/%d bytes", got, len(data))
 	}
 
 	warmMetrics := NewSyncMetricsRecorder()

@@ -92,7 +92,7 @@ cache.
 
 `gestaltd sync --locked -v` and `gestaltd sync --locked --verbose` add
 human-readable diagnostics for archive cache behavior, archive downloads,
-phase timings, prepared output size, and the slowest archive fetches. There is
+phase timings, prepared output size, and archive fetches. There is
 one verbosity level; `-vv` is not supported. The top-level `gestaltd -v` still
 prints the server version. Without `-v` or `--output-format=json`, successful
 `gestaltd sync --locked` remains quiet.
@@ -134,8 +134,8 @@ gestaltd sync \
 ```
 
 The JSON schema starts at version `1` and reports the sync action, inputs,
-artifact count, archive cache counters, archive download counters, phase
-timings, prepared output size, and the five slowest archive fetches. In
+artifact count and decisions, archive cache counters, archive download counters,
+archive fetches, phase timings, and prepared output size. In
 `--check` mode, the action is `check`, archive cache writes remain zero, and
 `output.measured` is `false`.
 
@@ -146,13 +146,15 @@ timings, prepared output size, and the five slowest archive fetches. In
 | `sync.duration_seconds` | Total successful sync duration. |
 | `inputs.config_paths` | Config files passed to sync after CLI path resolution. |
 | `artifacts.considered` | Prepared artifact entries in the effective config. |
+| `artifacts.items` | All prepared artifact decisions recorded by the run, sorted by duration descending. |
 | `archives.requests` | Current-platform archive acquisition attempts made by this run. |
 | `archives.unique_sha256` | Unique canonical expected SHA-256 values among archive requests. |
 | `archives.cache.*` | Cache configuration, eligibility, hit/miss, invalid, rejected, put, and put-failure counters. |
 | `archives.downloads.*` | Successful remote archive download count, bytes, and cumulative download time. |
-| `archives.slowest_fetches` | Up to five slowest archive acquisitions, including cache result and download status. |
+| `archives.fetches` | All archive acquisitions recorded by the run, sorted by duration descending. |
 | `phases.*_seconds` | Major lifecycle phase timings. Download time is cumulative and may not sum to wall-clock time under parallelism. |
-| `output.*` | Prepared output measurement over known prepared artifact roots, not the entire artifacts directory. |
+| `output.files`, `output.bytes` | Aggregate prepared output measurement over known prepared artifact roots, not the entire artifacts directory. |
+| `output.roots` | All measured prepared output roots, sorted by bytes descending. |
 
 ## Config Watch Mode
 

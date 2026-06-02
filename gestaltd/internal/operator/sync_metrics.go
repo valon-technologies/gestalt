@@ -1,10 +1,12 @@
 package operator
 
 import (
+	"cmp"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -23,7 +25,25 @@ const (
 	syncArchiveCacheResultDisabled    = "disabled"
 	syncArchiveCacheResultUncacheable = "uncacheable"
 
-	syncMetricsMaxSlowFetches = 5
+	syncArtifactSourceRemoteArchive = "remote_archive"
+	syncArtifactSourceLocalArchive  = "local_archive"
+	syncArtifactSourceLocalSource   = "local_source"
+	syncArtifactSourceGitSource     = "git_source"
+	syncArtifactSourcePathBacked    = "path_backed"
+
+	syncArtifactResultReused       = "reused"
+	syncArtifactResultMaterialized = "materialized"
+	syncArtifactResultPathBacked   = "path_backed"
+
+	syncArtifactReasonFresh             = "fresh"
+	syncArtifactReasonPreparedMissing   = "prepared_missing"
+	syncArtifactReasonMetadataMissing   = "metadata_missing"
+	syncArtifactReasonMetadataStale     = "metadata_stale"
+	syncArtifactReasonFingerprintStale  = "fingerprint_stale"
+	syncArtifactReasonManifestStale     = "manifest_stale"
+	syncArtifactReasonAssetRootMissing  = "asset_root_missing"
+	syncArtifactReasonExecutableMissing = "executable_missing"
+	syncArtifactReasonSourcePathBacked  = "source_path_backed"
 )
 
 type SyncMetrics struct {
@@ -50,15 +70,29 @@ type SyncMetricsInputs struct {
 }
 
 type SyncMetricsArtifacts struct {
-	Considered int `json:"considered"`
+	Considered int                         `json:"considered"`
+	Items      []SyncMetricsArtifactRecord `json:"items"`
+}
+
+type SyncMetricsArtifactRecord struct {
+	Subject                 string  `json:"subject"`
+	Kind                    string  `json:"kind"`
+	Name                    string  `json:"name"`
+	SourceKind              string  `json:"source_kind"`
+	Result                  string  `json:"result"`
+	Reason                  string  `json:"reason,omitempty"`
+	RelativePath            string  `json:"relative_path,omitempty"`
+	DurationSeconds         float64 `json:"duration_seconds"`
+	PrepareDurationSeconds  float64 `json:"prepare_duration_seconds,omitempty"`
+	ActivateDurationSeconds float64 `json:"activate_duration_seconds,omitempty"`
 }
 
 type SyncMetricsArchives struct {
-	Requests       int                       `json:"requests"`
-	UniqueSHA256   int                       `json:"unique_sha256"`
-	Cache          SyncMetricsArchiveCache   `json:"cache"`
-	Downloads      SyncMetricsDownloads      `json:"downloads"`
-	SlowestFetches []SyncMetricsArchiveFetch `json:"slowest_fetches"`
+	Requests     int                       `json:"requests"`
+	UniqueSHA256 int                       `json:"unique_sha256"`
+	Cache        SyncMetricsArchiveCache   `json:"cache"`
+	Downloads    SyncMetricsDownloads      `json:"downloads"`
+	Fetches      []SyncMetricsArchiveFetch `json:"fetches"`
 }
 
 type SyncMetricsArchiveCache struct {
@@ -101,9 +135,19 @@ type SyncMetricsPhases struct {
 }
 
 type SyncMetricsOutput struct {
-	Measured bool  `json:"measured"`
-	Files    int   `json:"files,omitempty"`
-	Bytes    int64 `json:"bytes,omitempty"`
+	Measured bool                    `json:"measured"`
+	Files    int                     `json:"files,omitempty"`
+	Bytes    int64                   `json:"bytes,omitempty"`
+	Roots    []SyncMetricsOutputRoot `json:"roots"`
+}
+
+type SyncMetricsOutputRoot struct {
+	Subject      string `json:"subject"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	RelativePath string `json:"relative_path,omitempty"`
+	Files        int    `json:"files,omitempty"`
+	Bytes        int64  `json:"bytes,omitempty"`
 }
 
 type SyncMetricsRecorder struct {
@@ -111,8 +155,22 @@ type SyncMetricsRecorder struct {
 	metrics    SyncMetrics
 	seenSHA    map[string]struct{}
 	fetches    []SyncMetricsArchiveFetch
+	artifacts  []SyncMetricsArtifactRecord
 	totalStart time.Time
 	phaseStart time.Time
+}
+
+type syncArtifactMetricsEvent struct {
+	Subject          string
+	Kind             string
+	Name             string
+	SourceKind       string
+	Result           string
+	Reason           string
+	RelativePath     string
+	Duration         time.Duration
+	PrepareDuration  time.Duration
+	ActivateDuration time.Duration
 }
 
 type syncArchiveMetricsEvent struct {
@@ -299,13 +357,13 @@ func (r *SyncMetricsRecorder) FinishLoadPhase() {
 	r.phaseStart = now
 }
 
-func (r *SyncMetricsRecorder) SetArtifactCount(artifactCount int) {
+func (r *SyncMetricsRecorder) SetArtifactRoots(roots []PreparedArtifactRoot) {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.metrics.Artifacts.Considered = artifactCount
+	r.metrics.Artifacts.Considered = len(roots)
 }
 
 func (r *SyncMetricsRecorder) FinishMaterializePhase() {
@@ -330,20 +388,21 @@ func (r *SyncMetricsRecorder) FinishValidatePhase() {
 	r.phaseStart = now
 }
 
-func (r *SyncMetricsRecorder) RecordOutputStats(measure bool, roots []string) {
+func (r *SyncMetricsRecorder) RecordOutputStats(measure bool, artifactsDir string, roots []PreparedArtifactRoot) {
 	if r == nil {
 		return
 	}
 	if !measure {
-		r.SetOutputStats(false, 0, 0)
+		r.SetOutputStats(false, 0, 0, nil)
 		return
 	}
 	outputStart := time.Now()
-	measured, files, bytes, err := measurePreparedOutputRoots(roots)
+	measured, files, bytes, outputRoots, err := measurePreparedOutputRoots(artifactsDir, roots)
 	if err != nil {
 		measured = false
 		files = 0
 		bytes = 0
+		outputRoots = nil
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -351,6 +410,7 @@ func (r *SyncMetricsRecorder) RecordOutputStats(measure bool, roots []string) {
 		Measured: measured,
 		Files:    files,
 		Bytes:    bytes,
+		Roots:    outputRoots,
 	}
 	r.metrics.Phases.OutputMeasureSeconds = roundedSeconds(time.Since(outputStart))
 }
@@ -417,15 +477,41 @@ func (r *SyncMetricsRecorder) RecordArchiveFetch(event syncArchiveMetricsEvent) 
 		case a.DurationSeconds < b.DurationSeconds:
 			return 1
 		default:
-			return 0
+			if n := cmp.Compare(a.Subject, b.Subject); n != 0 {
+				return n
+			}
+			if n := cmp.Compare(a.SourceKind, b.SourceKind); n != 0 {
+				return n
+			}
+			return cmp.Compare(a.SHA256, b.SHA256)
 		}
 	})
-	if len(r.fetches) > syncMetricsMaxSlowFetches {
-		r.fetches = r.fetches[:syncMetricsMaxSlowFetches]
-	}
 }
 
-func (r *SyncMetricsRecorder) SetOutputStats(measured bool, files int, bytes int64) {
+func (r *SyncMetricsRecorder) RecordArtifact(event syncArtifactMetricsEvent) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	record := SyncMetricsArtifactRecord{
+		Subject:                 event.Subject,
+		Kind:                    event.Kind,
+		Name:                    event.Name,
+		SourceKind:              event.SourceKind,
+		Result:                  event.Result,
+		Reason:                  event.Reason,
+		RelativePath:            event.RelativePath,
+		DurationSeconds:         roundedSeconds(event.Duration),
+		PrepareDurationSeconds:  roundedSeconds(event.PrepareDuration),
+		ActivateDurationSeconds: roundedSeconds(event.ActivateDuration),
+	}
+	r.artifacts = append(r.artifacts, record)
+	sortArtifactRecords(r.artifacts)
+	r.metrics.Artifacts.Items = append([]SyncMetricsArtifactRecord(nil), r.artifacts...)
+}
+
+func (r *SyncMetricsRecorder) SetOutputStats(measured bool, files int, bytes int64, roots []SyncMetricsOutputRoot) {
 	if r == nil {
 		return
 	}
@@ -435,6 +521,7 @@ func (r *SyncMetricsRecorder) SetOutputStats(measured bool, files int, bytes int
 		Measured: measured,
 		Files:    files,
 		Bytes:    bytes,
+		Roots:    append([]SyncMetricsOutputRoot(nil), roots...),
 	}
 }
 
@@ -456,7 +543,18 @@ func (r *SyncMetricsRecorder) Snapshot() SyncMetrics {
 	metrics := r.metrics
 	metrics.Inputs.ConfigPaths = append([]string(nil), r.metrics.Inputs.ConfigPaths...)
 	fetches := append([]SyncMetricsArchiveFetch(nil), r.fetches...)
-	metrics.Archives.SlowestFetches = fetches
+	metrics.Archives.Fetches = fetches
+	metrics.Artifacts.Items = append([]SyncMetricsArtifactRecord(nil), r.metrics.Artifacts.Items...)
+	metrics.Output.Roots = append([]SyncMetricsOutputRoot(nil), r.metrics.Output.Roots...)
+	if metrics.Archives.Fetches == nil {
+		metrics.Archives.Fetches = []SyncMetricsArchiveFetch{}
+	}
+	if metrics.Artifacts.Items == nil {
+		metrics.Artifacts.Items = []SyncMetricsArtifactRecord{}
+	}
+	if metrics.Output.Roots == nil {
+		metrics.Output.Roots = []SyncMetricsOutputRoot{}
+	}
 	return metrics
 }
 
@@ -468,17 +566,22 @@ func secondsDuration(seconds float64) time.Duration {
 	return time.Duration(seconds * float64(time.Second))
 }
 
-func measurePreparedOutputRoots(roots []string) (bool, int, int64, error) {
-	roots = dedupeCleanPaths(roots)
+func measurePreparedOutputRoots(artifactsDir string, roots []PreparedArtifactRoot) (bool, int, int64, []SyncMetricsOutputRoot, error) {
+	roots = dedupePreparedArtifactRoots(roots)
 	if len(roots) == 0 {
-		return false, 0, 0, nil
+		return false, 0, 0, nil, nil
 	}
 	var files int
 	var bytes int64
+	var outputRoots []SyncMetricsOutputRoot
 	for _, root := range roots {
-		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		var rootFiles int
+		var rootBytes int64
+		rootExists := true
+		err := filepath.WalkDir(root.DestDir, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
-				if path == root && os.IsNotExist(err) {
+				if path == root.DestDir && os.IsNotExist(err) {
+					rootExists = false
 					return nil
 				}
 				return err
@@ -491,32 +594,101 @@ func measurePreparedOutputRoots(roots []string) (bool, int, int64, error) {
 				return err
 			}
 			if info.Mode().IsRegular() {
-				files++
-				bytes += info.Size()
+				rootFiles++
+				rootBytes += info.Size()
 			}
 			return nil
 		})
 		if err != nil {
-			return false, 0, 0, err
+			return false, 0, 0, nil, err
 		}
+		if !rootExists {
+			continue
+		}
+		files += rootFiles
+		bytes += rootBytes
+		outputRoots = append(outputRoots, SyncMetricsOutputRoot{
+			Subject:      root.Subject,
+			Kind:         root.Kind,
+			Name:         root.Name,
+			RelativePath: relativeArtifactPath(artifactsDir, root.DestDir),
+			Files:        rootFiles,
+			Bytes:        rootBytes,
+		})
 	}
-	return true, files, bytes, nil
+	sortOutputRoots(outputRoots)
+	return true, files, bytes, outputRoots, nil
 }
 
-func dedupeCleanPaths(paths []string) []string {
-	seen := make(map[string]struct{}, len(paths))
-	var cleaned []string
-	for _, path := range paths {
-		if path == "" {
+func dedupePreparedArtifactRoots(roots []PreparedArtifactRoot) []PreparedArtifactRoot {
+	seen := make(map[string]struct{}, len(roots))
+	var cleaned []PreparedArtifactRoot
+	for _, root := range roots {
+		if root.DestDir == "" {
 			continue
 		}
-		path = filepath.Clean(path)
-		if _, ok := seen[path]; ok {
+		root.DestDir = filepath.Clean(root.DestDir)
+		if _, ok := seen[root.DestDir]; ok {
 			continue
 		}
-		seen[path] = struct{}{}
-		cleaned = append(cleaned, path)
+		seen[root.DestDir] = struct{}{}
+		cleaned = append(cleaned, root)
 	}
-	slices.Sort(cleaned)
+	slices.SortFunc(cleaned, func(a, b PreparedArtifactRoot) int {
+		if n := cmp.Compare(a.Kind, b.Kind); n != 0 {
+			return n
+		}
+		if n := cmp.Compare(a.Name, b.Name); n != 0 {
+			return n
+		}
+		return cmp.Compare(a.Subject, b.Subject)
+	})
 	return cleaned
+}
+
+func sortArtifactRecords(records []SyncMetricsArtifactRecord) {
+	slices.SortFunc(records, func(a, b SyncMetricsArtifactRecord) int {
+		switch {
+		case a.DurationSeconds > b.DurationSeconds:
+			return -1
+		case a.DurationSeconds < b.DurationSeconds:
+			return 1
+		}
+		if n := cmp.Compare(a.Kind, b.Kind); n != 0 {
+			return n
+		}
+		if n := cmp.Compare(a.Name, b.Name); n != 0 {
+			return n
+		}
+		return cmp.Compare(a.Subject, b.Subject)
+	})
+}
+
+func sortOutputRoots(roots []SyncMetricsOutputRoot) {
+	slices.SortFunc(roots, func(a, b SyncMetricsOutputRoot) int {
+		switch {
+		case a.Bytes > b.Bytes:
+			return -1
+		case a.Bytes < b.Bytes:
+			return 1
+		}
+		if n := cmp.Compare(a.Kind, b.Kind); n != 0 {
+			return n
+		}
+		if n := cmp.Compare(a.Name, b.Name); n != 0 {
+			return n
+		}
+		return cmp.Compare(a.Subject, b.Subject)
+	})
+}
+
+func relativeArtifactPath(artifactsDir, path string) string {
+	if artifactsDir == "" || path == "" {
+		return ""
+	}
+	rel, err := filepath.Rel(artifactsDir, path)
+	if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
+		return ""
+	}
+	return filepath.ToSlash(rel)
 }

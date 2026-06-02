@@ -33,6 +33,7 @@ func validateSyncOutputFormat(format string) error {
 }
 
 func writeSyncJSON(w io.Writer, metrics operator.SyncMetrics) error {
+	metrics = normalizeSyncMetricsForJSON(metrics)
 	doc := syncOutputDocument{
 		Schema:      syncOutputSchema{Version: "1"},
 		Command:     "sync",
@@ -40,6 +41,19 @@ func writeSyncJSON(w io.Writer, metrics operator.SyncMetrics) error {
 	}
 	encoder := json.NewEncoder(w)
 	return encoder.Encode(doc)
+}
+
+func normalizeSyncMetricsForJSON(metrics operator.SyncMetrics) operator.SyncMetrics {
+	if metrics.Archives.Fetches == nil {
+		metrics.Archives.Fetches = []operator.SyncMetricsArchiveFetch{}
+	}
+	if metrics.Artifacts.Items == nil {
+		metrics.Artifacts.Items = []operator.SyncMetricsArtifactRecord{}
+	}
+	if metrics.Output.Roots == nil {
+		metrics.Output.Roots = []operator.SyncMetricsOutputRoot{}
+	}
+	return metrics
 }
 
 func writeSyncText(w io.Writer, metrics operator.SyncMetrics, verbose bool) error {
@@ -95,12 +109,33 @@ func writeSyncText(w io.Writer, metrics operator.SyncMetrics, verbose bool) erro
 				return err
 			}
 		}
-		if len(metrics.Archives.SlowestFetches) > 0 {
-			if _, err := fmt.Fprintln(w, "Slowest archive fetches:"); err != nil {
+		if len(metrics.Archives.Fetches) > 0 {
+			if _, err := fmt.Fprintln(w, "Archive fetches:"); err != nil {
 				return err
 			}
-			for _, fetch := range metrics.Archives.SlowestFetches {
+			for _, fetch := range metrics.Archives.Fetches {
 				if _, err := fmt.Fprintf(w, "  %s: %s, downloaded=%t, %s, %.3fs\n", fetch.Subject, fetch.CacheResult, fetch.Downloaded, formatIECBytes(fetch.Bytes), fetch.DurationSeconds); err != nil {
+					return err
+				}
+			}
+		}
+		if len(metrics.Artifacts.Items) > 0 {
+			if _, err := fmt.Fprintln(w, "Artifacts:"); err != nil {
+				return err
+			}
+			for i := range metrics.Artifacts.Items {
+				artifact := &metrics.Artifacts.Items[i]
+				if _, err := fmt.Fprintf(w, "  %s: %s %s, reason=%s, prepare %.3fs, activate %.3fs, total %.3fs\n", artifact.Subject, artifact.SourceKind, artifact.Result, artifact.Reason, artifact.PrepareDurationSeconds, artifact.ActivateDurationSeconds, artifact.DurationSeconds); err != nil {
+					return err
+				}
+			}
+		}
+		if len(metrics.Output.Roots) > 0 {
+			if _, err := fmt.Fprintln(w, "Prepared output roots:"); err != nil {
+				return err
+			}
+			for _, root := range metrics.Output.Roots {
+				if _, err := fmt.Fprintf(w, "  %s: %d files, %s, %s\n", root.Subject, root.Files, formatIECBytes(root.Bytes), root.RelativePath); err != nil {
 					return err
 				}
 			}
