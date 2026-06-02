@@ -107,7 +107,7 @@ func TestManagerServerPublishEventThreadsCallerAppToSelectedProvider(t *testing.
 	published, err := server.PublishEvent(context.Background(), &proto.PublishWorkflowProviderEventRequest{
 		ProviderName:    "selected",
 		InvocationToken: token,
-		Event:           &proto.WorkflowEvent{Type: "valon_sats.attempt.submitted"},
+		Event:           &proto.WorkflowEvent{Type: "valon_sats.attempt.submitted", Source: "slack"},
 	})
 	if err != nil {
 		t.Fatalf("PublishEvent: %v", err)
@@ -120,6 +120,9 @@ func TestManagerServerPublishEventThreadsCallerAppToSelectedProvider(t *testing.
 	}
 	if got := selected.publishReqs[0].GetAppName(); got != "valonSats" {
 		t.Fatalf("selected publish app = %q, want valonSats", got)
+	}
+	if got := selected.publishReqs[0].GetEvent().GetSource(); got != "valonSats" {
+		t.Fatalf("selected publish source = %q, want valonSats", got)
 	}
 	if len(other.publishReqs) != 0 {
 		t.Fatalf("other publish requests = %d, want 0", len(other.publishReqs))
@@ -181,6 +184,9 @@ func TestManagerServerPublishEventThreadsCallerAppToFanoutProviders(t *testing.T
 		if got := provider.publishReqs[0].GetAppName(); got != "valonSats" {
 			t.Fatalf("%s publish app = %q, want valonSats", name, got)
 		}
+		if got := provider.publishReqs[0].GetEvent().GetSource(); got != "valonSats" {
+			t.Fatalf("%s publish source = %q, want valonSats", name, got)
+		}
 	}
 	for _, providerName := range []string{"first", "second"} {
 		assertManagerServerWorkflowAudit(t, auditBuf.String(), map[string]any{
@@ -200,7 +206,7 @@ func TestManagerServerPublishEventThreadsCallerAppToFanoutProviders(t *testing.T
 	}
 }
 
-func TestWorkflowManagerPublishEventSelectedProviderPreservesBlankApp(t *testing.T) {
+func TestWorkflowManagerPublishEventSelectedProviderRequiresCallerApp(t *testing.T) {
 	t.Parallel()
 
 	selected := &recordingWorkflowProvider{}
@@ -219,14 +225,11 @@ func TestWorkflowManagerPublishEventSelectedProviderPreservesBlankApp(t *testing
 		AppName:      "   ",
 		Event:        coreworkflow.Event{Type: "valon_sats.attempt.submitted"},
 	})
-	if err != nil {
-		t.Fatalf("PublishEvent: %v", err)
+	if !errors.Is(err, workflowmanager.ErrWorkflowEventSourceRequired) {
+		t.Fatalf("PublishEvent error = %v, want ErrWorkflowEventSourceRequired", err)
 	}
-	if len(selected.publishReqs) != 1 {
-		t.Fatalf("selected publish requests = %d, want 1", len(selected.publishReqs))
-	}
-	if got := selected.publishReqs[0].GetAppName(); got != "" {
-		t.Fatalf("selected publish app = %q, want empty", got)
+	if len(selected.publishReqs) != 0 {
+		t.Fatalf("selected publish requests = %d, want 0", len(selected.publishReqs))
 	}
 }
 

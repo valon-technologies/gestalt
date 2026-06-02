@@ -27,14 +27,15 @@ import (
 )
 
 var (
-	ErrWorkflowNotConfigured      = errors.New("workflow is not configured")
-	ErrWorkflowSubjectRequired    = errors.New("workflow subject is required")
-	ErrWorkflowScheduleSubject    = ErrWorkflowSubjectRequired
-	ErrDuplicateWorkflowObjects   = errors.New("workflow object matched multiple providers")
-	ErrWorkflowEventMatchRequired = errors.New("workflow trigger match.type is required")
-	ErrWorkflowEventTypeRequired  = errors.New("workflow event type is required")
-	ErrWorkflowKeyRequired        = errors.New("workflow key is required")
-	ErrWorkflowSignalNameRequired = errors.New("workflow signal name is required")
+	ErrWorkflowNotConfigured       = errors.New("workflow is not configured")
+	ErrWorkflowSubjectRequired     = errors.New("workflow subject is required")
+	ErrWorkflowScheduleSubject     = ErrWorkflowSubjectRequired
+	ErrDuplicateWorkflowObjects    = errors.New("workflow object matched multiple providers")
+	ErrWorkflowEventMatchRequired  = errors.New("workflow trigger match.type is required")
+	ErrWorkflowEventSourceRequired = errors.New("workflow event source is required")
+	ErrWorkflowEventTypeRequired   = errors.New("workflow event type is required")
+	ErrWorkflowKeyRequired         = errors.New("workflow key is required")
+	ErrWorkflowSignalNameRequired  = errors.New("workflow signal name is required")
 )
 
 const defaultWorkflowEventSpecVersion = "1.0"
@@ -871,7 +872,8 @@ func workflowTargetHasApp(target coreworkflow.Target, appName string) bool {
 func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req EventPublish) (out coreworkflow.Event, err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationEventPublish)
-	audit.setCallerApp(req.AppName)
+	appName := strings.TrimSpace(req.AppName)
+	audit.setCallerApp(appName)
 	finishAudit := true
 	defer func() {
 		eventType := out.Type
@@ -891,8 +893,11 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 	}
 
 	providerSelection := strings.TrimSpace(req.ProviderName)
-	appName := strings.TrimSpace(req.AppName)
+	if appName == "" {
+		return coreworkflow.Event{}, ErrWorkflowEventSourceRequired
+	}
 	event := req.Event
+	event.Source = appName
 	event = normalizePublishedEvent(event, m.now())
 	if strings.TrimSpace(event.Type) == "" {
 		return coreworkflow.Event{}, ErrWorkflowEventTypeRequired
