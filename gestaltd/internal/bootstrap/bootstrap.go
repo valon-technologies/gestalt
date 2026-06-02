@@ -183,6 +183,7 @@ type Deps struct {
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
+type AuthorizationFactory func(node yaml.Node) (core.AuthorizationProvider, error)
 type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.ExternalCredentialProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
@@ -196,6 +197,7 @@ type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry 
 
 type FactoryRegistry struct {
 	Auth                AuthFactory
+	Authorization       AuthorizationFactory
 	ExternalCredentials ExternalCredentialFactory
 	Secrets             map[string]SecretManagerFactory
 	IndexedDB           IndexedDBFactory
@@ -221,6 +223,7 @@ type Result struct {
 	Auth                 core.AuthenticationProvider
 	SelectedAuthProvider string
 	AuthProviders        map[string]core.AuthenticationProvider
+	Authorization        map[string]core.AuthorizationProvider
 	Services             *coredata.Services
 	ExtraIndexedDBs      []indexeddb.IndexedDB
 	ExtraCaches          []corecache.Cache
@@ -362,9 +365,11 @@ func (r *Result) Close(ctx context.Context) error {
 	if len(r.AuthProviders) != 0 {
 		authCloseErr = closeAuthProviders(r.AuthProviders)
 	}
+	authorizationCloseErr := closeAuthorizationProviders(r.Authorization)
 	externalCredentialsCloseErr := closeExternalCredentialProviderCandidate(r.Services)
 	errs = append(errs,
 		authCloseErr,
+		authorizationCloseErr,
 		externalCredentialsCloseErr,
 		CloseProviders(r.Providers),
 		r.Services.Close(),
@@ -655,6 +660,7 @@ type preparedCore struct {
 	Auth                 core.AuthenticationProvider
 	SelectedAuthProvider string
 	AuthProviders        map[string]core.AuthenticationProvider
+	Authorization        map[string]core.AuthorizationProvider
 	Services             *coredata.Services
 	ExtraIndexedDBs      []indexeddb.IndexedDB
 	ExtraCaches          []corecache.Cache
@@ -960,6 +966,17 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.SelectedIndexedDBName = selectedIndexedDBName
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
+	authorizationProviders, err := buildAuthorizationProviders(cfg, factories)
+	if err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, err
+	}
+	closeAuthorizationOnError := true
+	defer func() {
+		if closeAuthorizationOnError {
+			_ = closeAuthorizationProviders(authorizationProviders)
+		}
+	}()
 	closeExternalCredentialsOnError := true
 	defer func() {
 		if closeExternalCredentialsOnError {
@@ -982,11 +999,13 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	closeExtraStores = false
 	closeExtraCaches = false
 	closeExtraS3s = false
+	closeAuthorizationOnError = false
 	closeExternalCredentialsOnError = false
 	return &preparedCore{
 		Auth:                 auth,
 		SelectedAuthProvider: selectedAuthName,
 		AuthProviders:        authProviders,
+		Authorization:        authorizationProviders,
 		Services:             svc,
 		ExtraIndexedDBs:      extraIndexedDBs,
 		ExtraCaches:          extraCaches,
@@ -1030,9 +1049,11 @@ func (p *preparedCore) Close(ctx context.Context) error {
 	if len(p.AuthProviders) != 0 {
 		authCloseErr = closeAuthProviders(p.AuthProviders)
 	}
+	authorizationCloseErr := closeAuthorizationProviders(p.Authorization)
 	externalCredentialsCloseErr := closeExternalCredentialProviderCandidate(p.Services)
 	errs = append(errs,
 		authCloseErr,
+		authorizationCloseErr,
 		externalCredentialsCloseErr,
 		p.Services.Close(),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
@@ -1194,6 +1215,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Auth:                         prepared.Auth,
 		SelectedAuthProvider:         prepared.SelectedAuthProvider,
 		AuthProviders:                prepared.AuthProviders,
+		Authorization:                prepared.Authorization,
 		Services:                     prepared.Services,
 		ExtraIndexedDBs:              prepared.ExtraIndexedDBs,
 		ExtraCaches:                  prepared.ExtraCaches,
@@ -1706,6 +1728,20 @@ func closeAuthProviders(providers map[string]core.AuthenticationProvider) error 
 	return errors.Join(errs...)
 }
 
+func closeAuthorizationProviders(providers map[string]core.AuthorizationProvider) error {
+	if len(providers) == 0 {
+		return nil
+	}
+	var errs []error
+	for _, provider := range providers {
+		if provider == nil {
+			continue
+		}
+		errs = append(errs, provider.Close())
+	}
+	return errors.Join(errs...)
+}
+
 func closeExternalCredentialProviderCandidate(services *coredata.Services) error {
 	if services == nil || core.ExternalCredentialProviderMissing(services.ExternalCredentials) {
 		return nil
@@ -1772,6 +1808,50 @@ func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factor
 		return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
 	}
 	return auth, nil
+}
+
+func buildAuthorizationProviders(cfg *config.Config, factories *FactoryRegistry) (map[string]core.AuthorizationProvider, error) {
+	if len(cfg.Providers.Authorization) == 0 {
+		return nil, nil
+	}
+	if factories.Authorization == nil {
+		return nil, fmt.Errorf("bootstrap: authorization factory is not registered")
+	}
+	name, entry, err := cfg.SelectedAuthorizationProvider()
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		return nil, nil
+	}
+	provider, err := buildNamedAuthorizationProvider(name, entry, factories)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]core.AuthorizationProvider{name: provider}, nil
+}
+
+func buildNamedAuthorizationProvider(name string, entry *config.ProviderEntry, factories *FactoryRegistry) (core.AuthorizationProvider, error) {
+	logicalName := strings.TrimSpace(name)
+	if logicalName == "" {
+		logicalName = "authorization"
+	}
+	if entry == nil {
+		return nil, fmt.Errorf("bootstrap: authorization provider %q is not configured", logicalName)
+	}
+	node := entry.Config
+	if !config.IsComponentRuntimeConfigNode(node) {
+		var err error
+		node, err = config.BuildComponentRuntimeConfigNode(logicalName, providermanifestv1.KindAuthorization, entry, entry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+		}
+	}
+	provider, err := factories.Authorization(node)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+	}
+	return provider, nil
 }
 
 func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (indexeddb.IndexedDB, error) {

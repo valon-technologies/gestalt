@@ -4,6 +4,7 @@ inputs:
   - directory: .
     paths:
       - v1/agent.proto
+      - v1/authorization.proto
       - v1/authentication.proto
       - v1/app.proto
       - v1/runtime_provider.proto

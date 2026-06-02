@@ -285,7 +285,7 @@ func resolveSourceExecution(manifestPath string, manifest *providermanifestv1.Ma
 		switch providermanifestv1.NormalizeKind(kind) {
 		case providermanifestv1.KindApp:
 			exec.Command, exec.Args, exec.Cleanup, err = SourceProviderExecutionCommand(rootDir, goos, goarch)
-		case providermanifestv1.KindAuthentication, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+		case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 			exec.Command, exec.Args, exec.Cleanup, err = SourceComponentExecutionCommand(rootDir, kind, goos, goarch)
 		default:
 			return ResolvedSourceExecution{}, fmt.Errorf("manifest does not define a %s entrypoint", kind)

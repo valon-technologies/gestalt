@@ -1,0 +1,41 @@
+package providerdrivers
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/valon-technologies/gestalt/server/core"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
+	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
+	"gopkg.in/yaml.v3"
+)
+
+func AuthorizationFactory(node yaml.Node) (core.AuthorizationProvider, error) {
+	var cfg componentprovider.YAMLConfig
+	if err := node.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("authorization provider: parsing config: %w", err)
+	}
+	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
+		Kind:                 providermanifestv1.KindAuthorization,
+		Subject:              "authorization provider",
+		SourceMissingMessage: "no Go authorization provider source package found",
+		Config:               cfg,
+	})
+	if err != nil {
+		return nil, err
+	}
+	cfg = prepared.YAMLConfig
+
+	return authorizationservice.NewExecutable(context.Background(), authorizationservice.ExecConfig{
+		Command:    cfg.Command,
+		Args:       cfg.Args,
+		Workdir:    cfg.Workdir,
+		Env:        cfg.Env,
+		Config:     cfg.Config,
+		Egress:     cfg.EgressPolicy(""),
+		HostBinary: cfg.HostBinary,
+		Cleanup:    prepared.Cleanup,
+		Name:       cfg.Name,
+	})
+}

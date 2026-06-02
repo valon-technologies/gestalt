@@ -1,0 +1,216 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+message Subject {
+  string type = 1;
+  string id = 2;
+  google.protobuf.Struct properties = 3;
+}
+
+message Action {
+  string name = 1;
+  google.protobuf.Struct properties = 2;
+}
+
+message Resource {
+  string type = 1;
+  string id = 2;
+  google.protobuf.Struct properties = 3;
+}
+
+message CheckAccessRequest {
+  Subject subject = 1;
+  Action action = 2;
+  Resource resource = 3;
+}
+
+message CheckAccessResponse {
+  bool allowed = 1;
+  string model_id = 2;
+}
+
+message CheckAccessManyRequest {
+  repeated CheckAccessRequest requests = 1;
+}
+
+message CheckAccessManyResponse {
+  repeated CheckAccessResponse decisions = 1;
+}
+
+message ListRelationshipsRequest {
+  RelationshipFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message RelationshipFilter {
+  RelationshipTarget target = 1;
+  string relation = 2;
+  Resource resource = 3;
+  RelationshipTargetType target_type = 4;
+  string target_entity_type = 5;
+  string resource_type = 6;
+  SourceLayer source_layer = 7;
+}
+
+message ListRelationshipsResponse {
+  repeated Relationship relationships = 1;
+  string next_page_token = 2;
+}
+
+message AddRelationshipRequest {
+  Relationship relationship = 1;
+}
+
+message AddRelationshipResponse {
+  Relationship relationship = 1;
+}
+
+message DeleteRelationshipRequest {
+  RelationshipTuple relationship_tuple = 1;
+}
+
+message DeleteRelationshipResponse {}
+
+message SetAuthorizationStateRequest {
+  AuthorizationModel model = 1;
+  repeated Relationship relationships = 2;
+}
+
+message SetAuthorizationStateResponse {
+  AuthorizationModelRef active_model = 1;
+}
+
+message Relationship {
+  RelationshipTuple tuple = 1;
+  google.protobuf.Struct properties = 2;
+  SourceLayer source_layer = 3;
+}
+
+message RelationshipTuple {
+  RelationshipTarget target = 1;
+  string relation = 2;
+  Resource resource = 3;
+}
+
+message RelationshipTarget {
+  oneof kind {
+    Subject subject = 1;
+    Resource resource = 2;
+    SubjectSet subject_set = 3;
+  }
+}
+
+message SubjectSet {
+  Resource resource = 1;
+  string relation = 2;
+}
+
+enum RelationshipTargetType {
+  RELATIONSHIP_TARGET_TYPE_UNSPECIFIED = 0;
+  RELATIONSHIP_TARGET_TYPE_SUBJECT = 1;
+  RELATIONSHIP_TARGET_TYPE_RESOURCE = 2;
+  RELATIONSHIP_TARGET_TYPE_SUBJECT_SET = 3;
+}
+
+message AuthorizationModel {
+  string id = 1;
+  string version = 2;
+  repeated AuthorizationModelResourceType resource_types = 3;
+}
+
+enum DefaultAccessPolicy {
+  DEFAULT_ACCESS_POLICY_DENY = 0;
+  DEFAULT_ACCESS_POLICY_ALLOW = 1;
+}
+
+message AuthorizationModelResourceType {
+  string name = 1;
+  repeated ModelRelation relations = 2;
+  repeated ModelAction actions = 3;
+  SourceLayer source_layer = 4;
+  DefaultAccessPolicy default_access_policy = 5;
+}
+
+message ModelRelation {
+  string name = 1;
+  repeated ModelAllowedTarget allowed_targets = 2;
+}
+
+message ModelAction {
+  string name = 1;
+  repeated string relations = 2;
+}
+
+message ModelAllowedTarget {
+  oneof kind {
+    string subject_type = 1;
+    string resource_type = 2;
+    SubjectSetType subject_set_type = 3;
+  }
+}
+
+message SubjectSetType {
+  string resource_type = 1;
+  string relation = 2;
+}
+
+message AuthorizationModelRef {
+  string id = 1;
+  string version = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message GetActiveModelRefResponse {
+  AuthorizationModelRef model = 1;
+}
+
+message SetActiveModelRequest {
+  AuthorizationModel model = 1;
+}
+
+message SetActiveModelResponse {
+  AuthorizationModelRef model = 1;
+}
+
+message ListActiveModelResourceTypesRequest {
+  AuthorizationModelResourceTypeFilter filter = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message AuthorizationModelResourceTypeFilter {
+  string name = 1;
+  SourceLayer source_layer = 2;
+}
+
+message ListActiveModelResourceTypesResponse {
+  repeated AuthorizationModelResourceType resource_types = 1;
+  string next_page_token = 2;
+  string model_id = 3;
+}
+
+enum SourceLayer {
+  SOURCE_LAYER_UNSPECIFIED = 0;
+  SOURCE_LAYER_STATIC_CONFIG = 1;
+  SOURCE_LAYER_RUNTIME = 2;
+}
+
+service AuthorizationProvider {
+  rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse);
+  rpc CheckAccessMany(CheckAccessManyRequest) returns (CheckAccessManyResponse);
+
+  rpc ListRelationships(ListRelationshipsRequest) returns (ListRelationshipsResponse);
+  rpc AddRelationship(AddRelationshipRequest) returns (AddRelationshipResponse);
+  rpc DeleteRelationship(DeleteRelationshipRequest) returns (DeleteRelationshipResponse);
+  rpc SetAuthorizationState(SetAuthorizationStateRequest) returns (SetAuthorizationStateResponse);
+
+  rpc GetActiveModelRef(google.protobuf.Empty) returns (GetActiveModelRefResponse);
+  rpc SetActiveModel(SetActiveModelRequest) returns (SetActiveModelResponse);
+  rpc ListActiveModelResourceTypes(ListActiveModelResourceTypesRequest) returns (ListActiveModelResourceTypesResponse);
+}
