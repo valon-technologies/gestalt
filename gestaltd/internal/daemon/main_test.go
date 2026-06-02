@@ -286,6 +286,14 @@ func TestE2ESyncDefaultSuccessIsQuiet(t *testing.T) {
 
 	dir := t.TempDir()
 	appDir := setupAppDir(t, dir)
+	buildScriptPath := filepath.Join(appDir, "build.sh")
+	buildScript, err := os.ReadFile(buildScriptPath)
+	if err != nil {
+		t.Fatalf("read build script: %v", err)
+	}
+	if err := os.WriteFile(buildScriptPath, []byte("printf 'DEFAULT_SYNC_STDOUT_SENTINEL\\n'\nprintf 'DEFAULT_SYNC_STDERR_SENTINEL\\n' >&2\n"+string(buildScript)), 0o755); err != nil {
+		t.Fatalf("write build script: %v", err)
+	}
 	configPath := writeE2EConfig(t, dir, appDir, 18080)
 
 	out, err := exec.Command(gestaltdBin, "lock", "--config", configPath).CombinedOutput()

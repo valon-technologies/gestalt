@@ -307,7 +307,8 @@ func runSync(args []string) error {
 		metrics = operator.NewSyncMetricsRecorder()
 		observability.Recorder = metrics
 	}
-	if *outputFormat == syncOutputFormatJSON {
+	observability.BuildOutput = providerpkg.CommandOutput{Stdout: io.Discard, Stderr: io.Discard}
+	if *outputFormat == syncOutputFormatJSON || verbose {
 		observability.BuildOutput = providerpkg.CommandOutput{Stdout: os.Stderr, Stderr: os.Stderr}
 	}
 	opts := operator.SyncOptions{

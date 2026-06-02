@@ -1125,7 +1125,7 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	}
 	if recorder != nil {
 		recorder.FinishValidatePhase()
-		recorder.RecordOutputStats(mode == artifactModeMaterialize, preparedArtifactDestDirs(paths, cfg))
+		recorder.RecordOutputStats(mode == artifactModeMaterialize, paths.artifactsDir, preparedArtifactRoots(paths, cfg))
 		recorder.Finish()
 	}
 	return nil
@@ -1136,6 +1136,31 @@ func syncActionForArtifactMode(mode artifactMode) string {
 		return syncActionCheck
 	}
 	return syncActionMaterialize
+}
+
+func recordSyncArtifact(paths lifecyclePaths, kind, name, subject, destDir, sourceKind, result, reason string, start time.Time, prepareDuration, activateDuration time.Duration) {
+	if paths.syncMetrics == nil {
+		return
+	}
+	paths.syncMetrics.RecordArtifact(syncArtifactMetricsEvent{
+		Subject:          subject,
+		Kind:             kind,
+		Name:             name,
+		SourceKind:       sourceKind,
+		Result:           result,
+		Reason:           reason,
+		RelativePath:     relativeArtifactPath(paths.artifactsDir, destDir),
+		Duration:         time.Since(start),
+		PrepareDuration:  prepareDuration,
+		ActivateDuration: activateDuration,
+	})
+}
+
+func syncArtifactArchiveSourceKind(paths lifecyclePaths, entry LockEntry) string {
+	if isRemoteReleaseMetadataLocation(entry.Source) {
+		return syncArtifactSourceRemoteArchive
+	}
+	return syncArtifactSourceLocalArchive
 }
 
 func (l *Lifecycle) resolveConfigSecrets(ctx context.Context, cfg *config.Config) error {
@@ -3450,7 +3475,7 @@ func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile,
 		return err
 	}
 	if paths.syncMetrics != nil {
-		paths.syncMetrics.SetArtifactCount(len(preparedArtifactDestDirs(paths, cfg)))
+		paths.syncMetrics.SetArtifactRoots(preparedArtifactRoots(paths, cfg))
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		lockEntries := lockEntriesForKind(lock, collection.kind)
@@ -4773,21 +4798,27 @@ func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name 
 	if provider == nil || !provider.HasLocalSource() {
 		return nil, fmt.Errorf("%s requires local source configuration", subject)
 	}
+	start := time.Now()
 	install, err := inspectPreparedInstall(destDir)
 	needMaterialize := err != nil
+	reason := syncArtifactReasonPreparedMissing
 	if !needMaterialize {
 		switch inspectPreparedLockMetadata(paths, install, kind, name, provider, mode) {
 		case preparedLockMetadataMatch:
 			needMaterialize = false
+			reason = syncArtifactReasonFresh
 		default:
 			needMaterialize = true
+			reason = syncArtifactReasonMetadataStale
 		}
 	}
 	if needMaterialize {
 		if !mode.canMaterialize() {
 			return nil, preparedArtifactStaleError(paths, "prepared artifact for %s is missing or stale", subject)
 		}
+		prepareStart := time.Now()
 		stagedInstall, cleanupStaged, commitStaged, err := stageLocalSourceInstall(kind, name, provider.SourcePath(), destDir, paths.stageOptions())
+		prepareDuration := time.Since(prepareStart)
 		if cleanupStaged != nil {
 			defer func() { _ = cleanupStaged() }()
 		}
@@ -4803,16 +4834,22 @@ func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name 
 		if err := writePreparedLockMetadata(paths, stagedInstall, kind, name, provider); err != nil {
 			return nil, err
 		}
+		activateStart := time.Now()
 		if err := commitStaged(); err != nil {
 			return nil, err
 		}
+		activateDuration := time.Since(activateStart)
 		install, err = inspectPreparedInstall(destDir)
 		if err != nil {
 			return nil, fmt.Errorf("read prepared manifest for %s: %w", subject, err)
 		}
+		recordSyncArtifact(paths, kind, name, subject, destDir, syncArtifactSourceLocalSource, syncArtifactResultMaterialized, reason, start, prepareDuration, activateDuration)
 	}
 	if inspectPreparedLockMetadata(paths, install, kind, name, provider, mode) != preparedLockMetadataMatch {
 		return nil, preparedArtifactStaleError(paths, "prepared artifact for %s is missing or stale", subject)
+	}
+	if !needMaterialize {
+		recordSyncArtifact(paths, kind, name, subject, destDir, syncArtifactSourceLocalSource, syncArtifactResultReused, syncArtifactReasonFresh, start, 0, 0)
 	}
 	return install, nil
 }
@@ -4906,7 +4943,12 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 	case sourceBacked(provider):
 		if provider.HasLocalSource() {
 			if pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), provider.SourcePath()) {
-				return bindPathBackedUIManifest(provider, configMap)
+				start := time.Now()
+				assetRoot, err := bindPathBackedUIManifest(provider, configMap)
+				if err == nil {
+					recordSyncArtifact(paths, providermanifestv1.KindUI, logicalName, subject, assetRoot, syncArtifactSourcePathBacked, syncArtifactResultPathBacked, syncArtifactReasonSourcePathBacked, start, 0, 0)
+				}
+				return assetRoot, err
 			}
 			return l.applyLocalUIProvider(paths, provider, logicalName, subject, destDir, configMap, mode)
 		}
@@ -4931,14 +4973,21 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 		if !fingerprintMatches {
 			return "", lockMetadataStaleError(paths, "lock entry for %s is stale", subject)
 		}
+		start := time.Now()
 		install, err := inspectPreparedInstall(destDir)
 		needMaterialize := err != nil || !preparedInstallMatchesLockForMode(providermanifestv1.KindUI, logicalName, provider, *lockEntry, install, mode)
+		reason := syncArtifactReasonPreparedMissing
+		if err == nil && needMaterialize {
+			reason = syncArtifactReasonManifestStale
+		}
 		if !needMaterialize && install.assetRootPath == "" {
 			needMaterialize = true
+			reason = syncArtifactReasonAssetRootMissing
 		}
 		if !needMaterialize {
 			if _, err := os.Stat(install.assetRootPath); err != nil {
 				needMaterialize = true
+				reason = syncArtifactReasonAssetRootMissing
 			}
 		}
 		if needMaterialize {
@@ -4949,12 +4998,15 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 				if !provider.HasLocalSource() && !provider.HasGitSource() {
 					return "", preparedArtifactStaleError(paths, "prepared artifact for %s is missing or stale", subject)
 				}
+				var prepareDuration time.Duration
 				if stagedInstall == nil {
+					prepareStart := time.Now()
 					if provider.HasGitSource() {
 						stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindUI, logicalName, destDir, provider, paths.stageOptions())
 					} else {
 						stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindUI, logicalName, provider.SourcePath(), destDir, paths.stageOptions())
 					}
+					prepareDuration = time.Since(prepareStart)
 					if err != nil {
 						return "", err
 					}
@@ -4969,11 +5021,17 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 				if !preparedManifestMatchesLock(*lockEntry, stagedInstall.manifest) {
 					return "", lockMetadataStaleError(paths, "lock entry for %s is stale", subject)
 				}
+				activateStart := time.Now()
 				if err := commitStaged(); err != nil {
 					return "", err
 				}
+				sourceKind := syncArtifactSourceLocalSource
+				if provider.HasGitSource() {
+					sourceKind = syncArtifactSourceGitSource
+				}
+				recordSyncArtifact(paths, providermanifestv1.KindUI, logicalName, subject, destDir, sourceKind, syncArtifactResultMaterialized, reason, start, prepareDuration, time.Since(activateStart))
 			} else {
-				if err := l.materializeLockedUIProvider(context.Background(), paths, provider, *lockEntry, destDir); err != nil {
+				if err := l.materializeLockedUIProvider(context.Background(), paths, logicalName, subject, provider, *lockEntry, destDir, reason); err != nil {
 					return "", err
 				}
 			}
@@ -4981,6 +5039,9 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 			if err != nil {
 				return "", fmt.Errorf("read prepared manifest for %s: %w", subject, err)
 			}
+		}
+		if !needMaterialize {
+			recordSyncArtifact(paths, providermanifestv1.KindUI, logicalName, subject, destDir, syncArtifactArchiveSourceKind(paths, *lockEntry), syncArtifactResultReused, syncArtifactReasonFresh, start, 0, 0)
 		}
 		return bindPreparedUIInstall(provider, subject, destDir, configMap, install)
 	default:
@@ -5058,8 +5119,13 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 		return lockMetadataStaleError(paths, "lock entry for provider %q is stale", name)
 	}
 
+	start := time.Now()
 	install, err := inspectPreparedInstall(destDir)
 	needMaterialize := err != nil || !preparedInstallMatchesLockForMode(providermanifestv1.KindApp, name, app, entry, install, mode)
+	reason := syncArtifactReasonPreparedMissing
+	if err == nil && needMaterialize {
+		reason = syncArtifactReasonManifestStale
+	}
 	if err == nil && !needMaterialize {
 		platform := providerpkg.CurrentPlatformString()
 		if _, resolvedKey, ok := resolveArchiveForPlatform(entry, platform); ok {
@@ -5071,6 +5137,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 	if !needMaterialize && install.executablePath != "" {
 		if _, err := os.Stat(install.executablePath); err != nil {
 			needMaterialize = true
+			reason = syncArtifactReasonExecutableMissing
 		}
 	}
 	if needMaterialize {
@@ -5081,12 +5148,15 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 			if !app.HasLocalSource() && !app.HasGitSource() {
 				return preparedArtifactStaleError(paths, "prepared artifact for provider %q is missing or stale", name)
 			}
+			var prepareDuration time.Duration
 			if stagedInstall == nil {
+				prepareStart := time.Now()
 				if app.HasGitSource() {
 					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindApp, name, destDir, app, paths.stageOptions())
 				} else {
 					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindApp, name, app.SourcePath(), destDir, paths.stageOptions())
 				}
+				prepareDuration = time.Since(prepareStart)
 				if err != nil {
 					return err
 				}
@@ -5101,11 +5171,17 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 			if !preparedManifestMatchesLock(entry, stagedInstall.manifest) {
 				return lockMetadataStaleError(paths, "lock entry for provider %q is stale", name)
 			}
+			activateStart := time.Now()
 			if err := commitStaged(); err != nil {
 				return err
 			}
+			sourceKind := syncArtifactSourceLocalSource
+			if app.HasGitSource() {
+				sourceKind = syncArtifactSourceGitSource
+			}
+			recordSyncArtifact(paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, sourceKind, syncArtifactResultMaterialized, reason, start, prepareDuration, time.Since(activateStart))
 		} else {
-			if err := l.materializeLockedProvider(context.Background(), paths, name, app, entry); err != nil {
+			if err := l.materializeLockedProvider(context.Background(), paths, name, app, entry, reason); err != nil {
 				return err
 			}
 		}
@@ -5113,6 +5189,9 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 		if err != nil {
 			return fmt.Errorf("read prepared manifest for provider %q: %w", name, err)
 		}
+	}
+	if !needMaterialize {
+		recordSyncArtifact(paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, syncArtifactArchiveSourceKind(paths, entry), syncArtifactResultReused, syncArtifactReasonFresh, start, 0, 0)
 	}
 	return bindPreparedProviderInstall(paths, name, app, configMap, install)
 }
@@ -5144,8 +5223,13 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 		return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
 	}
 
+	start := time.Now()
 	install, err := inspectPreparedInstall(destDir)
 	needMaterialize := err != nil || !preparedInstallMatchesLockForMode(kind, name, app, *entry, install, mode)
+	reason := syncArtifactReasonPreparedMissing
+	if err == nil && needMaterialize {
+		reason = syncArtifactReasonManifestStale
+	}
 	if err == nil && !needMaterialize {
 		platform := providerpkg.CurrentPlatformString()
 		if _, resolvedKey, ok := resolveArchiveForPlatform(*entry, platform); ok {
@@ -5156,10 +5240,12 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 	}
 	if !needMaterialize && install.executablePath == "" {
 		needMaterialize = true
+		reason = syncArtifactReasonExecutableMissing
 	}
 	if !needMaterialize {
 		if _, err := os.Stat(install.executablePath); err != nil {
 			needMaterialize = true
+			reason = syncArtifactReasonExecutableMissing
 		}
 	}
 	if needMaterialize {
@@ -5170,12 +5256,15 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 			if !app.HasLocalSource() && !app.HasGitSource() {
 				return preparedArtifactStaleError(paths, "prepared artifact for %s %q is missing or stale", kind, name)
 			}
+			var prepareDuration time.Duration
 			if stagedInstall == nil {
+				prepareStart := time.Now()
 				if app.HasGitSource() {
 					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, kind, name, destDir, app, paths.stageOptions())
 				} else {
 					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(kind, name, app.SourcePath(), destDir, paths.stageOptions())
 				}
+				prepareDuration = time.Since(prepareStart)
 				if err != nil {
 					return err
 				}
@@ -5190,11 +5279,17 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 			if !preparedManifestMatchesLock(*entry, stagedInstall.manifest) {
 				return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
 			}
+			activateStart := time.Now()
 			if err := commitStaged(); err != nil {
 				return err
 			}
+			sourceKind := syncArtifactSourceLocalSource
+			if app.HasGitSource() {
+				sourceKind = syncArtifactSourceGitSource
+			}
+			recordSyncArtifact(paths, kind, name, fmt.Sprintf("%s %q", kind, name), destDir, sourceKind, syncArtifactResultMaterialized, reason, start, prepareDuration, time.Since(activateStart))
 		} else {
-			if err := l.materializeLockedComponent(context.Background(), paths, kind, name, app, *entry, destDir); err != nil {
+			if err := l.materializeLockedComponent(context.Background(), paths, kind, name, app, *entry, destDir, reason); err != nil {
 				return err
 			}
 		}
@@ -5202,6 +5297,9 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 		if err != nil {
 			return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
 		}
+	}
+	if !needMaterialize {
+		recordSyncArtifact(paths, kind, name, fmt.Sprintf("%s %q", kind, name), destDir, syncArtifactArchiveSourceKind(paths, *entry), syncArtifactResultReused, syncArtifactReasonFresh, start, 0, 0)
 	}
 	return bindPreparedComponentInstall(paths, kind, name, app, configMap, destDir, install)
 }
@@ -5272,7 +5370,8 @@ func bindPathBackedUIManifest(app *config.ProviderEntry, configMap map[string]an
 	return assetRoot, nil
 }
 
-func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyclePaths, name string, app *config.ProviderEntry, entry LockEntry) error {
+func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyclePaths, name string, app *config.ProviderEntry, entry LockEntry, reason string) error {
+	start := time.Now()
 	platform := providerpkg.CurrentPlatformString()
 	download, resolvedKey, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, fmt.Sprintf("provider %q", name), paths.archiveCacheDir)
 	if err != nil {
@@ -5281,7 +5380,9 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyc
 	defer cleanupDownload()
 
 	destDir := providerDestDir(paths, name)
+	prepareStart := time.Now()
 	installed, cleanupInstall, commitInstall, err := installLockedPackageAtomic(download.LocalPath, destDir)
+	prepareDuration := time.Since(prepareStart)
 	if err != nil {
 		return fmt.Errorf("install locked source provider for provider %q: %w", name, err)
 	}
@@ -5295,13 +5396,16 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyc
 	if err := validateLockedArchivePolicy(fmt.Sprintf("provider %q", name), providermanifestv1.KindApp, installed.Manifest, entry, platform, resolvedKey); err != nil {
 		return err
 	}
+	activateStart := time.Now()
 	if err := commitInstall(); err != nil {
 		return fmt.Errorf("activate locked source provider for provider %q: %w", name, err)
 	}
+	recordSyncArtifact(paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, syncArtifactArchiveSourceKind(paths, entry), syncArtifactResultMaterialized, reason, start, prepareDuration, time.Since(activateStart))
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecyclePaths, kind, name string, app *config.ProviderEntry, entry LockEntry, destDir string) error {
+func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecyclePaths, kind, name string, app *config.ProviderEntry, entry LockEntry, destDir, reason string) error {
+	start := time.Now()
 	platform := providerpkg.CurrentPlatformString()
 	download, resolvedKey, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, fmt.Sprintf("%s %q", kind, name), paths.archiveCacheDir)
 	if err != nil {
@@ -5312,7 +5416,9 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecy
 	if destDir == "" {
 		return fmt.Errorf("unsupported component %q", name)
 	}
+	prepareStart := time.Now()
 	installed, cleanupInstall, commitInstall, err := installLockedPackageAtomic(download.LocalPath, destDir)
+	prepareDuration := time.Since(prepareStart)
 	if err != nil {
 		return fmt.Errorf("install locked source provider for %s %q: %w", kind, name, err)
 	}
@@ -5329,15 +5435,18 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecy
 	if err := validateLockedArchivePolicy(fmt.Sprintf("%s %q", kind, name), archivePolicyKind(kind), installed.Manifest, entry, platform, resolvedKey); err != nil {
 		return err
 	}
+	activateStart := time.Now()
 	if err := commitInstall(); err != nil {
 		return fmt.Errorf("activate locked source provider for %s %q: %w", kind, name, err)
 	}
+	recordSyncArtifact(paths, kind, name, fmt.Sprintf("%s %q", kind, name), destDir, syncArtifactArchiveSourceKind(paths, entry), syncArtifactResultMaterialized, reason, start, prepareDuration, time.Since(activateStart))
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifecyclePaths, app *config.ProviderEntry, entry LockEntry, destDir string) error {
+func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifecyclePaths, name, subject string, app *config.ProviderEntry, entry LockEntry, destDir, reason string) error {
+	start := time.Now()
 	platform := providerpkg.CurrentPlatformString()
-	download, _, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, "ui provider", paths.archiveCacheDir)
+	download, _, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, subject, paths.archiveCacheDir)
 	if err != nil {
 		return err
 	}
@@ -5346,7 +5455,9 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifec
 	if err := os.RemoveAll(destDir); err != nil {
 		return fmt.Errorf("remove stale cache for ui provider: %w", err)
 	}
+	prepareStart := time.Now()
 	installed, err := installPackage(download.LocalPath, destDir)
+	prepareDuration := time.Since(prepareStart)
 	if err != nil {
 		return fmt.Errorf("install locked source for ui provider: %w", err)
 	}
@@ -5359,6 +5470,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifec
 	if installed.Manifest.Version != entry.Version {
 		return fmt.Errorf("locked source manifest version mismatch for ui provider: got %q, want %q", installed.Manifest.Version, entry.Version)
 	}
+	recordSyncArtifact(paths, providermanifestv1.KindUI, name, subject, destDir, syncArtifactArchiveSourceKind(paths, entry), syncArtifactResultMaterialized, reason, start, prepareDuration, 0)
 	return nil
 }
 

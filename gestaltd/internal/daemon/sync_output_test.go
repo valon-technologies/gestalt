@@ -25,7 +25,35 @@ func TestWriteSyncJSON(t *testing.T) {
 			Check:       false,
 			Parallelism: 4,
 		},
-		Artifacts: operator.SyncMetricsArtifacts{Considered: 2},
+		Artifacts: operator.SyncMetricsArtifacts{
+			Considered: 2,
+			Items: []operator.SyncMetricsArtifactRecord{{
+				Subject:         "provider \"alpha\"",
+				Kind:            "app",
+				Name:            "alpha",
+				SourceKind:      "local_source",
+				Result:          "materialized",
+				Reason:          "prepared_missing",
+				DurationSeconds: 1.0,
+			}},
+		},
+		Archives: operator.SyncMetricsArchives{
+			Fetches: []operator.SyncMetricsArchiveFetch{{
+				Subject:         "provider \"alpha\"",
+				SourceKind:      "remote_release_metadata",
+				CacheResult:     "hit",
+				DurationSeconds: 0.5,
+			}},
+		},
+		Output: operator.SyncMetricsOutput{
+			Measured: true,
+			Roots: []operator.SyncMetricsOutputRoot{{
+				Subject:      "provider \"alpha\"",
+				Kind:         "app",
+				Name:         "alpha",
+				RelativePath: "providers/alpha",
+			}},
+		},
 	}
 
 	var out bytes.Buffer
@@ -51,6 +79,59 @@ func TestWriteSyncJSON(t *testing.T) {
 	}
 	if doc.Artifacts.Considered != 2 {
 		t.Fatalf("artifacts.considered = %d, want 2", doc.Artifacts.Considered)
+	}
+	if len(doc.Archives.Fetches) != 1 {
+		t.Fatalf("archives.fetches len = %d, want 1", len(doc.Archives.Fetches))
+	}
+	if len(doc.Artifacts.Items) != 1 {
+		t.Fatalf("artifacts.items len = %d, want 1", len(doc.Artifacts.Items))
+	}
+	if len(doc.Output.Roots) != 1 {
+		t.Fatalf("output.roots len = %d, want 1", len(doc.Output.Roots))
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(out.Bytes(), &raw); err != nil {
+		t.Fatalf("unmarshal sync JSON map: %v", err)
+	}
+	archives, ok := raw["archives"].(map[string]any)
+	if !ok {
+		t.Fatalf("archives missing from JSON: %s", out.String())
+	}
+	if _, ok := archives["slowest_fetches"]; ok {
+		t.Fatalf("archives.slowest_fetches should not be serialized: %s", out.String())
+	}
+}
+
+func TestWriteSyncJSONIncludesEmptyMetricArrays(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	if err := writeSyncJSON(&out, operator.SyncMetrics{}); err != nil {
+		t.Fatalf("writeSyncJSON: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(out.Bytes(), &raw); err != nil {
+		t.Fatalf("unmarshal sync JSON map: %v", err)
+	}
+	archives := raw["archives"].(map[string]any)
+	if _, ok := archives["slowest_fetches"]; ok {
+		t.Fatalf("archives.slowest_fetches should not be serialized: %s", out.String())
+	}
+	for parent, keys := range map[string][]string{
+		"archives":  {"fetches"},
+		"artifacts": {"items"},
+		"output":    {"roots"},
+	} {
+		obj := raw[parent].(map[string]any)
+		for _, key := range keys {
+			array, ok := obj[key].([]any)
+			if !ok {
+				t.Fatalf("%s.%s = %#v, want empty array", parent, key, obj[key])
+			}
+			if len(array) != 0 {
+				t.Fatalf("%s.%s len = %d, want 0", parent, key, len(array))
+			}
+		}
 	}
 }
 

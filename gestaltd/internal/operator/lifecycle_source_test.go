@@ -4510,7 +4510,7 @@ func TestMaterializeLockedComponent_AllowsGenericDeclarativeTelemetryAndAuditPac
 				Source: config.NewMetadataSource("https://example.invalid/github-com-acme-providers-declarative/v1.0.0/provider-release.yaml"),
 			}
 			destDir := filepath.Join(dir, kind)
-			if err := lc.materializeLockedComponent(context.Background(), lifecyclePaths{}, kind, "default", providerEntry, entry, destDir); err != nil {
+			if err := lc.materializeLockedComponent(context.Background(), lifecyclePaths{}, kind, "default", providerEntry, entry, destDir, syncArtifactReasonPreparedMissing); err != nil {
 				t.Fatalf("materializeLockedComponent: %v", err)
 			}
 			install, err := inspectPreparedInstall(destDir)
