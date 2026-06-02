@@ -18,13 +18,21 @@ type MCPUpstream interface {
 	Close() error
 }
 
-// Provider wraps a REST-backed API provider and an MCP upstream for a single
-// integration. Execute goes to the API; CallTool goes to the upstream.
+// Provider wraps an API provider and an MCP upstream for a single integration.
+// Execute routes by operation ownership.
 type Provider struct {
 	name string
 	api  core.Provider
 	mcp  MCPUpstream
 }
+
+type operationOwner int
+
+const (
+	operationOwnerNone operationOwner = iota
+	operationOwnerAPI
+	operationOwnerMCP
+)
 
 var (
 	_ core.Provider               = (*Provider)(nil)
@@ -83,6 +91,19 @@ func connectionModeRank(mode core.ConnectionMode) int {
 func (p *Provider) Catalog() *catalog.Catalog { return p.buildCatalog() }
 
 func (p *Provider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
+	switch p.staticOperationOwner(operation) {
+	case operationOwnerAPI:
+		return p.api.Execute(ctx, operation, params, token)
+	case operationOwnerMCP:
+		return p.mcp.Execute(ctx, operation, params, token)
+	}
+	owner, err := sessionProviderForOperation(ctx, []core.Provider{p.api, p.mcp}, operation, token)
+	if err != nil {
+		return nil, err
+	}
+	if owner != nil {
+		return owner.Execute(ctx, operation, params, token)
+	}
 	return p.api.Execute(ctx, operation, params, token)
 }
 
@@ -111,21 +132,27 @@ func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*catalo
 }
 
 func (p *Provider) ConnectionForOperation(operation string) string {
+	switch p.staticOperationOwner(operation) {
+	case operationOwnerAPI:
+		return p.api.ConnectionForOperation(operation)
+	case operationOwnerMCP:
+		return p.mcp.ConnectionForOperation(operation)
+	}
 	return p.api.ConnectionForOperation(operation)
 }
 
 func (p *Provider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
-	if resolver, ok := p.api.(core.OperationConnectionResolver); ok {
-		return resolver.ResolveConnectionForOperation(operation, params)
+	if p.staticOperationOwner(operation) == operationOwnerMCP {
+		return resolveProviderConnection(p.mcp, operation, params)
 	}
-	return p.api.ConnectionForOperation(operation), nil
+	return resolveProviderConnection(p.api, operation, params)
 }
 
 func (p *Provider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
-	if policy, ok := p.api.(core.OperationConnectionOverridePolicy); ok {
-		return policy.OperationConnectionOverrideAllowed(operation, params)
+	if p.staticOperationOwner(operation) == operationOwnerMCP {
+		return providerConnectionOverrideAllowed(p.mcp, operation, params)
 	}
-	return false
+	return providerConnectionOverrideAllowed(p.api, operation, params)
 }
 
 func (p *Provider) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
@@ -240,4 +267,63 @@ func tagRESTCatalog(src *catalog.Catalog) *catalog.Catalog {
 
 func tagMCPCatalog(src *catalog.Catalog) *catalog.Catalog {
 	return tagCatalog(src, catalog.TransportMCPPassthrough)
+}
+
+func (p *Provider) staticOperationOwner(operation string) operationOwner {
+	// Static REST/API operations win ID collisions for compatibility with the
+	// existing REST catalog surface; dynamic session collisions are rejected.
+	if _, ok := catalog.OperationByID(p.api.Catalog(), operation); ok {
+		return operationOwnerAPI
+	}
+	if _, ok := catalog.OperationByID(p.mcp.Catalog(), operation); ok {
+		return operationOwnerMCP
+	}
+	return operationOwnerNone
+}
+
+func resolveProviderConnection(prov core.Provider, operation string, params map[string]any) (string, error) {
+	if resolver, ok := prov.(core.OperationConnectionResolver); ok {
+		return resolver.ResolveConnectionForOperation(operation, params)
+	}
+	return prov.ConnectionForOperation(operation), nil
+}
+
+func providerConnectionOverrideAllowed(prov core.Provider, operation string, params map[string]any) bool {
+	if policy, ok := prov.(core.OperationConnectionOverridePolicy); ok {
+		return policy.OperationConnectionOverrideAllowed(operation, params)
+	}
+	return false
+}
+
+func sessionProviderForOperation(ctx context.Context, providers []core.Provider, operation, token string) (core.Provider, error) {
+	var (
+		match    core.Provider
+		firstErr error
+	)
+	for _, provider := range providers {
+		if !core.SupportsSessionCatalog(provider) {
+			continue
+		}
+		cat, _, err := core.CatalogForRequest(ctx, provider, token)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if _, ok := catalog.OperationByID(cat, operation); !ok {
+			continue
+		}
+		if match != nil {
+			return nil, fmt.Errorf("operation %q provided by both %q and %q", operation, match.Name(), provider.Name())
+		}
+		match = provider
+	}
+	if match != nil {
+		return match, nil
+	}
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return nil, nil
 }

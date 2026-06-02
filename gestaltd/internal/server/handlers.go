@@ -19,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
+	"github.com/valon-technologies/gestalt/server/services/apps/mcphttp"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -721,12 +722,21 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sessionConnections := s.catalogSelectorConfig().SessionCatalogConnections(providerName, connection)
-	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, providerName, resolver, p, operationName, sessionConnections, instance)
+	opMeta, transport, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, providerName, resolver, p, operationName, sessionConnections, instance)
 	if err != nil {
 		s.writeInvocationError(w, r, providerName, operationName, err)
 		return
 	}
 	if !catalog.OperationVisibleByDefault(opMeta) {
+		s.writeInvocationError(w, r, providerName, operationName, invocation.ErrOperationNotFound)
+		return
+	}
+	if err := mcphttp.ValidateHTTPInvocation(transport, opMeta, r.Method); err != nil {
+		if mcphttp.IsMethodNotAllowed(err) {
+			w.Header().Set("Allow", http.MethodPost)
+			writeError(w, http.StatusMethodNotAllowed, err.Error())
+			return
+		}
 		s.writeInvocationError(w, r, providerName, operationName, invocation.ErrOperationNotFound)
 		return
 	}

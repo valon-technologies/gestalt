@@ -197,6 +197,10 @@ GraphQL surfaces expose a raw GraphQL passthrough immediately. When `allowedOper
 | `url`        | string | URL of the upstream MCP server.     |
 | `connection` | string | Connection name used for MCP calls. |
 
+MCP surfaces are exposed to MCP clients through Gestalt's `/mcp` endpoint and to
+REST clients through the generic REST facade at `POST /api/v1/{app}/{operation}`.
+REST-visible MCP tools are listed as `transport: mcp-passthrough` operations.
+
 #### `spec.surfaces.rest`
 
 | Field        | Type                | Purpose                                                                           |

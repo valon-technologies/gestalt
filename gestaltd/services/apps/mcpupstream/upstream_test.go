@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 	"github.com/valon-technologies/gestalt/server/services/egress"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -144,15 +145,62 @@ func TestUpstream_CallToolPassthrough(t *testing.T) {
 	}
 }
 
-func TestUpstream_ExecuteReturnsError(t *testing.T) {
+func TestUpstream_ExecuteCallsTool(t *testing.T) {
 	t.Parallel()
 
 	u := newTestUpstream(t)
 	t.Cleanup(func() { _ = u.Close() })
 
-	_, err := u.Execute(context.Background(), "run_query", nil, "token")
-	if err != core.ErrMCPOnly {
-		t.Fatalf("expected ErrMCPOnly, got %v", err)
+	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
+	result, err := u.Execute(ctx, "run_query", map[string]any{"sql": "SELECT 1"}, "token")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Execute result is nil")
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", result.Status)
+	}
+	if result.Headers.Get("Content-Type") != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", result.Headers.Get("Content-Type"))
+	}
+	if result.MCPResult == nil {
+		t.Fatal("MCPResult is nil")
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
+	if _, ok := body["content"].([]any); !ok {
+		t.Fatalf("body missing content array: %#v", body)
+	}
+	if body["isError"] != false {
+		t.Fatalf("isError = %v, want false", body["isError"])
+	}
+
+	result, err = u.Execute(context.Background(), "run_query", map[string]any{"sql": "SELECT 1"}, "token")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Execute result is nil")
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", result.Status)
+	}
+	if result.MCPResult == nil {
+		t.Fatal("MCPResult is nil")
+	}
+	body = nil
+	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
+	if _, ok := body["content"].([]any); !ok {
+		t.Fatalf("body missing content array: %#v", body)
+	}
+	if _, ok := body["isError"]; ok {
+		t.Fatalf("body unexpectedly has isError: %#v", body)
 	}
 }
 

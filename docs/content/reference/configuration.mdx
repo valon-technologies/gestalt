@@ -265,6 +265,8 @@ apps:
     surfaces:
       openapi:
         baseUrl: https://api.github.com
+      mcp:
+        url: https://mcp.github.example.com/mcp
     connections:
       api:
         mode: subject
@@ -278,3 +280,9 @@ apps:
         auth:
           type: mcp_oauth
 ```
+
+MCP surfaces expose upstream tools through the generic REST facade at
+`POST /api/v1/{app}/{operation}`. `GET /api/v1/apps/{app}/operations` lists
+HTTP-safe MCP tools as POST operations with `transport: mcp-passthrough`, and
+responses use the MCP `CallToolResult` envelope. Dynamic MCP tool catalogs are
+loaded lazily when request-scoped discovery is needed.

@@ -56,6 +56,18 @@ func OperationVisibleByDefault(op CatalogOperation) bool {
 	return op.Visible == nil || *op.Visible
 }
 
+func OperationByID(cat *Catalog, id string) (CatalogOperation, bool) {
+	if cat == nil || strings.TrimSpace(id) == "" {
+		return CatalogOperation{}, false
+	}
+	for i := range cat.Operations {
+		if cat.Operations[i].ID == id {
+			return cat.Operations[i], true
+		}
+	}
+	return CatalogOperation{}, false
+}
+
 // MergeTags returns provider-owned search tags with empty values removed and
 // case-insensitive duplicates collapsed while preserving the first spelling.
 func MergeTags(groups ...[]string) []string {

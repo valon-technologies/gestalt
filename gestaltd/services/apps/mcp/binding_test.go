@@ -843,6 +843,19 @@ func (p *directCallerProvider) CatalogForRequest(ctx context.Context, token stri
 	return p.cat, nil
 }
 
+func (p *directCallerProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
+	if op, ok := invocation.CatalogOperationFromContext(ctx, p.N, operation); ok {
+		if invocation.OperationTransport(op) != catalog.TransportMCPPassthrough {
+			return p.StubIntegration.Execute(ctx, operation, params, token)
+		}
+		return mcpupstream.ExecuteTool(ctx, p, operation, params, token)
+	}
+	if op, ok := catalog.OperationByID(p.cat, operation); ok && invocation.OperationTransport(op) == catalog.TransportMCPPassthrough {
+		return mcpupstream.ExecuteTool(ctx, p, operation, params, token)
+	}
+	return p.StubIntegration.Execute(ctx, operation, params, token)
+}
+
 func (p *directCallerProvider) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 	if p.callFn != nil {
 		return p.callFn(ctx, name, args)
@@ -3536,8 +3549,12 @@ func TestNewServer_PassthroughToolTreatsNilResultAsEmptyJSON(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected text content, got %T", result.Content[0])
 	}
-	if text.Text != "{}" {
-		t.Fatalf("text content = %q, want %q", text.Text, "{}")
+	var body map[string]any
+	if err := json.Unmarshal([]byte(text.Text), &body); err != nil {
+		t.Fatalf("text content is not JSON: %v", err)
+	}
+	if len(body) != 0 {
+		t.Fatalf("body = %#v, want empty object", body)
 	}
 }
 

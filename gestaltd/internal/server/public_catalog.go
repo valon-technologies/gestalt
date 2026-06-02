@@ -9,6 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	declarative "github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/mcphttp"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
@@ -27,7 +28,10 @@ func (s *Server) publicHTTPOperations(integration string, prov core.Provider, op
 			continue
 		}
 		if invocation.OperationTransport(op) == catalog.TransportMCPPassthrough {
-			continue
+			if !mcphttp.VisibleOnHTTP(op) {
+				continue
+			}
+			op = mcphttp.ProjectCatalogOperation(op)
 		}
 		projected, ok := s.projectPublicOperation(prov, op, projector, hasProjector)
 		if !ok {

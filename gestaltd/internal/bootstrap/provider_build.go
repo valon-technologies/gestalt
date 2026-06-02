@@ -846,6 +846,10 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved conf
 			connMode = core.ConnectionModeSubject
 		}
 		connMode = core.NormalizeConnectionMode(connMode)
+		mcpOpts := []mcpupstream.Option{
+			mcpupstream.WithMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+			mcpupstream.WithConnectionName(resolved.ConnectionName),
+		}
 		up, err := mcpupstream.New(
 			ctx,
 			name,
@@ -853,7 +857,7 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved conf
 			connMode,
 			manifestHeaders(cfg.manifestApp),
 			deps.Egress.CheckFunc(cfg.allowedHosts),
-			mcpupstream.WithMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+			mcpOpts...,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("create mcp upstream: %w", err)
