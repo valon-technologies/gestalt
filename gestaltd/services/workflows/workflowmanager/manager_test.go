@@ -165,7 +165,7 @@ func TestPublishEventPreservesCallerAppName(t *testing.T) {
 	if _, err := manager.PublishEvent(context.Background(), caller, EventPublish{
 		ProviderName: "local",
 		AppName:      " github ",
-		Event:        coreworkflow.Event{Type: "issue.created"},
+		Event:        coreworkflow.Event{Type: "issue.created", Source: "slack"},
 	}); err != nil {
 		t.Fatalf("PublishEvent selected provider: %v", err)
 	}
@@ -182,6 +182,15 @@ func TestPublishEventPreservesCallerAppName(t *testing.T) {
 		if req.GetAppName() != "github" {
 			t.Fatalf("publishedEvents[%d].AppName = %q, want github", i, req.GetAppName())
 		}
+		if req.GetEvent().GetSource() != "github" {
+			t.Fatalf("publishedEvents[%d].Event.Source = %q, want github", i, req.GetEvent().GetSource())
+		}
+	}
+
+	if _, err := manager.PublishEvent(context.Background(), caller, EventPublish{
+		Event: coreworkflow.Event{Type: "issue.deleted"},
+	}); !errors.Is(err, ErrWorkflowEventSourceRequired) {
+		t.Fatalf("PublishEvent without caller app error = %v, want ErrWorkflowEventSourceRequired", err)
 	}
 }
 

@@ -300,6 +300,8 @@ func workflowManagerErrorType(err error) string {
 		return "duplicate_workflow_objects"
 	case errors.Is(err, ErrWorkflowEventMatchRequired):
 		return "workflow_event_match_required"
+	case errors.Is(err, ErrWorkflowEventSourceRequired):
+		return "workflow_event_source_required"
 	case errors.Is(err, ErrWorkflowEventTypeRequired):
 		return "workflow_event_type_required"
 	case errors.Is(err, ErrWorkflowKeyRequired):

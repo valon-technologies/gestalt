@@ -92,7 +92,8 @@ func (s *Server) writeWorkflowPublishEventError(w http.ResponseWriter, r *http.R
 	case errors.Is(err, workflowmanager.ErrWorkflowSubjectRequired),
 		errors.Is(err, workflowmanager.ErrWorkflowScheduleSubject):
 		writeError(w, http.StatusUnauthorized, err.Error())
-	case errors.Is(err, workflowmanager.ErrWorkflowEventTypeRequired):
+	case errors.Is(err, workflowmanager.ErrWorkflowEventSourceRequired),
+		errors.Is(err, workflowmanager.ErrWorkflowEventTypeRequired):
 		writeError(w, http.StatusBadRequest, err.Error())
 	default:
 		s.writeWorkflowPublishEventProviderError(r.Context(), w, err)

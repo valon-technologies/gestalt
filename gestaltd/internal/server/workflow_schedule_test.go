@@ -2707,7 +2707,7 @@ func TestWorkflowEventTriggerCreateRequiresMatchType(t *testing.T) {
 	}
 }
 
-func TestWorkflowEventPublishFansOutAcrossWorkflowProviders(t *testing.T) {
+func TestWorkflowEventPublishRequiresCallerAppSource(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
@@ -2762,66 +2762,16 @@ func TestWorkflowEventPublishFansOutAcrossWorkflowProviders(t *testing.T) {
 		t.Fatalf("publish request: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusAccepted {
+	if resp.StatusCode != http.StatusBadRequest {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 202, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
 	}
-
-	var body struct {
-		Status string `json:"status"`
-		Event  struct {
-			ID          string         `json:"id"`
-			Type        string         `json:"type"`
-			Source      string         `json:"source"`
-			Subject     string         `json:"subject"`
-			SpecVersion string         `json:"specVersion"`
-			Time        *time.Time     `json:"time"`
-			Data        map[string]any `json:"data"`
-			Extensions  map[string]any `json:"extensions"`
-		} `json:"event"`
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "workflow event source is required") {
+		t.Fatalf("response body = %s, want workflow event source error", body)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decode publish response: %v", err)
-	}
-	if body.Status != "published" {
-		t.Fatalf("publish response status = %q, want published", body.Status)
-	}
-	if body.Event.ID == "" || body.Event.SpecVersion != "1.0" || body.Event.Time == nil {
-		t.Fatalf("published event = %#v", body.Event)
-	}
-	if body.Event.Type != "roadmap.item.updated" || body.Event.Source != "roadmap" || body.Event.Subject != "item" {
-		t.Fatalf("published event = %#v", body.Event)
-	}
-	if got := body.Event.Data["id"]; got != "item-1" {
-		t.Fatalf("published event data = %#v", body.Event.Data)
-	}
-	if got := body.Event.Extensions["traceId"]; got != "trace-1" {
-		t.Fatalf("published event extensions = %#v", body.Event.Extensions)
-	}
-
-	for name, provider := range map[string]*memoryWorkflowProvider{
-		"basic":    basicProvider,
-		"advanced": advancedProvider,
-	} {
-		if len(provider.publishEventReqs) != 1 {
-			t.Fatalf("%s publish requests = %d, want 1", name, len(provider.publishEventReqs))
-		}
-		if got := provider.publishEventReqs[0].GetAppName(); got != "" {
-			t.Fatalf("%s publish app = %q, want empty global publish", name, got)
-		}
-		for _, publishReq := range provider.publishEventReqs {
-			publishedAt := publishReq.GetEvent().GetTime().AsTime()
-			if publishReq.GetEvent().GetId() != body.Event.ID || publishReq.GetEvent().GetSpecVersion() != "1.0" || publishReq.GetEvent().GetTime() == nil || !publishedAt.Equal(*body.Event.Time) {
-				t.Fatalf("%s publish event = %#v, response = %#v", name, publishReq.GetEvent(), body.Event)
-			}
-			publishedBy := publishReq.GetPublishedBy()
-			if publishedBy.GetSubjectId() != principal.UserSubjectID(user.ID) ||
-				publishedBy.GetSubjectKind() != "user" ||
-				publishedBy.GetDisplayName() != "Ada" ||
-				publishedBy.GetAuthSource() != "session" {
-				t.Fatalf("%s published_by = %#v, want publishing user actor", name, publishedBy)
-			}
-		}
+	if len(basicProvider.publishEventReqs) != 0 || len(advancedProvider.publishEventReqs) != 0 {
+		t.Fatalf("publish requests basic=%d advanced=%d, want none", len(basicProvider.publishEventReqs), len(advancedProvider.publishEventReqs))
 	}
 }
 
