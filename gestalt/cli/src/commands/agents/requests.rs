@@ -448,7 +448,7 @@ pub(crate) fn build_turn_create_body(args: &AgentTurnCreateArgs) -> Result<Value
 
 fn validate_optional_timeout_seconds(body: &Map<String, Value>) -> Result<()> {
     if let Some(value) = body.get("timeoutSeconds")
-        && !value.as_i64().is_some_and(|seconds| seconds >= 0)
+        && value.as_i64().is_none_or(|seconds| seconds < 0)
     {
         bail!("timeoutSeconds must be a non-negative integer");
     }
