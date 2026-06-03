@@ -18,12 +18,14 @@ const (
 	syncArchiveSourceRemoteReleaseMetadata = "remote_release_metadata"
 	syncArchiveSourceLocal                 = "local"
 
-	syncArchiveCacheResultHit         = "hit"
-	syncArchiveCacheResultMiss        = "miss"
-	syncArchiveCacheResultInvalid     = "invalid"
-	syncArchiveCacheResultRejected    = "rejected"
-	syncArchiveCacheResultDisabled    = "disabled"
-	syncArchiveCacheResultUncacheable = "uncacheable"
+	syncCacheResultHit         = "hit"
+	syncCacheResultMiss        = "miss"
+	syncCacheResultInvalid     = "invalid"
+	syncCacheResultDisabled    = "disabled"
+	syncCacheResultUncacheable = "uncacheable"
+	syncCachePutSuccess        = "success"
+	syncCachePutFailure        = "failure"
+	syncCachePutSkipped        = "skipped"
 
 	syncArtifactSourceRemoteArchive = "remote_archive"
 	syncArtifactSourceLocalArchive  = "local_archive"
@@ -50,6 +52,7 @@ type SyncMetrics struct {
 	Sync      SyncMetricsSync      `json:"sync"`
 	Inputs    SyncMetricsInputs    `json:"inputs"`
 	Artifacts SyncMetricsArtifacts `json:"artifacts"`
+	Cache     SyncMetricsCache     `json:"cache"`
 	Archives  SyncMetricsArchives  `json:"archives"`
 	Phases    SyncMetricsPhases    `json:"phases"`
 	Output    SyncMetricsOutput    `json:"output"`
@@ -90,24 +93,42 @@ type SyncMetricsArtifactRecord struct {
 type SyncMetricsArchives struct {
 	Requests     int                       `json:"requests"`
 	UniqueSHA256 int                       `json:"unique_sha256"`
-	Cache        SyncMetricsArchiveCache   `json:"cache"`
 	Downloads    SyncMetricsDownloads      `json:"downloads"`
 	Fetches      []SyncMetricsArchiveFetch `json:"fetches"`
 }
 
-type SyncMetricsArchiveCache struct {
-	Configured  bool   `json:"configured"`
-	Enabled     bool   `json:"enabled"`
-	Dir         string `json:"dir"`
-	Eligible    int    `json:"eligible"`
-	Disabled    int    `json:"disabled"`
-	Uncacheable int    `json:"uncacheable"`
-	Hits        int    `json:"hits"`
-	Misses      int    `json:"misses"`
-	Invalid     int    `json:"invalid"`
-	Rejected    int    `json:"rejected"`
-	Puts        int    `json:"puts"`
-	PutFailures int    `json:"put_failures"`
+type SyncMetricsCache struct {
+	Configured    bool                    `json:"configured"`
+	Enabled       bool                    `json:"enabled"`
+	Dir           string                  `json:"dir"`
+	Mode          string                  `json:"mode,omitempty"`
+	BucketVersion string                  `json:"bucket_version,omitempty"`
+	Eligible      int                     `json:"eligible"`
+	Disabled      int                     `json:"disabled"`
+	Uncacheable   int                     `json:"uncacheable"`
+	Hits          int                     `json:"hits"`
+	Misses        int                     `json:"misses"`
+	Invalid       int                     `json:"invalid"`
+	Put           SyncMetricsCachePut     `json:"put"`
+	Entries       []SyncMetricsCacheEntry `json:"entries"`
+}
+
+type SyncMetricsCachePut struct {
+	Successes int `json:"successes"`
+	Failures  int `json:"failures"`
+}
+
+type SyncMetricsCacheEntry struct {
+	Subject         string  `json:"subject"`
+	SourceKind      string  `json:"source_kind"`
+	Key             string  `json:"key,omitempty"`
+	SHA256          string  `json:"archive_sha256,omitempty"`
+	Platform        string  `json:"platform,omitempty"`
+	Result          string  `json:"result"`
+	Put             string  `json:"put"`
+	Bytes           int64   `json:"bytes,omitempty"`
+	Files           int     `json:"files,omitempty"`
+	DurationSeconds float64 `json:"duration_seconds"`
 }
 
 type SyncMetricsDownloads struct {
@@ -120,9 +141,7 @@ type SyncMetricsArchiveFetch struct {
 	Subject         string  `json:"subject"`
 	SourceKind      string  `json:"source_kind"`
 	SHA256          string  `json:"sha256,omitempty"`
-	CacheResult     string  `json:"cache_result"`
 	Downloaded      bool    `json:"downloaded"`
-	CachePutFailed  bool    `json:"cache_put_failed"`
 	Bytes           int64   `json:"bytes"`
 	DurationSeconds float64 `json:"duration_seconds"`
 }
@@ -155,6 +174,7 @@ type SyncMetricsRecorder struct {
 	metrics    SyncMetrics
 	seenSHA    map[string]struct{}
 	fetches    []SyncMetricsArchiveFetch
+	cache      []SyncMetricsCacheEntry
 	artifacts  []SyncMetricsArtifactRecord
 	totalStart time.Time
 	phaseStart time.Time
@@ -177,138 +197,25 @@ type syncArchiveMetricsEvent struct {
 	Subject          string
 	SourceKind       string
 	SHA256           string
-	Eligible         bool
-	Disabled         bool
-	Uncacheable      bool
-	CacheResult      string
 	Downloaded       bool
-	CachePut         bool
-	CachePutFailed   bool
 	Bytes            int64
 	Duration         time.Duration
 	DownloadDuration time.Duration
 }
 
-type syncArchiveDownloadObserver struct {
-	metrics *SyncMetricsRecorder
-	subject string
-}
-
-func newSyncArchiveDownloadObserver(metrics *SyncMetricsRecorder, subject string) syncArchiveDownloadObserver {
-	return syncArchiveDownloadObserver{
-		metrics: metrics,
-		subject: subject,
-	}
-}
-
-func (o syncArchiveDownloadObserver) beginArchiveFetch(sourceKind, sha string, cacheEligible, useCache bool) *archiveFetchTracker {
-	return newArchiveFetchTracker(o.metrics, o.subject, sourceKind, sha, cacheEligible, useCache)
-}
-
-type archiveFetchTracker struct {
-	metrics       *SyncMetricsRecorder
-	event         syncArchiveMetricsEvent
-	start         time.Time
-	downloadStart time.Time
-	canceled      bool
-}
-
-func newArchiveFetchTracker(metrics *SyncMetricsRecorder, subject, sourceKind, sha string, cacheEligible, useCache bool) *archiveFetchTracker {
-	if metrics == nil {
-		return nil
-	}
-	tracker := &archiveFetchTracker{
-		metrics: metrics,
-		start:   time.Now(),
-		event: syncArchiveMetricsEvent{
-			Subject:     subject,
-			SourceKind:  sourceKind,
-			SHA256:      sha,
-			Eligible:    cacheEligible,
-			Disabled:    cacheEligible && !useCache,
-			Uncacheable: !cacheEligible,
-		},
-	}
-	switch {
-	case useCache:
-		tracker.event.CacheResult = syncArchiveCacheResultMiss
-	case tracker.event.Disabled:
-		tracker.event.CacheResult = syncArchiveCacheResultDisabled
-	default:
-		tracker.event.CacheResult = syncArchiveCacheResultUncacheable
-	}
-	return tracker
-}
-
-func (t *archiveFetchTracker) setCacheResult(result string) {
-	if t == nil {
-		return
-	}
-	t.event.CacheResult = result
-}
-
-func (t *archiveFetchTracker) setCacheLookupResult(result archiveCacheLookupResult) {
-	if t == nil {
-		return
-	}
-	switch result {
-	case archiveCacheHit:
-		t.setCacheResult(syncArchiveCacheResultHit)
-	case archiveCacheMiss:
-		t.setCacheResult(syncArchiveCacheResultMiss)
-	case archiveCacheInvalid:
-		t.setCacheResult(syncArchiveCacheResultInvalid)
-	case archiveCacheRejected:
-		t.setCacheResult(syncArchiveCacheResultRejected)
-	}
-}
-
-func (t *archiveFetchTracker) setCachePut(failed bool) {
-	if t == nil {
-		return
-	}
-	t.event.CachePut = true
-	t.event.CachePutFailed = failed
-}
-
-func (t *archiveFetchTracker) setBytesFromPath(path string) {
-	if t == nil {
-		return
-	}
-	t.event.Bytes = archiveFileSize(path)
-}
-
-func (t *archiveFetchTracker) startDownload() {
-	if t == nil {
-		return
-	}
-	t.downloadStart = time.Now()
-}
-
-func (t *archiveFetchTracker) finishDownload(remote bool, path string) {
-	if t == nil {
-		return
-	}
-	t.event.Downloaded = remote
-	t.event.Bytes = archiveFileSize(path)
-	if remote && !t.downloadStart.IsZero() {
-		t.event.DownloadDuration = time.Since(t.downloadStart)
-	}
-}
-
-func (t *archiveFetchTracker) cancel() {
-	if t == nil {
-		return
-	}
-	t.canceled = true
-}
-
-func (t *archiveFetchTracker) record() {
-	if t == nil || t.canceled {
-		return
-	}
-	t.event.Duration = time.Since(t.start)
-	t.metrics.RecordArchiveFetch(t.event)
+type syncCacheMetricsEvent struct {
+	Subject    string
+	SourceKind string
+	Key        string
+	SHA256     string
+	Platform   string
+	Result     string
+	Lookup     bool
+	Put        bool
+	PutFailed  bool
+	Bytes      int64
+	Files      int
+	Duration   time.Duration
 }
 
 func NewSyncMetricsRecorder() *SyncMetricsRecorder {
@@ -341,9 +248,13 @@ func (r *SyncMetricsRecorder) SetPaths(artifactsDir, lockfilePath, cacheDir stri
 	defer r.mu.Unlock()
 	r.metrics.Sync.ArtifactsDir = artifactsDir
 	r.metrics.Sync.LockfilePath = lockfilePath
-	r.metrics.Archives.Cache.Configured = cacheConfigured
-	r.metrics.Archives.Cache.Enabled = cacheEnabled
-	r.metrics.Archives.Cache.Dir = cacheDir
+	r.metrics.Cache.Configured = cacheConfigured
+	r.metrics.Cache.Enabled = cacheEnabled
+	r.metrics.Cache.Dir = cacheDir
+	if cacheConfigured {
+		r.metrics.Cache.Mode = "materialized"
+		r.metrics.Cache.BucketVersion = materializedCacheBucketVersion
+	}
 }
 
 func (r *SyncMetricsRecorder) FinishLoadPhase() {
@@ -427,32 +338,6 @@ func (r *SyncMetricsRecorder) RecordArchiveFetch(event syncArchiveMetricsEvent) 
 		r.seenSHA[event.SHA256] = struct{}{}
 		r.metrics.Archives.UniqueSHA256 = len(r.seenSHA)
 	}
-	if event.Eligible {
-		r.metrics.Archives.Cache.Eligible++
-	}
-	if event.Disabled {
-		r.metrics.Archives.Cache.Disabled++
-	}
-	if event.Uncacheable {
-		r.metrics.Archives.Cache.Uncacheable++
-	}
-	switch event.CacheResult {
-	case syncArchiveCacheResultHit:
-		r.metrics.Archives.Cache.Hits++
-	case syncArchiveCacheResultMiss:
-		r.metrics.Archives.Cache.Misses++
-	case syncArchiveCacheResultInvalid:
-		r.metrics.Archives.Cache.Invalid++
-	case syncArchiveCacheResultRejected:
-		r.metrics.Archives.Cache.Rejected++
-	}
-	if event.CachePut {
-		if event.CachePutFailed {
-			r.metrics.Archives.Cache.PutFailures++
-		} else {
-			r.metrics.Archives.Cache.Puts++
-		}
-	}
 	if event.Downloaded {
 		r.metrics.Archives.Downloads.Count++
 		r.metrics.Archives.Downloads.Bytes += event.Bytes
@@ -463,9 +348,7 @@ func (r *SyncMetricsRecorder) RecordArchiveFetch(event syncArchiveMetricsEvent) 
 		Subject:         event.Subject,
 		SourceKind:      event.SourceKind,
 		SHA256:          event.SHA256,
-		CacheResult:     event.CacheResult,
 		Downloaded:      event.Downloaded,
-		CachePutFailed:  event.CachePutFailed,
 		Bytes:           event.Bytes,
 		DurationSeconds: roundedSeconds(event.Duration),
 	}
@@ -486,6 +369,65 @@ func (r *SyncMetricsRecorder) RecordArchiveFetch(event syncArchiveMetricsEvent) 
 			return cmp.Compare(a.SHA256, b.SHA256)
 		}
 	})
+}
+
+func (r *SyncMetricsRecorder) RecordCacheEntry(event syncCacheMetricsEvent) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if event.Lookup {
+		switch event.Result {
+		case syncCacheResultHit:
+			r.metrics.Cache.Eligible++
+			r.metrics.Cache.Hits++
+		case syncCacheResultMiss:
+			r.metrics.Cache.Eligible++
+			r.metrics.Cache.Misses++
+		case syncCacheResultInvalid:
+			r.metrics.Cache.Eligible++
+			r.metrics.Cache.Invalid++
+		case syncCacheResultDisabled:
+			r.metrics.Cache.Disabled++
+		case syncCacheResultUncacheable:
+			r.metrics.Cache.Uncacheable++
+		}
+	}
+	put := syncCachePutSkipped
+	if event.Put {
+		if event.PutFailed {
+			r.metrics.Cache.Put.Failures++
+			put = syncCachePutFailure
+		} else {
+			r.metrics.Cache.Put.Successes++
+			put = syncCachePutSuccess
+		}
+	}
+	entry := SyncMetricsCacheEntry{
+		Subject:         event.Subject,
+		SourceKind:      event.SourceKind,
+		Key:             event.Key,
+		SHA256:          event.SHA256,
+		Platform:        event.Platform,
+		Result:          event.Result,
+		Put:             put,
+		Bytes:           event.Bytes,
+		Files:           event.Files,
+		DurationSeconds: roundedSeconds(event.Duration),
+	}
+	r.cache = append(r.cache, entry)
+	slices.SortFunc(r.cache, func(a, b SyncMetricsCacheEntry) int {
+		if n := cmp.Compare(a.Subject, b.Subject); n != 0 {
+			return n
+		}
+		if n := cmp.Compare(a.SourceKind, b.SourceKind); n != 0 {
+			return n
+		}
+		return cmp.Compare(a.Key, b.Key)
+	})
+	r.metrics.Cache.Entries = append([]SyncMetricsCacheEntry(nil), r.cache...)
 }
 
 func (r *SyncMetricsRecorder) RecordArtifact(event syncArtifactMetricsEvent) {
@@ -544,10 +486,14 @@ func (r *SyncMetricsRecorder) Snapshot() SyncMetrics {
 	metrics.Inputs.ConfigPaths = append([]string(nil), r.metrics.Inputs.ConfigPaths...)
 	fetches := append([]SyncMetricsArchiveFetch(nil), r.fetches...)
 	metrics.Archives.Fetches = fetches
+	metrics.Cache.Entries = append([]SyncMetricsCacheEntry(nil), r.metrics.Cache.Entries...)
 	metrics.Artifacts.Items = append([]SyncMetricsArtifactRecord(nil), r.metrics.Artifacts.Items...)
 	metrics.Output.Roots = append([]SyncMetricsOutputRoot(nil), r.metrics.Output.Roots...)
 	if metrics.Archives.Fetches == nil {
 		metrics.Archives.Fetches = []SyncMetricsArchiveFetch{}
+	}
+	if metrics.Cache.Entries == nil {
+		metrics.Cache.Entries = []SyncMetricsCacheEntry{}
 	}
 	if metrics.Artifacts.Items == nil {
 		metrics.Artifacts.Items = []SyncMetricsArtifactRecord{}

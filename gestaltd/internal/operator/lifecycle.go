@@ -117,9 +117,9 @@ type StatePaths struct {
 }
 
 type SyncOptions struct {
-	Parallelism     int
-	ArchiveCacheDir string
-	Observability   SyncObservability
+	Parallelism   int
+	CacheDir      string
+	Observability SyncObservability
 }
 
 func DefaultSyncParallelism() int {
@@ -1072,13 +1072,13 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 		return err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
-	if mode == artifactModeMaterialize && opts.ArchiveCacheDir != "" {
-		paths.archiveCacheDir = resolveCLIArtifactsDir(opts.ArchiveCacheDir)
+	if mode == artifactModeMaterialize && opts.CacheDir != "" {
+		paths.syncCacheDir = resolveCLIArtifactsDir(opts.CacheDir)
 	}
 	paths.syncMetrics = recorder
 	paths.syncBuildOutput = opts.Observability.BuildOutput
 	if recorder != nil {
-		recorder.SetPaths(paths.artifactsDir, paths.lockfilePath, paths.archiveCacheDir, opts.ArchiveCacheDir != "", mode == artifactModeMaterialize && paths.archiveCacheDir != "")
+		recorder.SetPaths(paths.artifactsDir, paths.lockfilePath, paths.syncCacheDir, opts.CacheDir != "", mode == artifactModeMaterialize && paths.syncCacheDir != "")
 	}
 	lock, err := ReadLockfile(paths.lockfilePath)
 	if err != nil {
@@ -1152,6 +1152,20 @@ func recordSyncArtifact(paths lifecyclePaths, kind, name, subject, destDir, sour
 		PrepareDuration:  prepareDuration,
 		ActivateDuration: activateDuration,
 	})
+}
+
+func recordSyncArchiveDownload(paths lifecyclePaths, event syncArchiveMetricsEvent) {
+	if paths.syncMetrics == nil {
+		return
+	}
+	paths.syncMetrics.RecordArchiveFetch(event)
+}
+
+func recordSyncCacheEntry(paths lifecyclePaths, event syncCacheMetricsEvent) {
+	if paths.syncMetrics == nil {
+		return
+	}
+	paths.syncMetrics.RecordCacheEntry(event)
 }
 
 func syncArtifactArchiveSourceKind(paths lifecyclePaths, entry LockEntry) string {
@@ -1562,7 +1576,7 @@ type lifecyclePaths struct {
 	agentDir               string
 	runtimeDir             string
 	uiDir                  string
-	archiveCacheDir        string
+	syncCacheDir           string
 	syncMetrics            *SyncMetricsRecorder
 	syncBuildOutput        providerpkg.CommandOutput
 }
@@ -3198,11 +3212,14 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("resolve archive for %s: %w", subject, err)
 	}
-	download, err := downloadArchiveForSourceWithCache(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation, archive.SHA256, "", nil)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("download metadata source package for %s: %w", subject, err)
 	}
 	defer download.Cleanup()
+	if err := verifyArchiveSHA256(download.SHA256Hex, archive.SHA256); err != nil {
+		return nil, LockEntry{}, fmt.Errorf("verify metadata source package for %s: %w", subject, err)
+	}
 
 	installed, err := installPackage(download.LocalPath, destDir)
 	if err != nil {
@@ -5186,134 +5203,191 @@ func bindPathBackedUIManifest(app *config.ProviderEntry, configMap map[string]an
 }
 
 func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyclePaths, name string, app *config.ProviderEntry, entry LockEntry, reason string) error {
-	start := time.Now()
-	platform := providerpkg.CurrentPlatformString()
-	download, resolvedKey, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, fmt.Sprintf("provider %q", name), paths.archiveCacheDir)
-	if err != nil {
-		return err
-	}
-	defer cleanupDownload()
-
-	destDir := providerDestDir(paths, name)
-	prepareStart := time.Now()
-	installed, cleanupInstall, commitInstall, err := installLockedPackageAtomic(download.LocalPath, destDir)
-	prepareDuration := time.Since(prepareStart)
-	if err != nil {
-		return fmt.Errorf("install locked source provider for provider %q: %w", name, err)
-	}
-	defer func() { _ = cleanupInstall() }()
-	if installed.Manifest.Source != lockEntryPackage(entry) {
-		return fmt.Errorf("locked source provider manifest source mismatch for provider %q: got %q, want %q", name, installed.Manifest.Source, lockEntryPackage(entry))
-	}
-	if installed.Manifest.Version != entry.Version {
-		return fmt.Errorf("locked source provider manifest version mismatch for provider %q: got %q, want %q", name, installed.Manifest.Version, entry.Version)
-	}
-	if err := validateLockedArchivePolicy(fmt.Sprintf("provider %q", name), providermanifestv1.KindApp, installed.Manifest, entry, platform, resolvedKey); err != nil {
-		return err
-	}
-	activateStart := time.Now()
-	if err := commitInstall(); err != nil {
-		return fmt.Errorf("activate locked source provider for provider %q: %w", name, err)
-	}
-	recordSyncArtifact(paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, syncArtifactArchiveSourceKind(paths, entry), syncArtifactResultMaterialized, reason, start, prepareDuration, time.Since(activateStart))
-	return nil
+	return l.materializeLockedArchive(ctx, paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), app, entry, providerDestDir(paths, name), reason)
 }
 
 func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecyclePaths, kind, name string, app *config.ProviderEntry, entry LockEntry, destDir, reason string) error {
-	start := time.Now()
-	platform := providerpkg.CurrentPlatformString()
-	download, resolvedKey, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, fmt.Sprintf("%s %q", kind, name), paths.archiveCacheDir)
-	if err != nil {
-		return err
-	}
-	defer cleanupDownload()
-
 	if destDir == "" {
 		return fmt.Errorf("unsupported component %q", name)
 	}
+	return l.materializeLockedArchive(ctx, paths, kind, name, fmt.Sprintf("%s %q", kind, name), app, entry, destDir, reason)
+}
+
+func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifecyclePaths, name, subject string, app *config.ProviderEntry, entry LockEntry, destDir, reason string) error {
+	return l.materializeLockedArchive(ctx, paths, providermanifestv1.KindUI, name, subject, app, entry, destDir, reason)
+}
+
+func (l *Lifecycle) materializeLockedArchive(ctx context.Context, paths lifecyclePaths, kind, name, subject string, app *config.ProviderEntry, entry LockEntry, destDir, reason string) error {
+	start := time.Now()
+	platform := providerpkg.CurrentPlatformString()
+	archiveLocation, resolvedKey, expectedSHA, err := l.resolveLockedArchiveDownload(paths, entry, platform, subject)
+	if err != nil {
+		return err
+	}
+	archiveSourceKind := syncArtifactSourceLocalArchive
+	if isRemoteReleaseMetadataLocation(archiveLocation) {
+		archiveSourceKind = syncArtifactSourceRemoteArchive
+	}
+
+	cacheReq := materializedCacheRequest{
+		Subject:        subject,
+		Kind:           kind,
+		Name:           name,
+		SourceKind:     archiveSourceKind,
+		ArchiveSHA256:  expectedSHA,
+		ResolvedKey:    resolvedKey,
+		Platform:       platform,
+		Package:        lockEntryPackage(entry),
+		Version:        entry.Version,
+		DestinationDir: destDir,
+	}
+	cacheResult := syncCacheResultMiss
+	cacheEligible := true
+	if paths.syncCacheDir != "" {
+		cacheStart := time.Now()
+		restore, err := (materializedCache{dir: paths.syncCacheDir}).Restore(cacheReq)
+		if restore != nil {
+			cacheResult = string(restore.Result)
+		}
+		if restore == nil {
+			cacheEligible = false
+			cacheResult = syncCacheResultUncacheable
+			recordSyncCacheEntry(paths, syncCacheMetricsEvent{
+				Subject:    subject,
+				SourceKind: cacheReq.SourceKind,
+				Platform:   platform,
+				Result:     cacheResult,
+				Lookup:     true,
+				Duration:   time.Since(cacheStart),
+			})
+		}
+		if restore != nil {
+			recordSyncCacheEntry(paths, syncCacheMetricsEvent{
+				Subject:    subject,
+				SourceKind: cacheReq.SourceKind,
+				Key:        restore.Key.Display,
+				SHA256:     restore.Key.ArchiveSHA256,
+				Platform:   platform,
+				Result:     string(restore.Result),
+				Lookup:     true,
+				Bytes:      restore.Bytes,
+				Files:      restore.Files,
+				Duration:   time.Since(cacheStart),
+			})
+		}
+		if err != nil {
+			return fmt.Errorf("restore materialized cache for %s: %w", subject, err)
+		}
+		if restore != nil && restore.Result == materializedCacheHit {
+			defer func() { _ = restore.cleanup() }()
+			if err := validateLockedInstalledManifest(kind, name, subject, restore.Install.manifest, entry, platform, resolvedKey); err != nil {
+				return err
+			}
+			activateStart := time.Now()
+			if err := restore.commit(); err != nil {
+				return fmt.Errorf("activate cached locked source for %s: %w", subject, err)
+			}
+			recordSyncArtifact(paths, kind, name, subject, destDir, cacheReq.SourceKind, syncArtifactResultMaterialized, reason, start, 0, time.Since(activateStart))
+			return nil
+		}
+	} else {
+		recordSyncCacheEntry(paths, syncCacheMetricsEvent{
+			Subject:    subject,
+			SourceKind: cacheReq.SourceKind,
+			Platform:   platform,
+			Result:     syncCacheResultDisabled,
+			Lookup:     true,
+		})
+	}
+
+	downloadStart := time.Now()
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
+	if err != nil {
+		return lockedArchiveDownloadError{err: fmt.Errorf("download locked source archive for %s: %w", subject, err)}
+	}
+	defer download.Cleanup()
+	if err := verifyArchiveSHA256(download.SHA256Hex, expectedSHA); err != nil {
+		return lockedArchiveDownloadError{err: fmt.Errorf("download locked source archive for %s: %w", subject, err)}
+	}
+	archiveFetchSourceKind := syncArchiveSourceLocal
+	if isRemoteReleaseMetadataLocation(archiveLocation) {
+		archiveFetchSourceKind = syncArchiveSourceRemoteReleaseMetadata
+	}
+	recordSyncArchiveDownload(paths, syncArchiveMetricsEvent{
+		Subject:          subject,
+		SourceKind:       archiveFetchSourceKind,
+		SHA256:           expectedSHA,
+		Downloaded:       isRemoteReleaseMetadataLocation(archiveLocation),
+		Bytes:            archiveFileSize(download.LocalPath),
+		Duration:         time.Since(downloadStart),
+		DownloadDuration: time.Since(downloadStart),
+	})
+
 	prepareStart := time.Now()
 	installed, cleanupInstall, commitInstall, err := installLockedPackageAtomic(download.LocalPath, destDir)
 	prepareDuration := time.Since(prepareStart)
 	if err != nil {
-		return fmt.Errorf("install locked source provider for %s %q: %w", kind, name, err)
+		return fmt.Errorf("install locked source for %s: %w", subject, err)
 	}
 	defer func() { _ = cleanupInstall() }()
-	if err := validateInstalledManifestKind(kind, name, installed.Manifest); err != nil {
+	if err := validateLockedInstalledManifest(kind, name, subject, installed.Manifest, entry, platform, resolvedKey); err != nil {
 		return err
 	}
-	if installed.Manifest.Source != lockEntryPackage(entry) {
-		return fmt.Errorf("locked source provider manifest source mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Source, lockEntryPackage(entry))
-	}
-	if installed.Manifest.Version != entry.Version {
-		return fmt.Errorf("locked source provider manifest version mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Version, entry.Version)
-	}
-	if err := validateLockedArchivePolicy(fmt.Sprintf("%s %q", kind, name), archivePolicyKind(kind), installed.Manifest, entry, platform, resolvedKey); err != nil {
-		return err
+	if paths.syncCacheDir != "" && cacheEligible {
+		cacheStart := time.Now()
+		key, files, bytes, putErr := (materializedCache{dir: paths.syncCacheDir}).Put(cacheReq, installed.Root)
+		recordSyncCacheEntry(paths, syncCacheMetricsEvent{
+			Subject:    subject,
+			SourceKind: cacheReq.SourceKind,
+			Key:        key.Display,
+			SHA256:     key.ArchiveSHA256,
+			Platform:   platform,
+			Result:     cacheResult,
+			Put:        true,
+			PutFailed:  putErr != nil,
+			Bytes:      bytes,
+			Files:      files,
+			Duration:   time.Since(cacheStart),
+		})
 	}
 	activateStart := time.Now()
 	if err := commitInstall(); err != nil {
-		return fmt.Errorf("activate locked source provider for %s %q: %w", kind, name, err)
+		return fmt.Errorf("activate locked source for %s: %w", subject, err)
 	}
-	recordSyncArtifact(paths, kind, name, fmt.Sprintf("%s %q", kind, name), destDir, syncArtifactArchiveSourceKind(paths, entry), syncArtifactResultMaterialized, reason, start, prepareDuration, time.Since(activateStart))
+	recordSyncArtifact(paths, kind, name, subject, destDir, cacheReq.SourceKind, syncArtifactResultMaterialized, reason, start, prepareDuration, time.Since(activateStart))
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifecyclePaths, name, subject string, app *config.ProviderEntry, entry LockEntry, destDir, reason string) error {
-	start := time.Now()
-	platform := providerpkg.CurrentPlatformString()
-	download, _, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, subject, paths.archiveCacheDir)
-	if err != nil {
-		return err
-	}
-	defer cleanupDownload()
-
-	if err := os.RemoveAll(destDir); err != nil {
-		return fmt.Errorf("remove stale cache for ui provider: %w", err)
-	}
-	prepareStart := time.Now()
-	installed, err := installPackage(download.LocalPath, destDir)
-	prepareDuration := time.Since(prepareStart)
-	if err != nil {
-		return fmt.Errorf("install locked source for ui provider: %w", err)
-	}
-	if err := validateInstalledManifestKind(providermanifestv1.KindUI, "ui provider", installed.Manifest); err != nil {
-		return err
-	}
-	if installed.Manifest.Source != lockEntryPackage(entry) {
-		return fmt.Errorf("locked source manifest source mismatch for ui provider: got %q, want %q", installed.Manifest.Source, lockEntryPackage(entry))
-	}
-	if installed.Manifest.Version != entry.Version {
-		return fmt.Errorf("locked source manifest version mismatch for ui provider: got %q, want %q", installed.Manifest.Version, entry.Version)
-	}
-	recordSyncArtifact(paths, providermanifestv1.KindUI, name, subject, destDir, syncArtifactArchiveSourceKind(paths, entry), syncArtifactResultMaterialized, reason, start, prepareDuration, 0)
-	return nil
-}
-
-func (l *Lifecycle) downloadLockedArchive(ctx context.Context, paths lifecyclePaths, app *config.ProviderEntry, entry LockEntry, platform, subject, cacheDir string) (*providerpkg.DownloadResult, string, func(), error) {
+func (l *Lifecycle) resolveLockedArchiveDownload(paths lifecyclePaths, entry LockEntry, platform, subject string) (string, string, string, error) {
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
-		return nil, "", nil, fmt.Errorf("no archive for platform %s for %s; publish an explicit %s archive with `gestaltd provider package --platform %s` or use a generic package where allowed", platform, subject, platform, platform)
+		return "", "", "", fmt.Errorf("no archive for platform %s for %s; publish an explicit %s archive with `gestaltd provider package --platform %s` or use a generic package where allowed", platform, subject, platform, platform)
 	}
 	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("resolve locked source archive for %s: %w", subject, err)
+		return "", "", "", fmt.Errorf("resolve locked source archive for %s: %w", subject, err)
 	}
 	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
-		return nil, "", nil, fmt.Errorf("no verified hash for platform %s for %s; publish release metadata with a sha256 for that archive before locking", platform, subject)
+		return "", "", "", fmt.Errorf("no verified hash for platform %s for %s; publish release metadata with a sha256 for that archive before locking", platform, subject)
 	}
 	expectedSHA, err := expectedSHAForLockedArchive(paths, entry, resolvedKey, archiveLocation, archive)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("resolve locked archive digest for %s: %w", subject, err)
+		return "", "", "", fmt.Errorf("resolve locked archive digest for %s: %w", subject, err)
 	}
-	var observer archiveDownloadObserver
-	if paths.syncMetrics != nil {
-		observer = newSyncArchiveDownloadObserver(paths.syncMetrics, subject)
+	return archiveLocation, resolvedKey, expectedSHA, nil
+}
+
+func validateLockedInstalledManifest(kind, name, subject string, manifest *providermanifestv1.Manifest, entry LockEntry, platform, resolvedKey string) error {
+	if err := validateInstalledManifestKind(kind, name, manifest); err != nil {
+		return err
 	}
-	download, err := downloadArchiveForSourceWithCache(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation, expectedSHA, cacheDir, observer)
-	if err != nil {
-		return nil, "", nil, lockedArchiveDownloadError{err: fmt.Errorf("download locked source archive for %s: %w", subject, err)}
+	if manifest.Source != lockEntryPackage(entry) {
+		return fmt.Errorf("locked source manifest source mismatch for %s: got %q, want %q", subject, manifest.Source, lockEntryPackage(entry))
 	}
-	return download, resolvedKey, download.Cleanup, nil
+	if manifest.Version != entry.Version {
+		return fmt.Errorf("locked source manifest version mismatch for %s: got %q, want %q", subject, manifest.Version, entry.Version)
+	}
+	return validateLockedArchivePolicy(subject, archivePolicyKind(kind), manifest, entry, platform, resolvedKey)
 }
 
 func expectedSHAForLockedArchive(paths lifecyclePaths, entry LockEntry, resolvedKey, archiveLocation string, archive LockArchive) (string, error) {

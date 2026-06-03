@@ -276,8 +276,8 @@ func TestE2ESyncJSONStdoutCleanWithSourceBuildOutput(t *testing.T) {
 	if doc.Output.Measured {
 		t.Fatalf("sync check JSON output.measured = true, want false")
 	}
-	if doc.Archives.Cache.Puts != 0 || doc.Archives.Cache.PutFailures != 0 {
-		t.Fatalf("sync check JSON cache puts/failures = %d/%d, want 0/0", doc.Archives.Cache.Puts, doc.Archives.Cache.PutFailures)
+	if doc.Cache.Put.Successes != 0 || doc.Cache.Put.Failures != 0 {
+		t.Fatalf("sync check JSON cache put successes/failures = %d/%d, want 0/0", doc.Cache.Put.Successes, doc.Cache.Put.Failures)
 	}
 }
 

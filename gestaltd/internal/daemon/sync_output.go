@@ -35,7 +35,7 @@ func validateSyncOutputFormat(format string) error {
 func writeSyncJSON(w io.Writer, metrics operator.SyncMetrics) error {
 	metrics = normalizeSyncMetricsForJSON(metrics)
 	doc := syncOutputDocument{
-		Schema:      syncOutputSchema{Version: "1"},
+		Schema:      syncOutputSchema{Version: "2"},
 		Command:     "sync",
 		SyncMetrics: metrics,
 	}
@@ -46,6 +46,9 @@ func writeSyncJSON(w io.Writer, metrics operator.SyncMetrics) error {
 func normalizeSyncMetricsForJSON(metrics operator.SyncMetrics) operator.SyncMetrics {
 	if metrics.Archives.Fetches == nil {
 		metrics.Archives.Fetches = []operator.SyncMetricsArchiveFetch{}
+	}
+	if metrics.Cache.Entries == nil {
+		metrics.Cache.Entries = []operator.SyncMetricsCacheEntry{}
 	}
 	if metrics.Artifacts.Items == nil {
 		metrics.Artifacts.Items = []operator.SyncMetricsArtifactRecord{}
@@ -64,33 +67,32 @@ func writeSyncText(w io.Writer, metrics operator.SyncMetrics, verbose bool) erro
 	if _, err := fmt.Fprintf(w, "Loaded %d prepared artifacts from lock/config.\n", metrics.Artifacts.Considered); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "Fetched %d archives: %d cache hits, %d downloads.\n", metrics.Archives.Requests, metrics.Archives.Cache.Hits, metrics.Archives.Downloads.Count); err != nil {
+	if _, err := fmt.Fprintf(w, "Fetched %d archives: %d downloads.\n", metrics.Archives.Requests, metrics.Archives.Downloads.Count); err != nil {
 		return err
 	}
 	if verbose {
 		cacheState := "disabled"
-		if metrics.Archives.Cache.Enabled {
+		if metrics.Cache.Enabled {
 			cacheState = "enabled"
 		}
-		if metrics.Archives.Cache.Configured {
-			if _, err := fmt.Fprintf(w, "Archive cache: %s at %s.\n", cacheState, metrics.Archives.Cache.Dir); err != nil {
+		if metrics.Cache.Configured {
+			if _, err := fmt.Fprintf(w, "Cache: %s materialized cache at %s.\n", cacheState, metrics.Cache.Dir); err != nil {
 				return err
 			}
 		} else {
-			if _, err := fmt.Fprintln(w, "Archive cache: disabled."); err != nil {
+			if _, err := fmt.Fprintln(w, "Cache: disabled."); err != nil {
 				return err
 			}
 		}
-		if _, err := fmt.Fprintf(w, "Archive cache: %d eligible, %d disabled, %d uncacheable, %d hits, %d misses, %d invalid, %d rejected, %d puts, %d put failures.\n",
-			metrics.Archives.Cache.Eligible,
-			metrics.Archives.Cache.Disabled,
-			metrics.Archives.Cache.Uncacheable,
-			metrics.Archives.Cache.Hits,
-			metrics.Archives.Cache.Misses,
-			metrics.Archives.Cache.Invalid,
-			metrics.Archives.Cache.Rejected,
-			metrics.Archives.Cache.Puts,
-			metrics.Archives.Cache.PutFailures,
+		if _, err := fmt.Fprintf(w, "Cache: %d eligible, %d disabled, %d uncacheable, %d hits, %d misses, %d invalid, %d put successes, %d put failures.\n",
+			metrics.Cache.Eligible,
+			metrics.Cache.Disabled,
+			metrics.Cache.Uncacheable,
+			metrics.Cache.Hits,
+			metrics.Cache.Misses,
+			metrics.Cache.Invalid,
+			metrics.Cache.Put.Successes,
+			metrics.Cache.Put.Failures,
 		); err != nil {
 			return err
 		}
@@ -114,7 +116,18 @@ func writeSyncText(w io.Writer, metrics operator.SyncMetrics, verbose bool) erro
 				return err
 			}
 			for _, fetch := range metrics.Archives.Fetches {
-				if _, err := fmt.Fprintf(w, "  %s: %s, downloaded=%t, %s, %.3fs\n", fetch.Subject, fetch.CacheResult, fetch.Downloaded, formatIECBytes(fetch.Bytes), fetch.DurationSeconds); err != nil {
+				if _, err := fmt.Fprintf(w, "  %s: downloaded=%t, %s, %.3fs\n", fetch.Subject, fetch.Downloaded, formatIECBytes(fetch.Bytes), fetch.DurationSeconds); err != nil {
+					return err
+				}
+			}
+		}
+		if len(metrics.Cache.Entries) > 0 {
+			if _, err := fmt.Fprintln(w, "Cache entries:"); err != nil {
+				return err
+			}
+			for i := range metrics.Cache.Entries {
+				entry := &metrics.Cache.Entries[i]
+				if _, err := fmt.Fprintf(w, "  %s: %s, put=%s, %d files, %s, %.3fs\n", entry.Subject, entry.Result, entry.Put, entry.Files, formatIECBytes(entry.Bytes), entry.DurationSeconds); err != nil {
 					return err
 				}
 			}
