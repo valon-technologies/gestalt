@@ -44,6 +44,8 @@ test("Agent forwards invocation tokens across session, turn, and interaction cal
     turnId?: string;
     interactionId?: string;
     reason?: string;
+    workflowRunId?: string;
+    workflowKeys?: string[];
   }> = [];
 
   const handler = connectNodeAdapter({
@@ -57,6 +59,8 @@ test("Agent forwards invocation tokens across session, turn, and interaction cal
             method: "createSession",
             invocationToken: input.invocationToken,
             providerName: input.providerName,
+            ...(typeof input.workflow?.runId === "string" ? { workflowRunId: input.workflow.runId } : {}),
+            ...(input.workflow !== undefined ? { workflowKeys: Object.keys(input.workflow).sort() } : {}),
           });
           return create(AgentSessionSchema, {
             id: "session-1",
@@ -324,6 +328,19 @@ test("Agent forwards invocation tokens across session, turn, and interaction cal
       turnId: "turn-1",
       reason: "user requested cancellation",
     });
+    const fromWorkflow = new Agent(
+      request("", {}, {}, {}, {}, {
+        provider: "local",
+        runId: "run-123",
+        runAs: { id: "service_account:caller-supplied" },
+        trigger: { event: { data: { ignored: true } } },
+      }),
+    );
+    await fromWorkflow.createSession({
+      providerName: "workflow-agent",
+      model: "gpt-test",
+      clientRef: "workflow-session",
+    });
 
     expect(fetchedSession.metadata).toEqual({ source: "transport-test" });
     expect(listedSessions.map((entry) => entry.id)).toEqual(["session-1"]);
@@ -397,6 +414,13 @@ test("Agent forwards invocation tokens across session, turn, and interaction cal
         turnId: "turn-1",
         reason: "user requested cancellation",
       },
+      {
+        method: "createSession",
+        invocationToken: "",
+        providerName: "workflow-agent",
+        workflowRunId: "run-123",
+        workflowKeys: ["provider", "providerName", "runId"],
+      },
     ]);
   } finally {
     if (previousSocket === undefined) {
@@ -413,14 +437,12 @@ test("Agent forwards invocation tokens across session, turn, and interaction cal
   }
 });
 
-test("Agent prioritizes invocation-token validation over socket configuration", () => {
+test("Agent still requires host service socket configuration", () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
 
   try {
     delete process.env[ENV_HOST_SERVICE_SOCKET];
-    expect(() => new Agent("   ")).toThrow(
-      "agent: invocation token is not available",
-    );
+    expect(() => new Agent("   ")).toThrow("agent: GESTALT_HOST_SERVICE_SOCKET is not set");
   } finally {
     if (previousSocket === undefined) {
       delete process.env[ENV_HOST_SERVICE_SOCKET];

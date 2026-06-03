@@ -38,6 +38,7 @@ import {
   dateFromTimestamp,
   type JsonObjectInput,
 } from "./protocol.ts";
+import { hostInvocationContext } from "./invocation-context.ts";
 import {
   optionalObjectFromStruct,
   optionalStruct,
@@ -171,12 +172,12 @@ export interface Agent {
  */
 class AgentImpl implements Agent {
   private readonly client: Client<typeof AgentProviderService>;
-  private readonly invocationToken: string;
+  private readonly invocationContext: ReturnType<typeof hostInvocationContext>;
 
   constructor(request: Request);
   constructor(invocationToken: string);
   constructor(requestOrToken: Request | string) {
-    this.invocationToken = normalizeInvocationToken(requestOrToken);
+    this.invocationContext = hostInvocationContext(requestOrToken);
 
     const target = process.env[ENV_HOST_SERVICE_SOCKET]?.trim();
     if (!target) {
@@ -203,7 +204,7 @@ class AgentImpl implements Agent {
         clientRef: request.clientRef ?? "",
         metadata: optionalStruct(request.metadata),
         idempotencyKey: request.idempotencyKey ?? "",
-        invocationToken: this.invocationToken,
+        ...this.invocationContext,
         workspace: workspaceToProto(request.workspace),
       }),
     );
@@ -214,7 +215,7 @@ class AgentImpl implements Agent {
     return agentSessionFromProto(
       await this.client.getSession({
         sessionId: request.sessionId,
-        invocationToken: this.invocationToken,
+        ...this.invocationContext,
       }),
     );
   }
@@ -225,7 +226,7 @@ class AgentImpl implements Agent {
   ): Promise<AgentSession[]> {
     const response = await this.client.listSessions({
       providerName: request.providerName ?? "",
-      invocationToken: this.invocationToken,
+      ...this.invocationContext,
       state: request.state ?? AgentSessionState.UNSPECIFIED,
       limit: request.limit ?? 0,
       summaryOnly: request.summaryOnly ?? false,
@@ -243,7 +244,7 @@ class AgentImpl implements Agent {
         clientRef: request.clientRef ?? "",
         state: request.state ?? AgentSessionState.UNSPECIFIED,
         metadata: optionalStruct(request.metadata),
-        invocationToken: this.invocationToken,
+        ...this.invocationContext,
       }),
     );
   }
@@ -260,7 +261,7 @@ class AgentImpl implements Agent {
         output: agentOutputToProto(request.output),
         metadata: optionalStruct(request.metadata),
         idempotencyKey: request.idempotencyKey ?? "",
-        invocationToken: this.invocationToken,
+        ...this.invocationContext,
         modelOptions: optionalStruct(request.modelOptions),
         timeoutSeconds: request.timeoutSeconds ?? 0,
       }),
@@ -272,7 +273,7 @@ class AgentImpl implements Agent {
     return agentTurnFromProto(
       await this.client.getTurn({
         turnId: request.turnId,
-        invocationToken: this.invocationToken,
+        ...this.invocationContext,
       }),
     );
   }
@@ -281,7 +282,7 @@ class AgentImpl implements Agent {
   async listTurns(request: AgentListTurns): Promise<AgentTurn[]> {
     const response = await this.client.listTurns({
       sessionId: request.sessionId,
-      invocationToken: this.invocationToken,
+      ...this.invocationContext,
       status: request.status ?? AgentExecutionStatus.UNSPECIFIED,
       limit: request.limit ?? 0,
       summaryOnly: request.summaryOnly ?? false,
@@ -295,7 +296,7 @@ class AgentImpl implements Agent {
       await this.client.cancelTurn({
         turnId: request.turnId,
         reason: request.reason ?? "",
-        invocationToken: this.invocationToken,
+        ...this.invocationContext,
       }),
     );
   }
@@ -308,7 +309,7 @@ class AgentImpl implements Agent {
       turnId: request.turnId,
       afterSeq: BigInt(request.afterSeq ?? 0),
       limit: request.limit ?? 0,
-      invocationToken: this.invocationToken,
+      ...this.invocationContext,
     });
     return response.events.map(agentTurnEventFromProto);
   }
@@ -319,7 +320,7 @@ class AgentImpl implements Agent {
   ): Promise<AgentInteraction[]> {
     const response = await this.client.listInteractions({
       turnId: request.turnId,
-      invocationToken: this.invocationToken,
+      ...this.invocationContext,
     });
     return response.interactions.map(agentInteractionFromProto);
   }
@@ -333,22 +334,10 @@ class AgentImpl implements Agent {
         turnId: request.turnId,
         interactionId: request.interactionId,
         resolution: optionalStruct(request.resolution),
-        invocationToken: this.invocationToken,
+        ...this.invocationContext,
       }),
     );
   }
-}
-
-function normalizeInvocationToken(requestOrToken: Request | string): string {
-  const invocationToken =
-    typeof requestOrToken === "string"
-      ? requestOrToken
-      : requestOrToken.invocationToken;
-  const trimmed = invocationToken.trim();
-  if (!trimmed) {
-    throw new Error("agent: invocation token is not available");
-  }
-  return trimmed;
 }
 
 function workspaceToProto(workspace?: AgentWorkspace | undefined) {
