@@ -12,7 +12,6 @@ import {
 } from "./internal/gen/v1/agent_pb.ts";
 import type { Request } from "./api.ts";
 import {
-  agentActorFromProto,
   agentOutputToProto,
   agentMessageFromProto,
   agentMessageToProto,
@@ -364,7 +363,7 @@ function agentSessionFromProto(session: ProtoAgentSession): AgentSession {
     clientRef: session.clientRef,
     state: session.state as AgentSessionState,
     metadata: optionalObjectFromStruct(session.metadata),
-    createdBy: agentActorFromProto(session.createdBy),
+    createdBySubjectId: session.createdBySubjectId ?? "",
     createdAt: optionalDate(session.createdAt),
     updatedAt: optionalDate(session.updatedAt),
     lastTurnAt: optionalDate(session.lastTurnAt),
@@ -381,7 +380,7 @@ function agentTurnFromProto(turn: ProtoAgentTurn): AgentTurn {
     messages: turn.messages.map(agentMessageFromProto),
     output: agentTurnOutputFromProto(turn.output),
     statusMessage: turn.statusMessage,
-    createdBy: agentActorFromProto(turn.createdBy),
+    createdBySubjectId: turn.createdBySubjectId ?? "",
     createdAt: optionalDate(turn.createdAt),
     startedAt: optionalDate(turn.startedAt),
     completedAt: optionalDate(turn.completedAt),

@@ -50,7 +50,7 @@ func (p *agentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgen
 		strings.TrimSpace(req.SessionID),
 		strings.TrimSpace(req.Model),
 		strings.TrimSpace(req.ClientRef),
-		req.CreatedBy,
+		req.CreatedBySubjectID,
 		req.Metadata,
 	)
 	return cloneSession(session), nil
@@ -103,7 +103,7 @@ func (p *agentProvider) CreateTurn(ctx context.Context, req *gestalt.CreateAgent
 		req.Tools,
 		req.Metadata,
 		req.Output,
-		req.CreatedBy,
+		req.CreatedBySubjectID,
 		strings.TrimSpace(req.ExecutionRef),
 		strings.TrimSpace(req.RunGrant),
 	)
@@ -255,7 +255,7 @@ func (p *agentProvider) startTurn(
 	tools []gestalt.ResolvedAgentTool,
 	metadata map[string]any,
 	requestedOutput *gestalt.AgentOutput,
-	createdBy *gestalt.AgentActor,
+	createdBySubjectID string,
 	executionRef string,
 	runGrant string,
 ) (*gestalt.AgentTurn, *gestalt.AgentInteraction, error) {
@@ -278,7 +278,7 @@ func (p *agentProvider) startTurn(
 
 	now := time.Now()
 	p.mu.Lock()
-	session := p.createOrUpdateSessionLocked(sessionID, model, "", createdBy, nil)
+	session := p.createOrUpdateSessionLocked(sessionID, model, "", createdBySubjectID, nil)
 	session.LastTurnAt = &now
 	session.UpdatedAt = now
 	turn := &gestalt.AgentTurn{
@@ -288,7 +288,7 @@ func (p *agentProvider) startTurn(
 		Model:        model,
 		Status:       gestalt.AgentExecutionStatusRunning,
 		Messages:     cloneMessages(messages),
-		CreatedBy:    cloneActor(createdBy),
+		CreatedBySubjectID: strings.TrimSpace(createdBySubjectID),
 		CreatedAt:    now,
 		StartedAt:    &now,
 		ExecutionRef: executionRef,
@@ -351,7 +351,7 @@ func (p *agentProvider) startTurn(
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	session = p.createOrUpdateSessionLocked(sessionID, model, "", createdBy, nil)
+	session = p.createOrUpdateSessionLocked(sessionID, model, "", createdBySubjectID, nil)
 	session.LastTurnAt = &now
 	session.UpdatedAt = now
 
@@ -363,7 +363,7 @@ func (p *agentProvider) startTurn(
 			ProviderName: providerName,
 			Model:        model,
 			Messages:     cloneMessages(messages),
-			CreatedBy:    cloneActor(createdBy),
+			CreatedBySubjectID: strings.TrimSpace(createdBySubjectID),
 			CreatedAt:    now,
 			StartedAt:    &now,
 			ExecutionRef: executionRef,
@@ -426,7 +426,7 @@ func (p *agentProvider) createOrUpdateSessionLocked(
 	sessionID string,
 	model string,
 	clientRef string,
-	createdBy *gestalt.AgentActor,
+	createdBySubjectID string,
 	metadata map[string]any,
 ) *gestalt.AgentSession {
 	if sessionID == "" {
@@ -453,7 +453,7 @@ func (p *agentProvider) createOrUpdateSessionLocked(
 		ClientRef:    clientRef,
 		State:        gestalt.AgentSessionStateActive,
 		Metadata:     cloneMap(metadata),
-		CreatedBy:    cloneActor(createdBy),
+		CreatedBySubjectID: strings.TrimSpace(createdBySubjectID),
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -654,18 +654,6 @@ func cloneImageRef(input *gestalt.AgentMessagePartImageRef) *gestalt.AgentMessag
 	}
 }
 
-func cloneActor(input *gestalt.AgentActor) *gestalt.AgentActor {
-	if input == nil {
-		return nil
-	}
-	return &gestalt.AgentActor{
-		SubjectID:   input.SubjectID,
-		SubjectKind: input.SubjectKind,
-		DisplayName: input.DisplayName,
-		AuthSource:  input.AuthSource,
-	}
-}
-
 func cloneSession(input *gestalt.AgentSession) *gestalt.AgentSession {
 	if input == nil {
 		return nil
@@ -677,7 +665,7 @@ func cloneSession(input *gestalt.AgentSession) *gestalt.AgentSession {
 		ClientRef:    input.ClientRef,
 		State:        input.State,
 		Metadata:     cloneMap(input.Metadata),
-		CreatedBy:    cloneActor(input.CreatedBy),
+		CreatedBySubjectID: input.CreatedBySubjectID,
 		CreatedAt:    input.CreatedAt,
 		UpdatedAt:    input.UpdatedAt,
 		LastTurnAt:   cloneTime(input.LastTurnAt),
@@ -697,7 +685,7 @@ func cloneTurn(input *gestalt.AgentTurn) *gestalt.AgentTurn {
 		Messages:      cloneMessages(input.Messages),
 		Output:        cloneTurnOutput(input.Output),
 		StatusMessage: input.StatusMessage,
-		CreatedBy:     cloneActor(input.CreatedBy),
+		CreatedBySubjectID: input.CreatedBySubjectID,
 		CreatedAt:     input.CreatedAt,
 		StartedAt:     cloneTime(input.StartedAt),
 		CompletedAt:   cloneTime(input.CompletedAt),

@@ -136,9 +136,15 @@ func (p *Provider) requestContext(_ context.Context, _ RequestContextInput, req 
 	return gestalt.OK(RequestContextOutput{
 		Subject: RequestContextSubject{
 			ID:          req.Subject.ID,
-			Kind:        req.Subject.Kind,
-			DisplayName: req.Subject.DisplayName,
-			AuthSource:  req.Subject.AuthSource,
+			Kind: func() string {
+				kind, _, ok := gestalt.ParseSubjectID(req.Subject.ID)
+				if ok {
+					return kind
+				}
+				return ""
+			}(),
+			DisplayName: req.Subject.Email,
+			AuthSource:  req.Subject.CredentialSubjectID,
 		},
 		Credential: RequestContextCredential{
 			Mode:       req.Credential.Mode,

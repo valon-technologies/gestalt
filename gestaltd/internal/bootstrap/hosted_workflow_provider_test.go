@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -308,8 +309,7 @@ func TestWorkflowConfigReconciliationReconcilesReadyRuntimeProvidersIndependentl
 					RunAs: &config.WorkflowRunAsConfig{
 						Subject: &config.WorkflowRunAsSubjectConfig{
 							ID:   "service_account:ready-workflow",
-							Kind: "service_account",
-						},
+													},
 					},
 					Cron: "* * * * *",
 				},
@@ -825,7 +825,7 @@ func (p *recordingWorkflowControlProvider) UpsertSchedule(_ context.Context, req
 		Timezone:     req.GetTimezone(),
 		Target:       workflowwire.TargetFromProto(req.GetTarget()),
 		Paused:       req.GetPaused(),
-		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 		DefinitionID: req.GetDefinitionId(),
 	}
 	p.schedules[req.GetScheduleId()] = schedule
@@ -861,7 +861,7 @@ func (p *recordingWorkflowControlProvider) UpsertEventTrigger(_ context.Context,
 		Match:        workflowwire.EventMatchFromProto(req.GetMatch()),
 		Target:       workflowwire.TargetFromProto(req.GetTarget()),
 		Paused:       req.GetPaused(),
-		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 		DefinitionID: req.GetDefinitionId(),
 	}
 	p.eventTriggers[req.GetTriggerId()] = trigger

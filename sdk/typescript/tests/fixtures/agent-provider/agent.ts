@@ -24,7 +24,6 @@ const interactions = new Map<string, AgentInteraction>();
 let canceledTurns = 0;
 
 export const provider = defineAgentProvider({
-  displayName: "Fixture Agent",
   description: "Agent provider fixture used by SDK tests",
   configure() {
     sessions.clear();
@@ -39,7 +38,7 @@ export const provider = defineAgentProvider({
       model: request.model,
       clientRef: request.clientRef,
       metadata: request.metadata,
-      createdBy: request.createdBy,
+      createdBySubjectId: request.createdBySubjectId,
     });
   },
   async getSession(request) {
@@ -67,7 +66,7 @@ export const provider = defineAgentProvider({
         : session.metadata !== undefined
           ? { metadata: session.metadata }
           : {}),
-      ...(session.createdBy !== undefined ? { createdBy: session.createdBy } : {}),
+      ...(session.createdBySubjectId ? { createdBySubjectId: session.createdBySubjectId } : {}),
       ...(session.createdAt ? { createdAt: session.createdAt } : {}),
       updatedAt: timestampNow(),
       ...(session.lastTurnAt ? { lastTurnAt: session.lastTurnAt } : {}),
@@ -131,7 +130,7 @@ async function upsertSession(request: {
   model: string;
   clientRef: string | undefined;
   metadata: object | undefined;
-  createdBy: AgentSession["createdBy"] | undefined;
+  createdBySubjectId: string | undefined;
 }): Promise<AgentSession> {
   const existing = sessions.get(request.sessionId);
   const session: AgentSession = {
@@ -141,7 +140,7 @@ async function upsertSession(request: {
     ...(request.clientRef !== undefined ? { clientRef: request.clientRef } : {}),
     state: existing?.state || AgentSessionState.ACTIVE,
     ...(request.metadata !== undefined ? { metadata: request.metadata } : {}),
-    ...(request.createdBy !== undefined ? { createdBy: request.createdBy } : {}),
+    ...(request.createdBySubjectId ? { createdBySubjectId: request.createdBySubjectId } : {}),
     ...(existing?.createdAt
       ? { createdAt: existing.createdAt }
       : { createdAt: timestampNow() }),
@@ -174,7 +173,7 @@ async function createCanonicalTurn(
     messages: request.messages,
     output,
     statusMessage: waitingForInput ? "waiting for input" : "completed",
-    ...(request.createdBy !== undefined ? { createdBy: request.createdBy } : {}),
+    ...(request.createdBySubjectId ? { createdBySubjectId: request.createdBySubjectId } : {}),
     createdAt: timestampNow(),
     startedAt: timestampNow(),
     ...(waitingForInput ? {} : { completedAt: timestampNow() }),
@@ -191,7 +190,7 @@ async function createCanonicalTurn(
       ...(session.clientRef !== undefined ? { clientRef: session.clientRef } : {}),
       state: session.state,
       ...(session.metadata !== undefined ? { metadata: session.metadata } : {}),
-      ...(session.createdBy !== undefined ? { createdBy: session.createdBy } : {}),
+      ...(session.createdBySubjectId ? { createdBySubjectId: session.createdBySubjectId } : {}),
       ...(session.createdAt ? { createdAt: session.createdAt } : {}),
       updatedAt: timestampNow(),
       lastTurnAt: timestampNow(),
@@ -264,7 +263,7 @@ async function cancelCanonicalTurn(request: {
     messages: turn.messages,
     ...(turn.output !== undefined ? { output: turn.output } : {}),
     statusMessage: request.reason,
-    ...(turn.createdBy ? { createdBy: turn.createdBy } : {}),
+    ...(turn.createdBySubjectId ? { createdBySubjectId: turn.createdBySubjectId } : {}),
     ...(turn.createdAt ? { createdAt: turn.createdAt } : {}),
     ...(turn.startedAt ? { startedAt: turn.startedAt } : {}),
     completedAt: timestampNow(),
@@ -306,7 +305,7 @@ async function resolveCanonicalInteraction(request: {
     messages: turn.messages,
     output: turnOutputForExistingTurn(turn, `resolved:${resolved.id}`),
     statusMessage: resolved.id,
-    ...(turn.createdBy ? { createdBy: turn.createdBy } : {}),
+    ...(turn.createdBySubjectId ? { createdBySubjectId: turn.createdBySubjectId } : {}),
     ...(turn.createdAt ? { createdAt: turn.createdAt } : {}),
     ...(turn.startedAt ? { startedAt: turn.startedAt } : {}),
     completedAt: timestampNow(),
@@ -350,14 +349,12 @@ function turnEventDisplay(
   switch (type) {
     case "turn.started":
       return {
-        kind: "status",
         phase: "started",
         label: "turn",
         text: "provider turn started",
       };
     case "interaction.requested":
       return {
-        kind: "interaction",
         phase: "requested",
         label: "approval",
         ref: stringField(data, "interactionId"),
@@ -365,7 +362,6 @@ function turnEventDisplay(
       };
     case "interaction.resolved":
       return {
-        kind: "interaction",
         phase: "resolved",
         label: "approval",
         ref: stringField(data, "interactionId"),
@@ -373,14 +369,12 @@ function turnEventDisplay(
       };
     case "assistant.completed":
       return {
-        kind: "text",
         phase: "completed",
         text: "provider assistant completed",
         format: "markdown",
       };
     case "turn.completed":
       return {
-        kind: "status",
         phase: "completed",
         label: "turn",
         text: "provider turn completed",
@@ -388,7 +382,6 @@ function turnEventDisplay(
       };
     case "turn.canceled":
       return {
-        kind: "status",
         phase: "canceled",
         label: "turn",
         text: stringField(data, "reason"),

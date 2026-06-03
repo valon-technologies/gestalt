@@ -205,11 +205,8 @@ func workflowRunAsInvocationContext(ctx context.Context, resolver WorkflowRunRes
 	p := principal.Canonicalize(&principal.Principal{
 		SubjectID:           resolved.RunAs.SubjectID,
 		CredentialSubjectID: resolved.RunAs.CredentialSubjectID,
-		DisplayName:         resolved.RunAs.DisplayName,
-		Kind:                principal.Kind(resolved.RunAs.SubjectKind),
 		TokenPermissions:    resolved.Auth.Permissions,
 	})
-	principal.SetAuthSource(p, resolved.RunAs.AuthSource)
 
 	tokenCtx := invocationTokenContext{
 		callerApp:          "workflow:" + strings.TrimSpace(resolved.ProviderName),

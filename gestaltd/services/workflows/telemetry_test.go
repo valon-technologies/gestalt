@@ -497,7 +497,6 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"target_kind",
 		"caller_app",
 		"subject_id",
-		"subject_kind",
 		"target_authorization_provider",
 		"target_authorization_operation",
 		"target_authorization_tool_ref_index",
@@ -520,8 +519,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"allowed":              true,
 		"caller_app":           "slack",
 		"subject_id":           "user:user-123",
-		"subject_kind":         "user",
-		"workflow_target_kind": "steps",
+				"workflow_target_kind": "steps",
 	})
 	assertWorkflowAuditLog(t, auditOutput, failureKey, map[string]any{
 		"level":                "WARN",
@@ -534,8 +532,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"error":                "grpc_status",
 		"caller_app":           "slack",
 		"subject_id":           "user:user-123",
-		"subject_kind":         "user",
-		"workflow_target_kind": "steps",
+				"workflow_target_kind": "steps",
 	})
 	assertWorkflowAuditLog(t, auditOutput, authorizerDeniedKey, map[string]any{
 		"level":                     "WARN",
@@ -549,8 +546,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"authorization_decision":    "workflow_target_authorizer_provider_denied",
 		"caller_app":                "slack",
 		"subject_id":                "user:authorizer-denied",
-		"subject_kind":              "user",
-		"workflow_target_kind":      "steps",
+				"workflow_target_kind":      "steps",
 		"workflow_target_component": "agent_tool_ref",
 		"workflow_target_provider":  "datadog",
 		"workflow_target_operation": "listAlerts",
@@ -812,7 +808,7 @@ func (p *workflowManagerTelemetryProvider) SignalOrStartRun(_ context.Context, r
 		Status:      coreworkflow.RunStatusRunning,
 		WorkflowKey: req.GetWorkflowKey(),
 		Target:      workflowwire.TargetFromProto(req.GetTarget()),
-		CreatedBy:   workflowwire.ActorFromProto(req.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	})
 	if err != nil {
 		return nil, err

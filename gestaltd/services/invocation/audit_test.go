@@ -28,9 +28,8 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 		Timestamp:               eventTime,
 		RequestID:               "req-abc-123",
 		Source:                  "binding:test-hook",
-		SubjectID:               principal.UserSubjectID("user-42"),
-		SubjectKind:             string(principal.KindUser),
-		Provider:                "alpha",
+		SubjectID: principal.UserSubjectID("user-42"),
+		Provider:  "alpha",
 		Operation:               "fetch",
 		Depth:                   1,
 		Allowed:                 true,
@@ -70,9 +69,6 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 	}
 	if record["subject_id"] != principal.UserSubjectID("user-42") {
 		t.Errorf("expected subject_id=%q, got %v", principal.UserSubjectID("user-42"), record["subject_id"])
-	}
-	if record["subject_kind"] != string(principal.KindUser) {
-		t.Errorf("expected subject_kind=%q, got %v", principal.KindUser, record["subject_kind"])
 	}
 	if _, has := record["user_id"]; has {
 		t.Errorf("expected emitted audit record to omit user_id, got %v", record["user_id"])
@@ -122,9 +118,8 @@ func TestSlogAuditSink_DeniedEntry(t *testing.T) {
 		Timestamp:   time.Now(),
 		RequestID:   "req-deny-456",
 		Source:      "binding:test-hook",
-		SubjectID:   principal.UserSubjectID("user-99"),
-		SubjectKind: string(principal.KindUser),
-		Provider:    "beta",
+		SubjectID: principal.UserSubjectID("user-99"),
+		Provider:  "beta",
 		Operation:   "write",
 		Depth:       2,
 		Allowed:     false,
@@ -159,21 +154,15 @@ func TestSlogAuditSink_RunAsDelegationFields(t *testing.T) {
 	sink := invocation.NewSlogAuditSink(&buf)
 
 	entry := core.AuditEntry{
-		Timestamp:        time.Now(),
-		RequestID:        "req-run-as",
-		Source:           "agent",
-		SubjectID:        "service_account:event-handler",
-		SubjectKind:      "service_account",
-		AgentSubjectID:   principal.UserSubjectID("user-42"),
-		AgentSubjectKind: string(principal.KindUser),
-		AgentDisplayName: "Hugh",
-		AgentAuthSource:  "source-app",
-		RunAsSubjectID:   "service_account:event-handler",
-		RunAsSubjectKind: "service_account",
-		RunAsAuthSource:  "event_handler",
-		Provider:         "target",
-		Operation:        "reviews.create",
-		Allowed:          true,
+		Timestamp:      time.Now(),
+		RequestID:      "req-run-as",
+		Source:         "agent",
+		SubjectID:      "service_account:event-handler",
+		AgentSubjectID: principal.UserSubjectID("user-42"),
+		RunAsSubjectID: "service_account:event-handler",
+		Provider:       "target",
+		Operation:      "reviews.create",
+		Allowed:        true,
 	}
 
 	sink.Log(context.Background(), entry)
@@ -187,9 +176,6 @@ func TestSlogAuditSink_RunAsDelegationFields(t *testing.T) {
 	}
 	if record["run_as_subject_id"] != entry.RunAsSubjectID {
 		t.Fatalf("run_as_subject_id = %v", record["run_as_subject_id"])
-	}
-	if record["run_as_auth_source"] != "event_handler" {
-		t.Fatalf("run_as_auth_source = %v", record["run_as_auth_source"])
 	}
 }
 

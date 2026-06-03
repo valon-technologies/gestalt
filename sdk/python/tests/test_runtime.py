@@ -55,6 +55,7 @@ from gestalt import (
     WorkflowProvider,
     _bootstrap,
     _runtime,
+    parse_subject_id,
 )
 from gestalt._gen.v1 import app_pb2 as _app_pb2
 from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
@@ -362,7 +363,7 @@ class MainEntrypointTests(unittest.TestCase):
             return {
                 "token": request.token,
                 "subject_id": request.subject.id,
-                "subject_kind": request.subject.kind,
+                "subject_kind": (parse_subject_id(request.subject.id) or ("", ""))[0],
                 "subject_email": request.subject.email,
                 "agent_subject_id": request.agent_subject.id,
                 "agent_subject_email": request.agent_subject.email,
@@ -467,15 +468,10 @@ class MainEntrypointTests(unittest.TestCase):
                 context=app_pb2.RequestContext(
                     subject=app_pb2.SubjectContext(
                         id="user:user-123",
-                        kind="user",
-                        auth_source="api_token",
                         email="ada@example.com",
                     ),
                     agent_subject=app_pb2.SubjectContext(
                         id="user:user-456",
-                        kind="user",
-                        display_name="Grace Hopper",
-                        auth_source="slack",
                         email="grace@example.com",
                     ),
                     credential=app_pb2.CredentialContext(
@@ -496,10 +492,7 @@ class MainEntrypointTests(unittest.TestCase):
                             operation="bot.getPullRequest",
                             run_as=app_pb2.SubjectContext(
                                 id="service_account:github-review",
-                                kind="service_account",
                                 credential_subject_id="service_account:github-review",
-                                display_name="GitHub Review",
-                                auth_source="managed_subject",
                             ),
                         )
                     ],
@@ -513,7 +506,7 @@ class MainEntrypointTests(unittest.TestCase):
                 token="secret-token",
                 connection_params={"tenant": "acme"},
                 context=app_pb2.RequestContext(
-                    subject=app_pb2.SubjectContext(id="user:user-123", kind="user"),
+                    subject=app_pb2.SubjectContext(id="user:user-123"),
                     credential=app_pb2.CredentialContext(mode="subject"),
                     access=app_pb2.AccessContext(
                         policy="sample_policy",

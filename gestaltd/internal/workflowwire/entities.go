@@ -2,6 +2,7 @@ package workflowwire
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
@@ -11,30 +12,6 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-func ActorToProto(actor coreworkflow.Actor) *proto.WorkflowActor {
-	if actor == (coreworkflow.Actor{}) {
-		return nil
-	}
-	return &proto.WorkflowActor{
-		SubjectId:   actor.SubjectID,
-		SubjectKind: actor.SubjectKind,
-		DisplayName: actor.DisplayName,
-		AuthSource:  actor.AuthSource,
-	}
-}
-
-func ActorFromProto(actor *proto.WorkflowActor) coreworkflow.Actor {
-	if actor == nil {
-		return coreworkflow.Actor{}
-	}
-	return coreworkflow.Actor{
-		SubjectID:   actor.GetSubjectId(),
-		SubjectKind: actor.GetSubjectKind(),
-		DisplayName: actor.GetDisplayName(),
-		AuthSource:  actor.GetAuthSource(),
-	}
-}
 
 func EventToProto(event coreworkflow.Event) (*proto.WorkflowEvent, error) {
 	data, err := protoutil.StructFromMap(event.Data)
@@ -154,19 +131,19 @@ func RunFromProto(run *proto.BoundWorkflowRun) (*coreworkflow.Run, error) {
 		return nil, err
 	}
 	return &coreworkflow.Run{
-		ID:            run.GetId(),
-		Status:        status,
-		WorkflowKey:   run.GetWorkflowKey(),
-		Target:        TargetFromProto(run.GetTarget()),
-		DefinitionID:  run.GetDefinitionId(),
-		Trigger:       trigger,
-		CreatedBy:     ActorFromProto(run.GetCreatedBy()),
-		RunAs:         agentwire.RunAsSubjectFromProto(run.GetRunAs()),
-		CreatedAt:     TimeFromProto(run.GetCreatedAt()),
-		StartedAt:     TimeFromProto(run.GetStartedAt()),
-		CompletedAt:   TimeFromProto(run.GetCompletedAt()),
-		StatusMessage: run.GetStatusMessage(),
-		ResultBody:    run.GetResultBody(),
+		ID:                 run.GetId(),
+		Status:             status,
+		WorkflowKey:        run.GetWorkflowKey(),
+		Target:             TargetFromProto(run.GetTarget()),
+		DefinitionID:       run.GetDefinitionId(),
+		Trigger:            trigger,
+		CreatedBySubjectID: strings.TrimSpace(run.GetCreatedBySubjectId()),
+		RunAs:              agentwire.RunAsSubjectFromProto(run.GetRunAs()),
+		CreatedAt:          TimeFromProto(run.GetCreatedAt()),
+		StartedAt:          TimeFromProto(run.GetStartedAt()),
+		CompletedAt:        TimeFromProto(run.GetCompletedAt()),
+		StatusMessage:      run.GetStatusMessage(),
+		ResultBody:         run.GetResultBody(),
 	}, nil
 }
 
@@ -183,19 +160,19 @@ func RunToProto(run *coreworkflow.Run) (*proto.BoundWorkflowRun, error) {
 		return nil, err
 	}
 	return &proto.BoundWorkflowRun{
-		Id:            run.ID,
-		Status:        RunStatusToProto(run.Status),
-		Target:        target,
-		Trigger:       trigger,
-		CreatedAt:     TimeToProto(run.CreatedAt),
-		StartedAt:     TimeToProto(run.StartedAt),
-		CompletedAt:   TimeToProto(run.CompletedAt),
-		StatusMessage: run.StatusMessage,
-		ResultBody:    run.ResultBody,
-		CreatedBy:     ActorToProto(run.CreatedBy),
-		WorkflowKey:   run.WorkflowKey,
-		DefinitionId:  run.DefinitionID,
-		RunAs:         agentwire.RunAsSubjectToProto(run.RunAs),
+		Id:                 run.ID,
+		Status:             RunStatusToProto(run.Status),
+		Target:             target,
+		Trigger:            trigger,
+		CreatedAt:          TimeToProto(run.CreatedAt),
+		StartedAt:          TimeToProto(run.StartedAt),
+		CompletedAt:        TimeToProto(run.CompletedAt),
+		StatusMessage:      run.StatusMessage,
+		ResultBody:         run.ResultBody,
+		CreatedBySubjectId: strings.TrimSpace(run.CreatedBySubjectID),
+		WorkflowKey:        run.WorkflowKey,
+		DefinitionId:       run.DefinitionID,
+		RunAs:              agentwire.RunAsSubjectToProto(run.RunAs),
 	}, nil
 }
 
@@ -204,17 +181,17 @@ func ScheduleFromProto(schedule *proto.BoundWorkflowSchedule) (*coreworkflow.Sch
 		return nil, nil
 	}
 	return &coreworkflow.Schedule{
-		ID:           schedule.GetId(),
-		Cron:         schedule.GetCron(),
-		Timezone:     schedule.GetTimezone(),
-		Target:       TargetFromProto(schedule.GetTarget()),
-		DefinitionID: schedule.GetDefinitionId(),
-		Paused:       schedule.GetPaused(),
-		CreatedBy:    ActorFromProto(schedule.GetCreatedBy()),
-		RunAs:        agentwire.RunAsSubjectFromProto(schedule.GetRunAs()),
-		CreatedAt:    TimeFromProto(schedule.GetCreatedAt()),
-		UpdatedAt:    TimeFromProto(schedule.GetUpdatedAt()),
-		NextRunAt:    TimeFromProto(schedule.GetNextRunAt()),
+		ID:                 schedule.GetId(),
+		Cron:               schedule.GetCron(),
+		Timezone:           schedule.GetTimezone(),
+		Target:             TargetFromProto(schedule.GetTarget()),
+		DefinitionID:       schedule.GetDefinitionId(),
+		Paused:             schedule.GetPaused(),
+		CreatedBySubjectID: strings.TrimSpace(schedule.GetCreatedBySubjectId()),
+		RunAs:              agentwire.RunAsSubjectFromProto(schedule.GetRunAs()),
+		CreatedAt:          TimeFromProto(schedule.GetCreatedAt()),
+		UpdatedAt:          TimeFromProto(schedule.GetUpdatedAt()),
+		NextRunAt:          TimeFromProto(schedule.GetNextRunAt()),
 	}, nil
 }
 
@@ -227,17 +204,17 @@ func ScheduleToProto(schedule *coreworkflow.Schedule) (*proto.BoundWorkflowSched
 		return nil, err
 	}
 	return &proto.BoundWorkflowSchedule{
-		Id:           schedule.ID,
-		Cron:         schedule.Cron,
-		Timezone:     schedule.Timezone,
-		Target:       target,
-		Paused:       schedule.Paused,
-		CreatedAt:    TimeToProto(schedule.CreatedAt),
-		UpdatedAt:    TimeToProto(schedule.UpdatedAt),
-		NextRunAt:    TimeToProto(schedule.NextRunAt),
-		CreatedBy:    ActorToProto(schedule.CreatedBy),
-		DefinitionId: schedule.DefinitionID,
-		RunAs:        agentwire.RunAsSubjectToProto(schedule.RunAs),
+		Id:                 schedule.ID,
+		Cron:               schedule.Cron,
+		Timezone:           schedule.Timezone,
+		Target:             target,
+		Paused:             schedule.Paused,
+		CreatedAt:          TimeToProto(schedule.CreatedAt),
+		UpdatedAt:          TimeToProto(schedule.UpdatedAt),
+		NextRunAt:          TimeToProto(schedule.NextRunAt),
+		CreatedBySubjectId: strings.TrimSpace(schedule.CreatedBySubjectID),
+		DefinitionId:       schedule.DefinitionID,
+		RunAs:              agentwire.RunAsSubjectToProto(schedule.RunAs),
 	}, nil
 }
 
@@ -246,15 +223,15 @@ func EventTriggerFromProto(trigger *proto.BoundWorkflowEventTrigger) (*coreworkf
 		return nil, nil
 	}
 	return &coreworkflow.EventTrigger{
-		ID:           trigger.GetId(),
-		Match:        EventMatchFromProto(trigger.GetMatch()),
-		Target:       TargetFromProto(trigger.GetTarget()),
-		DefinitionID: trigger.GetDefinitionId(),
-		Paused:       trigger.GetPaused(),
-		CreatedBy:    ActorFromProto(trigger.GetCreatedBy()),
-		RunAs:        agentwire.RunAsSubjectFromProto(trigger.GetRunAs()),
-		CreatedAt:    TimeFromProto(trigger.GetCreatedAt()),
-		UpdatedAt:    TimeFromProto(trigger.GetUpdatedAt()),
+		ID:                 trigger.GetId(),
+		Match:              EventMatchFromProto(trigger.GetMatch()),
+		Target:             TargetFromProto(trigger.GetTarget()),
+		DefinitionID:       trigger.GetDefinitionId(),
+		Paused:             trigger.GetPaused(),
+		CreatedBySubjectID: strings.TrimSpace(trigger.GetCreatedBySubjectId()),
+		RunAs:              agentwire.RunAsSubjectFromProto(trigger.GetRunAs()),
+		CreatedAt:          TimeFromProto(trigger.GetCreatedAt()),
+		UpdatedAt:          TimeFromProto(trigger.GetUpdatedAt()),
 	}, nil
 }
 
@@ -267,15 +244,15 @@ func EventTriggerToProto(trigger *coreworkflow.EventTrigger) (*proto.BoundWorkfl
 		return nil, err
 	}
 	return &proto.BoundWorkflowEventTrigger{
-		Id:           trigger.ID,
-		Match:        EventMatchToProto(trigger.Match),
-		Target:       target,
-		Paused:       trigger.Paused,
-		CreatedAt:    TimeToProto(trigger.CreatedAt),
-		UpdatedAt:    TimeToProto(trigger.UpdatedAt),
-		CreatedBy:    ActorToProto(trigger.CreatedBy),
-		DefinitionId: trigger.DefinitionID,
-		RunAs:        agentwire.RunAsSubjectToProto(trigger.RunAs),
+		Id:                 trigger.ID,
+		Match:              EventMatchToProto(trigger.Match),
+		Target:             target,
+		Paused:             trigger.Paused,
+		CreatedAt:          TimeToProto(trigger.CreatedAt),
+		UpdatedAt:          TimeToProto(trigger.UpdatedAt),
+		CreatedBySubjectId: strings.TrimSpace(trigger.CreatedBySubjectID),
+		DefinitionId:       trigger.DefinitionID,
+		RunAs:              agentwire.RunAsSubjectToProto(trigger.RunAs),
 	}, nil
 }
 
@@ -284,10 +261,10 @@ func DefinitionFromProto(definition *proto.BoundWorkflowDefinition) (*coreworkfl
 		return nil, nil
 	}
 	return &coreworkflow.Definition{
-		ID:        definition.GetId(),
-		Target:    TargetFromProto(definition.GetTarget()),
-		CreatedBy: ActorFromProto(definition.GetCreatedBy()),
-		CreatedAt: TimeFromProto(definition.GetCreatedAt()),
+		ID:                 definition.GetId(),
+		Target:             TargetFromProto(definition.GetTarget()),
+		CreatedBySubjectID: strings.TrimSpace(definition.GetCreatedBySubjectId()),
+		CreatedAt:          TimeFromProto(definition.GetCreatedAt()),
 	}, nil
 }
 
@@ -300,10 +277,10 @@ func DefinitionToProto(definition *coreworkflow.Definition) (*proto.BoundWorkflo
 		return nil, err
 	}
 	return &proto.BoundWorkflowDefinition{
-		Id:        definition.ID,
-		Target:    target,
-		CreatedBy: ActorToProto(definition.CreatedBy),
-		CreatedAt: TimeToProto(definition.CreatedAt),
+		Id:                 definition.ID,
+		Target:             target,
+		CreatedBySubjectId: strings.TrimSpace(definition.CreatedBySubjectID),
+		CreatedAt:          TimeToProto(definition.CreatedAt),
 	}, nil
 }
 
@@ -317,14 +294,14 @@ func SignalToProto(signal coreworkflow.Signal) (*proto.WorkflowSignal, error) {
 		return nil, fmt.Errorf("workflow signal metadata: %w", err)
 	}
 	return &proto.WorkflowSignal{
-		Id:             signal.ID,
-		Name:           signal.Name,
-		Payload:        payload,
-		Metadata:       metadata,
-		CreatedBy:      ActorToProto(signal.CreatedBy),
-		CreatedAt:      TimeToProto(signal.CreatedAt),
-		IdempotencyKey: signal.IdempotencyKey,
-		Sequence:       signal.Sequence,
+		Id:                 signal.ID,
+		Name:               signal.Name,
+		Payload:            payload,
+		Metadata:           metadata,
+		CreatedBySubjectId: strings.TrimSpace(signal.CreatedBySubjectID),
+		CreatedAt:          TimeToProto(signal.CreatedAt),
+		IdempotencyKey:     signal.IdempotencyKey,
+		Sequence:           signal.Sequence,
 	}, nil
 }
 
@@ -333,14 +310,14 @@ func SignalFromProto(signal *proto.WorkflowSignal) coreworkflow.Signal {
 		return coreworkflow.Signal{}
 	}
 	return coreworkflow.Signal{
-		ID:             signal.GetId(),
-		Name:           signal.GetName(),
-		Payload:        protoutil.MapFromStruct(signal.GetPayload()),
-		Metadata:       protoutil.MapFromStruct(signal.GetMetadata()),
-		CreatedBy:      ActorFromProto(signal.GetCreatedBy()),
-		CreatedAt:      TimeFromProto(signal.GetCreatedAt()),
-		IdempotencyKey: signal.GetIdempotencyKey(),
-		Sequence:       signal.GetSequence(),
+		ID:                 signal.GetId(),
+		Name:               signal.GetName(),
+		Payload:            protoutil.MapFromStruct(signal.GetPayload()),
+		Metadata:           protoutil.MapFromStruct(signal.GetMetadata()),
+		CreatedBySubjectID: strings.TrimSpace(signal.GetCreatedBySubjectId()),
+		CreatedAt:          TimeFromProto(signal.GetCreatedAt()),
+		IdempotencyKey:     signal.GetIdempotencyKey(),
+		Sequence:           signal.GetSequence(),
 	}
 }
 

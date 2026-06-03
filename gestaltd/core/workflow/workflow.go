@@ -25,8 +25,6 @@ const (
 	RunStatusCanceled  RunStatus = "canceled"
 )
 
-type Actor = core.Actor
-
 type Target struct {
 	Steps []Step
 }
@@ -179,7 +177,7 @@ type Run struct {
 	Target        Target
 	DefinitionID  string
 	Trigger       RunTrigger
-	CreatedBy     Actor
+	CreatedBySubjectID string
 	RunAs         *core.RunAsSubject
 	CreatedAt     *time.Time
 	StartedAt     *time.Time
@@ -195,7 +193,7 @@ type Schedule struct {
 	Target       Target
 	DefinitionID string
 	Paused       bool
-	CreatedBy    Actor
+	CreatedBySubjectID string
 	RunAs        *core.RunAsSubject
 	CreatedAt    *time.Time
 	UpdatedAt    *time.Time
@@ -208,7 +206,7 @@ type EventTrigger struct {
 	Target       Target
 	DefinitionID string
 	Paused       bool
-	CreatedBy    Actor
+	CreatedBySubjectID string
 	RunAs        *core.RunAsSubject
 	CreatedAt    *time.Time
 	UpdatedAt    *time.Time
@@ -217,7 +215,7 @@ type EventTrigger struct {
 type Definition struct {
 	ID        string
 	Target    Target
-	CreatedBy Actor
+	CreatedBySubjectID string
 	CreatedAt *time.Time
 }
 
@@ -238,7 +236,7 @@ type Signal struct {
 	Name           string
 	Payload        map[string]any
 	Metadata       map[string]any
-	CreatedBy      Actor
+	CreatedBySubjectID string
 	CreatedAt      *time.Time
 	IdempotencyKey string
 	Sequence       int64

@@ -40,7 +40,7 @@ pub mod proto {
 }
 
 pub use agent::{
-    AgentActor, AgentExecutionStatus, AgentHost, AgentHostApi, AgentHostError,
+AgentExecutionStatus, AgentHost, AgentHostApi, AgentHostError,
     AgentHostExecuteToolInput, AgentHostListToolsInput, AgentHostResolveConnectionInput,
     AgentInteraction, AgentInteractionState, AgentInteractionType, AgentJson, AgentMessage,
     AgentMessagePart, AgentMessagePartImageRef, AgentMessagePartToolCall,
@@ -69,7 +69,7 @@ pub use agent_access::{
 };
 pub use api::{
     Access, Credential, HTTPSubjectRequest, Host, Provider, Request, Response, RuntimeMetadata,
-    Subject, ok,
+    Subject, parse_subject_id, ok,
 };
 pub use app_access::{
     App, AppContract, AppError, InvocationGrant, InvokeGraphQLOptions, InvokeOptions,
@@ -140,7 +140,7 @@ pub use workflow::{
     SignalOrStartWorkflowProviderRunRequest, SignalWorkflowProviderRunRequest,
     SignalWorkflowRunResponse, StartWorkflowProviderRunRequest,
     UpsertWorkflowProviderEventTriggerRequest, UpsertWorkflowProviderScheduleRequest,
-    WorkflowActor, WorkflowAgentMessage, WorkflowDefinition, WorkflowEvalContext,
+WorkflowAgentMessage, WorkflowDefinition, WorkflowEvalContext,
     WorkflowEvalResult, WorkflowEvent, WorkflowEventMatch, WorkflowEventTrigger,
     WorkflowEventTriggerInvocation, WorkflowExecutionRequest, WorkflowJson, WorkflowProvider,
     WorkflowRun, WorkflowRunSignal, WorkflowRunStatus, WorkflowRunTrigger, WorkflowSchedule,
@@ -153,13 +153,13 @@ pub use workflow::{
     new_bound_workflow_event_trigger_from_trigger, new_bound_workflow_run,
     new_bound_workflow_run_from_run, new_bound_workflow_schedule,
     new_bound_workflow_schedule_from_schedule, new_bound_workflow_target,
-    new_bound_workflow_target_from_target, new_workflow_actor, new_workflow_agent_message,
+    new_bound_workflow_target_from_target, new_workflow_agent_message,
     new_workflow_event, new_workflow_event_from_event, new_workflow_event_match,
     new_workflow_event_trigger_invocation, new_workflow_run_trigger,
     new_workflow_run_trigger_from_trigger, new_workflow_schedule_trigger, new_workflow_signal,
     new_workflow_signal_from_signal, new_workflow_step, new_workflow_step_agent_turn,
     new_workflow_step_app_call, new_workflow_step_when, new_workflow_text, new_workflow_value,
-    path_value, render_workflow_template, workflow_actor_input_from_actor,
+    path_value, render_workflow_template,
     workflow_event_input_from_event, workflow_event_match_input_from_match,
     workflow_run_trigger_input_from_trigger, workflow_signal_input_from_signal,
     workflow_step_agent_turn_input_from_turn, workflow_step_app_call_input_from_call,

@@ -5,10 +5,7 @@ import type { AgentToolRef } from "./agent.ts";
 
 export interface Subject {
   id: string;
-  kind: string;
   credentialSubjectId: string;
-  displayName: string;
-  authSource: string;
   email: string;
 }
 
@@ -17,10 +14,7 @@ export interface Subject {
  */
 export interface SubjectInput {
   id: string;
-  kind: string;
   credentialSubjectId?: string | undefined;
-  displayName: string;
-  authSource: string;
   email?: string | undefined;
 }
 
@@ -136,6 +130,22 @@ export function ok<T>(body: T, headers?: ResponseHeaders): Response<T> {
  * const input = request("token", { region: "us-east-1" }, { id: "usr_123" });
  * ```
  */
+export function parseSubjectId(
+  subjectId: string,
+): { kind: string; id: string } | undefined {
+  const trimmed = subjectId.trim();
+  const index = trimmed.indexOf(":");
+  if (index <= 0 || index >= trimmed.length - 1) {
+    return undefined;
+  }
+  const kind = trimmed.slice(0, index).trim();
+  const id = trimmed.slice(index + 1).trim();
+  if (!kind || !id) {
+    return undefined;
+  }
+  return { kind, id };
+}
+
 export function request(
   token = "",
   connectionParams: Record<string, string> = {},
@@ -157,18 +167,12 @@ export function request(
     },
     subject: {
       id: subject.id ?? "",
-      kind: subject.kind ?? "",
       credentialSubjectId: subject.credentialSubjectId ?? "",
-      displayName: subject.displayName ?? "",
-      authSource: subject.authSource ?? "",
       email: subject.email ?? "",
     },
     agentSubject: {
       id: agentSubject.id ?? "",
-      kind: agentSubject.kind ?? "",
       credentialSubjectId: agentSubject.credentialSubjectId ?? "",
-      displayName: agentSubject.displayName ?? "",
-      authSource: agentSubject.authSource ?? "",
       email: agentSubject.email ?? "",
     },
     credential: {

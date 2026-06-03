@@ -323,7 +323,7 @@ func TestAgentCreateTurnDoesNotReportSessionMissingAfterSessionResolved(t *testi
 
 	provider := newMemoryAgentProvider()
 	provider.createTurnHook = func(turn *coreagent.Turn) {
-		turn.CreatedBy.SubjectID = principal.UserSubjectID("someone-else")
+		turn.CreatedBySubjectID = principal.UserSubjectID("someone-else")
 	}
 	authz := &dynamicProviderAuthorizer{}
 	authz.allowed.Store(true)
@@ -442,10 +442,7 @@ func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 		ProviderName: "managed",
 		Model:        "gpt-5.4",
 		State:        coreagent.SessionStateActive,
-		CreatedBy: coreagent.Actor{
-			SubjectID:   principal.UserSubjectID(user.ID),
-			SubjectKind: string(principal.KindUser),
-		},
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -541,7 +538,7 @@ func (p *memoryAgentProvider) CreateSession(_ context.Context, req *proto.Create
 		ClientRef:    req.GetClientRef(),
 		State:        coreagent.SessionStateActive,
 		Metadata:     mapFromStruct(req.GetMetadata()),
-		CreatedBy:    actorFromProto(req.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
@@ -630,7 +627,7 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req *proto.CreateAge
 		Model:        req.GetModel(),
 		Status:       coreagent.ExecutionStatusSucceeded,
 		Messages:     messagesFromProto(req.GetMessages()),
-		CreatedBy:    actorFromProto(req.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 		CreatedAt:    &now,
 		StartedAt:    &now,
 		CompletedAt:  &now,
@@ -987,18 +984,6 @@ func mapFromStruct(value *structpb.Struct) map[string]any {
 		return nil
 	}
 	return value.AsMap()
-}
-
-func actorFromProto(value *proto.AgentActor) coreagent.Actor {
-	if value == nil {
-		return coreagent.Actor{}
-	}
-	return coreagent.Actor{
-		SubjectID:   value.GetSubjectId(),
-		SubjectKind: value.GetSubjectKind(),
-		DisplayName: value.GetDisplayName(),
-		AuthSource:  value.GetAuthSource(),
-	}
 }
 
 func messagesFromProto(values []*proto.AgentMessage) []coreagent.Message {

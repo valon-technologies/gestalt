@@ -21,6 +21,15 @@ use crate::{Error, Result};
 /// Native JSON object used by authored workflow providers.
 pub type WorkflowJson = serde_json::Value;
 
+fn subject_id_from_proto(value: String) -> Option<String> {
+    let trimmed = value.trim().to_string();
+    (!trimmed.is_empty()).then_some(trimmed)
+}
+
+fn subject_id_to_proto(value: Option<String>) -> String {
+    value.unwrap_or_default().trim().to_string()
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[repr(i32)]
 pub enum WorkflowRunStatus {
@@ -152,14 +161,6 @@ pub struct WorkflowStepOutputSource {
     pub path: String,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct WorkflowActor {
-    pub subject_id: String,
-    pub subject_kind: String,
-    pub display_name: String,
-    pub auth_source: String,
-}
-
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WorkflowEvent {
     pub id: String,
@@ -186,7 +187,7 @@ pub struct WorkflowSignal {
     pub name: String,
     pub payload: Option<WorkflowJson>,
     pub metadata: Option<WorkflowJson>,
-    pub created_by: Option<WorkflowActor>,
+    pub created_by_subject_id: Option<String>,
     pub created_at: Option<SystemTime>,
     pub idempotency_key: String,
     pub sequence: i64,
@@ -224,7 +225,7 @@ pub struct BoundWorkflowRun {
     pub completed_at: Option<SystemTime>,
     pub status_message: String,
     pub result_body: String,
-    pub created_by: Option<WorkflowActor>,
+    pub created_by_subject_id: Option<String>,
     pub workflow_key: String,
     pub provider_name: String,
     pub definition_id: String,
@@ -241,7 +242,7 @@ pub struct BoundWorkflowSchedule {
     pub created_at: Option<SystemTime>,
     pub updated_at: Option<SystemTime>,
     pub next_run_at: Option<SystemTime>,
-    pub created_by: Option<WorkflowActor>,
+    pub created_by_subject_id: Option<String>,
     pub provider_name: String,
     pub definition_id: String,
     pub run_as: Option<Subject>,
@@ -255,7 +256,7 @@ pub struct BoundWorkflowEventTrigger {
     pub paused: bool,
     pub created_at: Option<SystemTime>,
     pub updated_at: Option<SystemTime>,
-    pub created_by: Option<WorkflowActor>,
+    pub created_by_subject_id: Option<String>,
     pub provider_name: String,
     pub definition_id: String,
     pub run_as: Option<Subject>,
@@ -265,7 +266,7 @@ pub struct BoundWorkflowEventTrigger {
 pub struct BoundWorkflowDefinition {
     pub id: String,
     pub target: Option<BoundWorkflowTarget>,
-    pub created_by: Option<WorkflowActor>,
+    pub created_by_subject_id: Option<String>,
     pub created_at: Option<SystemTime>,
     pub provider_name: String,
 }
@@ -283,7 +284,7 @@ pub struct CreateWorkflowProviderDefinitionRequest {
     pub provider_name: String,
     pub target: Option<BoundWorkflowTarget>,
     pub idempotency_key: String,
-    pub created_by: Option<WorkflowActor>,
+    pub created_by_subject_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -296,7 +297,7 @@ pub struct UpdateWorkflowProviderDefinitionRequest {
     pub definition_id: String,
     pub provider_name: String,
     pub target: Option<BoundWorkflowTarget>,
-    pub requested_by: Option<WorkflowActor>,
+    pub requested_by_subject_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -435,7 +436,7 @@ impl WorkflowSignal {
 pub struct StartWorkflowProviderRunRequest {
     pub target: Option<BoundWorkflowTarget>,
     pub idempotency_key: String,
-    pub created_by: Option<WorkflowActor>,
+    pub created_by_subject_id: Option<String>,
     pub workflow_key: String,
     pub definition_id: String,
     pub run_as: Option<Subject>,
@@ -471,7 +472,7 @@ pub struct SignalOrStartWorkflowProviderRunRequest {
     pub workflow_key: String,
     pub target: Option<BoundWorkflowTarget>,
     pub idempotency_key: String,
-    pub created_by: Option<WorkflowActor>,
+    pub created_by_subject_id: Option<String>,
     pub signal: Option<WorkflowSignal>,
     pub definition_id: String,
     pub run_as: Option<Subject>,
@@ -484,7 +485,7 @@ pub struct UpsertWorkflowProviderScheduleRequest {
     pub timezone: String,
     pub target: Option<BoundWorkflowTarget>,
     pub paused: bool,
-    pub requested_by: Option<WorkflowActor>,
+    pub requested_by_subject_id: Option<String>,
     pub idempotency_key: String,
     pub definition_id: String,
     pub run_as: Option<Subject>,
@@ -519,7 +520,7 @@ pub struct UpsertWorkflowProviderEventTriggerRequest {
     pub event_match: Option<WorkflowEventMatch>,
     pub target: Option<BoundWorkflowTarget>,
     pub paused: bool,
-    pub requested_by: Option<WorkflowActor>,
+    pub requested_by_subject_id: Option<String>,
     pub idempotency_key: String,
     pub definition_id: String,
     pub run_as: Option<Subject>,
@@ -552,54 +553,13 @@ pub struct ResumeWorkflowProviderEventTriggerRequest {
 pub struct PublishWorkflowProviderEventRequest {
     pub app_name: String,
     pub event: Option<WorkflowEvent>,
-    pub published_by: Option<WorkflowActor>,
-}
-
-/// Creates workflow actor metadata.
-pub fn new_workflow_actor(input: WorkflowActor) -> WorkflowActor {
-    WorkflowActor {
-        subject_id: input.subject_id,
-        subject_kind: input.subject_kind,
-        display_name: input.display_name,
-        auth_source: input.auth_source,
-    }
-}
-
-/// Returns input copied from workflow actor metadata.
-pub fn workflow_actor_input_from_actor(input: &WorkflowActor) -> WorkflowActor {
-    WorkflowActor {
-        subject_id: input.subject_id.clone(),
-        subject_kind: input.subject_kind.clone(),
-        display_name: input.display_name.clone(),
-        auth_source: input.auth_source.clone(),
-    }
-}
-
-fn workflow_actor_to_proto(input: WorkflowActor) -> pb::WorkflowActor {
-    pb::WorkflowActor {
-        subject_id: input.subject_id,
-        subject_kind: input.subject_kind,
-        display_name: input.display_name,
-        auth_source: input.auth_source,
-    }
-}
-
-fn workflow_actor_from_proto(input: pb::WorkflowActor) -> WorkflowActor {
-    WorkflowActor {
-        subject_id: input.subject_id,
-        subject_kind: input.subject_kind,
-        display_name: input.display_name,
-        auth_source: input.auth_source,
-    }
+    pub published_by_subject_id: Option<String>,
 }
 
 fn workflow_subject_from_proto(input: pb::SubjectContext) -> Subject {
     Subject {
         id: input.id,
-        kind: input.kind,
         credential_subject_id: input.credential_subject_id,
-        display_name: input.display_name,
-        auth_source: input.auth_source,
         email: input.email,
     }
 }
@@ -607,13 +567,11 @@ fn workflow_subject_from_proto(input: pb::SubjectContext) -> Subject {
 fn workflow_subject_to_proto(input: Subject) -> pb::SubjectContext {
     pb::SubjectContext {
         id: input.id,
-        kind: input.kind,
         credential_subject_id: input.credential_subject_id,
-        display_name: input.display_name,
-        auth_source: input.auth_source,
         email: input.email,
     }
 }
+
 
 /// Creates workflow event-match fields.
 pub fn new_workflow_event_match(input: WorkflowEventMatch) -> WorkflowEventMatch {
@@ -1126,7 +1084,7 @@ pub fn new_workflow_signal(input: WorkflowSignal) -> ProviderResult<WorkflowSign
         name: input.name,
         payload: input.payload,
         metadata: input.metadata,
-        created_by: input.created_by.map(new_workflow_actor),
+        created_by_subject_id: input.created_by_subject_id,
         created_at: input.created_at,
         idempotency_key: input.idempotency_key,
         sequence: input.sequence,
@@ -1140,10 +1098,7 @@ pub fn workflow_signal_input_from_signal(input: &WorkflowSignal) -> ProviderResu
         name: input.name.clone(),
         payload: input.payload.clone(),
         metadata: input.metadata.clone(),
-        created_by: input
-            .created_by
-            .as_ref()
-            .map(workflow_actor_input_from_actor),
+        created_by_subject_id: input.created_by_subject_id.clone(),
         created_at: input.created_at,
         idempotency_key: input.idempotency_key.clone(),
         sequence: input.sequence,
@@ -1158,7 +1113,7 @@ pub(crate) fn workflow_signal_to_proto(
         name: input.name,
         payload: input.payload.map(protocol::struct_from_json).transpose()?,
         metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
-        created_by: input.created_by.map(workflow_actor_to_proto),
+        created_by_subject_id: subject_id_to_proto(input.created_by_subject_id),
         created_at: input.created_at.map(protocol::timestamp_from_system_time),
         idempotency_key: input.idempotency_key,
         sequence: input.sequence,
@@ -1173,7 +1128,7 @@ pub(crate) fn workflow_signal_from_proto(
         name: input.name,
         payload: input.payload.as_ref().map(protocol::json_from_struct),
         metadata: input.metadata.as_ref().map(protocol::json_from_struct),
-        created_by: input.created_by.map(workflow_actor_from_proto),
+        created_by_subject_id: subject_id_from_proto(input.created_by_subject_id),
         created_at: input
             .created_at
             .as_ref()
@@ -1341,7 +1296,7 @@ pub fn new_bound_workflow_run(input: BoundWorkflowRun) -> ProviderResult<BoundWo
         completed_at: input.completed_at,
         status_message: input.status_message,
         result_body: input.result_body,
-        created_by: input.created_by.map(new_workflow_actor),
+        created_by_subject_id: input.created_by_subject_id,
         workflow_key: input.workflow_key,
         provider_name: input.provider_name,
         definition_id: input.definition_id,
@@ -1371,10 +1326,7 @@ pub fn bound_workflow_run_input_from_run(
         completed_at: input.completed_at,
         status_message: input.status_message.clone(),
         result_body: input.result_body.clone(),
-        created_by: input
-            .created_by
-            .as_ref()
-            .map(workflow_actor_input_from_actor),
+        created_by_subject_id: input.created_by_subject_id.clone(),
         workflow_key: input.workflow_key.clone(),
         provider_name: input.provider_name.clone(),
         definition_id: input.definition_id.clone(),
@@ -1401,7 +1353,7 @@ pub(crate) fn bound_workflow_run_to_proto(
         completed_at: input.completed_at.map(protocol::timestamp_from_system_time),
         status_message: input.status_message,
         result_body: input.result_body,
-        created_by: input.created_by.map(workflow_actor_to_proto),
+        created_by_subject_id: subject_id_to_proto(input.created_by_subject_id),
         workflow_key: input.workflow_key,
         provider_name: input.provider_name,
         definition_id: input.definition_id,
@@ -1440,7 +1392,7 @@ pub(crate) fn bound_workflow_run_from_proto(
             .transpose()?,
         status_message: input.status_message,
         result_body: input.result_body,
-        created_by: input.created_by.map(workflow_actor_from_proto),
+        created_by_subject_id: subject_id_from_proto(input.created_by_subject_id),
         workflow_key: input.workflow_key,
         provider_name: input.provider_name,
         definition_id: input.definition_id,
@@ -1466,10 +1418,7 @@ pub fn bound_workflow_definition_input_from_definition(
             .as_ref()
             .map(bound_workflow_target_input_from_target)
             .transpose()?,
-        created_by: input
-            .created_by
-            .as_ref()
-            .map(workflow_actor_input_from_actor),
+        created_by_subject_id: input.created_by_subject_id.clone(),
         created_at: input.created_at,
         provider_name: input.provider_name.clone(),
     })
@@ -1488,7 +1437,7 @@ pub fn new_bound_workflow_schedule(
         created_at: input.created_at,
         updated_at: input.updated_at,
         next_run_at: input.next_run_at,
-        created_by: input.created_by.map(new_workflow_actor),
+        created_by_subject_id: input.created_by_subject_id,
         provider_name: input.provider_name,
         definition_id: input.definition_id,
         run_as: input.run_as,
@@ -1512,10 +1461,7 @@ pub fn bound_workflow_schedule_input_from_schedule(
         created_at: input.created_at,
         updated_at: input.updated_at,
         next_run_at: input.next_run_at,
-        created_by: input
-            .created_by
-            .as_ref()
-            .map(workflow_actor_input_from_actor),
+        created_by_subject_id: input.created_by_subject_id.clone(),
         provider_name: input.provider_name.clone(),
         definition_id: input.definition_id.clone(),
         run_as: input.run_as.clone(),
@@ -1537,7 +1483,7 @@ pub(crate) fn bound_workflow_schedule_to_proto(
         created_at: input.created_at.map(protocol::timestamp_from_system_time),
         updated_at: input.updated_at.map(protocol::timestamp_from_system_time),
         next_run_at: input.next_run_at.map(protocol::timestamp_from_system_time),
-        created_by: input.created_by.map(workflow_actor_to_proto),
+        created_by_subject_id: subject_id_to_proto(input.created_by_subject_id),
         provider_name: input.provider_name,
         definition_id: input.definition_id,
         run_as: input.run_as.map(workflow_subject_to_proto),
@@ -1571,7 +1517,7 @@ pub(crate) fn bound_workflow_schedule_from_proto(
             .as_ref()
             .map(protocol::system_time_from_timestamp)
             .transpose()?,
-        created_by: input.created_by.map(workflow_actor_from_proto),
+        created_by_subject_id: subject_id_from_proto(input.created_by_subject_id),
         provider_name: input.provider_name,
         definition_id: input.definition_id,
         run_as: input.run_as.map(workflow_subject_from_proto),
@@ -1596,7 +1542,7 @@ pub fn new_bound_workflow_event_trigger(
         paused: input.paused,
         created_at: input.created_at,
         updated_at: input.updated_at,
-        created_by: input.created_by.map(new_workflow_actor),
+        created_by_subject_id: input.created_by_subject_id,
         provider_name: input.provider_name,
         definition_id: input.definition_id,
         run_as: input.run_as,
@@ -1621,10 +1567,7 @@ pub fn bound_workflow_event_trigger_input_from_trigger(
         paused: input.paused,
         created_at: input.created_at,
         updated_at: input.updated_at,
-        created_by: input
-            .created_by
-            .as_ref()
-            .map(workflow_actor_input_from_actor),
+        created_by_subject_id: input.created_by_subject_id.clone(),
         provider_name: input.provider_name.clone(),
         definition_id: input.definition_id.clone(),
         run_as: input.run_as.clone(),
@@ -1644,7 +1587,7 @@ pub(crate) fn bound_workflow_event_trigger_to_proto(
         paused: input.paused,
         created_at: input.created_at.map(protocol::timestamp_from_system_time),
         updated_at: input.updated_at.map(protocol::timestamp_from_system_time),
-        created_by: input.created_by.map(workflow_actor_to_proto),
+        created_by_subject_id: subject_id_to_proto(input.created_by_subject_id),
         provider_name: input.provider_name,
         definition_id: input.definition_id,
         run_as: input.run_as.map(workflow_subject_to_proto),
@@ -1672,7 +1615,7 @@ pub(crate) fn bound_workflow_event_trigger_from_proto(
             .as_ref()
             .map(protocol::system_time_from_timestamp)
             .transpose()?,
-        created_by: input.created_by.map(workflow_actor_from_proto),
+        created_by_subject_id: subject_id_from_proto(input.created_by_subject_id),
         provider_name: input.provider_name,
         definition_id: input.definition_id,
         run_as: input.run_as.map(workflow_subject_from_proto),
@@ -1695,7 +1638,7 @@ pub(crate) fn bound_workflow_definition_from_proto(
             .target
             .map(bound_workflow_target_from_proto)
             .transpose()?,
-        created_by: input.created_by.map(workflow_actor_from_proto),
+        created_by_subject_id: subject_id_from_proto(input.created_by_subject_id),
         created_at: input
             .created_at
             .as_ref()
@@ -1714,7 +1657,7 @@ pub(crate) fn bound_workflow_definition_to_proto(
             .target
             .map(bound_workflow_target_to_proto)
             .transpose()?,
-        created_by: input.created_by.map(workflow_actor_to_proto),
+        created_by_subject_id: subject_id_to_proto(input.created_by_subject_id),
         created_at: input.created_at.map(protocol::timestamp_from_system_time),
         provider_name: input.provider_name,
     })
@@ -1729,7 +1672,7 @@ fn start_workflow_provider_run_request_from_proto(
             .map(bound_workflow_target_from_proto)
             .transpose()?,
         idempotency_key: request.idempotency_key,
-        created_by: request.created_by.map(workflow_actor_from_proto),
+        created_by_subject_id: subject_id_from_proto(request.created_by_subject_id),
         workflow_key: request.workflow_key,
         definition_id: request.definition_id,
         run_as: request.run_as.map(workflow_subject_from_proto),
@@ -1757,7 +1700,7 @@ fn create_workflow_provider_definition_request_from_proto(
             .map(bound_workflow_target_from_proto)
             .transpose()?,
         idempotency_key: request.idempotency_key,
-        created_by: request.created_by.map(workflow_actor_from_proto),
+        created_by_subject_id: subject_id_from_proto(request.created_by_subject_id),
     })
 }
 
@@ -1771,7 +1714,7 @@ fn update_workflow_provider_definition_request_from_proto(
             .target
             .map(bound_workflow_target_from_proto)
             .transpose()?,
-        requested_by: request.requested_by.map(workflow_actor_from_proto),
+        requested_by_subject_id: subject_id_from_proto(request.requested_by_subject_id),
     })
 }
 
@@ -1811,7 +1754,7 @@ fn upsert_schedule_request_from_proto(
             .map(bound_workflow_target_from_proto)
             .transpose()?,
         paused: request.paused,
-        requested_by: request.requested_by.map(workflow_actor_from_proto),
+        requested_by_subject_id: subject_id_from_proto(request.requested_by_subject_id),
         idempotency_key: request.idempotency_key,
         definition_id: request.definition_id,
         run_as: request.run_as.map(workflow_subject_from_proto),
@@ -1841,7 +1784,7 @@ fn upsert_event_trigger_request_from_proto(
             .map(bound_workflow_target_from_proto)
             .transpose()?,
         paused: request.paused,
-        requested_by: request.requested_by.map(workflow_actor_from_proto),
+        requested_by_subject_id: subject_id_from_proto(request.requested_by_subject_id),
         idempotency_key: request.idempotency_key,
         definition_id: request.definition_id,
         run_as: request.run_as.map(workflow_subject_from_proto),
@@ -1866,7 +1809,7 @@ fn publish_event_request_from_proto(
     Ok(PublishWorkflowProviderEventRequest {
         app_name: request.app_name,
         event: request.event.map(workflow_event_from_proto).transpose()?,
-        published_by: request.published_by.map(workflow_actor_from_proto),
+        published_by_subject_id: subject_id_from_proto(request.published_by_subject_id),
     })
 }
 
@@ -2395,7 +2338,7 @@ where
                         .transpose()
                         .map_err(|error| rpc_status("workflow signal or start run", error))?,
                     idempotency_key: request.idempotency_key,
-                    created_by: request.created_by.map(workflow_actor_from_proto),
+                    created_by_subject_id: subject_id_from_proto(request.created_by_subject_id),
                     signal: request
                         .signal
                         .map(workflow_signal_from_proto)

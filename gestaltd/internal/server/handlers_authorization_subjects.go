@@ -21,7 +21,6 @@ import (
 type createManagedSubjectRequest struct {
 	ID          string `json:"id"`
 	SubjectID   string `json:"subjectId"`
-	Kind        string `json:"kind"`
 	DisplayName string `json:"displayName"`
 	Description string `json:"description"`
 }
@@ -34,7 +33,6 @@ type updateManagedSubjectRequest struct {
 type managedSubjectInfo struct {
 	ID                 string     `json:"id"`
 	SubjectID          string     `json:"subjectId"`
-	Kind               string     `json:"kind"`
 	DisplayName        string     `json:"displayName"`
 	Description        string     `json:"description,omitempty"`
 	CreatedBySubjectID string     `json:"createdBySubjectId,omitempty"`
@@ -109,7 +107,6 @@ func (s *Server) createManagedSubject(w http.ResponseWriter, r *http.Request) {
 
 	subject, err := s.managedSubjects.CreateManagedSubject(r.Context(), &core.ManagedSubject{
 		SubjectID:          subjectID,
-		Kind:               coredata.ManagedSubjectKindServiceAccount,
 		DisplayName:        displayName,
 		Description:        req.Description,
 		CreatedBySubjectID: creatorSubjectID,
@@ -841,7 +838,6 @@ func managedSubjectInfoFromCore(subject *core.ManagedSubject) managedSubjectInfo
 	return managedSubjectInfo{
 		ID:                 id,
 		SubjectID:          subject.SubjectID,
-		Kind:               subject.Kind,
 		DisplayName:        subject.DisplayName,
 		Description:        subject.Description,
 		CreatedBySubjectID: subject.CreatedBySubjectID,
@@ -852,13 +848,6 @@ func managedSubjectInfoFromCore(subject *core.ManagedSubject) managedSubjectInfo
 }
 
 func managedSubjectIDFromCreateRequest(req createManagedSubjectRequest) (string, error) {
-	kind := strings.TrimSpace(req.Kind)
-	if kind == "" {
-		kind = coredata.ManagedSubjectKindServiceAccount
-	}
-	if kind != coredata.ManagedSubjectKindServiceAccount {
-		return "", fmt.Errorf("kind must be %q", coredata.ManagedSubjectKindServiceAccount)
-	}
 	if subjectID := strings.TrimSpace(req.SubjectID); subjectID != "" {
 		return canonicalServiceAccountSubjectID(subjectID)
 	}

@@ -2992,7 +2992,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3009,7 +3008,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-events
-          kind: service_account
       match:
         type: roadmap.task.updated
         source: roadmap
@@ -3045,9 +3043,7 @@ server:
 			Provider: "temporal",
 			RunAs: &WorkflowRunAsConfig{
 				Subject: &WorkflowRunAsSubjectConfig{
-					ID:         "service_account:roadmap-workflow",
-					Kind:       "service_account",
-					AuthSource: "config",
+					ID: "service_account:roadmap-workflow",
 				},
 			},
 			Target: workflowTestAppStepTargetConfig("roadmap", "nightly_sync", providermanifestv1.ConnectionModeNone, map[string]any{
@@ -3063,9 +3059,7 @@ server:
 			Provider: "temporal",
 			RunAs: &WorkflowRunAsConfig{
 				Subject: &WorkflowRunAsSubjectConfig{
-					ID:         "service_account:roadmap-events",
-					Kind:       "service_account",
-					AuthSource: "config",
+					ID: "service_account:roadmap-events",
 				},
 			},
 			Target: workflowTestAppStepTargetConfig("roadmap", "backfill_items", "", map[string]any{
@@ -3100,7 +3094,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3135,7 +3128,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3169,7 +3161,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3198,7 +3189,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3238,7 +3228,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3492,7 +3481,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3583,7 +3571,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3678,7 +3665,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       cron: "*/5 * * * *"
       target:
         steps:
@@ -3722,7 +3708,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-events
-          kind: service_account
       match:
         type: roadmap.task.updated
       target:
@@ -3767,7 +3752,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-events
-          kind: service_account
       match:
         source: roadmap
       target:
@@ -3815,7 +3799,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       cron: "0 0 0 * * *"
       timezone: Mars/Olympus
       target:
@@ -6262,8 +6245,7 @@ func TestValidateStructureCanonicalizesAppInvokeRunAs(t *testing.T) {
 					CredentialMode: providermanifestv1.ConnectionModeNone,
 					RunAs: &AppInvocationRunAsConfig{
 						Subject: &AppInvocationRunAsSubjectConfig{
-							ID:          " service_account:automation ",
-							DisplayName: " Automation app ",
+							ID: " service_account:automation ",
 						},
 						ApplyByDefault: &applyByDefault,
 					},
@@ -6282,7 +6264,7 @@ func TestValidateStructureCanonicalizesAppInvokeRunAs(t *testing.T) {
 	if subject.SubjectID != "service_account:automation" {
 		t.Fatalf("RunAsSubject().SubjectID = %q", subject.SubjectID)
 	}
-	if subject.SubjectKind != "service_account" || subject.CredentialSubjectID != subject.SubjectID || subject.DisplayName != "Automation app" {
+	if subject.CredentialSubjectID != subject.SubjectID {
 		t.Fatalf("RunAsSubject() = %#v, want normalized service account subject", subject)
 	}
 	if cfg.Apps["source"].Invokes[0].RunAsAppliesByDefault() {
@@ -6328,8 +6310,7 @@ func TestValidateStructureRejectsAppInvokeRunAsOnSurface(t *testing.T) {
 					Surface: string(SpecSurfaceGraphQL),
 					RunAs: &AppInvocationRunAsConfig{
 						Subject: &AppInvocationRunAsSubjectConfig{
-							ID:   "service_account:automation",
-							Kind: "service_account",
+							ID: "service_account:automation",
 						},
 					},
 				}},

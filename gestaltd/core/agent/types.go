@@ -33,8 +33,6 @@ const (
 	SessionStateArchived SessionState = "archived"
 )
 
-type Actor = core.Actor
-
 type Message struct {
 	Role     string
 	Text     string
@@ -141,7 +139,7 @@ type Session struct {
 	ClientRef    string
 	State        SessionState
 	Metadata     map[string]any
-	CreatedBy    Actor
+	CreatedBySubjectID string
 	CreatedAt    *time.Time
 	UpdatedAt    *time.Time
 	LastTurnAt   *time.Time
@@ -191,7 +189,7 @@ type Turn struct {
 	Messages      []Message
 	Output        TurnOutput
 	StatusMessage string
-	CreatedBy     Actor
+	CreatedBySubjectID string
 	CreatedAt     *time.Time
 	StartedAt     *time.Time
 	CompletedAt   *time.Time

@@ -34,6 +34,7 @@ from ._api import (
     Response,
     Subject,
     field,
+    parse_subject_id,
 )
 
 _AGENT_PROTOCOL_EXPORTS = (
@@ -64,8 +65,7 @@ _AGENT_PROTOCOL_EXPORTS = (
     "AGENT_TOOL_SOURCE_MODE_MCP_CATALOG",
     "AGENT_TOOL_SOURCE_MODE_NONE",
     "AGENT_TOOL_SOURCE_MODE_UNSPECIFIED",
-    "AgentActor",
-    "AgentInteraction",
+        "AgentInteraction",
     "AgentMessage",
     "AgentMessagePart",
     "AgentMessagePartImageRef",
@@ -277,8 +277,7 @@ _WORKFLOW_AUTHORED_EXPORTS = (
     "WORKFLOW_RUN_STATUS_RUNNING",
     "WORKFLOW_RUN_STATUS_SUCCEEDED",
     "WORKFLOW_RUN_STATUS_UNSPECIFIED",
-    "WorkflowActor",
-    "WorkflowEvent",
+        "WorkflowEvent",
     "WorkflowEventMatch",
     "WorkflowEventTriggerInvocation",
     "Workflow",
@@ -651,6 +650,7 @@ __all__ = [
     "S3ReadStream",
     "SecretsProvider",
     "Subject",
+    "parse_subject_id",
     "SessionCatalogProvider",
     "SessionTTLProvider",
     "Starter",

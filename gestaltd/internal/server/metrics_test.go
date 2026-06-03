@@ -641,9 +641,6 @@ func TestPlatformAuthMetrics(t *testing.T) {
 	if auditRecord["operation"] != "api_token.list" {
 		t.Fatalf("expected audit operation api_token.list, got %v", auditRecord["operation"])
 	}
-	if auditRecord["auth_source"] != "session" {
-		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
-	}
 	if auditRecord["allowed"] != true {
 		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
 	}

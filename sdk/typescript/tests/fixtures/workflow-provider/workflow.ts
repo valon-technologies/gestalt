@@ -8,6 +8,8 @@ import {
   defineWorkflowProvider,
   workflowEvent,
   type BoundWorkflowDefinition,
+  type BoundWorkflowEventTrigger,
+  type BoundWorkflowSchedule,
   type BoundWorkflowTarget,
   type DeleteWorkflowProviderDefinitionRequest,
   type DeleteWorkflowProviderEventTriggerRequest,
@@ -40,7 +42,6 @@ function appStepTarget(appName: string, operation: string): BoundWorkflowTarget 
 }
 
 export const provider = defineWorkflowProvider({
-  displayName: "Fixture Workflow",
   description: "Workflow provider fixture used by SDK tests",
   configure() {
     runs.clear();
@@ -121,7 +122,7 @@ export const provider = defineWorkflowProvider({
       id: `${request.workflowKey || "workflow"}:${runs.size + 1}`,
       status: WorkflowRunStatus.PENDING,
       target: request.target,
-      createdBy: request.createdBy,
+      createdBySubjectId: request.createdBySubjectId,
       workflowKey: request.workflowKey,
       definitionId: request.definitionId,
     });
@@ -250,7 +251,7 @@ function updateSchedule(
     cron: schedule.cron,
     timezone: schedule.timezone,
     paused,
-    ...(schedule.createdBy ? { createdBy: schedule.createdBy } : {}),
+    ...(schedule.createdBySubjectId ? { createdBySubjectId: schedule.createdBySubjectId } : {}),
     ...(schedule.target ? { target: schedule.target } : {}),
     ...(schedule.createdAt ? { createdAt: schedule.createdAt } : {}),
     ...(schedule.updatedAt ? { updatedAt: schedule.updatedAt } : {}),
@@ -273,7 +274,7 @@ function updateTrigger(
   const updated = boundWorkflowEventTrigger({
     id: trigger.id,
     paused,
-    ...(trigger.createdBy ? { createdBy: trigger.createdBy } : {}),
+    ...(trigger.createdBySubjectId ? { createdBySubjectId: trigger.createdBySubjectId } : {}),
     ...(trigger.match ? { match: trigger.match } : {}),
     ...(trigger.target ? { target: trigger.target } : {}),
     ...(trigger.createdAt ? { createdAt: trigger.createdAt } : {}),
@@ -309,7 +310,7 @@ function createRun(
     id,
     status,
     statusMessage,
-    ...(request.createdBy ? { createdBy: request.createdBy } : {}),
+    ...(request.createdBySubjectId ? { createdBySubjectId: request.createdBySubjectId } : {}),
     ...(request.target ? { target: request.target } : {}),
     ...(request.definitionId ? { definitionId: request.definitionId } : {}),
   });
@@ -317,17 +318,17 @@ function createRun(
 
 function createSchedule(
   request: UpsertWorkflowProviderScheduleRequest,
-  existing?: { createdBy?: UpsertWorkflowProviderScheduleRequest["requestedBy"] },
+  existing?: BoundWorkflowSchedule,
 ) {
   return boundWorkflowSchedule({
     id: request.scheduleId,
     cron: request.cron,
     timezone: request.timezone,
     paused: request.paused,
-    ...(existing?.createdBy
-      ? { createdBy: existing.createdBy }
-      : request.requestedBy
-        ? { createdBy: request.requestedBy }
+    ...(existing?.createdBySubjectId
+      ? { createdBySubjectId: existing.createdBySubjectId }
+      : request.requestedBySubjectId
+        ? { createdBySubjectId: request.requestedBySubjectId }
         : {}),
     ...(request.target ? { target: request.target } : {}),
     ...(request.definitionId ? { definitionId: request.definitionId } : {}),
@@ -336,15 +337,15 @@ function createSchedule(
 
 function createTrigger(
   request: UpsertWorkflowProviderEventTriggerRequest,
-  existing?: { createdBy?: UpsertWorkflowProviderEventTriggerRequest["requestedBy"] },
+  existing?: BoundWorkflowEventTrigger,
 ) {
   return boundWorkflowEventTrigger({
     id: request.triggerId,
     paused: request.paused,
-    ...(existing?.createdBy
-      ? { createdBy: existing.createdBy }
-      : request.requestedBy
-        ? { createdBy: request.requestedBy }
+    ...(existing?.createdBySubjectId
+      ? { createdBySubjectId: existing.createdBySubjectId }
+      : request.requestedBySubjectId
+        ? { createdBySubjectId: request.requestedBySubjectId }
         : {}),
     ...(request.match ? { match: request.match } : {}),
     ...(request.target ? { target: request.target } : {}),

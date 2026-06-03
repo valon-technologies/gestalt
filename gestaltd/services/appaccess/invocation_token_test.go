@@ -192,10 +192,8 @@ func TestInvocationTokenExchangePreservesInvocationDelegationMetadata(t *testing
 	delegation := InvocationDelegation{
 		RunAs: &core.RunAsSubject{
 			SubjectID:           "service_account:data-schema-explorer",
-			SubjectKind:         "service_account",
-			CredentialSubjectID: "service_account:data-schema-explorer",
-			DisplayName:         "Data Schema Explorer",
-		},
+						CredentialSubjectID: "service_account:data-schema-explorer",
+					},
 	}
 	rootToken, err := manager.MintRootToken(context.Background(), "caller", InvocationGrants{
 		InvocationGrantAllApps: {AllOperations: true},
@@ -340,8 +338,7 @@ func TestInvocationTokenResolvePreservesEmailOnlyPrincipals(t *testing.T) {
 		&principal.Principal{
 			Identity: &core.UserIdentity{
 				Email:       "ada@example.com",
-				DisplayName: "Ada",
-			},
+							},
 			Kind:   principal.KindUser,
 			Source: principal.SourceEnv,
 		},

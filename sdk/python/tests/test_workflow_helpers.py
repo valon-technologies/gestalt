@@ -315,7 +315,7 @@ class WorkflowHelperTests(unittest.TestCase):
                 ]
             ),
             trigger=gestalt.WorkflowRunTrigger(manual=True),
-            created_by=gestalt.WorkflowActor(subject_id="user-1", subject_kind="user"),
+            created_by_subject_id="user:user-1",
             signals=[
                 gestalt.WorkflowSignal(
                     id="sig-1",
@@ -348,7 +348,7 @@ class WorkflowHelperTests(unittest.TestCase):
             },
         )
         self.assertEqual(ctx["trigger"], {"kind": "manual"})
-        self.assertEqual(ctx["createdBy"], {"subjectId": "user-1", "subjectKind": "user"})
+        self.assertEqual(ctx["createdBySubjectId"], "user:user-1")
         self.assertEqual(
             ctx["signals"],
             [
@@ -378,7 +378,7 @@ class WorkflowHelperTests(unittest.TestCase):
                 },
                 "input": {"repository": "valon/app"},
                 "metadata": {"definitionId": "def-1"},
-                "createdBy": {"subjectId": "user-1", "subjectKind": "user"},
+                "createdBySubjectId": "user:user-1",
                 "signals": [
                     "ignored",
                     {"id": "sig-1", "name": "queued", "payload": {"state": "queued"}},
@@ -391,7 +391,7 @@ class WorkflowHelperTests(unittest.TestCase):
                             "payloadOmitted": True,
                         },
                         "metadata": {"source": "webhook"},
-                        "createdBy": {"subjectId": "bot-1", "displayName": "GitHub"},
+                        "createdBySubjectId": "bot:github",
                         "createdAt": "2026-05-08T12:01:00Z",
                         "idempotencyKey": "idem-1",
                         "sequence": 2,
@@ -410,16 +410,14 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(ctx.trigger.scheduled_for, "2026-05-08T12:00:00Z")
         self.assertEqual(ctx.input, {"repository": "valon/app"})
         self.assertEqual(ctx.metadata, {"definitionId": "def-1"})
-        assert ctx.created_by is not None
-        self.assertEqual(ctx.created_by.subject_id, "user-1")
+        self.assertEqual(ctx.created_by_subject_id, "user:user-1")
         self.assertEqual(len(ctx.signals), 2)
         latest_signal = ctx.latest_signal
         assert latest_signal is not None
         self.assertEqual(latest_signal.id, "sig-2")
         self.assertEqual(latest_signal.payload["github_event"], "pull_request")
         self.assertEqual(latest_signal.metadata, {"source": "webhook"})
-        assert latest_signal.created_by is not None
-        self.assertEqual(latest_signal.created_by.display_name, "GitHub")
+        self.assertEqual(latest_signal.created_by_subject_id, "bot:github")
         self.assertEqual(latest_signal.sequence, 2)
 
     def test_parse_workflow_run_context_preserves_struct_sequence(self) -> None:
@@ -471,7 +469,7 @@ class WorkflowHelperTests(unittest.TestCase):
         )
         self.assertEqual(ctx.input, {})
         self.assertEqual(ctx.metadata, {})
-        self.assertIsNone(ctx.created_by)
+        self.assertEqual(ctx.created_by_subject_id, "")
         self.assertEqual(len(ctx.signals), 1)
         self.assertEqual(ctx.signals[0].payload, {})
         self.assertEqual(ctx.signals[0].metadata, {"ok": True})

@@ -18,15 +18,13 @@ func TestToolRefProtoRoundTripCarriesRunAs(t *testing.T) {
 		Title:       "Search support Notion",
 		Description: "Search support pages",
 		RunAs: &core.RunAsSubject{
-			SubjectID:   " service_account:gestalt-support-notion ",
-			DisplayName: " Gestalt Support Notion ",
-			AuthSource:  " notion_service_account ",
+			SubjectID: " service_account:gestalt-support-notion ",
 		},
 	}
 
 	encoded := ToolRefToProto(ref)
-	if got := encoded.GetRunAs().GetKind(); got != "service_account" {
-		t.Fatalf("encoded runAs subject kind = %q, want service_account", got)
+	if got := encoded.GetRunAs().GetId(); got != "service_account:gestalt-support-notion" {
+		t.Fatalf("encoded runAs subject id = %q, want service_account:gestalt-support-notion", got)
 	}
 	if got := encoded.GetRunAs().GetCredentialSubjectId(); got != "service_account:gestalt-support-notion" {
 		t.Fatalf("encoded runAs credential subject = %q, want normalized default", got)

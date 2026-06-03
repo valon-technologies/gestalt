@@ -265,29 +265,8 @@ func agentCallerAppName(ctx context.Context) string {
 	return callerAppNameFromContext(ctx)
 }
 
-func agentActorToProto(actor coreagent.Actor) *proto.AgentActor {
-	if actor == (coreagent.Actor{}) {
-		return nil
-	}
-	return &proto.AgentActor{
-		SubjectId:   actor.SubjectID,
-		SubjectKind: actor.SubjectKind,
-		DisplayName: actor.DisplayName,
-		AuthSource:  actor.AuthSource,
-	}
-}
-
 func agentSubjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
-	if subject == (core.RunAsSubject{}) {
-		return nil
-	}
-	return &proto.SubjectContext{
-		Id:                  subject.SubjectID,
-		Kind:                subject.SubjectKind,
-		CredentialSubjectId: subject.CredentialSubjectID,
-		DisplayName:         subject.DisplayName,
-		AuthSource:          subject.AuthSource,
-	}
+	return agentwire.RunAsSubjectToProto(&subject)
 }
 
 func agentWorkspaceFromProto(workspace *proto.AgentWorkspace) *coreagent.Workspace {
@@ -506,7 +485,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	providerReq.Model = strings.TrimSpace(req.GetModel())
 	providerReq.ClientRef = strings.TrimSpace(req.GetClientRef())
 	providerReq.Metadata = req.GetMetadata()
-	providerReq.CreatedBy = agentActorToProto(agentActorFromPrincipal(p))
+	providerReq.CreatedBySubjectId = agentSubjectIDFromPrincipal(p)
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	providerReq.SessionStart = sessionStartConfigToProto(sessionStart)
 	providerReq.Workspace = agentWorkspaceToProto(workspace)
@@ -812,7 +791,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.ToolRefsSet = toolRefsSet
 	providerReq.ToolSource = agentwire.ToolSourceModeToProto(toolSource)
 	providerReq.Tools = nil
-	providerReq.CreatedBy = agentActorToProto(agentActorFromPrincipal(p))
+	providerReq.CreatedBySubjectId = agentSubjectIDFromPrincipal(p)
 	providerReq.ExecutionRef = turnID
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	providerReq.RunGrant = runGrant
@@ -1484,10 +1463,7 @@ func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, prov
 		TurnID:              turnID,
 		CallerAppName:       strings.TrimSpace(callerAppName),
 		SubjectID:           subject.SubjectID,
-		SubjectKind:         subject.SubjectKind,
 		CredentialSubjectID: subject.CredentialSubjectID,
-		DisplayName:         subject.DisplayName,
-		AuthSource:          subject.AuthSource,
 		Permissions:         permissions,
 		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
 		ToolRefsSet:         toolRefsSet,
@@ -2413,7 +2389,7 @@ func providerSessionOwnedBy(session *coreagent.Session, p *principal.Principal) 
 		return false
 	}
 	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	return subjectID != "" && strings.TrimSpace(session.CreatedBy.SubjectID) == subjectID
+	return subjectID != "" && strings.TrimSpace(session.CreatedBySubjectID) == subjectID
 }
 
 func providerTurnOwnedBy(turn *coreagent.Turn, p *principal.Principal) bool {
@@ -2421,7 +2397,7 @@ func providerTurnOwnedBy(turn *coreagent.Turn, p *principal.Principal) bool {
 		return false
 	}
 	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	return subjectID != "" && strings.TrimSpace(turn.CreatedBy.SubjectID) == subjectID
+	return subjectID != "" && strings.TrimSpace(turn.CreatedBySubjectID) == subjectID
 }
 
 func normalizeProviderSession(providerName, sessionID string, session *coreagent.Session) (*coreagent.Session, error) {
@@ -3739,7 +3715,6 @@ func agentToolRunAsKey(subject *core.RunAsSubject) core.RunAsSubject {
 	}
 	return core.RunAsSubject{
 		SubjectID:           normalized.SubjectID,
-		SubjectKind:         normalized.SubjectKind,
 		CredentialSubjectID: normalized.CredentialSubjectID,
 	}
 }
@@ -3750,7 +3725,6 @@ func agentToolRunAsKeyString(subject core.RunAsSubject) string {
 	}
 	return strings.Join([]string{
 		subject.SubjectID,
-		subject.SubjectKind,
 		subject.CredentialSubjectID,
 	}, "\x00")
 }
@@ -3924,17 +3898,12 @@ func normalizeAgentToolCredentialMode(mode core.ConnectionMode) (core.Connection
 	}
 }
 
-func agentActorFromPrincipal(p *principal.Principal) coreagent.Actor {
+func agentSubjectIDFromPrincipal(p *principal.Principal) string {
 	p = principal.Canonicalized(p)
 	if p == nil {
-		return coreagent.Actor{}
+		return ""
 	}
-	return coreagent.Actor{
-		SubjectID:   strings.TrimSpace(p.SubjectID),
-		SubjectKind: string(p.Kind),
-		DisplayName: agentActorDisplayName(p),
-		AuthSource:  p.AuthSource(),
-	}
+	return strings.TrimSpace(p.SubjectID)
 }
 
 func agentSubjectFromPrincipal(p *principal.Principal) core.RunAsSubject {
@@ -3944,24 +3913,8 @@ func agentSubjectFromPrincipal(p *principal.Principal) core.RunAsSubject {
 	}
 	return core.RunAsSubject{
 		SubjectID:           strings.TrimSpace(p.SubjectID),
-		SubjectKind:         string(p.Kind),
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-		DisplayName:         agentActorDisplayName(p),
-		AuthSource:          p.AuthSource(),
 	}
-}
-
-func agentActorDisplayName(p *principal.Principal) string {
-	if p == nil {
-		return ""
-	}
-	if value := strings.TrimSpace(p.DisplayName); value != "" {
-		return value
-	}
-	if p.Identity != nil {
-		return strings.TrimSpace(p.Identity.DisplayName)
-	}
-	return ""
 }
 
 func principalSubjectID(p *principal.Principal) string {

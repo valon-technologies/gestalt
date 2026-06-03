@@ -16,7 +16,6 @@ import {
   ListWorkflowProviderRunsResponseSchema,
   ListWorkflowProviderSchedulesResponseSchema,
   SignalWorkflowRunResponseSchema,
-  WorkflowActorSchema,
   WorkflowEventMatchSchema,
   WorkflowEventSchema,
   WorkflowEventTriggerInvocationSchema,
@@ -59,7 +58,6 @@ import {
   type UpdateWorkflowProviderDefinitionRequest as ProtoUpdateWorkflowProviderDefinitionRequest,
   type UpsertWorkflowProviderEventTriggerRequest as ProtoUpsertWorkflowProviderEventTriggerRequest,
   type UpsertWorkflowProviderScheduleRequest as ProtoUpsertWorkflowProviderScheduleRequest,
-  type WorkflowActor as ProtoWorkflowActor,
   type WorkflowEvent as ProtoWorkflowEvent,
   type WorkflowEventMatch as ProtoWorkflowEventMatch,
   type WorkflowEventTriggerInvocation as ProtoWorkflowEventTriggerInvocation,
@@ -215,12 +213,6 @@ export interface WorkflowStep {
   action?: WorkflowStepActionKind | undefined;
 }
 
-export interface WorkflowActor {
-  subjectId?: string | undefined;
-  subjectKind?: string | undefined;
-  displayName?: string | undefined;
-  authSource?: string | undefined;
-}
 
 export interface WorkflowEvent {
   id?: string | undefined;
@@ -245,7 +237,7 @@ export interface WorkflowSignal {
   name?: string | undefined;
   payload?: JsonObjectInput | undefined;
   metadata?: JsonObjectInput | undefined;
-  createdBy?: WorkflowActor | undefined;
+  createdBySubjectId?: string | undefined;
   createdAt?: Date | undefined;
   idempotencyKey?: string | undefined;
   sequence?: bigint | number | undefined;
@@ -284,7 +276,7 @@ export interface BoundWorkflowRun {
   completedAt?: Date | undefined;
   statusMessage?: string | undefined;
   resultBody?: string | undefined;
-  createdBy?: WorkflowActor | undefined;
+  createdBySubjectId?: string | undefined;
   workflowKey?: string | undefined;
   providerName?: string | undefined;
   definitionId?: string | undefined;
@@ -299,7 +291,7 @@ export interface BoundWorkflowSchedule {
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
   nextRunAt?: Date | undefined;
-  createdBy?: WorkflowActor | undefined;
+  createdBySubjectId?: string | undefined;
   providerName?: string | undefined;
   definitionId?: string | undefined;
 }
@@ -311,7 +303,7 @@ export interface BoundWorkflowEventTrigger {
   paused?: boolean | undefined;
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
-  createdBy?: WorkflowActor | undefined;
+  createdBySubjectId?: string | undefined;
   providerName?: string | undefined;
   definitionId?: string | undefined;
 }
@@ -319,7 +311,7 @@ export interface BoundWorkflowEventTrigger {
 export interface BoundWorkflowDefinition {
   id?: string | undefined;
   target?: BoundWorkflowTarget | undefined;
-  createdBy?: WorkflowActor | undefined;
+  createdBySubjectId?: string | undefined;
   createdAt?: Date | undefined;
   providerName?: string | undefined;
 }
@@ -327,7 +319,7 @@ export interface BoundWorkflowDefinition {
 export interface StartWorkflowProviderRunRequest {
   target?: BoundWorkflowTarget | undefined;
   idempotencyKey: string;
-  createdBy?: WorkflowActor | undefined;
+  createdBySubjectId?: string | undefined;
   workflowKey: string;
   definitionId?: string | undefined;
 }
@@ -362,7 +354,7 @@ export interface SignalOrStartWorkflowProviderRunRequest {
   workflowKey: string;
   target?: BoundWorkflowTarget | undefined;
   idempotencyKey: string;
-  createdBy?: WorkflowActor | undefined;
+  createdBySubjectId?: string | undefined;
   signal?: WorkflowSignal | undefined;
   definitionId?: string | undefined;
 }
@@ -377,7 +369,7 @@ export interface SignalWorkflowRunResponse {
 export interface CreateWorkflowProviderDefinitionRequest {
   target?: BoundWorkflowTarget | undefined;
   idempotencyKey: string;
-  createdBy?: WorkflowActor | undefined;
+  createdBySubjectId?: string | undefined;
 }
 
 export interface GetWorkflowProviderDefinitionRequest {
@@ -387,7 +379,7 @@ export interface GetWorkflowProviderDefinitionRequest {
 export interface UpdateWorkflowProviderDefinitionRequest {
   definitionId: string;
   target?: BoundWorkflowTarget | undefined;
-  requestedBy?: WorkflowActor | undefined;
+  requestedBySubjectId?: string | undefined;
 }
 
 export interface DeleteWorkflowProviderDefinitionRequest {
@@ -400,7 +392,7 @@ export interface UpsertWorkflowProviderScheduleRequest {
   timezone: string;
   target?: BoundWorkflowTarget | undefined;
   paused: boolean;
-  requestedBy?: WorkflowActor | undefined;
+  requestedBySubjectId?: string | undefined;
   idempotencyKey?: string | undefined;
   definitionId?: string | undefined;
 }
@@ -428,7 +420,7 @@ export interface UpsertWorkflowProviderEventTriggerRequest {
   match?: WorkflowEventMatch | undefined;
   target?: BoundWorkflowTarget | undefined;
   paused: boolean;
-  requestedBy?: WorkflowActor | undefined;
+  requestedBySubjectId?: string | undefined;
   idempotencyKey?: string | undefined;
   definitionId?: string | undefined;
 }
@@ -454,7 +446,7 @@ export interface ResumeWorkflowProviderEventTriggerRequest {
 export interface PublishWorkflowProviderEventRequest {
   appName: string;
   event?: WorkflowEvent | undefined;
-  publishedBy?: WorkflowActor | undefined;
+  publishedBySubjectId?: string | undefined;
 }
 
 export interface WorkflowSchedule {
@@ -483,21 +475,6 @@ export interface WorkflowRunSignal {
   signal?: WorkflowSignal | undefined;
   startedRun?: boolean | undefined;
   workflowKey?: string | undefined;
-}
-
-/** Creates workflow actor metadata from native input. */
-export function workflowActor(input: WorkflowActor = {}): WorkflowActor {
-  return {
-    subjectId: input.subjectId ?? "",
-    subjectKind: input.subjectKind ?? "",
-    displayName: input.displayName ?? "",
-    authSource: input.authSource ?? "",
-  };
-}
-
-/** Returns native input copied from workflow actor metadata. */
-export function workflowActorInputFromActor(input?: WorkflowActor): WorkflowActor | undefined {
-  return input === undefined ? undefined : { ...input };
 }
 
 /** Creates workflow event-match fields from native input. */
@@ -887,7 +864,7 @@ export function workflowSignal(input: WorkflowSignal = {}): WorkflowSignal {
     name: input.name ?? "",
     payload: input.payload === undefined ? undefined : structFromObject(input.payload),
     metadata: input.metadata === undefined ? undefined : structFromObject(input.metadata),
-    createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId?.trim() ?? "",
     createdAt: input.createdAt,
     idempotencyKey: input.idempotencyKey ?? "",
     sequence: input.sequence === undefined ? 0n : BigInt(input.sequence),
@@ -904,7 +881,7 @@ export function workflowSignalInputFromSignal(input?: WorkflowSignal): WorkflowS
     name: input.name,
     payload: input.payload === undefined ? undefined : jsonObjectClone(input.payload),
     metadata: input.metadata === undefined ? undefined : jsonObjectClone(input.metadata),
-    createdBy: workflowActorInputFromActor(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId,
     createdAt: input.createdAt,
     idempotencyKey: input.idempotencyKey,
     sequence: input.sequence,
@@ -1007,7 +984,7 @@ export function boundWorkflowRun(input: BoundWorkflowRun = {}): BoundWorkflowRun
     completedAt: input.completedAt,
     statusMessage: input.statusMessage ?? "",
     resultBody: input.resultBody ?? "",
-    createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId?.trim() ?? "",
     workflowKey: input.workflowKey ?? "",
     providerName: input.providerName ?? "",
     definitionId: input.definitionId ?? "",
@@ -1027,7 +1004,7 @@ export function boundWorkflowRunInputFromRun(input?: BoundWorkflowRun): BoundWor
     trigger: workflowRunTriggerInputFromTrigger(input.trigger) === undefined
       ? undefined
       : workflowRunTrigger(input.trigger!),
-    createdBy: workflowActorInputFromActor(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId,
   };
 }
 
@@ -1043,7 +1020,7 @@ export function boundWorkflowDefinition(
   return {
     id: input.id ?? "",
     target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
-    createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId?.trim() ?? "",
     createdAt: input.createdAt,
     providerName: input.providerName ?? "",
   };
@@ -1059,7 +1036,7 @@ export function boundWorkflowDefinitionInputFromDefinition(
   return {
     ...input,
     target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
-    createdBy: workflowActorInputFromActor(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId,
   };
 }
 
@@ -1083,7 +1060,7 @@ export function boundWorkflowSchedule(
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
     nextRunAt: input.nextRunAt,
-    createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId?.trim() ?? "",
     providerName: input.providerName ?? "",
     definitionId: input.definitionId ?? "",
   };
@@ -1099,7 +1076,7 @@ export function boundWorkflowScheduleInputFromSchedule(
   return {
     ...input,
     target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
-    createdBy: workflowActorInputFromActor(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId,
   };
 }
 
@@ -1121,7 +1098,7 @@ export function boundWorkflowEventTrigger(
     paused: input.paused ?? false,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
-    createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId?.trim() ?? "",
     providerName: input.providerName ?? "",
     definitionId: input.definitionId ?? "",
   };
@@ -1138,7 +1115,7 @@ export function boundWorkflowEventTriggerInputFromTrigger(
     ...input,
     match: workflowEventMatchInputFromMatch(input.match),
     target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
-    createdBy: workflowActorInputFromActor(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId,
   };
 }
 
@@ -1654,30 +1631,6 @@ export function createWorkflowProviderService(
   };
 }
 
-export function workflowActorToProto(input?: WorkflowActor | undefined): ProtoWorkflowActor | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return create(WorkflowActorSchema, {
-    subjectId: input.subjectId ?? "",
-    subjectKind: input.subjectKind ?? "",
-    displayName: input.displayName ?? "",
-    authSource: input.authSource ?? "",
-  });
-}
-
-export function workflowActorFromProto(input?: ProtoWorkflowActor | undefined): WorkflowActor | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    subjectId: input.subjectId,
-    subjectKind: input.subjectKind,
-    displayName: input.displayName,
-    authSource: input.authSource,
-  };
-}
-
 export function workflowEventMatchToProto(
   input?: WorkflowEventMatch | undefined,
 ): ProtoWorkflowEventMatch | undefined {
@@ -2080,7 +2033,7 @@ export function workflowSignalToProto(input?: WorkflowSignal | undefined): Proto
     name: input.name ?? "",
     payload: optionalStruct(input.payload),
     metadata: optionalStruct(input.metadata),
-    createdBy: workflowActorToProto(input.createdBy),
+    createdBySubjectId: (input.createdBySubjectId ?? "").trim(),
     createdAt: optionalTimestamp(input.createdAt),
     idempotencyKey: input.idempotencyKey ?? "",
     sequence: BigInt(input.sequence ?? 0),
@@ -2096,7 +2049,7 @@ export function workflowSignalFromProto(input?: ProtoWorkflowSignal | undefined)
     name: input.name,
     payload: optionalObjectFromStruct(input.payload),
     metadata: optionalObjectFromStruct(input.metadata),
-    createdBy: workflowActorFromProto(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId,
     createdAt: optionalDate(input.createdAt),
     idempotencyKey: input.idempotencyKey,
     sequence: input.sequence,
@@ -2206,7 +2159,7 @@ export function boundWorkflowRunToProto(input: BoundWorkflowRun): ProtoBoundWork
     completedAt: optionalTimestamp(input.completedAt),
     statusMessage: input.statusMessage ?? "",
     resultBody: input.resultBody ?? "",
-    createdBy: workflowActorToProto(input.createdBy),
+    createdBySubjectId: (input.createdBySubjectId ?? "").trim(),
     workflowKey: input.workflowKey ?? "",
     providerName: input.providerName ?? "",
     definitionId: input.definitionId ?? "",
@@ -2227,7 +2180,7 @@ export function boundWorkflowRunFromProto(input?: ProtoBoundWorkflowRun | undefi
     completedAt: optionalDate(input.completedAt),
     statusMessage: input.statusMessage,
     resultBody: input.resultBody,
-    createdBy: workflowActorFromProto(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId,
     workflowKey: input.workflowKey,
     providerName: input.providerName,
     definitionId: input.definitionId,
@@ -2255,7 +2208,7 @@ export function boundWorkflowScheduleToProto(input: BoundWorkflowSchedule): Prot
     createdAt: optionalTimestamp(input.createdAt),
     updatedAt: optionalTimestamp(input.updatedAt),
     nextRunAt: optionalTimestamp(input.nextRunAt),
-    createdBy: workflowActorToProto(input.createdBy),
+    createdBySubjectId: (input.createdBySubjectId ?? "").trim(),
     providerName: input.providerName ?? "",
     definitionId: input.definitionId ?? "",
   });
@@ -2276,7 +2229,7 @@ export function boundWorkflowScheduleFromProto(
     createdAt: optionalDate(input.createdAt),
     updatedAt: optionalDate(input.updatedAt),
     nextRunAt: optionalDate(input.nextRunAt),
-    createdBy: workflowActorFromProto(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId,
     providerName: input.providerName,
     definitionId: input.definitionId,
   };
@@ -2292,7 +2245,7 @@ export function boundWorkflowEventTriggerToProto(
     paused: input.paused ?? false,
     createdAt: optionalTimestamp(input.createdAt),
     updatedAt: optionalTimestamp(input.updatedAt),
-    createdBy: workflowActorToProto(input.createdBy),
+    createdBySubjectId: (input.createdBySubjectId ?? "").trim(),
     providerName: input.providerName ?? "",
     definitionId: input.definitionId ?? "",
   });
@@ -2311,7 +2264,7 @@ export function boundWorkflowEventTriggerFromProto(
     paused: input.paused,
     createdAt: optionalDate(input.createdAt),
     updatedAt: optionalDate(input.updatedAt),
-    createdBy: workflowActorFromProto(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId,
     providerName: input.providerName,
     definitionId: input.definitionId,
   };
@@ -2321,7 +2274,7 @@ export function boundWorkflowDefinitionToProto(input: BoundWorkflowDefinition) {
   return create(BoundWorkflowDefinitionSchema, {
     id: input.id ?? "",
     target: boundWorkflowTargetToProto(input.target),
-    createdBy: workflowActorToProto(input.createdBy),
+    createdBySubjectId: (input.createdBySubjectId ?? "").trim(),
     createdAt: optionalTimestamp(input.createdAt),
     providerName: input.providerName ?? "",
   });
@@ -2336,7 +2289,7 @@ export function boundWorkflowDefinitionFromProto(
   return {
     id: input.id,
     target: boundWorkflowTargetFromProto(input.target),
-    createdBy: workflowActorFromProto(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId,
     createdAt: optionalDate(input.createdAt),
     providerName: input.providerName,
   };
@@ -2348,7 +2301,7 @@ function startWorkflowProviderRunRequestFromProto(
 	return {
 		target: boundWorkflowTargetFromProto(input.target),
 		idempotencyKey: input.idempotencyKey,
-		createdBy: workflowActorFromProto(input.createdBy),
+		createdBySubjectId: input.createdBySubjectId,
 		workflowKey: input.workflowKey,
 		definitionId: input.definitionId,
 	};
@@ -2393,7 +2346,7 @@ function signalOrStartWorkflowProviderRunRequestFromProto(
     workflowKey: input.workflowKey,
     target: boundWorkflowTargetFromProto(input.target),
     idempotencyKey: input.idempotencyKey,
-    createdBy: workflowActorFromProto(input.createdBy),
+    createdBySubjectId: input.createdBySubjectId,
     signal: workflowSignalFromProto(input.signal),
     definitionId: input.definitionId,
   };
@@ -2405,7 +2358,7 @@ function createWorkflowProviderDefinitionRequestFromProto(
 	return {
 		target: boundWorkflowTargetFromProto(input.target),
 		idempotencyKey: input.idempotencyKey,
-		createdBy: workflowActorFromProto(input.createdBy),
+		createdBySubjectId: input.createdBySubjectId,
 	};
 }
 
@@ -2421,7 +2374,7 @@ function updateWorkflowProviderDefinitionRequestFromProto(
   return {
     definitionId: input.definitionId,
     target: boundWorkflowTargetFromProto(input.target),
-    requestedBy: workflowActorFromProto(input.requestedBy),
+    requestedBySubjectId: input.requestedBySubjectId,
   };
 }
 
@@ -2440,7 +2393,7 @@ function upsertWorkflowProviderScheduleRequestFromProto(
     timezone: input.timezone,
     target: boundWorkflowTargetFromProto(input.target),
     paused: input.paused,
-    requestedBy: workflowActorFromProto(input.requestedBy),
+    requestedBySubjectId: input.requestedBySubjectId,
     idempotencyKey: input.idempotencyKey,
     definitionId: input.definitionId,
   };
@@ -2484,7 +2437,7 @@ function upsertWorkflowProviderEventTriggerRequestFromProto(
     match: workflowEventMatchFromProto(input.match),
     target: boundWorkflowTargetFromProto(input.target),
     paused: input.paused,
-    requestedBy: workflowActorFromProto(input.requestedBy),
+    requestedBySubjectId: input.requestedBySubjectId,
     idempotencyKey: input.idempotencyKey,
     definitionId: input.definitionId,
   };
@@ -2526,7 +2479,7 @@ function publishWorkflowProviderEventRequestFromProto(
   return {
     appName: input.appName,
     event: workflowEventFromProto(input.event),
-    publishedBy: workflowActorFromProto(input.publishedBy),
+    publishedBySubjectId: input.publishedBySubjectId,
   };
 }
 
@@ -2669,16 +2622,9 @@ export interface WorkflowExecutionRequest {
   trigger?: WorkflowRunTrigger | undefined;
   input?: Record<string, JsonInput> | undefined;
   metadata?: Record<string, JsonInput> | undefined;
-  createdBy?: WorkflowActor | undefined;
+  createdBySubjectId?: string | undefined;
   invocationToken?: string | undefined;
   signals?: readonly WorkflowSignal[] | undefined;
-}
-
-export interface WorkflowRunContextActor {
-  subjectId: string;
-  subjectKind: string;
-  displayName: string;
-  authSource: string;
 }
 
 export interface WorkflowRunContextTrigger {
@@ -2694,7 +2640,7 @@ export interface WorkflowRunContextSignal {
   name: string;
   payload: Record<string, JsonInput>;
   metadata: Record<string, JsonInput>;
-  createdBy?: WorkflowRunContextActor | undefined;
+  createdBySubjectId?: string | undefined;
   createdAt: string;
   idempotencyKey: string;
   sequence?: number | undefined;
@@ -2708,7 +2654,7 @@ export interface WorkflowRunContext {
   input: Record<string, JsonInput>;
   metadata: Record<string, JsonInput>;
   signals: readonly WorkflowRunContextSignal[];
-  createdBy?: WorkflowRunContextActor | undefined;
+  createdBySubjectId?: string | undefined;
   latestSignal?: WorkflowRunContextSignal | undefined;
 }
 
@@ -2860,9 +2806,9 @@ export function workflowRunContext(
   if (signals.length > 0) {
     out.signals = signals;
   }
-  const createdBy = workflowActorContext(req.createdBy);
-  if (createdBy !== undefined) {
-    out.createdBy = createdBy;
+  const createdBySubjectId = req.createdBySubjectId?.trim();
+  if (createdBySubjectId) {
+    out.createdBySubjectId = createdBySubjectId;
   }
   return out;
 }
@@ -2877,7 +2823,7 @@ export function parseWorkflowRunContext(
       .map(workflowRunContextSignal)
       .filter((signal): signal is WorkflowRunContextSignal => signal !== undefined)
     : [];
-  const createdBy = workflowRunContextActor(data.createdBy);
+  const createdBySubjectId = workflowContextString(data.createdBySubjectId);
   const latestSignal = signals.at(-1);
   const context: WorkflowRunContext = {
     provider: workflowContextString(data.provider),
@@ -2890,8 +2836,8 @@ export function parseWorkflowRunContext(
   if (target !== undefined) {
     context.target = target;
   }
-  if (createdBy !== undefined) {
-    context.createdBy = createdBy;
+  if (createdBySubjectId) {
+    context.createdBySubjectId = createdBySubjectId;
   }
   if (latestSignal !== undefined) {
     context.latestSignal = latestSignal;
@@ -2935,30 +2881,15 @@ function workflowRunContextSignal(value: unknown): WorkflowRunContextSignal | un
     createdAt: workflowContextString(value.createdAt),
     idempotencyKey: workflowContextString(value.idempotencyKey),
   };
-  const createdBy = workflowRunContextActor(value.createdBy);
-  if (createdBy !== undefined) {
-    signal.createdBy = createdBy;
+  const createdBySubjectId = typeof value.createdBySubjectId === "string" ? value.createdBySubjectId.trim() : "";
+  if (createdBySubjectId) {
+    signal.createdBySubjectId = createdBySubjectId;
   }
   const sequence = workflowContextNumber(value.sequence);
   if (sequence !== undefined) {
     signal.sequence = sequence;
   }
   return signal;
-}
-
-function workflowRunContextActor(value: unknown): WorkflowRunContextActor | undefined {
-  if (!isWorkflowContextRecord(value)) {
-    return undefined;
-  }
-  const actor: WorkflowRunContextActor = {
-    subjectId: workflowContextString(value.subjectId),
-    subjectKind: workflowContextString(value.subjectKind),
-    displayName: workflowContextString(value.displayName),
-    authSource: workflowContextString(value.authSource),
-  };
-  return actor.subjectId || actor.subjectKind || actor.displayName || actor.authSource
-    ? actor
-    : undefined;
 }
 
 function workflowContextString(value: unknown): string {
@@ -3067,17 +2998,6 @@ function workflowEventContext(event?: WorkflowEvent): Record<string, JsonInput> 
   return Object.keys(out).length === 0 ? undefined : out;
 }
 
-function workflowActorContext(actor?: WorkflowActor): Record<string, JsonInput> | undefined {
-  if (actor === undefined) {
-    return undefined;
-  }
-  const out: Record<string, JsonInput> = {};
-  if (actor.subjectId?.trim()) out.subjectId = actor.subjectId.trim();
-  if (actor.subjectKind?.trim()) out.subjectKind = actor.subjectKind.trim();
-  if (actor.displayName?.trim()) out.displayName = actor.displayName.trim();
-  if (actor.authSource?.trim()) out.authSource = actor.authSource.trim();
-  return Object.keys(out).length === 0 ? undefined : out;
-}
 
 export function workflowSignalsContext(
   signals?: readonly WorkflowSignal[] | undefined,
@@ -3091,8 +3011,8 @@ export function workflowSignalsContext(
       if (Object.keys(payload).length > 0) out.payload = payload;
     }
     if (signal.metadata !== undefined) out.metadata = compactJsonValue(signal.metadata, 4);
-    const createdBy = workflowActorContext(signal.createdBy);
-    if (createdBy !== undefined) out.createdBy = createdBy;
+    const createdBySubjectId = signal.createdBySubjectId?.trim();
+    if (createdBySubjectId) out.createdBySubjectId = createdBySubjectId;
     if (signal.createdAt !== undefined) out.createdAt = signal.createdAt.toISOString();
     if (signal.idempotencyKey?.trim()) {
       out.idempotencyKey = signal.idempotencyKey.trim();

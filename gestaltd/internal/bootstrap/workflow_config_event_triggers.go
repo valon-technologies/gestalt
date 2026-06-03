@@ -73,7 +73,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 			Match:       workflowwire.EventMatchToProto(workflowConfigEventTriggerMatch(trigger)),
 			Target:      targetProto,
 			Paused:      trigger.Paused,
-			RequestedBy: workflowwire.ActorToProto(workflowConfigActor()),
+			RequestedBySubjectId: workflowConfigOwnerSubjectID(),
 			RunAs:       agentwire.RunAsSubjectToProto(runAs),
 		}); err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
@@ -155,12 +155,9 @@ func isWorkflowConfigOwnedEventTrigger(existing *coreworkflow.EventTrigger, appN
 	if existing == nil {
 		return false
 	}
-	actor := workflowConfigActor()
 	return existing.ID == triggerID &&
 		workflowConfigTargetLabel(existing.Target) == appName &&
-		existing.CreatedBy.SubjectID == actor.SubjectID &&
-		existing.CreatedBy.SubjectKind == actor.SubjectKind &&
-		existing.CreatedBy.AuthSource == actor.AuthSource
+		existing.CreatedBySubjectID == workflowConfigOwnerSubjectID()
 }
 
 func workflowConfigEventTriggerMatch(trigger config.WorkflowEventTriggerConfig) coreworkflow.EventMatch {

@@ -35,6 +35,20 @@ if TYPE_CHECKING:
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
 FIELD_REQUIRED_KEY: Final[str] = "required"
 
+
+def parse_subject_id(subject_id: str) -> tuple[str, str] | None:
+    """Split a canonical subject ID such as user:ada into kind and id."""
+    trimmed = subject_id.strip()
+    if ":" not in trimmed:
+        return None
+    kind, _, id_part = trimmed.partition(":")
+    kind = kind.strip()
+    id_part = id_part.strip()
+    if not kind or not id_part:
+        return None
+    return kind, id_part
+
+
 T = TypeVar("T")
 ResponseHeaderValue = str | list[str] | tuple[str, ...]
 ResponseHeaders = dict[str, ResponseHeaderValue]
@@ -45,11 +59,9 @@ class Subject:
     """Identity information attached to an incoming provider request."""
 
     id: str = ""
-    kind: str = ""
     credential_subject_id: str = ""
-    display_name: str = ""
-    auth_source: str = ""
     email: str = ""
+
 
 
 @dataclasses.dataclass(slots=True)

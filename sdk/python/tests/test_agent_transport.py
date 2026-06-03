@@ -125,7 +125,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             client_ref=request.client_ref,
             state=AGENT_SESSION_STATE_ACTIVE,
             metadata=request.metadata,
-            created_by=request.created_by,
+            created_by_subject_id=request.created_by_subject_id,
         )
 
     def get_session(self, request: Any) -> Any:
@@ -175,7 +175,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
                 text="echo:Plan it",
             ),
             status_message="waiting for input",
-            created_by=request.created_by,
+            created_by_subject_id=request.created_by_subject_id,
             execution_ref=request.execution_ref,
         )
 

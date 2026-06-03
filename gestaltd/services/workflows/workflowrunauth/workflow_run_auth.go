@@ -163,17 +163,8 @@ func RunAsContext(runAs *core.RunAsSubject) map[string]any {
 	if runAs.SubjectID != "" {
 		out["id"] = runAs.SubjectID
 	}
-	if runAs.SubjectKind != "" {
-		out["kind"] = runAs.SubjectKind
-	}
 	if runAs.CredentialSubjectID != "" {
 		out["credentialSubjectId"] = runAs.CredentialSubjectID
-	}
-	if runAs.DisplayName != "" {
-		out["displayName"] = runAs.DisplayName
-	}
-	if runAs.AuthSource != "" {
-		out["authSource"] = runAs.AuthSource
 	}
 	return out
 }

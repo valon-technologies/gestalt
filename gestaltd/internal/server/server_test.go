@@ -5525,7 +5525,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("decode created managed subject: %v", err)
 	}
 	_ = resp.Body.Close()
-	if created.ID != "reporting-bot" || created.SubjectID != "service_account:reporting-bot" || created.Kind != "service_account" {
+	if created.ID != "reporting-bot" || created.SubjectID != "service_account:reporting-bot" {
 		t.Fatalf("created managed subject = %+v", created)
 	}
 	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
@@ -13225,9 +13225,6 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 	if deniedAudit["allowed"] != false {
 		t.Fatalf("expected denied audit allowed=false, got %v", deniedAudit["allowed"])
 	}
-	if deniedAudit["auth_source"] != "api_token" {
-		t.Fatalf("expected denied audit auth_source api_token, got %v", deniedAudit["auth_source"])
-	}
 	if deniedAudit["subject_id"] != principal.UserSubjectID(viewer.ID) {
 		t.Fatalf("expected denied audit subject_id %q, got %v", principal.UserSubjectID(viewer.ID), deniedAudit["subject_id"])
 	}
@@ -13358,9 +13355,6 @@ func TestHumanAuthorization_ExecuteOperation_DefaultAllowTreatsAuthenticatedUser
 	}
 	if deniedAudit["allowed"] != false {
 		t.Fatalf("expected denied audit allowed=false, got %v", deniedAudit["allowed"])
-	}
-	if deniedAudit["auth_source"] != "api_token" {
-		t.Fatalf("expected denied audit auth_source api_token, got %v", deniedAudit["auth_source"])
 	}
 	if deniedAudit["subject_id"] != principal.UserSubjectID(viewer.ID) {
 		t.Fatalf("expected denied audit subject_id %q, got %v", principal.UserSubjectID(viewer.ID), deniedAudit["subject_id"])
@@ -13494,9 +13488,6 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 	}
 	if deniedAudit["allowed"] != false {
 		t.Fatalf("expected denied audit allowed=false, got %v", deniedAudit["allowed"])
-	}
-	if deniedAudit["auth_source"] != "api_token" {
-		t.Fatalf("expected denied audit auth_source api_token, got %v", deniedAudit["auth_source"])
 	}
 	if deniedAudit["subject_id"] != principal.UserSubjectID(viewer.ID) {
 		t.Fatalf("expected denied audit subject_id %q, got %v", principal.UserSubjectID(viewer.ID), deniedAudit["subject_id"])
@@ -14463,9 +14454,6 @@ func TestLoginCallback(t *testing.T) {
 	if auditRecord["operation"] != "auth.login.complete" {
 		t.Fatalf("expected audit operation auth.login.complete, got %v", auditRecord["operation"])
 	}
-	if auditRecord["auth_source"] != "session" {
-		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
-	}
 	if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(existing.ID) {
 		t.Fatalf("expected audit subject_id %q, got %v", principal.UserSubjectID(existing.ID), auditRecord["subject_id"])
 	}
@@ -14650,9 +14638,6 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	}
 	if tokenAudit["source"] != "http" {
 		t.Fatalf("expected token audit source http, got %v", tokenAudit["source"])
-	}
-	if tokenAudit["auth_source"] != "session" {
-		t.Fatalf("expected token audit auth_source session, got %v", tokenAudit["auth_source"])
 	}
 	if subjectID, ok := tokenAudit["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(u.ID) {
 		t.Fatalf("expected token audit subject_id %q, got %v", principal.UserSubjectID(u.ID), tokenAudit["subject_id"])
@@ -15188,9 +15173,6 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		if auditRecord["operation"] != "connection.oauth.complete" {
 			t.Fatalf("expected audit operation connection.oauth.complete, got %v", auditRecord["operation"])
 		}
-		if auditRecord["auth_source"] != "session" {
-			t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
-		}
 		if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(u.ID) {
 			t.Fatalf("expected audit subject_id %q, got %v", principal.UserSubjectID(u.ID), auditRecord["subject_id"])
 		}
@@ -15723,9 +15705,6 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	if auditRecord["source"] != "http" {
 		t.Fatalf("expected audit source http, got %v", auditRecord["source"])
 	}
-	if auditRecord["auth_source"] != "session" {
-		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
-	}
 	if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(existing.ID) {
 		t.Fatalf("expected audit subject_id %q, got %v", principal.UserSubjectID(existing.ID), auditRecord["subject_id"])
 	}
@@ -15792,9 +15771,6 @@ func TestCreateAPIToken_AuditResolveUserFailure(t *testing.T) {
 	}
 	if auditRecord["operation"] != "api_token.create" {
 		t.Fatalf("expected audit operation api_token.create, got %v", auditRecord["operation"])
-	}
-	if auditRecord["auth_source"] != "session" {
-		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
 	}
 	if auditRecord["allowed"] != false {
 		t.Fatalf("expected audit allowed=false, got %v", auditRecord["allowed"])
@@ -16868,9 +16844,6 @@ func TestHostedHTTPBinding_ComposedProviderPreservesSubjectResolver(t *testing.T
 	case subject := <-subjects:
 		if subject.ID != "user:slack-linked" {
 			t.Fatalf("operation subject = %q, want %q", subject.ID, "user:slack-linked")
-		}
-		if subject.AuthSource != "authorization" {
-			t.Fatalf("operation auth_source = %q, want %q", subject.AuthSource, "authorization")
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for http binding invocation")
@@ -20486,9 +20459,6 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 	if auditRecord["request_id"] != calledRequestID {
 		t.Fatalf("expected audit request_id %q, got %v", calledRequestID, auditRecord["request_id"])
 	}
-	if auditRecord["auth_source"] != "session" {
-		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
-	}
 	if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID == "" {
 		t.Fatalf("expected non-empty audit subject_id, got %v", auditRecord["subject_id"])
 	}
@@ -20703,14 +20673,8 @@ func TestMCPEndpoint_ServiceAccountAuthorizationAndAudit(t *testing.T) {
 	if auditRecord["allowed"] != false {
 		t.Fatalf("expected audit allowed=false, got %v", auditRecord["allowed"])
 	}
-	if auditRecord["auth_source"] != "api_token" {
-		t.Fatalf("expected audit auth_source api_token, got %v", auditRecord["auth_source"])
-	}
 	if auditRecord["subject_id"] != "service_account:triage-bot" {
 		t.Fatalf("expected subject_id service_account:triage-bot, got %v", auditRecord["subject_id"])
-	}
-	if auditRecord["subject_kind"] != "service_account" {
-		t.Fatalf("expected subject_kind service_account, got %v", auditRecord["subject_kind"])
 	}
 }
 
@@ -21540,9 +21504,6 @@ func TestLogout(t *testing.T) {
 	}
 	if auditRecord["source"] != "http" {
 		t.Fatalf("expected audit source http, got %v", auditRecord["source"])
-	}
-	if auditRecord["auth_source"] != "session" {
-		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
 	}
 	if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID == "" {
 		t.Fatalf("expected non-empty audit subject_id, got %v", auditRecord["subject_id"])

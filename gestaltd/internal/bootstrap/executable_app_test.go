@@ -1405,7 +1405,7 @@ func (m *stubWorkflowManager) CreateDefinition(_ context.Context, p *principal.P
 		Definition: &coreworkflow.Definition{
 			ID:        id,
 			Target:    cloneWorkflowTarget(req.Target),
-			CreatedBy: coreworkflow.Actor{SubjectID: subjectIDOf(p)},
+			CreatedBySubjectID: subjectIDOf(p),
 			CreatedAt: &now,
 		},
 	}
@@ -1679,7 +1679,7 @@ func (m *stubWorkflowManager) StartRun(_ context.Context, p *principal.Principal
 			DefinitionID: strings.TrimSpace(req.DefinitionID),
 			WorkflowKey:  req.WorkflowKey,
 			CreatedAt:    &now,
-			CreatedBy:    coreworkflow.Actor{SubjectID: subjectIDOf(p)},
+			CreatedBySubjectID: subjectIDOf(p),
 		},
 	}
 	m.runs[id] = value
@@ -1752,18 +1752,6 @@ func stubAgentProtoStructToMap(src *structpb.Struct) map[string]any {
 	return src.AsMap()
 }
 
-func stubAgentActorFromProto(src *proto.AgentActor) coreagent.Actor {
-	if src == nil {
-		return coreagent.Actor{}
-	}
-	return coreagent.Actor{
-		SubjectID:   src.GetSubjectId(),
-		SubjectKind: src.GetSubjectKind(),
-		DisplayName: src.GetDisplayName(),
-		AuthSource:  src.GetAuthSource(),
-	}
-}
-
 func stubAgentMessagesFromProto(src []*proto.AgentMessage) []coreagent.Message {
 	out := make([]coreagent.Message, 0, len(src))
 	for _, message := range src {
@@ -1811,7 +1799,7 @@ func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req *pro
 		ClientRef:    req.GetClientRef(),
 		State:        coreagent.SessionStateActive,
 		Metadata:     stubAgentProtoStructToMap(req.GetMetadata()),
-		CreatedBy:    stubAgentActorFromProto(req.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
@@ -1875,7 +1863,7 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req *proto.
 		Status:       coreagent.ExecutionStatusSucceeded,
 		Messages:     stubAgentMessagesFromProto(req.GetMessages()),
 		Output:       coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
-		CreatedBy:    stubAgentActorFromProto(req.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 		CreatedAt:    &now,
 		StartedAt:    &now,
 		CompletedAt:  &now,
@@ -4105,8 +4093,8 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if sessionReq.IdempotencyKey != "plugin-agent-session" {
 		t.Fatalf("CreateSession idempotency_key = %q, want %q", sessionReq.IdempotencyKey, "plugin-agent-session")
 	}
-	if sessionReq.GetCreatedBy().GetSubjectId() != "user:user-123" {
-		t.Fatalf("CreateSession created_by.subject_id = %q, want %q", sessionReq.GetCreatedBy().GetSubjectId(), "user:user-123")
+	if strings.TrimSpace(sessionReq.GetCreatedBySubjectId()) != "user:user-123" {
+		t.Fatalf("CreateSession created_by_subject_id = %q, want %q", sessionReq.GetCreatedBySubjectId(), "user:user-123")
 	}
 	if turnReq.IdempotencyKey != "plugin-agent-turn" {
 		t.Fatalf("CreateTurn idempotency_key = %q, want %q", turnReq.IdempotencyKey, "plugin-agent-turn")
@@ -4114,8 +4102,8 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if turnReq.GetSessionId() != roundTrip.SessionID {
 		t.Fatalf("CreateTurn session_id = %q, want %q", turnReq.GetSessionId(), roundTrip.SessionID)
 	}
-	if turnReq.GetCreatedBy().GetSubjectId() != "user:user-123" {
-		t.Fatalf("CreateTurn created_by.subject_id = %q, want %q", turnReq.GetCreatedBy().GetSubjectId(), "user:user-123")
+	if strings.TrimSpace(turnReq.GetCreatedBySubjectId()) != "user:user-123" {
+		t.Fatalf("CreateTurn created_by_subject_id = %q, want %q", turnReq.GetCreatedBySubjectId(), "user:user-123")
 	}
 	turnMetadata := stubAgentProtoStructToMap(turnReq.GetMetadata())
 	if requireInteraction, _ := turnMetadata["requireInteraction"].(bool); !requireInteraction {
@@ -4892,12 +4880,6 @@ func TestPluginInvokesInheritAmbientConnectionAndAllowOverride(t *testing.T) {
 			}
 			if got.Body.Subject.ID != principal.UserSubjectID(user.ID) {
 				t.Fatalf("nested subject.id = %q, want %q", got.Body.Subject.ID, principal.UserSubjectID(user.ID))
-			}
-			if got.Body.Subject.Kind != string(principal.KindUser) {
-				t.Fatalf("nested subject.kind = %q, want %q", got.Body.Subject.Kind, principal.KindUser)
-			}
-			if got.Body.Subject.AuthSource != principal.SourceSession.String() {
-				t.Fatalf("nested subject.auth_source = %q, want %q", got.Body.Subject.AuthSource, principal.SourceSession.String())
 			}
 		})
 	}

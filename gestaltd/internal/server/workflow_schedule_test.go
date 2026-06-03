@@ -119,7 +119,7 @@ func (p *memoryWorkflowProvider) CreateDefinition(_ context.Context, req *proto.
 	if id == "" {
 		id = "definition"
 	}
-	definition := &coreworkflow.Definition{ID: id, Target: cloneWorkflowTarget(workflowwire.TargetFromProto(req.GetTarget())), CreatedBy: workflowwire.ActorFromProto(req.GetCreatedBy())}
+	definition := &coreworkflow.Definition{ID: id, Target: cloneWorkflowTarget(workflowwire.TargetFromProto(req.GetTarget())), CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId())}
 	p.definitions[id] = definition
 	return workflowwire.DefinitionToProto(cloneWorkflowDefinition(definition))
 }
@@ -236,7 +236,7 @@ func (p *memoryWorkflowProvider) UpsertSchedule(_ context.Context, req *proto.Up
 		Target:       target,
 		DefinitionID: req.GetDefinitionId(),
 		Paused:       req.GetPaused(),
-		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 		CreatedAt:    createdAt,
 		UpdatedAt:    &now,
 	}
@@ -327,7 +327,7 @@ func (p *memoryWorkflowProvider) UpsertEventTrigger(_ context.Context, req *prot
 		Target:       target,
 		DefinitionID: req.GetDefinitionId(),
 		Paused:       req.GetPaused(),
-		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 		CreatedAt:    createdAt,
 		UpdatedAt:    &now,
 	}
@@ -1033,7 +1033,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		ID:        "sched-ada",
 		Cron:      "*/5 * * * *",
 		Target:    workflowAppStepTarget("roadmap", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(ada.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(ada.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -1041,7 +1041,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		ID:        "sched-grace",
 		Cron:      "0 * * * *",
 		Target:    workflowAppStepTarget("roadmap", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(grace.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(grace.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -1056,7 +1056,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 				CredentialMode: core.ConnectionModeNone,
 			},
 		}}},
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(ada.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(ada.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -1332,7 +1332,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 		ID:        "sched-sync",
 		Cron:      "*/5 * * * *",
 		Target:    workflowAppStepTarget("roadmap", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -1340,7 +1340,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 		ID:        "sched-export",
 		Cron:      "0 * * * *",
 		Target:    workflowAppStepTarget("roadmap", "export"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -1451,7 +1451,7 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingTarget(t *testing.T) {
 		Cron:      "*/5 * * * *",
 		Timezone:  "UTC",
 		Target:    oldTarget,
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -1667,7 +1667,7 @@ func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing
 		ID:        "sched-ada-basic",
 		Cron:      "*/5 * * * *",
 		Target:    workflowAppStepTarget("roadmap", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -1963,7 +1963,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 		ID:        "sched-ada-basic",
 		Cron:      "*/5 * * * *",
 		Target:    workflowAppStepTarget("roadmap", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(ada.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(ada.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -1971,7 +1971,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 		ID:        "sched-ada-advanced",
 		Cron:      "0 * * * *",
 		Target:    workflowAppStepTarget("analytics", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(ada.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(ada.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -1979,7 +1979,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 		ID:        "sched-grace-advanced",
 		Cron:      "15 * * * *",
 		Target:    workflowAppStepTarget("analytics", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(grace.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(grace.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -2457,7 +2457,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 		ID:        "trg-ada-basic",
 		Match:     coreworkflow.EventMatch{Type: "roadmap.item.updated"},
 		Target:    workflowAppStepTarget("roadmap", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(ada.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(ada.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -2472,7 +2472,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 				CredentialMode: core.ConnectionModeNone,
 			},
 		}}},
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(ada.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(ada.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}
@@ -2480,7 +2480,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 		ID:        "trg-grace-advanced",
 		Match:     coreworkflow.EventMatch{Type: "analytics.item.failed"},
 		Target:    workflowAppStepTarget("analytics", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(grace.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(grace.ID),
 		CreatedAt: &now,
 		UpdatedAt: &now,
 	}

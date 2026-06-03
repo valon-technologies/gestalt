@@ -3,7 +3,6 @@ import { defineAuthenticationProvider } from "../../../src/index.ts";
 let configuredIssuer = "https://issuer.example.test";
 
 export const provider = defineAuthenticationProvider({
-  displayName: "Fixture Auth",
   description: "Auth fixture used by SDK tests",
   configure(_name, config) {
     configuredIssuer = String(config.issuer ?? configuredIssuer);
@@ -19,7 +18,6 @@ export const provider = defineAuthenticationProvider({
       subject: request.query.code || "subject-1",
       email: "fixture@example.com",
       emailVerified: true,
-      displayName: "Fixture Auth User",
       avatarUrl: `${configuredIssuer}/avatar.png`,
       claims: {
         issuer: configuredIssuer,
@@ -34,8 +32,7 @@ export const provider = defineAuthenticationProvider({
     return {
       subject: token,
       email: `${token}@example.com`,
-      displayName: "Validated User",
-    };
+      };
   },
   sessionSettings() {
     return {

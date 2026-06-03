@@ -326,13 +326,11 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
             context: Some(RequestContext {
                 subject: Some(SubjectContext {
                     id: "user:user-123".to_owned(),
-                    kind: "user".to_owned(),
                     email: "ada@example.com".to_owned(),
                     ..Default::default()
                 }),
                 agent_subject: Some(SubjectContext {
                     id: "user:user-456".to_owned(),
-                    kind: "user".to_owned(),
                     email: "grace@example.com".to_owned(),
                     ..Default::default()
                 }),

@@ -70,7 +70,7 @@ func TestGlobalWorkflowRunListPassesPaginationAndFilters(t *testing.T) {
 		ID:        "run-page",
 		Status:    coreworkflow.RunStatusRunning,
 		Target:    workflowAppStepTarget("roadmap", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
 		CreatedAt: &now,
 	}
 
@@ -173,14 +173,14 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 		ID:        "run-sync",
 		Status:    coreworkflow.RunStatusSucceeded,
 		Target:    workflowAppStepTarget("roadmap", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
 		CreatedAt: &now,
 	}
 	provider.runs["run-export"] = &coreworkflow.Run{
 		ID:        "run-export",
 		Status:    coreworkflow.RunStatusFailed,
 		Target:    workflowAppStepTarget("roadmap", "export"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
 		CreatedAt: &now,
 	}
 
@@ -253,7 +253,7 @@ func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
 		ID:        "run-cancel",
 		Status:    coreworkflow.RunStatusRunning,
 		Target:    workflowAppStepTarget("roadmap", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
 		CreatedAt: &now,
 		StartedAt: &now,
 	}

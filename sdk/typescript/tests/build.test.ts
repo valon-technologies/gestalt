@@ -320,15 +320,11 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
           context: create(RequestContextSchema, {
             subject: create(SubjectContextSchema, {
               id: "user:user-123",
-              kind: "user",
-              authSource: "api_token",
-              email: "ada@example.com",
+                            email: "ada@example.com",
             }),
             agentSubject: create(SubjectContextSchema, {
               id: "user:agent-456",
-              kind: "user",
-              authSource: "delegated",
-              email: "grace@example.com",
+                            email: "grace@example.com",
             }),
             credential: create(CredentialContextSchema, {
               mode: "subject",
@@ -391,8 +387,7 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
           context: create(RequestContextSchema, {
             subject: create(SubjectContextSchema, {
               id: "user:user-123",
-              kind: "user",
-            }),
+                          }),
             credential: create(CredentialContextSchema, {
               mode: "subject",
             }),

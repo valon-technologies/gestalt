@@ -902,7 +902,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 	if strings.TrimSpace(event.Type) == "" {
 		return coreworkflow.Event{}, ErrWorkflowEventTypeRequired
 	}
-	publishedBy := workflowActorFromPrincipal(p)
+	publishedBy := workflowSubjectIDFromPrincipal(p)
 
 	if providerSelection != "" {
 		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
@@ -917,7 +917,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 		publishedProto, err := provider.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
 			AppName:     appName,
 			Event:       eventProto,
-			PublishedBy: workflowwire.ActorToProto(publishedBy),
+			PublishedBySubjectId: publishedBy,
 		})
 		if err != nil {
 			return coreworkflow.Event{}, err
@@ -953,7 +953,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 		_, err = provider.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
 			AppName:     appName,
 			Event:       eventProto,
-			PublishedBy: workflowwire.ActorToProto(publishedBy),
+			PublishedBySubjectId: publishedBy,
 		})
 		if err != nil {
 			providerAudit.finish(ctx, err)

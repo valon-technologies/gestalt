@@ -44,13 +44,12 @@ test("WorkflowProvider service converts transport messages to native callbacks",
   const address = await reserveTCPAddress();
   const calls: Array<{ method: string; detail: string }> = [];
   const provider = defineWorkflowProvider({
-    displayName: "Workflow transport fixture",
     async createDefinition(request) {
-      calls.push({ method: "create-definition", detail: request.createdBy?.subjectId ?? "" });
+      calls.push({ method: "create-definition", detail: request.createdBySubjectId ?? "" });
       return {
         id: request.idempotencyKey,
         target: request.target,
-        createdBy: request.createdBy,
+        createdBySubjectId: request.createdBySubjectId,
       };
     },
     async getDefinition(request) {
@@ -73,7 +72,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
         target: request.target,
         statusMessage: "",
         resultBody: "",
-        createdBy: request.createdBy,
+        createdBySubjectId: request.createdBySubjectId,
         workflowKey: request.workflowKey,
         definitionId: request.definitionId,
       };
@@ -121,7 +120,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
           target: request.target,
           statusMessage: "",
           resultBody: "",
-          createdBy: request.createdBy,
+          createdBySubjectId: request.createdBySubjectId,
           workflowKey: request.workflowKey,
           definitionId: request.definitionId,
         },
@@ -137,7 +136,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
         timezone: request.timezone,
         target: request.target,
         paused: request.paused,
-        createdBy: request.requestedBy,
+        requestedBySubjectId: request.requestedBySubjectId,
         definitionId: request.definitionId,
       };
     },
@@ -160,7 +159,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
         match: request.match,
         target: request.target,
         paused: request.paused,
-        createdBy: request.requestedBy,
+        requestedBySubjectId: request.requestedBySubjectId,
         definitionId: request.definitionId,
       };
     },
@@ -223,7 +222,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
 
     const definition = await client.createDefinition({
       idempotencyKey: "definition-native-ts",
-      createdBy: { subjectId: "user:ada" },
+      createdBySubjectId: "user:ada",
       target: {
         steps: [{
           id: "define",
@@ -235,7 +234,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
       },
     });
     expect(definition.id).toBe("definition-native-ts");
-    expect(definition.createdBy?.subjectId).toBe("user:ada");
+    expect(definition.createdBySubjectId).toBe("user:ada");
 
     const published = await client.publishEvent(create(PublishWorkflowProviderEventRequestSchema, {
       appName: "demo",

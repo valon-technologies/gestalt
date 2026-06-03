@@ -1404,7 +1404,7 @@ func agentSessionInfoFromCoreView(session *coreagent.Session, summaryOnly bool) 
 	info.Model = strings.TrimSpace(session.Model)
 	info.ClientRef = strings.TrimSpace(session.ClientRef)
 	info.State = strings.TrimSpace(string(session.State))
-	info.CreatedBy = agentActorInfoFromCore(session.CreatedBy)
+	info.CreatedBy = workflowActorInfoFromSubjectID(session.CreatedBySubjectID)
 	info.CreatedAt = session.CreatedAt
 	info.UpdatedAt = session.UpdatedAt
 	info.LastTurnAt = session.LastTurnAt
@@ -1460,7 +1460,7 @@ func agentTurnInfoFromCoreView(turn *coreagent.Turn, summaryOnly bool) agentTurn
 	info.Model = strings.TrimSpace(turn.Model)
 	info.Status = strings.TrimSpace(string(turn.Status))
 	info.StatusMessage = turn.StatusMessage
-	info.CreatedBy = agentActorInfoFromCore(turn.CreatedBy)
+	info.CreatedBy = workflowActorInfoFromSubjectID(turn.CreatedBySubjectID)
 	info.CreatedAt = turn.CreatedAt
 	info.StartedAt = turn.StartedAt
 	info.CompletedAt = turn.CompletedAt
@@ -1651,18 +1651,6 @@ func agentMessagePartsFromCore(parts []coreagent.MessagePart) []agentMessagePart
 		})
 	}
 	return out
-}
-
-func agentActorInfoFromCore(actor coreagent.Actor) *workflowActorInfo {
-	if actor == (coreagent.Actor{}) {
-		return nil
-	}
-	return &workflowActorInfo{
-		SubjectID:   actor.SubjectID,
-		SubjectKind: actor.SubjectKind,
-		DisplayName: actor.DisplayName,
-		AuthSource:  actor.AuthSource,
-	}
 }
 
 func agentInteractionInfoFromCore(interaction *coreagent.Interaction) agentInteractionInfo {

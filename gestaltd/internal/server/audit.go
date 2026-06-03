@@ -84,7 +84,6 @@ func (s *Server) auditEventWithAuthSource(ctx context.Context, authSource, sourc
 	}
 
 	ctx, entry := invocation.BuildAuditEntry(ctx, nil, source, provider, operation)
-	entry.AuthSource = authSource
 	populateAuditEntry(&entry, allowed, err, auditTarget{}, auditAuthorization{})
 	s.auditSink.Log(ctx, entry)
 }
@@ -95,7 +94,6 @@ func (s *Server) auditEventWithSubjectIDAndTarget(ctx context.Context, subjectID
 	}
 
 	ctx, entry := invocation.BuildAuditEntry(ctx, &principal.Principal{SubjectID: strings.TrimSpace(subjectID)}, source, provider, operation)
-	entry.AuthSource = authSource
 	populateAuditEntry(&entry, allowed, err, target, auditAuthorization{})
 	s.auditSink.Log(ctx, entry)
 }

@@ -6,7 +6,6 @@ let configuredName = "";
 let configuredScope = "";
 
 const provider = defineSecretsProvider({
-  displayName: "Fixture Secrets",
   description: "Secrets fixture used by SDK tests",
   configure(name, config) {
     configuredName = name;

@@ -724,8 +724,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithGrantedCallerToolRefs(
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runAs := &core.RunAsSubject{
 		SubjectID:   "service_account:review-worker",
-		SubjectKind: "service_account",
-	}
+			}
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		CallerAppName: "source",
 		Permissions: []core.AccessPermission{{
@@ -1148,7 +1147,7 @@ func TestAgentRuntimeWorkflowSystemToolUpdateDefinitionScheduleUsesManagementPri
 		{App: "roadmap", Operations: []string{"sync"}},
 		{App: "notification", Operations: []string{"reply"}},
 	})
-	owner := coreworkflow.Actor{SubjectID: principal.UserSubjectID("ada")}
+	owner := principal.UserSubjectID("ada")
 	target := workflowSystemToolTestAppStepTarget("roadmap", "sync")
 	manager := &workflowSystemToolPrincipalRecordingManager{
 		schedule: &workflowmanager.ManagedSchedule{
@@ -1159,7 +1158,7 @@ func TestAgentRuntimeWorkflowSystemToolUpdateDefinitionScheduleUsesManagementPri
 				Timezone:     "UTC",
 				Target:       target,
 				DefinitionID: "definition-1",
-				CreatedBy:    owner,
+				CreatedBySubjectID: owner,
 			},
 		},
 		definition: &workflowmanager.ManagedDefinition{
@@ -1167,7 +1166,7 @@ func TestAgentRuntimeWorkflowSystemToolUpdateDefinitionScheduleUsesManagementPri
 			Definition: &coreworkflow.Definition{
 				ID:        "definition-1",
 				Target:    target,
-				CreatedBy: owner,
+				CreatedBySubjectID: owner,
 			},
 		},
 	}
@@ -1228,12 +1227,12 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 	})
 	roadmapTarget := workflowSystemToolTestAppStepTarget("roadmap", "sync")
 	notificationTarget := workflowSystemToolTestAppStepTarget("notification", "reply")
-	owner := coreworkflow.Actor{SubjectID: principal.UserSubjectID("ada")}
+	owner := principal.UserSubjectID("ada")
 	workflowProvider.runs = map[string]*coreworkflow.Run{
-		"run-a": {ID: "run-a", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, CreatedBy: owner},
-		"run-b": {ID: "run-b", Status: coreworkflow.RunStatusSucceeded, Target: notificationTarget, CreatedBy: owner},
-		"run-c": {ID: "run-c", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, CreatedBy: owner},
-		"run-d": {ID: "run-d", Status: coreworkflow.RunStatusFailed, Target: roadmapTarget, CreatedBy: owner},
+		"run-a": {ID: "run-a", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, CreatedBySubjectID: owner},
+		"run-b": {ID: "run-b", Status: coreworkflow.RunStatusSucceeded, Target: notificationTarget, CreatedBySubjectID: owner},
+		"run-c": {ID: "run-c", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, CreatedBySubjectID: owner},
+		"run-d": {ID: "run-d", Status: coreworkflow.RunStatusFailed, Target: roadmapTarget, CreatedBySubjectID: owner},
 	}
 
 	firstResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
@@ -1652,9 +1651,7 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 						ID:        req.GetTurnId(),
 						SessionID: "session-1",
 						Status:    coreagent.ExecutionStatusRunning,
-						CreatedBy: coreagent.Actor{
-							SubjectID: req.GetSubject().GetId(),
-						},
+						CreatedBySubjectID: strings.TrimSpace(req.GetSubject().GetId()),
 					}, nil
 				},
 			},
@@ -1776,7 +1773,7 @@ func (p *workflowSystemToolRecordingProvider) CreateDefinition(_ context.Context
 	definition := &coreworkflow.Definition{
 		ID:        id,
 		Target:    workflowwire.TargetFromProto(req.GetTarget()),
-		CreatedBy: workflowwire.ActorFromProto(req.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}
 	p.definitions[id] = definition
 	value := *definition
@@ -1803,7 +1800,7 @@ func (p *workflowSystemToolRecordingProvider) UpdateDefinition(_ context.Context
 	definition := &coreworkflow.Definition{
 		ID:        id,
 		Target:    workflowwire.TargetFromProto(req.GetTarget()),
-		CreatedBy: existing.CreatedBy,
+		CreatedBySubjectID: existing.CreatedBySubjectID,
 	}
 	p.definitions[id] = definition
 	value := *definition
@@ -1826,7 +1823,7 @@ func (p *workflowSystemToolRecordingProvider) StartRun(_ context.Context, req *p
 	target := workflowwire.TargetFromProto(req.GetTarget())
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
 	workflowKey := strings.TrimSpace(req.GetWorkflowKey())
-	createdBy := workflowwire.ActorFromProto(req.GetCreatedBy())
+	createdBy := strings.TrimSpace(req.GetCreatedBySubjectId())
 	definitionID := strings.TrimSpace(req.GetDefinitionId())
 	if p.runs == nil {
 		p.runs = map[string]*coreworkflow.Run{}
@@ -1857,7 +1854,7 @@ func (p *workflowSystemToolRecordingProvider) StartRun(_ context.Context, req *p
 		WorkflowKey:  workflowKey,
 		Target:       target,
 		DefinitionID: definitionID,
-		CreatedBy:    createdBy,
+		CreatedBySubjectID: createdBy,
 	}
 	p.runs[run.ID] = run
 	if idempotencyKey != "" {
@@ -1963,7 +1960,7 @@ func (p *workflowSystemToolRecordingProvider) UpsertSchedule(_ context.Context, 
 		Target:       workflowwire.TargetFromProto(req.GetTarget()),
 		DefinitionID: req.GetDefinitionId(),
 		Paused:       req.GetPaused(),
-		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 	}
 	if p.schedules == nil {
 		p.schedules = map[string]*coreworkflow.Schedule{}
@@ -2041,8 +2038,7 @@ func mustMintWorkflowSystemRunGrant(t *testing.T, runtime *agentRuntime, scope w
 		TurnID:              "turn-1",
 		CallerAppName:       strings.TrimSpace(scope.CallerAppName),
 		SubjectID:           principal.UserSubjectID("ada"),
-		SubjectKind:         string(principal.KindUser),
-		CredentialSubjectID: principal.UserSubjectID("ada"),
+				CredentialSubjectID: principal.UserSubjectID("ada"),
 		Permissions:         append([]core.AccessPermission(nil), scope.Permissions...),
 		ToolRefs:            append([]coreagent.ToolRef(nil), scope.ToolRefs...),
 		Tools:               append([]coreagent.Tool(nil), scope.Tools...),

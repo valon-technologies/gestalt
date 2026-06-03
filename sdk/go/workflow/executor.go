@@ -21,7 +21,7 @@ type Request struct {
 	Trigger         *gestalt.WorkflowRunTrigger
 	Input           map[string]any
 	Metadata        map[string]any
-	CreatedBy       *gestalt.WorkflowActor
+	CreatedBySubjectID string
 	RunAs           *gestalt.Subject
 	InvocationToken string
 	Signals         []gestalt.WorkflowSignal

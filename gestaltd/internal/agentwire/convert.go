@@ -99,10 +99,7 @@ func RunAsSubjectFromProto(subject *proto.SubjectContext) *core.RunAsSubject {
 	}
 	return core.NormalizeRunAsSubject(&core.RunAsSubject{
 		SubjectID:           subject.GetId(),
-		SubjectKind:         subject.GetKind(),
 		CredentialSubjectID: subject.GetCredentialSubjectId(),
-		DisplayName:         subject.GetDisplayName(),
-		AuthSource:          subject.GetAuthSource(),
 	})
 }
 
@@ -113,10 +110,7 @@ func RunAsSubjectToProto(subject *core.RunAsSubject) *proto.SubjectContext {
 	}
 	return &proto.SubjectContext{
 		Id:                  normalized.SubjectID,
-		Kind:                normalized.SubjectKind,
 		CredentialSubjectId: normalized.CredentialSubjectID,
-		DisplayName:         normalized.DisplayName,
-		AuthSource:          normalized.AuthSource,
 	}
 }
 

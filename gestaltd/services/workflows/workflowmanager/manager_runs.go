@@ -54,7 +54,7 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 		Target:         targetProto,
 		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
 		WorkflowKey:    strings.TrimSpace(req.WorkflowKey),
-		CreatedBy:      workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
+		CreatedBySubjectId: workflowSubjectIDFromPrincipal(p),
 		DefinitionId:   strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
@@ -219,7 +219,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 		WorkflowKey:    workflowKey,
 		Target:         targetProto,
 		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
-		CreatedBy:      workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
+		CreatedBySubjectId: workflowSubjectIDFromPrincipal(p),
 		DefinitionId:   strings.TrimSpace(req.DefinitionID),
 		Signal:         signalProto,
 	})
@@ -393,7 +393,7 @@ func (m *Manager) runAccessible(ctx context.Context, p *principal.Principal, run
 	if run == nil || run.Run == nil {
 		return false
 	}
-	return workflowActorOwnedBy(run.Run.CreatedBy, p) && m.allowStoredTarget(ctx, p, run.Run.Target)
+	return workflowSubjectOwnedBy(run.Run.CreatedBySubjectID, p) && m.allowStoredTarget(ctx, p, run.Run.Target)
 }
 
 func managedSignalResponse(providerName string, provider coreworkflow.Provider, resp *coreworkflow.SignalRunResponse) (*ManagedRunSignal, error) {

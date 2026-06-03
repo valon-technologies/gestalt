@@ -18,7 +18,6 @@ function cloneBytes(value: Uint8Array): Uint8Array {
 }
 
 export const provider = defineCacheProvider({
-  displayName: "Fixture Cache",
   description: "Cache fixture used by SDK tests",
   configure(_name, config) {
     configuredPrefix = String(config.prefix ?? "");

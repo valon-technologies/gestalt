@@ -82,7 +82,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			Timezone:    schedule.Timezone,
 			Target:      targetProto,
 			Paused:      schedule.Paused,
-			RequestedBy: workflowwire.ActorToProto(workflowConfigActor()),
+			RequestedBySubjectId: workflowConfigOwnerSubjectID(),
 			RunAs:       agentwire.RunAsSubjectToProto(runAs),
 		}); err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
@@ -187,12 +187,9 @@ func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, appName, sch
 	if existing == nil {
 		return false
 	}
-	actor := workflowConfigActor()
 	return existing.ID == scheduleID &&
 		workflowConfigTargetLabel(existing.Target) == appName &&
-		existing.CreatedBy.SubjectID == actor.SubjectID &&
-		existing.CreatedBy.SubjectKind == actor.SubjectKind &&
-		existing.CreatedBy.AuthSource == actor.AuthSource
+		existing.CreatedBySubjectID == workflowConfigOwnerSubjectID()
 }
 
 func workflowConfigTargetLabel(target coreworkflow.Target) string {
@@ -214,15 +211,6 @@ func workflowConfigTargetLabel(target coreworkflow.Target) string {
 
 func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Target {
 	return config.WorkflowTargetToCore(target)
-}
-
-func workflowConfigActor() coreworkflow.Actor {
-	return coreworkflow.Actor{
-		SubjectID:   workflowConfigOwnerSubjectID(),
-		SubjectKind: "system",
-		DisplayName: "Workflow Config",
-		AuthSource:  "config",
-	}
 }
 
 func workflowConfigScheduleID(scheduleKey string) string {

@@ -3,6 +3,7 @@ package agents
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
@@ -40,41 +41,11 @@ func agentMessagesFromProto(messages []*proto.AgentMessage) []coreagent.Message 
 	return agentwire.MessagesFromProto(messages)
 }
 
-func agentActorToProto(actor coreagent.Actor) *proto.AgentActor {
-	if actor == (coreagent.Actor{}) {
-		return nil
-	}
-	return &proto.AgentActor{
-		SubjectId:   actor.SubjectID,
-		SubjectKind: actor.SubjectKind,
-		DisplayName: actor.DisplayName,
-		AuthSource:  actor.AuthSource,
-	}
-}
-
-func agentActorFromProto(actor *proto.AgentActor) coreagent.Actor {
-	if actor == nil {
-		return coreagent.Actor{}
-	}
-	return coreagent.Actor{
-		SubjectID:   actor.GetSubjectId(),
-		SubjectKind: actor.GetSubjectKind(),
-		DisplayName: actor.GetDisplayName(),
-		AuthSource:  actor.GetAuthSource(),
-	}
-}
-
 func subjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
 	if subject == (core.RunAsSubject{}) {
 		return nil
 	}
-	return &proto.SubjectContext{
-		Id:                  subject.SubjectID,
-		Kind:                subject.SubjectKind,
-		CredentialSubjectId: subject.CredentialSubjectID,
-		DisplayName:         subject.DisplayName,
-		AuthSource:          subject.AuthSource,
-	}
+	return agentwire.RunAsSubjectToProto(&subject)
 }
 
 func listedAgentToolToProto(tool coreagent.ListedTool) *proto.ListedAgentTool {
@@ -194,7 +165,7 @@ func agentSessionFromProto(session *proto.AgentSession) (*coreagent.Session, err
 		ClientRef:    session.GetClientRef(),
 		State:        state,
 		Metadata:     mapFromStruct(session.GetMetadata()),
-		CreatedBy:    agentActorFromProto(session.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(session.GetCreatedBySubjectId()),
 		CreatedAt:    timeFromProto(session.GetCreatedAt()),
 		UpdatedAt:    timeFromProto(session.GetUpdatedAt()),
 		LastTurnAt:   timeFromProto(session.GetLastTurnAt()),
@@ -218,7 +189,7 @@ func agentTurnFromProto(turn *proto.AgentTurn) (*coreagent.Turn, error) {
 		Messages:      agentMessagesFromProto(turn.GetMessages()),
 		Output:        agentTurnOutputFromProto(turn),
 		StatusMessage: turn.GetStatusMessage(),
-		CreatedBy:     agentActorFromProto(turn.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(turn.GetCreatedBySubjectId()),
 		CreatedAt:     timeFromProto(turn.GetCreatedAt()),
 		StartedAt:     timeFromProto(turn.GetStartedAt()),
 		CompletedAt:   timeFromProto(turn.GetCompletedAt()),
@@ -364,7 +335,7 @@ func agentSessionToProto(session *coreagent.Session) (*proto.AgentSession, error
 		ClientRef:    session.ClientRef,
 		State:        agentSessionStateToProto(session.State),
 		Metadata:     metadata,
-		CreatedBy:    agentActorToProto(session.CreatedBy),
+		CreatedBySubjectId: strings.TrimSpace(session.CreatedBySubjectID),
 		CreatedAt:    timeToProto(session.CreatedAt),
 		UpdatedAt:    timeToProto(session.UpdatedAt),
 		LastTurnAt:   timeToProto(session.LastTurnAt),
@@ -387,7 +358,7 @@ func agentTurnToProto(turn *coreagent.Turn) (*proto.AgentTurn, error) {
 		Status:        agentExecutionStatusToProto(turn.Status),
 		Messages:      messages,
 		StatusMessage: turn.StatusMessage,
-		CreatedBy:     agentActorToProto(turn.CreatedBy),
+		CreatedBySubjectId: strings.TrimSpace(turn.CreatedBySubjectID),
 		CreatedAt:     timeToProto(turn.CreatedAt),
 		StartedAt:     timeToProto(turn.StartedAt),
 		CompletedAt:   timeToProto(turn.CompletedAt),

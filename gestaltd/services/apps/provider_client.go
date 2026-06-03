@@ -330,11 +330,9 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 
 	if p := principal.FromContext(ctx); p != nil {
 		out.Subject = &proto.SubjectContext{
-			Id:          subjectIDForPrincipal(p),
-			Kind:        subjectKindForPrincipal(p),
-			DisplayName: subjectDisplayName(p),
-			AuthSource:  p.AuthSource(),
-			Email:       subjectEmail(p),
+			Id:                  subjectIDForPrincipal(p),
+			CredentialSubjectId: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
+			Email:               subjectEmail(p),
 		}
 	}
 

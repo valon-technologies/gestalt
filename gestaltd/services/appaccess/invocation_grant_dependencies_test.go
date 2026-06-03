@@ -16,8 +16,7 @@ func TestInvocationGrantsFromDependenciesPreservesBroadAccessAndConfiguredMetada
 			CredentialMode: core.ConnectionModeSubject,
 			RunAs: &core.RunAsSubject{
 				SubjectID:   "service_account:data-schema-explorer",
-				DisplayName: "Data Schema Explorer",
-			},
+							},
 			ApplyByDefault: true,
 		},
 		{

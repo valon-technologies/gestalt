@@ -129,7 +129,7 @@ impl AgentProvider for TestAgentProvider {
             client_ref: request.client_ref,
             state: AgentSessionState::Active,
             metadata: request.metadata,
-            created_by: request.created_by,
+            created_by_subject_id: request.created_by_subject_id.clone(),
             created_at: Some(SystemTime::now()),
             updated_at: Some(SystemTime::now()),
             ..Default::default()
@@ -207,7 +207,7 @@ impl AgentProvider for TestAgentProvider {
                 text: "echo:Plan it".to_string(),
             })),
             status_message: "waiting for input".to_string(),
-            created_by: request.created_by,
+            created_by_subject_id: request.created_by_subject_id.clone(),
             created_at: Some(SystemTime::now()),
             started_at: Some(SystemTime::now()),
             execution_ref: request.execution_ref,

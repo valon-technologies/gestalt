@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"net/http"
 	"path/filepath"
 	"slices"
@@ -38,12 +39,7 @@ func (providerBuildOrderingAgentProvider) CreateSession(_ context.Context, req *
 		ID:           req.GetSessionId(),
 		ProviderName: "managed",
 		Model:        req.GetModel(),
-		CreatedBy: coreagent.Actor{
-			SubjectID:   req.GetCreatedBy().GetSubjectId(),
-			SubjectKind: req.GetCreatedBy().GetSubjectKind(),
-			DisplayName: req.GetCreatedBy().GetDisplayName(),
-			AuthSource:  req.GetCreatedBy().GetAuthSource(),
-		},
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}, nil
 }
 

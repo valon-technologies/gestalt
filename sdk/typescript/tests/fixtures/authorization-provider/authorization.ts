@@ -3,7 +3,6 @@ import { defineAuthorizationProvider } from "../../../src/index.ts";
 let resourcePrefix = "fixture";
 
 export const provider = defineAuthorizationProvider({
-  displayName: "Fixture Authorization",
   description: "Authorization fixture used by SDK tests",
   configure(_name, config) {
     resourcePrefix = String(config.prefix ?? resourcePrefix);

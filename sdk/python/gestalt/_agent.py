@@ -232,14 +232,6 @@ class AgentMessage:
     metadata: JsonObjectInput | None = None
 
 
-@dataclass(slots=True)
-class AgentActor:
-    subject_id: str = ""
-    subject_kind: str = ""
-    display_name: str = ""
-    auth_source: str = ""
-
-
 @dataclass(init=False, slots=True)
 class AgentToolRef:
     app: str = ""
@@ -293,7 +285,7 @@ class AgentSession:
     client_ref: str = ""
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
     metadata: JsonObjectInput | None = None
-    created_by: AgentActor | Mapping[str, Any] | None = None
+    created_by_subject_id: str = ""
     created_at: TimestampInput = None
     updated_at: TimestampInput = None
     last_turn_at: TimestampInput = None
@@ -336,7 +328,7 @@ class CreateAgentProviderSessionRequest:
     model: str = ""
     client_ref: str = ""
     metadata: JsonObject | None = None
-    created_by: AgentActor | None = None
+    created_by_subject_id: str = ""
     subject: Subject | None = None
     session_start: AgentSessionStartConfig | None = None
     prepared_workspace: AgentPreparedWorkspace | None = None
@@ -381,7 +373,7 @@ class AgentTurn:
     messages: Iterable[AgentMessage | Mapping[str, Any]] = field(default_factory=list)
     output: "AgentTurnOutput | Mapping[str, Any] | None" = None
     status_message: str = ""
-    created_by: AgentActor | Mapping[str, Any] | None = None
+    created_by_subject_id: str = ""
     created_at: TimestampInput = None
     started_at: TimestampInput = None
     completed_at: TimestampInput = None
@@ -450,7 +442,7 @@ class CreateAgentProviderTurnRequest:
     tools: Iterable[ResolvedAgentTool] = field(default_factory=list)
     output: AgentOutput | Mapping[str, Any] | None = None
     metadata: JsonObject | None = None
-    created_by: AgentActor | None = None
+    created_by_subject_id: str = ""
     execution_ref: str = ""
     tool_refs: Iterable[AgentToolRef] = field(default_factory=list)
     tool_source: int = AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
@@ -646,8 +638,8 @@ def create_agent_provider_session_request_from_proto(
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
         else None,
-        created_by=agent_actor_from_proto(request.created_by)
-        if has_field(request, "created_by")
+        created_by_subject_id=request.created_by_subject_id.strip()
+        if has_field(request, "created_by_subject_id")
         else None,
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
@@ -718,8 +710,8 @@ def create_agent_provider_turn_request_from_proto(
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
         else None,
-        created_by=agent_actor_from_proto(request.created_by)
-        if has_field(request, "created_by")
+        created_by_subject_id=request.created_by_subject_id.strip()
+        if has_field(request, "created_by_subject_id")
         else None,
         execution_ref=request.execution_ref,
         tool_refs=[agent_tool_ref_from_proto(ref) for ref in request.tool_refs],
@@ -832,7 +824,7 @@ def agent_session_to_proto(value: AgentSession | Mapping[str, Any]) -> Any:
         state=_int_field(session.state),
     )
     _copy_struct(out, "metadata", session.metadata)
-    _copy_message(out, "created_by", agent_actor_to_proto(session.created_by))
+    _copy_scalar(out, "created_by_subject_id", (session.created_by_subject_id or "").strip())
     _copy_timestamp(out, "created_at", session.created_at)
     _copy_timestamp(out, "updated_at", session.updated_at)
     _copy_timestamp(out, "last_turn_at", session.last_turn_at)
@@ -947,7 +939,7 @@ def agent_turn_to_proto(value: AgentTurn | Mapping[str, Any]) -> Any:
     if output is not None:
         field, message = output
         getattr(out, field).CopyFrom(message)
-    _copy_message(out, "created_by", agent_actor_to_proto(turn.created_by))
+    _copy_scalar(out, "created_by_subject_id", (turn.created_by_subject_id or "").strip())
     _copy_timestamp(out, "created_at", turn.created_at)
     _copy_timestamp(out, "started_at", turn.started_at)
     _copy_timestamp(out, "completed_at", turn.completed_at)
@@ -1160,34 +1152,12 @@ def agent_image_ref_to_proto(
     return pb.AgentMessagePartImageRef(uri=image_ref.uri, mime_type=image_ref.mime_type)
 
 
-def agent_actor_from_proto(value: Any) -> AgentActor:
-    return AgentActor(
-        subject_id=value.subject_id,
-        subject_kind=value.subject_kind,
-        display_name=value.display_name,
-        auth_source=value.auth_source,
-    )
-
-
-def agent_actor_to_proto(value: AgentActor | Mapping[str, Any] | None) -> Any | None:
-    if value is None:
-        return None
-    actor = _coerce(value, AgentActor, "AgentActor")
-    return pb.AgentActor(
-        subject_id=actor.subject_id,
-        subject_kind=actor.subject_kind,
-        display_name=actor.display_name,
-        auth_source=actor.auth_source,
-    )
 
 
 def subject_from_proto(value: Any) -> Subject:
     return Subject(
         id=value.id,
-        kind=value.kind,
         credential_subject_id=value.credential_subject_id,
-        display_name=value.display_name,
-        auth_source=value.auth_source,
         email=value.email,
     )
 
@@ -1200,10 +1170,7 @@ def subject_to_proto(
     subject = _coerce(value, Subject, "Subject")
     return _app_pb.SubjectContext(
         id=subject.id,
-        kind=subject.kind,
         credential_subject_id=subject.credential_subject_id,
-        display_name=subject.display_name,
-        auth_source=subject.auth_source,
         email=subject.email,
     )
 
@@ -1313,9 +1280,9 @@ def agent_session_from_proto(value: Any) -> AgentSession:
         metadata=struct_to_dict(value.metadata)
         if has_field(value, "metadata")
         else None,
-        created_by=agent_actor_from_proto(value.created_by)
-        if has_field(value, "created_by")
-        else None,
+        created_by_subject_id=value.created_by_subject_id.strip()
+        if has_field(value, "created_by_subject_id")
+        else "",
         created_at=datetime_from_timestamp(value.created_at)
         if has_field(value, "created_at")
         else None,
@@ -1346,9 +1313,9 @@ def agent_turn_from_proto(value: Any) -> AgentTurn:
         messages=[agent_message_from_proto(message) for message in value.messages],
         output=_agent_turn_output_from_proto(value),
         status_message=value.status_message,
-        created_by=agent_actor_from_proto(value.created_by)
-        if has_field(value, "created_by")
-        else None,
+        created_by_subject_id=value.created_by_subject_id.strip()
+        if has_field(value, "created_by_subject_id")
+        else "",
         created_at=datetime_from_timestamp(value.created_at)
         if has_field(value, "created_at")
         else None,
@@ -1563,6 +1530,10 @@ def _coerce(value: Any, cls: type[Any], field_name: str) -> Any:
     raise TypeError(f"{field_name} must be {cls.__name__} or a mapping")
 
 
+def _copy_scalar(target: Any, field: str, value: str) -> None:
+    setattr(target, field, value or "")
+
+
 def _copy_message(target: Any, field: str, value: Any | None) -> None:
     if value is not None:
         getattr(target, field).CopyFrom(value)
@@ -1584,27 +1555,6 @@ def _copy_value(target: Any, field: str, value: Any) -> None:
         getattr(target, field).CopyFrom(value_from_json(value))
 
 
-def agent_actor_to_dict(actor: Any) -> dict[str, Any]:
-    """Convert an ``AgentActor`` value to a plain dictionary."""
-
-    return _message_fields(
-        actor,
-        ("subject_id", "subject_kind", "display_name", "auth_source"),
-    )
-
-
-def agent_actor_from_dict(value: Mapping[str, Any] | None) -> Any:
-    """Create an ``AgentActor`` from a plain dictionary."""
-
-    data = dict(value or {})
-    return AgentActor(
-        subject_id=data.get("subject_id", ""),
-        subject_kind=data.get("subject_kind", ""),
-        display_name=data.get("display_name", ""),
-        auth_source=data.get("auth_source", ""),
-    )
-
-
 def subject_to_dict(subject: Any) -> dict[str, Any]:
     """Convert an ``Subject`` value to a dictionary."""
 
@@ -1612,10 +1562,7 @@ def subject_to_dict(subject: Any) -> dict[str, Any]:
         subject,
         (
             "id",
-            "kind",
             "credential_subject_id",
-            "display_name",
-            "auth_source",
             "email",
         ),
     )
@@ -1627,10 +1574,7 @@ def subject_from_dict(value: Mapping[str, Any] | None) -> Any:
     data = dict(value or {})
     return Subject(
         id=data.get("id", ""),
-        kind=data.get("kind", ""),
         credential_subject_id=data.get("credential_subject_id", ""),
-        display_name=data.get("display_name", ""),
-        auth_source=data.get("auth_source", ""),
         email=data.get("email", ""),
     )
 

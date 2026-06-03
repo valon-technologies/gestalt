@@ -1152,7 +1152,6 @@ func TestPrepareAtPath_AllowsSessionCatalogOnlyInvokesTarget(t *testing.T) {
           runAs:
             subject:
               id: service_account:agent
-              kind: service_account
             applyByDefault: false
     target:
       source:
