@@ -252,8 +252,8 @@ spec:
 
 Hosted HTTP bindings are optional routes layered on top of operations. They do
 not replace the generic `/api/v1/{app}/{operation}` facade; use them when a
-plugin needs a stable custom path, form-encoded request bodies, hosted request
-verification, or an immediate host-managed acknowledgment response.
+plugin needs a stable custom path, form-encoded request bodies, or hosted request
+verification.
 
 `spec.http.<name>.path` is app-relative. The configured app key determines
 the public prefix: for a deployment entry named `example`, `path: /command`
