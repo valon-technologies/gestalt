@@ -259,19 +259,6 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 	if _, ok := binding.RequestBody.Content["application/x-www-form-urlencoded"]; !ok {
 		t.Fatalf("binding.RequestBody.Content = %#v, want form content type", binding.RequestBody.Content)
 	}
-	if binding.Ack == nil {
-		t.Fatal("binding.Ack = nil, want hosted HTTP ack metadata")
-	}
-	if binding.Ack.Status != http.StatusOK {
-		t.Fatalf("binding.Ack.Status = %d, want %d", binding.Ack.Status, http.StatusOK)
-	}
-	body, ok := binding.Ack.Body.(map[string]any)
-	if !ok {
-		t.Fatalf("binding.Ack.Body type = %T, want map[string]any", binding.Ack.Body)
-	}
-	if got := body["status"]; got != "accepted" {
-		t.Fatalf("binding.Ack.Body[status] = %#v, want %#v", got, "accepted")
-	}
 }
 
 func writeManagedPluginConfigForTest(t *testing.T, dir, pluginKey, metadataURL, mountPath string) string {
@@ -397,12 +384,6 @@ func hostedHTTPMetadataSpec(target string) *providermanifestv1.Spec {
 					Required: true,
 					Content: map[string]*providermanifestv1.HTTPMediaType{
 						"application/x-www-form-urlencoded": {},
-					},
-				},
-				Ack: &providermanifestv1.HTTPAck{
-					Status: 200,
-					Body: map[string]any{
-						"status": "accepted",
 					},
 				},
 			},

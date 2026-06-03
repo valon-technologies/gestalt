@@ -760,10 +760,6 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 						Method:   http.MethodPost,
 						Security: "public",
 						Target:   "receive_event",
-						Ack: &providermanifestv1.HTTPAck{
-							Status: http.StatusAccepted,
-							Body:   map[string]any{"accepted": true},
-						},
 					},
 				},
 			},
@@ -779,8 +775,8 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 		t.Fatalf("http binding request: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("http binding status = %d, want %d", resp.StatusCode, http.StatusAccepted)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("http binding status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
 	select {
