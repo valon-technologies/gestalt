@@ -1804,20 +1804,9 @@ type EgressConfig struct {
 }
 
 type AuthorizationConfig struct {
-	Policies      map[string]SubjectPolicyDef               `yaml:"policies,omitempty"`
 	Models        map[string]AuthorizationModelDef          `yaml:"models,omitempty"`
 	Relationships []AuthorizationRelationshipDef            `yaml:"relationships,omitempty"`
 	ResourceTypes map[string]AuthorizationResourcePolicyDef `yaml:"resourceTypes,omitempty"`
-}
-
-type SubjectPolicyDef struct {
-	Default string                   `yaml:"default,omitempty"`
-	Members []SubjectPolicyMemberDef `yaml:"members,omitempty"`
-}
-
-type SubjectPolicyMemberDef struct {
-	SubjectID string `yaml:"subjectID,omitempty"`
-	Role      string `yaml:"role"`
 }
 
 type AuthorizationModelDef struct {
@@ -1826,10 +1815,11 @@ type AuthorizationModelDef struct {
 }
 
 type AuthorizationResourceTypeDef struct {
-	Relations map[string]AuthorizationRelationDef   `yaml:"relations,omitempty"`
-	Actions   map[string]AuthorizationActionDef     `yaml:"actions,omitempty"`
-	Dynamic   AuthorizationResourceDynamicPolicyDef `yaml:"dynamic,omitempty"`
-	Source    AuthorizationSourceMetadataDef        `yaml:"source,omitempty"`
+	DefaultAccessPolicy string                                `yaml:"defaultAccessPolicy,omitempty"`
+	Relations           map[string]AuthorizationRelationDef   `yaml:"relations,omitempty"`
+	Actions             map[string]AuthorizationActionDef     `yaml:"actions,omitempty"`
+	Dynamic             AuthorizationResourceDynamicPolicyDef `yaml:"dynamic,omitempty"`
+	Source              AuthorizationSourceMetadataDef        `yaml:"source,omitempty"`
 }
 
 type AuthorizationRelationDef struct {
@@ -3431,15 +3421,6 @@ func normalizeAuthorizationConfig(cfg *Config) error {
 }
 
 func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig {
-	if len(cfg.Policies) == 0 {
-		cfg.Policies = nil
-	} else {
-		policies := make(map[string]SubjectPolicyDef, len(cfg.Policies))
-		for name, policy := range cfg.Policies {
-			policies[name] = normalizedSubjectPolicyDef(policy)
-		}
-		cfg.Policies = policies
-	}
 	if len(cfg.Models) == 0 {
 		cfg.Models = nil
 	} else {
@@ -3639,13 +3620,6 @@ func normalizeAdminConfig(cfg *Config) error {
 	return nil
 }
 
-func normalizedSubjectPolicyDef(policy SubjectPolicyDef) SubjectPolicyDef {
-	if len(policy.Members) == 0 {
-		policy.Members = nil
-	}
-	return policy
-}
-
 func applyAppMountBindings(cfg *Config) error {
 	if cfg == nil || len(cfg.Apps) == 0 {
 		return nil
@@ -3673,9 +3647,6 @@ func applyAppMountBindings(cfg *Config) error {
 			return fmt.Errorf("config validation: apps.%s.ui.path: %w", appName, err)
 		}
 		app.MountPath = normalizedPath
-		if err := validateAuthorizationPolicyReference(cfg, "app", appName, app.AuthorizationPolicy); err != nil {
-			return err
-		}
 		if app.UI == "" {
 			continue
 		}

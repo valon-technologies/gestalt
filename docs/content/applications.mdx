@@ -116,12 +116,14 @@ server:
     indexeddb: main
 
 authorization:
-  policies:
-    workspace_review:
-      default: deny
-      members:
-        - subjectID: service_account:workspace-review-nightly
-          role: admin
+  models:
+    default:
+      resourceTypes:
+        workspace-review:
+          defaultAccessPolicy: deny
+          relations:
+            admin:
+              subjectTypes: [subject]
 
 providers:
   authentication:

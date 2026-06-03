@@ -746,57 +746,7 @@ server:
 	}
 }
 
-func TestValidateStructureRejectsDuplicateAuthorizationPolicyMembers(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		members []SubjectPolicyMemberDef
-		want    string
-	}{
-		{
-			name: "duplicate subject id",
-			members: []SubjectPolicyMemberDef{
-				{SubjectID: "user:123", Role: "viewer"},
-				{SubjectID: "user:123", Role: "admin"},
-			},
-			want: "subjectID duplicates",
-		},
-		{
-			name: "missing subject id",
-			members: []SubjectPolicyMemberDef{
-				{Role: "viewer"},
-			},
-			want: "subjectID is required",
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			cfg := &Config{
-				APIVersion: ConfigAPIVersion,
-				Authorization: AuthorizationConfig{
-					Policies: map[string]SubjectPolicyDef{
-						"roadmap": {
-							Default: "deny",
-							Members: tc.members,
-						},
-					},
-				},
-			}
-
-			err := ValidateStructure(cfg)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("ValidateStructure error = %v, want substring %q", err, tc.want)
-			}
-		})
-	}
-}
-
-func TestLoadAuthorizationModelFragments(t *testing.T) {
+func TestLoadRejectsAuthorizationPolicies(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
@@ -807,10 +757,27 @@ authorization:
       members:
         - subjectID: user:legacy
           role: admin
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), `field policies not found`) {
+		t.Fatalf("Load error = %v, want unknown policies field", err)
+	}
+}
+
+func TestLoadAuthorizationModelFragments(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+authorization:
   models:
     default:
       resourceTypes:
         team:
+          defaultAccessPolicy: deny
           relations:
             member:
               subjectTypes: [subject]
@@ -852,10 +819,10 @@ authorization:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.Authorization.Policies["legacy_admins"].Members[0].SubjectID; got != "user:legacy" {
-		t.Fatalf("legacy policy subjectID = %q, want user:legacy", got)
-	}
 	team := cfg.Authorization.Models["default"].ResourceTypes["team"]
+	if got := team.DefaultAccessPolicy; got != "deny" {
+		t.Fatalf("team defaultAccessPolicy = %q, want deny", got)
+	}
 	if !team.Dynamic.AllowAdditionalRelationships {
 		t.Fatal("team dynamic allowAdditionalRelationships = false, want true")
 	}
@@ -912,6 +879,18 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 				}),
 			}},
 			wantErr: `references unknown relation "admin"`,
+		},
+		{
+			name: "invalid default access policy",
+			authz: AuthorizationConfig{Models: map[string]AuthorizationModelDef{
+				"default": model(map[string]AuthorizationResourceTypeDef{
+					"team": {
+						DefaultAccessPolicy: "sometimes",
+						Relations:           map[string]AuthorizationRelationDef{"member": subjectRelation("subject")},
+					},
+				}),
+			}},
+			wantErr: `authorization.models.default.resourceTypes.team.defaultAccessPolicy must be "allow" or "deny"`,
 		},
 		{
 			name: "model key has surrounding whitespace",
@@ -1250,10 +1229,6 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-authorization:
-  policies:
-    admin_policy:
-      default: deny
 `)
 
 		_, err := Load(path)
@@ -1290,10 +1265,6 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-authorization:
-  policies:
-    admin_policy:
-      default: deny
 `)
 
 		_, err := Load(path)
@@ -1328,10 +1299,6 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-authorization:
-  policies:
-    admin_policy:
-      default: deny
 `)
 
 		_, err := Load(path)
@@ -1365,10 +1332,6 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-authorization:
-  policies:
-    admin_policy:
-      default: deny
 `)
 
 		_, err := Load(path)
@@ -2117,13 +2080,6 @@ apps:
       bundle: roadmap
       path: /create-customer-roadmap-review/
     authorizationPolicy: roadmap_policy
-authorization:
-  policies:
-    roadmap_policy:
-      default: deny
-      members:
-        - subjectID: user:viewer-user
-          role: viewer
 server:
   providers:
     indexeddb: sqlite

@@ -2031,14 +2031,6 @@ func seedUser(t *testing.T, svc *coredata.Services, email string) *core.User {
 	return u
 }
 
-func staticPolicyUserMember(t *testing.T, svc *coredata.Services, email, role string) config.SubjectPolicyMemberDef {
-	t.Helper()
-	return config.SubjectPolicyMemberDef{
-		SubjectID: principal.UserSubjectID(seedUser(t, svc, email).ID),
-		Role:      role,
-	}
-}
-
 func seedUserRecord(t *testing.T, svc *coredata.Services, id, email string, createdAt time.Time) *core.User {
 	t.Helper()
 	ctx := context.Background()

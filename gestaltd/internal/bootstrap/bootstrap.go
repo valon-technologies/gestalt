@@ -977,6 +977,10 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 			_ = closeAuthorizationProviders(authorizationProviders)
 		}
 	}()
+	if err := bootstrapAuthorizationProviderState(ctx, cfg, authorizationProviders); err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, err
+	}
 	closeExternalCredentialsOnError := true
 	defer func() {
 		if closeExternalCredentialsOnError {
