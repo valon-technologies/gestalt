@@ -510,6 +510,7 @@ func buildAppInvocationHostService(deps Deps, tokens *appaccessservice.Invocatio
 				invoker,
 				tokens,
 				appaccessservice.WithWorkflowRunResolver(workflowRuns),
+				appaccessservice.WithWorkflowAppInvocationGrants(deps.WorkflowAppInvocationGrants),
 			))
 		},
 	}

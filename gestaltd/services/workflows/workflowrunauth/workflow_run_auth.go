@@ -22,6 +22,7 @@ type Resolver interface {
 type TargetAuth struct {
 	Operations  map[string]map[string]core.ConnectionMode
 	Permissions principal.PermissionSet
+	StepApps    map[string]struct{}
 }
 
 type ResolvedInvocation struct {
@@ -80,12 +81,17 @@ func TargetInvocationAuth(target coreworkflow.Target) TargetAuth {
 	auth := TargetAuth{
 		Operations:  map[string]map[string]core.ConnectionMode{},
 		Permissions: principal.PermissionSet{},
+		StepApps:    map[string]struct{}{},
 	}
 	for i := range target.Steps {
 		step := &target.Steps[i]
 		if step.App != nil {
-			addOperationGrant(auth.Operations, step.App.Name, step.App.Operation, step.App.CredentialMode)
-			addOperationPermission(auth.Permissions, step.App.Name, step.App.Operation)
+			appName := strings.TrimSpace(step.App.Name)
+			if appName != "" {
+				auth.StepApps[appName] = struct{}{}
+			}
+			addOperationGrant(auth.Operations, appName, step.App.Operation, step.App.CredentialMode)
+			addOperationPermission(auth.Permissions, appName, step.App.Operation)
 		}
 		if step.Agent != nil {
 			if providerName := strings.TrimSpace(step.Agent.ProviderName); providerName != "" {

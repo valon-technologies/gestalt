@@ -37,6 +37,7 @@ type recordingAppInvocation struct {
 	instance              string
 	operation             string
 	credentialMode        core.ConnectionMode
+	tokenPermissions      principal.PermissionSet
 	params                map[string]any
 	graphQLIdempotencyKey string
 	graphQLProviderName   string
@@ -53,6 +54,7 @@ func (i *recordingAppInvocation) Invoke(ctx context.Context, p *principal.Princi
 	if p != nil {
 		i.subjectID = p.SubjectID
 		i.credentialSubjectID = p.CredentialSubjectID
+		i.tokenPermissions = principal.ClonePermissionSet(p.TokenPermissions)
 	}
 	if runAsAudit.AgentSubject != nil {
 		i.agentSubjectID = runAsAudit.AgentSubject.SubjectID
@@ -262,6 +264,101 @@ func TestAppServerInvokeUsesWorkflowRunAsWithoutInvocationToken(t *testing.T) {
 	runAs := invocation.WorkflowContextMap(invoker.workflowContext, "runAs")
 	if got := invocation.WorkflowContextString(runAs, "id"); got != "user:workflow-runner" {
 		t.Fatalf("workflow runAs id = %q, want persisted runAs", got)
+	}
+}
+
+func TestAppServerInvokeWorkflowRunAsInheritsDirectStepAppInvokes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		stepApp     string
+		wantCode    codes.Code
+		wantInvoked bool
+	}{
+		{
+			name:        "direct step app invoke",
+			stepApp:     "worker",
+			wantInvoked: true,
+		},
+		{
+			name:     "unrelated app invoke",
+			stepApp:  "other",
+			wantCode: codes.PermissionDenied,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			tokens, err := NewInvocationTokenManager([]byte("plugin-invoker-workflow-step-invokes-" + tc.name))
+			if err != nil {
+				t.Fatalf("NewInvocationTokenManager: %v", err)
+			}
+			workflow, err := structpb.NewStruct(map[string]any{
+				"providerName": "workflow-provider",
+				"runId":        "run-123",
+			})
+			if err != nil {
+				t.Fatalf("NewStruct: %v", err)
+			}
+
+			invoker := &recordingAppInvocation{}
+			server := NewAppServer(invoker, tokens,
+				WithWorkflowRunResolver(staticWorkflowRunResolver{
+					run: &coreworkflow.Run{
+						ID: "run-123",
+						Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+							ID: "run",
+							App: &coreworkflow.AppCall{
+								Name:      tc.stepApp,
+								Operation: "run",
+							},
+						}}},
+						RunAs: &core.RunAsSubject{SubjectID: "service_account:workflow-runner"},
+					},
+				}),
+				WithWorkflowAppInvocationGrants(map[string]InvocationGrants{
+					"worker": ExactInvocationGrantsFromDependencies([]InvocationDependency{{
+						App:            "downstream",
+						Operation:      "read",
+						CredentialMode: core.ConnectionModeNone,
+					}}),
+				}),
+			)
+			client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+				proto.RegisterAppServer(srv, server)
+			}))
+
+			_, err = client.Invoke(context.Background(), &proto.AppInvokeRequest{
+				App:       "downstream",
+				Operation: "read",
+				Workflow:  workflow,
+			})
+			if tc.wantCode != codes.OK {
+				if got := status.Code(err); got != tc.wantCode {
+					t.Fatalf("Invoke status = %s, want %s (err=%v)", got, tc.wantCode, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Invoke: %v", err)
+			}
+			if !tc.wantInvoked {
+				t.Fatal("test case succeeded unexpectedly")
+			}
+			if invoker.providerName != "downstream" || invoker.operation != "read" {
+				t.Fatalf("target = %s.%s, want downstream.read", invoker.providerName, invoker.operation)
+			}
+			if invoker.credentialMode != core.ConnectionModeNone {
+				t.Fatalf("credential mode = %q, want none", invoker.credentialMode)
+			}
+			if invoker.subjectID != "service_account:workflow-runner" {
+				t.Fatalf("subject id = %q, want persisted runAs subject", invoker.subjectID)
+			}
+			if _, ok := invoker.tokenPermissions["downstream"]["read"]; !ok {
+				t.Fatalf("token permissions = %#v, want downstream.read", invoker.tokenPermissions)
+			}
+		})
 	}
 }
 

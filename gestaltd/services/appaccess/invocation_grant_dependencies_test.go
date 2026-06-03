@@ -47,3 +47,29 @@ func TestInvocationGrantsFromDependenciesPreservesBroadAccessAndConfiguredMetada
 		t.Fatal("ApplyByDefault=false should not attach default delegation")
 	}
 }
+
+func TestExactInvocationGrantsFromDependencies(t *testing.T) {
+	t.Parallel()
+
+	grants := ExactInvocationGrantsFromDependencies([]InvocationDependency{
+		{
+			App:            "worker",
+			Operation:      "run",
+			CredentialMode: core.ConnectionModeNone,
+		},
+		{
+			App:     "linear",
+			Surface: " graphql ",
+		},
+	})
+
+	if _, ok := grants[InvocationGrantAllApps]; ok {
+		t.Fatalf("exact grants included wildcard grant: %#v", grants)
+	}
+	if got := grants["worker"].Operations["run"]; got != core.ConnectionModeNone {
+		t.Fatalf("worker.run credential mode = %q, want none", got)
+	}
+	if _, ok := grants["linear"].Surfaces["graphql"]; !ok {
+		t.Fatalf("linear surfaces = %#v, want graphql", grants["linear"].Surfaces)
+	}
+}

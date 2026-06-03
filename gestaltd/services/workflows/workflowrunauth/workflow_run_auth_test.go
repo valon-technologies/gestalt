@@ -95,6 +95,12 @@ func TestTargetInvocationAuthIncludesAppAndAgentToolRefs(t *testing.T) {
 	if _, ok := auth.Operations["docs"]["search"]; !ok {
 		t.Fatalf("auth operations = %#v, want docs.search", auth.Operations)
 	}
+	if _, ok := auth.StepApps["ledger"]; !ok {
+		t.Fatalf("step apps = %#v, want ledger", auth.StepApps)
+	}
+	if _, ok := auth.StepApps["docs"]; ok {
+		t.Fatalf("step apps = %#v, did not want agent tool app docs", auth.StepApps)
+	}
 	if _, ok := auth.Permissions["ledger"]["post"]; !ok {
 		t.Fatalf("auth permissions = %#v, want ledger.post", auth.Permissions)
 	}
