@@ -68,10 +68,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		default:
 			return fmt.Errorf("bootstrap: get workflow schedule %q for app %q: %w", desiredEntry.ScheduleID, appName, err)
 		}
-		runAs, err := workflowConfigRunAsSubject("workflows.schedules."+desiredEntry.ScheduleKey+".runAs", schedule.RunAs)
-		if err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
-		}
+		runAs := schedule.RunAs.SubjectRef()
 		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs); err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
@@ -217,20 +214,6 @@ func workflowConfigTargetLabel(target coreworkflow.Target) string {
 
 func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Target {
 	return config.WorkflowTargetToCore(target)
-}
-
-func workflowConfigRunAsSubject(path string, runAs *config.WorkflowRunAsConfig) (*core.RunAsSubject, error) {
-	if runAs == nil {
-		return nil, fmt.Errorf("config validation: %s is required", path)
-	}
-	subject := runAs.SubjectRef()
-	if subject == nil || strings.TrimSpace(subject.SubjectID) == "" {
-		return nil, fmt.Errorf("config validation: %s.subject is required", path)
-	}
-	if subject.AuthSource == "" {
-		subject.AuthSource = "config"
-	}
-	return subject, nil
 }
 
 func workflowConfigActor() coreworkflow.Actor {

@@ -60,10 +60,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		default:
 			return fmt.Errorf("bootstrap: get workflow event trigger %q for app %q: %w", desiredEntry.TriggerID, appName, err)
 		}
-		runAs, err := workflowConfigRunAsSubject("workflows.eventTriggers."+desiredEntry.TriggerKey+".runAs", trigger.RunAs)
-		if err != nil {
-			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
-		}
+		runAs := trigger.RunAs.SubjectRef()
 		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs); err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
