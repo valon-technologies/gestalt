@@ -189,27 +189,6 @@ func cloneAnyMap(src map[string]any) map[string]any {
 	return out
 }
 
-func testAgentActorToProto(actor coreagent.Actor) *proto.AgentActor {
-	return &proto.AgentActor{
-		SubjectId:   actor.SubjectID,
-		SubjectKind: actor.SubjectKind,
-		DisplayName: actor.DisplayName,
-		AuthSource:  actor.AuthSource,
-	}
-}
-
-func testAgentActorFromProto(actor *proto.AgentActor) coreagent.Actor {
-	if actor == nil {
-		return coreagent.Actor{}
-	}
-	return coreagent.Actor{
-		SubjectID:   actor.GetSubjectId(),
-		SubjectKind: actor.GetSubjectKind(),
-		DisplayName: actor.GetDisplayName(),
-		AuthSource:  actor.GetAuthSource(),
-	}
-}
-
 func testAgentWorkspaceToProto(workspace *coreagent.Workspace) *proto.AgentWorkspace {
 	if workspace == nil {
 		return nil
@@ -419,11 +398,11 @@ func (p *workspaceAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 		sessionID = req.GetSessionId()
 	}
 	session := &coreagent.Session{
-		ID:           sessionID,
-		ProviderName: "simple",
-		Model:        req.GetModel(),
-		State:        coreagent.SessionStateActive,
-		CreatedBy:    testAgentActorFromProto(req.GetCreatedBy()),
+		ID:                 sessionID,
+		ProviderName:       "simple",
+		Model:              req.GetModel(),
+		State:              coreagent.SessionStateActive,
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}
 	if p.sessions == nil {
 		p.sessions = map[string]*coreagent.Session{}
@@ -453,10 +432,10 @@ func (p *workspaceAgentProvider) UpdateSession(_ context.Context, req *proto.Upd
 		delete(p.sessions, strings.TrimSpace(req.GetSessionId()))
 	}
 	return &coreagent.Session{
-		ID:           req.GetSessionId(),
-		ProviderName: "simple",
-		State:        state,
-		CreatedBy:    coreagent.Actor{SubjectID: "user:user-1"},
+		ID:                 req.GetSessionId(),
+		ProviderName:       "simple",
+		State:              state,
+		CreatedBySubjectID: "user:user-1",
 	}, nil
 }
 
@@ -504,9 +483,9 @@ func TestHostedAgentPoolPreparesWorkspaceBeforeProviderCreate(t *testing.T) {
 	t.Cleanup(func() { _ = pool.Close() })
 
 	session, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId: "agent-session-1",
-		Model:     "gpt-test",
-		CreatedBy: testAgentActorToProto(coreagent.Actor{SubjectID: "user:user-1"}),
+		SessionId:          "agent-session-1",
+		Model:              "gpt-test",
+		CreatedBySubjectId: "user:user-1",
 		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
@@ -626,9 +605,9 @@ func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepar
 	t.Cleanup(func() { _ = pool.Close() })
 
 	first, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:      "agent-session-1",
-		IdempotencyKey: "workspace-create-1",
-		CreatedBy:      testAgentActorToProto(coreagent.Actor{SubjectID: "user:user-1"}),
+		SessionId:          "agent-session-1",
+		IdempotencyKey:     "workspace-create-1",
+		CreatedBySubjectId: "user:user-1",
 		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
@@ -648,9 +627,9 @@ func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepar
 		return nil, errors.New("prepare should not run for idempotent replay")
 	}
 	second, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:      "agent-session-1",
-		IdempotencyKey: "workspace-create-1",
-		CreatedBy:      testAgentActorToProto(coreagent.Actor{SubjectID: "user:user-1"}),
+		SessionId:          "agent-session-1",
+		IdempotencyKey:     "workspace-create-1",
+		CreatedBySubjectId: "user:user-1",
 		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
 			CWD: "other",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
@@ -691,9 +670,9 @@ func TestHostedAgentPoolCleansPreparedWorkspaceWhenProviderReturnsWrongSessionID
 	t.Cleanup(func() { _ = pool.Close() })
 
 	_, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:      "agent-session-1",
-		IdempotencyKey: "workspace-create-1",
-		CreatedBy:      testAgentActorToProto(coreagent.Actor{SubjectID: "user:user-1"}),
+		SessionId:          "agent-session-1",
+		IdempotencyKey:     "workspace-create-1",
+		CreatedBySubjectId: "user:user-1",
 		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
@@ -776,8 +755,8 @@ func TestHostedAgentPoolCleansPreparedWorkspaceWhenSessionArchived(t *testing.T)
 	t.Cleanup(func() { _ = pool.Close() })
 
 	_, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId: "agent-session-1",
-		CreatedBy: testAgentActorToProto(coreagent.Actor{SubjectID: "user:user-1"}),
+		SessionId:          "agent-session-1",
+		CreatedBySubjectId: "user:user-1",
 		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
@@ -2300,7 +2279,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		Metadata: mustTestProtoStruct(t, map[string]any{
 			"source": "agent-runtime-test",
 		}),
-		CreatedBy: testAgentActorToProto(coreagent.Actor{SubjectID: "user:user-123"}),
+		CreatedBySubjectId: "user:user-123",
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -2428,11 +2407,11 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	}
 
 	pausedTurn, err := agents[0].CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		TurnId:    "turn-2",
-		SessionId: "session-1",
-		Model:     "gpt-test",
-		CreatedBy: testAgentActorToProto(coreagent.Actor{SubjectID: "user:user-123"}),
-		Output:    agentRuntimeTextOutput(),
+		TurnId:             "turn-2",
+		SessionId:          "session-1",
+		Model:              "gpt-test",
+		CreatedBySubjectId: "user:user-123",
+		Output:             agentRuntimeTextOutput(),
 		Metadata: mustTestProtoStruct(t, map[string]any{
 			"requireInteraction": true,
 		}),
@@ -2541,10 +2520,10 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 			"simple": &routingAgentProvider{
 				getTurn: func(context.Context, *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 					return &coreagent.Turn{
-						ID:        "turn-1",
-						SessionID: "session-1",
-						Status:    coreagent.ExecutionStatusRunning,
-						CreatedBy: coreagent.Actor{SubjectID: "user:user-123"},
+						ID:                 "turn-1",
+						SessionID:          "session-1",
+						Status:             coreagent.ExecutionStatusRunning,
+						CreatedBySubjectID: "user:user-123",
 					}, nil
 				},
 			},
@@ -2559,7 +2538,6 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
 			App:        "slack",
 			Operations: []string{"chat.postMessage"},
@@ -2609,7 +2587,6 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
 			App:        "slack",
 			Operations: []string{"events.reply"},
@@ -2666,10 +2643,10 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 			"simple": &routingAgentProvider{
 				getTurn: func(context.Context, *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 					return &coreagent.Turn{
-						ID:        "turn-1",
-						SessionID: "session-1",
-						Status:    coreagent.ExecutionStatusRunning,
-						CreatedBy: coreagent.Actor{SubjectID: "user:user-123"},
+						ID:                 "turn-1",
+						SessionID:          "session-1",
+						Status:             coreagent.ExecutionStatusRunning,
+						CreatedBySubjectID: "user:user-123",
 					}, nil
 				},
 			},
@@ -2679,8 +2656,7 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 	runtime.SetRunGrants(runGrants)
 
 	runAs := &core.RunAsSubject{
-		SubjectID:   "service_account:review-worker",
-		SubjectKind: "service_account",
+		SubjectID: "service_account:review-worker",
 	}
 	messageTarget := coreagent.ToolTarget{
 		App:       "source",
@@ -2704,9 +2680,6 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
-		DisplayName:  "Hugh",
-		AuthSource:   "source-app",
 		Permissions: []core.AccessPermission{
 			{App: "source", Operations: []string{"messages.reply"}},
 			{App: "target", Operations: []string{"reviews.create"}},
@@ -2787,10 +2760,10 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 			"simple": &routingAgentProvider{
 				getTurn: func(context.Context, *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 					return &coreagent.Turn{
-						ID:        "turn-1",
-						SessionID: "session-1",
-						Status:    coreagent.ExecutionStatusSucceeded,
-						CreatedBy: coreagent.Actor{SubjectID: "user:user-123"},
+						ID:                 "turn-1",
+						SessionID:          "session-1",
+						Status:             coreagent.ExecutionStatusSucceeded,
+						CreatedBySubjectID: "user:user-123",
 					}, nil
 				},
 			},
@@ -2805,7 +2778,6 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
 			App:        "roadmap",
 			Operations: []string{"sync"},
@@ -2861,11 +2833,11 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 						t.Fatalf("GetTurn TurnID = %q, want provider-turn-1", req.GetTurnId())
 					}
 					return &coreagent.Turn{
-						ID:           "provider-turn-1",
-						SessionID:    "session-1",
-						Status:       coreagent.ExecutionStatusRunning,
-						ExecutionRef: "requested-turn-1",
-						CreatedBy:    coreagent.Actor{SubjectID: "user:user-123"},
+						ID:                 "provider-turn-1",
+						SessionID:          "session-1",
+						Status:             coreagent.ExecutionStatusRunning,
+						ExecutionRef:       "requested-turn-1",
+						CreatedBySubjectID: "user:user-123",
 					}, nil
 				},
 			},
@@ -2880,7 +2852,6 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		SessionID:    "session-1",
 		TurnID:       "requested-turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
 			App:        "roadmap",
 			Operations: []string{"sync"},
@@ -2924,7 +2895,6 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		SessionID:    "session-1",
 		TurnID:       "other-requested-turn",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
 			App:        "roadmap",
 			Operations: []string{"sync"},
@@ -2971,7 +2941,6 @@ func TestAgentRuntimeRejectsToolsAndConnectionsForNoneSourceBeforeResolvers(t *t
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		ToolSource:   coreagent.ToolSourceModeNone,
 	})
 	if err != nil {
@@ -3078,10 +3047,10 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 			"claude": &routingAgentProvider{
 				getTurn: func(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 					return &coreagent.Turn{
-						ID:        req.GetTurnId(),
-						SessionID: "session-1",
-						Status:    coreagent.ExecutionStatusRunning,
-						CreatedBy: coreagent.Actor{SubjectID: "user:user-123"},
+						ID:                 req.GetTurnId(),
+						SessionID:          "session-1",
+						Status:             coreagent.ExecutionStatusRunning,
+						CreatedBySubjectID: "user:user-123",
 					}, nil
 				},
 			},
@@ -3096,7 +3065,6 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
 			App:        "roadmap",
 			Operations: []string{"sync", "sync!", "sync_2"},
@@ -3168,7 +3136,6 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
 			App:        "roadmap",
 			Operations: []string{"sync"},
@@ -3197,7 +3164,6 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
 			App:        "docs",
 			Operations: docsPermissions,
@@ -3263,7 +3229,6 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
 			App:        "roadmap",
 			Operations: []string{"sync"},
@@ -3357,10 +3322,10 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 			"claude": &routingAgentProvider{
 				getTurn: func(context.Context, *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 					return &coreagent.Turn{
-						ID:        "turn-1",
-						SessionID: "session-1",
-						Status:    coreagent.ExecutionStatusRunning,
-						CreatedBy: coreagent.Actor{SubjectID: "user:user-123"},
+						ID:                 "turn-1",
+						SessionID:          "session-1",
+						Status:             coreagent.ExecutionStatusRunning,
+						CreatedBySubjectID: "user:user-123",
 					}, nil
 				},
 			},
@@ -3375,7 +3340,6 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{
 			{App: "github", Operations: []string{"issues"}},
 			{App: "linear", Operations: []string{"viewer"}},
@@ -3431,7 +3395,6 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
 			App:        "linear",
 			Operations: []string{"viewer"},
@@ -3461,7 +3424,6 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
 			App:        "linear",
 			Operations: []string{"viewer"},

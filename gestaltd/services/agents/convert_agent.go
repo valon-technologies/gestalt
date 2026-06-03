@@ -3,6 +3,7 @@ package agents
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
@@ -40,41 +41,11 @@ func agentMessagesFromProto(messages []*proto.AgentMessage) []coreagent.Message 
 	return agentwire.MessagesFromProto(messages)
 }
 
-func agentActorToProto(actor coreagent.Actor) *proto.AgentActor {
-	if actor == (coreagent.Actor{}) {
-		return nil
-	}
-	return &proto.AgentActor{
-		SubjectId:   actor.SubjectID,
-		SubjectKind: actor.SubjectKind,
-		DisplayName: actor.DisplayName,
-		AuthSource:  actor.AuthSource,
-	}
-}
-
-func agentActorFromProto(actor *proto.AgentActor) coreagent.Actor {
-	if actor == nil {
-		return coreagent.Actor{}
-	}
-	return coreagent.Actor{
-		SubjectID:   actor.GetSubjectId(),
-		SubjectKind: actor.GetSubjectKind(),
-		DisplayName: actor.GetDisplayName(),
-		AuthSource:  actor.GetAuthSource(),
-	}
-}
-
 func subjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
 	if subject == (core.RunAsSubject{}) {
 		return nil
 	}
-	return &proto.SubjectContext{
-		Id:                  subject.SubjectID,
-		Kind:                subject.SubjectKind,
-		CredentialSubjectId: subject.CredentialSubjectID,
-		DisplayName:         subject.DisplayName,
-		AuthSource:          subject.AuthSource,
-	}
+	return agentwire.RunAsSubjectToProto(&subject)
 }
 
 func listedAgentToolToProto(tool coreagent.ListedTool) *proto.ListedAgentTool {
@@ -188,16 +159,16 @@ func agentSessionFromProto(session *proto.AgentSession) (*coreagent.Session, err
 		return nil, err
 	}
 	return &coreagent.Session{
-		ID:           session.GetId(),
-		ProviderName: session.GetProviderName(),
-		Model:        session.GetModel(),
-		ClientRef:    session.GetClientRef(),
-		State:        state,
-		Metadata:     mapFromStruct(session.GetMetadata()),
-		CreatedBy:    agentActorFromProto(session.GetCreatedBy()),
-		CreatedAt:    timeFromProto(session.GetCreatedAt()),
-		UpdatedAt:    timeFromProto(session.GetUpdatedAt()),
-		LastTurnAt:   timeFromProto(session.GetLastTurnAt()),
+		ID:                 session.GetId(),
+		ProviderName:       session.GetProviderName(),
+		Model:              session.GetModel(),
+		ClientRef:          session.GetClientRef(),
+		State:              state,
+		Metadata:           mapFromStruct(session.GetMetadata()),
+		CreatedBySubjectID: strings.TrimSpace(session.GetCreatedBySubjectId()),
+		CreatedAt:          timeFromProto(session.GetCreatedAt()),
+		UpdatedAt:          timeFromProto(session.GetUpdatedAt()),
+		LastTurnAt:         timeFromProto(session.GetLastTurnAt()),
 	}, nil
 }
 
@@ -210,19 +181,19 @@ func agentTurnFromProto(turn *proto.AgentTurn) (*coreagent.Turn, error) {
 		return nil, err
 	}
 	return &coreagent.Turn{
-		ID:            turn.GetId(),
-		SessionID:     turn.GetSessionId(),
-		ProviderName:  turn.GetProviderName(),
-		Model:         turn.GetModel(),
-		Status:        status,
-		Messages:      agentMessagesFromProto(turn.GetMessages()),
-		Output:        agentTurnOutputFromProto(turn),
-		StatusMessage: turn.GetStatusMessage(),
-		CreatedBy:     agentActorFromProto(turn.GetCreatedBy()),
-		CreatedAt:     timeFromProto(turn.GetCreatedAt()),
-		StartedAt:     timeFromProto(turn.GetStartedAt()),
-		CompletedAt:   timeFromProto(turn.GetCompletedAt()),
-		ExecutionRef:  turn.GetExecutionRef(),
+		ID:                 turn.GetId(),
+		SessionID:          turn.GetSessionId(),
+		ProviderName:       turn.GetProviderName(),
+		Model:              turn.GetModel(),
+		Status:             status,
+		Messages:           agentMessagesFromProto(turn.GetMessages()),
+		Output:             agentTurnOutputFromProto(turn),
+		StatusMessage:      turn.GetStatusMessage(),
+		CreatedBySubjectID: strings.TrimSpace(turn.GetCreatedBySubjectId()),
+		CreatedAt:          timeFromProto(turn.GetCreatedAt()),
+		StartedAt:          timeFromProto(turn.GetStartedAt()),
+		CompletedAt:        timeFromProto(turn.GetCompletedAt()),
+		ExecutionRef:       turn.GetExecutionRef(),
 	}, nil
 }
 
@@ -358,16 +329,16 @@ func agentSessionToProto(session *coreagent.Session) (*proto.AgentSession, error
 		return nil, fmt.Errorf("agent session metadata: %w", err)
 	}
 	return &proto.AgentSession{
-		Id:           session.ID,
-		ProviderName: session.ProviderName,
-		Model:        session.Model,
-		ClientRef:    session.ClientRef,
-		State:        agentSessionStateToProto(session.State),
-		Metadata:     metadata,
-		CreatedBy:    agentActorToProto(session.CreatedBy),
-		CreatedAt:    timeToProto(session.CreatedAt),
-		UpdatedAt:    timeToProto(session.UpdatedAt),
-		LastTurnAt:   timeToProto(session.LastTurnAt),
+		Id:                 session.ID,
+		ProviderName:       session.ProviderName,
+		Model:              session.Model,
+		ClientRef:          session.ClientRef,
+		State:              agentSessionStateToProto(session.State),
+		Metadata:           metadata,
+		CreatedBySubjectId: strings.TrimSpace(session.CreatedBySubjectID),
+		CreatedAt:          timeToProto(session.CreatedAt),
+		UpdatedAt:          timeToProto(session.UpdatedAt),
+		LastTurnAt:         timeToProto(session.LastTurnAt),
 	}, nil
 }
 
@@ -380,18 +351,18 @@ func agentTurnToProto(turn *coreagent.Turn) (*proto.AgentTurn, error) {
 		return nil, fmt.Errorf("agent turn messages: %w", err)
 	}
 	out := &proto.AgentTurn{
-		Id:            turn.ID,
-		SessionId:     turn.SessionID,
-		ProviderName:  turn.ProviderName,
-		Model:         turn.Model,
-		Status:        agentExecutionStatusToProto(turn.Status),
-		Messages:      messages,
-		StatusMessage: turn.StatusMessage,
-		CreatedBy:     agentActorToProto(turn.CreatedBy),
-		CreatedAt:     timeToProto(turn.CreatedAt),
-		StartedAt:     timeToProto(turn.StartedAt),
-		CompletedAt:   timeToProto(turn.CompletedAt),
-		ExecutionRef:  turn.ExecutionRef,
+		Id:                 turn.ID,
+		SessionId:          turn.SessionID,
+		ProviderName:       turn.ProviderName,
+		Model:              turn.Model,
+		Status:             agentExecutionStatusToProto(turn.Status),
+		Messages:           messages,
+		StatusMessage:      turn.StatusMessage,
+		CreatedBySubjectId: strings.TrimSpace(turn.CreatedBySubjectID),
+		CreatedAt:          timeToProto(turn.CreatedAt),
+		StartedAt:          timeToProto(turn.StartedAt),
+		CompletedAt:        timeToProto(turn.CompletedAt),
+		ExecutionRef:       turn.ExecutionRef,
 	}
 	if err := setAgentTurnOutputProto(out, turn.Output); err != nil {
 		return nil, fmt.Errorf("agent turn output: %w", err)

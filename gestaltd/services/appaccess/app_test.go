@@ -221,10 +221,7 @@ func TestAppServerInvokeUsesWorkflowRunAsWithoutInvocationToken(t *testing.T) {
 			}}},
 			RunAs: &core.RunAsSubject{
 				SubjectID:           "user:workflow-runner",
-				SubjectKind:         "user",
 				CredentialSubjectID: "user:workflow-runner",
-				DisplayName:         "Workflow runner",
-				AuthSource:          "config",
 			},
 		},
 	}))
@@ -423,7 +420,6 @@ func TestAppServerInvokeAppliesConfiguredDelegationMetadata(t *testing.T) {
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID:           "user:test-user",
 		CredentialSubjectID: "user:test-user",
-		DisplayName:         "Test User",
 		Kind:                principal.KindUser,
 		Source:              principal.SourceSession,
 	})
@@ -437,10 +433,7 @@ func TestAppServerInvokeAppliesConfiguredDelegationMetadata(t *testing.T) {
 				"vds.schemaVersions": {
 					RunAs: &core.RunAsSubject{
 						SubjectID:           "service_account:data-schema-explorer",
-						SubjectKind:         "service_account",
 						CredentialSubjectID: "service_account:data-schema-explorer",
-						DisplayName:         "Data Schema Explorer",
-						AuthSource:          "app_invocation",
 					},
 				},
 			},

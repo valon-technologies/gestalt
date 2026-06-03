@@ -260,7 +260,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -276,7 +275,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       cron: "0 3 * * *"
       target:
         steps:
@@ -295,7 +293,6 @@ workflows:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
       match:
         type: roadmap.item.updated
         source: roadmap

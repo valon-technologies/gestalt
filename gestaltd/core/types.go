@@ -15,7 +15,6 @@ type User struct {
 
 type ManagedSubject struct {
 	SubjectID          string
-	Kind               string
 	DisplayName        string
 	Description        string
 	CreatedBySubjectID string

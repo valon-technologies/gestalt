@@ -998,23 +998,9 @@ func normalizeAppInvocationRunAs(path string, invoke *AppInvocationDependency) e
 	}
 	subject := runAs.Subject
 	subject.ID = strings.TrimSpace(subject.ID)
-	subject.Kind = strings.TrimSpace(subject.Kind)
 	subject.CredentialSubjectID = strings.TrimSpace(subject.CredentialSubjectID)
-	subject.DisplayName = strings.TrimSpace(subject.DisplayName)
-	subject.AuthSource = strings.TrimSpace(subject.AuthSource)
 	if subject.ID == "" {
 		return fmt.Errorf("config validation: %s.runAs.subject.id is required", path)
-	}
-	if subject.Kind == "" {
-		if kind, _, ok := core.ParseSubjectID(subject.ID); ok {
-			subject.Kind = kind
-		}
-	}
-	if subject.Kind == "" {
-		return fmt.Errorf("config validation: %s.runAs.subject.kind is required", path)
-	}
-	if subject.CredentialSubjectID == "" {
-		subject.CredentialSubjectID = subject.ID
 	}
 	return nil
 }
@@ -2150,22 +2136,9 @@ func normalizeWorkflowRunAs(path string, runAs *WorkflowRunAsConfig) (*WorkflowR
 	}
 	subject := *runAs.Subject
 	subject.ID = strings.TrimSpace(subject.ID)
-	subject.Kind = strings.TrimSpace(subject.Kind)
-	subject.DisplayName = strings.TrimSpace(subject.DisplayName)
-	subject.AuthSource = strings.TrimSpace(subject.AuthSource)
-	if subject.AuthSource == "" {
-		subject.AuthSource = "config"
-	}
+	subject.CredentialSubjectID = strings.TrimSpace(subject.CredentialSubjectID)
 	if subject.ID == "" {
 		return nil, fmt.Errorf("config validation: %s.subject.id is required", path)
-	}
-	kind, _, ok := core.ParseSubjectID(subject.ID)
-	if subject.Kind == "" {
-		if ok {
-			subject.Kind = kind
-		}
-	} else if ok && subject.Kind != kind {
-		return nil, fmt.Errorf("config validation: %s.subject.kind %q must match subject.id kind %q", path, subject.Kind, kind)
 	}
 	return &WorkflowRunAsConfig{Subject: &subject}, nil
 }

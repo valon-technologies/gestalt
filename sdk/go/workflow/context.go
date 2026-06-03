@@ -89,8 +89,8 @@ func WorkflowRunContext(req Request) map[string]any {
 	if len(req.Signals) > 0 {
 		ctxValue["signals"] = WorkflowSignalsContext(req.Signals)
 	}
-	if createdBy := WorkflowActorContext(req.CreatedBy); len(createdBy) > 0 {
-		ctxValue["createdBy"] = createdBy
+	if createdBySubjectID := strings.TrimSpace(req.CreatedBySubjectID); createdBySubjectID != "" {
+		ctxValue["createdBySubjectId"] = createdBySubjectID
 	}
 	if runAs := WorkflowSubjectContext(req.RunAs); len(runAs) > 0 {
 		ctxValue["runAs"] = runAs
@@ -194,26 +194,6 @@ func WorkflowEventContext(event *gestalt.WorkflowEvent) map[string]any {
 	return value
 }
 
-func WorkflowActorContext(actor *gestalt.WorkflowActor) map[string]any {
-	value := map[string]any{}
-	if actor == nil {
-		return value
-	}
-	if actor.SubjectID != "" {
-		value["subjectId"] = actor.SubjectID
-	}
-	if actor.SubjectKind != "" {
-		value["subjectKind"] = actor.SubjectKind
-	}
-	if actor.DisplayName != "" {
-		value["displayName"] = actor.DisplayName
-	}
-	if actor.AuthSource != "" {
-		value["authSource"] = actor.AuthSource
-	}
-	return value
-}
-
 func WorkflowSubjectContext(subject *gestalt.Subject) map[string]any {
 	value := map[string]any{}
 	if subject == nil {
@@ -222,17 +202,8 @@ func WorkflowSubjectContext(subject *gestalt.Subject) map[string]any {
 	if id := strings.TrimSpace(subject.ID); id != "" {
 		value["id"] = id
 	}
-	if kind := strings.TrimSpace(subject.Kind); kind != "" {
-		value["kind"] = kind
-	}
 	if credentialSubjectID := strings.TrimSpace(subject.CredentialSubjectID); credentialSubjectID != "" {
 		value["credentialSubjectId"] = credentialSubjectID
-	}
-	if displayName := strings.TrimSpace(subject.DisplayName); displayName != "" {
-		value["displayName"] = displayName
-	}
-	if authSource := strings.TrimSpace(subject.AuthSource); authSource != "" {
-		value["authSource"] = authSource
 	}
 	if email := strings.TrimSpace(subject.Email); email != "" {
 		value["email"] = email
@@ -268,8 +239,8 @@ func WorkflowSignalsContext(signals []gestalt.WorkflowSignal) []map[string]any {
 				value["metadata"] = metadata
 			}
 		}
-		if createdBy := WorkflowActorContext(signal.CreatedBy); len(createdBy) > 0 {
-			value["createdBy"] = createdBy
+		if createdBySubjectID := strings.TrimSpace(signal.CreatedBySubjectID); createdBySubjectID != "" {
+			value["createdBySubjectId"] = createdBySubjectID
 		}
 		if !signal.CreatedAt.IsZero() {
 			value["createdAt"] = signal.CreatedAt.UTC().Format(time.RFC3339Nano)

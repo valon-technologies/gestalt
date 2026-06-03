@@ -31,9 +31,9 @@ These fields are emitted when available:
 
 | Field | Meaning |
 | --- | --- |
-| `auth_source` | Authentication mechanism for the caller: `session`, `api_token`, or `env`. |
 | `subject_id` | Canonical caller subject such as `user:<id>` or [`service_account:<id>`](/service-accounts) |
-| `subject_kind` | Canonical subject type, such as `user` or `service_account` |
+| `credential_subject_id` | Credential subject when it differs from `subject_id` |
+| `run_as_subject_id` | Delegated run-as subject for the invocation, when present |
 | `target_kind` | Generic kind for the object the event acted on, such as `api_token` or `connection` |
 | `target_id` | Stable identifier for the affected object when one exists |
 | `target_name` | Human-readable label for the affected object |
@@ -65,9 +65,6 @@ Workflow events also use workflow-specific fields when available:
 | `workflow_target_provider` | Target app, agent provider, or tool provider involved in the workflow action or denial. |
 | `workflow_target_operation` | Target operation involved in the workflow action or denial. |
 | `workflow_created_by_subject_id` | Original workflow creator subject for audited operations that execute inside a workflow context. |
-| `workflow_created_by_subject_kind` | Original workflow creator subject kind. |
-| `workflow_created_by_display_name` | Display name for the original workflow creator, when available. |
-| `workflow_created_by_auth_source` | Auth source for the original workflow creator, when available. |
 
 ## Event Names
 
@@ -180,9 +177,7 @@ definitions.
   "event_time": "2026-04-06T18:23:11.842Z",
   "request_id": "2a7c1d7f-2b25-4b7a-8ae8-02f4d8f6f2b2",
   "source": "mcp",
-  "auth_source": "api_token",
   "subject_id": "user:usr_123",
-  "subject_kind": "user",
   "provider": "github",
   "operation": "issues_list",
   "depth": 0,
@@ -200,9 +195,7 @@ Workflow-manager records keep workflow routing context in audit logs:
   "event_time": "2026-05-14T00:45:59.542Z",
   "request_id": "21d82738-3fa7-4d5f-b33f-cff12b92bb24",
   "source": "workflow_manager",
-  "auth_source": "api_token",
   "subject_id": "service_account:slack-bot",
-  "subject_kind": "service_account",
   "provider": "temporal",
   "operation": "workflow.event.publish",
   "target_kind": "workflow_event",
@@ -226,7 +219,7 @@ With the default `providers.audit.default.source: inherit`, you can still split 
 ## Metrics Notes
 
 Audit logs are a good source for invocation-based activity metrics. In
-particular, `source`, `auth_source`, `subject_id`, `provider`, `operation`, and
+particular, `source`, `subject_id`, `provider`, `operation`, and
 `allowed` are enough to derive distinct-user activity over guarded invocations.
 
 For DAU, WAU, or MAU built from tool usage, filter to successful top-level invocations where `allowed = true`, `depth = 0`, and `subject_id` is non-empty. That produces a clean “subjects who actually invoked a tool” metric. If you need a broader product-activity definition, treat the non-invocation audit events as a separate metric family rather than mixing them into invocation counts.

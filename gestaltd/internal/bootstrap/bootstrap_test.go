@@ -71,7 +71,6 @@ func bootstrapGraphQLSchema() graphqlschema.Schema {
 		QueryType: &graphqlschema.TypeName{Name: "Query"},
 		Types: []graphqlschema.FullType{
 			{
-				Kind: "OBJECT",
 				Name: "Query",
 				Fields: []graphqlschema.Field{
 					{
@@ -84,7 +83,6 @@ func bootstrapGraphQLSchema() graphqlschema.Schema {
 				},
 			},
 			{
-				Kind: "OBJECT",
 				Name: "Viewer",
 				Fields: []graphqlschema.Field{
 					{Name: "id", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("ID")}},
@@ -598,40 +596,13 @@ func bootstrapAgentMapToProtoStruct(src map[string]any) *structpb.Struct {
 	return out
 }
 
-func bootstrapAgentActorFromProto(src *proto.AgentActor) coreagent.Actor {
-	if src == nil {
-		return coreagent.Actor{}
-	}
-	return coreagent.Actor{
-		SubjectID:   src.GetSubjectId(),
-		SubjectKind: src.GetSubjectKind(),
-		DisplayName: src.GetDisplayName(),
-		AuthSource:  src.GetAuthSource(),
-	}
-}
-
-func bootstrapAgentActorToProto(src coreagent.Actor) *proto.AgentActor {
-	if src == (coreagent.Actor{}) {
-		return nil
-	}
-	return &proto.AgentActor{
-		SubjectId:   src.SubjectID,
-		SubjectKind: src.SubjectKind,
-		DisplayName: src.DisplayName,
-		AuthSource:  src.AuthSource,
-	}
-}
-
 func bootstrapAgentSubjectFromProto(src *proto.SubjectContext) core.RunAsSubject {
 	if src == nil {
 		return core.RunAsSubject{}
 	}
 	return core.RunAsSubject{
 		SubjectID:           src.GetId(),
-		SubjectKind:         src.GetKind(),
 		CredentialSubjectID: src.GetCredentialSubjectId(),
-		DisplayName:         src.GetDisplayName(),
-		AuthSource:          src.GetAuthSource(),
 	}
 }
 
@@ -720,27 +691,27 @@ func (p *recordingAgentProvider) ensureStateLocked() {
 	}
 }
 
-func agentProviderSessionIdempotencyScope(subject core.RunAsSubject, actor coreagent.Actor, idempotencyKey string) string {
+func agentProviderSessionIdempotencyScope(subject core.RunAsSubject, createdBySubjectID string, idempotencyKey string) string {
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	if idempotencyKey == "" {
 		return ""
 	}
-	return strings.Join([]string{"session", agentProviderSubjectScope(subject, actor), idempotencyKey}, "\x00")
+	return strings.Join([]string{"session", agentProviderSubjectScope(subject, createdBySubjectID), idempotencyKey}, "\x00")
 }
 
-func agentProviderTurnIdempotencyScope(subject core.RunAsSubject, actor coreagent.Actor, sessionID, idempotencyKey string) string {
+func agentProviderTurnIdempotencyScope(subject core.RunAsSubject, createdBySubjectID string, sessionID, idempotencyKey string) string {
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	if idempotencyKey == "" {
 		return ""
 	}
-	return strings.Join([]string{"turn", agentProviderSubjectScope(subject, actor), strings.TrimSpace(sessionID), idempotencyKey}, "\x00")
+	return strings.Join([]string{"turn", agentProviderSubjectScope(subject, createdBySubjectID), strings.TrimSpace(sessionID), idempotencyKey}, "\x00")
 }
 
-func agentProviderSubjectScope(subject core.RunAsSubject, actor coreagent.Actor) string {
+func agentProviderSubjectScope(subject core.RunAsSubject, createdBySubjectID string) string {
 	if subjectID := strings.TrimSpace(subject.SubjectID); subjectID != "" {
 		return subjectID
 	}
-	return strings.TrimSpace(actor.SubjectID)
+	return strings.TrimSpace(createdBySubjectID)
 }
 
 func turnStatusIsTerminalForTest(status coreagent.ExecutionStatus) bool {
@@ -757,7 +728,7 @@ func (p *recordingAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 	defer p.mu.Unlock()
 	p.ensureStateLocked()
 	subject := bootstrapAgentSubjectFromProto(req.GetSubject())
-	createdBy := bootstrapAgentActorFromProto(req.GetCreatedBy())
+	createdBy := strings.TrimSpace(req.GetCreatedBySubjectId())
 	idempotencyScope := agentProviderSessionIdempotencyScope(subject, createdBy, req.GetIdempotencyKey())
 	if sessionID, ok := p.sessionIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
 		session, ok := p.sessions[sessionID]
@@ -773,15 +744,15 @@ func (p *recordingAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	session := &coreagent.Session{
-		ID:         sessionID,
-		Model:      strings.TrimSpace(req.GetModel()),
-		ClientRef:  strings.TrimSpace(req.GetClientRef()),
-		State:      coreagent.SessionStateActive,
-		Metadata:   bootstrapAgentProtoStructToMap(req.GetMetadata()),
-		CreatedBy:  createdBy,
-		CreatedAt:  &now,
-		UpdatedAt:  &now,
-		LastTurnAt: nil,
+		ID:                 sessionID,
+		Model:              strings.TrimSpace(req.GetModel()),
+		ClientRef:          strings.TrimSpace(req.GetClientRef()),
+		State:              coreagent.SessionStateActive,
+		Metadata:           bootstrapAgentProtoStructToMap(req.GetMetadata()),
+		CreatedBySubjectID: createdBy,
+		CreatedAt:          &now,
+		UpdatedAt:          &now,
+		LastTurnAt:         nil,
 	}
 	p.sessions[sessionID] = cloneBootstrapAgentSession(session)
 	if idempotencyScope != "" {
@@ -838,7 +809,7 @@ func (p *recordingAgentProvider) CreateTurn(_ context.Context, req *proto.Create
 	defer p.mu.Unlock()
 	p.ensureStateLocked()
 	subject := bootstrapAgentSubjectFromProto(req.GetSubject())
-	createdBy := bootstrapAgentActorFromProto(req.GetCreatedBy())
+	createdBy := strings.TrimSpace(req.GetCreatedBySubjectId())
 	idempotencyScope := agentProviderTurnIdempotencyScope(subject, createdBy, req.GetSessionId(), req.GetIdempotencyKey())
 	if turnID, ok := p.turnIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
 		turn, ok := p.turns[turnID]
@@ -854,17 +825,17 @@ func (p *recordingAgentProvider) CreateTurn(_ context.Context, req *proto.Create
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	turn := &coreagent.Turn{
-		ID:           turnID,
-		SessionID:    strings.TrimSpace(req.GetSessionId()),
-		Model:        strings.TrimSpace(req.GetModel()),
-		Status:       coreagent.ExecutionStatusSucceeded,
-		Messages:     cloneBootstrapAgentMessages(bootstrapAgentMessagesFromProto(req.GetMessages())),
-		Output:       coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
-		CreatedBy:    createdBy,
-		CreatedAt:    &now,
-		StartedAt:    &now,
-		CompletedAt:  &now,
-		ExecutionRef: strings.TrimSpace(req.GetExecutionRef()),
+		ID:                 turnID,
+		SessionID:          strings.TrimSpace(req.GetSessionId()),
+		Model:              strings.TrimSpace(req.GetModel()),
+		Status:             coreagent.ExecutionStatusSucceeded,
+		Messages:           cloneBootstrapAgentMessages(bootstrapAgentMessagesFromProto(req.GetMessages())),
+		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
+		CreatedBySubjectID: createdBy,
+		CreatedAt:          &now,
+		StartedAt:          &now,
+		CompletedAt:        &now,
+		ExecutionRef:       strings.TrimSpace(req.GetExecutionRef()),
 	}
 	p.turns[turnID] = cloneBootstrapAgentTurn(turn)
 	if session := p.sessions[turn.SessionID]; session != nil {
@@ -1064,7 +1035,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 	p.mu.Lock()
 	p.ensureStateLocked()
 	subject := bootstrapAgentSubjectFromProto(req.GetSubject())
-	createdBy := bootstrapAgentActorFromProto(req.GetCreatedBy())
+	createdBy := strings.TrimSpace(req.GetCreatedBySubjectId())
 	idempotencyScope := agentProviderTurnIdempotencyScope(subject, createdBy, req.GetSessionId(), req.GetIdempotencyKey())
 	if turnID, ok := p.turnIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
 		turn, ok := p.turns[turnID]
@@ -1090,15 +1061,15 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	turn := &coreagent.Turn{
-		ID:           turnID,
-		SessionID:    strings.TrimSpace(req.GetSessionId()),
-		Model:        strings.TrimSpace(req.GetModel()),
-		Status:       coreagent.ExecutionStatusRunning,
-		Messages:     cloneBootstrapAgentMessages(bootstrapAgentMessagesFromProto(req.GetMessages())),
-		CreatedBy:    createdBy,
-		CreatedAt:    &now,
-		StartedAt:    &now,
-		ExecutionRef: strings.TrimSpace(req.GetExecutionRef()),
+		ID:                 turnID,
+		SessionID:          strings.TrimSpace(req.GetSessionId()),
+		Model:              strings.TrimSpace(req.GetModel()),
+		Status:             coreagent.ExecutionStatusRunning,
+		Messages:           cloneBootstrapAgentMessages(bootstrapAgentMessagesFromProto(req.GetMessages())),
+		CreatedBySubjectID: createdBy,
+		CreatedAt:          &now,
+		StartedAt:          &now,
+		ExecutionRef:       strings.TrimSpace(req.GetExecutionRef()),
 	}
 	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": turn.SessionID})
 	p.turns[turn.ID] = cloneBootstrapAgentTurn(turn)
@@ -1459,9 +1430,9 @@ func (p *recordingWorkflowProvider) CreateDefinition(_ context.Context, req *pro
 		return workflowwire.DefinitionToProto(&value)
 	}
 	definition := &coreworkflow.Definition{
-		ID:        id,
-		Target:    cloneBootstrapWorkflowTarget(workflowwire.TargetFromProto(req.GetTarget())),
-		CreatedBy: workflowwire.ActorFromProto(req.GetCreatedBy()),
+		ID:                 id,
+		Target:             cloneBootstrapWorkflowTarget(workflowwire.TargetFromProto(req.GetTarget())),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}
 	p.definitions[id] = definition
 	value := *definition
@@ -1523,14 +1494,14 @@ func (p *recordingWorkflowProvider) SignalOrStartRun(context.Context, *proto.Sig
 func (p *recordingWorkflowProvider) UpsertSchedule(_ context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	p.upsertedSchedules = append(p.upsertedSchedules, gproto.Clone(req).(*proto.UpsertWorkflowProviderScheduleRequest))
 	schedule := &coreworkflow.Schedule{
-		ID:           req.GetScheduleId(),
-		Cron:         req.GetCron(),
-		Timezone:     req.GetTimezone(),
-		Target:       workflowwire.TargetFromProto(req.GetTarget()),
-		DefinitionID: req.GetDefinitionId(),
-		Paused:       req.GetPaused(),
-		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
-		RunAs:        agentwire.RunAsSubjectFromProto(req.GetRunAs()),
+		ID:                 req.GetScheduleId(),
+		Cron:               req.GetCron(),
+		Timezone:           req.GetTimezone(),
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
+		DefinitionID:       req.GetDefinitionId(),
+		Paused:             req.GetPaused(),
+		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
+		RunAs:              agentwire.RunAsSubjectFromProto(req.GetRunAs()),
 	}
 	if p.schedules == nil {
 		p.schedules = map[string]*coreworkflow.Schedule{}
@@ -1605,13 +1576,13 @@ func (p *recordingWorkflowProvider) ResumeSchedule(context.Context, *proto.Resum
 func (p *recordingWorkflowProvider) UpsertEventTrigger(_ context.Context, req *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
 	p.upsertedEventTriggers = append(p.upsertedEventTriggers, gproto.Clone(req).(*proto.UpsertWorkflowProviderEventTriggerRequest))
 	trigger := &coreworkflow.EventTrigger{
-		ID:           req.GetTriggerId(),
-		Match:        workflowwire.EventMatchFromProto(req.GetMatch()),
-		Target:       workflowwire.TargetFromProto(req.GetTarget()),
-		DefinitionID: req.GetDefinitionId(),
-		Paused:       req.GetPaused(),
-		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
-		RunAs:        agentwire.RunAsSubjectFromProto(req.GetRunAs()),
+		ID:                 req.GetTriggerId(),
+		Match:              workflowwire.EventMatchFromProto(req.GetMatch()),
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
+		DefinitionID:       req.GetDefinitionId(),
+		Paused:             req.GetPaused(),
+		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
+		RunAs:              agentwire.RunAsSubjectFromProto(req.GetRunAs()),
 	}
 	if p.eventTriggers == nil {
 		p.eventTriggers = map[string]*coreworkflow.EventTrigger{}
@@ -2051,9 +2022,7 @@ func setWorkflowFixture(cfg *config.Config, app string, workflow *workflowFixtur
 func workflowFixtureRunAs(app string) *config.WorkflowRunAsConfig {
 	return &config.WorkflowRunAsConfig{
 		Subject: &config.WorkflowRunAsSubjectConfig{
-			ID:          "service_account:" + strings.TrimSpace(app) + "-workflow",
-			Kind:        "service_account",
-			DisplayName: strings.TrimSpace(app) + " workflow",
+			ID: "service_account:" + strings.TrimSpace(app) + "-workflow",
 		},
 	}
 }
@@ -2843,8 +2812,8 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if createTurnReq.GetExecutionRef() != first.ID {
 		t.Fatalf("CreateTurn execution_ref = %q, want %q", createTurnReq.GetExecutionRef(), first.ID)
 	}
-	if createTurnReq.GetCreatedBy().GetSubjectId() != p.SubjectID {
-		t.Fatalf("CreateTurn created_by.subject_id = %q, want %q", createTurnReq.GetCreatedBy().GetSubjectId(), p.SubjectID)
+	if strings.TrimSpace(createTurnReq.GetCreatedBySubjectId()) != p.SubjectID {
+		t.Fatalf("CreateTurn created_by_subject_id = %q, want %q", createTurnReq.GetCreatedBySubjectId(), p.SubjectID)
 	}
 	if len(createTurnReq.GetTools()) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.GetTools())
@@ -2915,7 +2884,6 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 			ConnMode: core.ConnectionModeSubject,
 			CatalogVal: &catalog.Catalog{
 				Name:        name,
-				DisplayName: "Assigned ticket issue source",
 				Description: "Unavailable issue tracking integration.",
 				Operations: []catalog.CatalogOperation{{
 					ID:          "list_issues",
@@ -2944,7 +2912,6 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 			ConnMode: core.ConnectionModeNone,
 			CatalogVal: &catalog.Catalog{
 				Name:        "linear",
-				DisplayName: "Linear",
 				Description: "Manage issues, projects, and teams.",
 				Operations: []catalog.CatalogOperation{
 					{
@@ -2998,7 +2965,6 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 			ConnMode: core.ConnectionModeNone,
 			CatalogVal: &catalog.Catalog{
 				Name:        "customerRoadmapReview",
-				DisplayName: "Customer Roadmap Review",
 				Description: "Review customer roadmap views, customer needs, endpoints, and current user metadata.",
 				Operations: []catalog.CatalogOperation{
 					{
@@ -3157,7 +3123,6 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		ConnMode: core.ConnectionModeNone,
 		CatalogVal: &catalog.Catalog{
 			Name:        "docs",
-			DisplayName: "Docs",
 			Description: "Search and inspect docs",
 			Operations: []catalog.CatalogOperation{
 				{ID: "alpha_search", Method: http.MethodGet, Title: "Docs alpha search", Description: "Search docs alpha", ReadOnly: true},
@@ -3363,8 +3328,7 @@ func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalog
 			DN:       "Linear",
 			ConnMode: core.ConnectionModeNone,
 			CatalogVal: &catalog.Catalog{
-				Name:        "linear",
-				DisplayName: "Linear",
+				Name: "linear",
 				Operations: []catalog.CatalogOperation{{
 					ID:       "issues",
 					Method:   http.MethodGet,
@@ -3388,8 +3352,7 @@ func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalog
 			DN:       "GitHub",
 			ConnMode: core.ConnectionModeNone,
 			CatalogVal: &catalog.Catalog{
-				Name:        "github",
-				DisplayName: "GitHub",
+				Name: "github",
 				Operations: []catalog.CatalogOperation{{
 					ID:       "issues",
 					Method:   http.MethodGet,
@@ -3506,7 +3469,6 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *t
 		ConnMode: core.ConnectionModeNone,
 		CatalogVal: &catalog.Catalog{
 			Name:        "linear",
-			DisplayName: "Linear",
 			Description: "Manage issues, projects, and teams.",
 			Operations: []catalog.CatalogOperation{{
 				ID:          "issues",
@@ -3785,18 +3747,18 @@ func TestBootstrapAgentProviderSupportsDirectTurnInteractionLifecycle(t *testing
 	}
 	startCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "system:config"})
 	if _, err := selected.CreateSession(startCtx, &proto.CreateAgentProviderSessionRequest{
-		SessionId: "agent-session-plain",
-		Model:     "gpt-test",
-		CreatedBy: bootstrapAgentActorToProto(coreagent.Actor{SubjectID: "system:config"}),
+		SessionId:          "agent-session-plain",
+		Model:              "gpt-test",
+		CreatedBySubjectId: "system:config",
 	}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := selected.CreateTurn(startCtx, &proto.CreateAgentProviderTurnRequest{
-		TurnId:    "agent-turn-plain",
-		SessionId: "agent-session-plain",
-		Model:     "gpt-test",
-		CreatedBy: bootstrapAgentActorToProto(coreagent.Actor{SubjectID: "system:config"}),
-		Output:    bootstrapTextAgentOutput(),
+		TurnId:             "agent-turn-plain",
+		SessionId:          "agent-session-plain",
+		Model:              "gpt-test",
+		CreatedBySubjectId: "system:config",
+		Output:             bootstrapTextAgentOutput(),
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -4895,12 +4857,12 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if gotApp.Input.Object["source"].Literal != "yaml" {
 		t.Fatalf("target input = %#v", gotApp.Input)
 	}
-	requestedBy := workflowwire.ActorFromProto(got.GetRequestedBy())
-	if requestedBy.SubjectID != "system:config" || requestedBy.SubjectKind != "system" || requestedBy.AuthSource != "config" {
-		t.Fatalf("requestedBy = %#v", requestedBy)
+	requestedBy := strings.TrimSpace(got.GetRequestedBySubjectId())
+	if requestedBy != "system:config" {
+		t.Fatalf("requestedBy = %q, want system:config", requestedBy)
 	}
 	runAs := agentwire.RunAsSubjectFromProto(got.GetRunAs())
-	if runAs == nil || runAs.SubjectID != "service_account:roadmap-workflow" || runAs.SubjectKind != "service_account" {
+	if runAs == nil || runAs.SubjectID != "service_account:roadmap-workflow" {
 		t.Fatalf("runAs = %#v", runAs)
 	}
 }
@@ -5011,8 +4973,7 @@ func TestBootstrapConfiguredWorkflowScheduleRunAsAllowsUserCredentialedTarget(t 
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
 	nightly.RunAs = &config.WorkflowRunAsConfig{
 		Subject: &config.WorkflowRunAsSubjectConfig{
-			ID:          " service_account:roadmap-sync ",
-			DisplayName: " Roadmap sync ",
+			ID: " service_account:roadmap-sync ",
 		},
 	}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
@@ -5037,9 +4998,9 @@ func TestBootstrapConfiguredWorkflowScheduleRunAsAllowsUserCredentialedTarget(t 
 		t.Fatalf("recorded schedules = %#v", recorders)
 	}
 	got := recorder.upsertedSchedules[0]
-	requestedBy := workflowwire.ActorFromProto(got.GetRequestedBy())
-	if requestedBy.SubjectID != "system:config" || requestedBy.SubjectKind != "system" || requestedBy.AuthSource != "config" {
-		t.Fatalf("requestedBy = %#v", requestedBy)
+	requestedBy := strings.TrimSpace(got.GetRequestedBySubjectId())
+	if requestedBy != "system:config" {
+		t.Fatalf("requestedBy = %q, want system:config", requestedBy)
 	}
 }
 
@@ -5083,7 +5044,7 @@ func TestBootstrapPersistsConfiguredWorkflowScheduleRunAsUserSubject(t *testing.
 		t.Fatalf("recorded schedules = %#v", recorders)
 	}
 	runAs := agentwire.RunAsSubjectFromProto(recorder.upsertedSchedules[0].GetRunAs())
-	if runAs == nil || runAs.SubjectID != "user:ada" || runAs.SubjectKind != "user" {
+	if runAs == nil || runAs.SubjectID != "user:ada" {
 		t.Fatalf("runAs = %#v, want user:ada", runAs)
 	}
 }
@@ -5736,12 +5697,12 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	if gotApp.Input.Object["source"].Literal != "yaml" {
 		t.Fatalf("target input = %#v", gotApp.Input)
 	}
-	requestedBy := workflowwire.ActorFromProto(got.GetRequestedBy())
-	if requestedBy.SubjectID != "system:config" || requestedBy.SubjectKind != "system" || requestedBy.AuthSource != "config" {
-		t.Fatalf("requestedBy = %#v", requestedBy)
+	requestedBy := strings.TrimSpace(got.GetRequestedBySubjectId())
+	if requestedBy != "system:config" {
+		t.Fatalf("requestedBy = %q, want system:config", requestedBy)
 	}
 	runAs := agentwire.RunAsSubjectFromProto(got.GetRunAs())
-	if runAs == nil || runAs.SubjectID != "service_account:roadmap-workflow" || runAs.SubjectKind != "service_account" {
+	if runAs == nil || runAs.SubjectID != "service_account:roadmap-workflow" {
 		t.Fatalf("runAs = %#v", runAs)
 	}
 }
@@ -5766,8 +5727,7 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 	trigger := cfg.Workflows.EventTriggers["task_updated"]
 	trigger.RunAs = &config.WorkflowRunAsConfig{
 		Subject: &config.WorkflowRunAsSubjectConfig{
-			ID:   "service_account:roadmap-events",
-			Kind: "service_account",
+			ID: "service_account:roadmap-events",
 		},
 	}
 	cfg.Workflows.EventTriggers["task_updated"] = trigger
@@ -5792,12 +5752,12 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 		t.Fatalf("recorded event triggers = %#v", recorders)
 	}
 	got := recorder.upsertedEventTriggers[0]
-	requestedBy := workflowwire.ActorFromProto(got.GetRequestedBy())
-	if requestedBy.SubjectID != "system:config" || requestedBy.SubjectKind != "system" || requestedBy.AuthSource != "config" {
-		t.Fatalf("requestedBy = %#v", requestedBy)
+	requestedBy := strings.TrimSpace(got.GetRequestedBySubjectId())
+	if requestedBy != "system:config" {
+		t.Fatalf("requestedBy = %q, want system:config", requestedBy)
 	}
 	runAs := agentwire.RunAsSubjectFromProto(got.GetRunAs())
-	if runAs == nil || runAs.SubjectID != "service_account:roadmap-events" || runAs.SubjectKind != "service_account" || runAs.CredentialSubjectID != "service_account:roadmap-events" || runAs.AuthSource != "config" {
+	if runAs == nil || runAs.SubjectID != "service_account:roadmap-events" {
 		t.Fatalf("runAs = %#v", runAs)
 	}
 }
@@ -6780,12 +6740,12 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 	}
 
 	if _, err := provider.CreateTurn(startCtx, &proto.CreateAgentProviderTurnRequest{
-		TurnId:    "agent-turn-1",
-		SessionId: "agent-session-1",
-		Model:     "gpt-test",
-		CreatedBy: bootstrapAgentActorToProto(coreagent.Actor{SubjectID: "system:config"}),
-		Output:    bootstrapTextAgentOutput(),
-		Tools:     bootstrapAgentToolsToProto([]coreagent.Tool{tool}),
+		TurnId:             "agent-turn-1",
+		SessionId:          "agent-session-1",
+		Model:              "gpt-test",
+		CreatedBySubjectId: "system:config",
+		Output:             bootstrapTextAgentOutput(),
+		Tools:              bootstrapAgentToolsToProto([]coreagent.Tool{tool}),
 	}); err == nil {
 		t.Fatal("CreateTurn error = nil, want mismatched turn id failure")
 	} else if !strings.Contains(err.Error(), `returned turn id "generated-turn-1" for requested turn id "agent-turn-1"`) {
@@ -6804,13 +6764,13 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 	}
 
 	replayedTurn, err := provider.CreateTurn(startCtx, &proto.CreateAgentProviderTurnRequest{
-		TurnId:         "agent-turn-1",
-		SessionId:      "agent-session-1",
-		IdempotencyKey: "workflow:github:run-1:turn",
-		Model:          "gpt-test",
-		CreatedBy:      bootstrapAgentActorToProto(coreagent.Actor{SubjectID: "system:config"}),
-		Output:         bootstrapTextAgentOutput(),
-		Tools:          bootstrapAgentToolsToProto([]coreagent.Tool{tool}),
+		TurnId:             "agent-turn-1",
+		SessionId:          "agent-session-1",
+		IdempotencyKey:     "workflow:github:run-1:turn",
+		Model:              "gpt-test",
+		CreatedBySubjectId: "system:config",
+		Output:             bootstrapTextAgentOutput(),
+		Tools:              bootstrapAgentToolsToProto([]coreagent.Tool{tool}),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn idempotent replay: %v", err)

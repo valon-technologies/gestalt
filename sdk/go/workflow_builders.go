@@ -87,39 +87,6 @@ type WorkflowStepOutputSource struct {
 	Path   string
 }
 
-// WorkflowActor contains fields for constructing workflow actor
-// metadata.
-type WorkflowActor struct {
-	SubjectID   string
-	SubjectKind string
-	DisplayName string
-	AuthSource  string
-}
-
-// workflowActorToProto creates workflow actor metadata.
-func workflowActorToProto(input WorkflowActor) *proto.WorkflowActor {
-	return &proto.WorkflowActor{
-		SubjectId:   input.SubjectID,
-		SubjectKind: input.SubjectKind,
-		DisplayName: input.DisplayName,
-		AuthSource:  input.AuthSource,
-	}
-}
-
-// workflowActorFromProto converts existing workflow actor metadata into
-// builder input.
-func workflowActorFromProto(value *proto.WorkflowActor) WorkflowActor {
-	if value == nil {
-		return WorkflowActor{}
-	}
-	return WorkflowActor{
-		SubjectID:   value.GetSubjectId(),
-		SubjectKind: value.GetSubjectKind(),
-		DisplayName: value.GetDisplayName(),
-		AuthSource:  value.GetAuthSource(),
-	}
-}
-
 // boundWorkflowTargetToProto creates a workflow target.
 func boundWorkflowTargetToProto(input BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {
 	steps, err := workflowStepsToProto(input.Steps)
@@ -592,7 +559,7 @@ type WorkflowSignal struct {
 	Name           string
 	Payload        any
 	Metadata       any
-	CreatedBy      *WorkflowActor
+	CreatedBySubjectID string
 	CreatedAt      time.Time
 	IdempotencyKey string
 	Sequence       int64
@@ -613,7 +580,7 @@ func workflowSignalToProto(input WorkflowSignal) (*proto.WorkflowSignal, error) 
 		Name:           input.Name,
 		Payload:        payload,
 		Metadata:       metadata,
-		CreatedBy:      workflowActorFromInput(input.CreatedBy),
+		CreatedBySubjectId: strings.TrimSpace(input.CreatedBySubjectID),
 		CreatedAt:      timestampFromNonZeroTime(input.CreatedAt),
 		IdempotencyKey: input.IdempotencyKey,
 		Sequence:       input.Sequence,
@@ -630,7 +597,7 @@ func workflowSignalFromProto(value *proto.WorkflowSignal) WorkflowSignal {
 		Name:           value.GetName(),
 		Payload:        mapFromStruct(value.GetPayload()),
 		Metadata:       mapFromStruct(value.GetMetadata()),
-		CreatedBy:      workflowActorInputPtrFromActor(value.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(value.GetCreatedBySubjectId()),
 		CreatedAt:      timeFromTimestamp(value.GetCreatedAt()),
 		IdempotencyKey: value.GetIdempotencyKey(),
 		Sequence:       value.GetSequence(),
@@ -779,7 +746,7 @@ type BoundWorkflowRun struct {
 	CompletedAt   *time.Time
 	StatusMessage string
 	ResultBody    string
-	CreatedBy     *WorkflowActor
+	CreatedBySubjectID string
 	RunAs         *Subject
 	WorkflowKey   string
 	ProviderName  string
@@ -806,7 +773,7 @@ func boundWorkflowRunToProto(input BoundWorkflowRun) (*proto.BoundWorkflowRun, e
 		CompletedAt:   timestampFromOptionalTime(input.CompletedAt),
 		StatusMessage: input.StatusMessage,
 		ResultBody:    input.ResultBody,
-		CreatedBy:     workflowActorFromInput(input.CreatedBy),
+		CreatedBySubjectId: strings.TrimSpace(input.CreatedBySubjectID),
 		RunAs:         subjectToProto(input.RunAs),
 		WorkflowKey:   input.WorkflowKey,
 		ProviderName:  input.ProviderName,
@@ -841,7 +808,7 @@ func boundWorkflowRunFromProto(value *proto.BoundWorkflowRun) (BoundWorkflowRun,
 		CompletedAt:   completedAt,
 		StatusMessage: value.GetStatusMessage(),
 		ResultBody:    value.GetResultBody(),
-		CreatedBy:     workflowActorInputPtrFromActor(value.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(value.GetCreatedBySubjectId()),
 		RunAs:         subjectFromProto(value.GetRunAs()),
 		WorkflowKey:   value.GetWorkflowKey(),
 		ProviderName:  value.GetProviderName(),
@@ -854,7 +821,7 @@ func boundWorkflowRunFromProto(value *proto.BoundWorkflowRun) (BoundWorkflowRun,
 type BoundWorkflowDefinition struct {
 	ID           string
 	Target       *BoundWorkflowTarget
-	CreatedBy    *WorkflowActor
+	CreatedBySubjectID string
 	CreatedAt    time.Time
 	ProviderName string
 }
@@ -868,7 +835,7 @@ func boundWorkflowDefinitionToProto(input BoundWorkflowDefinition) (*proto.Bound
 	return &proto.BoundWorkflowDefinition{
 		Id:           input.ID,
 		Target:       target,
-		CreatedBy:    workflowActorFromInput(input.CreatedBy),
+		CreatedBySubjectId: strings.TrimSpace(input.CreatedBySubjectID),
 		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
 		ProviderName: input.ProviderName,
 	}, nil
@@ -883,7 +850,7 @@ func boundWorkflowDefinitionFromProto(value *proto.BoundWorkflowDefinition) (Bou
 	return BoundWorkflowDefinition{
 		ID:           value.GetId(),
 		Target:       workflowTargetInputPtrFromTarget(value.GetTarget()),
-		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(value.GetCreatedBySubjectId()),
 		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
 		ProviderName: value.GetProviderName(),
 	}, nil
@@ -920,7 +887,7 @@ type BoundWorkflowSchedule struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	NextRunAt    *time.Time
-	CreatedBy    *WorkflowActor
+	CreatedBySubjectID string
 	RunAs        *Subject
 	ProviderName string
 	DefinitionID string
@@ -941,7 +908,7 @@ func boundWorkflowScheduleToProto(input BoundWorkflowSchedule) (*proto.BoundWork
 		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
 		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
 		NextRunAt:    timestampFromOptionalTime(input.NextRunAt),
-		CreatedBy:    workflowActorFromInput(input.CreatedBy),
+		CreatedBySubjectId: strings.TrimSpace(input.CreatedBySubjectID),
 		RunAs:        subjectToProto(input.RunAs),
 		ProviderName: input.ProviderName,
 		DefinitionId: input.DefinitionID,
@@ -967,7 +934,7 @@ func boundWorkflowScheduleFromProto(value *proto.BoundWorkflowSchedule) (BoundWo
 		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
 		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
 		NextRunAt:    nextRunAt,
-		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(value.GetCreatedBySubjectId()),
 		RunAs:        subjectFromProto(value.GetRunAs()),
 		ProviderName: value.GetProviderName(),
 		DefinitionID: value.GetDefinitionId(),
@@ -993,7 +960,7 @@ type BoundWorkflowEventTrigger struct {
 	Paused       bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
-	CreatedBy    *WorkflowActor
+	CreatedBySubjectID string
 	RunAs        *Subject
 	ProviderName string
 	DefinitionID string
@@ -1020,7 +987,7 @@ func boundWorkflowEventTriggerToProto(input BoundWorkflowEventTrigger) (*proto.B
 		Paused:       input.Paused,
 		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
 		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
-		CreatedBy:    workflowActorFromInput(input.CreatedBy),
+		CreatedBySubjectId: strings.TrimSpace(input.CreatedBySubjectID),
 		RunAs:        subjectToProto(input.RunAs),
 		ProviderName: input.ProviderName,
 		DefinitionId: input.DefinitionID,
@@ -1040,7 +1007,7 @@ func boundWorkflowEventTriggerFromProto(value *proto.BoundWorkflowEventTrigger) 
 		Paused:       value.GetPaused(),
 		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
 		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
-		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(value.GetCreatedBySubjectId()),
 		RunAs:        subjectFromProto(value.GetRunAs()),
 		ProviderName: value.GetProviderName(),
 		DefinitionID: value.GetDefinitionId(),
@@ -1076,21 +1043,6 @@ func workflowTargetInputPtrFromTarget(value *proto.BoundWorkflowTarget) *BoundWo
 		return nil
 	}
 	input := boundWorkflowTargetFromProto(value)
-	return &input
-}
-
-func workflowActorFromInput(input *WorkflowActor) *proto.WorkflowActor {
-	if input == nil {
-		return nil
-	}
-	return workflowActorToProto(*input)
-}
-
-func workflowActorInputPtrFromActor(value *proto.WorkflowActor) *WorkflowActor {
-	if value == nil {
-		return nil
-	}
-	input := workflowActorFromProto(value)
 	return &input
 }
 

@@ -80,6 +80,7 @@ export {
   type Request,
   type Response,
   type Subject,
+  parseSubjectId,
   type SubjectInput,
 } from "../../../../src/api.ts";
 export {
@@ -290,7 +291,6 @@ export {
   AgentToolSourceMode,
   defineAgentProvider,
   isAgentProvider,
-  type AgentActor,
   type AgentHostExecuteToolInput,
   type AgentHostListToolsInput,
   type AgentHostResolveConnectionInput,
@@ -358,8 +358,6 @@ export {
   boundWorkflowTargetToProto,
   defineWorkflowProvider,
   isWorkflowProvider,
-  workflowActor,
-  workflowActorInputFromActor,
   workflowEvent,
   workflowEventFromEvent,
   workflowEventInputFromEvent,
@@ -413,7 +411,6 @@ export {
   type UpdateWorkflowProviderDefinitionRequest,
   type UpsertWorkflowProviderEventTriggerRequest,
   type UpsertWorkflowProviderScheduleRequest,
-  type WorkflowActor,
   type WorkflowEvent,
   type WorkflowEventMatch,
   type WorkflowEventTriggerInvocation,

@@ -4,7 +4,6 @@ import {
 } from "@bufbuild/protobuf";
 
 import {
-  AgentActorSchema,
   AgentOutputSchema,
   AgentStructuredOutputSchema,
   AgentTextOutputSchema,
@@ -14,7 +13,6 @@ import {
   AgentTurnDisplaySchema,
   AgentTurnStructuredOutputSchema,
   AgentTurnTextOutputSchema,
-  type AgentActor as ProtoAgentActor,
   type AgentMessage as ProtoAgentMessage,
   type AgentMessagePart as ProtoAgentMessagePart,
   type AgentOutput as ProtoAgentOutput,
@@ -37,7 +35,6 @@ import {
   optionalStruct,
 } from "./protocol-internal.ts";
 import type {
-  AgentActor,
   AgentOutput,
   AgentMessage,
   AgentMessagePart,
@@ -266,34 +263,6 @@ export function agentMessagePartToProto(
   };
 }
 
-export function agentActorFromProto(
-  actor?: ProtoAgentActor | undefined,
-): AgentActor | undefined {
-  if (actor === undefined) {
-    return undefined;
-  }
-  return {
-    subjectId: actor.subjectId,
-    subjectKind: actor.subjectKind,
-    displayName: actor.displayName,
-    authSource: actor.authSource,
-  };
-}
-
-export function agentActorToProto(
-  actor?: AgentActor | undefined,
-): ProtoAgentActor | undefined {
-  if (actor === undefined) {
-    return undefined;
-  }
-  return create(AgentActorSchema, {
-    subjectId: actor.subjectId ?? "",
-    subjectKind: actor.subjectKind ?? "",
-    displayName: actor.displayName ?? "",
-    authSource: actor.authSource ?? "",
-  });
-}
-
 export function agentToolRefFromProto(ref: ProtoAgentToolRef): AgentToolRef {
   return {
     app: ref.app,
@@ -328,10 +297,7 @@ function agentRunAsSubjectFromProto(
   }
   return {
     id: subject.id,
-    kind: subject.kind,
     credentialSubjectId: subject.credentialSubjectId,
-    displayName: subject.displayName,
-    authSource: subject.authSource,
     email: subject.email,
   };
 }
@@ -344,10 +310,7 @@ function agentRunAsSubjectToProto(
   }
   return create(SubjectContextSchema, {
     id: subject.id ?? "",
-    kind: subject.kind ?? "",
     credentialSubjectId: subject.credentialSubjectId ?? "",
-    displayName: subject.displayName ?? "",
-    authSource: subject.authSource ?? "",
     email: subject.email ?? "",
   });
 }

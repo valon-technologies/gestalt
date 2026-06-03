@@ -275,7 +275,7 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
                 r#type: "demo.refresh.requested".to_string(),
                 ..Default::default()
             }),
-            published_by: None,
+            published_by_subject_id: String::new(),
             invocation_token: String::new(),
             provider_name: String::new(),
         })

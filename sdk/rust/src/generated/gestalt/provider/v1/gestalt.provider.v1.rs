@@ -202,15 +202,9 @@ pub struct SubjectContext {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub kind: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub auth_source: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub email: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
     pub credential_subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub email: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentToolRef {
@@ -487,17 +481,6 @@ pub struct AgentMessagePart {
     #[prost(message, optional, tag = "6")]
     pub image_ref: ::core::option::Option<AgentMessagePartImageRef>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AgentActor {
-    #[prost(string, tag = "1")]
-    pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub subject_kind: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub auth_source: ::prost::alloc::string::String,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentWorkspace {
     #[prost(message, repeated, tag = "1")]
@@ -599,8 +582,8 @@ pub struct AgentSession {
     pub state: i32,
     #[prost(message, optional, tag = "6")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "7")]
-    pub created_by: ::core::option::Option<AgentActor>,
+    #[prost(string, tag = "7")]
+    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "8")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(message, optional, tag = "9")]
@@ -620,8 +603,8 @@ pub struct CreateAgentProviderSessionRequest {
     pub client_ref: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "7")]
-    pub created_by: ::core::option::Option<AgentActor>,
+    #[prost(string, tag = "7")]
+    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "8")]
     pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "9")]
@@ -741,8 +724,8 @@ pub struct AgentTurn {
     pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
     #[prost(string, tag = "9")]
     pub status_message: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "10")]
-    pub created_by: ::core::option::Option<AgentActor>,
+    #[prost(string, tag = "10")]
+    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "11")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(message, optional, tag = "12")]
@@ -819,8 +802,8 @@ pub struct CreateAgentProviderTurnRequest {
     pub tools: ::prost::alloc::vec::Vec<ResolvedAgentTool>,
     #[prost(message, optional, tag = "8")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "10")]
-    pub created_by: ::core::option::Option<AgentActor>,
+    #[prost(string, tag = "10")]
+    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "11")]
     pub execution_ref: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "12")]
@@ -3212,17 +3195,6 @@ pub struct WorkflowStepOutputSource {
     #[prost(string, tag = "2")]
     pub path: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowActor {
-    #[prost(string, tag = "1")]
-    pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub subject_kind: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub auth_source: ::prost::alloc::string::String,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowEvent {
     #[prost(string, tag = "1")]
@@ -3307,8 +3279,8 @@ pub struct BoundWorkflowRun {
     pub status_message: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub result_body: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "10")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "10")]
+    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "12")]
     pub workflow_key: ::prost::alloc::string::String,
     #[prost(string, tag = "13")]
@@ -3336,8 +3308,8 @@ pub struct BoundWorkflowSchedule {
     pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(message, optional, tag = "8")]
     pub next_run_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "9")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "9")]
+    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "11")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(string, tag = "12")]
@@ -3359,8 +3331,8 @@ pub struct BoundWorkflowEventTrigger {
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(message, optional, tag = "6")]
     pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "7")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "7")]
+    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(string, tag = "10")]
@@ -3374,8 +3346,8 @@ pub struct BoundWorkflowDefinition {
     pub id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(message, optional, tag = "3")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "3")]
+    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "4")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(string, tag = "5")]
@@ -3391,8 +3363,8 @@ pub struct WorkflowSignal {
     pub payload: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "4")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "5")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "5")]
+    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(string, tag = "7")]
@@ -3406,8 +3378,8 @@ pub struct StartWorkflowProviderRunRequest {
     pub target: ::core::option::Option<BoundWorkflowTarget>,
     #[prost(string, tag = "2")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "4")]
+    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub workflow_key: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
@@ -3472,8 +3444,8 @@ pub struct SignalOrStartWorkflowProviderRunRequest {
     pub target: ::core::option::Option<BoundWorkflowTarget>,
     #[prost(string, tag = "3")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "4")]
+    pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub signal: ::core::option::Option<WorkflowSignal>,
     #[prost(string, tag = "7")]
@@ -3508,8 +3480,8 @@ pub struct UpsertWorkflowProviderScheduleRequest {
     pub target: ::core::option::Option<BoundWorkflowTarget>,
     #[prost(bool, tag = "5")]
     pub paused: bool,
-    #[prost(message, optional, tag = "7")]
-    pub requested_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "7")]
+    pub requested_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(string, tag = "10")]
@@ -3569,8 +3541,8 @@ pub struct UpsertWorkflowProviderEventTriggerRequest {
     pub target: ::core::option::Option<BoundWorkflowTarget>,
     #[prost(bool, tag = "4")]
     pub paused: bool,
-    #[prost(message, optional, tag = "6")]
-    pub requested_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "6")]
+    pub requested_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "8")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
@@ -3626,8 +3598,8 @@ pub struct PublishWorkflowProviderEventRequest {
     pub app_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub event: ::core::option::Option<WorkflowEvent>,
-    #[prost(message, optional, tag = "3")]
-    pub published_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "3")]
+    pub published_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
@@ -3643,8 +3615,8 @@ pub struct CreateWorkflowProviderDefinitionRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "5")]
+    pub created_by_subject_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowProviderDefinitionRequest {
@@ -3663,8 +3635,8 @@ pub struct UpdateWorkflowProviderDefinitionRequest {
     pub target: ::core::option::Option<BoundWorkflowTarget>,
     #[prost(string, tag = "4")]
     pub invocation_token: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
-    pub requested_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "5")]
+    pub requested_by_subject_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DeleteWorkflowProviderDefinitionRequest {

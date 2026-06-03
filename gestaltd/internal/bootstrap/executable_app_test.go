@@ -80,10 +80,8 @@ type invokePluginEnvelope struct {
 
 type requestContextBody struct {
 	Subject struct {
-		ID          string `json:"id"`
-		Kind        string `json:"kind"`
-		DisplayName string `json:"display_name"`
-		AuthSource  string `json:"auth_source"`
+		ID    string `json:"id"`
+		Email string `json:"email"`
 	} `json:"subject"`
 	Credential struct {
 		Mode       string `json:"mode"`
@@ -1403,10 +1401,10 @@ func (m *stubWorkflowManager) CreateDefinition(_ context.Context, p *principal.P
 	value := &workflowmanager.ManagedDefinition{
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
 		Definition: &coreworkflow.Definition{
-			ID:        id,
-			Target:    cloneWorkflowTarget(req.Target),
-			CreatedBy: coreworkflow.Actor{SubjectID: subjectIDOf(p)},
-			CreatedAt: &now,
+			ID:                 id,
+			Target:             cloneWorkflowTarget(req.Target),
+			CreatedBySubjectID: subjectIDOf(p),
+			CreatedAt:          &now,
 		},
 	}
 	m.definitions[id] = value
@@ -1674,12 +1672,12 @@ func (m *stubWorkflowManager) StartRun(_ context.Context, p *principal.Principal
 	value := &workflowmanager.ManagedRun{
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
 		Run: &coreworkflow.Run{
-			ID:           id,
-			Target:       cloneWorkflowTarget(req.Target),
-			DefinitionID: strings.TrimSpace(req.DefinitionID),
-			WorkflowKey:  req.WorkflowKey,
-			CreatedAt:    &now,
-			CreatedBy:    coreworkflow.Actor{SubjectID: subjectIDOf(p)},
+			ID:                 id,
+			Target:             cloneWorkflowTarget(req.Target),
+			DefinitionID:       strings.TrimSpace(req.DefinitionID),
+			WorkflowKey:        req.WorkflowKey,
+			CreatedAt:          &now,
+			CreatedBySubjectID: subjectIDOf(p),
 		},
 	}
 	m.runs[id] = value
@@ -1752,18 +1750,6 @@ func stubAgentProtoStructToMap(src *structpb.Struct) map[string]any {
 	return src.AsMap()
 }
 
-func stubAgentActorFromProto(src *proto.AgentActor) coreagent.Actor {
-	if src == nil {
-		return coreagent.Actor{}
-	}
-	return coreagent.Actor{
-		SubjectID:   src.GetSubjectId(),
-		SubjectKind: src.GetSubjectKind(),
-		DisplayName: src.GetDisplayName(),
-		AuthSource:  src.GetAuthSource(),
-	}
-}
-
 func stubAgentMessagesFromProto(src []*proto.AgentMessage) []coreagent.Message {
 	out := make([]coreagent.Message, 0, len(src))
 	for _, message := range src {
@@ -1805,15 +1791,15 @@ func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req *pro
 	now := time.Now().UTC().Truncate(time.Second)
 	p.createSessionRequests = append(p.createSessionRequests, req)
 	session := &coreagent.Session{
-		ID:           req.GetSessionId(),
-		ProviderName: "managed",
-		Model:        req.GetModel(),
-		ClientRef:    req.GetClientRef(),
-		State:        coreagent.SessionStateActive,
-		Metadata:     stubAgentProtoStructToMap(req.GetMetadata()),
-		CreatedBy:    stubAgentActorFromProto(req.GetCreatedBy()),
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
+		ID:                 req.GetSessionId(),
+		ProviderName:       "managed",
+		Model:              req.GetModel(),
+		ClientRef:          req.GetClientRef(),
+		State:              coreagent.SessionStateActive,
+		Metadata:           stubAgentProtoStructToMap(req.GetMetadata()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedAt:          &now,
+		UpdatedAt:          &now,
 	}
 	p.sessions[session.ID] = session
 	return cloneAgentSession(session), nil
@@ -1868,18 +1854,18 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req *proto.
 	p.createTurnRequests = append(p.createTurnRequests, req)
 
 	turn := &coreagent.Turn{
-		ID:           req.GetTurnId(),
-		SessionID:    req.GetSessionId(),
-		ProviderName: "managed",
-		Model:        req.GetModel(),
-		Status:       coreagent.ExecutionStatusSucceeded,
-		Messages:     stubAgentMessagesFromProto(req.GetMessages()),
-		Output:       coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
-		CreatedBy:    stubAgentActorFromProto(req.GetCreatedBy()),
-		CreatedAt:    &now,
-		StartedAt:    &now,
-		CompletedAt:  &now,
-		ExecutionRef: req.GetExecutionRef(),
+		ID:                 req.GetTurnId(),
+		SessionID:          req.GetSessionId(),
+		ProviderName:       "managed",
+		Model:              req.GetModel(),
+		Status:             coreagent.ExecutionStatusSucceeded,
+		Messages:           stubAgentMessagesFromProto(req.GetMessages()),
+		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedAt:          &now,
+		StartedAt:          &now,
+		CompletedAt:        &now,
+		ExecutionRef:       req.GetExecutionRef(),
 	}
 	p.turns[turn.ID] = turn
 	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": req.GetSessionId()})
@@ -4105,8 +4091,8 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if sessionReq.IdempotencyKey != "plugin-agent-session" {
 		t.Fatalf("CreateSession idempotency_key = %q, want %q", sessionReq.IdempotencyKey, "plugin-agent-session")
 	}
-	if sessionReq.GetCreatedBy().GetSubjectId() != "user:user-123" {
-		t.Fatalf("CreateSession created_by.subject_id = %q, want %q", sessionReq.GetCreatedBy().GetSubjectId(), "user:user-123")
+	if strings.TrimSpace(sessionReq.GetCreatedBySubjectId()) != "user:user-123" {
+		t.Fatalf("CreateSession created_by_subject_id = %q, want %q", sessionReq.GetCreatedBySubjectId(), "user:user-123")
 	}
 	if turnReq.IdempotencyKey != "plugin-agent-turn" {
 		t.Fatalf("CreateTurn idempotency_key = %q, want %q", turnReq.IdempotencyKey, "plugin-agent-turn")
@@ -4114,8 +4100,8 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if turnReq.GetSessionId() != roundTrip.SessionID {
 		t.Fatalf("CreateTurn session_id = %q, want %q", turnReq.GetSessionId(), roundTrip.SessionID)
 	}
-	if turnReq.GetCreatedBy().GetSubjectId() != "user:user-123" {
-		t.Fatalf("CreateTurn created_by.subject_id = %q, want %q", turnReq.GetCreatedBy().GetSubjectId(), "user:user-123")
+	if strings.TrimSpace(turnReq.GetCreatedBySubjectId()) != "user:user-123" {
+		t.Fatalf("CreateTurn created_by_subject_id = %q, want %q", turnReq.GetCreatedBySubjectId(), "user:user-123")
 	}
 	turnMetadata := stubAgentProtoStructToMap(turnReq.GetMetadata())
 	if requireInteraction, _ := turnMetadata["requireInteraction"].(bool); !requireInteraction {
@@ -4892,12 +4878,6 @@ func TestPluginInvokesInheritAmbientConnectionAndAllowOverride(t *testing.T) {
 			}
 			if got.Body.Subject.ID != principal.UserSubjectID(user.ID) {
 				t.Fatalf("nested subject.id = %q, want %q", got.Body.Subject.ID, principal.UserSubjectID(user.ID))
-			}
-			if got.Body.Subject.Kind != string(principal.KindUser) {
-				t.Fatalf("nested subject.kind = %q, want %q", got.Body.Subject.Kind, principal.KindUser)
-			}
-			if got.Body.Subject.AuthSource != principal.SourceSession.String() {
-				t.Fatalf("nested subject.auth_source = %q, want %q", got.Body.Subject.AuthSource, principal.SourceSession.String())
 			}
 		})
 	}

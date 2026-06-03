@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -62,24 +61,14 @@ func buildAuditEntry(ctx context.Context, p *principal.Principal, source, provid
 		UserAgent:  reqMeta.UserAgent,
 	}
 	if p != nil {
-		entry.AuthSource = p.AuthSource()
 		entry.SubjectID = p.SubjectID
-		if p.Kind != "" {
-			entry.SubjectKind = string(p.Kind)
-		}
 	}
 	if delegation := RunAsAuditFromContext(ctx); delegation.RunAsSubject != nil {
 		if agentSubject := delegation.AgentSubject; agentSubject != nil {
 			entry.AgentSubjectID = agentSubject.SubjectID
-			entry.AgentSubjectKind = agentSubject.SubjectKind
-			entry.AgentDisplayName = agentSubject.DisplayName
-			entry.AgentAuthSource = agentSubject.AuthSource
 		}
 		runAs := delegation.RunAsSubject
 		entry.RunAsSubjectID = runAs.SubjectID
-		entry.RunAsSubjectKind = runAs.SubjectKind
-		entry.RunAsDisplayName = runAs.DisplayName
-		entry.RunAsAuthSource = runAs.AuthSource
 	}
 	access := AccessContextFromContext(ctx)
 	if access.Policy != "" {
@@ -91,9 +80,6 @@ func buildAuditEntry(ctx context.Context, p *principal.Principal, source, provid
 	if workflow := WorkflowContextFromContext(ctx); workflow != nil {
 		if createdBy := WorkflowContextMap(workflow, "createdBy"); createdBy != nil {
 			entry.WorkflowCreatedBySubjectID = WorkflowContextString(createdBy, "subjectId")
-			entry.WorkflowCreatedBySubjectKind = WorkflowContextString(createdBy, "subjectKind")
-			entry.WorkflowCreatedByDisplayName = WorkflowContextString(createdBy, "displayName")
-			entry.WorkflowCreatedByAuthSource = WorkflowContextString(createdBy, "authSource")
 		}
 	}
 	return entry
@@ -121,10 +107,6 @@ func SetCredentialAudit(ctx context.Context, mode core.ConnectionMode, subjectID
 }
 
 func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
-	auditPrincipal := principal.Canonicalized(&principal.Principal{
-		SubjectID: strings.TrimSpace(entry.SubjectID),
-		Kind:      principal.Kind(strings.TrimSpace(entry.SubjectKind)),
-	})
 	attrs := []slog.Attr{
 		slog.String("log.type", auditLogType),
 		slog.Time("event_time", entry.Timestamp),
@@ -136,38 +118,14 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 		slog.Bool("allowed", entry.Allowed),
 	}
 
-	if entry.AuthSource != "" {
-		attrs = append(attrs, slog.String("auth_source", entry.AuthSource))
-	}
-	if auditPrincipal.SubjectID != "" {
-		attrs = append(attrs, slog.String("subject_id", auditPrincipal.SubjectID))
-	}
-	if auditPrincipal.Kind != "" {
-		attrs = append(attrs, slog.String("subject_kind", string(auditPrincipal.Kind)))
+	if entry.SubjectID != "" {
+		attrs = append(attrs, slog.String("subject_id", entry.SubjectID))
 	}
 	if entry.AgentSubjectID != "" {
 		attrs = append(attrs, slog.String("agent_subject_id", entry.AgentSubjectID))
 	}
-	if entry.AgentSubjectKind != "" {
-		attrs = append(attrs, slog.String("agent_subject_kind", entry.AgentSubjectKind))
-	}
-	if entry.AgentDisplayName != "" {
-		attrs = append(attrs, slog.String("agent_display_name", entry.AgentDisplayName))
-	}
-	if entry.AgentAuthSource != "" {
-		attrs = append(attrs, slog.String("agent_auth_source", entry.AgentAuthSource))
-	}
 	if entry.RunAsSubjectID != "" {
 		attrs = append(attrs, slog.String("run_as_subject_id", entry.RunAsSubjectID))
-	}
-	if entry.RunAsSubjectKind != "" {
-		attrs = append(attrs, slog.String("run_as_subject_kind", entry.RunAsSubjectKind))
-	}
-	if entry.RunAsDisplayName != "" {
-		attrs = append(attrs, slog.String("run_as_display_name", entry.RunAsDisplayName))
-	}
-	if entry.RunAsAuthSource != "" {
-		attrs = append(attrs, slog.String("run_as_auth_source", entry.RunAsAuthSource))
 	}
 	if entry.AccessPolicy != "" {
 		attrs = append(attrs, slog.String("access_policy", entry.AccessPolicy))
@@ -192,15 +150,6 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 	}
 	if entry.WorkflowCreatedBySubjectID != "" {
 		attrs = append(attrs, slog.String("workflow_created_by_subject_id", entry.WorkflowCreatedBySubjectID))
-	}
-	if entry.WorkflowCreatedBySubjectKind != "" {
-		attrs = append(attrs, slog.String("workflow_created_by_subject_kind", entry.WorkflowCreatedBySubjectKind))
-	}
-	if entry.WorkflowCreatedByDisplayName != "" {
-		attrs = append(attrs, slog.String("workflow_created_by_display_name", entry.WorkflowCreatedByDisplayName))
-	}
-	if entry.WorkflowCreatedByAuthSource != "" {
-		attrs = append(attrs, slog.String("workflow_created_by_auth_source", entry.WorkflowCreatedByAuthSource))
 	}
 	if entry.WorkflowKeySHA256 != "" {
 		attrs = append(attrs, slog.String("workflow_key_sha256", entry.WorkflowKeySHA256))

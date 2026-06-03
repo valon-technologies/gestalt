@@ -44,9 +44,9 @@ func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, 
 		return nil, err
 	}
 	definitionProto, err := provider.CreateDefinition(ctx, &proto.CreateWorkflowProviderDefinitionRequest{
-		Target:         targetProto,
-		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
-		CreatedBy:      workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
+		Target:             targetProto,
+		IdempotencyKey:     strings.TrimSpace(req.IdempotencyKey),
+		CreatedBySubjectId: workflowSubjectIDFromPrincipal(p),
 	})
 	if err != nil {
 		return nil, err
@@ -105,9 +105,9 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 		return nil, err
 	}
 	definitionProto, err := provider.UpdateDefinition(ctx, &proto.UpdateWorkflowProviderDefinitionRequest{
-		DefinitionId: strings.TrimSpace(definitionID),
-		Target:       targetProto,
-		RequestedBy:  workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
+		DefinitionId:         strings.TrimSpace(definitionID),
+		Target:               targetProto,
+		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
 	})
 	if err != nil {
 		return nil, err
@@ -208,7 +208,7 @@ func (m *Manager) definitionAccessible(ctx context.Context, p *principal.Princip
 	if definition == nil || definition.Definition == nil {
 		return false
 	}
-	return workflowActorOwnedBy(definition.Definition.CreatedBy, p) && m.allowStoredTarget(ctx, p, definition.Definition.Target)
+	return workflowSubjectOwnedBy(definition.Definition.CreatedBySubjectID, p) && m.allowStoredTarget(ctx, p, definition.Definition.Target)
 }
 
 func (m *Manager) providerNames() []string {

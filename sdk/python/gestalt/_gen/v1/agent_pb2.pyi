@@ -142,18 +142,6 @@ class AgentMessagePart(_message.Message):
     image_ref: AgentMessagePartImageRef
     def __init__(self, type: _Optional[_Union[AgentMessagePartType, str]] = ..., text: _Optional[str] = ..., json: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., tool_call: _Optional[_Union[AgentMessagePartToolCall, _Mapping]] = ..., tool_result: _Optional[_Union[AgentMessagePartToolResult, _Mapping]] = ..., image_ref: _Optional[_Union[AgentMessagePartImageRef, _Mapping]] = ...) -> None: ...
 
-class AgentActor(_message.Message):
-    __slots__ = ()
-    SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    SUBJECT_KIND_FIELD_NUMBER: _ClassVar[int]
-    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
-    AUTH_SOURCE_FIELD_NUMBER: _ClassVar[int]
-    subject_id: str
-    subject_kind: str
-    display_name: str
-    auth_source: str
-    def __init__(self, subject_id: _Optional[str] = ..., subject_kind: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ...) -> None: ...
-
 class AgentWorkspace(_message.Message):
     __slots__ = ()
     CHECKOUTS_FIELD_NUMBER: _ClassVar[int]
@@ -254,7 +242,7 @@ class AgentSession(_message.Message):
     CLIENT_REF_FIELD_NUMBER: _ClassVar[int]
     STATE_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
-    CREATED_BY_FIELD_NUMBER: _ClassVar[int]
+    CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
     LAST_TURN_AT_FIELD_NUMBER: _ClassVar[int]
@@ -264,11 +252,11 @@ class AgentSession(_message.Message):
     client_ref: str
     state: AgentSessionState
     metadata: _struct_pb2.Struct
-    created_by: AgentActor
+    created_by_subject_id: str
     created_at: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
     last_turn_at: _timestamp_pb2.Timestamp
-    def __init__(self, id: _Optional[str] = ..., provider_name: _Optional[str] = ..., model: _Optional[str] = ..., client_ref: _Optional[str] = ..., state: _Optional[_Union[AgentSessionState, str]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by: _Optional[_Union[AgentActor, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_turn_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., provider_name: _Optional[str] = ..., model: _Optional[str] = ..., client_ref: _Optional[str] = ..., state: _Optional[_Union[AgentSessionState, str]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_turn_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class CreateAgentProviderSessionRequest(_message.Message):
     __slots__ = ()
@@ -277,7 +265,7 @@ class CreateAgentProviderSessionRequest(_message.Message):
     MODEL_FIELD_NUMBER: _ClassVar[int]
     CLIENT_REF_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
-    CREATED_BY_FIELD_NUMBER: _ClassVar[int]
+    CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     SESSION_START_FIELD_NUMBER: _ClassVar[int]
     PREPARED_WORKSPACE_FIELD_NUMBER: _ClassVar[int]
@@ -290,7 +278,7 @@ class CreateAgentProviderSessionRequest(_message.Message):
     model: str
     client_ref: str
     metadata: _struct_pb2.Struct
-    created_by: AgentActor
+    created_by_subject_id: str
     subject: _app_pb2.SubjectContext
     session_start: AgentSessionStartConfig
     prepared_workspace: PreparedAgentWorkspace
@@ -298,7 +286,7 @@ class CreateAgentProviderSessionRequest(_message.Message):
     invocation_token: str
     workspace: AgentWorkspace
     workflow: _struct_pb2.Struct
-    def __init__(self, session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., client_ref: _Optional[str] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by: _Optional[_Union[AgentActor, _Mapping]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., session_start: _Optional[_Union[AgentSessionStartConfig, _Mapping]] = ..., prepared_workspace: _Optional[_Union[PreparedAgentWorkspace, _Mapping]] = ..., provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ..., workspace: _Optional[_Union[AgentWorkspace, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    def __init__(self, session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., client_ref: _Optional[str] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., session_start: _Optional[_Union[AgentSessionStartConfig, _Mapping]] = ..., prepared_workspace: _Optional[_Union[PreparedAgentWorkspace, _Mapping]] = ..., provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ..., workspace: _Optional[_Union[AgentWorkspace, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class AgentSessionStartConfig(_message.Message):
     __slots__ = ()
@@ -404,7 +392,7 @@ class AgentTurn(_message.Message):
     STATUS_FIELD_NUMBER: _ClassVar[int]
     MESSAGES_FIELD_NUMBER: _ClassVar[int]
     STATUS_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    CREATED_BY_FIELD_NUMBER: _ClassVar[int]
+    CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     STARTED_AT_FIELD_NUMBER: _ClassVar[int]
     COMPLETED_AT_FIELD_NUMBER: _ClassVar[int]
@@ -418,14 +406,14 @@ class AgentTurn(_message.Message):
     status: AgentExecutionStatus
     messages: _containers.RepeatedCompositeFieldContainer[AgentMessage]
     status_message: str
-    created_by: AgentActor
+    created_by_subject_id: str
     created_at: _timestamp_pb2.Timestamp
     started_at: _timestamp_pb2.Timestamp
     completed_at: _timestamp_pb2.Timestamp
     execution_ref: str
     text: AgentTurnTextOutput
     structured: AgentTurnStructuredOutput
-    def __init__(self, id: _Optional[str] = ..., session_id: _Optional[str] = ..., provider_name: _Optional[str] = ..., model: _Optional[str] = ..., status: _Optional[_Union[AgentExecutionStatus, str]] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., status_message: _Optional[str] = ..., created_by: _Optional[_Union[AgentActor, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., completed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., execution_ref: _Optional[str] = ..., text: _Optional[_Union[AgentTurnTextOutput, _Mapping]] = ..., structured: _Optional[_Union[AgentTurnStructuredOutput, _Mapping]] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., session_id: _Optional[str] = ..., provider_name: _Optional[str] = ..., model: _Optional[str] = ..., status: _Optional[_Union[AgentExecutionStatus, str]] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., status_message: _Optional[str] = ..., created_by_subject_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., completed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., execution_ref: _Optional[str] = ..., text: _Optional[_Union[AgentTurnTextOutput, _Mapping]] = ..., structured: _Optional[_Union[AgentTurnStructuredOutput, _Mapping]] = ...) -> None: ...
 
 class AgentTurnTextOutput(_message.Message):
     __slots__ = ()
@@ -478,7 +466,7 @@ class CreateAgentProviderTurnRequest(_message.Message):
     MESSAGES_FIELD_NUMBER: _ClassVar[int]
     TOOLS_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
-    CREATED_BY_FIELD_NUMBER: _ClassVar[int]
+    CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     EXECUTION_REF_FIELD_NUMBER: _ClassVar[int]
     TOOL_REFS_FIELD_NUMBER: _ClassVar[int]
     TOOL_SOURCE_FIELD_NUMBER: _ClassVar[int]
@@ -497,7 +485,7 @@ class CreateAgentProviderTurnRequest(_message.Message):
     messages: _containers.RepeatedCompositeFieldContainer[AgentMessage]
     tools: _containers.RepeatedCompositeFieldContainer[ResolvedAgentTool]
     metadata: _struct_pb2.Struct
-    created_by: AgentActor
+    created_by_subject_id: str
     execution_ref: str
     tool_refs: _containers.RepeatedCompositeFieldContainer[_app_pb2.AgentToolRef]
     tool_source: AgentToolSourceMode
@@ -509,7 +497,7 @@ class CreateAgentProviderTurnRequest(_message.Message):
     tool_refs_set: bool
     output: AgentOutput
     workflow: _struct_pb2.Struct
-    def __init__(self, turn_id: _Optional[str] = ..., session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ResolvedAgentTool, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by: _Optional[_Union[AgentActor, _Mapping]] = ..., execution_ref: _Optional[str] = ..., tool_refs: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., run_grant: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., invocation_token: _Optional[str] = ..., tool_refs_set: _Optional[bool] = ..., output: _Optional[_Union[AgentOutput, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    def __init__(self, turn_id: _Optional[str] = ..., session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ResolvedAgentTool, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., execution_ref: _Optional[str] = ..., tool_refs: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., run_grant: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., invocation_token: _Optional[str] = ..., tool_refs_set: _Optional[bool] = ..., output: _Optional[_Union[AgentOutput, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class AgentTextOutput(_message.Message):
     __slots__ = ()

@@ -38,10 +38,7 @@ type operationDelegationGrantClaims struct {
 
 type runAsSubjectGrantClaims struct {
 	SubjectID           string `json:"subject_id,omitempty"`
-	SubjectKind         string `json:"subject_kind,omitempty"`
 	CredentialSubjectID string `json:"credential_subject_id,omitempty"`
-	DisplayName         string `json:"display_name,omitempty"`
-	AuthSource          string `json:"auth_source,omitempty"`
 }
 
 func AllInvocationGrants() InvocationGrants {
@@ -281,10 +278,7 @@ func grantOperationDelegationsClaims(delegations map[string]InvocationDelegation
 		if delegation.RunAs != nil {
 			claims.RunAs = &runAsSubjectGrantClaims{
 				SubjectID:           delegation.RunAs.SubjectID,
-				SubjectKind:         delegation.RunAs.SubjectKind,
 				CredentialSubjectID: delegation.RunAs.CredentialSubjectID,
-				DisplayName:         delegation.RunAs.DisplayName,
-				AuthSource:          delegation.RunAs.AuthSource,
 			}
 		}
 		out[operation] = claims
@@ -300,10 +294,7 @@ func delegationFromGrantClaims(claims operationDelegationGrantClaims) Invocation
 	if claims.RunAs != nil {
 		runAs = core.NormalizeRunAsSubject(&core.RunAsSubject{
 			SubjectID:           claims.RunAs.SubjectID,
-			SubjectKind:         claims.RunAs.SubjectKind,
 			CredentialSubjectID: claims.RunAs.CredentialSubjectID,
-			DisplayName:         claims.RunAs.DisplayName,
-			AuthSource:          claims.RunAs.AuthSource,
 		})
 	}
 	return normalizeInvocationDelegation(InvocationDelegation{

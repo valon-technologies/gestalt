@@ -139,10 +139,8 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 		Operation: "search",
 		RunAs: &Subject{
 			ID:                  "service_account:gestalt-support-notion",
-			Kind:                "service_account",
 			CredentialSubjectID: "service_account:notion-credential",
-			DisplayName:         "Gestalt Support Notion",
-			AuthSource:          "notion_service_account",
+			Email:               "support@example.com",
 		},
 	}
 
@@ -151,7 +149,7 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 		t.Fatalf("encoded runAs subject = %q", got)
 	}
 	roundTrip := agentToolRefFromProto(encoded)
-	if roundTrip.RunAs == nil || roundTrip.RunAs.DisplayName != "Gestalt Support Notion" {
+	if roundTrip.RunAs == nil || roundTrip.RunAs.Email != "support@example.com" {
 		t.Fatalf("round-trip runAs = %#v", roundTrip.RunAs)
 	}
 }

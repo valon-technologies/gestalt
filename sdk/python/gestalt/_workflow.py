@@ -207,16 +207,6 @@ class BoundWorkflowTarget:
     steps: Sequence[WorkflowStep] = _dataclasses.field(default_factory=list)
 
 
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowActor:
-    """Native data for a workflow actor."""
-    __hash__ = None
-
-    subject_id: str = ""
-    subject_kind: str = ""
-    display_name: str = ""
-    auth_source: str = ""
-
 
 @_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowEvent:
@@ -253,7 +243,7 @@ class WorkflowSignal:
     name: str = ""
     payload: WorkflowJsonObject | None = None
     metadata: WorkflowJsonObject | None = None
-    created_by: WorkflowActor | None = None
+    created_by_subject_id: str = ""
     created_at: _dt.datetime | Any | None = None
     idempotency_key: str = ""
     sequence: int = 0
@@ -301,7 +291,7 @@ class BoundWorkflowRun:
     completed_at: _dt.datetime | Any | None = None
     status_message: str = ""
     result_body: str = ""
-    created_by: WorkflowActor | None = None
+    created_by_subject_id: str = ""
     workflow_key: str = ""
     provider_name: str = ""
     definition_id: str = ""
@@ -314,7 +304,7 @@ class BoundWorkflowDefinition:
 
     id: str = ""
     target: BoundWorkflowTarget | None = None
-    created_by: WorkflowActor | None = None
+    created_by_subject_id: str = ""
     created_at: _dt.datetime | Any | None = None
     provider_name: str = ""
 
@@ -332,7 +322,7 @@ class BoundWorkflowSchedule:
     created_at: _dt.datetime | Any | None = None
     updated_at: _dt.datetime | Any | None = None
     next_run_at: _dt.datetime | Any | None = None
-    created_by: WorkflowActor | None = None
+    created_by_subject_id: str = ""
     provider_name: str = ""
     definition_id: str = ""
 
@@ -348,7 +338,7 @@ class BoundWorkflowEventTrigger:
     paused: bool = False
     created_at: _dt.datetime | Any | None = None
     updated_at: _dt.datetime | Any | None = None
-    created_by: WorkflowActor | None = None
+    created_by_subject_id: str = ""
     provider_name: str = ""
     definition_id: str = ""
 
@@ -640,33 +630,6 @@ def _agent_tool_ref_input_list(values: Sequence[Any] | None) -> list[AgentToolRe
         else:
             output.append(agent_tool_ref_from_dict(item))
     return output
-
-
-def workflow_actor(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow actor ."""
-
-    if isinstance(value, pb.WorkflowActor):
-        return _copy(value)
-    data = _data(value, kwargs)
-    return pb.WorkflowActor(
-        subject_id=data.get("subject_id", ""),
-        subject_kind=data.get("subject_kind", ""),
-        display_name=data.get("display_name", ""),
-        auth_source=data.get("auth_source", ""),
-    )
-
-
-def workflow_actor_input_from_actor(value: Any | None) -> WorkflowActor | None:
-    """Return input copied from a workflow actor."""
-
-    if value is None:
-        return None
-    return WorkflowActor(
-        subject_id=value.subject_id,
-        subject_kind=value.subject_kind,
-        display_name=value.display_name,
-        auth_source=value.auth_source,
-    )
 
 
 def workflow_event_match(value: Any | None = None, **kwargs: Any) -> Any:
@@ -1177,13 +1140,12 @@ def workflow_signal(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.WorkflowSignal):
         return _copy(value)
     data = _data(value, kwargs)
-    created_by = data.get("created_by")
     return pb.WorkflowSignal(
         id=data.get("id", ""),
         name=data.get("name", ""),
         payload=_optional_struct(data.get("payload")),
         metadata=_optional_struct(data.get("metadata")),
-        created_by=workflow_actor(created_by) if created_by is not None else None,
+        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
         created_at=_optional_timestamp(data.get("created_at")),
         idempotency_key=data.get("idempotency_key", ""),
         sequence=data.get("sequence", 0),
@@ -1204,9 +1166,9 @@ def workflow_signal_input_from_signal(value: Any | None) -> WorkflowSignal | Non
         metadata=cast(WorkflowJsonObject, struct_to_dict(value.metadata))
         if has_field(value, "metadata")
         else None,
-        created_by=workflow_actor_input_from_actor(value.created_by)
-        if has_field(value, "created_by")
-        else None,
+        created_by_subject_id=value.created_by_subject_id.strip()
+        if has_field(value, "created_by_subject_id")
+        else "",
         created_at=_timestamp_to_datetime(value, "created_at"),
         idempotency_key=value.idempotency_key,
         sequence=value.sequence,
@@ -1515,7 +1477,6 @@ def bound_workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
     data = _data(value, kwargs)
     target = data.get("target")
     trigger = data.get("trigger")
-    created_by = data.get("created_by")
     return pb.BoundWorkflowRun(
         id=data.get("id", ""),
         status=data.get("status", WORKFLOW_RUN_STATUS_UNSPECIFIED),
@@ -1526,7 +1487,7 @@ def bound_workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
         completed_at=_optional_timestamp(data.get("completed_at")),
         status_message=data.get("status_message", ""),
         result_body=data.get("result_body", ""),
-        created_by=workflow_actor(created_by) if created_by is not None else None,
+        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
         workflow_key=data.get("workflow_key", ""),
         provider_name=data.get("provider_name", ""),
         definition_id=data.get("definition_id", ""),
@@ -1554,9 +1515,9 @@ def bound_workflow_run_input_from_run(
         completed_at=_timestamp_to_datetime(value, "completed_at"),
         status_message=value.status_message,
         result_body=value.result_body,
-        created_by=workflow_actor_input_from_actor(value.created_by)
-        if has_field(value, "created_by")
-        else None,
+        created_by_subject_id=value.created_by_subject_id.strip()
+        if has_field(value, "created_by_subject_id")
+        else "",
         workflow_key=value.workflow_key,
         provider_name=value.provider_name,
         definition_id=value.definition_id,
@@ -1577,11 +1538,10 @@ def bound_workflow_definition(value: Any | None = None, **kwargs: Any) -> Any:
         return _copy(value)
     data = _data(value, kwargs)
     target = data.get("target")
-    created_by = data.get("created_by")
     return pb.BoundWorkflowDefinition(
         id=data.get("id", ""),
         target=bound_workflow_target(target) if target is not None else None,
-        created_by=workflow_actor(created_by) if created_by is not None else None,
+        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
         created_at=_optional_timestamp(data.get("created_at")),
         provider_name=data.get("provider_name", ""),
     )
@@ -1599,9 +1559,9 @@ def bound_workflow_definition_input_from_definition(
         target=bound_workflow_target_input_from_target(value.target)
         if has_field(value, "target")
         else None,
-        created_by=workflow_actor_input_from_actor(value.created_by)
-        if has_field(value, "created_by")
-        else None,
+        created_by_subject_id=value.created_by_subject_id.strip()
+        if has_field(value, "created_by_subject_id")
+        else "",
         created_at=_timestamp_to_datetime(value, "created_at"),
         provider_name=value.provider_name,
     )
@@ -1621,7 +1581,6 @@ def bound_workflow_schedule(value: Any | None = None, **kwargs: Any) -> Any:
         return _copy(value)
     data = _data(value, kwargs)
     target = data.get("target")
-    created_by = data.get("created_by")
     return pb.BoundWorkflowSchedule(
         id=data.get("id", ""),
         cron=data.get("cron", ""),
@@ -1631,7 +1590,7 @@ def bound_workflow_schedule(value: Any | None = None, **kwargs: Any) -> Any:
         created_at=_optional_timestamp(data.get("created_at")),
         updated_at=_optional_timestamp(data.get("updated_at")),
         next_run_at=_optional_timestamp(data.get("next_run_at")),
-        created_by=workflow_actor(created_by) if created_by is not None else None,
+        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
         provider_name=data.get("provider_name", ""),
         definition_id=data.get("definition_id", ""),
     )
@@ -1655,9 +1614,9 @@ def bound_workflow_schedule_input_from_schedule(
         created_at=_timestamp_to_datetime(value, "created_at"),
         updated_at=_timestamp_to_datetime(value, "updated_at"),
         next_run_at=_timestamp_to_datetime(value, "next_run_at"),
-        created_by=workflow_actor_input_from_actor(value.created_by)
-        if has_field(value, "created_by")
-        else None,
+        created_by_subject_id=value.created_by_subject_id.strip()
+        if has_field(value, "created_by_subject_id")
+        else "",
         provider_name=value.provider_name,
         definition_id=value.definition_id,
     )
@@ -1678,7 +1637,6 @@ def bound_workflow_event_trigger(value: Any | None = None, **kwargs: Any) -> Any
     data = _data(value, kwargs)
     match = data.get("match")
     target = data.get("target")
-    created_by = data.get("created_by")
     return pb.BoundWorkflowEventTrigger(
         id=data.get("id", ""),
         match=workflow_event_match(match) if match is not None else None,
@@ -1686,7 +1644,7 @@ def bound_workflow_event_trigger(value: Any | None = None, **kwargs: Any) -> Any
         paused=data.get("paused", False),
         created_at=_optional_timestamp(data.get("created_at")),
         updated_at=_optional_timestamp(data.get("updated_at")),
-        created_by=workflow_actor(created_by) if created_by is not None else None,
+        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
         provider_name=data.get("provider_name", ""),
         definition_id=data.get("definition_id", ""),
     )
@@ -1710,9 +1668,9 @@ def bound_workflow_event_trigger_input_from_trigger(
         paused=value.paused,
         created_at=_timestamp_to_datetime(value, "created_at"),
         updated_at=_timestamp_to_datetime(value, "updated_at"),
-        created_by=workflow_actor_input_from_actor(value.created_by)
-        if has_field(value, "created_by")
-        else None,
+        created_by_subject_id=value.created_by_subject_id.strip()
+        if has_field(value, "created_by_subject_id")
+        else "",
         provider_name=value.provider_name,
         definition_id=value.definition_id,
     )
@@ -1775,7 +1733,7 @@ class StartWorkflowProviderRunRequest:
 
     target: BoundWorkflowTarget | None = None
     idempotency_key: str = ""
-    created_by: WorkflowActor | None = None
+    created_by_subject_id: str = ""
     workflow_key: str = ""
     definition_id: str = ""
 
@@ -1834,7 +1792,7 @@ class SignalOrStartWorkflowProviderRunRequest:
     workflow_key: str = ""
     target: BoundWorkflowTarget | None = None
     idempotency_key: str = ""
-    created_by: WorkflowActor | None = None
+    created_by_subject_id: str = ""
     signal: WorkflowSignal | None = None
     definition_id: str = ""
 
@@ -1857,7 +1815,7 @@ class CreateWorkflowProviderDefinitionRequest:
 
     target: BoundWorkflowTarget | None = None
     idempotency_key: str = ""
-    created_by: WorkflowActor | None = None
+    created_by_subject_id: str = ""
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
@@ -1875,7 +1833,7 @@ class UpdateWorkflowProviderDefinitionRequest:
 
     definition_id: str = ""
     target: BoundWorkflowTarget | None = None
-    requested_by: WorkflowActor | None = None
+    requested_by_subject_id: str = ""
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
@@ -1896,7 +1854,7 @@ class UpsertWorkflowProviderScheduleRequest:
     timezone: str = ""
     target: BoundWorkflowTarget | None = None
     paused: bool = False
-    requested_by: WorkflowActor | None = None
+    requested_by_subject_id: str = ""
     idempotency_key: str = ""
     definition_id: str = ""
 
@@ -1958,7 +1916,7 @@ class UpsertWorkflowProviderEventTriggerRequest:
     match: WorkflowEventMatch | None = None
     target: BoundWorkflowTarget | None = None
     paused: bool = False
-    requested_by: WorkflowActor | None = None
+    requested_by_subject_id: str = ""
     idempotency_key: str = ""
     definition_id: str = ""
 
@@ -2018,7 +1976,7 @@ class PublishWorkflowProviderEventRequest:
 
     app_name: str = ""
     event: WorkflowEvent | None = None
-    published_by: WorkflowActor | None = None
+    published_by_subject_id: str = ""
 
 
 def start_workflow_provider_run_request_from_proto(
@@ -2029,9 +1987,9 @@ def start_workflow_provider_run_request_from_proto(
         if has_field(value, "target")
         else None,
         idempotency_key=value.idempotency_key,
-        created_by=workflow_actor_input_from_actor(value.created_by)
-        if has_field(value, "created_by")
-        else None,
+        created_by_subject_id=value.created_by_subject_id.strip()
+        if has_field(value, "created_by_subject_id")
+        else "",
         workflow_key=value.workflow_key,
         definition_id=value.definition_id,
     )
@@ -2094,9 +2052,9 @@ def signal_or_start_workflow_provider_run_request_from_proto(
         if has_field(value, "target")
         else None,
         idempotency_key=value.idempotency_key,
-        created_by=workflow_actor_input_from_actor(value.created_by)
-        if has_field(value, "created_by")
-        else None,
+        created_by_subject_id=value.created_by_subject_id.strip()
+        if has_field(value, "created_by_subject_id")
+        else "",
         signal=workflow_signal_input_from_signal(value.signal)
         if has_field(value, "signal")
         else None,
@@ -2127,9 +2085,9 @@ def create_workflow_provider_definition_request_from_proto(
         if has_field(value, "target")
         else None,
         idempotency_key=value.idempotency_key,
-        created_by=workflow_actor_input_from_actor(value.created_by)
-        if has_field(value, "created_by")
-        else None,
+        created_by_subject_id=value.created_by_subject_id.strip()
+        if has_field(value, "created_by_subject_id")
+        else "",
     )
 
 
@@ -2147,9 +2105,9 @@ def update_workflow_provider_definition_request_from_proto(
         target=bound_workflow_target_input_from_target(value.target)
         if has_field(value, "target")
         else None,
-        requested_by=workflow_actor_input_from_actor(value.requested_by)
-        if has_field(value, "requested_by")
-        else None,
+        requested_by_subject_id=value.requested_by_subject_id.strip()
+        if has_field(value, "requested_by_subject_id")
+        else "",
     )
 
 
@@ -2170,9 +2128,9 @@ def upsert_workflow_provider_schedule_request_from_proto(
         if has_field(value, "target")
         else None,
         paused=value.paused,
-        requested_by=workflow_actor_input_from_actor(value.requested_by)
-        if has_field(value, "requested_by")
-        else None,
+        requested_by_subject_id=value.requested_by_subject_id.strip()
+        if has_field(value, "requested_by_subject_id")
+        else "",
         idempotency_key=value.idempotency_key,
         definition_id=value.definition_id,
     )
@@ -2233,9 +2191,9 @@ def upsert_workflow_provider_event_trigger_request_from_proto(
         if has_field(value, "target")
         else None,
         paused=value.paused,
-        requested_by=workflow_actor_input_from_actor(value.requested_by)
-        if has_field(value, "requested_by")
-        else None,
+        requested_by_subject_id=value.requested_by_subject_id.strip()
+        if has_field(value, "requested_by_subject_id")
+        else "",
         idempotency_key=value.idempotency_key,
         definition_id=value.definition_id,
     )
@@ -2294,9 +2252,9 @@ def publish_workflow_provider_event_request_from_proto(
         event=workflow_event_input_from_event(value.event)
         if has_field(value, "event")
         else None,
-        published_by=workflow_actor_input_from_actor(value.published_by)
-        if has_field(value, "published_by")
-        else None,
+        published_by_subject_id=value.published_by_subject_id.strip()
+        if has_field(value, "published_by_subject_id")
+        else "",
     )
 
 
@@ -2766,18 +2724,9 @@ class WorkflowExecutionRequest:
     trigger: WorkflowRunTrigger | None = None
     input: WorkflowJsonObject | None = None
     metadata: WorkflowJsonObject | None = None
-    created_by: WorkflowActor | None = None
+    created_by_subject_id: str = ""
     invocation_token: str = ""
     signals: Sequence[WorkflowSignal] = _dataclasses.field(default_factory=list)
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowRunContextActor:
-    __hash__ = None
-    subject_id: str = ""
-    subject_kind: str = ""
-    display_name: str = ""
-    auth_source: str = ""
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
@@ -2797,7 +2746,7 @@ class WorkflowRunContextSignal:
     name: str = ""
     payload: WorkflowJsonObject = _dataclasses.field(default_factory=dict)
     metadata: WorkflowJsonObject = _dataclasses.field(default_factory=dict)
-    created_by: WorkflowRunContextActor | None = None
+    created_by_subject_id: str = ""
     created_at: str = ""
     idempotency_key: str = ""
     sequence: int | None = None
@@ -2817,7 +2766,7 @@ class WorkflowRunContext:
     signals: Sequence[WorkflowRunContextSignal] = _dataclasses.field(
         default_factory=list
     )
-    created_by: WorkflowRunContextActor | None = None
+    created_by_subject_id: str = ""
 
     @property
     def latest_signal(self) -> WorkflowRunContextSignal | None:
@@ -2966,9 +2915,9 @@ def workflow_run_context(req: WorkflowExecutionRequest) -> dict[str, Any]:
     signal_context = workflow_signals_context(req.signals)
     if signal_context:
         out["signals"] = signal_context
-    created_by = _workflow_actor_context(req.created_by)
-    if created_by:
-        out["createdBy"] = created_by
+    created_by_subject_id = (req.created_by_subject_id or "").strip()
+    if created_by_subject_id:
+        out["createdBySubjectId"] = created_by_subject_id
     return out
 
 
@@ -2984,7 +2933,9 @@ def parse_workflow_run_context(
         input=_workflow_context_object(data.get("input")),
         metadata=_workflow_context_object(data.get("metadata")),
         signals=_workflow_run_signals(data.get("signals")),
-        created_by=_workflow_run_actor(data.get("createdBy")),
+        created_by_subject_id=_workflow_context_str(
+            data.get("createdBySubjectId", data.get("createdBy"))
+        ),
     )
 
 
@@ -3018,30 +2969,13 @@ def _workflow_run_signal(value: Any) -> WorkflowRunContextSignal | None:
         name=_workflow_context_str(value.get("name")),
         payload=_workflow_context_object(value.get("payload")),
         metadata=_workflow_context_object(value.get("metadata")),
-        created_by=_workflow_run_actor(value.get("createdBy")),
+        created_by_subject_id=_workflow_context_str(
+            value.get("createdBySubjectId", value.get("createdBy"))
+        ),
         created_at=_workflow_context_str(value.get("createdAt")),
         idempotency_key=_workflow_context_str(value.get("idempotencyKey")),
         sequence=_workflow_context_int(value.get("sequence")),
     )
-
-
-def _workflow_run_actor(value: Any) -> WorkflowRunContextActor | None:
-    if not isinstance(value, Mapping):
-        return None
-    actor = WorkflowRunContextActor(
-        subject_id=_workflow_context_str(value.get("subjectId")),
-        subject_kind=_workflow_context_str(value.get("subjectKind")),
-        display_name=_workflow_context_str(value.get("displayName")),
-        auth_source=_workflow_context_str(value.get("authSource")),
-    )
-    if (
-        actor.subject_id
-        or actor.subject_kind
-        or actor.display_name
-        or actor.auth_source
-    ):
-        return actor
-    return None
 
 
 def _workflow_context_str(value: Any) -> str:
@@ -3154,22 +3088,6 @@ def _workflow_event_context(event: WorkflowEvent | Any | None) -> dict[str, Any]
         out["extensions"] = dict(cast(Mapping[str, Any], extensions))
     return out
 
-
-def _workflow_actor_context(actor: WorkflowActor | Any | None) -> dict[str, Any]:
-    if actor is None:
-        return {}
-    out: dict[str, Any] = {}
-    if getattr(actor, "subject_id", "").strip():
-        out["subjectId"] = actor.subject_id.strip()
-    if getattr(actor, "subject_kind", "").strip():
-        out["subjectKind"] = actor.subject_kind.strip()
-    if getattr(actor, "display_name", "").strip():
-        out["displayName"] = actor.display_name.strip()
-    if getattr(actor, "auth_source", "").strip():
-        out["authSource"] = actor.auth_source.strip()
-    return out
-
-
 def workflow_signals_context(signals: Sequence[WorkflowSignal] | None) -> list[dict[str, Any]]:
     if not signals:
         return []
@@ -3186,9 +3104,9 @@ def workflow_signals_context(signals: Sequence[WorkflowSignal] | None) -> list[d
                 item["payload"] = payload
         if signal.metadata is not None:
             item["metadata"] = _compact_json_value(signal.metadata, 4)
-        created_by = _workflow_actor_context(signal.created_by)
-        if created_by:
-            item["createdBy"] = created_by
+        created_by_subject_id = (signal.created_by_subject_id or "").strip()
+        if created_by_subject_id:
+            item["createdBySubjectId"] = created_by_subject_id
         created_at = _format_workflow_time(signal.created_at)
         if created_at:
             item["createdAt"] = created_at

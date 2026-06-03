@@ -382,8 +382,10 @@ func credentialMaterialContext(ctx context.Context, p *principal.Principal, tm c
 		UserID:              strings.TrimSpace(tm.ActorUserID),
 		CredentialSubjectID: strings.TrimSpace(tm.SubjectID),
 	}
-	principal.SetAuthSource(actor, strings.TrimSpace(tm.ActorAuthSource))
-	return principal.WithPrincipal(ctx, actor)
+	if kind, _, ok := core.ParseSubjectID(actor.SubjectID); ok {
+		actor.Kind = principal.Kind(kind)
+	}
+	return principal.WithPrincipal(ctx, principal.Canonicalize(actor))
 }
 
 type connectionSetupResult struct {

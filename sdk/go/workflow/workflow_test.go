@@ -51,10 +51,7 @@ func TestExecutorInvokesAppStep(t *testing.T) {
 		RunID:        "run-1",
 		RunAs: &gestalt.Subject{
 			ID:                  "service_account:workflow-runner",
-			Kind:                "service_account",
 			CredentialSubjectID: "service_account:workflow-runner",
-			DisplayName:         "Workflow runner",
-			AuthSource:          "config",
 		},
 		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
 			ID: "send",
@@ -116,10 +113,7 @@ func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 		RunID:        "run-1",
 		RunAs: &gestalt.Subject{
 			ID:                  "service_account:workflow-runner",
-			Kind:                "service_account",
 			CredentialSubjectID: "service_account:workflow-runner",
-			DisplayName:         "Workflow runner",
-			AuthSource:          "config",
 		},
 		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
 			ID: "review",

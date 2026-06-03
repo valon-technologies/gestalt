@@ -133,13 +133,13 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 		return nil, err
 	}
 	scheduleProto, err := provider.UpsertSchedule(ctx, &proto.UpsertWorkflowProviderScheduleRequest{
-		ScheduleId:   scheduleID,
-		Cron:         strings.TrimSpace(req.Cron),
-		Timezone:     strings.TrimSpace(req.Timezone),
-		Target:       targetProto,
-		Paused:       req.Paused,
-		RequestedBy:  workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
-		DefinitionId: strings.TrimSpace(req.DefinitionID),
+		ScheduleId:           scheduleID,
+		Cron:                 strings.TrimSpace(req.Cron),
+		Timezone:             strings.TrimSpace(req.Timezone),
+		Target:               targetProto,
+		Paused:               req.Paused,
+		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
+		DefinitionId:         strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
 		return nil, err
@@ -211,13 +211,13 @@ func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, sc
 		return nil, err
 	}
 	scheduleProto, err := nextProvider.UpsertSchedule(ctx, &proto.UpsertWorkflowProviderScheduleRequest{
-		ScheduleId:   strings.TrimSpace(existing.Schedule.ID),
-		Cron:         strings.TrimSpace(req.Cron),
-		Timezone:     strings.TrimSpace(req.Timezone),
-		Target:       targetProto,
-		Paused:       req.Paused,
-		RequestedBy:  workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
-		DefinitionId: strings.TrimSpace(req.DefinitionID),
+		ScheduleId:           strings.TrimSpace(existing.Schedule.ID),
+		Cron:                 strings.TrimSpace(req.Cron),
+		Timezone:             strings.TrimSpace(req.Timezone),
+		Target:               targetProto,
+		Paused:               req.Paused,
+		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
+		DefinitionId:         strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
 		return nil, err
@@ -419,12 +419,12 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 		return nil, err
 	}
 	triggerProto, err := provider.UpsertEventTrigger(ctx, &proto.UpsertWorkflowProviderEventTriggerRequest{
-		TriggerId:    triggerID,
-		Match:        workflowwire.EventMatchToProto(match),
-		Target:       targetProto,
-		Paused:       req.Paused,
-		RequestedBy:  workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
-		DefinitionId: strings.TrimSpace(req.DefinitionID),
+		TriggerId:            triggerID,
+		Match:                workflowwire.EventMatchToProto(match),
+		Target:               targetProto,
+		Paused:               req.Paused,
+		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
+		DefinitionId:         strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
 		return nil, err
@@ -497,12 +497,12 @@ func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal
 		return nil, err
 	}
 	triggerProto, err := nextProvider.UpsertEventTrigger(ctx, &proto.UpsertWorkflowProviderEventTriggerRequest{
-		TriggerId:    strings.TrimSpace(existing.Trigger.ID),
-		Match:        workflowwire.EventMatchToProto(match),
-		Target:       targetProto,
-		Paused:       req.Paused,
-		RequestedBy:  workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
-		DefinitionId: strings.TrimSpace(req.DefinitionID),
+		TriggerId:            strings.TrimSpace(existing.Trigger.ID),
+		Match:                workflowwire.EventMatchToProto(match),
+		Target:               targetProto,
+		Paused:               req.Paused,
+		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
+		DefinitionId:         strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
 		return nil, err
@@ -709,7 +709,7 @@ func (m *Manager) scheduleAccessible(ctx context.Context, p *principal.Principal
 	if schedule == nil || schedule.Schedule == nil {
 		return false
 	}
-	return workflowActorOwnedBy(schedule.Schedule.CreatedBy, p) && m.allowStoredTarget(ctx, p, schedule.Schedule.Target)
+	return workflowSubjectOwnedBy(schedule.Schedule.CreatedBySubjectID, p) && m.allowStoredTarget(ctx, p, schedule.Schedule.Target)
 }
 
 func (m *Manager) requireOwnedEventTrigger(ctx context.Context, p *principal.Principal, triggerID, providerSelection string) (*ManagedEventTrigger, error) {
@@ -727,12 +727,12 @@ func (m *Manager) eventTriggerAccessible(ctx context.Context, p *principal.Princ
 	if trigger == nil || trigger.Trigger == nil {
 		return false
 	}
-	return workflowActorOwnedBy(trigger.Trigger.CreatedBy, p) && m.allowStoredTarget(ctx, p, trigger.Trigger.Target)
+	return workflowSubjectOwnedBy(trigger.Trigger.CreatedBySubjectID, p) && m.allowStoredTarget(ctx, p, trigger.Trigger.Target)
 }
 
-func workflowActorOwnedBy(actor coreworkflow.Actor, p *principal.Principal) bool {
+func workflowSubjectOwnedBy(createdBySubjectID string, p *principal.Principal) bool {
 	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	return subjectID != "" && strings.TrimSpace(actor.SubjectID) == subjectID
+	return subjectID != "" && strings.TrimSpace(createdBySubjectID) == subjectID
 }
 
 func coreworkflowProviderNotFound() error {
@@ -769,30 +769,12 @@ func normalizeEventMatch(match coreworkflow.EventMatch) coreworkflow.EventMatch 
 	}
 }
 
-func workflowActorFromPrincipal(p *principal.Principal) coreworkflow.Actor {
+func workflowSubjectIDFromPrincipal(p *principal.Principal) string {
 	p = principal.Canonicalized(p)
-	if p == nil {
-		return coreworkflow.Actor{}
-	}
-	return coreworkflow.Actor{
-		SubjectID:   strings.TrimSpace(p.SubjectID),
-		SubjectKind: string(p.Kind),
-		DisplayName: workflowActorDisplayName(p),
-		AuthSource:  p.AuthSource(),
-	}
-}
-
-func workflowActorDisplayName(p *principal.Principal) string {
 	if p == nil {
 		return ""
 	}
-	if value := strings.TrimSpace(p.DisplayName); value != "" {
-		return value
-	}
-	if p.Identity != nil {
-		return strings.TrimSpace(p.Identity.DisplayName)
-	}
-	return ""
+	return strings.TrimSpace(p.SubjectID)
 }
 
 func principalSubjectID(p *principal.Principal) string {
@@ -835,8 +817,8 @@ func (m *Manager) normalizeSignal(signal coreworkflow.Signal, p *principal.Princ
 	if signal.Name == "" {
 		return coreworkflow.Signal{}, ErrWorkflowSignalNameRequired
 	}
-	if signal.CreatedBy == (coreworkflow.Actor{}) {
-		signal.CreatedBy = workflowActorFromPrincipal(p)
+	if strings.TrimSpace(signal.CreatedBySubjectID) == "" {
+		signal.CreatedBySubjectID = workflowSubjectIDFromPrincipal(p)
 	}
 	if signal.CreatedAt == nil || signal.CreatedAt.IsZero() {
 		value := m.now().UTC()

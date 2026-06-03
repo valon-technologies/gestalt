@@ -39,10 +39,7 @@ type invocationTokenClaims struct {
 	DelegationExpiresAt *jwt.NumericDate                 `json:"delegation_expires_at,omitempty"`
 	CallerApp           string                           `json:"caller_app,omitempty"`
 	CallerProviderKind  string                           `json:"caller_provider_kind,omitempty"`
-	SubjectKind         string                           `json:"subject_kind,omitempty"`
 	Email               string                           `json:"email,omitempty"`
-	DisplayName         string                           `json:"display_name,omitempty"`
-	AuthSource          string                           `json:"auth_source,omitempty"`
 	CredentialSubjectID string                           `json:"credential_subject_id,omitempty"`
 	TokenPermissions    map[string][]string              `json:"token_permissions,omitempty"`
 	Grants              map[string]invocationGrantClaims `json:"grants,omitempty"`
@@ -322,10 +319,7 @@ func claimsFromContext(ctx context.Context, appName string, grants InvocationGra
 		DelegationExpiresAt: jwt.NewNumericDate(delegationExpiresAt),
 		CallerApp:           appName,
 		CallerProviderKind:  string(callerKind),
-		SubjectKind:         string(subjectKindForInvocationClaims(p)),
 		Email:               emailForInvocationClaims(p),
-		DisplayName:         displayNameForInvocationClaims(p),
-		AuthSource:          authSourceForInvocationClaims(p),
 		CredentialSubjectID: credentialSubjectIDForInvocationClaims(p),
 		TokenPermissions:    encodePermissionSet(tokenPermissionsForInvocationClaims(p)),
 		Grants:              encodeInvocationGrantClaims(grants),
@@ -435,42 +429,11 @@ func subjectIDForInvocationClaims(p *principal.Principal) string {
 	return strings.TrimSpace(p.SubjectID)
 }
 
-func subjectKindForInvocationClaims(p *principal.Principal) principal.Kind {
-	p = principal.Canonicalized(p)
-	if p == nil {
-		return ""
-	}
-	if p.Kind != "" {
-		return p.Kind
-	}
-	if p.Identity != nil {
-		return principal.KindUser
-	}
-	return ""
-}
-
-func displayNameForInvocationClaims(p *principal.Principal) string {
-	if p == nil {
-		return ""
-	}
-	if p.Identity != nil && strings.TrimSpace(p.Identity.DisplayName) != "" {
-		return strings.TrimSpace(p.Identity.DisplayName)
-	}
-	return strings.TrimSpace(p.DisplayName)
-}
-
 func emailForInvocationClaims(p *principal.Principal) string {
 	if p == nil || p.Identity == nil {
 		return ""
 	}
 	return strings.TrimSpace(p.Identity.Email)
-}
-
-func authSourceForInvocationClaims(p *principal.Principal) string {
-	if p == nil {
-		return ""
-	}
-	return p.AuthSource()
 }
 
 func credentialSubjectIDForInvocationClaims(p *principal.Principal) string {
@@ -509,22 +472,19 @@ func principalFromInvocationClaims(claims *invocationTokenClaims) *principal.Pri
 	p := &principal.Principal{
 		SubjectID:           strings.TrimSpace(claims.Subject),
 		CredentialSubjectID: strings.TrimSpace(claims.CredentialSubjectID),
-		DisplayName:         strings.TrimSpace(claims.DisplayName),
-		Kind:                principal.Kind(strings.TrimSpace(claims.SubjectKind)),
 		TokenPermissions:    tokenPerms,
 	}
-	principal.SetAuthSource(p, claims.AuthSource)
-	if strings.TrimSpace(claims.Email) != "" || strings.TrimSpace(claims.DisplayName) != "" {
-		p.Identity = &core.UserIdentity{
-			Email:       strings.TrimSpace(claims.Email),
-			DisplayName: strings.TrimSpace(claims.DisplayName),
-		}
+	if kind, _, ok := core.ParseSubjectID(p.SubjectID); ok {
+		p.Kind = principal.Kind(kind)
+	}
+	if strings.TrimSpace(claims.Email) != "" {
+		p.Identity = &core.UserIdentity{Email: strings.TrimSpace(claims.Email)}
 	}
 	if p.TokenPermissions != nil {
 		p.Scopes = principal.PermissionApps(p.TokenPermissions)
 	}
 	principal.Canonicalize(p)
-	if p.SubjectID == "" && p.UserID == "" && p.Kind == "" && p.DisplayName == "" && p.CredentialSubjectID == "" && p.TokenPermissions == nil && p.Source == principal.SourceUnknown && p.AuthSourceOverride == "" {
+	if p.SubjectID == "" && p.UserID == "" && p.Kind == "" && p.CredentialSubjectID == "" && p.TokenPermissions == nil && p.Identity == nil && p.Source == principal.SourceUnknown {
 		return nil
 	}
 	return p

@@ -102,7 +102,7 @@ func TestManagerServerRejectsCallerSuppliedRunAs(t *testing.T) {
 		t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
 	}
 	server := NewProviderServer("caller", nil, tokens)
-	runAs := &proto.SubjectContext{Id: "user:ada", Kind: "user"}
+	runAs := &proto.SubjectContext{Id: "user:ada"}
 
 	for name, call := range map[string]func() error{
 		"upsert schedule": func() error {
@@ -200,7 +200,6 @@ func TestManagerServerPublishEventThreadsCallerAppToSelectedProvider(t *testing.
 		"target_name":    "valon_sats.attempt.submitted",
 		"caller_app":     "valonSats",
 		"subject_id":     "user:user-123",
-		"subject_kind":   "user",
 		"request_id_set": true,
 		"allowed":        true,
 	})
@@ -262,7 +261,6 @@ func TestManagerServerPublishEventThreadsCallerAppToFanoutProviders(t *testing.T
 			"target_name":    "valon_sats.attempt.submitted",
 			"caller_app":     "valonSats",
 			"subject_id":     "user:user-123",
-			"subject_kind":   "user",
 			"request_id_set": true,
 			"allowed":        true,
 		})

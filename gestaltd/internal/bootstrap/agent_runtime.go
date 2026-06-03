@@ -613,9 +613,6 @@ func agentToolRefsLogValue(refs []coreagent.ToolRef) []map[string]string {
 			if subjectID := strings.TrimSpace(runAs.SubjectID); subjectID != "" {
 				value["run_as_subject_id"] = subjectID
 			}
-			if subjectKind := strings.TrimSpace(runAs.SubjectKind); subjectKind != "" {
-				value["run_as_subject_kind"] = subjectKind
-			}
 		}
 		out = append(out, value)
 	}
@@ -795,10 +792,7 @@ func (r *agentRuntime) validateAgentRunGrantTurn(ctx context.Context, grant agen
 		TurnId: turnID,
 		Subject: &proto.SubjectContext{
 			Id:                  strings.TrimSpace(grant.SubjectID),
-			Kind:                strings.TrimSpace(grant.SubjectKind),
 			CredentialSubjectId: strings.TrimSpace(grant.CredentialSubjectID),
-			DisplayName:         strings.TrimSpace(grant.DisplayName),
-			AuthSource:          strings.TrimSpace(grant.AuthSource),
 		},
 	})
 	if err != nil {
@@ -831,12 +825,12 @@ func agentRunGrantPrincipal(grant agentgrant.Grant) *principal.Principal {
 	value := &principal.Principal{
 		SubjectID:           strings.TrimSpace(grant.SubjectID),
 		CredentialSubjectID: strings.TrimSpace(grant.CredentialSubjectID),
-		DisplayName:         strings.TrimSpace(grant.DisplayName),
-		Kind:                principal.Kind(strings.TrimSpace(grant.SubjectKind)),
 		Scopes:              principal.PermissionApps(compiled),
 		TokenPermissions:    compiled,
 	}
-	principal.SetAuthSource(value, grant.AuthSource)
+	if kind, _, ok := core.ParseSubjectID(value.SubjectID); ok {
+		value.Kind = principal.Kind(kind)
+	}
 	if value.CredentialSubjectID == "" && principal.IsSystemSubjectID(value.SubjectID) {
 		value.CredentialSubjectID = value.SubjectID
 	}

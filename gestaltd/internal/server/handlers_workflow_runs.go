@@ -24,10 +24,7 @@ import (
 )
 
 type workflowActorInfo struct {
-	SubjectID   string `json:"subjectId,omitempty"`
-	SubjectKind string `json:"subjectKind,omitempty"`
-	DisplayName string `json:"displayName,omitempty"`
-	AuthSource  string `json:"authSource,omitempty"`
+	SubjectID string `json:"subjectId,omitempty"`
 }
 
 type workflowRunEventInfo struct {
@@ -218,7 +215,7 @@ func workflowRunInfoFromCore(run *coreworkflow.Run, providerName string) workflo
 	info.ResultBody = run.ResultBody
 	info.Target = workflowScheduleTargetInfoFromCore(run.Target)
 	info.Trigger = workflowRunTriggerInfoFromCore(run.Trigger)
-	info.CreatedBy = workflowActorInfoFromCore(run.CreatedBy)
+	info.CreatedBy = workflowActorInfoFromSubjectID(run.CreatedBySubjectID)
 	return info
 }
 
@@ -253,16 +250,12 @@ func workflowRunTriggerInfoFromCore(trigger coreworkflow.RunTrigger) *workflowRu
 	}
 }
 
-func workflowActorInfoFromCore(actor coreworkflow.Actor) *workflowActorInfo {
-	if actor == (coreworkflow.Actor{}) {
+func workflowActorInfoFromSubjectID(subjectID string) *workflowActorInfo {
+	subjectID = strings.TrimSpace(subjectID)
+	if subjectID == "" {
 		return nil
 	}
-	return &workflowActorInfo{
-		SubjectID:   actor.SubjectID,
-		SubjectKind: actor.SubjectKind,
-		DisplayName: actor.DisplayName,
-		AuthSource:  actor.AuthSource,
-	}
+	return &workflowActorInfo{SubjectID: subjectID}
 }
 
 func (s *Server) writeWorkflowRunManagerError(w http.ResponseWriter, r *http.Request, runID string, err error) {

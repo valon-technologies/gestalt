@@ -723,8 +723,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithGrantedCallerToolRefs(
 	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runAs := &core.RunAsSubject{
-		SubjectID:   "service_account:review-worker",
-		SubjectKind: "service_account",
+		SubjectID: "service_account:review-worker",
 	}
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		CallerAppName: "source",
@@ -1148,26 +1147,26 @@ func TestAgentRuntimeWorkflowSystemToolUpdateDefinitionScheduleUsesManagementPri
 		{App: "roadmap", Operations: []string{"sync"}},
 		{App: "notification", Operations: []string{"reply"}},
 	})
-	owner := coreworkflow.Actor{SubjectID: principal.UserSubjectID("ada")}
+	owner := principal.UserSubjectID("ada")
 	target := workflowSystemToolTestAppStepTarget("roadmap", "sync")
 	manager := &workflowSystemToolPrincipalRecordingManager{
 		schedule: &workflowmanager.ManagedSchedule{
 			ProviderName: "temporal",
 			Schedule: &coreworkflow.Schedule{
-				ID:           "schedule-1",
-				Cron:         "*/5 * * * *",
-				Timezone:     "UTC",
-				Target:       target,
-				DefinitionID: "definition-1",
-				CreatedBy:    owner,
+				ID:                 "schedule-1",
+				Cron:               "*/5 * * * *",
+				Timezone:           "UTC",
+				Target:             target,
+				DefinitionID:       "definition-1",
+				CreatedBySubjectID: owner,
 			},
 		},
 		definition: &workflowmanager.ManagedDefinition{
 			ProviderName: "temporal",
 			Definition: &coreworkflow.Definition{
-				ID:        "definition-1",
-				Target:    target,
-				CreatedBy: owner,
+				ID:                 "definition-1",
+				Target:             target,
+				CreatedBySubjectID: owner,
 			},
 		},
 	}
@@ -1228,12 +1227,12 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 	})
 	roadmapTarget := workflowSystemToolTestAppStepTarget("roadmap", "sync")
 	notificationTarget := workflowSystemToolTestAppStepTarget("notification", "reply")
-	owner := coreworkflow.Actor{SubjectID: principal.UserSubjectID("ada")}
+	owner := principal.UserSubjectID("ada")
 	workflowProvider.runs = map[string]*coreworkflow.Run{
-		"run-a": {ID: "run-a", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, CreatedBy: owner},
-		"run-b": {ID: "run-b", Status: coreworkflow.RunStatusSucceeded, Target: notificationTarget, CreatedBy: owner},
-		"run-c": {ID: "run-c", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, CreatedBy: owner},
-		"run-d": {ID: "run-d", Status: coreworkflow.RunStatusFailed, Target: roadmapTarget, CreatedBy: owner},
+		"run-a": {ID: "run-a", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, CreatedBySubjectID: owner},
+		"run-b": {ID: "run-b", Status: coreworkflow.RunStatusSucceeded, Target: notificationTarget, CreatedBySubjectID: owner},
+		"run-c": {ID: "run-c", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, CreatedBySubjectID: owner},
+		"run-d": {ID: "run-d", Status: coreworkflow.RunStatusFailed, Target: roadmapTarget, CreatedBySubjectID: owner},
 	}
 
 	firstResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
@@ -1649,12 +1648,10 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 			"managed": &routingAgentProvider{
 				getTurn: func(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 					return &coreagent.Turn{
-						ID:        req.GetTurnId(),
-						SessionID: "session-1",
-						Status:    coreagent.ExecutionStatusRunning,
-						CreatedBy: coreagent.Actor{
-							SubjectID: req.GetSubject().GetId(),
-						},
+						ID:                 req.GetTurnId(),
+						SessionID:          "session-1",
+						Status:             coreagent.ExecutionStatusRunning,
+						CreatedBySubjectID: strings.TrimSpace(req.GetSubject().GetId()),
 					}, nil
 				},
 			},
@@ -1774,9 +1771,9 @@ func (p *workflowSystemToolRecordingProvider) CreateDefinition(_ context.Context
 		return workflowwire.DefinitionToProto(&value)
 	}
 	definition := &coreworkflow.Definition{
-		ID:        id,
-		Target:    workflowwire.TargetFromProto(req.GetTarget()),
-		CreatedBy: workflowwire.ActorFromProto(req.GetCreatedBy()),
+		ID:                 id,
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}
 	p.definitions[id] = definition
 	value := *definition
@@ -1801,9 +1798,9 @@ func (p *workflowSystemToolRecordingProvider) UpdateDefinition(_ context.Context
 		return nil, core.ErrNotFound
 	}
 	definition := &coreworkflow.Definition{
-		ID:        id,
-		Target:    workflowwire.TargetFromProto(req.GetTarget()),
-		CreatedBy: existing.CreatedBy,
+		ID:                 id,
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
+		CreatedBySubjectID: existing.CreatedBySubjectID,
 	}
 	p.definitions[id] = definition
 	value := *definition
@@ -1826,7 +1823,7 @@ func (p *workflowSystemToolRecordingProvider) StartRun(_ context.Context, req *p
 	target := workflowwire.TargetFromProto(req.GetTarget())
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
 	workflowKey := strings.TrimSpace(req.GetWorkflowKey())
-	createdBy := workflowwire.ActorFromProto(req.GetCreatedBy())
+	createdBy := strings.TrimSpace(req.GetCreatedBySubjectId())
 	definitionID := strings.TrimSpace(req.GetDefinitionId())
 	if p.runs == nil {
 		p.runs = map[string]*coreworkflow.Run{}
@@ -1852,12 +1849,12 @@ func (p *workflowSystemToolRecordingProvider) StartRun(_ context.Context, req *p
 		runID = fmt.Sprintf("run-%d", len(p.runs)+1)
 	}
 	run := &coreworkflow.Run{
-		ID:           runID,
-		Status:       coreworkflow.RunStatusPending,
-		WorkflowKey:  workflowKey,
-		Target:       target,
-		DefinitionID: definitionID,
-		CreatedBy:    createdBy,
+		ID:                 runID,
+		Status:             coreworkflow.RunStatusPending,
+		WorkflowKey:        workflowKey,
+		Target:             target,
+		DefinitionID:       definitionID,
+		CreatedBySubjectID: createdBy,
 	}
 	p.runs[run.ID] = run
 	if idempotencyKey != "" {
@@ -1957,13 +1954,13 @@ func (p *workflowSystemToolRecordingProvider) SignalOrStartRun(context.Context, 
 func (p *workflowSystemToolRecordingProvider) UpsertSchedule(_ context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	p.upsertedSchedules = append(p.upsertedSchedules, gproto.Clone(req).(*proto.UpsertWorkflowProviderScheduleRequest))
 	schedule := &coreworkflow.Schedule{
-		ID:           req.GetScheduleId(),
-		Cron:         req.GetCron(),
-		Timezone:     req.GetTimezone(),
-		Target:       workflowwire.TargetFromProto(req.GetTarget()),
-		DefinitionID: req.GetDefinitionId(),
-		Paused:       req.GetPaused(),
-		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
+		ID:                 req.GetScheduleId(),
+		Cron:               req.GetCron(),
+		Timezone:           req.GetTimezone(),
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
+		DefinitionID:       req.GetDefinitionId(),
+		Paused:             req.GetPaused(),
+		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 	}
 	if p.schedules == nil {
 		p.schedules = map[string]*coreworkflow.Schedule{}
@@ -2041,7 +2038,6 @@ func mustMintWorkflowSystemRunGrant(t *testing.T, runtime *agentRuntime, scope w
 		TurnID:              "turn-1",
 		CallerAppName:       strings.TrimSpace(scope.CallerAppName),
 		SubjectID:           principal.UserSubjectID("ada"),
-		SubjectKind:         string(principal.KindUser),
 		CredentialSubjectID: principal.UserSubjectID("ada"),
 		Permissions:         append([]core.AccessPermission(nil), scope.Permissions...),
 		ToolRefs:            append([]coreagent.ToolRef(nil), scope.ToolRefs...),

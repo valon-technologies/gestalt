@@ -323,7 +323,7 @@ func TestAgentCreateTurnDoesNotReportSessionMissingAfterSessionResolved(t *testi
 
 	provider := newMemoryAgentProvider()
 	provider.createTurnHook = func(turn *coreagent.Turn) {
-		turn.CreatedBy.SubjectID = principal.UserSubjectID("someone-else")
+		turn.CreatedBySubjectID = principal.UserSubjectID("someone-else")
 	}
 	authz := &dynamicProviderAuthorizer{}
 	authz.allowed.Store(true)
@@ -438,16 +438,13 @@ func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.mu.Lock()
 	provider.sessions["session-managed"] = &coreagent.Session{
-		ID:           "session-managed",
-		ProviderName: "managed",
-		Model:        "gpt-5.4",
-		State:        coreagent.SessionStateActive,
-		CreatedBy: coreagent.Actor{
-			SubjectID:   principal.UserSubjectID(user.ID),
-			SubjectKind: string(principal.KindUser),
-		},
-		CreatedAt: &now,
-		UpdatedAt: &now,
+		ID:                 "session-managed",
+		ProviderName:       "managed",
+		Model:              "gpt-5.4",
+		State:              coreagent.SessionStateActive,
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
+		CreatedAt:          &now,
+		UpdatedAt:          &now,
 	}
 	provider.mu.Unlock()
 
@@ -535,15 +532,15 @@ func (p *memoryAgentProvider) CreateSession(_ context.Context, req *proto.Create
 
 	now := time.Now().UTC().Truncate(time.Second)
 	session := &coreagent.Session{
-		ID:           req.GetSessionId(),
-		ProviderName: "managed",
-		Model:        req.GetModel(),
-		ClientRef:    req.GetClientRef(),
-		State:        coreagent.SessionStateActive,
-		Metadata:     mapFromStruct(req.GetMetadata()),
-		CreatedBy:    actorFromProto(req.GetCreatedBy()),
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
+		ID:                 req.GetSessionId(),
+		ProviderName:       "managed",
+		Model:              req.GetModel(),
+		ClientRef:          req.GetClientRef(),
+		State:              coreagent.SessionStateActive,
+		Metadata:           mapFromStruct(req.GetMetadata()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedAt:          &now,
+		UpdatedAt:          &now,
 	}
 	p.sessions[session.ID] = session
 	return cloneSession(session), nil
@@ -624,18 +621,18 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req *proto.CreateAge
 	now := time.Now().UTC().Truncate(time.Second)
 	metadata := mapFromStruct(req.GetMetadata())
 	turn := &coreagent.Turn{
-		ID:           req.GetTurnId(),
-		SessionID:    req.GetSessionId(),
-		ProviderName: "managed",
-		Model:        req.GetModel(),
-		Status:       coreagent.ExecutionStatusSucceeded,
-		Messages:     messagesFromProto(req.GetMessages()),
-		CreatedBy:    actorFromProto(req.GetCreatedBy()),
-		CreatedAt:    &now,
-		StartedAt:    &now,
-		CompletedAt:  &now,
-		ExecutionRef: req.GetExecutionRef(),
-		Output:       coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
+		ID:                 req.GetTurnId(),
+		SessionID:          req.GetSessionId(),
+		ProviderName:       "managed",
+		Model:              req.GetModel(),
+		Status:             coreagent.ExecutionStatusSucceeded,
+		Messages:           messagesFromProto(req.GetMessages()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedAt:          &now,
+		StartedAt:          &now,
+		CompletedAt:        &now,
+		ExecutionRef:       req.GetExecutionRef(),
+		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
 	}
 	if req.GetOutput().GetStructured() != nil {
 		turn.Output = coreagent.TurnOutput{
@@ -987,18 +984,6 @@ func mapFromStruct(value *structpb.Struct) map[string]any {
 		return nil
 	}
 	return value.AsMap()
-}
-
-func actorFromProto(value *proto.AgentActor) coreagent.Actor {
-	if value == nil {
-		return coreagent.Actor{}
-	}
-	return coreagent.Actor{
-		SubjectID:   value.GetSubjectId(),
-		SubjectKind: value.GetSubjectKind(),
-		DisplayName: value.GetDisplayName(),
-		AuthSource:  value.GetAuthSource(),
-	}
 }
 
 func messagesFromProto(values []*proto.AgentMessage) []coreagent.Message {

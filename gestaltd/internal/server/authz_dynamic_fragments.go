@@ -293,7 +293,6 @@ func (s *Server) auditAuthorizationFragmentMutation(ctx context.Context, operati
 	}
 	if p := principal.FromContext(ctx); p != nil {
 		entry.SubjectID = p.SubjectID
-		entry.AuthSource = p.AuthSource()
 	}
 	if relationship != nil {
 		entry.TargetName = fmt.Sprintf("%s:%s#%s@%s:%s", relationship.Resource.Type, relationship.Resource.ID, relationship.Relation, relationship.Subject.Type, relationship.Subject.ID)

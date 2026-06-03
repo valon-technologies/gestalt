@@ -825,9 +825,8 @@ workflows:
 | `target.steps[].app.input` | Optional workflow value that must resolve to a JSON object. Use `literal` for static params. |
 | `target.steps[].agent` | Optional agent turn using `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `output`, and `modelOptions`. |
 | `target.steps[].when` | Optional guard with `value` and scalar `equals`; `value.stepOutput.stepId` may reference only earlier steps. |
-| `runAs.subject.id` | Optional service-account subject ID, such as `service_account:roadmap-sync`, used as the runtime principal and credential subject. Without [`runAs`](/service-accounts#runas), config-managed workflows run as `system:config` and cannot target subject-scoped credentials. |
-| `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
-| `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
+| `runAs.subject.id` | Optional service-account subject ID, such as `service_account:roadmap-sync`, used as the runtime principal. Without [`runAs`](/service-accounts#runas), config-managed workflows run as `system:config` and cannot target subject-scoped credentials. |
+| `runAs.subject.credentialSubjectId` | Optional credential subject when it differs from `runAs.subject.id`. |
 | `invokes` | Optional additional app-operation grants as `{ app, operation }` entries. The direct target operation is always included. These grants are a token permission ceiling; they do not create credentials or replace `apps.<target>.invokes` for nested app calls. |
 | `cron` | **Required.** Five-field cron expression. |
 | `timezone` | IANA timezone name. Defaults to `UTC`. |
@@ -842,9 +841,8 @@ workflows:
 | `target.steps[].app` | App step call fields: `name`, `operation`, optional `connection`, optional `instance`, and optional workflow-value `input`. |
 | `target.steps[].agent` | Agent step turn fields: `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `output`, and `modelOptions`. |
 | `target.steps[].when` | Optional guard with `value` and scalar `equals`; `value.stepOutput.stepId` may reference only earlier steps. |
-| `runAs.subject.id` | Optional service-account subject ID used as the runtime principal and credential subject. See [`runAs`](/service-accounts#runas). |
-| `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
-| `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
+| `runAs.subject.id` | Optional service-account subject ID used as the runtime principal. See [`runAs`](/service-accounts#runas). |
+| `runAs.subject.credentialSubjectId` | Optional credential subject when it differs from `runAs.subject.id`. |
 | `invokes` | Optional additional app-operation grants as `{ app, operation }` entries. The direct target operation is always included. These grants are a token permission ceiling; they do not create credentials or replace `apps.<target>.invokes` for nested app calls. |
 | `match.type` | **Required.** Event type matcher. |
 | `match.source` | Optional event source matcher. |

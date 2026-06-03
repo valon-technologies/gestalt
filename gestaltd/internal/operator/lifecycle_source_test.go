@@ -1029,8 +1029,7 @@ workflows:
       paused: ${GESTALT_SCOPED_APP_DROPPED_WORKFLOW_BOOL_MISSING_ENV}
       runAs:
         subject:
-          id: test
-          kind: test
+          id: service_account:test
 %s
   externalCredentials:
     local:

@@ -807,25 +807,17 @@ type WorkflowRunAsConfig struct {
 }
 
 type WorkflowRunAsSubjectConfig struct {
-	ID          string `yaml:"id,omitempty"`
-	Kind        string `yaml:"kind,omitempty"`
-	DisplayName string `yaml:"displayName,omitempty"`
-	AuthSource  string `yaml:"authSource,omitempty"`
+	ID                  string `yaml:"id,omitempty"`
+	CredentialSubjectID string `yaml:"credentialSubjectId,omitempty"`
 }
 
 func (r *WorkflowRunAsConfig) SubjectRef() *core.RunAsSubject {
 	if r == nil || r.Subject == nil {
 		return nil
 	}
-	authSource := r.Subject.AuthSource
-	if authSource == "" {
-		authSource = "config"
-	}
 	return core.NormalizeRunAsSubject(&core.RunAsSubject{
-		SubjectID:   r.Subject.ID,
-		SubjectKind: r.Subject.Kind,
-		DisplayName: r.Subject.DisplayName,
-		AuthSource:  authSource,
+		SubjectID:           r.Subject.ID,
+		CredentialSubjectID: r.Subject.CredentialSubjectID,
 	})
 }
 
@@ -2262,10 +2254,7 @@ type AppInvocationRunAsConfig struct {
 
 type AppInvocationRunAsSubjectConfig struct {
 	ID                  string `yaml:"id,omitempty"`
-	Kind                string `yaml:"kind,omitempty"`
 	CredentialSubjectID string `yaml:"credentialSubjectId,omitempty"`
-	DisplayName         string `yaml:"displayName,omitempty"`
-	AuthSource          string `yaml:"authSource,omitempty"`
 }
 
 func (d AppInvocationDependency) RunAsSubject() *core.RunAsSubject {
@@ -2275,10 +2264,7 @@ func (d AppInvocationDependency) RunAsSubject() *core.RunAsSubject {
 	if subject := d.RunAs.Subject; subject != nil {
 		return core.NormalizeRunAsSubject(&core.RunAsSubject{
 			SubjectID:           subject.ID,
-			SubjectKind:         subject.Kind,
 			CredentialSubjectID: subject.CredentialSubjectID,
-			DisplayName:         subject.DisplayName,
-			AuthSource:          subject.AuthSource,
 		})
 	}
 	return nil

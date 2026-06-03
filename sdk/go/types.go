@@ -90,10 +90,7 @@ type SessionCatalogProvider interface {
 // Subject identifies the caller that initiated an operation.
 type Subject struct {
 	ID                  string
-	Kind                string
 	CredentialSubjectID string
-	DisplayName         string
-	AuthSource          string
 	Email               string
 }
 

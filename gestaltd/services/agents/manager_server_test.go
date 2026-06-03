@@ -286,10 +286,7 @@ func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationTokenFromAppSt
 			}}},
 			RunAs: &core.RunAsSubject{
 				SubjectID:           "user:workflow-runner",
-				SubjectKind:         "user",
 				CredentialSubjectID: "user:workflow-runner",
-				DisplayName:         "Workflow runner",
-				AuthSource:          "config",
 			},
 		},
 	}))

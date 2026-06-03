@@ -171,7 +171,6 @@ test("runtime main writes a static catalog in catalog mode", async () => {
         name: "@scope/catalog provider",
         gestalt: {
           provider: {
-            kind: "app",
             target: "./provider.ts#app",
           },
         },
@@ -312,7 +311,6 @@ test("loadProviderFromTarget rejects duplicate operation identifiers after trimm
         name: "duplicate-provider",
         gestalt: {
           provider: {
-            kind: "app",
             target: "./provider.ts#app",
           },
         },
@@ -361,7 +359,6 @@ test("loadProviderFromTarget rejects structural app objects without the full run
         name: "structural-runtime-base-provider",
         gestalt: {
           provider: {
-            kind: "app",
             target: "./provider.ts#app",
           },
         },
@@ -371,9 +368,7 @@ test("loadProviderFromTarget rejects structural app objects without the full run
     writeFileSync(
       join(root, "provider.ts"),
       `export const app = {
-  kind: "integration",
   name: "structural-runtime-base",
-  displayName: "Structural Runtime Base",
   description: "structural app missing runtime base methods",
   version: "1.0.0",
   connectionMode: "unspecified",
@@ -666,15 +661,11 @@ test("integration provider service exposes metadata, configure, execute, and ses
       context: create(RequestContextSchema, {
         subject: create(SubjectContextSchema, {
           id: "user:user-123",
-          kind: "user",
-          authSource: "api_token",
-          email: "ada@example.com",
+                    email: "ada@example.com",
         }),
         agentSubject: create(SubjectContextSchema, {
           id: "user:agent-456",
-          kind: "user",
-          authSource: "delegated",
-          email: "grace@example.com",
+                    email: "grace@example.com",
         }),
         credential: create(CredentialContextSchema, {
           mode: "subject",
@@ -713,8 +704,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
       context: create(RequestContextSchema, {
         subject: create(SubjectContextSchema, {
           id: "user:user-123",
-          kind: "user",
-        }),
+                  }),
         credential: create(CredentialContextSchema, {
           mode: "subject",
         }),
@@ -783,10 +773,7 @@ test("integration provider service resolves hosted HTTP subjects through the app
       }
       return {
         id: "user:user-456",
-        kind: "user",
-        displayName: "Slack User",
-        authSource: "slack",
-      };
+                };
     },
     operations: [
       {
@@ -830,9 +817,7 @@ test("integration provider service resolves hosted HTTP subjects through the app
       context: create(RequestContextSchema, {
         subject: create(SubjectContextSchema, {
           id: "system:http_binding:agent:command",
-          kind: "system",
-          authSource: "http_binding",
-        }),
+          }),
         credential: create(CredentialContextSchema, {
           mode: "none",
         }),
@@ -853,10 +838,7 @@ test("integration provider service resolves hosted HTTP subjects through the app
   );
   expect(resolved.subject).toMatchObject({
     id: "user:user-456",
-    kind: "user",
-    displayName: "Slack User",
-    authSource: "slack",
-    email: "",
+        email: "",
   });
   expect(seenRequest).toEqual({
     binding: "command",
@@ -883,10 +865,7 @@ test("integration provider service resolves hosted HTTP subjects through the app
   expect(seenContext).toEqual({
     subject: {
       id: "system:http_binding:agent:command",
-      kind: "system",
       credentialSubjectId: "",
-      displayName: "",
-      authSource: "http_binding",
       email: "",
     },
     credential: {
@@ -979,7 +958,6 @@ test("integration provider service preserves body-shaped outputs and explicit re
         name: "output-provider",
         gestalt: {
           provider: {
-            kind: "app",
             target: "./provider.ts#app",
           },
         },
@@ -1808,12 +1786,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   const run = await (workflow.startRun as any)(
     create(StartWorkflowProviderRunRequestSchema, {
       idempotencyKey: "req-1",
-      createdBy: {
-        subjectId: "user:user-123",
-        subjectKind: "user",
-        displayName: "Ada",
-        authSource: "api_token",
-      },
+      createdBySubjectId: "user:user-123",
       target: workflowAppStepTarget("roadmap", "sync", {
         input: { object: { project: { literal: "alpha" } } },
       }),
@@ -1828,19 +1801,14 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   expect(runApp.name).toBe("roadmap");
   expect(run.status).toBe(WorkflowRunStatus.PENDING);
   expect(run.statusMessage).toBe("idempotency:req-1");
-  expect(run.createdBy?.subjectId).toBe("user:user-123");
+  expect(run.createdBySubjectId).toBe("user:user-123");
 
   const schedule = await (workflow.upsertSchedule as any)(
     create(UpsertWorkflowProviderScheduleRequestSchema, {
       scheduleId: "nightly",
       cron: "*/5 * * * *",
       timezone: "UTC",
-      requestedBy: {
-        subjectId: "service_account:planner",
-        subjectKind: "service_account",
-        displayName: "Planner",
-        authSource: "api_token",
-      },
+      requestedBySubjectId: "service_account:planner",
       target: workflowAppStepTarget("roadmap", "sync"),
     }),
   );
@@ -1852,23 +1820,18 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
     throw new Error("workflow schedule target does not have an app step");
   }
   expect(scheduleApp.name).toBe("roadmap");
-  expect(schedule.createdBy?.subjectId).toBe("service_account:planner");
+  expect(schedule.createdBySubjectId).toBe("service_account:planner");
 
   const updatedSchedule = await (workflow.upsertSchedule as any)(
     create(UpsertWorkflowProviderScheduleRequestSchema, {
       scheduleId: "nightly",
       cron: "0 * * * *",
       timezone: "UTC",
-      requestedBy: {
-        subjectId: "user:user-999",
-        subjectKind: "user",
-        displayName: "Grace",
-        authSource: "api_token",
-      },
+      requestedBySubjectId: "user:user-999",
       target: workflowAppStepTarget("roadmap", "sync"),
     }),
   );
-  expect(updatedSchedule.createdBy?.subjectId).toBe("service_account:planner");
+  expect(updatedSchedule.createdBySubjectId).toBe("service_account:planner");
 
   await (workflow.publishEvent as any)(
     create(PublishWorkflowProviderEventRequestSchema, {
@@ -1918,12 +1881,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
       metadata: {
         source: "runtime-test",
       },
-      createdBy: {
-        subjectId: "user:user-123",
-        subjectKind: "user",
-        displayName: "Ada",
-        authSource: "api_token",
-      },
+      createdBySubjectId: "user:user-123",
     }),
   );
   expect(session.id).toBe("session-canonical-1");
@@ -2085,12 +2043,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
           },
         },
       ],
-      createdBy: {
-        subjectId: "user:user-123",
-        subjectKind: "user",
-        displayName: "Ada",
-        authSource: "api_token",
-      },
+      createdBySubjectId: "user:user-123",
       output: { kind: { case: "text", value: {} } },
       executionRef: "exec-turn-2",
     }),
@@ -2101,7 +2054,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
   expect(completedTurn.status).toBe(AgentExecutionStatus.SUCCEEDED);
   expect(completedTurn.output.case).toBe("text");
   expect(completedTurn.output.value?.text).toBe("echo:Summarize deployment status");
-  expect(completedTurn.createdBy?.subjectId).toBe("user:user-123");
+  expect(completedTurn.createdBySubjectId).toBe("user:user-123");
   expect(completedTurn.messages[0]?.parts[0]?.type).toBe(
     AgentMessagePartType.TEXT,
   );
@@ -2189,25 +2142,17 @@ test("integration provider request context includes workflow metadata", async ()
           runId: "run-123",
           provider: "temporal",
           executionRef: "exec-ref-123",
-          createdBy: {
-            subjectId: "user:user-123",
-            subjectKind: "user",
-            displayName: "Ada",
-            authSource: "api_token",
-          },
+          createdBySubjectId: "user:user-123",
           target: {
-            kind: "steps",
             steps: [
               {
                 id: "sync",
-                kind: "app",
                 app: "demo",
                 operation: "sync",
               },
             ],
           },
           trigger: {
-            kind: "event",
             triggerId: "trigger-1",
             event: {
               id: "evt-1",
@@ -2230,11 +2175,8 @@ test("integration provider request context includes workflow metadata", async ()
             operation: "bot.getPullRequest",
             runAs: create(SubjectContextSchema, {
               id: "service_account:github-review",
-              kind: "service_account",
               credentialSubjectId: "service_account:github-review",
-              displayName: "GitHub Review",
-              authSource: "managed_subject",
-            }),
+              }),
           }),
         ],
         toolRefsSet: true,
@@ -2250,25 +2192,17 @@ test("integration provider request context includes workflow metadata", async ()
       runId: "run-123",
       provider: "temporal",
       executionRef: "exec-ref-123",
-      createdBy: {
-        subjectId: "user:user-123",
-        subjectKind: "user",
-        displayName: "Ada",
-        authSource: "api_token",
-      },
+      createdBySubjectId: "user:user-123",
       target: {
-        kind: "steps",
         steps: [
           {
             id: "sync",
-            kind: "app",
             app: "demo",
             operation: "sync",
           },
         ],
       },
       trigger: {
-        kind: "event",
         triggerId: "trigger-1",
         event: {
           id: "evt-1",
@@ -2297,10 +2231,7 @@ test("integration provider request context includes workflow metadata", async ()
         system: "",
         runAs: {
           id: "service_account:github-review",
-          kind: "service_account",
           credentialSubjectId: "service_account:github-review",
-          displayName: "GitHub Review",
-          authSource: "managed_subject",
           email: "",
         },
       },

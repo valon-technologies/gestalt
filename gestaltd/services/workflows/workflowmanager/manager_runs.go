@@ -51,11 +51,11 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 		return nil, err
 	}
 	runProto, err := provider.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{
-		Target:         targetProto,
-		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
-		WorkflowKey:    strings.TrimSpace(req.WorkflowKey),
-		CreatedBy:      workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
-		DefinitionId:   strings.TrimSpace(req.DefinitionID),
+		Target:             targetProto,
+		IdempotencyKey:     strings.TrimSpace(req.IdempotencyKey),
+		WorkflowKey:        strings.TrimSpace(req.WorkflowKey),
+		CreatedBySubjectId: workflowSubjectIDFromPrincipal(p),
+		DefinitionId:       strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
 		return nil, err
@@ -216,12 +216,12 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 		return nil, err
 	}
 	respProto, err := provider.SignalOrStartRun(ctx, &proto.SignalOrStartWorkflowProviderRunRequest{
-		WorkflowKey:    workflowKey,
-		Target:         targetProto,
-		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
-		CreatedBy:      workflowwire.ActorToProto(workflowActorFromPrincipal(p)),
-		DefinitionId:   strings.TrimSpace(req.DefinitionID),
-		Signal:         signalProto,
+		WorkflowKey:        workflowKey,
+		Target:             targetProto,
+		IdempotencyKey:     strings.TrimSpace(req.IdempotencyKey),
+		CreatedBySubjectId: workflowSubjectIDFromPrincipal(p),
+		DefinitionId:       strings.TrimSpace(req.DefinitionID),
+		Signal:             signalProto,
 	})
 	if err != nil {
 		return nil, err
@@ -393,7 +393,7 @@ func (m *Manager) runAccessible(ctx context.Context, p *principal.Principal, run
 	if run == nil || run.Run == nil {
 		return false
 	}
-	return workflowActorOwnedBy(run.Run.CreatedBy, p) && m.allowStoredTarget(ctx, p, run.Run.Target)
+	return workflowSubjectOwnedBy(run.Run.CreatedBySubjectID, p) && m.allowStoredTarget(ctx, p, run.Run.Target)
 }
 
 func managedSignalResponse(providerName string, provider coreworkflow.Provider, resp *coreworkflow.SignalRunResponse) (*ManagedRunSignal, error) {

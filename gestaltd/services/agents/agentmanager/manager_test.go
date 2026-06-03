@@ -172,28 +172,16 @@ func newRouteCountingAgentProvider(name string) *routeCountingAgentProvider {
 	}
 }
 
-func agentTestActorFromProto(actor *proto.AgentActor) coreagent.Actor {
-	if actor == nil {
-		return coreagent.Actor{}
-	}
-	return coreagent.Actor{
-		SubjectID:   actor.GetSubjectId(),
-		SubjectKind: actor.GetSubjectKind(),
-		DisplayName: actor.GetDisplayName(),
-		AuthSource:  actor.GetAuthSource(),
-	}
-}
-
 func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	p.createSessionReqs = append(p.createSessionReqs, cloneAgentRequest(req, &proto.CreateAgentProviderSessionRequest{}))
 	session := &coreagent.Session{
-		ID:           req.GetSessionId(),
-		ProviderName: p.name,
-		Model:        req.GetModel(),
-		ClientRef:    req.GetClientRef(),
-		State:        coreagent.SessionStateActive,
-		Metadata:     mapsCloneAny(protoutil.MapFromStruct(req.GetMetadata())),
-		CreatedBy:    agentTestActorFromProto(req.GetCreatedBy()),
+		ID:                 req.GetSessionId(),
+		ProviderName:       p.name,
+		Model:              req.GetModel(),
+		ClientRef:          req.GetClientRef(),
+		State:              coreagent.SessionStateActive,
+		Metadata:           mapsCloneAny(protoutil.MapFromStruct(req.GetMetadata())),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}
 	p.sessions[session.ID] = session
 	return cloneRouteSession(session), nil
@@ -238,7 +226,7 @@ func (p *routeCountingAgentProvider) ListSessions(_ context.Context, req *proto.
 				continue
 			}
 		}
-		if req.GetSubject().GetId() != "" && session.CreatedBy.SubjectID != req.GetSubject().GetId() {
+		if req.GetSubject().GetId() != "" && session.CreatedBySubjectID != req.GetSubject().GetId() {
 			continue
 		}
 		if state != "" && session.State != state {
@@ -284,15 +272,15 @@ func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req *proto.Cr
 		status = coreagent.ExecutionStatusRunning
 	}
 	turn := &coreagent.Turn{
-		ID:           turnID,
-		SessionID:    req.GetSessionId(),
-		ProviderName: p.name,
-		Model:        req.GetModel(),
-		Status:       status,
-		Messages:     agentwire.MessagesFromProto(req.GetMessages()),
-		Output:       p.createTurnOutput,
-		CreatedBy:    agentTestActorFromProto(req.GetCreatedBy()),
-		ExecutionRef: req.GetExecutionRef(),
+		ID:                 turnID,
+		SessionID:          req.GetSessionId(),
+		ProviderName:       p.name,
+		Model:              req.GetModel(),
+		Status:             status,
+		Messages:           agentwire.MessagesFromProto(req.GetMessages()),
+		Output:             p.createTurnOutput,
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		ExecutionRef:       req.GetExecutionRef(),
 	}
 	p.turns[turn.ID] = turn
 	return cloneRouteTurn(turn), nil
@@ -336,7 +324,7 @@ func (p *routeCountingAgentProvider) ListTurns(_ context.Context, req *proto.Lis
 		if req.GetSessionId() != "" && turn.SessionID != req.GetSessionId() {
 			continue
 		}
-		if req.GetSubject().GetId() != "" && turn.CreatedBy.SubjectID != req.GetSubject().GetId() {
+		if req.GetSubject().GetId() != "" && turn.CreatedBySubjectID != req.GetSubject().GetId() {
 			continue
 		}
 		if statusFilter != "" && turn.Status != statusFilter {
@@ -734,10 +722,10 @@ func TestManagerGetSessionContinuesAfterProviderUnavailable(t *testing.T) {
 	manager := newTestManager(t, Config{Agent: control})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 	session := &coreagent.Session{
-		ID:           "session-1",
-		ProviderName: "alpha",
-		State:        coreagent.SessionStateActive,
-		CreatedBy:    coreagent.Actor{SubjectID: principal.UserSubjectID("user-1")},
+		ID:                 "session-1",
+		ProviderName:       "alpha",
+		State:              coreagent.SessionStateActive,
+		CreatedBySubjectID: principal.UserSubjectID("user-1"),
 	}
 	alpha.sessions[session.ID] = session
 	beta.getSessionErr = status.Error(codes.Unavailable, "provider restarting")
@@ -798,18 +786,18 @@ func TestManagerGetTurnContinuesAfterProviderUnavailable(t *testing.T) {
 	manager := newTestManager(t, Config{Agent: control})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 	session := &coreagent.Session{
-		ID:           "session-1",
-		ProviderName: "alpha",
-		State:        coreagent.SessionStateActive,
-		CreatedBy:    coreagent.Actor{SubjectID: principal.UserSubjectID("user-1")},
+		ID:                 "session-1",
+		ProviderName:       "alpha",
+		State:              coreagent.SessionStateActive,
+		CreatedBySubjectID: principal.UserSubjectID("user-1"),
 	}
 	turn := &coreagent.Turn{
-		ID:           "turn-1",
-		SessionID:    session.ID,
-		ProviderName: "alpha",
-		Status:       coreagent.ExecutionStatusSucceeded,
-		Output:       coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "done"}},
-		CreatedBy:    coreagent.Actor{SubjectID: principal.UserSubjectID("user-1")},
+		ID:                 "turn-1",
+		SessionID:          session.ID,
+		ProviderName:       "alpha",
+		Status:             coreagent.ExecutionStatusSucceeded,
+		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "done"}},
+		CreatedBySubjectID: principal.UserSubjectID("user-1"),
 	}
 	alpha.sessions[session.ID] = session
 	alpha.turns[turn.ID] = turn
@@ -1041,10 +1029,10 @@ func TestManagerListTurnsRequiresBoundedHydrationForSummaryLists(t *testing.T) {
 	}
 	subjectID := principal.UserSubjectID("user-1")
 	provider.sessions["session-1"] = &coreagent.Session{
-		ID:           "session-1",
-		ProviderName: "unbounded",
-		State:        coreagent.SessionStateActive,
-		CreatedBy:    coreagent.Actor{SubjectID: subjectID},
+		ID:                 "session-1",
+		ProviderName:       "unbounded",
+		State:              coreagent.SessionStateActive,
+		CreatedBySubjectID: subjectID,
 	}
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
@@ -1181,8 +1169,7 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	p := &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 		Identity: &core.UserIdentity{
-			Email:       "ada@example.com",
-			DisplayName: "Ada Lovelace",
+			Email: "ada@example.com",
 		},
 	}
 
@@ -2052,7 +2039,6 @@ func TestManagerCancelTurnRevokesRunGrantWithoutBootstrapWrapper(t *testing.T) {
 		SessionID:    session.ID,
 		TurnID:       turn.ID,
 		SubjectID:    principal.UserSubjectID("user-1"),
-		SubjectKind:  string(principal.KindUser),
 	})
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
@@ -2116,7 +2102,6 @@ func TestManagerCancelTurnRevokesExecutionRefGrantWithoutBootstrapWrapper(t *tes
 		SessionID:    session.ID,
 		TurnID:       turn.ExecutionRef,
 		SubjectID:    principal.UserSubjectID("user-1"),
-		SubjectKind:  string(principal.KindUser),
 	})
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
@@ -2372,7 +2357,6 @@ func TestNormalizeToolRefsRejectsProviderRunAsDelegation(t *testing.T) {
 
 	runAs := &core.RunAsSubject{
 		SubjectID:           "service_account:automation",
-		SubjectKind:         "service_account",
 		CredentialSubjectID: "service_account:automation",
 	}
 	for _, tc := range []struct {
@@ -2864,7 +2848,7 @@ func agentToolSchemaPropertiesForTest(t *testing.T, schema map[string]any) map[s
 	return properties
 }
 
-func TestAgentToolTargetKeyIgnoresRunAsDisplayMetadata(t *testing.T) {
+func TestAgentToolTargetKeyUsesRunAsIdentity(t *testing.T) {
 	t.Parallel()
 
 	base := coreagent.ToolRef{
@@ -2872,41 +2856,21 @@ func TestAgentToolTargetKeyIgnoresRunAsDisplayMetadata(t *testing.T) {
 		Operation: "automation.write",
 		RunAs: &core.RunAsSubject{
 			SubjectID:           "service_account:automation",
-			SubjectKind:         "service_account",
 			CredentialSubjectID: "service_account:automation",
-			DisplayName:         "Automation app",
-			AuthSource:          "managed_event",
 		},
 	}
 	same := base
 	same.RunAs = &core.RunAsSubject{
 		SubjectID:           " service_account:automation ",
-		SubjectKind:         " service_account ",
 		CredentialSubjectID: " service_account:automation ",
-		DisplayName:         " Automation app ",
-		AuthSource:          " managed_event ",
-	}
-	differentDisplayMetadata := base
-	differentDisplayMetadata.RunAs = &core.RunAsSubject{
-		SubjectID:           base.RunAs.SubjectID,
-		SubjectKind:         base.RunAs.SubjectKind,
-		CredentialSubjectID: base.RunAs.CredentialSubjectID,
-		DisplayName:         "Another display name",
-		AuthSource:          "another_auth_source",
 	}
 	differentCredentialSubject := base
 	differentCredentialSubject.RunAs = &core.RunAsSubject{
 		SubjectID:           base.RunAs.SubjectID,
-		SubjectKind:         base.RunAs.SubjectKind,
 		CredentialSubjectID: "service_account:other-automation",
-		DisplayName:         base.RunAs.DisplayName,
-		AuthSource:          base.RunAs.AuthSource,
 	}
 	if agentToolTargetKeyFromRef(base) != agentToolTargetKeyFromRef(same) {
 		t.Fatal("agentToolTargetKeyFromRef should normalize equivalent runAs subjects")
-	}
-	if agentToolTargetKeyFromRef(base) != agentToolTargetKeyFromRef(differentDisplayMetadata) {
-		t.Fatal("agentToolTargetKeyFromRef should ignore runAs display/auth metadata")
 	}
 	if agentToolTargetKeyFromRef(base) == agentToolTargetKeyFromRef(differentCredentialSubject) {
 		t.Fatal("agentToolTargetKeyFromRef collapsed distinct runAs credential subject")

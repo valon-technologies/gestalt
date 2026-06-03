@@ -31,7 +31,6 @@ import { removeTempDir } from "./helpers.ts";
 
 test("AgentProvider accepts JSON display payloads for turn events", async () => {
   const provider = defineAgentProvider({
-    displayName: "Agent transport fixture",
     async listTurnEvents() {
       return [
         {
@@ -42,7 +41,6 @@ test("AgentProvider accepts JSON display payloads for turn events", async () => 
           source: "fixture-agent",
           visibility: "public",
           display: {
-            kind: "tool",
             phase: "started",
             label: "Lookup fixture",
             ref: "call-1",
@@ -80,7 +78,6 @@ test("AgentProvider accepts JSON display payloads for turn events", async () => 
     source: "fixture-agent",
     visibility: "public",
     display: {
-      kind: "tool",
       phase: "started",
       label: "Lookup fixture",
       ref: "call-1",
@@ -127,7 +124,6 @@ test("AgentProvider rejects structured output without a schema", async () => {
 test("AgentProvider forwards invocation tokens to handlers", async () => {
   const seenTokens: string[] = [];
   const provider = defineAgentProvider({
-    displayName: "Agent token fixture",
     createSession(request) {
       seenTokens.push(request.invocationToken);
       return {

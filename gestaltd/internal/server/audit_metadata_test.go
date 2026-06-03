@@ -100,9 +100,6 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 	if record["provider"] != "audit-prov" {
 		t.Errorf("expected provider=audit-prov, got %v", record["provider"])
 	}
-	if record["auth_source"] != "session" {
-		t.Errorf("expected auth_source=session, got %v", record["auth_source"])
-	}
 	if subjectID, ok := record["subject_id"].(string); !ok || subjectID == "" {
 		t.Errorf("expected non-empty subject_id, got %v", record["subject_id"])
 	}
@@ -198,7 +195,6 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 		routeAuth      string
 		wantSource     string
 		wantError      string
-		wantAuthSource string
 		wantProvider   string
 	}{
 		{
@@ -226,7 +222,6 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 			withMCPHandler: true,
 			wantSource:     "mcp",
 			wantError:      "invalid token",
-			wantAuthSource: "session",
 		},
 		{
 			name:         "missing_plugin_route_auth_uses_named_provider_in_audit",
@@ -328,12 +323,11 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 			if record["provider"] != tc.wantProvider {
 				t.Fatalf("expected provider %q, got %v", tc.wantProvider, record["provider"])
 			}
-			if tc.wantAuthSource == "" {
-				if authSource, ok := record["auth_source"]; ok && authSource != "" {
-					t.Fatalf("expected empty auth_source, got %v", authSource)
-				}
-			} else if record["auth_source"] != tc.wantAuthSource {
-				t.Fatalf("expected auth_source %q, got %v", tc.wantAuthSource, record["auth_source"])
+			if authSource, ok := record["auth_source"]; ok && authSource != "" {
+				t.Fatalf("expected auth_source omitted, got %v", authSource)
+			}
+			if subjectKind, ok := record["subject_kind"]; ok && subjectKind != "" {
+				t.Fatalf("expected subject_kind omitted, got %v", subjectKind)
 			}
 		})
 	}
@@ -423,9 +417,6 @@ func TestAuditMetadata_ServiceAccountSubjectAndCredentialPath(t *testing.T) {
 
 	if record["subject_id"] != "service_account:triage-bot" {
 		t.Fatalf("expected service account subject_id, got %v", record["subject_id"])
-	}
-	if record["subject_kind"] != "service_account" {
-		t.Fatalf("expected subject_kind=service_account, got %v", record["subject_kind"])
 	}
 	if record["credential_mode"] != "subject" {
 		t.Fatalf("expected credential_mode=subject, got %v", record["credential_mode"])

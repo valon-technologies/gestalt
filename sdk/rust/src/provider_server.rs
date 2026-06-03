@@ -272,10 +272,7 @@ fn request_subject_field(
     };
     Subject {
         id: subject.id.clone(),
-        kind: subject.kind.clone(),
         credential_subject_id: subject.credential_subject_id.clone(),
-        display_name: subject.display_name.clone(),
-        auth_source: subject.auth_source.clone(),
         email: subject.email.clone(),
     }
 }
@@ -363,10 +360,7 @@ fn http_subject_request(request: Option<&HttpSubjectRequest>) -> HTTPSubjectRequ
 fn subject_to_proto(subject: Subject) -> SubjectContext {
     SubjectContext {
         id: subject.id,
-        kind: subject.kind,
         credential_subject_id: subject.credential_subject_id,
-        display_name: subject.display_name,
-        auth_source: subject.auth_source,
         email: subject.email,
     }
 }

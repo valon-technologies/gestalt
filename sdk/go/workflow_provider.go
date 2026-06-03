@@ -6,7 +6,7 @@ import "context"
 type StartWorkflowProviderRunRequest struct {
 	Target         *BoundWorkflowTarget
 	IdempotencyKey string
-	CreatedBy      *WorkflowActor
+	CreatedBySubjectID string
 	RunAs          *Subject
 	WorkflowKey    string
 	DefinitionID   string
@@ -65,7 +65,7 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 	WorkflowKey    string
 	Target         *BoundWorkflowTarget
 	IdempotencyKey string
-	CreatedBy      *WorkflowActor
+	CreatedBySubjectID string
 	RunAs          *Subject
 	Signal         *WorkflowSignal
 	DefinitionID   string
@@ -76,7 +76,7 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 type CreateWorkflowProviderDefinitionRequest struct {
 	Target         *BoundWorkflowTarget
 	IdempotencyKey string
-	CreatedBy      *WorkflowActor
+	CreatedBySubjectID string
 }
 
 // GetWorkflowProviderDefinitionRequest identifies one workflow definition.
@@ -89,7 +89,7 @@ type GetWorkflowProviderDefinitionRequest struct {
 type UpdateWorkflowProviderDefinitionRequest struct {
 	DefinitionID string
 	Target       *BoundWorkflowTarget
-	RequestedBy  *WorkflowActor
+	RequestedBySubjectID string
 }
 
 // DeleteWorkflowProviderDefinitionRequest identifies a workflow definition to
@@ -118,7 +118,7 @@ type UpsertWorkflowProviderScheduleRequest struct {
 	Timezone       string
 	Target         *BoundWorkflowTarget
 	Paused         bool
-	RequestedBy    *WorkflowActor
+	RequestedBySubjectID string
 	RunAs          *Subject
 	IdempotencyKey string
 	DefinitionID   string
@@ -170,7 +170,7 @@ type UpsertWorkflowProviderEventTriggerRequest struct {
 	Match          *WorkflowEventMatch
 	Target         *BoundWorkflowTarget
 	Paused         bool
-	RequestedBy    *WorkflowActor
+	RequestedBySubjectID string
 	RunAs          *Subject
 	IdempotencyKey string
 	DefinitionID   string
@@ -220,7 +220,7 @@ type ResumeWorkflowProviderEventTriggerRequest struct {
 type PublishWorkflowProviderEventRequest struct {
 	AppName     string
 	Event       *WorkflowEvent
-	PublishedBy *WorkflowActor
+	PublishedBySubjectID string
 }
 
 // WorkflowProvider is implemented by providers that serve the workflow base

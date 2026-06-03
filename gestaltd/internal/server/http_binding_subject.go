@@ -60,11 +60,11 @@ func (s *Server) resolveHTTPBindingPrincipal(ctx context.Context, binding Mounte
 	}
 
 	p := &principal.Principal{
-		SubjectID:   strings.TrimSpace(resolved.ID),
-		DisplayName: strings.TrimSpace(resolved.DisplayName),
+		SubjectID: strings.TrimSpace(resolved.ID),
 	}
-	principal.SetAuthSource(p, resolved.AuthSource)
 	if kind := strings.TrimSpace(resolved.Kind); kind != "" {
+		p.Kind = principal.Kind(kind)
+	} else if kind, _, ok := core.ParseSubjectID(p.SubjectID); ok {
 		p.Kind = principal.Kind(kind)
 	}
 	return principal.Canonicalize(p), nil

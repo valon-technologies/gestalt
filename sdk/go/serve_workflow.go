@@ -263,7 +263,7 @@ func createWorkflowProviderDefinitionRequestFromProto(req *proto.CreateWorkflowP
 	return &CreateWorkflowProviderDefinitionRequest{
 		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
 		IdempotencyKey: req.GetIdempotencyKey(),
-		CreatedBy:      workflowActorInputPtrFromActor(req.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}
 }
 
@@ -274,7 +274,7 @@ func updateWorkflowProviderDefinitionRequestFromProto(req *proto.UpdateWorkflowP
 	return &UpdateWorkflowProviderDefinitionRequest{
 		DefinitionID: req.GetDefinitionId(),
 		Target:       workflowTargetInputPtrFromTarget(req.GetTarget()),
-		RequestedBy:  workflowActorInputPtrFromActor(req.GetRequestedBy()),
+		RequestedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 	}
 }
 
@@ -285,7 +285,7 @@ func startWorkflowProviderRunRequestFromProto(req *proto.StartWorkflowProviderRu
 	return &StartWorkflowProviderRunRequest{
 		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
 		IdempotencyKey: req.GetIdempotencyKey(),
-		CreatedBy:      workflowActorInputPtrFromActor(req.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 		RunAs:          subjectFromProto(req.GetRunAs()),
 		WorkflowKey:    req.GetWorkflowKey(),
 		DefinitionID:   req.GetDefinitionId(),
@@ -320,7 +320,7 @@ func signalOrStartWorkflowProviderRunRequestFromProto(req *proto.SignalOrStartWo
 		WorkflowKey:    req.GetWorkflowKey(),
 		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
 		IdempotencyKey: req.GetIdempotencyKey(),
-		CreatedBy:      workflowActorInputPtrFromActor(req.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 		RunAs:          subjectFromProto(req.GetRunAs()),
 		Signal:         signal,
 		DefinitionID:   req.GetDefinitionId(),
@@ -337,7 +337,7 @@ func upsertWorkflowProviderScheduleRequestFromProto(req *proto.UpsertWorkflowPro
 		Timezone:       req.GetTimezone(),
 		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
 		Paused:         req.GetPaused(),
-		RequestedBy:    workflowActorInputPtrFromActor(req.GetRequestedBy()),
+		RequestedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 		RunAs:          subjectFromProto(req.GetRunAs()),
 		IdempotencyKey: req.GetIdempotencyKey(),
 		DefinitionID:   req.GetDefinitionId(),
@@ -353,7 +353,7 @@ func upsertWorkflowProviderEventTriggerRequestFromProto(req *proto.UpsertWorkflo
 		Match:          workflowEventMatchInputPtrFromMatch(req.GetMatch()),
 		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
 		Paused:         req.GetPaused(),
-		RequestedBy:    workflowActorInputPtrFromActor(req.GetRequestedBy()),
+		RequestedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 		RunAs:          subjectFromProto(req.GetRunAs()),
 		IdempotencyKey: req.GetIdempotencyKey(),
 		DefinitionID:   req.GetDefinitionId(),
@@ -372,7 +372,7 @@ func publishWorkflowProviderEventRequestFromProto(req *proto.PublishWorkflowProv
 	return &PublishWorkflowProviderEventRequest{
 		AppName:     req.GetAppName(),
 		Event:       event,
-		PublishedBy: workflowActorInputPtrFromActor(req.GetPublishedBy()),
+		PublishedBySubjectID: strings.TrimSpace(req.GetPublishedBySubjectId()),
 	}
 }
 
