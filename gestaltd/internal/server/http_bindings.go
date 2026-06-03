@@ -99,7 +99,6 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 				Target:         target,
 				CredentialMode: core.ConnectionMode(binding.CredentialMode),
 				RequestBody:    binding.RequestBody,
-				Ack:            binding.Ack,
 				SecurityName:   securityName,
 				Security:       scheme,
 			})
@@ -217,14 +216,6 @@ func validateMountedHTTPBinding(pluginName, bindingName string, binding *config.
 			normalizedContent[normalizedMediaType] = binding.RequestBody.Content[mediaType]
 		}
 		binding.RequestBody.Content = normalizedContent
-	}
-	if binding.Ack != nil {
-		if binding.Ack.Status == 0 {
-			binding.Ack.Status = http.StatusOK
-		}
-		if binding.Ack.Status < 200 || binding.Ack.Status > 299 {
-			return fmt.Errorf("%s.ack.status must be a 2xx status", path)
-		}
 	}
 	return nil
 }

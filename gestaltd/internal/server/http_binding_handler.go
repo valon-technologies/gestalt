@@ -1,15 +1,10 @@
 package server
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
-
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 func (s *Server) handleHTTPBinding(binding MountedHTTPBinding, w http.ResponseWriter, r *http.Request) {
@@ -24,14 +19,7 @@ func (s *Server) handleHTTPBinding(binding MountedHTTPBinding, w http.ResponseWr
 		var requestErr *httpBindingRequestError
 		if errors.As(err, &requestErr) {
 			if requestErr.status > 0 && requestErr.status < 400 {
-				if binding.Ack != nil {
-					if err := writeHTTPBindingAck(w, binding.Ack); err != nil {
-						slog.ErrorContext(r.Context(), "write http binding ack", "app", binding.AppName, "binding", binding.Name, "error", err)
-						writeError(w, http.StatusInternalServerError, "failed to write http binding response")
-					}
-				} else {
-					w.WriteHeader(requestErr.status)
-				}
+				w.WriteHeader(requestErr.status)
 				return
 			}
 			if requestErr.status >= 500 {
@@ -70,16 +58,6 @@ func (s *Server) handleHTTPBinding(binding MountedHTTPBinding, w http.ResponseWr
 		return
 	}
 
-	if binding.Ack != nil {
-		if err := writeHTTPBindingAck(w, binding.Ack); err != nil {
-			slog.ErrorContext(r.Context(), "write http binding ack", "app", binding.AppName, "binding", binding.Name, "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to write http binding response")
-			return
-		}
-		s.dispatchHTTPBindingAsync(binding, resolvedPrincipal, verified, parsed, invocation.RequestMetaFromContext(r.Context()))
-		return
-	}
-
 	result, err := s.httpBindingOperationInvocation(r.Context(), binding, resolvedPrincipal, verified, parsed)
 	if err != nil {
 		s.writeInvocationError(w, r, binding.AppName, binding.Target, err)
@@ -98,39 +76,4 @@ func readHTTPBindingBody(r *http.Request) ([]byte, error) {
 		return nil, errors.New("failed to read request body")
 	}
 	return body, nil
-}
-
-func writeHTTPBindingAck(w http.ResponseWriter, ack *providermanifestv1.HTTPAck) error {
-	if ack == nil {
-		w.WriteHeader(http.StatusOK)
-		return nil
-	}
-	status := ack.Status
-	if status == 0 {
-		status = http.StatusOK
-	}
-	for key, value := range ack.Headers {
-		w.Header().Set(key, value)
-	}
-	if ack.Body == nil {
-		w.WriteHeader(status)
-		return nil
-	}
-	if contentType := strings.TrimSpace(w.Header().Get("Content-Type")); contentType != "" && !strings.Contains(strings.ToLower(contentType), "json") {
-		switch body := ack.Body.(type) {
-		case string:
-			w.WriteHeader(status)
-			_, err := w.Write([]byte(body))
-			return err
-		case []byte:
-			w.WriteHeader(status)
-			_, err := w.Write(body)
-			return err
-		default:
-			return errors.New("non-JSON ack bodies must be string or bytes")
-		}
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	return json.NewEncoder(w).Encode(ack.Body)
 }

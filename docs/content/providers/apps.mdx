@@ -555,10 +555,6 @@ spec:
         required: true
         content:
           application/x-www-form-urlencoded: {}
-      ack:
-        status: 200
-        body:
-          status: accepted
 ```
 
 Implement the target operation in the app SDK:
@@ -795,9 +791,8 @@ Implement the target operation in the app SDK:
 
 Request query parameters are included in the operation input. JSON object
 bodies merge into the input by field name, form-encoded bodies become string
-parameters, and unsupported body types are passed as `rawBody`. If `ack` is
-configured, Gestalt sends that response immediately and runs the operation
-asynchronously. Without `ack`, the caller receives the operation response.
+parameters, and unsupported body types are passed as `rawBody`. The caller
+receives the operation response when processing completes.
 
 ### Declarative apps
 

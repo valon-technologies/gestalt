@@ -12,7 +12,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -1487,7 +1486,6 @@ func cloneHTTPBindings(src map[string]*HTTPBinding) map[string]*HTTPBinding {
 		}
 		copyBinding := *binding
 		copyBinding.RequestBody = cloneHTTPRequestBody(binding.RequestBody)
-		copyBinding.Ack = cloneHTTPAck(binding.Ack)
 		cloned[name] = &copyBinding
 	}
 	return cloned
@@ -1510,72 +1508,6 @@ func cloneHTTPRequestBody(src *providermanifestv1.HTTPRequestBody) *providermani
 		}
 	}
 	return &cloned
-}
-
-func cloneHTTPAck(src *providermanifestv1.HTTPAck) *providermanifestv1.HTTPAck {
-	if src == nil {
-		return nil
-	}
-	cloned := *src
-	if src.Headers != nil {
-		cloned.Headers = maps.Clone(src.Headers)
-	}
-	cloned.Body = cloneHTTPBodyValue(src.Body)
-	return &cloned
-}
-
-func cloneHTTPBodyValue(src any) any {
-	if src == nil {
-		return nil
-	}
-	return cloneHTTPBodyReflectValue(reflect.ValueOf(src)).Interface()
-}
-
-func cloneHTTPBodyReflectValue(value reflect.Value) reflect.Value {
-	if !value.IsValid() {
-		return reflect.Value{}
-	}
-	switch value.Kind() {
-	case reflect.Interface:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		return cloneHTTPBodyReflectValue(value.Elem())
-	case reflect.Pointer:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		cloned := reflect.New(value.Type().Elem())
-		cloned.Elem().Set(cloneHTTPBodyReflectValue(value.Elem()))
-		return cloned
-	case reflect.Map:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		cloned := reflect.MakeMapWithSize(value.Type(), value.Len())
-		iter := value.MapRange()
-		for iter.Next() {
-			cloned.SetMapIndex(cloneHTTPBodyReflectValue(iter.Key()), cloneHTTPBodyReflectValue(iter.Value()))
-		}
-		return cloned
-	case reflect.Slice:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		cloned := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
-		for i := 0; i < value.Len(); i++ {
-			cloned.Index(i).Set(cloneHTTPBodyReflectValue(value.Index(i)))
-		}
-		return cloned
-	case reflect.Array:
-		cloned := reflect.New(value.Type()).Elem()
-		for i := 0; i < value.Len(); i++ {
-			cloned.Index(i).Set(cloneHTTPBodyReflectValue(value.Index(i)))
-		}
-		return cloned
-	default:
-		return value
-	}
 }
 
 func mergeHTTPSecurityScheme(base, override *HTTPSecurityScheme) *HTTPSecurityScheme {
@@ -1667,28 +1599,6 @@ func mergeHTTPBinding(base, override *HTTPBinding) *HTTPBinding {
 				requestBody.Content = cloneHTTPRequestBody(override.RequestBody).Content
 			}
 			merged.RequestBody = &requestBody
-		}
-	}
-	if override.Ack != nil {
-		if merged.Ack == nil {
-			merged.Ack = cloneHTTPAck(override.Ack)
-		} else {
-			ack := cloneHTTPAck(merged.Ack)
-			if override.Ack.Status != 0 {
-				ack.Status = override.Ack.Status
-			}
-			if override.Ack.Headers != nil {
-				if ack.Headers == nil {
-					ack.Headers = map[string]string{}
-				}
-				for key, value := range override.Ack.Headers {
-					ack.Headers[key] = value
-				}
-			}
-			if override.Ack.Body != nil {
-				ack.Body = cloneHTTPBodyValue(override.Ack.Body)
-			}
-			merged.Ack = ack
 		}
 	}
 	return &merged
