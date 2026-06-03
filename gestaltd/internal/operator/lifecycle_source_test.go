@@ -2648,8 +2648,8 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 				}
 			}
 			if tc.localSource && tc.remoteArchives {
-				cacheDir := filepath.Join(dir, "archive-cache-local-metadata")
-				assertRemoteArchiveCacheRoundTrip(t, lc, configPath, cacheDir, wantCurrentSHA, &currentArchiveCount, func() error {
+				cacheDir := filepath.Join(dir, "materialized-cache-local-metadata")
+				assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, cacheDir, wantCurrentSHA, &currentArchiveCount, func() error {
 					return os.RemoveAll(appRoot)
 				}, func() {
 					if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -2912,16 +2912,16 @@ packages:
 		t.Fatalf("archive request count after sync = %d, want %d", got, archiveBefore+1)
 	}
 
-	cacheDir := filepath.Join(dir, "archive-cache")
+	cacheDir := filepath.Join(dir, "materialized-cache")
 	resetAppRoot := func() error { return os.RemoveAll(appRoot) }
 	drainHandlerErr := func() {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
 	}
-	assertCheckSyncDoesNotPopulateArchiveCache(t, lc, configPath, cacheDir, resetAppRoot)
-	assertRemoteArchiveCacheRoundTrip(t, lc, configPath, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
-	assertRemoteArchiveCacheRepair(t, lc, configPath, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
+	assertCheckSyncDoesNotPopulateMaterializedCache(t, lc, configPath, cacheDir, resetAppRoot)
+	assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
+	assertRemoteMaterializedCacheRepair(t, lc, configPath, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
 
 	archiveBeforeLoad := archiveCount.Load()
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
@@ -3279,8 +3279,8 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	if got := archiveCount.Load() - archiveBefore; got != 1 {
 		t.Fatalf("archive request count during sync = %d, want 1", got)
 	}
-	cacheDir := filepath.Join(dir, "archive-cache")
-	assertRemoteArchiveCacheRoundTrip(t, lc, configPath, cacheDir, archiveSHAHex, &archiveCount, func() error {
+	cacheDir := filepath.Join(dir, "materialized-cache")
+	assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, cacheDir, archiveSHAHex, &archiveCount, func() error {
 		return os.RemoveAll(workflowRoot)
 	}, func() {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -3637,8 +3637,8 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	if got := archiveCount.Load() - archiveBefore; got != 1 {
 		t.Fatalf("archive request count during sync = %d, want 1", got)
 	}
-	cacheDir := filepath.Join(dir, "archive-cache")
-	assertRemoteArchiveCacheRoundTrip(t, lc, configPath, cacheDir, archiveSHAHex, &archiveCount, func() error {
+	cacheDir := filepath.Join(dir, "materialized-cache")
+	assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, cacheDir, archiveSHAHex, &archiveCount, func() error {
 		return os.RemoveAll(uiRoot)
 	}, func() {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {

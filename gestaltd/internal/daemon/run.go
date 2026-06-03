@@ -279,7 +279,7 @@ func runSync(args []string) error {
 	locked := fs.Bool("locked", false, "require an existing lockfile; do not resolve new metadata")
 	check := fs.Bool("check", false, "fail if artifacts would need to be materialized")
 	parallelism := fs.Int("parallelism", defaultSyncParallelism(), "maximum concurrent local UI source preparations")
-	cacheDir := fs.String("cache-dir", "", "path to opt-in remote archive cache")
+	cacheDir := fs.String("cache-dir", "", "path to opt-in materialized artifact cache")
 	verboseLong := fs.Bool("verbose", false, "emit detailed sync diagnostics")
 	verboseShort := fs.Bool("v", false, "emit detailed sync diagnostics")
 	outputFormat := fs.String("output-format", syncOutputFormatText, "output format: text or json")
@@ -312,9 +312,9 @@ func runSync(args []string) error {
 		observability.BuildOutput = providerpkg.CommandOutput{Stdout: os.Stderr, Stderr: os.Stderr}
 	}
 	opts := operator.SyncOptions{
-		Parallelism:     *parallelism,
-		ArchiveCacheDir: *cacheDir,
-		Observability:   observability,
+		Parallelism:   *parallelism,
+		CacheDir:      *cacheDir,
+		Observability: observability,
 	}
 
 	if err := syncConfigWithStatePathsOptions(configPaths, operator.StatePaths{
@@ -528,7 +528,7 @@ func printSyncUsage(w io.Writer) {
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Materialize prepared artifacts from the existing lockfile.")
 	writeUsageLine(w, "Does not resolve new metadata or rewrite the lockfile.")
-	writeUsageLine(w, "--cache-dir reuses verified remote release archives; --check remains read-only.")
+	writeUsageLine(w, "--cache-dir reuses materialized prepared artifacts keyed by locked archive identity; --check remains read-only.")
 	writeUsageLine(w, "--parallelism caps concurrent local source UI preparation.")
 	writeUsageLine(w, "--output-format=json writes one machine-readable metrics document to stdout on success.")
 	writeUsageLine(w, "-v/--verbose adds cache, download, timing, and output-size diagnostics.")
@@ -540,7 +540,7 @@ func printSyncUsage(w io.Writer) {
 	writeUsageLine(w, "  --lockfile        Path to lockfile; defaults to gestalt.lock.json next to the primary config")
 	writeUsageLine(w, "  --locked          Require an existing lockfile")
 	writeUsageLine(w, "  --parallelism     Maximum concurrent local source UI preparations")
-	writeUsageLine(w, "  --cache-dir       Opt-in cache for verified remote release archives; relative paths use the current working directory")
+	writeUsageLine(w, "  --cache-dir       Opt-in cache for materialized prepared artifacts; relative paths use the current working directory")
 	writeUsageLine(w, "  --output-format   Output format: text or json")
 	writeUsageLine(w, "  -v, --verbose     Emit detailed sync diagnostics")
 	writeUsageLine(w, "  --check           Fail if artifacts would need to be materialized")

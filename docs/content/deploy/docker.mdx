@@ -71,15 +71,18 @@ gestaltd sync \
   --output-format=json \
   --config deploy/config.yaml \
   --artifacts-dir deploy \
-  --cache-dir /cache/gestaltd-archives \
+  --cache-dir /cache/gestaltd \
   > gestaltd-sync.json
 ```
 
-The archive cache is content-addressed by the locked archive SHA-256. A
-lockfile bump misses only for archives whose SHA changes; unchanged remote
-release archives can still be reused from the cache. Omitting `--cache-dir`
-disables the archive cache, and `sync --locked --check` remains read-only and
-does not populate it.
+The sync cache is content-addressed by locked archive identity and stores
+materialized prepared artifacts. A lockfile bump misses only for prepared
+outputs whose locked archive identity changes; unchanged entries can be restored
+without re-downloading or reinstalling the package. Omitting `--cache-dir`
+disables the cache, and `sync --locked --check` remains read-only and does not
+populate it.
+Use a private cache location. Any principal that can write this cache can
+influence restored prepared artifacts.
 
 If the deployment builds local source providers during `sync`, you can opt into
 the generic Gestalt build cache during the build stage:

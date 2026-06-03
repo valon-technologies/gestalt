@@ -308,7 +308,7 @@ func normalizeLockArchives(archives map[string]LockArchive) map[string]LockArchi
 	normalized := make(map[string]LockArchive, len(archives))
 	for platform := range archives {
 		archive := archives[platform]
-		if sha, ok := canonicalArchiveCacheSHA(archive.SHA256); ok {
+		if sha, ok := canonicalArchiveSHA256(archive.SHA256); ok {
 			archive.SHA256 = sha
 		} else {
 			archive.SHA256 = strings.TrimSpace(archive.SHA256)
