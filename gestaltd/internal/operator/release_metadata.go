@@ -16,7 +16,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
@@ -60,18 +62,25 @@ type gitHubReleaseByTagResponse struct {
 }
 
 type providerReleaseMetadata struct {
-	Schema        string                             `yaml:"schema"`
-	SchemaVersion int                                `yaml:"schemaVersion"`
-	Package       string                             `yaml:"package"`
-	Kind          string                             `yaml:"kind"`
-	Version       string                             `yaml:"version"`
-	Runtime       string                             `yaml:"runtime"`
-	Artifacts     map[string]providerReleaseArtifact `yaml:"artifacts,omitempty"`
+	Schema           string                               `yaml:"schema"`
+	SchemaVersion    int                                  `yaml:"schemaVersion"`
+	Package          string                               `yaml:"package"`
+	Kind             string                               `yaml:"kind"`
+	Version          string                               `yaml:"version"`
+	Runtime          string                               `yaml:"runtime"`
+	Artifacts        map[string]providerReleaseArtifact   `yaml:"artifacts,omitempty"`
+	StaticValidation *providerReleaseStaticValidationData `yaml:"staticValidation,omitempty"`
 }
 
 type providerReleaseArtifact struct {
 	Path   string `yaml:"path"`
 	SHA256 string `yaml:"sha256"`
+}
+
+type providerReleaseStaticValidationData struct {
+	Manifest           *providermanifestv1.Manifest `yaml:"manifest,omitempty"`
+	Catalog            *catalog.Catalog             `yaml:"catalog,omitempty"`
+	CatalogSessionOnly bool                         `yaml:"catalogSessionOnly,omitempty"`
 }
 
 func sourceAuthToken(entry *config.ProviderEntry) string {
@@ -149,6 +158,43 @@ func validateProviderReleaseMetadata(metadata *providerReleaseMetadata) error {
 		}
 		if strings.TrimSpace(artifact.SHA256) == "" {
 			return fmt.Errorf("provider release artifact sha256 is required for target %q", target)
+		}
+	}
+	if err := validateProviderReleaseStaticValidation(metadata); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateProviderReleaseStaticValidation(metadata *providerReleaseMetadata) error {
+	static := metadata.StaticValidation
+	if static == nil {
+		return nil
+	}
+	if static.Manifest == nil && static.Catalog == nil {
+		return fmt.Errorf("provider release staticValidation must include manifest or catalog metadata")
+	}
+	if static.Manifest != nil {
+		manifestKind := providermanifestv1.NormalizeKind(static.Manifest.Kind)
+		if manifestKind != metadata.Kind {
+			return fmt.Errorf("provider release staticValidation.manifest kind %q does not match %q", manifestKind, metadata.Kind)
+		}
+		if source := strings.TrimSpace(static.Manifest.Source); source != "" && source != strings.TrimSpace(metadata.Package) {
+			return fmt.Errorf("provider release staticValidation.manifest package %q does not match %q", source, metadata.Package)
+		}
+		if version := strings.TrimSpace(static.Manifest.Version); version != "" && version != strings.TrimSpace(metadata.Version) {
+			return fmt.Errorf("provider release staticValidation.manifest version %q does not match %q", version, metadata.Version)
+		}
+		if len(static.Manifest.Artifacts) != 0 {
+			return fmt.Errorf("provider release staticValidation.manifest must not include platform artifacts")
+		}
+		if static.Manifest.Entrypoint != nil && static.Manifest.Entrypoint.ArtifactPath != staticvalidation.EntrypointPlaceholder {
+			return fmt.Errorf("provider release staticValidation.manifest entrypoint artifactPath must be %q", staticvalidation.EntrypointPlaceholder)
+		}
+	}
+	if static.Catalog != nil {
+		if err := static.Catalog.Validate(); err != nil {
+			return fmt.Errorf("provider release staticValidation.catalog: %w", err)
 		}
 	}
 	return nil
