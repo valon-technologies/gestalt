@@ -3088,20 +3088,6 @@ def _workflow_event_context(event: WorkflowEvent | Any | None) -> dict[str, Any]
         out["extensions"] = dict(cast(Mapping[str, Any], extensions))
     return out
 
-
-def _workflow_actor_context(subject_id: str | Any | None) -> dict[str, Any]:
-    if subject_id is None:
-        return {}
-    if isinstance(subject_id, str):
-        trimmed = subject_id.strip()
-        return {"createdBySubjectId": trimmed} if trimmed else {}
-    out: dict[str, Any] = {}
-    if getattr(subject_id, "subject_id", "").strip():
-        out["createdBySubjectId"] = subject_id.subject_id.strip()
-    return out
-
-
-
 def workflow_signals_context(signals: Sequence[WorkflowSignal] | None) -> list[dict[str, Any]]:
     if not signals:
         return []
