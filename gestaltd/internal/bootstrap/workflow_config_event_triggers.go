@@ -10,10 +10,10 @@ import (
 	"strings"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
@@ -24,7 +24,7 @@ type desiredWorkflowConfigEventTrigger struct {
 	trigger      config.WorkflowEventTriggerConfig
 }
 
-func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, tokens *appaccessservice.InvocationTokenManager, includeProvider workflowConfigProviderFilter) error {
+func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, includeProvider workflowConfigProviderFilter) error {
 	if cfg == nil || runtime == nil {
 		return nil
 	}
@@ -64,16 +64,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
-		permissions, err := workflowConfigExecutionPermissions(cfg, "workflows.eventTriggers."+desiredEntry.TriggerKey, trigger.Invokes)
-		if err != nil {
-			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
-		}
-		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs, permissions); err != nil {
-			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
-		}
-		executionPermissions := workflowConfigExecutionPermissionsForTarget(target, permissions)
-		providerCtx, err = workflowConfigInvocationContext(providerCtx, tokens, runAs, executionPermissions)
-		if err != nil {
+		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs); err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
 		targetProto, err := workflowwire.TargetToProto(target)
@@ -86,6 +77,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 			Target:      targetProto,
 			Paused:      trigger.Paused,
 			RequestedBy: workflowwire.ActorToProto(workflowConfigActor()),
+			RunAs:       agentwire.RunAsSubjectToProto(runAs),
 		}); err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}

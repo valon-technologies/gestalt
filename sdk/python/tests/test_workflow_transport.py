@@ -82,6 +82,7 @@ class _WorkflowServicer(workflow_pb2_grpc.WorkflowProviderServicer):
                 "event_type": event.type,
                 "event_source": event.source,
                 "event_subject": event.subject,
+                "app_name": request.app_name,
                 "provider_name": request.provider_name,
             }
         )
@@ -142,6 +143,7 @@ class WorkflowTransportTests(unittest.TestCase):
         with Workflow("token-123") as manager:
             published = manager.publish_event(
                 workflow_pb2.PublishWorkflowProviderEventRequest(
+                    app_name="github",
                     event=event,
                     provider_name="advanced",
                 )
@@ -161,6 +163,7 @@ class WorkflowTransportTests(unittest.TestCase):
                     "event_type": "github.app.webhook",
                     "event_source": "github",
                     "event_subject": "acme/widgets",
+                    "app_name": "github",
                     "provider_name": "advanced",
                 }
             ],
@@ -241,6 +244,7 @@ class WorkflowTransportTests(unittest.TestCase):
                     "event_type": "github.app.webhook",
                     "event_source": "github",
                     "event_subject": "installation:99",
+                    "app_name": "",
                     "provider_name": "managed",
                 },
             ],

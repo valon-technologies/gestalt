@@ -92,6 +92,9 @@ func WorkflowRunContext(req Request) map[string]any {
 	if createdBy := WorkflowActorContext(req.CreatedBy); len(createdBy) > 0 {
 		ctxValue["createdBy"] = createdBy
 	}
+	if runAs := WorkflowSubjectContext(req.RunAs); len(runAs) > 0 {
+		ctxValue["runAs"] = runAs
+	}
 	return ctxValue
 }
 
@@ -207,6 +210,32 @@ func WorkflowActorContext(actor *gestalt.WorkflowActor) map[string]any {
 	}
 	if actor.AuthSource != "" {
 		value["authSource"] = actor.AuthSource
+	}
+	return value
+}
+
+func WorkflowSubjectContext(subject *gestalt.Subject) map[string]any {
+	value := map[string]any{}
+	if subject == nil {
+		return value
+	}
+	if id := strings.TrimSpace(subject.ID); id != "" {
+		value["id"] = id
+	}
+	if kind := strings.TrimSpace(subject.Kind); kind != "" {
+		value["kind"] = kind
+	}
+	if credentialSubjectID := strings.TrimSpace(subject.CredentialSubjectID); credentialSubjectID != "" {
+		value["credentialSubjectId"] = credentialSubjectID
+	}
+	if displayName := strings.TrimSpace(subject.DisplayName); displayName != "" {
+		value["displayName"] = displayName
+	}
+	if authSource := strings.TrimSpace(subject.AuthSource); authSource != "" {
+		value["authSource"] = authSource
+	}
+	if email := strings.TrimSpace(subject.Email); email != "" {
+		value["email"] = email
 	}
 	return value
 }

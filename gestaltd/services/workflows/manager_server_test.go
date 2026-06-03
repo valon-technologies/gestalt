@@ -80,6 +80,69 @@ func TestWorkflowManagerTargetOrDefinitionAllowsDefinitionOnlyRequests(t *testin
 	}
 }
 
+func TestManagerServerRejectsCallerSuppliedRunAs(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-runas-test-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	token, err := tokens.MintRootTokenWithWorkflowGrants(
+		principal.WithPrincipal(context.Background(), publishEventPrincipal()),
+		"caller",
+		nil,
+		workflowgrants.Grants{
+			workflowgrants.OperationSchedulesCreate:     {},
+			workflowgrants.OperationEventTriggersCreate: {},
+			workflowgrants.OperationRunsStart:           {},
+			workflowgrants.OperationRunsSignalOrStart:   {},
+		},
+	)
+	if err != nil {
+		t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
+	}
+	server := NewProviderServer("caller", nil, tokens)
+	runAs := &proto.SubjectContext{Id: "user:ada", Kind: "user"}
+
+	for name, call := range map[string]func() error{
+		"upsert schedule": func() error {
+			_, callErr := server.UpsertSchedule(context.Background(), &proto.UpsertWorkflowProviderScheduleRequest{
+				InvocationToken: token,
+				RunAs:           runAs,
+			})
+			return callErr
+		},
+		"start run": func() error {
+			_, callErr := server.StartRun(context.Background(), &proto.StartWorkflowProviderRunRequest{
+				InvocationToken: token,
+				RunAs:           runAs,
+			})
+			return callErr
+		},
+		"signal or start run": func() error {
+			_, callErr := server.SignalOrStartRun(context.Background(), &proto.SignalOrStartWorkflowProviderRunRequest{
+				InvocationToken: token,
+				RunAs:           runAs,
+			})
+			return callErr
+		},
+		"upsert event trigger": func() error {
+			_, callErr := server.UpsertEventTrigger(context.Background(), &proto.UpsertWorkflowProviderEventTriggerRequest{
+				InvocationToken: token,
+				RunAs:           runAs,
+			})
+			return callErr
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if err := call(); status.Code(err) != codes.PermissionDenied {
+				t.Fatalf("status = %s, want %s (err=%v)", status.Code(err), codes.PermissionDenied, err)
+			}
+		})
+	}
+}
+
 func TestManagerServerPublishEventThreadsCallerAppToSelectedProvider(t *testing.T) {
 	t.Parallel()
 

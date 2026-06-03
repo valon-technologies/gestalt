@@ -7,6 +7,7 @@ type StartWorkflowProviderRunRequest struct {
 	Target         *BoundWorkflowTarget
 	IdempotencyKey string
 	CreatedBy      *WorkflowActor
+	RunAs          *Subject
 	WorkflowKey    string
 	DefinitionID   string
 }
@@ -65,6 +66,7 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 	Target         *BoundWorkflowTarget
 	IdempotencyKey string
 	CreatedBy      *WorkflowActor
+	RunAs          *Subject
 	Signal         *WorkflowSignal
 	DefinitionID   string
 }
@@ -117,6 +119,7 @@ type UpsertWorkflowProviderScheduleRequest struct {
 	Target         *BoundWorkflowTarget
 	Paused         bool
 	RequestedBy    *WorkflowActor
+	RunAs          *Subject
 	IdempotencyKey string
 	DefinitionID   string
 }
@@ -168,6 +171,7 @@ type UpsertWorkflowProviderEventTriggerRequest struct {
 	Target         *BoundWorkflowTarget
 	Paused         bool
 	RequestedBy    *WorkflowActor
+	RunAs          *Subject
 	IdempotencyKey string
 	DefinitionID   string
 }

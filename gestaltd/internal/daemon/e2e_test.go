@@ -257,6 +257,10 @@ apps:
 workflows:
   schedules:
     nightly_sync:
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -269,6 +273,10 @@ workflows:
               input:
                 mode: incremental
     nightly_summary:
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       cron: "0 3 * * *"
       target:
         steps:
@@ -284,6 +292,10 @@ workflows:
                   operation: sync
   eventTriggers:
     roadmap_updated:
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       match:
         type: roadmap.item.updated
         source: roadmap

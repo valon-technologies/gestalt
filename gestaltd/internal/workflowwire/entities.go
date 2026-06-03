@@ -5,6 +5,7 @@ import (
 	"time"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -160,6 +161,7 @@ func RunFromProto(run *proto.BoundWorkflowRun) (*coreworkflow.Run, error) {
 		DefinitionID:  run.GetDefinitionId(),
 		Trigger:       trigger,
 		CreatedBy:     ActorFromProto(run.GetCreatedBy()),
+		RunAs:         agentwire.RunAsSubjectFromProto(run.GetRunAs()),
 		CreatedAt:     TimeFromProto(run.GetCreatedAt()),
 		StartedAt:     TimeFromProto(run.GetStartedAt()),
 		CompletedAt:   TimeFromProto(run.GetCompletedAt()),
@@ -193,6 +195,7 @@ func RunToProto(run *coreworkflow.Run) (*proto.BoundWorkflowRun, error) {
 		CreatedBy:     ActorToProto(run.CreatedBy),
 		WorkflowKey:   run.WorkflowKey,
 		DefinitionId:  run.DefinitionID,
+		RunAs:         agentwire.RunAsSubjectToProto(run.RunAs),
 	}, nil
 }
 
@@ -208,6 +211,7 @@ func ScheduleFromProto(schedule *proto.BoundWorkflowSchedule) (*coreworkflow.Sch
 		DefinitionID: schedule.GetDefinitionId(),
 		Paused:       schedule.GetPaused(),
 		CreatedBy:    ActorFromProto(schedule.GetCreatedBy()),
+		RunAs:        agentwire.RunAsSubjectFromProto(schedule.GetRunAs()),
 		CreatedAt:    TimeFromProto(schedule.GetCreatedAt()),
 		UpdatedAt:    TimeFromProto(schedule.GetUpdatedAt()),
 		NextRunAt:    TimeFromProto(schedule.GetNextRunAt()),
@@ -233,6 +237,7 @@ func ScheduleToProto(schedule *coreworkflow.Schedule) (*proto.BoundWorkflowSched
 		NextRunAt:    TimeToProto(schedule.NextRunAt),
 		CreatedBy:    ActorToProto(schedule.CreatedBy),
 		DefinitionId: schedule.DefinitionID,
+		RunAs:        agentwire.RunAsSubjectToProto(schedule.RunAs),
 	}, nil
 }
 
@@ -247,6 +252,7 @@ func EventTriggerFromProto(trigger *proto.BoundWorkflowEventTrigger) (*coreworkf
 		DefinitionID: trigger.GetDefinitionId(),
 		Paused:       trigger.GetPaused(),
 		CreatedBy:    ActorFromProto(trigger.GetCreatedBy()),
+		RunAs:        agentwire.RunAsSubjectFromProto(trigger.GetRunAs()),
 		CreatedAt:    TimeFromProto(trigger.GetCreatedAt()),
 		UpdatedAt:    TimeFromProto(trigger.GetUpdatedAt()),
 	}, nil
@@ -269,6 +275,7 @@ func EventTriggerToProto(trigger *coreworkflow.EventTrigger) (*proto.BoundWorkfl
 		UpdatedAt:    TimeToProto(trigger.UpdatedAt),
 		CreatedBy:    ActorToProto(trigger.CreatedBy),
 		DefinitionId: trigger.DefinitionID,
+		RunAs:        agentwire.RunAsSubjectToProto(trigger.RunAs),
 	}, nil
 }
 

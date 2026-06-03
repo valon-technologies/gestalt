@@ -12,7 +12,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -410,11 +412,17 @@ func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *a
 	if manager == nil {
 		manager = unavailableAgentManager{}
 	}
+	workflowRuns := workflowRunResolverFromDeps(deps)
 	return runtimehost.HostService{
 		Name:           "agent_provider",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.AgentProvider_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAgentProviderServer(srv, agentservice.NewProviderServer(pluginName, manager, tokens))
+			proto.RegisterAgentProviderServer(srv, agentservice.NewProviderServer(
+				pluginName,
+				manager,
+				tokens,
+				agentservice.WithWorkflowRunResolver(workflowRuns),
+			))
 		},
 	}
 }
@@ -444,6 +452,7 @@ func buildAppInvocationHostService(deps Deps, tokens *appaccessservice.Invocatio
 	if invoker == nil {
 		invoker = unavailableAppInvocation{}
 	}
+	workflowRuns := workflowRunResolverFromDeps(deps)
 	return runtimehost.HostService{
 		Name:           "app",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.App_ServiceDesc.ServiceName)},
@@ -451,7 +460,34 @@ func buildAppInvocationHostService(deps Deps, tokens *appaccessservice.Invocatio
 			proto.RegisterAppServer(srv, appaccessservice.NewServer(
 				invoker,
 				tokens,
+				appaccessservice.WithWorkflowRunResolver(workflowRuns),
 			))
 		},
 	}
+}
+
+type workflowRunResolver struct {
+	runtime *workflowRuntime
+}
+
+func workflowRunResolverFromDeps(deps Deps) appaccessservice.WorkflowRunResolver {
+	if deps.WorkflowRuntime == nil {
+		return nil
+	}
+	return workflowRunResolver{runtime: deps.WorkflowRuntime}
+}
+
+func (r workflowRunResolver) ResolveWorkflowRun(ctx context.Context, providerName, runID string) (*coreworkflow.Run, error) {
+	if r.runtime == nil {
+		return nil, fmt.Errorf("workflow runtime is not configured")
+	}
+	_, provider, err := r.runtime.ResolveProvider(ctx, providerName)
+	if err != nil {
+		return nil, err
+	}
+	runProto, err := provider.GetRun(ctx, &proto.GetWorkflowProviderRunRequest{RunId: strings.TrimSpace(runID)})
+	if err != nil {
+		return nil, err
+	}
+	return workflowwire.RunFromProto(runProto)
 }

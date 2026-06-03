@@ -12,26 +12,45 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowrunauth"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type AppServer struct {
 	proto.UnimplementedAppServer
 
-	invoker invocation.Invoker
-	tokens  *InvocationTokenManager
+	invoker      invocation.Invoker
+	tokens       *InvocationTokenManager
+	workflowRuns WorkflowRunResolver
 }
 
-func NewAppServer(invoker invocation.Invoker, tokens *InvocationTokenManager) *AppServer {
-	return &AppServer{
-		invoker: invoker,
-		tokens:  tokens,
+type WorkflowRunResolver = workflowrunauth.Resolver
+
+type AppServerOption func(*AppServer)
+
+func WithWorkflowRunResolver(resolver WorkflowRunResolver) AppServerOption {
+	return func(s *AppServer) {
+		s.workflowRuns = resolver
 	}
 }
 
-func NewServer(invoker invocation.Invoker, tokens *InvocationTokenManager) proto.AppServer {
-	return NewAppServer(invoker, tokens)
+func NewAppServer(invoker invocation.Invoker, tokens *InvocationTokenManager, opts ...AppServerOption) *AppServer {
+	s := &AppServer{
+		invoker: invoker,
+		tokens:  tokens,
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(s)
+		}
+	}
+	return s
+}
+
+func NewServer(invoker invocation.Invoker, tokens *InvocationTokenManager, opts ...AppServerOption) proto.AppServer {
+	return NewAppServer(invoker, tokens, opts...)
 }
 
 func (s *AppServer) ExchangeInvocationToken(_ context.Context, req *proto.ExchangeInvocationTokenRequest) (*proto.ExchangeInvocationTokenResponse, error) {
@@ -69,7 +88,7 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 	if targetOperation == "" {
 		return nil, status.Error(codes.InvalidArgument, "operation is required")
 	}
-	tokenCtx, err := s.tokenContextForInvoke(req, targetApp, targetOperation)
+	tokenCtx, err := s.tokenContextForInvoke(ctx, req, targetApp, targetOperation)
 	if err != nil {
 		return nil, err
 	}
@@ -77,9 +96,6 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 	invokeCtx, instance, err := prepareInvocationSelectors(ctx, tokenCtx, req.GetConnection(), req.GetInstance())
 	if err != nil {
 		return nil, err
-	}
-	if workflow := req.GetWorkflow(); workflow != nil {
-		invokeCtx = invocation.WithWorkflowContext(invokeCtx, invocation.CloneWorkflowContext(workflow.AsMap()))
 	}
 	invokeCtx = invocation.WithIdempotencyKey(invokeCtx, req.GetIdempotencyKey())
 	params := map[string]any{}
@@ -138,14 +154,17 @@ func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraph
 	return appOperationResult(result, err)
 }
 
-func (s *AppServer) tokenContextForInvoke(req *proto.AppInvokeRequest, targetApp, targetOperation string) (invocationTokenContext, error) {
+func (s *AppServer) tokenContextForInvoke(ctx context.Context, req *proto.AppInvokeRequest, targetApp, targetOperation string) (invocationTokenContext, error) {
 	invocationToken := strings.TrimSpace(req.GetInvocationToken())
 	if invocationToken == "" {
-		return invocationTokenContext{}, status.Error(codes.FailedPrecondition, "invocation token is required")
+		return workflowRunAsInvocationContext(ctx, s.workflowRuns, req.GetWorkflow(), targetApp, targetOperation, req.GetCredentialMode())
 	}
 	tokenCtx, err := s.tokens.resolveToken(invocationToken, "")
 	if err != nil {
 		return invocationTokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	if workflow := req.GetWorkflow(); workflow != nil {
+		tokenCtx.workflow = invocation.CloneWorkflowContext(workflow.AsMap())
 	}
 	callerApp := strings.TrimSpace(tokenCtx.callerApp)
 	profile, ok := EffectiveOperationProfile(tokenCtx.grants, targetApp, targetOperation)
@@ -167,6 +186,84 @@ func (s *AppServer) tokenContextForInvoke(req *proto.AppInvokeRequest, targetApp
 	tokenCtx.credentialModeOverride = profile.CredentialMode
 	tokenCtx.operationProfile = profile
 	return tokenCtx, nil
+}
+
+func WorkflowRunAsTokenContext(ctx context.Context, resolver WorkflowRunResolver, workflow *structpb.Struct) (TokenContext, error) {
+	tokenCtx, err := workflowRunAsInvocationContext(ctx, resolver, workflow, "", "", "")
+	if err != nil {
+		return TokenContext{}, err
+	}
+	return TokenContext{inner: tokenCtx}, nil
+}
+
+func workflowRunAsInvocationContext(ctx context.Context, resolver WorkflowRunResolver, workflow *structpb.Struct, targetApp, targetOperation, rawCredentialMode string) (invocationTokenContext, error) {
+	resolved, err := workflowrunauth.ResolveInvocationFromWorkflowRun(ctx, resolver, workflow)
+	if err != nil {
+		return invocationTokenContext{}, err
+	}
+	grants := invocationGrantsFromWorkflowTargetAuth(resolved.Auth)
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID:           resolved.RunAs.SubjectID,
+		CredentialSubjectID: resolved.RunAs.CredentialSubjectID,
+		DisplayName:         resolved.RunAs.DisplayName,
+		Kind:                principal.Kind(resolved.RunAs.SubjectKind),
+		TokenPermissions:    resolved.Auth.Permissions,
+	})
+	principal.SetAuthSource(p, resolved.RunAs.AuthSource)
+
+	tokenCtx := invocationTokenContext{
+		callerApp:          "workflow:" + strings.TrimSpace(resolved.ProviderName),
+		callerProviderKind: invocation.ProviderKindWorkflow,
+		principal:          p,
+		grants:             grants,
+		workflow:           resolved.Workflow,
+	}
+	if targetApp == "" && targetOperation == "" {
+		return tokenCtx, nil
+	}
+	profile, ok := EffectiveOperationProfile(grants, targetApp, targetOperation)
+	if !ok {
+		return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "workflow run %q may not invoke %s.%s", resolved.RunID, targetApp, targetOperation)
+	}
+	credentialMode, err := appInvokeCredentialMode(rawCredentialMode)
+	if err != nil {
+		return invocationTokenContext{}, err
+	}
+	if credentialMode != "" {
+		if !appInvokeCredentialModeAllowed(credentialMode, profile) {
+			return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "workflow run %q may not invoke %s.%s with credential_mode %q", resolved.RunID, targetApp, targetOperation, credentialMode)
+		}
+		tokenCtx.credentialModeOverride = credentialMode
+		tokenCtx.operationProfile = profile
+		return tokenCtx, nil
+	}
+	tokenCtx.credentialModeOverride = profile.CredentialMode
+	tokenCtx.operationProfile = profile
+	return tokenCtx, nil
+}
+
+func invocationGrantsFromWorkflowTargetAuth(auth workflowrunauth.TargetAuth) InvocationGrants {
+	grants := InvocationGrants{}
+	for appName, operations := range auth.Operations {
+		for operation, credentialMode := range operations {
+			addWorkflowOperationGrant(grants, appName, operation, credentialMode)
+		}
+	}
+	return grants
+}
+
+func addWorkflowOperationGrant(grants InvocationGrants, appName, operation string, credentialMode core.ConnectionMode) {
+	appName = strings.TrimSpace(appName)
+	operation = strings.TrimSpace(operation)
+	if appName == "" || operation == "" {
+		return
+	}
+	grant := grants[appName]
+	if grant.Operations == nil {
+		grant.Operations = map[string]core.ConnectionMode{}
+	}
+	grant.Operations[operation] = core.NormalizeOptionalConnectionMode(credentialMode)
+	grants[appName] = grant
 }
 
 func (s *AppServer) tokenContextForSurfaceInvoke(req *proto.AppInvokeGraphQLRequest, targetApp, surface string) (invocationTokenContext, error) {

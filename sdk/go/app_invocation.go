@@ -60,11 +60,9 @@ type App interface {
 
 var sharedAppTransport sharedManagerTransport[proto.AppClient]
 
-// NewApp returns a capability that attaches invocationToken to every request.
+// NewApp returns a capability that attaches invocationToken to every request
+// when one is available.
 func NewApp(invocationToken string) (App, error) {
-	if strings.TrimSpace(invocationToken) == "" {
-		return nil, fmt.Errorf("app: invocation token is not available")
-	}
 	target, token, err := hostServiceTarget("app")
 	if err != nil {
 		return nil, err

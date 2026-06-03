@@ -286,6 +286,7 @@ func startWorkflowProviderRunRequestFromProto(req *proto.StartWorkflowProviderRu
 		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
 		IdempotencyKey: req.GetIdempotencyKey(),
 		CreatedBy:      workflowActorInputPtrFromActor(req.GetCreatedBy()),
+		RunAs:          subjectFromProto(req.GetRunAs()),
 		WorkflowKey:    req.GetWorkflowKey(),
 		DefinitionID:   req.GetDefinitionId(),
 	}
@@ -320,6 +321,7 @@ func signalOrStartWorkflowProviderRunRequestFromProto(req *proto.SignalOrStartWo
 		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
 		IdempotencyKey: req.GetIdempotencyKey(),
 		CreatedBy:      workflowActorInputPtrFromActor(req.GetCreatedBy()),
+		RunAs:          subjectFromProto(req.GetRunAs()),
 		Signal:         signal,
 		DefinitionID:   req.GetDefinitionId(),
 	}
@@ -336,6 +338,7 @@ func upsertWorkflowProviderScheduleRequestFromProto(req *proto.UpsertWorkflowPro
 		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
 		Paused:         req.GetPaused(),
 		RequestedBy:    workflowActorInputPtrFromActor(req.GetRequestedBy()),
+		RunAs:          subjectFromProto(req.GetRunAs()),
 		IdempotencyKey: req.GetIdempotencyKey(),
 		DefinitionID:   req.GetDefinitionId(),
 	}
@@ -351,6 +354,7 @@ func upsertWorkflowProviderEventTriggerRequestFromProto(req *proto.UpsertWorkflo
 		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
 		Paused:         req.GetPaused(),
 		RequestedBy:    workflowActorInputPtrFromActor(req.GetRequestedBy()),
+		RunAs:          subjectFromProto(req.GetRunAs()),
 		IdempotencyKey: req.GetIdempotencyKey(),
 		DefinitionID:   req.GetDefinitionId(),
 	}

@@ -780,6 +780,7 @@ type BoundWorkflowRun struct {
 	StatusMessage string
 	ResultBody    string
 	CreatedBy     *WorkflowActor
+	RunAs         *Subject
 	WorkflowKey   string
 	ProviderName  string
 	DefinitionID  string
@@ -806,6 +807,7 @@ func boundWorkflowRunToProto(input BoundWorkflowRun) (*proto.BoundWorkflowRun, e
 		StatusMessage: input.StatusMessage,
 		ResultBody:    input.ResultBody,
 		CreatedBy:     workflowActorFromInput(input.CreatedBy),
+		RunAs:         subjectToProto(input.RunAs),
 		WorkflowKey:   input.WorkflowKey,
 		ProviderName:  input.ProviderName,
 		DefinitionId:  input.DefinitionID,
@@ -840,6 +842,7 @@ func boundWorkflowRunFromProto(value *proto.BoundWorkflowRun) (BoundWorkflowRun,
 		StatusMessage: value.GetStatusMessage(),
 		ResultBody:    value.GetResultBody(),
 		CreatedBy:     workflowActorInputPtrFromActor(value.GetCreatedBy()),
+		RunAs:         subjectFromProto(value.GetRunAs()),
 		WorkflowKey:   value.GetWorkflowKey(),
 		ProviderName:  value.GetProviderName(),
 		DefinitionID:  value.GetDefinitionId(),
@@ -918,6 +921,7 @@ type BoundWorkflowSchedule struct {
 	UpdatedAt    time.Time
 	NextRunAt    *time.Time
 	CreatedBy    *WorkflowActor
+	RunAs        *Subject
 	ProviderName string
 	DefinitionID string
 }
@@ -938,6 +942,7 @@ func boundWorkflowScheduleToProto(input BoundWorkflowSchedule) (*proto.BoundWork
 		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
 		NextRunAt:    timestampFromOptionalTime(input.NextRunAt),
 		CreatedBy:    workflowActorFromInput(input.CreatedBy),
+		RunAs:        subjectToProto(input.RunAs),
 		ProviderName: input.ProviderName,
 		DefinitionId: input.DefinitionID,
 	}, nil
@@ -963,6 +968,7 @@ func boundWorkflowScheduleFromProto(value *proto.BoundWorkflowSchedule) (BoundWo
 		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
 		NextRunAt:    nextRunAt,
 		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
+		RunAs:        subjectFromProto(value.GetRunAs()),
 		ProviderName: value.GetProviderName(),
 		DefinitionID: value.GetDefinitionId(),
 	}, nil
@@ -988,6 +994,7 @@ type BoundWorkflowEventTrigger struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	CreatedBy    *WorkflowActor
+	RunAs        *Subject
 	ProviderName string
 	DefinitionID string
 }
@@ -1014,6 +1021,7 @@ func boundWorkflowEventTriggerToProto(input BoundWorkflowEventTrigger) (*proto.B
 		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
 		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
 		CreatedBy:    workflowActorFromInput(input.CreatedBy),
+		RunAs:        subjectToProto(input.RunAs),
 		ProviderName: input.ProviderName,
 		DefinitionId: input.DefinitionID,
 	}, nil
@@ -1033,6 +1041,7 @@ func boundWorkflowEventTriggerFromProto(value *proto.BoundWorkflowEventTrigger) 
 		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
 		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
 		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
+		RunAs:        subjectFromProto(value.GetRunAs()),
 		ProviderName: value.GetProviderName(),
 		DefinitionID: value.GetDefinitionId(),
 	}, nil
