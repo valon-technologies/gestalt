@@ -426,8 +426,6 @@ pub(crate) fn build_turn_create_body(args: &AgentTurnCreateArgs) -> Result<Value
             "timeoutSeconds".to_string(),
             Value::Number(timeout_seconds.into()),
         );
-    } else {
-        require_positive_timeout_seconds(&body)?;
     }
 
     let messages = build_messages(&args.system, &args.messages);
@@ -448,17 +446,17 @@ pub(crate) fn build_turn_create_body(args: &AgentTurnCreateArgs) -> Result<Value
     Ok(Value::Object(body))
 }
 
-fn require_positive_timeout_seconds(body: &Map<String, Value>) -> Result<()> {
-    let Some(value) = body.get("timeoutSeconds") else {
-        bail!("--timeout-seconds is required unless input sets timeoutSeconds");
-    };
-    if value.as_i64().is_some_and(|seconds| seconds > 0) {
-        return Ok(());
+fn validate_optional_timeout_seconds(body: &Map<String, Value>) -> Result<()> {
+    if let Some(value) = body.get("timeoutSeconds")
+        && !value.as_i64().is_some_and(|seconds| seconds >= 0)
+    {
+        bail!("timeoutSeconds must be a non-negative integer");
     }
-    bail!("timeoutSeconds must be a positive integer");
+    Ok(())
 }
 
 fn validate_turn_create_body(body: &Map<String, Value>) -> Result<()> {
+    validate_optional_timeout_seconds(body)?;
     let has_messages = body
         .get("messages")
         .and_then(Value::as_array)

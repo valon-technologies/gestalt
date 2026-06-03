@@ -1006,8 +1006,8 @@ def workflow_step(value: Any | None = None, **kwargs: Any) -> Any:
     if app is not None and agent is not None:
         raise ValueError("workflow step must set either app or agent")
     timeout_seconds = data.get("timeout_seconds", 0)
-    if agent is not None and timeout_seconds <= 0:
-        raise ValueError("workflow agent step timeout_seconds must be positive")
+    if timeout_seconds < 0:
+        raise ValueError("workflow step timeout_seconds must not be negative")
     step = pb.WorkflowStep(
         id=data.get("id", ""),
         inputs={
@@ -1028,8 +1028,8 @@ def workflow_step(value: Any | None = None, **kwargs: Any) -> Any:
 
 
 def _validate_workflow_step_timeout(value: Any) -> None:
-    if has_field(value, "agent") and value.timeout_seconds <= 0:
-        raise ValueError("workflow agent step timeout_seconds must be positive")
+    if value.timeout_seconds < 0:
+        raise ValueError("workflow step timeout_seconds must not be negative")
 
 
 def workflow_step_input_from_step(value: Any | None) -> WorkflowStep | None:

@@ -296,9 +296,9 @@ pub(crate) fn new_agent_update_session_request(
 pub(crate) fn new_agent_create_turn_request(
     input: AgentCreateTurn,
 ) -> crate::Result<pb::CreateAgentProviderTurnRequest> {
-    if input.timeout_seconds <= 0 {
+    if input.timeout_seconds < 0 {
         return Err(crate::Error::bad_request(
-            "agent create turn timeout_seconds must be positive",
+            "agent create turn timeout_seconds must not be negative",
         ));
     }
     Ok(pb::CreateAgentProviderTurnRequest {

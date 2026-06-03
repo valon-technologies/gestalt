@@ -151,10 +151,6 @@ func (e *Executor) Execute(ctx context.Context, req Request) (*Response, error) 
 		case step.App != nil:
 			output, err = e.invokeAppStep(stepCtx, req, token, step.App, inputs, result.Outputs, scope, stepID)
 		case step.Agent != nil:
-			if step.TimeoutSeconds <= 0 {
-				cancelStep()
-				return workflowFailedStepResponse(result, stepID, "invalid_step", "workflow agent step timeout_seconds must be positive")
-			}
 			output, turnID, err = e.invokeAgentStep(stepCtx, req, token, step.Agent, inputs, sessions, scope, stepID, step.TimeoutSeconds, step.Metadata)
 		default:
 			err = fmt.Errorf("workflow step must set app or agent")

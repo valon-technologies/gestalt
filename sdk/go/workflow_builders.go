@@ -164,9 +164,6 @@ func workflowStepToProto(step WorkflowStep) (*proto.WorkflowStep, error) {
 		}
 		out.Action = &proto.WorkflowStep_App{App: app}
 	case step.Agent != nil:
-		if step.TimeoutSeconds <= 0 {
-			return nil, fmt.Errorf("agent timeout_seconds must be positive")
-		}
 		agent, err := workflowStepAgentTurnToProto(step.Agent)
 		if err != nil {
 			return nil, fmt.Errorf("agent: %w", err)

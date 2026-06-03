@@ -123,7 +123,6 @@ class AgentUpdateSession:
 
 @dataclass(slots=True)
 class AgentCreateTurn:
-    timeout_seconds: int
     session_id: str = ""
     model: str = ""
     messages: Sequence[Any] | None = None
@@ -133,6 +132,7 @@ class AgentCreateTurn:
     metadata: Any | None = None
     idempotency_key: str = ""
     model_options: Any | None = None
+    timeout_seconds: int = 0
 
 
 @dataclass(slots=True)
@@ -434,7 +434,6 @@ class ResolvedAgentTool:
 
 @dataclass(slots=True)
 class CreateAgentProviderTurnRequest:
-    timeout_seconds: int
     turn_id: str = ""
     session_id: str = ""
     idempotency_key: str = ""
@@ -450,6 +449,7 @@ class CreateAgentProviderTurnRequest:
     subject: Subject | None = None
     model_options: JsonObject | None = None
     run_grant: str = ""
+    timeout_seconds: int = 0
 
 
 @dataclass(slots=True)
@@ -699,8 +699,8 @@ def create_agent_provider_turn_request_from_proto(
 ) -> CreateAgentProviderTurnRequest:
     if not has_field(request, "output"):
         raise ValueError("create turn output is required")
-    if request.timeout_seconds <= 0:
-        raise ValueError("agent create turn timeout_seconds must be positive")
+    if request.timeout_seconds < 0:
+        raise ValueError("agent create turn timeout_seconds must not be negative")
     return CreateAgentProviderTurnRequest(
         timeout_seconds=request.timeout_seconds,
         turn_id=request.turn_id,
@@ -2056,13 +2056,13 @@ def _agent_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.CreateAgentProviderTurnRequest):
         if not has_field(value, "output"):
             raise ValueError("create turn output is required")
-        if value.timeout_seconds <= 0:
-            raise ValueError("agent create turn timeout_seconds must be positive")
+        if value.timeout_seconds < 0:
+            raise ValueError("agent create turn timeout_seconds must not be negative")
         return _copy(value)
     data = _data(value, kwargs)
     timeout_seconds = data.get("timeout_seconds", 0)
-    if timeout_seconds <= 0:
-        raise ValueError("agent create turn timeout_seconds must be positive")
+    if timeout_seconds < 0:
+        raise ValueError("agent create turn timeout_seconds must not be negative")
     request = pb.CreateAgentProviderTurnRequest(
         session_id=data.get("session_id", ""),
         model=data.get("model", ""),

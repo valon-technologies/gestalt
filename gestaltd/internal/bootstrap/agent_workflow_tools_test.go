@@ -407,8 +407,8 @@ func TestWorkflowSystemToolStartRunSchemaMatchesV1Contract(t *testing.T) {
 		t.Fatalf("runs.start step properties = %#v", items["properties"])
 	}
 	stepTimeout, ok := stepProps["timeoutSeconds"].(map[string]any)
-	if !ok || stepTimeout["minimum"] != 1 {
-		t.Fatalf("runs.start step timeoutSeconds schema = %#v, want minimum 1", stepProps["timeoutSeconds"])
+	if !ok || stepTimeout["minimum"] != 0 {
+		t.Fatalf("runs.start step timeoutSeconds schema = %#v, want minimum 0", stepProps["timeoutSeconds"])
 	}
 	stepBranches, ok := items["oneOf"].([]any)
 	if !ok || len(stepBranches) != 2 {
@@ -419,16 +419,16 @@ func TestWorkflowSystemToolStartRunSchemaMatchesV1Contract(t *testing.T) {
 		t.Fatalf("runs.start agent step branch = %#v", stepBranches[1])
 	}
 	agentStepRequired, ok := agentStepBranch["required"].([]string)
-	if !ok || !stringSliceContains(agentStepRequired, "agent") || !stringSliceContains(agentStepRequired, "timeoutSeconds") {
-		t.Fatalf("runs.start agent step required = %#v, want agent and timeoutSeconds", agentStepBranch["required"])
+	if !ok || len(agentStepRequired) != 1 || agentStepRequired[0] != "agent" {
+		t.Fatalf("runs.start agent step required = %#v, want only agent", agentStepBranch["required"])
 	}
 	agentStepProps, ok := agentStepBranch["properties"].(map[string]any)
 	if !ok {
 		t.Fatalf("runs.start agent step properties = %#v", agentStepBranch["properties"])
 	}
 	agentStepTimeout, ok := agentStepProps["timeoutSeconds"].(map[string]any)
-	if !ok || agentStepTimeout["minimum"] != 1 {
-		t.Fatalf("runs.start agent step timeoutSeconds schema = %#v, want minimum 1", agentStepProps["timeoutSeconds"])
+	if !ok || agentStepTimeout["minimum"] != 0 {
+		t.Fatalf("runs.start agent step timeoutSeconds schema = %#v, want minimum 0", agentStepProps["timeoutSeconds"])
 	}
 	agent, ok := stepProps["agent"].(map[string]any)
 	if !ok {
@@ -2088,13 +2088,7 @@ func workflowSystemRunGrants(t *testing.T, runtime *agentRuntime) *agentgrant.Ma
 func workflowSystemToolTestTarget(steps ...map[string]any) map[string]any {
 	items := make([]any, 0, len(steps))
 	for _, step := range steps {
-		item := maps.Clone(step)
-		if _, hasAgent := item["agent"]; hasAgent {
-			if _, hasTimeout := item["timeoutSeconds"]; !hasTimeout {
-				item["timeoutSeconds"] = 1
-			}
-		}
-		items = append(items, item)
+		items = append(items, maps.Clone(step))
 	}
 	return map[string]any{"steps": items}
 }

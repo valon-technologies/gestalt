@@ -1860,7 +1860,7 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 			wantCreated: true,
 		},
 		{
-			name: "turn execution budget is required",
+			name: "turn execution budget can be omitted",
 			caps: &coreagent.ProviderCapabilities{
 				SupportedToolSources: []coreagent.ToolSourceMode{
 					coreagent.ToolSourceModeNone,
@@ -1869,6 +1869,20 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 			req: &proto.CreateAgentProviderTurnRequest{
 				ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
 				Output:     agentTextOutputProto(),
+			},
+			wantCreated: true,
+		},
+		{
+			name: "turn execution budget rejects negative values",
+			caps: &coreagent.ProviderCapabilities{
+				SupportedToolSources: []coreagent.ToolSourceMode{
+					coreagent.ToolSourceModeNone,
+				},
+			},
+			req: &proto.CreateAgentProviderTurnRequest{
+				TimeoutSeconds: -1,
+				ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
+				Output:         agentTextOutputProto(),
 			},
 			wantErr: invocation.ErrInvalidInvocation,
 		},

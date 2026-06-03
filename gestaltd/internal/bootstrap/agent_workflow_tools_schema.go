@@ -95,7 +95,7 @@ func workflowSystemToolStepSchema() map[string]any {
 		"app":            workflowSystemToolAppCallSchema("App name."),
 		"agent":          workflowSystemToolAgentTurnSchema(),
 		"when":           workflowSystemToolStepWhenSchema(),
-		"timeoutSeconds": map[string]any{"type": "integer", "minimum": 1, "description": "Execution budget in seconds. Required and positive for agent steps."},
+		"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0, "description": "Optional execution budget in seconds. Providers choose their own timeout when omitted or zero."},
 		"metadata":       map[string]any{"type": "object"},
 	})
 	schema["oneOf"] = []any{
@@ -104,9 +104,9 @@ func workflowSystemToolStepSchema() map[string]any {
 			"not":      map[string]any{"required": []string{"agent"}},
 		},
 		map[string]any{
-			"required": []string{"agent", "timeoutSeconds"},
+			"required": []string{"agent"},
 			"properties": map[string]any{
-				"timeoutSeconds": map[string]any{"type": "integer", "minimum": 1},
+				"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0},
 			},
 			"not": map[string]any{"required": []string{"app"}},
 		},

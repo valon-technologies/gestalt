@@ -92,9 +92,6 @@ func (e *Executor) invokeAppStep(ctx context.Context, req Request, token string,
 }
 
 func (e *Executor) invokeAgentStep(ctx context.Context, req Request, token string, agent *gestalt.WorkflowStepAgentTurn, inputs map[string]any, sessions map[string]workflowAgentSessionState, invocationScope, stepID string, timeoutSeconds int32, stepMetadata any) (any, string, error) {
-	if timeoutSeconds <= 0 {
-		return nil, "", fmt.Errorf("workflow agent step timeout_seconds must be positive")
-	}
 	client, err := e.newAgent(token)
 	if err != nil {
 		return nil, "", err

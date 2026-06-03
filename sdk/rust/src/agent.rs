@@ -1699,9 +1699,9 @@ fn create_session_request_from_proto(
 fn create_turn_request_from_proto(
     value: pb::CreateAgentProviderTurnRequest,
 ) -> ProviderResult<CreateAgentProviderTurnRequest> {
-    if value.timeout_seconds <= 0 {
+    if value.timeout_seconds < 0 {
         return Err(crate::Error::bad_request(
-            "agent create turn timeout_seconds must be positive",
+            "agent create turn timeout_seconds must not be negative",
         ));
     }
     Ok(CreateAgentProviderTurnRequest {

@@ -25,9 +25,6 @@ pub fn resume_interactive(client: &ApiClient, args: &AgentResumeArgs) -> Result<
 
 impl AgentShell {
     fn connect(client: &ApiClient, args: &AgentArgs) -> Result<Self> {
-        let timeout_seconds = args
-            .timeout_seconds
-            .context("--timeout-seconds is required for cloud agent turns")?;
         let session_args = AgentSessionCreateArgs {
             provider: args.provider.clone(),
             model: args.model.clone(),
@@ -42,7 +39,7 @@ impl AgentShell {
             model_override: args.model.clone(),
             system_messages: args.system.clone(),
             tools: args.tools.clone(),
-            timeout_seconds,
+            timeout_seconds: args.timeout_seconds,
             applied_system_messages: false,
         })
     }
@@ -111,7 +108,7 @@ impl AgentShell {
             messages,
             tools: self.tools.clone(),
             idempotency_key: None,
-            timeout_seconds: Some(self.timeout_seconds),
+            timeout_seconds: self.timeout_seconds,
             input: None,
         };
         let turn = super::requests::create_turn_info(client, &turn_args)?;
@@ -160,12 +157,15 @@ pub(crate) fn run_shell_interactive(
     }
 }
 
-fn print_resume_command(session_id: &str, timeout_seconds: i32) -> Result<()> {
+fn print_resume_command(session_id: &str, timeout_seconds: Option<i32>) -> Result<()> {
     let mut stdout = io::stdout().lock();
-    writeln!(
-        stdout,
-        "Resume with: gestalt agent resume {session_id} --timeout-seconds {timeout_seconds}"
-    )?;
+    match timeout_seconds {
+        Some(timeout_seconds) => writeln!(
+            stdout,
+            "Resume with: gestalt agent resume {session_id} --timeout-seconds {timeout_seconds}"
+        )?,
+        None => writeln!(stdout, "Resume with: gestalt agent resume {session_id}")?,
+    }
     Ok(())
 }
 
@@ -265,13 +265,14 @@ pub(crate) fn agent_tui_help_lines() -> Vec<String> {
 }
 
 pub(crate) fn agent_session_lines(shell: &AgentShell) -> Vec<String> {
-    vec![
-        format!("session {}", shell.session.id),
-        format!(
+    let resume_command = match shell.timeout_seconds {
+        Some(timeout_seconds) => format!(
             "resume command: gestalt agent resume {} --timeout-seconds {}",
-            shell.session.id, shell.timeout_seconds
+            shell.session.id, timeout_seconds
         ),
-    ]
+        None => format!("resume command: gestalt agent resume {}", shell.session.id),
+    };
+    vec![format!("session {}", shell.session.id), resume_command]
 }
 
 pub(crate) fn agent_model_lines(

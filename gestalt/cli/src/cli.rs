@@ -697,7 +697,7 @@ pub struct AgentArgs {
     #[arg(long = "tool", value_parser = AgentToolArg::parse)]
     pub tools: Vec<AgentToolArg>,
 
-    /// Positive execution budget in seconds for each created turn
+    /// Optional execution budget in seconds for each created turn
     #[arg(long = "timeout-seconds", value_parser = clap::value_parser!(i32).range(1..))]
     pub timeout_seconds: Option<i32>,
 }
@@ -756,9 +756,9 @@ pub struct AgentResumeArgs {
     #[arg(long = "tool", value_parser = AgentToolArg::parse)]
     pub tools: Vec<AgentToolArg>,
 
-    /// Positive execution budget in seconds for each created turn
+    /// Optional execution budget in seconds for each created turn
     #[arg(long = "timeout-seconds", value_parser = clap::value_parser!(i32).range(1..))]
-    pub timeout_seconds: i32,
+    pub timeout_seconds: Option<i32>,
 }
 
 #[derive(Subcommand)]
@@ -1077,7 +1077,7 @@ pub struct AgentTurnCreateArgs {
     #[arg(long = "idempotency-key")]
     pub idempotency_key: Option<String>,
 
-    /// Positive execution budget in seconds for the turn
+    /// Optional execution budget in seconds for the turn
     #[arg(long = "timeout-seconds", value_parser = clap::value_parser!(i32).range(1..))]
     pub timeout_seconds: Option<i32>,
 

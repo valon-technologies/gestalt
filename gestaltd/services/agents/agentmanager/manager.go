@@ -752,8 +752,8 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	if err := validateAgentOutput(requestedOutput); err != nil {
 		return nil, err
 	}
-	if req.GetTimeoutSeconds() <= 0 {
-		return nil, fmt.Errorf("%w: timeout_seconds must be positive", invocation.ErrInvalidInvocation)
+	if req.GetTimeoutSeconds() < 0 {
+		return nil, fmt.Errorf("%w: timeout_seconds must not be negative", invocation.ErrInvalidInvocation)
 	}
 	var tools []coreagent.Tool
 	switch toolSource {

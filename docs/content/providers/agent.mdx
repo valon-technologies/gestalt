@@ -464,8 +464,10 @@ provider.
 ### Execution model
 
 `CreateTurn` should persist the turn and return quickly, usually in `RUNNING` or
-`PENDING`. `timeoutSeconds` is a required positive execution budget for the
-provider-owned turn; it does not extend the `CreateTurn` RPC deadline.
+`PENDING`. `timeoutSeconds` is an optional positive execution budget for the
+provider-owned turn. When omitted or zero, the provider chooses its own
+execution timeout, usually by delegating to the upstream model SDK default. The
+field does not extend the `CreateTurn` RPC deadline.
 Long-running model and tool work should continue in the background. Callers use
 `GetTurn`, `ListTurnEvents`, and `ListInteractions` to observe progress or
 resolve pending human input.

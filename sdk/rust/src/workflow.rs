@@ -873,9 +873,9 @@ fn workflow_step_when_from_proto(input: pb::WorkflowStepWhen) -> WorkflowStepWhe
 
 /// Creates a workflow step.
 pub fn new_workflow_step(input: WorkflowStep) -> ProviderResult<WorkflowStep> {
-    if matches!(input.action, WorkflowStepAction::Agent(_)) && input.timeout_seconds <= 0 {
+    if input.timeout_seconds < 0 {
         return Err(crate::Error::bad_request(
-            "workflow agent step timeout_seconds must be positive",
+            "workflow step timeout_seconds must not be negative",
         ));
     }
     Ok(WorkflowStep {
@@ -913,11 +913,6 @@ fn workflow_step_to_proto(input: WorkflowStep) -> ProviderResult<pb::WorkflowSte
             Some(Action::App(workflow_step_app_call_to_proto(value)?))
         }
         WorkflowStepAction::Agent(value) => {
-            if input.timeout_seconds <= 0 {
-                return Err(crate::Error::bad_request(
-                    "workflow agent step timeout_seconds must be positive",
-                ));
-            }
             Some(Action::Agent(workflow_step_agent_turn_to_proto(value)?))
         }
     };

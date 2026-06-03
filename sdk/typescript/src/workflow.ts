@@ -742,10 +742,9 @@ export function workflowStep(input: WorkflowStep = {}): WorkflowStep {
   }
   const timeoutSeconds = input.timeoutSeconds ?? 0;
   if (
-    agent !== undefined
-    && (!Number.isInteger(timeoutSeconds) || timeoutSeconds <= 0)
+    !Number.isInteger(timeoutSeconds) || timeoutSeconds < 0
   ) {
-    throw new Error("workflow agent step timeoutSeconds must be positive");
+    throw new Error("workflow step timeoutSeconds must not be negative");
   }
   const action: WorkflowStepActionKind = app !== undefined
     ? { case: "app" as const, value: workflowStepAppCall(app) }

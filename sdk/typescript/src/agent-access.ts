@@ -103,7 +103,7 @@ export interface AgentCreateTurn {
   metadata?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
   modelOptions?: JsonObjectInput | undefined;
-  timeoutSeconds: number;
+  timeoutSeconds?: number | undefined;
 }
 
 /** Shape accepted when fetching an agent turn through the agent facade. */
@@ -250,8 +250,9 @@ class AgentImpl implements Agent {
 
   /** Creates an agent turn. */
   async createTurn(request: AgentCreateTurn): Promise<AgentTurn> {
-    if (!Number.isInteger(request.timeoutSeconds) || request.timeoutSeconds <= 0) {
-      throw new Error("agent create turn timeoutSeconds must be positive");
+    const timeoutSeconds = request.timeoutSeconds ?? 0;
+    if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 0) {
+      throw new Error("agent create turn timeoutSeconds must not be negative");
     }
     return agentTurnFromProto(
       await this.client.createTurn({
@@ -265,7 +266,7 @@ class AgentImpl implements Agent {
         idempotencyKey: request.idempotencyKey ?? "",
         ...this.invocationContext,
         modelOptions: optionalStruct(request.modelOptions),
-        timeoutSeconds: request.timeoutSeconds,
+        timeoutSeconds,
       }),
     );
   }

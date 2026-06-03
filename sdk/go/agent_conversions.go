@@ -707,8 +707,8 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 	if req == nil {
 		return nil, InvalidArgument("agent create turn request is required")
 	}
-	if req.GetTimeoutSeconds() <= 0 {
-		return nil, InvalidArgument("agent create turn timeout_seconds must be positive")
+	if req.GetTimeoutSeconds() < 0 {
+		return nil, InvalidArgument("agent create turn timeout_seconds must not be negative")
 	}
 	return &CreateAgentProviderTurnRequest{
 		TurnID:         req.GetTurnId(),

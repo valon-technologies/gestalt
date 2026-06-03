@@ -2185,11 +2185,8 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 			}
 		}
 		if step.Agent != nil {
-			if step.Timeout == "" {
-				return fmt.Errorf("config validation: %s.timeout is required for agent steps", stepPath)
-			}
-			if int(parsedTimeout.Seconds()) <= 0 {
-				return fmt.Errorf("config validation: %s.timeout must be at least 1s for agent steps", stepPath)
+			if step.Timeout != "" && int(parsedTimeout.Seconds()) < 0 {
+				return fmt.Errorf("config validation: %s.timeout must not be negative for agent steps", stepPath)
 			}
 			if err := validateWorkflowStepAgentConfig(cfg, stepPath+".agent", step.Agent); err != nil {
 				return err
