@@ -1138,10 +1138,11 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 		t.Fatal("session-1 backend was not recorded")
 	}
 	turn, err := agents[0].CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		TurnId:    "turn-1",
-		SessionId: "session-1",
-		Model:     "gpt-test",
-		Output:    agentRuntimeTextOutput(),
+		TimeoutSeconds: 1,
+		TurnId:         "turn-1",
+		SessionId:      "session-1",
+		Model:          "gpt-test",
+		Output:         agentRuntimeTextOutput(),
 		Metadata: mustTestProtoStruct(t, map[string]any{
 			"requireInteraction": true,
 		}),
@@ -2023,9 +2024,10 @@ func TestHostedAgentProviderPoolSkipsPastDrainBackendForNewTurn(t *testing.T) {
 	}
 
 	turn, err := pool.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		TurnId:    "turn-1",
-		SessionId: "session-1",
-		Output:    agentRuntimeTextOutput(),
+		TimeoutSeconds: 1,
+		TurnId:         "turn-1",
+		SessionId:      "session-1",
+		Output:         agentRuntimeTextOutput(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -2320,9 +2322,10 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	}
 
 	turn, err := agents[0].CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		TurnId:    "turn-1",
-		SessionId: "session-1",
-		Model:     "gpt-test",
+		TimeoutSeconds: 1,
+		TurnId:         "turn-1",
+		SessionId:      "session-1",
+		Model:          "gpt-test",
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "Plan it",
@@ -2412,6 +2415,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		Model:              "gpt-test",
 		CreatedBySubjectId: "user:user-123",
 		Output:             agentRuntimeTextOutput(),
+		TimeoutSeconds:     1,
 		Metadata: mustTestProtoStruct(t, map[string]any{
 			"requireInteraction": true,
 		}),
@@ -3682,10 +3686,11 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	}
 
 	turn, err := agents[0].CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		TurnId:    "turn-1",
-		SessionId: "session-1",
-		Model:     "gpt-test",
-		Output:    agentRuntimeTextOutput(),
+		TimeoutSeconds: 1,
+		TurnId:         "turn-1",
+		SessionId:      "session-1",
+		Model:          "gpt-test",
+		Output:         agentRuntimeTextOutput(),
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)

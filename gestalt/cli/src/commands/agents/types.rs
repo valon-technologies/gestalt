@@ -265,6 +265,7 @@ pub(crate) struct AgentShell {
     pub(crate) model_override: Option<String>,
     pub(crate) system_messages: Vec<String>,
     pub(crate) tools: Vec<AgentToolArg>,
+    pub(crate) timeout_seconds: Option<i32>,
     pub(crate) applied_system_messages: bool,
 }
 

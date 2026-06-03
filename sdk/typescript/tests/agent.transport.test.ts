@@ -106,6 +106,7 @@ test("AgentProvider rejects structured output without a schema", async () => {
       create(CreateAgentProviderTurnRequestSchema, {
         turnId: "turn-1",
         sessionId: "session-1",
+        timeoutSeconds: 120,
         output: {
           kind: {
             case: "structured",
@@ -155,6 +156,7 @@ test("AgentProvider forwards invocation tokens to handlers", async () => {
       sessionId: "session-1",
       model: "gpt-test",
       output: { kind: { case: "text", value: {} } },
+      timeoutSeconds: 120,
       invocationToken: "turn-token",
     }),
   );

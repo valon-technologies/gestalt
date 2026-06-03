@@ -699,7 +699,10 @@ def create_agent_provider_turn_request_from_proto(
 ) -> CreateAgentProviderTurnRequest:
     if not has_field(request, "output"):
         raise ValueError("create turn output is required")
+    if request.timeout_seconds < 0:
+        raise ValueError("agent create turn timeout_seconds must not be negative")
     return CreateAgentProviderTurnRequest(
+        timeout_seconds=request.timeout_seconds,
         turn_id=request.turn_id,
         session_id=request.session_id,
         idempotency_key=request.idempotency_key,
@@ -723,7 +726,6 @@ def create_agent_provider_turn_request_from_proto(
         if has_field(request, "model_options")
         else None,
         run_grant=request.run_grant,
-        timeout_seconds=request.timeout_seconds,
     )
 
 
@@ -2054,8 +2056,13 @@ def _agent_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.CreateAgentProviderTurnRequest):
         if not has_field(value, "output"):
             raise ValueError("create turn output is required")
+        if value.timeout_seconds < 0:
+            raise ValueError("agent create turn timeout_seconds must not be negative")
         return _copy(value)
     data = _data(value, kwargs)
+    timeout_seconds = data.get("timeout_seconds", 0)
+    if timeout_seconds < 0:
+        raise ValueError("agent create turn timeout_seconds must not be negative")
     request = pb.CreateAgentProviderTurnRequest(
         session_id=data.get("session_id", ""),
         model=data.get("model", ""),
@@ -2065,7 +2072,7 @@ def _agent_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
         ],
         tool_source=data.get("tool_source", AGENT_TOOL_SOURCE_MODE_UNSPECIFIED),
         idempotency_key=data.get("idempotency_key", ""),
-        timeout_seconds=data.get("timeout_seconds", 0),
+        timeout_seconds=timeout_seconds,
     )
     request.output.CopyFrom(_agent_output_to_proto(data.get("output")))
     if data.get("metadata") is not None:

@@ -1074,6 +1074,10 @@ export type CreateAgentProviderTurnRequest = Message<"gestalt.provider.v1.Create
   runGrant: string;
 
   /**
+   * Optional provider-owned turn execution budget, in seconds.
+   * If unset or zero, the provider chooses its own execution timeout. This does
+   * not control the CreateTurn RPC deadline.
+   *
    * @generated from field: int32 timeout_seconds = 18;
    */
   timeoutSeconds: number;
@@ -2170,4 +2174,3 @@ export const AgentHost: GenService<{
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_agent, 1);
-

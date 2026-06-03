@@ -873,6 +873,11 @@ fn workflow_step_when_from_proto(input: pb::WorkflowStepWhen) -> WorkflowStepWhe
 
 /// Creates a workflow step.
 pub fn new_workflow_step(input: WorkflowStep) -> ProviderResult<WorkflowStep> {
+    if input.timeout_seconds < 0 {
+        return Err(crate::Error::bad_request(
+            "workflow step timeout_seconds must not be negative",
+        ));
+    }
     Ok(WorkflowStep {
         id: input.id,
         inputs: input

@@ -142,8 +142,9 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 	}
 
 	turn, err := client.CreateTurn(context.Background(), gestalt.AgentCreateTurn{
-		SessionID: "session-1",
-		Model:     "gpt-test",
+		SessionID:      "session-1",
+		Model:          "gpt-test",
+		TimeoutSeconds: 120,
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -225,8 +226,9 @@ func TestTransport_AgentWorkflowContextWithoutInvocationToken(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if _, err := client.CreateTurn(ctx, gestalt.AgentCreateTurn{
-		SessionID: "session-1",
-		Model:     "gpt-test",
+		SessionID:      "session-1",
+		Model:          "gpt-test",
+		TimeoutSeconds: 120,
 	}); err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
@@ -347,8 +349,9 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 		Output: &gestalt.AgentOutput{
 			Structured: &gestalt.AgentStructuredOutput{Schema: map[string]any{"type": "object"}},
 		},
-		Metadata:     map[string]any{"request": "native"},
-		ModelOptions: map[string]any{"temperature": 0},
+		Metadata:       map[string]any{"request": "native"},
+		ModelOptions:   map[string]any{"temperature": 0},
+		TimeoutSeconds: 120,
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -377,5 +380,8 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	}
 	if schema := got.GetOutput().GetStructured().GetSchema().AsMap(); schema["type"] != "object" {
 		t.Fatalf("output schema = %#v", schema)
+	}
+	if got.GetTimeoutSeconds() != 120 {
+		t.Fatalf("timeout_seconds = %d, want 120", got.GetTimeoutSeconds())
 	}
 }

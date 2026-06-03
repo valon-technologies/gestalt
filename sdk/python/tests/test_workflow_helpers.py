@@ -207,6 +207,7 @@ class WorkflowHelperTests(unittest.TestCase):
                             )
                         ],
                     ),
+                    timeout_seconds=45,
                     when=gestalt.WorkflowStepWhen(
                         value=gestalt.WorkflowValue(
                             step_output=gestalt.WorkflowStepOutputSource(
@@ -280,6 +281,7 @@ class WorkflowHelperTests(unittest.TestCase):
                         output=gestalt.AgentOutput(text=gestalt.AgentTextOutput()),
                         model_options={"temperature": 0},
                     ),
+                    timeout_seconds=45,
                 )
             ]
         )

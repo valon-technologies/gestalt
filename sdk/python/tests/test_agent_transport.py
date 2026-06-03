@@ -962,6 +962,7 @@ class AgentTransportTests(unittest.TestCase):
                 turn_id="turn-1",
                 session_id="session-1",
                 model="gpt-5.1",
+                timeout_seconds=120,
                 messages=[
                     agent_pb2.AgentMessage(
                         role="user",
@@ -1211,6 +1212,7 @@ class AgentTransportTests(unittest.TestCase):
                 agent_pb2.CreateAgentProviderTurnRequest(
                     session_id="session-managed-1",
                     model="gpt-5.1",
+                    timeout_seconds=120,
                     messages=[
                         agent_pb2.AgentMessage(
                             role="user",
@@ -1325,7 +1327,7 @@ class AgentTransportTests(unittest.TestCase):
                     "reason": "",
                     "tool_source": agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
                     "tool_ref_count": 0,
-                    "timeout_seconds": 0,
+                    "timeout_seconds": 120,
                     "output_kind": "structured",
                     "has_structured_schema": True,
                 },
@@ -1513,6 +1515,7 @@ class AgentTransportTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "agent output is required"):
                 manager.create_turn(
                     AgentCreateTurn(
+                        timeout_seconds=120,
                         session_id="session-managed-1",
                         messages=[AgentMessage(role="user", text="Summarize this")],
                     )
@@ -1523,6 +1526,7 @@ class AgentTransportTests(unittest.TestCase):
             ):
                 manager.create_turn(
                     AgentCreateTurn(
+                        timeout_seconds=120,
                         session_id="session-managed-1",
                         messages=[AgentMessage(role="user", text="Summarize this")],
                         output=AgentOutput(
@@ -1539,6 +1543,7 @@ class AgentTransportTests(unittest.TestCase):
             ):
                 manager.create_turn(
                     AgentCreateTurn(
+                        timeout_seconds=120,
                         session_id="session-managed-1",
                         messages=[AgentMessage(role="user", text="Summarize this")],
                         output=AgentOutput(

@@ -740,6 +740,12 @@ export function workflowStep(input: WorkflowStep = {}): WorkflowStep {
   if (app !== undefined && agent !== undefined) {
     throw new Error("workflow step must set either app or agent");
   }
+  const timeoutSeconds = input.timeoutSeconds ?? 0;
+  if (
+    !Number.isInteger(timeoutSeconds) || timeoutSeconds < 0
+  ) {
+    throw new Error("workflow step timeoutSeconds must not be negative");
+  }
   const action: WorkflowStepActionKind = app !== undefined
     ? { case: "app" as const, value: workflowStepAppCall(app) }
     : agent !== undefined
@@ -757,7 +763,7 @@ export function workflowStep(input: WorkflowStep = {}): WorkflowStep {
     agent: workflowStepAgentAction(action),
     action,
     when: input.when === undefined ? undefined : workflowStepWhen(input.when),
-    timeoutSeconds: input.timeoutSeconds ?? 0,
+    timeoutSeconds,
     metadata: input.metadata === undefined ? undefined : structFromObject(input.metadata),
   };
 }

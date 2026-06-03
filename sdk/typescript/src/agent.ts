@@ -879,6 +879,12 @@ function createAgentProviderTurnRequestFromProto(
   if (output === undefined) {
     throw new ConnectError("create turn output is required", Code.InvalidArgument);
   }
+  if (!Number.isInteger(request.timeoutSeconds) || request.timeoutSeconds < 0) {
+    throw new ConnectError(
+      "agent create turn timeoutSeconds must not be negative",
+      Code.InvalidArgument,
+    );
+  }
   return {
     turnId: request.turnId,
     sessionId: request.sessionId,

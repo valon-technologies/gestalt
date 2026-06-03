@@ -250,6 +250,10 @@ class AgentImpl implements Agent {
 
   /** Creates an agent turn. */
   async createTurn(request: AgentCreateTurn): Promise<AgentTurn> {
+    const timeoutSeconds = request.timeoutSeconds ?? 0;
+    if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 0) {
+      throw new Error("agent create turn timeoutSeconds must not be negative");
+    }
     return agentTurnFromProto(
       await this.client.createTurn({
         sessionId: request.sessionId,
@@ -262,7 +266,7 @@ class AgentImpl implements Agent {
         idempotencyKey: request.idempotencyKey ?? "",
         ...this.invocationContext,
         modelOptions: optionalStruct(request.modelOptions),
-        timeoutSeconds: request.timeoutSeconds ?? 0,
+        timeoutSeconds,
       }),
     );
   }

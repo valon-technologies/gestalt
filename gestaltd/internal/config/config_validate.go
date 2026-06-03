@@ -2167,6 +2167,15 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 		if (step.App == nil) == (step.Agent == nil) {
 			return fmt.Errorf("config validation: %s must set exactly one of app or agent", stepPath)
 		}
+		step.Timeout = strings.TrimSpace(step.Timeout)
+		var parsedTimeout time.Duration
+		if step.Timeout != "" {
+			var err error
+			parsedTimeout, err = time.ParseDuration(step.Timeout)
+			if err != nil {
+				return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", stepPath, step.Timeout, err)
+			}
+		}
 		if step.App != nil {
 			if err := normalizeWorkflowStepAppCallConfig(stepPath+".app", step.App, true); err != nil {
 				return err
@@ -2176,14 +2185,11 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 			}
 		}
 		if step.Agent != nil {
+			if step.Timeout != "" && parsedTimeout < 0 {
+				return fmt.Errorf("config validation: %s.timeout must not be negative for agent steps", stepPath)
+			}
 			if err := validateWorkflowStepAgentConfig(cfg, stepPath+".agent", step.Agent); err != nil {
 				return err
-			}
-		}
-		step.Timeout = strings.TrimSpace(step.Timeout)
-		if step.Timeout != "" {
-			if _, err := time.ParseDuration(step.Timeout); err != nil {
-				return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", stepPath, step.Timeout, err)
 			}
 		}
 		if step.When != nil {

@@ -1923,6 +1923,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
       sessionId: session.id,
       idempotencyKey: "turn-req-1",
       model: "gpt-test",
+      timeoutSeconds: 120,
       messages: [
         {
           role: "user",
@@ -2028,6 +2029,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
       sessionId: session.id,
       idempotencyKey: "turn-req-2",
       model: "gpt-test",
+      timeoutSeconds: 120,
       messages: [
         {
           role: "user",

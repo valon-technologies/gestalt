@@ -641,6 +641,7 @@ impl TuiApp {
             messages,
             tools: self.shell.tools.clone(),
             idempotency_key: None,
+            timeout_seconds: self.shell.timeout_seconds,
             input: None,
         };
         let (command_tx, command_rx) = mpsc::channel();

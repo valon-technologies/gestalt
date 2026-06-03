@@ -158,6 +158,7 @@ fn workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()> {
                     })),
                     equals: Some(json!(true)),
                 }),
+                timeout_seconds: 45,
                 ..Default::default()
             },
         ],

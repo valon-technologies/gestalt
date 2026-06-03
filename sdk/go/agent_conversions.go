@@ -703,9 +703,12 @@ func listAgentTurnsResponseFromProto(value *proto.ListAgentProviderTurnsResponse
 	return &ListAgentTurnsResponse{Turns: agentTurnsFromProto(value.GetTurns())}
 }
 
-func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnRequest) *CreateAgentProviderTurnRequest {
+func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnRequest) (*CreateAgentProviderTurnRequest, error) {
 	if req == nil {
-		return &CreateAgentProviderTurnRequest{}
+		return nil, InvalidArgument("agent create turn request is required")
+	}
+	if req.GetTimeoutSeconds() < 0 {
+		return nil, InvalidArgument("agent create turn timeout_seconds must not be negative")
 	}
 	return &CreateAgentProviderTurnRequest{
 		TurnID:         req.GetTurnId(),
@@ -724,7 +727,7 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		ModelOptions:   mapFromStruct(req.GetModelOptions()),
 		RunGrant:       req.GetRunGrant(),
 		TimeoutSeconds: req.GetTimeoutSeconds(),
-	}
+	}, nil
 }
 
 func getAgentProviderTurnRequestFromProto(req *proto.GetAgentProviderTurnRequest) *GetAgentProviderTurnRequest {

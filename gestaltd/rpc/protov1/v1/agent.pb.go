@@ -2361,13 +2361,16 @@ type CreateAgentProviderTurnRequest struct {
 	Subject            *SubjectContext        `protobuf:"bytes,14,opt,name=subject,proto3" json:"subject,omitempty"`
 	ModelOptions       *structpb.Struct       `protobuf:"bytes,16,opt,name=model_options,json=modelOptions,proto3" json:"model_options,omitempty"`
 	RunGrant           string                 `protobuf:"bytes,17,opt,name=run_grant,json=runGrant,proto3" json:"run_grant,omitempty"`
-	TimeoutSeconds     int32                  `protobuf:"varint,18,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
-	InvocationToken    string                 `protobuf:"bytes,19,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	ToolRefsSet        bool                   `protobuf:"varint,20,opt,name=tool_refs_set,json=toolRefsSet,proto3" json:"tool_refs_set,omitempty"`
-	Output             *AgentOutput           `protobuf:"bytes,21,opt,name=output,proto3" json:"output,omitempty"`
-	Workflow           *structpb.Struct       `protobuf:"bytes,22,opt,name=workflow,proto3" json:"workflow,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Optional provider-owned turn execution budget, in seconds.
+	// If unset or zero, the provider chooses its own execution timeout. This does
+	// not control the CreateTurn RPC deadline.
+	TimeoutSeconds  int32            `protobuf:"varint,18,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	InvocationToken string           `protobuf:"bytes,19,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	ToolRefsSet     bool             `protobuf:"varint,20,opt,name=tool_refs_set,json=toolRefsSet,proto3" json:"tool_refs_set,omitempty"`
+	Output          *AgentOutput     `protobuf:"bytes,21,opt,name=output,proto3" json:"output,omitempty"`
+	Workflow        *structpb.Struct `protobuf:"bytes,22,opt,name=workflow,proto3" json:"workflow,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CreateAgentProviderTurnRequest) Reset() {

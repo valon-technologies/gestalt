@@ -406,6 +406,30 @@ func TestWorkflowSystemToolStartRunSchemaMatchesV1Contract(t *testing.T) {
 	if !ok {
 		t.Fatalf("runs.start step properties = %#v", items["properties"])
 	}
+	stepTimeout, ok := stepProps["timeoutSeconds"].(map[string]any)
+	if !ok || stepTimeout["minimum"] != 0 {
+		t.Fatalf("runs.start step timeoutSeconds schema = %#v, want minimum 0", stepProps["timeoutSeconds"])
+	}
+	stepBranches, ok := items["oneOf"].([]any)
+	if !ok || len(stepBranches) != 2 {
+		t.Fatalf("runs.start step oneOf = %#v, want app and agent branches", items["oneOf"])
+	}
+	agentStepBranch, ok := stepBranches[1].(map[string]any)
+	if !ok {
+		t.Fatalf("runs.start agent step branch = %#v", stepBranches[1])
+	}
+	agentStepRequired, ok := agentStepBranch["required"].([]string)
+	if !ok || len(agentStepRequired) != 1 || agentStepRequired[0] != "agent" {
+		t.Fatalf("runs.start agent step required = %#v, want only agent", agentStepBranch["required"])
+	}
+	agentStepProps, ok := agentStepBranch["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("runs.start agent step properties = %#v", agentStepBranch["properties"])
+	}
+	agentStepTimeout, ok := agentStepProps["timeoutSeconds"].(map[string]any)
+	if !ok || agentStepTimeout["minimum"] != 0 {
+		t.Fatalf("runs.start agent step timeoutSeconds schema = %#v, want minimum 0", agentStepProps["timeoutSeconds"])
+	}
 	agent, ok := stepProps["agent"].(map[string]any)
 	if !ok {
 		t.Fatalf("runs.start step agent schema = %#v", stepProps["agent"])
@@ -2064,7 +2088,7 @@ func workflowSystemRunGrants(t *testing.T, runtime *agentRuntime) *agentgrant.Ma
 func workflowSystemToolTestTarget(steps ...map[string]any) map[string]any {
 	items := make([]any, 0, len(steps))
 	for _, step := range steps {
-		items = append(items, step)
+		items = append(items, maps.Clone(step))
 	}
 	return map[string]any{"steps": items}
 }

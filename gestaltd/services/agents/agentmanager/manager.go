@@ -496,14 +496,10 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		if sessionStart != nil || workspace != nil {
 			return nil, err
 		}
-		fallback, getErr := provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
-			SessionId: sessionID,
-			Subject:   agentSubjectToProto(agentSubjectFromPrincipal(p)),
-		})
-		if getErr != nil {
+		session, err = m.getCreatedSessionAfterCreateError(ctx, p, provider, sessionID)
+		if err != nil {
 			return nil, err
 		}
-		session = fallback
 	}
 	normalized, err := normalizeProviderSessionForCreate(providerName, sessionID, idempotencyKey, session)
 	if err != nil {
@@ -516,6 +512,13 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		return nil, core.ErrNotFound
 	}
 	return normalized, nil
+}
+
+func (m *Manager) getCreatedSessionAfterCreateError(ctx context.Context, p *principal.Principal, provider coreagent.Provider, sessionID string) (*coreagent.Session, error) {
+	return provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
+		SessionId: sessionID,
+		Subject:   agentSubjectToProto(agentSubjectFromPrincipal(p)),
+	})
 }
 
 func (m *Manager) GetSession(ctx context.Context, p *principal.Principal, req *proto.GetAgentProviderSessionRequest) (session *coreagent.Session, err error) {
@@ -749,6 +752,9 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	if err := validateAgentOutput(requestedOutput); err != nil {
 		return nil, err
 	}
+	if req.GetTimeoutSeconds() < 0 {
+		return nil, fmt.Errorf("%w: timeout_seconds must not be negative", invocation.ErrInvalidInvocation)
+	}
 	var tools []coreagent.Tool
 	switch toolSource {
 	case coreagent.ToolSourceModeMCPCatalog:
@@ -798,15 +804,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.InvocationToken = ""
 	turn, err = ownedSession.provider.CreateTurn(ctx, providerReq)
 	if err != nil {
-		fallback, getErr := ownedSession.provider.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
-			TurnId:  turnID,
-			Subject: agentSubjectToProto(agentSubjectFromPrincipal(p)),
-		})
-		if getErr == nil {
-			turn = fallback
-		} else {
-			return nil, err
-		}
+		return nil, err
 	}
 	normalized, err := normalizeProviderTurnForCreate(ownedSession.providerName, ownedSession.session.ID, turnID, idempotencyKey, turn)
 	if err != nil {

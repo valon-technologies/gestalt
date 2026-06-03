@@ -696,6 +696,10 @@ pub struct AgentArgs {
     /// Add a tool in app:operation form to each turn
     #[arg(long = "tool", value_parser = AgentToolArg::parse)]
     pub tools: Vec<AgentToolArg>,
+
+    /// Optional execution budget in seconds for each created turn
+    #[arg(long = "timeout-seconds", value_parser = clap::value_parser!(i32).range(1..))]
+    pub timeout_seconds: Option<i32>,
 }
 
 #[derive(Subcommand)]
@@ -751,6 +755,10 @@ pub struct AgentResumeArgs {
     /// Add a tool in app:operation form to each turn
     #[arg(long = "tool", value_parser = AgentToolArg::parse)]
     pub tools: Vec<AgentToolArg>,
+
+    /// Optional execution budget in seconds for each created turn
+    #[arg(long = "timeout-seconds", value_parser = clap::value_parser!(i32).range(1..))]
+    pub timeout_seconds: Option<i32>,
 }
 
 #[derive(Subcommand)]
@@ -1068,6 +1076,10 @@ pub struct AgentTurnCreateArgs {
     /// Idempotency key for safe retries
     #[arg(long = "idempotency-key")]
     pub idempotency_key: Option<String>,
+
+    /// Optional execution budget in seconds for the turn
+    #[arg(long = "timeout-seconds", value_parser = clap::value_parser!(i32).range(1..))]
+    pub timeout_seconds: Option<i32>,
 
     /// Load the JSON request body from a file (use "-" for stdin)
     #[arg(long = "input", alias = "request-file")]

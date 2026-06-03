@@ -969,6 +969,7 @@ test("buildProviderBinary compiles a runnable agent provider executable", async 
         turnId: "turn-1",
         sessionId: session.id,
         model: "gpt-test",
+        timeoutSeconds: 120,
         messages: [
           {
             role: "user",

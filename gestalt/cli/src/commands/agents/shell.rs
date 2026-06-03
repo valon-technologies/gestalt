@@ -39,6 +39,7 @@ impl AgentShell {
             model_override: args.model.clone(),
             system_messages: args.system.clone(),
             tools: args.tools.clone(),
+            timeout_seconds: args.timeout_seconds,
             applied_system_messages: false,
         })
     }
@@ -54,6 +55,7 @@ impl AgentShell {
             model_override: args.model.clone(),
             system_messages: args.system.clone(),
             tools: args.tools.clone(),
+            timeout_seconds: args.timeout_seconds,
             applied_system_messages: false,
         })
     }
@@ -106,6 +108,7 @@ impl AgentShell {
             messages,
             tools: self.tools.clone(),
             idempotency_key: None,
+            timeout_seconds: self.timeout_seconds,
             input: None,
         };
         let turn = super::requests::create_turn_info(client, &turn_args)?;
@@ -121,10 +124,11 @@ pub(crate) fn run_shell_interactive(
     initial_messages: Vec<String>,
 ) -> Result<()> {
     let session_id = shell.session.id.clone();
+    let timeout_seconds = shell.timeout_seconds;
     if tui::can_run() {
         let result = tui::run_shell(client, shell, initial_messages);
         if result.is_ok() {
-            print_resume_command(&session_id)?;
+            print_resume_command(&session_id, timeout_seconds)?;
         }
         return result;
     }
@@ -139,7 +143,7 @@ pub(crate) fn run_shell_interactive(
 
     loop {
         let Some(line) = prompt_agent_message(&mut input)? else {
-            print_resume_command(&session_id)?;
+            print_resume_command(&session_id, timeout_seconds)?;
             return Ok(());
         };
         let trimmed = line.trim();
@@ -153,9 +157,15 @@ pub(crate) fn run_shell_interactive(
     }
 }
 
-fn print_resume_command(session_id: &str) -> Result<()> {
+fn print_resume_command(session_id: &str, timeout_seconds: Option<i32>) -> Result<()> {
     let mut stdout = io::stdout().lock();
-    writeln!(stdout, "Resume with: gestalt agent resume {session_id}")?;
+    match timeout_seconds {
+        Some(timeout_seconds) => writeln!(
+            stdout,
+            "Resume with: gestalt agent resume {session_id} --timeout-seconds {timeout_seconds}"
+        )?,
+        None => writeln!(stdout, "Resume with: gestalt agent resume {session_id}")?,
+    }
     Ok(())
 }
 
@@ -255,10 +265,14 @@ pub(crate) fn agent_tui_help_lines() -> Vec<String> {
 }
 
 pub(crate) fn agent_session_lines(shell: &AgentShell) -> Vec<String> {
-    vec![
-        format!("session {}", shell.session.id),
-        format!("resume command: gestalt agent resume {}", shell.session.id),
-    ]
+    let resume_command = match shell.timeout_seconds {
+        Some(timeout_seconds) => format!(
+            "resume command: gestalt agent resume {} --timeout-seconds {}",
+            shell.session.id, timeout_seconds
+        ),
+        None => format!("resume command: gestalt agent resume {}", shell.session.id),
+    };
+    vec![format!("session {}", shell.session.id), resume_command]
 }
 
 pub(crate) fn agent_model_lines(

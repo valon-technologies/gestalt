@@ -1113,6 +1113,7 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 	}
 
 	turn, err := client.CreateTurn(ctx, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds:  1,
 		InvocationToken: invocationToken,
 		SessionId:       sessionID,
 		Model:           "gpt-test",

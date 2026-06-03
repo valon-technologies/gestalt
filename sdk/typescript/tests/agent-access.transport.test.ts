@@ -308,6 +308,7 @@ test("Agent forwards invocation tokens across session, turn, and interaction cal
       ],
       output: { text: {} },
       idempotencyKey: "turn-req-1",
+      timeoutSeconds: 120,
     });
     const fetchedTurn = await fromRequest.getTurn({ turnId: "turn-1" });
     const listedTurns = await fromRequest.listTurns({ sessionId: "session-1" });
