@@ -344,45 +344,60 @@ describe("S3 transport", () => {
   });
 
   test("copy, delete, exists, and presign round-trip", async () => {
-    const s3 = client();
-    const sourceRef = {
-      key: "source.txt",
-    } as const;
-    const destinationRef = {
-      key: "copied.txt",
-    } as const;
-    const source = s3.object(sourceRef.key);
+    // Use a dedicated TCP harness: Bun's HTTP/2 client can corrupt session
+    // authority after many RPCs on the shared default harness (see beforeAll).
+    const { proc: tcpProc, target } = await startTCPHarness();
+    const envName = ENV_HOST_SERVICE_SOCKET;
+    const previousTarget = process.env[envName];
+    process.env[envName] = target;
+    try {
+      const s3 = client();
+      const sourceRef = {
+        key: "source.txt",
+      } as const;
+      const destinationRef = {
+        key: "copied.txt",
+      } as const;
+      const source = s3.object(sourceRef.key);
 
-    await source.writeString("copy me", {
-      contentType: "text/plain",
-      metadata: {
-        copied: "true",
-      },
-    });
+      await source.writeString("copy me", {
+        contentType: "text/plain",
+        metadata: {
+          copied: "true",
+        },
+      });
 
-    const copied = await s3.copyObject(sourceRef, destinationRef);
-    expect(copied.ref.key).toBe("copied.txt");
-    expect(await s3.object(destinationRef.key).text()).toBe("copy me");
+      const copied = await s3.copyObject(sourceRef, destinationRef);
+      expect(copied.ref.key).toBe("copied.txt");
+      expect(await s3.object(destinationRef.key).text()).toBe("copy me");
 
-    const presigned = await s3.object(destinationRef.key).presign({
-      method: PresignMethod.Put,
-      expiresSeconds: 60,
-      contentType: "text/plain",
-      headers: {
-        "x-test-header": "present",
-      },
-    });
-    expect(presigned.method).toBe(PresignMethod.Put);
-    expect(presigned.url).toContain("https://example.invalid/copied.txt");
-    expect(presigned.url).toContain("method=PUT");
-    expect(presigned.headers).toEqual({ "x-test-header": "present" });
-    expect(presigned.expiresAt).toBeInstanceOf(Date);
+      const presigned = await s3.object(destinationRef.key).presign({
+        method: PresignMethod.Put,
+        expiresSeconds: 60,
+        contentType: "text/plain",
+        headers: {
+          "x-test-header": "present",
+        },
+      });
+      expect(presigned.method).toBe(PresignMethod.Put);
+      expect(presigned.url).toContain("https://example.invalid/copied.txt");
+      expect(presigned.url).toContain("method=PUT");
+      expect(presigned.headers).toEqual({ "x-test-header": "present" });
+      expect(presigned.expiresAt).toBeInstanceOf(Date);
 
-    const destination = s3.object(destinationRef.key);
-    expect(await destination.exists()).toBe(true);
-    await destination.delete();
-    expect(await destination.exists()).toBe(false);
-    await expect(destination.stat()).rejects.toBeInstanceOf(S3NotFoundError);
+      const destination = s3.object(destinationRef.key);
+      expect(await destination.exists()).toBe(true);
+      await destination.delete();
+      expect(await destination.exists()).toBe(false);
+      await expect(destination.stat()).rejects.toBeInstanceOf(S3NotFoundError);
+    } finally {
+      tcpProc.kill();
+      if (previousTarget === undefined) {
+        delete process.env[envName];
+      } else {
+        process.env[envName] = previousTarget;
+      }
+    }
   });
 
   test("partial stream consumption can be cancelled by the caller", async () => {
