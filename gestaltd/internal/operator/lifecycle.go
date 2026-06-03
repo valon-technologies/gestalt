@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -3189,6 +3188,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 		Version:  metadata.Version,
 		Archives: archives,
 	}
+	applyProviderReleaseStaticValidationMetadata(&entry, metadata)
 
 	currentPlatform := providerpkg.CurrentPlatformString()
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, currentPlatform)
@@ -3230,6 +3230,19 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 		return nil, LockEntry{}, err
 	}
 	return installed, entry, nil
+}
+
+func applyProviderReleaseStaticValidationMetadata(entry *LockEntry, metadata *providerReleaseMetadata) {
+	if entry == nil || metadata == nil || metadata.StaticValidation == nil {
+		return
+	}
+	static := metadata.StaticValidation
+	entry.StaticManifest = static.Manifest
+	if static.Catalog != nil {
+		entry.StaticCatalogAvailable = true
+		entry.StaticCatalogOperations = staticCatalogOperationIDs(static.Catalog)
+	}
+	entry.StaticCatalogSessionOnly = static.CatalogSessionOnly
 }
 
 func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths lifecyclePaths) (map[string]LockEntry, error) {
@@ -3755,11 +3768,13 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 		if !ok {
 			return nil
 		}
-		staticManifest, err := portableStaticValidationManifest(entry.ResolvedManifest, entry.ResolvedManifestPath, lockEntryUsesPortableStaticManifest(entry, lockEntry))
-		if err != nil {
-			return fmt.Errorf("project static validation manifest for %s: %w", name, err)
+		if lockEntry.StaticManifest == nil {
+			staticManifest, err := portableStaticValidationManifest(entry.ResolvedManifest, entry.ResolvedManifestPath, lockEntryUsesPortableStaticManifest(entry, lockEntry))
+			if err != nil {
+				return fmt.Errorf("project static validation manifest for %s: %w", name, err)
+			}
+			lockEntry.StaticManifest = staticManifest
 		}
-		lockEntry.StaticManifest = staticManifest
 		entries[name] = lockEntry
 		return nil
 	}
@@ -3779,14 +3794,16 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 		if err != nil {
 			return err
 		}
-		lockEntry.StaticCatalogAvailable = resolved.Available
-		lockEntry.StaticCatalogFingerprint = fingerprint
-		lockEntry.StaticCatalogOperations = staticCatalogOperationIDs(resolved.Catalog)
-		lockEntry.StaticCatalogSessionOnly = resolved.SessionOnly
+		if !lockEntry.StaticCatalogAvailable && !lockEntry.StaticCatalogSessionOnly && len(lockEntry.StaticCatalogOperations) == 0 {
+			lockEntry.StaticCatalogAvailable = resolved.Available
+			lockEntry.StaticCatalogFingerprint = fingerprint
+			lockEntry.StaticCatalogOperations = staticCatalogOperationIDs(resolved.Catalog)
+			lockEntry.StaticCatalogSessionOnly = resolved.SessionOnly
+		}
 		lock.Providers[name] = lockEntry
-		entry.ResolvedCatalog = catalogFromStaticOperationIDs(lockEntry.StaticCatalogOperations, resolved.Available)
-		entry.ResolvedCatalogAvailable = resolved.Available
-		entry.ResolvedCatalogSessionOnly = resolved.SessionOnly
+		entry.ResolvedCatalog = catalogFromStaticOperationIDs(lockEntry.StaticCatalogOperations, lockEntry.StaticCatalogAvailable)
+		entry.ResolvedCatalogAvailable = lockEntry.StaticCatalogAvailable
+		entry.ResolvedCatalogSessionOnly = lockEntry.StaticCatalogSessionOnly
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		entries := lockEntriesForKind(lock, collection.kind)
@@ -4209,21 +4226,7 @@ func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecy
 	if !found {
 		return lockMetadataStaleError(paths, "lock entry for %s %q is missing or stale", kind, name)
 	}
-	install, cleanup, err := l.installLockedArchiveForStaticValidation(ctx, paths, kind, name, provider, entry, destDir, platform)
-	if cleanup != nil {
-		defer func() { cleanup() }()
-	}
-	if err != nil {
-		if isStaticArchiveUnavailable(err) {
-			if manifest := fallbackStaticValidationManifest(kind, entry); manifest != nil {
-				provider.ResolvedCatalogSessionOnly = kind == providermanifestv1.KindApp
-				provider.StaticManifestUnavailable = true
-				return bind("", manifest)
-			}
-		}
-		return err
-	}
-	return bind(install.manifestPath, install.manifest)
+	return lockMetadataStaleError(paths, "lock entry for %s %q does not include static validation metadata", kind, name)
 }
 
 func staticValidationNeedsSourceAuthSecrets(paths lifecyclePaths, cfg *config.Config, lock *Lockfile, platform string) (bool, error) {
@@ -4326,18 +4329,6 @@ func providerSourceAuthUsesSecretRef(provider *config.ProviderEntry) (bool, erro
 	return ok, nil
 }
 
-type staticArchiveUnavailableError struct {
-	err error
-}
-
-func (e staticArchiveUnavailableError) Error() string {
-	return e.err.Error()
-}
-
-func (e staticArchiveUnavailableError) Unwrap() error {
-	return e.err
-}
-
 type lockedArchiveDownloadError struct {
 	err error
 }
@@ -4348,94 +4339,6 @@ func (e lockedArchiveDownloadError) Error() string {
 
 func (e lockedArchiveDownloadError) Unwrap() error {
 	return e.err
-}
-
-func isStaticArchiveUnavailable(err error) bool {
-	var unavailable staticArchiveUnavailableError
-	return errors.As(err, &unavailable)
-}
-
-func fallbackStaticValidationManifest(kind string, entry LockEntry) *providermanifestv1.Manifest {
-	normalizedKind := providermanifestv1.NormalizeKind(lockEntryKind(entry, kind))
-	if normalizedKind == "" {
-		normalizedKind = providermanifestv1.NormalizeKind(kind)
-	}
-	if normalizedKind == "" {
-		return nil
-	}
-	manifest := &providermanifestv1.Manifest{
-		Kind:    normalizedKind,
-		Source:  lockEntryPackage(entry),
-		Version: entry.Version,
-		Spec:    &providermanifestv1.Spec{},
-	}
-	if lockEntryRuntime(entry, kind) == providerReleaseRuntimeExecutable {
-		manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: staticValidationEntrypointPlaceholder}
-	}
-	return manifest
-}
-
-func (l *Lifecycle) installLockedArchiveForStaticValidation(ctx context.Context, paths lifecyclePaths, kind, name string, provider *config.ProviderEntry, entry LockEntry, destDir, platform string) (*preparedInstall, func(), error) {
-	subject := fmt.Sprintf("%s %q", kind, name)
-	download, resolvedKey, cleanup, err := l.downloadLockedArchive(ctx, paths, provider, entry, platform, subject, "")
-	if err != nil {
-		var downloadErr lockedArchiveDownloadError
-		if !errors.As(err, &downloadErr) {
-			return nil, nil, err
-		}
-		var mismatch archiveDigestMismatchError
-		if errors.As(err, &mismatch) {
-			return nil, nil, fmt.Errorf("locked source provider digest mismatch for %s %q: %w", kind, name, err)
-		}
-		return nil, nil, staticArchiveUnavailableError{
-			err: err,
-		}
-	}
-	if err := os.RemoveAll(destDir); err != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("reset static validation install dir for %s %q: %w", kind, name, err)
-	}
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("create static validation install dir for %s %q: %w", kind, name, err)
-	}
-	install, err := installPackageForStaticValidation(download.LocalPath, destDir)
-	if err != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("inspect locked source provider for %s %q: %w", kind, name, err)
-	}
-	if install.manifest.Source != lockEntryPackage(entry) {
-		cleanup()
-		return nil, nil, fmt.Errorf("locked source provider manifest source mismatch for %s %q: got %q, want %q", kind, name, install.manifest.Source, lockEntryPackage(entry))
-	}
-	if install.manifest.Version != entry.Version {
-		cleanup()
-		return nil, nil, fmt.Errorf("locked source provider manifest version mismatch for %s %q: got %q, want %q", kind, name, install.manifest.Version, entry.Version)
-	}
-	if err := validateLockedArchivePolicy(archivePolicySubject(kind, name), archivePolicyKind(kind), install.manifest, entry, platform, resolvedKey); err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-	return install, cleanup, nil
-}
-
-func installPackageForStaticValidation(packagePath, destDir string) (*preparedInstall, error) {
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create app directory: %w", err)
-	}
-	if err := providerpkg.ExtractPackage(packagePath, destDir); err != nil {
-		return nil, err
-	}
-	manifestPath, err := providerpkg.FindManifestFile(destDir)
-	if err != nil {
-		return nil, err
-	}
-	_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
-	if err != nil {
-		return nil, err
-	}
-	manifest = providerpkg.ResolveManifestLocalReferences(manifest, manifestPath)
-	return &preparedInstall{manifestPath: manifestPath, manifest: manifest}, nil
 }
 
 type preparedAppWork struct {

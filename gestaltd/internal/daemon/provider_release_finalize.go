@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -281,6 +282,10 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 	if err != nil {
 		return nil, err
 	}
+	staticManifest, err := staticvalidation.ProjectManifest(manifest, "", true)
+	if err != nil {
+		return nil, fmt.Errorf("project static validation manifest: %w", err)
+	}
 
 	metadata := &providerReleaseMetadata{
 		Schema:        providerReleaseSchemaName,
@@ -290,6 +295,9 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 		Version:       version,
 		Runtime:       runtime,
 		Artifacts:     make(map[string]providerReleaseArtifact, len(archives)),
+		StaticValidation: &providerReleaseStaticValidationData{
+			Manifest: staticManifest,
+		},
 	}
 	for _, archive := range archives {
 		target := providerReleaseArtifactTarget(manifest, archive)

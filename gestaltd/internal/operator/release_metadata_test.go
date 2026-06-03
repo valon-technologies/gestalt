@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 func TestDecodeProviderReleaseMetadataAcceptsStaticValidation(t *testing.T) {
@@ -62,12 +63,16 @@ func TestDecodeProviderReleaseMetadataRejectsInvalidStaticValidation(t *testing.
 
 	cases := []struct {
 		name    string
-		block   string
+		block   *string
 		wantErr string
 	}{
 		{
+			name:    "missing static validation",
+			wantErr: "staticValidation is required",
+		},
+		{
 			name: "platform-specific static manifest",
-			block: `
+			block: ptr(`
   manifest:
     kind: app
     source: github.com/acme/providers/provider
@@ -78,13 +83,13 @@ func TestDecodeProviderReleaseMetadataRejectsInvalidStaticValidation(t *testing.
         path: bin/provider
     entrypoint:
       artifactPath: bin/provider
-    spec: {}`,
+    spec: {}`),
 			wantErr: "staticValidation.manifest must not include platform artifacts",
 		},
 		{
 			name: "session-only flag without metadata",
-			block: `
-  catalogSessionOnly: true`,
+			block: ptr(`
+  catalogSessionOnly: true`),
 			wantErr: "staticValidation must include manifest or catalog metadata",
 		},
 	}
@@ -105,11 +110,46 @@ artifacts:
   linux/amd64:
     path: provider-linux-amd64.tar.gz
     sha256: linux-sha
-staticValidation:` + tc.block + `
-`))
+` + staticValidationBlock(tc.block)))
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("decodeProviderReleaseMetadata error = %v, want %q", err, tc.wantErr)
 			}
 		})
 	}
+}
+
+func staticValidationBlock(block *string) string {
+	if block == nil {
+		return ""
+	}
+	return "staticValidation:" + *block + "\n"
+}
+
+func ptr(value string) *string {
+	return &value
+}
+
+func (metadata providerReleaseMetadata) MarshalYAML() (any, error) {
+	type providerReleaseMetadataYAML providerReleaseMetadata
+	out := providerReleaseMetadataYAML(metadata)
+	if out.StaticValidation == nil {
+		out.StaticValidation = defaultProviderReleaseStaticValidationForTest(&metadata)
+	}
+	return out, nil
+}
+
+func defaultProviderReleaseStaticValidationForTest(metadata *providerReleaseMetadata) *providerReleaseStaticValidationData {
+	if metadata == nil {
+		return nil
+	}
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.NormalizeKind(metadata.Kind),
+		Source:  strings.TrimSpace(metadata.Package),
+		Version: strings.TrimSpace(metadata.Version),
+		Spec:    &providermanifestv1.Spec{},
+	}
+	if metadata.Runtime == providerReleaseRuntimeExecutable {
+		manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: staticvalidation.EntrypointPlaceholder}
+	}
+	return &providerReleaseStaticValidationData{Manifest: manifest}
 }

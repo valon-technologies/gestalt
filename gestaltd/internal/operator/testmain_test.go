@@ -195,6 +195,17 @@ func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manif
 				"sha256": digest,
 			},
 		},
+		"staticValidation": map[string]any{
+			"manifest": map[string]any{
+				"kind":    manifest.Kind,
+				"source":  manifest.Source,
+				"version": manifest.Version,
+				"entrypoint": map[string]any{
+					"artifactPath": staticValidationEntrypointPlaceholder,
+				},
+				"spec": map[string]any{},
+			},
+		},
 	}
 	data, err := yaml.Marshal(metadata)
 	if err != nil {
