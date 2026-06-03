@@ -6,16 +6,17 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, req DefinitionUpsert) (out *ManagedDefinition, err error) {
+func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, req DefinitionApply) (out *ManagedDefinition, err error) {
 	p = principal.Canonicalized(p)
 	ctx = WithCallerAppName(ctx, req.CallerAppName)
-	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationDefinitionCreate)
+	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationDefinitionApply)
 	audit.setCallerApp(req.CallerAppName)
 	defer func() {
 		if out != nil && out.Definition != nil {
@@ -32,21 +33,21 @@ func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return nil, err
 	}
-	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerAppName)
+	spec, err := m.resolveDefinitionSpec(ctx, p, req.Spec, req.CallerAppName)
 	if err != nil {
 		return nil, err
 	}
 	audit.setProvider(providerName)
-	audit.setWorkflowTarget(target)
+	audit.setWorkflowTarget(spec.Target)
 
-	targetProto, err := workflowwire.TargetToProto(target)
+	specProto, err := workflowwire.DefinitionSpecToProto(&spec)
 	if err != nil {
 		return nil, err
 	}
-	definitionProto, err := provider.CreateDefinition(ctx, &proto.CreateWorkflowProviderDefinitionRequest{
-		Target:             targetProto,
-		IdempotencyKey:     strings.TrimSpace(req.IdempotencyKey),
-		CreatedBySubjectId: workflowSubjectIDFromPrincipal(p),
+	definitionProto, err := provider.ApplyDefinition(ctx, &proto.ApplyWorkflowProviderDefinitionRequest{
+		Spec:                 specProto,
+		IdempotencyKey:       strings.TrimSpace(req.IdempotencyKey),
+		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
 	})
 	if err != nil {
 		return nil, err
@@ -62,11 +63,48 @@ func (m *Manager) GetDefinition(ctx context.Context, p *principal.Principal, def
 	return m.requireOwnedDefinition(ctx, p, definitionID, "")
 }
 
-func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, definitionID string, req DefinitionUpsert) (out *ManagedDefinition, err error) {
+func (m *Manager) ListDefinitions(ctx context.Context, p *principal.Principal) (*ListDefinitionsResponse, error) {
+	if m == nil || m.workflow == nil {
+		return nil, ErrWorkflowNotConfigured
+	}
+	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
+	if subjectID == "" {
+		return nil, ErrWorkflowSubjectRequired
+	}
+	out := make([]*ManagedDefinition, 0)
+	for _, providerName := range m.providerNames() {
+		_, provider, err := m.resolveProvider(ctx, providerName)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := provider.ListDefinitions(ctx, &proto.ListWorkflowProviderDefinitionsRequest{})
+		if err != nil {
+			return nil, err
+		}
+		for _, definitionProto := range resp.GetDefinitions() {
+			if definitionProto == nil {
+				continue
+			}
+			definition, err := workflowwire.DefinitionFromProto(definitionProto)
+			if err != nil {
+				return nil, err
+			}
+			managed := &ManagedDefinition{
+				ProviderName: strings.TrimSpace(providerName),
+				Definition:   definition,
+				provider:     provider,
+			}
+			if m.definitionAccessible(ctx, p, managed) {
+				out = append(out, managed)
+			}
+		}
+	}
+	return &ListDefinitionsResponse{Definitions: out}, nil
+}
+
+func (m *Manager) SetDefinitionPaused(ctx context.Context, p *principal.Principal, definitionID string, paused bool) (out *ManagedDefinition, err error) {
 	p = principal.Canonicalized(p)
-	ctx = WithCallerAppName(ctx, req.CallerAppName)
-	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationDefinitionUpdate)
-	audit.setCallerApp(req.CallerAppName)
+	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationDefinitionPause)
 	audit.setObjectTarget(workflowAuditTargetDefinition, definitionID, "")
 	defer func() {
 		if out != nil && out.Definition != nil {
@@ -76,37 +114,13 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 		}
 		audit.finish(ctx, err)
 	}()
-	if strings.TrimSpace(principalSubjectID(p)) == "" {
-		return nil, ErrWorkflowSubjectRequired
-	}
 	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, "")
 	if err != nil {
 		return nil, err
 	}
-	providerName := existing.ProviderName
-	provider := existing.provider
-	if selected := strings.TrimSpace(req.ProviderName); selected != "" {
-		selectedProviderName, _, err := m.resolveProvider(ctx, selected)
-		if err != nil {
-			return nil, err
-		}
-		if selectedProviderName != providerName {
-			return nil, fmt.Errorf("%w: workflow definition %s belongs to provider %q, not %q", invocation.ErrInvalidInvocation, strings.TrimSpace(definitionID), providerName, selectedProviderName)
-		}
-	}
-	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerAppName)
-	if err != nil {
-		return nil, err
-	}
-	audit.setProvider(providerName)
-	audit.setWorkflowTarget(target)
-	targetProto, err := workflowwire.TargetToProto(target)
-	if err != nil {
-		return nil, err
-	}
-	definitionProto, err := provider.UpdateDefinition(ctx, &proto.UpdateWorkflowProviderDefinitionRequest{
+	definitionProto, err := existing.provider.SetDefinitionPaused(ctx, &proto.SetWorkflowProviderDefinitionPausedRequest{
 		DefinitionId:         strings.TrimSpace(definitionID),
-		Target:               targetProto,
+		Paused:               paused,
 		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
 	})
 	if err != nil {
@@ -116,7 +130,39 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return nil, err
 	}
-	return &ManagedDefinition{ProviderName: providerName, Definition: definition, provider: provider}, nil
+	return &ManagedDefinition{ProviderName: existing.ProviderName, Definition: definition, provider: existing.provider}, nil
+}
+
+func (m *Manager) SetActivationPaused(ctx context.Context, p *principal.Principal, definitionID, activationID string, paused bool) (out *ManagedDefinition, err error) {
+	p = principal.Canonicalized(p)
+	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationActivationPause)
+	audit.setObjectTarget(workflowAuditTargetDefinition, definitionID, activationID)
+	defer func() {
+		if out != nil && out.Definition != nil {
+			audit.setProvider(out.ProviderName)
+			audit.setObjectTarget(workflowAuditTargetDefinition, out.Definition.ID, activationID)
+			audit.setWorkflowTarget(out.Definition.Target)
+		}
+		audit.finish(ctx, err)
+	}()
+	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, "")
+	if err != nil {
+		return nil, err
+	}
+	definitionProto, err := existing.provider.SetActivationPaused(ctx, &proto.SetWorkflowProviderActivationPausedRequest{
+		DefinitionId:         strings.TrimSpace(definitionID),
+		ActivationId:         strings.TrimSpace(activationID),
+		Paused:               paused,
+		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
+	})
+	if err != nil {
+		return nil, err
+	}
+	definition, err := workflowwire.DefinitionFromProto(definitionProto)
+	if err != nil {
+		return nil, err
+	}
+	return &ManagedDefinition{ProviderName: existing.ProviderName, Definition: definition, provider: existing.provider}, nil
 }
 
 func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) (err error) {
@@ -135,6 +181,67 @@ func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, 
 		audit.setWorkflowTarget(existing.Definition.Target)
 	}
 	return existing.provider.DeleteDefinition(ctx, &proto.DeleteWorkflowProviderDefinitionRequest{DefinitionId: strings.TrimSpace(definitionID)})
+}
+
+func (m *Manager) resolveDefinitionSpec(ctx context.Context, p *principal.Principal, spec coreworkflow.DefinitionSpec, callerAppName string) (coreworkflow.DefinitionSpec, error) {
+	spec.ID = strings.TrimSpace(spec.ID)
+	if spec.ID == "" {
+		return coreworkflow.DefinitionSpec{}, fmt.Errorf("%w: workflow definition id is required", invocation.ErrInvalidInvocation)
+	}
+	target, err := m.resolveTarget(ctx, p, spec.Target, callerAppName)
+	if err != nil {
+		return coreworkflow.DefinitionSpec{}, err
+	}
+	activations, err := normalizeDefinitionActivations(spec.Activations)
+	if err != nil {
+		return coreworkflow.DefinitionSpec{}, err
+	}
+	spec.Target = target
+	spec.Activations = activations
+	return spec, nil
+}
+
+func normalizeDefinitionActivations(values []coreworkflow.Activation) ([]coreworkflow.Activation, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]coreworkflow.Activation, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for i := range values {
+		activation := values[i]
+		activation.ID = strings.TrimSpace(activation.ID)
+		if activation.ID == "" {
+			return nil, fmt.Errorf("%w: workflow definition.activations[%d].id is required", invocation.ErrInvalidInvocation, i)
+		}
+		if _, exists := seen[activation.ID]; exists {
+			return nil, fmt.Errorf("%w: workflow definition.activations[%d].id duplicates %q", invocation.ErrInvalidInvocation, i, activation.ID)
+		}
+		seen[activation.ID] = struct{}{}
+		switch {
+		case activation.Schedule != nil && activation.Event != nil:
+			return nil, fmt.Errorf("%w: workflow definition.activations[%d] must set exactly one of schedule or event", invocation.ErrInvalidInvocation, i)
+		case activation.Schedule != nil:
+			activation.Schedule.Cron = strings.TrimSpace(activation.Schedule.Cron)
+			activation.Schedule.Timezone = strings.TrimSpace(activation.Schedule.Timezone)
+			if activation.Schedule.Cron == "" {
+				return nil, fmt.Errorf("%w: workflow definition.activations[%d].schedule.cron is required", invocation.ErrInvalidInvocation, i)
+			}
+		case activation.Event != nil:
+			activation.Event.Match.Type = strings.TrimSpace(activation.Event.Match.Type)
+			activation.Event.Match.Source = strings.TrimSpace(activation.Event.Match.Source)
+			activation.Event.Match.Subject = strings.TrimSpace(activation.Event.Match.Subject)
+			if activation.Event.Match.Type == "" {
+				return nil, fmt.Errorf("%w: workflow definition.activations[%d].event.match.type is required", invocation.ErrInvalidInvocation, i)
+			}
+		default:
+			return nil, fmt.Errorf("%w: workflow definition.activations[%d] must set schedule or event", invocation.ErrInvalidInvocation, i)
+		}
+		if err := coreworkflow.ValidateValueRefs(fmt.Sprintf("workflow definition.activations[%d].input", i), activation.Input, map[string]struct{}{}); err != nil {
+			return nil, err
+		}
+		out = append(out, activation)
+	}
+	return out, nil
 }
 
 func (m *Manager) findDefinition(ctx context.Context, definitionID, providerSelection string) (*ManagedDefinition, error) {

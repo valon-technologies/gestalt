@@ -45,8 +45,8 @@ func WorkflowStepInvocationScope(req Request) string {
 				return "event-time:" + event.Time.UTC().Format(time.RFC3339Nano)
 			}
 		}
-		if triggerID := strings.TrimSpace(req.Trigger.Event.TriggerID); triggerID != "" {
-			return "event-trigger:" + triggerID + ":" + uuid.NewString()
+		if activationID := strings.TrimSpace(req.Trigger.Event.ActivationID); activationID != "" {
+			return "event-activation:" + activationID + ":" + uuid.NewString()
 		}
 		return "event-non-idempotent:" + uuid.NewString()
 	}
@@ -141,13 +141,13 @@ func WorkflowTriggerContext(trigger *gestalt.WorkflowRunTrigger) map[string]any 
 	}
 	switch {
 	case trigger.Schedule != nil:
-		value := map[string]any{"kind": "schedule", "scheduleId": trigger.Schedule.ScheduleID}
+		value := map[string]any{"kind": "schedule", "activationId": trigger.Schedule.ActivationID}
 		if trigger.Schedule.ScheduledFor != nil {
 			value["scheduledFor"] = trigger.Schedule.ScheduledFor.UTC().Format(time.RFC3339Nano)
 		}
 		return value
 	case trigger.Event != nil:
-		value := map[string]any{"kind": "event", "triggerId": trigger.Event.TriggerID}
+		value := map[string]any{"kind": "event", "activationId": trigger.Event.ActivationID}
 		if event := WorkflowEventContext(trigger.Event.Event); len(event) > 0 {
 			value["event"] = event
 		}

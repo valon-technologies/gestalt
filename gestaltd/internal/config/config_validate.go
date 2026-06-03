@@ -1998,126 +1998,121 @@ var workflowScheduleCronParser = cronv3.NewParser(
 	cronv3.Minute | cronv3.Hour | cronv3.Dom | cronv3.Month | cronv3.Dow,
 )
 
-func validateWorkflowScheduleCron(scheduleKey, spec string) error {
+func validateWorkflowScheduleCron(path, spec string) error {
 	if _, err := workflowScheduleCronParser.Parse(spec); err != nil {
-		return fmt.Errorf("config validation: workflows.schedules.%s.cron %q is invalid: %w", scheduleKey, spec, err)
+		return fmt.Errorf("config validation: %s.schedule.cron %q is invalid: %w", path, spec, err)
 	}
 	return nil
 }
 
 func validateWorkflowsConfig(cfg *Config) error {
-	if len(cfg.Workflows.Schedules) > 0 {
-		normalized := make(map[string]WorkflowScheduleConfig, len(cfg.Workflows.Schedules))
-		for key := range cfg.Workflows.Schedules {
-			schedule := cfg.Workflows.Schedules[key]
+	if len(cfg.Workflows.Definitions) > 0 {
+		normalized := make(map[string]WorkflowDefinitionConfig, len(cfg.Workflows.Definitions))
+		for key := range cfg.Workflows.Definitions {
+			definition := cfg.Workflows.Definitions[key]
 			key = strings.TrimSpace(key)
 			if key == "" {
-				return fmt.Errorf("config validation: workflows.schedules keys must not be empty")
+				return fmt.Errorf("config validation: workflows.definitions keys must not be empty")
 			}
 			if _, exists := normalized[key]; exists {
-				return fmt.Errorf("config validation: workflows.schedules duplicates %q", key)
+				return fmt.Errorf("config validation: workflows.definitions duplicates %q", key)
 			}
-			if err := validateWorkflowScheduleTarget(cfg, key, &schedule); err != nil {
+			if err := validateWorkflowDefinitionTarget(cfg, key, &definition); err != nil {
 				return err
 			}
-			runAs, err := normalizeWorkflowRunAs("workflows.schedules."+key+".runAs", schedule.RunAs)
+			runAs, err := normalizeWorkflowRunAs("workflows.definitions."+key+".runAs", definition.RunAs)
 			if err != nil {
 				return err
 			}
-			schedule.RunAs = runAs
-			schedule.Provider = strings.TrimSpace(schedule.Provider)
-			providerName, _, err := cfg.EffectiveWorkflowProvider(schedule.Provider)
+			definition.RunAs = runAs
+			definition.Provider = strings.TrimSpace(definition.Provider)
+			providerName, _, err := cfg.EffectiveWorkflowProvider(definition.Provider)
 			if err != nil {
-				return fmt.Errorf("config validation: workflows.schedules.%s.provider: %w", key, err)
+				return fmt.Errorf("config validation: workflows.definitions.%s.provider: %w", key, err)
 			}
 			if providerName == "" {
-				return fmt.Errorf("config validation: workflows.schedules.%s.provider is required", key)
+				return fmt.Errorf("config validation: workflows.definitions.%s.provider is required", key)
 			}
-			schedule.Cron = strings.TrimSpace(schedule.Cron)
-			if schedule.Cron == "" {
-				return fmt.Errorf("config validation: workflows.schedules.%s.cron is required", key)
-			}
-			if err := validateWorkflowScheduleCron(key, schedule.Cron); err != nil {
+			if err := normalizeWorkflowActivationsConfig(key, &definition); err != nil {
 				return err
 			}
-			schedule.Timezone = strings.TrimSpace(schedule.Timezone)
-			if schedule.Timezone == "" {
-				schedule.Timezone = "UTC"
-			}
-			if _, err := time.LoadLocation(schedule.Timezone); err != nil {
-				return fmt.Errorf("config validation: workflows.schedules.%s.timezone %q is invalid: %w", key, schedule.Timezone, err)
-			}
-			normalized[key] = schedule
+			normalized[key] = definition
 		}
-		cfg.Workflows.Schedules = normalized
-	}
-
-	if len(cfg.Workflows.EventTriggers) > 0 {
-		normalized := make(map[string]WorkflowEventTriggerConfig, len(cfg.Workflows.EventTriggers))
-		for key := range cfg.Workflows.EventTriggers {
-			trigger := cfg.Workflows.EventTriggers[key]
-			key = strings.TrimSpace(key)
-			if key == "" {
-				return fmt.Errorf("config validation: workflows.eventTriggers keys must not be empty")
-			}
-			if _, exists := normalized[key]; exists {
-				return fmt.Errorf("config validation: workflows.eventTriggers duplicates %q", key)
-			}
-			if err := validateWorkflowEventTriggerTarget(cfg, key, &trigger); err != nil {
-				return err
-			}
-			runAs, err := normalizeWorkflowRunAs("workflows.eventTriggers."+key+".runAs", trigger.RunAs)
-			if err != nil {
-				return err
-			}
-			trigger.RunAs = runAs
-			trigger.Provider = strings.TrimSpace(trigger.Provider)
-			providerName, _, err := cfg.EffectiveWorkflowProvider(trigger.Provider)
-			if err != nil {
-				return fmt.Errorf("config validation: workflows.eventTriggers.%s.provider: %w", key, err)
-			}
-			if providerName == "" {
-				return fmt.Errorf("config validation: workflows.eventTriggers.%s.provider is required", key)
-			}
-			trigger.Match.Type = strings.TrimSpace(trigger.Match.Type)
-			if trigger.Match.Type == "" {
-				return fmt.Errorf("config validation: workflows.eventTriggers.%s.match.type is required", key)
-			}
-			trigger.Match.Source = strings.TrimSpace(trigger.Match.Source)
-			trigger.Match.Subject = strings.TrimSpace(trigger.Match.Subject)
-			normalized[key] = trigger
-		}
-		cfg.Workflows.EventTriggers = normalized
+		cfg.Workflows.Definitions = normalized
 	}
 	return nil
 }
 
-func validateWorkflowScheduleTarget(cfg *Config, key string, schedule *WorkflowScheduleConfig) error {
-	if schedule == nil {
-		return fmt.Errorf("config validation: workflows.schedules.%s is required", key)
+func validateWorkflowDefinitionTarget(cfg *Config, key string, definition *WorkflowDefinitionConfig) error {
+	if definition == nil {
+		return fmt.Errorf("config validation: workflows.definitions.%s is required", key)
 	}
-	targetPath := "workflows.schedules." + key + ".target"
-	if err := normalizeWorkflowTarget(cfg, targetPath, schedule.Target); err != nil {
+	stepsPath := "workflows.definitions." + key + ".steps"
+	if err := normalizeWorkflowSteps(cfg, stepsPath, definition.Steps); err != nil {
 		return err
 	}
-	return validateWorkflowTargetApps(cfg, targetPath, schedule.Target)
+	return validateWorkflowStepApps(cfg, stepsPath, definition.Steps)
 }
 
-func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *WorkflowEventTriggerConfig) error {
-	if trigger == nil {
-		return fmt.Errorf("config validation: workflows.eventTriggers.%s is required", key)
+func normalizeWorkflowActivationsConfig(definitionKey string, definition *WorkflowDefinitionConfig) error {
+	if len(definition.On) == 0 {
+		return nil
 	}
-	targetPath := "workflows.eventTriggers." + key + ".target"
-	if err := normalizeWorkflowTarget(cfg, targetPath, trigger.Target); err != nil {
-		return err
+	normalized := make(map[string]WorkflowActivationConfig, len(definition.On))
+	for activationID := range definition.On {
+		activation := definition.On[activationID]
+		activationID = strings.TrimSpace(activationID)
+		if activationID == "" {
+			return fmt.Errorf("config validation: workflows.definitions.%s.on keys must not be empty", definitionKey)
+		}
+		if _, exists := normalized[activationID]; exists {
+			return fmt.Errorf("config validation: workflows.definitions.%s.on duplicates %q", definitionKey, activationID)
+		}
+		path := "workflows.definitions." + definitionKey + ".on." + activationID
+		switch {
+		case activation.Schedule != nil && activation.Event != nil:
+			return fmt.Errorf("config validation: %s must set exactly one of schedule or event", path)
+		case activation.Schedule != nil:
+			activation.Schedule.Cron = strings.TrimSpace(activation.Schedule.Cron)
+			if activation.Schedule.Cron == "" {
+				return fmt.Errorf("config validation: %s.schedule.cron is required", path)
+			}
+			if err := validateWorkflowScheduleCron(path, activation.Schedule.Cron); err != nil {
+				return err
+			}
+			activation.Schedule.Timezone = strings.TrimSpace(activation.Schedule.Timezone)
+			if activation.Schedule.Timezone == "" {
+				activation.Schedule.Timezone = "UTC"
+			}
+			if _, err := time.LoadLocation(activation.Schedule.Timezone); err != nil {
+				return fmt.Errorf("config validation: %s.schedule.timezone %q is invalid: %w", path, activation.Schedule.Timezone, err)
+			}
+		case activation.Event != nil:
+			activation.Event.Type = strings.TrimSpace(activation.Event.Type)
+			if activation.Event.Type == "" {
+				return fmt.Errorf("config validation: %s.event.type is required", path)
+			}
+			activation.Event.Source = strings.TrimSpace(activation.Event.Source)
+			activation.Event.Subject = strings.TrimSpace(activation.Event.Subject)
+		default:
+			return fmt.Errorf("config validation: %s must set schedule or event", path)
+		}
+		if err := normalizeWorkflowValueConfig(path+".input", &activation.Input); err != nil {
+			return err
+		}
+		if err := coreworkflow.ValidateValueRefs(path+".input", WorkflowValueToCore(activation.Input), map[string]struct{}{}); err != nil {
+			return fmt.Errorf("config validation: %w", err)
+		}
+		normalized[activationID] = activation
 	}
-	return validateWorkflowTargetApps(cfg, targetPath, trigger.Target)
+	definition.On = normalized
+	return nil
 }
 
-func validateWorkflowTargetApps(cfg *Config, path string, target *WorkflowTargetConfig) error {
-	for i := range target.Steps {
-		step := &target.Steps[i]
-		stepPath := fmt.Sprintf("%s.steps[%d]", path, i)
+func validateWorkflowStepApps(cfg *Config, path string, steps []WorkflowStepConfig) error {
+	for i := range steps {
+		step := &steps[i]
+		stepPath := fmt.Sprintf("%s[%d]", path, i)
 		if step.App != nil {
 			if _, ok := cfg.Apps[step.App.Name]; !ok {
 				return fmt.Errorf("config validation: %s.app.name references unknown app %q", stepPath, step.App.Name)
@@ -2143,14 +2138,14 @@ func normalizeWorkflowRunAs(path string, runAs *WorkflowRunAsConfig) (*WorkflowR
 	return &WorkflowRunAsConfig{Subject: &subject}, nil
 }
 
-func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetConfig) error {
-	if target == nil || len(target.Steps) == 0 {
-		return fmt.Errorf("config validation: %s.steps is required", path)
+func normalizeWorkflowSteps(cfg *Config, path string, steps []WorkflowStepConfig) error {
+	if len(steps) == 0 {
+		return fmt.Errorf("config validation: %s is required", path)
 	}
 	seen := map[string]struct{}{}
-	for i := range target.Steps {
-		stepPath := fmt.Sprintf("%s.steps[%d]", path, i)
-		step := &target.Steps[i]
+	for i := range steps {
+		stepPath := fmt.Sprintf("%s[%d]", path, i)
+		step := &steps[i]
 		step.ID = strings.TrimSpace(step.ID)
 		if step.ID == "" {
 			return fmt.Errorf("config validation: %s.id is required", stepPath)
@@ -2387,17 +2382,22 @@ func normalizeWorkflowValueConfig(path string, value *WorkflowValueConfig) error
 			set++
 		}
 	}
-	if strings.TrimSpace(value.RunInput) != "" {
-		value.RunInput = strings.TrimSpace(value.RunInput)
+	if strings.TrimSpace(value.Input) != "" {
+		value.Input = strings.TrimSpace(value.Input)
 		set++
 	}
-	if strings.TrimSpace(value.SignalPayload) != "" {
-		value.SignalPayload = strings.TrimSpace(value.SignalPayload)
+	if strings.TrimSpace(value.Signal) != "" {
+		value.Signal = strings.TrimSpace(value.Signal)
 		set++
 	}
 	if value.StepOutput != nil {
 		value.StepOutput.StepID = strings.TrimSpace(value.StepOutput.StepID)
 		value.StepOutput.Path = strings.TrimSpace(value.StepOutput.Path)
+		set++
+	}
+	if value.StepInput != nil {
+		value.StepInput.StepID = strings.TrimSpace(value.StepInput.StepID)
+		value.StepInput.Path = strings.TrimSpace(value.StepInput.Path)
 		set++
 	}
 	if set > 1 {

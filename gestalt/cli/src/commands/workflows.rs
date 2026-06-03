@@ -1,191 +1,18 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use serde_json::{Map, Value, json};
 
 use crate::api::ApiClient;
 use crate::cli::{
-    WorkflowCommands, WorkflowEventCommands, WorkflowEventPublishArgs, WorkflowRunCommands,
-    WorkflowScheduleCommands, WorkflowScheduleCreateArgs, WorkflowScheduleUpdateArgs,
-    WorkflowTriggerCommands, WorkflowTriggerCreateArgs, WorkflowTriggerUpdateArgs,
+    WorkflowCommands, WorkflowEventCommands, WorkflowEventDeliverArgs, WorkflowRunCommands,
 };
 use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
 use crate::query;
 
-use super::workflow_target::{
-    AppStepTargetUpdate, build_app_step_target, literal_input, merge_app_step_target_flags,
-    resolve_optional_string, target_app, target_has_app, target_operation,
-};
+use super::workflow_target::{target_app, target_operation};
 
 const EVENTS_PATH: &str = "/api/v1/workflow/events";
-const SCHEDULES_PATH: &str = "/api/v1/workflow/schedules";
-const TRIGGERS_PATH: &str = "/api/v1/workflow/event-triggers";
 const RUNS_PATH: &str = "/api/v1/workflow/runs";
-
-pub fn list(client: &ApiClient, app: Option<&str>, format: Format) -> Result<()> {
-    let resp = client
-        .get(SCHEDULES_PATH)
-        .context("failed to list workflow schedules")?;
-    let filtered = filter_by_app(resp, app);
-    print_schedules(&filtered, format, app);
-    Ok(())
-}
-
-pub fn get(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let resp = client
-        .get(&format!("{SCHEDULES_PATH}/{id}"))
-        .with_context(|| format!("failed to get workflow schedule {id}"))?;
-    print_schedule(&resp, format);
-    Ok(())
-}
-
-pub fn create(client: &ApiClient, args: &WorkflowScheduleCreateArgs, format: Format) -> Result<()> {
-    let input = build_optional_map(&args.params, args.input_file.as_deref())?;
-    let input_value = input.as_ref().map(literal_input);
-    let body = build_upsert_body(
-        &args.cron,
-        args.timezone.as_deref(),
-        &args.app,
-        &args.operation,
-        args.connection.as_deref(),
-        args.instance.as_deref(),
-        input_value.as_ref(),
-        args.paused,
-    );
-
-    let resp = client
-        .post(SCHEDULES_PATH, &body)
-        .context("failed to create workflow schedule")?;
-    print_schedule(&resp, format);
-    Ok(())
-}
-
-pub fn update(client: &ApiClient, args: &WorkflowScheduleUpdateArgs, format: Format) -> Result<()> {
-    let existing = client
-        .get(&format!("{SCHEDULES_PATH}/{id}", id = args.id))
-        .with_context(|| format!("failed to load workflow schedule {}", args.id))?;
-
-    let body = merge_update(args, &existing)?;
-    let resp = client
-        .put(&format!("{SCHEDULES_PATH}/{id}", id = args.id), &body)
-        .with_context(|| format!("failed to update workflow schedule {}", args.id))?;
-    print_schedule(&resp, format);
-    Ok(())
-}
-
-pub fn delete(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let resp = client
-        .delete(&format!("{SCHEDULES_PATH}/{id}"))
-        .with_context(|| format!("failed to delete workflow schedule {id}"))?;
-    match format {
-        Format::Json => output::print_json(&resp),
-        Format::Table => output::print_success(&format!("Workflow schedule {id} deleted.")),
-    }
-    Ok(())
-}
-
-pub fn pause(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let resp = client
-        .post(&format!("{SCHEDULES_PATH}/{id}/pause"), &json!({}))
-        .with_context(|| format!("failed to pause workflow schedule {id}"))?;
-    print_schedule(&resp, format);
-    Ok(())
-}
-
-pub fn resume(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let resp = client
-        .post(&format!("{SCHEDULES_PATH}/{id}/resume"), &json!({}))
-        .with_context(|| format!("failed to resume workflow schedule {id}"))?;
-    print_schedule(&resp, format);
-    Ok(())
-}
-
-pub fn list_triggers(
-    client: &ApiClient,
-    app: Option<&str>,
-    event_type: Option<&str>,
-    format: Format,
-) -> Result<()> {
-    let resp = client
-        .get(TRIGGERS_PATH)
-        .context("failed to list workflow triggers")?;
-    let filtered = filter_triggers(resp, app, event_type);
-    print_triggers(&filtered, format, app);
-    Ok(())
-}
-
-pub fn get_trigger(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let resp = client
-        .get(&format!("{TRIGGERS_PATH}/{id}"))
-        .with_context(|| format!("failed to get workflow trigger {id}"))?;
-    print_trigger(&resp, format);
-    Ok(())
-}
-
-pub fn create_trigger(
-    client: &ApiClient,
-    args: &WorkflowTriggerCreateArgs,
-    format: Format,
-) -> Result<()> {
-    let target = build_trigger_target(args)?;
-    let body = build_trigger_upsert_body(
-        args.provider.as_deref(),
-        &args.event_type,
-        args.source.as_deref(),
-        args.subject.as_deref(),
-        target,
-        args.paused,
-    );
-
-    let resp = client
-        .post(TRIGGERS_PATH, &body)
-        .context("failed to create workflow trigger")?;
-    print_trigger(&resp, format);
-    Ok(())
-}
-
-pub fn update_trigger(
-    client: &ApiClient,
-    args: &WorkflowTriggerUpdateArgs,
-    format: Format,
-) -> Result<()> {
-    let existing = client
-        .get(&format!("{TRIGGERS_PATH}/{id}", id = args.id))
-        .with_context(|| format!("failed to load workflow trigger {}", args.id))?;
-
-    let body = merge_trigger_update(args, &existing)?;
-    let resp = client
-        .put(&format!("{TRIGGERS_PATH}/{id}", id = args.id), &body)
-        .with_context(|| format!("failed to update workflow trigger {}", args.id))?;
-    print_trigger(&resp, format);
-    Ok(())
-}
-
-pub fn delete_trigger(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let resp = client
-        .delete(&format!("{TRIGGERS_PATH}/{id}"))
-        .with_context(|| format!("failed to delete workflow trigger {id}"))?;
-    match format {
-        Format::Json => output::print_json(&resp),
-        Format::Table => output::print_success(&format!("Workflow trigger {id} deleted.")),
-    }
-    Ok(())
-}
-
-pub fn pause_trigger(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let resp = client
-        .post(&format!("{TRIGGERS_PATH}/{id}/pause"), &json!({}))
-        .with_context(|| format!("failed to pause workflow trigger {id}"))?;
-    print_trigger(&resp, format);
-    Ok(())
-}
-
-pub fn resume_trigger(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let resp = client
-        .post(&format!("{TRIGGERS_PATH}/{id}/resume"), &json!({}))
-        .with_context(|| format!("failed to resume workflow trigger {id}"))?;
-    print_trigger(&resp, format);
-    Ok(())
-}
 
 pub fn list_runs(
     client: &ApiClient,
@@ -208,17 +35,13 @@ fn runs_path(
     page_token: Option<&str>,
 ) -> Result<String> {
     let mut params = Vec::new();
-    push_query_param(&mut params, "app", app);
-    push_query_param(&mut params, "status", status);
+    query::push_opt_param(&mut params, "app", app);
+    query::push_opt_param(&mut params, "status", status);
     if let Some(page_size) = page_size {
         params.push(("pageSize".to_string(), page_size.to_string()));
     }
-    push_query_param(&mut params, "pageToken", page_token);
+    query::push_opt_param(&mut params, "pageToken", page_token);
     query::append_query(RUNS_PATH, &params)
-}
-
-fn push_query_param(params: &mut Vec<(String, String)>, name: &str, value: Option<&str>) {
-    query::push_opt_param(params, name, value);
 }
 
 pub fn get_run(client: &ApiClient, id: &str, format: Format) -> Result<()> {
@@ -246,9 +69,9 @@ pub fn cancel_run(
     Ok(())
 }
 
-pub fn publish_event(
+pub fn deliver_event(
     client: &ApiClient,
-    args: &WorkflowEventPublishArgs,
+    args: &WorkflowEventDeliverArgs,
     format: Format,
 ) -> Result<()> {
     let data = build_optional_map(&args.data, args.data_file.as_deref())?;
@@ -257,44 +80,12 @@ pub fn publish_event(
     } else {
         Some(params::assemble_params(&args.extensions, None, "")?)
     };
-    let body = build_event_publish_body(args, data.as_ref(), extensions.as_ref());
+    let body = build_event_deliver_body(args, data.as_ref(), extensions.as_ref());
     let resp = client
         .post(EVENTS_PATH, &body)
-        .context("failed to publish workflow event")?;
-    print_published_event(&resp, format);
+        .context("failed to deliver workflow event")?;
+    print_delivered_event(&resp, format);
     Ok(())
-}
-
-fn filter_by_app(value: Value, app: Option<&str>) -> Value {
-    let Some(app) = app else {
-        return value;
-    };
-    let Value::Array(items) = value else {
-        return value;
-    };
-    Value::Array(
-        items
-            .into_iter()
-            .filter(|item| target_has_app(item, app))
-            .collect(),
-    )
-}
-
-fn filter_triggers(value: Value, app: Option<&str>, event_type: Option<&str>) -> Value {
-    let Value::Array(items) = value else {
-        return value;
-    };
-    Value::Array(
-        items
-            .into_iter()
-            .filter(|item| {
-                app.map(|app| target_has_app(item, app)).unwrap_or(true)
-                    && event_type
-                        .map(|event_type| item["match"]["type"].as_str() == Some(event_type))
-                        .unwrap_or(true)
-            })
-            .collect(),
-    )
 }
 
 fn build_optional_map(
@@ -321,8 +112,8 @@ fn build_optional_map(
     }
 }
 
-fn build_event_publish_body(
-    args: &WorkflowEventPublishArgs,
+fn build_event_deliver_body(
+    args: &WorkflowEventDeliverArgs,
     data: Option<&Map<String, Value>>,
     extensions: Option<&Map<String, Value>>,
 ) -> Value {
@@ -356,283 +147,6 @@ fn build_event_publish_body(
         body.insert("extensions".to_string(), Value::Object(extensions.clone()));
     }
     Value::Object(body)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn build_upsert_body(
-    cron: &str,
-    timezone: Option<&str>,
-    app: &str,
-    operation: &str,
-    connection: Option<&str>,
-    instance: Option<&str>,
-    input: Option<&Value>,
-    paused: bool,
-) -> Value {
-    build_schedule_upsert_body(
-        cron,
-        timezone,
-        build_app_step_target(app, operation, connection, instance, input),
-        paused,
-    )
-}
-
-fn build_schedule_upsert_body(
-    cron: &str,
-    timezone: Option<&str>,
-    target: Value,
-    paused: bool,
-) -> Value {
-    let mut body = Map::new();
-    body.insert("cron".to_string(), Value::String(cron.to_string()));
-    if let Some(timezone) = timezone {
-        body.insert("timezone".to_string(), Value::String(timezone.to_string()));
-    }
-    body.insert("target".to_string(), target);
-    body.insert("paused".to_string(), Value::Bool(paused));
-    Value::Object(body)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn build_trigger_upsert_body(
-    provider: Option<&str>,
-    event_type: &str,
-    source: Option<&str>,
-    subject: Option<&str>,
-    target: Value,
-    paused: bool,
-) -> Value {
-    let mut body = Map::new();
-    if let Some(provider) = provider {
-        let provider = provider.trim();
-        if !provider.is_empty() {
-            body.insert("provider".to_string(), Value::String(provider.to_string()));
-        }
-    }
-    body.insert(
-        "match".to_string(),
-        build_event_match(event_type, source, subject),
-    );
-    body.insert("target".to_string(), target);
-    body.insert("paused".to_string(), Value::Bool(paused));
-    Value::Object(body)
-}
-
-fn build_trigger_target(args: &WorkflowTriggerCreateArgs) -> Result<Value> {
-    if let Some(path) = args.target_file.as_deref() {
-        if args.app.is_some()
-            || args.operation.is_some()
-            || args.connection.is_some()
-            || args.instance.is_some()
-            || !args.params.is_empty()
-            || args.input_file.is_some()
-        {
-            return Err(anyhow!(
-                "--target-file cannot be combined with app step target flags or input options"
-            ));
-        }
-        let target = params::load_input_file(path)?;
-        if target.is_empty() {
-            return Err(anyhow!("workflow trigger target file must not be empty"));
-        }
-        return Ok(Value::Object(target));
-    }
-
-    let app = args
-        .app
-        .as_deref()
-        .ok_or_else(|| anyhow!("workflow trigger target requires --app or --target-file"))?;
-    let operation = args
-        .operation
-        .as_deref()
-        .ok_or_else(|| anyhow!("workflow trigger app step target requires --operation"))?;
-    let input = build_optional_map(&args.params, args.input_file.as_deref())?;
-    let input_value = input.as_ref().map(literal_input);
-    Ok(build_app_step_target(
-        app,
-        operation,
-        args.connection.as_deref(),
-        args.instance.as_deref(),
-        input_value.as_ref(),
-    ))
-}
-
-fn merge_update(args: &WorkflowScheduleUpdateArgs, existing: &Value) -> Result<Value> {
-    let cron = match args.cron.as_deref() {
-        Some(value) => value.to_string(),
-        None => existing["cron"]
-            .as_str()
-            .ok_or_else(|| anyhow!("existing schedule is missing cron; pass --cron"))?
-            .to_string(),
-    };
-
-    let timezone = resolve_optional_string(args.timezone.as_deref(), existing["timezone"].as_str());
-
-    let target = merge_schedule_target_update(args, existing)?;
-
-    let paused = if args.paused {
-        true
-    } else if args.unpaused {
-        false
-    } else {
-        existing["paused"].as_bool().unwrap_or(false)
-    };
-
-    Ok(build_schedule_upsert_body(
-        &cron,
-        timezone.as_deref(),
-        target,
-        paused,
-    ))
-}
-
-fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> Result<Value> {
-    let event_type = match args.event_type.as_deref() {
-        Some(value) => value.to_string(),
-        None => existing["match"]["type"]
-            .as_str()
-            .ok_or_else(|| anyhow!("existing trigger is missing match.type; pass --type"))?
-            .to_string(),
-    };
-    let source =
-        resolve_optional_string(args.source.as_deref(), existing["match"]["source"].as_str());
-    let subject = resolve_optional_string(
-        args.subject.as_deref(),
-        existing["match"]["subject"].as_str(),
-    );
-    let target = merge_trigger_target_update(args, existing)?;
-
-    let paused = if args.paused {
-        true
-    } else if args.unpaused {
-        false
-    } else {
-        existing["paused"].as_bool().unwrap_or(false)
-    };
-
-    Ok(build_trigger_upsert_body(
-        existing["provider"].as_str(),
-        &event_type,
-        source.as_deref(),
-        subject.as_deref(),
-        target,
-        paused,
-    ))
-}
-
-fn merge_schedule_target_update(
-    args: &WorkflowScheduleUpdateArgs,
-    existing: &Value,
-) -> Result<Value> {
-    let (input, replace_input) = target_input_update(&args.params, args.input_file.as_deref())?;
-    merge_app_step_target_flags(
-        existing,
-        AppStepTargetUpdate {
-            resource: "schedule",
-            step_id: args.step_id.as_deref(),
-            app: args.app.as_deref(),
-            operation: args.operation.as_deref(),
-            connection: args.connection.as_deref(),
-            instance: args.instance.as_deref(),
-            clear_input: args.clear_input,
-            replace_input,
-            input: input.as_ref(),
-        },
-    )
-}
-
-fn merge_trigger_target_update(
-    args: &WorkflowTriggerUpdateArgs,
-    existing: &Value,
-) -> Result<Value> {
-    let (input, replace_input) = target_input_update(&args.params, args.input_file.as_deref())?;
-    merge_app_step_target_flags(
-        existing,
-        AppStepTargetUpdate {
-            resource: "trigger",
-            step_id: args.step_id.as_deref(),
-            app: args.app.as_deref(),
-            operation: args.operation.as_deref(),
-            connection: args.connection.as_deref(),
-            instance: args.instance.as_deref(),
-            clear_input: args.clear_input,
-            replace_input,
-            input: input.as_ref(),
-        },
-    )
-}
-
-fn target_input_update(
-    params: &[ParamEntry],
-    input_file: Option<&str>,
-) -> Result<(Option<Value>, bool)> {
-    let replace_input = !params.is_empty() || input_file.is_some();
-    let input = if replace_input {
-        build_optional_map(params, input_file)?.map(|input| literal_input(&input))
-    } else {
-        None
-    };
-    Ok((input, replace_input))
-}
-
-fn build_event_match(event_type: &str, source: Option<&str>, subject: Option<&str>) -> Value {
-    let mut match_body = Map::new();
-    match_body.insert("type".to_string(), Value::String(event_type.to_string()));
-    if let Some(source) = source {
-        match_body.insert("source".to_string(), Value::String(source.to_string()));
-    }
-    if let Some(subject) = subject {
-        match_body.insert("subject".to_string(), Value::String(subject.to_string()));
-    }
-    Value::Object(match_body)
-}
-
-fn print_schedule(value: &Value, format: Format) {
-    match format {
-        Format::Json => output::print_json(value),
-        Format::Table => {
-            let rows = vec![schedule_row(value, None)];
-            output::print_table(&schedule_headers(), &rows);
-        }
-    }
-}
-
-fn print_schedules(value: &Value, format: Format, preferred_app: Option<&str>) {
-    match format {
-        Format::Json => output::print_json(value),
-        Format::Table => {
-            let items = value.as_array().cloned().unwrap_or_default();
-            let rows: Vec<Vec<String>> = items
-                .iter()
-                .map(|item| schedule_row(item, preferred_app))
-                .collect();
-            output::print_table(&schedule_headers(), &rows);
-        }
-    }
-}
-
-fn print_trigger(value: &Value, format: Format) {
-    match format {
-        Format::Json => output::print_json(value),
-        Format::Table => {
-            let rows = vec![trigger_row(value, None)];
-            output::print_table(&trigger_headers(), &rows);
-        }
-    }
-}
-
-fn print_triggers(value: &Value, format: Format, preferred_app: Option<&str>) {
-    match format {
-        Format::Json => output::print_json(value),
-        Format::Table => {
-            let items = value.as_array().cloned().unwrap_or_default();
-            let rows: Vec<Vec<String>> = items
-                .iter()
-                .map(|item| trigger_row(item, preferred_app))
-                .collect();
-            output::print_table(&trigger_headers(), &rows);
-        }
-    }
 }
 
 fn print_run(value: &Value, format: Format) {
@@ -679,74 +193,15 @@ fn next_page_token(value: &Value) -> Option<&str> {
         .filter(|token| !token.is_empty())
 }
 
-fn print_published_event(value: &Value, format: Format) {
+fn print_delivered_event(value: &Value, format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
             let event = value.get("event").unwrap_or(value);
-            let rows = vec![published_event_row(event)];
-            output::print_table(&published_event_headers(), &rows);
+            let rows = vec![delivered_event_row(event)];
+            output::print_table(&delivered_event_headers(), &rows);
         }
     }
-}
-
-fn trigger_headers() -> [&'static str; 8] {
-    [
-        "ID",
-        "Type",
-        "Source",
-        "Subject",
-        "App",
-        "Operation",
-        "Paused",
-        "Created",
-    ]
-}
-
-fn trigger_row(value: &Value, preferred_app: Option<&str>) -> Vec<String> {
-    vec![
-        value["id"].as_str().unwrap_or("-").to_string(),
-        value["match"]["type"].as_str().unwrap_or("-").to_string(),
-        value["match"]["source"].as_str().unwrap_or("-").to_string(),
-        value["match"]["subject"]
-            .as_str()
-            .unwrap_or("-")
-            .to_string(),
-        target_app(value, preferred_app).unwrap_or("-").to_string(),
-        target_operation(value, preferred_app)
-            .unwrap_or("-")
-            .to_string(),
-        format_bool(value["paused"].as_bool()),
-        value["createdAt"].as_str().unwrap_or("-").to_string(),
-    ]
-}
-
-fn schedule_headers() -> [&'static str; 8] {
-    [
-        "ID",
-        "App",
-        "Operation",
-        "Cron",
-        "TZ",
-        "Paused",
-        "Next Run",
-        "Created",
-    ]
-}
-
-fn schedule_row(value: &Value, preferred_app: Option<&str>) -> Vec<String> {
-    vec![
-        value["id"].as_str().unwrap_or("-").to_string(),
-        target_app(value, preferred_app).unwrap_or("-").to_string(),
-        target_operation(value, preferred_app)
-            .unwrap_or("-")
-            .to_string(),
-        value["cron"].as_str().unwrap_or("-").to_string(),
-        value["timezone"].as_str().unwrap_or("-").to_string(),
-        format_bool(value["paused"].as_bool()),
-        value["nextRunAt"].as_str().unwrap_or("-").to_string(),
-        value["createdAt"].as_str().unwrap_or("-").to_string(),
-    ]
 }
 
 fn run_headers() -> [&'static str; 7] {
@@ -761,11 +216,11 @@ fn run_headers() -> [&'static str; 7] {
     ]
 }
 
-fn published_event_headers() -> [&'static str; 5] {
+fn delivered_event_headers() -> [&'static str; 5] {
     ["ID", "Type", "Source", "Subject", "Time"]
 }
 
-fn published_event_row(value: &Value) -> Vec<String> {
+fn delivered_event_row(value: &Value) -> Vec<String> {
     vec![
         value["id"].as_str().unwrap_or("-").to_string(),
         value["type"].as_str().unwrap_or("-").to_string(),
@@ -796,11 +251,11 @@ fn run_row(value: &Value, preferred_app: Option<&str>) -> Vec<String> {
 fn run_trigger_label(value: &Value) -> String {
     let trigger = &value["trigger"];
     match trigger["kind"].as_str() {
-        Some("schedule") => trigger["scheduleId"]
+        Some("schedule") => trigger["activationId"]
             .as_str()
             .map(|id| format!("schedule:{id}"))
             .unwrap_or_else(|| "schedule".to_string()),
-        Some("event") => trigger["triggerId"]
+        Some("event") => trigger["activationId"]
             .as_str()
             .map(|id| format!("event:{id}"))
             .unwrap_or_else(|| "event".to_string()),
@@ -810,36 +265,8 @@ fn run_trigger_label(value: &Value) -> String {
     }
 }
 
-fn format_bool(value: Option<bool>) -> String {
-    match value {
-        Some(true) => "yes".to_string(),
-        Some(false) => "no".to_string(),
-        None => "-".to_string(),
-    }
-}
-
 pub fn dispatch(client: &ApiClient, command: WorkflowCommands, format: Format) -> Result<()> {
     match command {
-        WorkflowCommands::Schedules { command } => match command {
-            WorkflowScheduleCommands::List { app } => list(client, app.as_deref(), format),
-            WorkflowScheduleCommands::Get { id } => get(client, &id, format),
-            WorkflowScheduleCommands::Create(args) => create(client, &args, format),
-            WorkflowScheduleCommands::Update(args) => update(client, &args, format),
-            WorkflowScheduleCommands::Delete { id } => delete(client, &id, format),
-            WorkflowScheduleCommands::Pause { id } => pause(client, &id, format),
-            WorkflowScheduleCommands::Resume { id } => resume(client, &id, format),
-        },
-        WorkflowCommands::Triggers { command } => match command {
-            WorkflowTriggerCommands::List { app, event_type } => {
-                list_triggers(client, app.as_deref(), event_type.as_deref(), format)
-            }
-            WorkflowTriggerCommands::Get { id } => get_trigger(client, &id, format),
-            WorkflowTriggerCommands::Create(args) => create_trigger(client, &args, format),
-            WorkflowTriggerCommands::Update(args) => update_trigger(client, &args, format),
-            WorkflowTriggerCommands::Delete { id } => delete_trigger(client, &id, format),
-            WorkflowTriggerCommands::Pause { id } => pause_trigger(client, &id, format),
-            WorkflowTriggerCommands::Resume { id } => resume_trigger(client, &id, format),
-        },
         WorkflowCommands::Runs { command } => match command {
             WorkflowRunCommands::List {
                 app,
@@ -860,7 +287,7 @@ pub fn dispatch(client: &ApiClient, command: WorkflowCommands, format: Format) -
             }
         },
         WorkflowCommands::Events { command } => match command {
-            WorkflowEventCommands::Publish(args) => publish_event(client, &args, format),
+            WorkflowEventCommands::Deliver(args) => deliver_event(client, &args, format),
         },
     }
 }

@@ -44,7 +44,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"gopkg.in/yaml.v3"
 )
@@ -1061,7 +1060,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		opts = append(opts,
 			appservice.WithInvocationTokens(invTokens),
 			appservice.WithInvocationTokenSubject(name, appaccessservice.InvocationGrantsFromDependencies(appInvocationDependencies(entry.Invokes))),
-			appservice.WithWorkflowManagerGrants(workflowgrants.All()),
+			appservice.WithWorkflowManagerGrants(appWorkflowGrants(entry.Capabilities)),
 		)
 	}
 	prov, err := appservice.NewRemote(ctx, conn.Integration(), spec, pluginConfig, opts...)
@@ -1665,7 +1664,7 @@ func (unavailableAppInvocation) InvokeGraphQL(context.Context, *principal.Princi
 
 type unavailableWorkflowManager struct{}
 
-func (unavailableWorkflowManager) CreateDefinition(context.Context, *principal.Principal, workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+func (unavailableWorkflowManager) ApplyDefinition(context.Context, *principal.Principal, workflowmanager.DefinitionApply) (*workflowmanager.ManagedDefinition, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
@@ -1673,68 +1672,20 @@ func (unavailableWorkflowManager) GetDefinition(context.Context, *principal.Prin
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
-func (unavailableWorkflowManager) UpdateDefinition(context.Context, *principal.Principal, string, workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+func (unavailableWorkflowManager) ListDefinitions(context.Context, *principal.Principal) (*workflowmanager.ListDefinitionsResponse, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) SetDefinitionPaused(context.Context, *principal.Principal, string, bool) (*workflowmanager.ManagedDefinition, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) SetActivationPaused(context.Context, *principal.Principal, string, string, bool) (*workflowmanager.ManagedDefinition, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
 func (unavailableWorkflowManager) DeleteDefinition(context.Context, *principal.Principal, string) error {
 	return fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) ListSchedules(context.Context, *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) CreateSchedule(context.Context, *principal.Principal, workflowmanager.ScheduleUpsert) (*workflowmanager.ManagedSchedule, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) GetSchedule(context.Context, *principal.Principal, string) (*workflowmanager.ManagedSchedule, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) UpdateSchedule(context.Context, *principal.Principal, string, workflowmanager.ScheduleUpsert) (*workflowmanager.ManagedSchedule, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) DeleteSchedule(context.Context, *principal.Principal, string) error {
-	return fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) PauseSchedule(context.Context, *principal.Principal, string) (*workflowmanager.ManagedSchedule, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) ResumeSchedule(context.Context, *principal.Principal, string) (*workflowmanager.ManagedSchedule, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) ListEventTriggers(context.Context, *principal.Principal) ([]*workflowmanager.ManagedEventTrigger, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) CreateEventTrigger(context.Context, *principal.Principal, workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) GetEventTrigger(context.Context, *principal.Principal, string) (*workflowmanager.ManagedEventTrigger, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) UpdateEventTrigger(context.Context, *principal.Principal, string, workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) DeleteEventTrigger(context.Context, *principal.Principal, string) error {
-	return fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) PauseEventTrigger(context.Context, *principal.Principal, string) (*workflowmanager.ManagedEventTrigger, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) ResumeEventTrigger(context.Context, *principal.Principal, string) (*workflowmanager.ManagedEventTrigger, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
 }
 
 func (unavailableWorkflowManager) ListRuns(context.Context, *principal.Principal, coreworkflow.ListRunsRequest) (*workflowmanager.ListRunsResponse, error) {
@@ -1746,6 +1697,14 @@ func (unavailableWorkflowManager) StartRun(context.Context, *principal.Principal
 }
 
 func (unavailableWorkflowManager) GetRun(context.Context, *principal.Principal, string) (*workflowmanager.ManagedRun, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) GetRunEvents(context.Context, *principal.Principal, string) (*proto.GetWorkflowProviderRunEventsResponse, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) GetRunOutput(context.Context, *principal.Principal, string) (*proto.GetWorkflowProviderRunOutputResponse, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
@@ -1761,7 +1720,7 @@ func (unavailableWorkflowManager) SignalOrStartRun(context.Context, *principal.P
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
-func (unavailableWorkflowManager) PublishEvent(context.Context, *principal.Principal, workflowmanager.EventPublish) (coreworkflow.Event, error) {
+func (unavailableWorkflowManager) DeliverEvent(context.Context, *principal.Principal, workflowmanager.EventDeliver) (coreworkflow.Event, error) {
 	return coreworkflow.Event{}, fmt.Errorf("workflow manager is not available")
 }
 

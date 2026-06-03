@@ -255,56 +255,60 @@ apps:
       path: /roadmap
       bundle: roadmap
 workflows:
-  schedules:
+  definitions:
     nightly_sync:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: sync
-            app:
-              name: roadmap
-              operation: sync
-              connection: default
-              instance: tenant-a
-              input:
-                mode: incremental
+      steps:
+        - id: sync
+          app:
+            name: roadmap
+            operation: sync
+            connection: default
+            instance: tenant-a
+            input:
+              mode: incremental
+      on:
+        nightly:
+          schedule:
+            cron: "0 2 * * *"
     nightly_summary:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-      cron: "0 3 * * *"
-      target:
-        steps:
-          - id: summarize
-            timeout: 120s
-            agent:
-              provider: simple
-              model: fast
-              prompt: Summarize yesterday.
-              output:
-                text: {}
-              tools:
-                - app: roadmap
-                  operation: sync
-  eventTriggers:
+      steps:
+        - id: summarize
+          timeout: 120s
+          agent:
+            provider: simple
+            model: fast
+            prompt: Summarize yesterday.
+            output:
+              text: {}
+            tools:
+              - app: roadmap
+                operation: sync
+      on:
+        nightly:
+          schedule:
+            cron: "0 3 * * *"
     roadmap_updated:
       runAs:
         subject:
           id: service_account:roadmap-workflow
-      match:
-        type: roadmap.item.updated
-        source: roadmap
-      target:
-        steps:
-          - id: sync
-            app:
-              name: roadmap
-              operation: sync
-              input:
-                mode: event
+      steps:
+        - id: sync
+          app:
+            name: roadmap
+            operation: sync
+            input:
+              mode: event
+      on:
+        roadmap_updated:
+          event:
+            type: roadmap.item.updated
+            source: roadmap
 `, e2eLoopbackBaseURL(8080), indexedDBManifest, ui.ManifestPath, workflowManifest, agentManifest, appManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)

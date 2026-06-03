@@ -2676,26 +2676,26 @@ func TestManagerProjectsAgentFacingAppToolSchemas(t *testing.T) {
 func TestManagerProjectsWorkflowSystemToolSchemas(t *testing.T) {
 	t.Parallel()
 
-	ref := coreagent.ToolRef{System: coreagent.SystemToolWorkflow, Operation: "schedules.update"}
+	ref := coreagent.ToolRef{System: coreagent.SystemToolWorkflow, Operation: "definitions.apply"}
 	workflowTools := projectionWorkflowSystemTools{
 		tools: map[string]coreagent.Tool{
 			ref.Operation: {
-				Name:        "Update schedule",
-				Description: "Update a workflow schedule",
+				Name:        "Apply definition",
+				Description: "Apply a workflow definition",
 				ParametersSchema: map[string]any{
 					"allOf": []any{
 						map[string]any{
 							"type": "object",
 							"properties": map[string]any{
-								"scheduleId": map[string]any{"type": "string"},
+								"definitionId": map[string]any{"type": "string"},
 							},
-							"required": []any{"scheduleId"},
+							"required": []any{"definitionId"},
 						},
 						map[string]any{
 							"properties": map[string]any{
-								"cron": map[string]any{"type": "string"},
+								"provider": map[string]any{"type": "string"},
 							},
-							"required": []any{"cron"},
+							"required": []any{"provider"},
 						},
 					},
 				},
@@ -2721,8 +2721,8 @@ func TestManagerProjectsWorkflowSystemToolSchemas(t *testing.T) {
 		t.Fatalf("ListTools returned %d tools, want one", len(listed.Tools))
 	}
 	listedSchema := mustDecodeAgentToolSchema(t, listed.Tools[0].InputSchemaJSON)
-	requireAgentToolSchemaProperties(t, listedSchema, "scheduleId", "cron")
-	requireAgentToolSchemaRequired(t, listedSchema, "cron", "scheduleId")
+	requireAgentToolSchemaProperties(t, listedSchema, "definitionId", "provider")
+	requireAgentToolSchemaRequired(t, listedSchema, "definitionId", "provider")
 	requireAgentToolSchemaMissingKeys(t, listedSchema, "allOf", "oneOf", "anyOf")
 
 	resolved, err := manager.ResolveTools(context.Background(), p, coreagent.ResolveToolsRequest{
@@ -2735,16 +2735,16 @@ func TestManagerProjectsWorkflowSystemToolSchemas(t *testing.T) {
 	if len(resolved) != 1 {
 		t.Fatalf("ResolveTools returned %d tools, want one", len(resolved))
 	}
-	requireAgentToolSchemaProperties(t, resolved[0].ParametersSchema, "scheduleId", "cron")
-	requireAgentToolSchemaRequired(t, resolved[0].ParametersSchema, "cron", "scheduleId")
+	requireAgentToolSchemaProperties(t, resolved[0].ParametersSchema, "definitionId", "provider")
+	requireAgentToolSchemaRequired(t, resolved[0].ParametersSchema, "definitionId", "provider")
 	requireAgentToolSchemaMissingKeys(t, resolved[0].ParametersSchema, "allOf", "oneOf", "anyOf")
 
 	one, err := manager.ResolveTool(context.Background(), p, ref)
 	if err != nil {
 		t.Fatalf("ResolveTool: %v", err)
 	}
-	requireAgentToolSchemaProperties(t, one.ParametersSchema, "scheduleId", "cron")
-	requireAgentToolSchemaRequired(t, one.ParametersSchema, "cron", "scheduleId")
+	requireAgentToolSchemaProperties(t, one.ParametersSchema, "definitionId", "provider")
+	requireAgentToolSchemaRequired(t, one.ParametersSchema, "definitionId", "provider")
 	requireAgentToolSchemaMissingKeys(t, one.ParametersSchema, "allOf", "oneOf", "anyOf")
 }
 

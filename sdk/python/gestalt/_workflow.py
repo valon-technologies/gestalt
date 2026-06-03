@@ -23,7 +23,10 @@ from ._agent import (
     agent_tool_ref_from_dict,
     agent_tool_ref_from_proto,
     agent_tool_ref_to_proto,
+    subject_from_proto,
+    subject_to_proto,
 )
+from ._api import Subject
 from ._gen.v1 import agent_pb2 as _agent_pb
 from ._gen.v1 import app_pb2 as _app_pb
 from ._gen.v1 import workflow_pb2 as _pb
@@ -73,6 +76,14 @@ WORKFLOW_RUN_STATUS_SUCCEEDED = pb.WORKFLOW_RUN_STATUS_SUCCEEDED
 WORKFLOW_RUN_STATUS_FAILED = pb.WORKFLOW_RUN_STATUS_FAILED
 WORKFLOW_RUN_STATUS_CANCELED = pb.WORKFLOW_RUN_STATUS_CANCELED
 
+WORKFLOW_STEP_STATUS_UNSPECIFIED = pb.WORKFLOW_STEP_STATUS_UNSPECIFIED
+WORKFLOW_STEP_STATUS_PENDING = pb.WORKFLOW_STEP_STATUS_PENDING
+WORKFLOW_STEP_STATUS_RUNNING = pb.WORKFLOW_STEP_STATUS_RUNNING
+WORKFLOW_STEP_STATUS_SKIPPED = pb.WORKFLOW_STEP_STATUS_SKIPPED
+WORKFLOW_STEP_STATUS_SUCCEEDED = pb.WORKFLOW_STEP_STATUS_SUCCEEDED
+WORKFLOW_STEP_STATUS_FAILED = pb.WORKFLOW_STEP_STATUS_FAILED
+WORKFLOW_STEP_STATUS_UNKNOWN = pb.WORKFLOW_STEP_STATUS_UNKNOWN
+
 WorkflowJsonScalar: TypeAlias = None | bool | int | float | str
 WorkflowJsonNonNullScalar: TypeAlias = bool | int | float | str
 WorkflowJsonValue: TypeAlias = (
@@ -115,9 +126,10 @@ class WorkflowValue:
     object: Mapping[str, "WorkflowValuePayload"] | None = None
     array: list["WorkflowValuePayload"] | tuple["WorkflowValuePayload", ...] | None = None
     template: WorkflowText | str | None = None
-    run_input: str = ""
-    signal_payload: str = ""
+    input: str = ""
+    signal: str = ""
     step_output: WorkflowStepOutputSource | None = None
+    step_input: WorkflowStepOutputSource | None = None
 
 
 WorkflowValuePayload: TypeAlias = (
@@ -207,7 +219,6 @@ class BoundWorkflowTarget:
     steps: Sequence[WorkflowStep] = _dataclasses.field(default_factory=list)
 
 
-
 @_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowEvent:
     """Native data for a workflow event."""
@@ -235,6 +246,32 @@ class WorkflowEventMatch:
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
+class WorkflowActivation:
+    """Native data for a compiled workflow activation."""
+    __hash__ = None
+
+    id: str = ""
+    input: WorkflowValueInput | None = None
+    paused: bool = False
+    schedule: Mapping[str, Any] | None = None
+    event: Mapping[str, Any] | None = None
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class WorkflowDefinitionSpec:
+    """Native data for applying a workflow definition."""
+    __hash__ = None
+
+    id: str = ""
+    target: BoundWorkflowTarget | None = None
+    activations: Sequence[WorkflowActivation | Mapping[str, Any]] = _dataclasses.field(
+        default_factory=list
+    )
+    paused: bool = False
+    run_as: Subject | Mapping[str, Any] | None = None
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowSignal:
     """Native data for a workflow signal."""
     __hash__ = None
@@ -254,7 +291,7 @@ class WorkflowScheduleTrigger:
     """Native data for a schedule-triggered workflow run."""
     __hash__ = None
 
-    schedule_id: str = ""
+    activation_id: str = ""
     scheduled_for: _dt.datetime | Any | None = None
 
 
@@ -263,7 +300,7 @@ class WorkflowEventTriggerInvocation:
     """Native data for an event-triggered workflow run."""
     __hash__ = None
 
-    trigger_id: str = ""
+    activation_id: str = ""
     event: WorkflowEvent | None = None
 
 
@@ -278,7 +315,38 @@ class WorkflowRunTrigger:
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
-class BoundWorkflowRun:
+class WorkflowStepAttempt:
+    """Native data for one durable workflow step attempt."""
+    __hash__ = None
+
+    id: str = ""
+    status: int = WORKFLOW_STEP_STATUS_UNSPECIFIED
+    idempotency_key: str = ""
+    input: WorkflowJsonValue | None = None
+    output: WorkflowJsonValue | None = None
+    status_message: str = ""
+    started_at: _dt.datetime | Any | None = None
+    completed_at: _dt.datetime | Any | None = None
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class WorkflowStepExecution:
+    """Native data for one durable workflow step execution."""
+    __hash__ = None
+
+    step_id: str = ""
+    status: int = WORKFLOW_STEP_STATUS_UNSPECIFIED
+    attempts: Sequence[WorkflowStepAttempt] = _dataclasses.field(default_factory=list)
+    input: WorkflowJsonValue | None = None
+    output: WorkflowJsonValue | None = None
+    status_message: str = ""
+    skip_reason: str = ""
+    started_at: _dt.datetime | Any | None = None
+    completed_at: _dt.datetime | Any | None = None
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class WorkflowRun:
     """Native data for a workflow-provider run."""
     __hash__ = None
 
@@ -290,67 +358,45 @@ class BoundWorkflowRun:
     started_at: _dt.datetime | Any | None = None
     completed_at: _dt.datetime | Any | None = None
     status_message: str = ""
-    result_body: str = ""
+    output: WorkflowJsonValue | None = None
     created_by_subject_id: str = ""
     workflow_key: str = ""
     provider_name: str = ""
     definition_id: str = ""
+    run_as: Subject | Mapping[str, Any] | None = None
+    input: WorkflowJsonObject | None = None
+    definition_generation: int = 0
+    current_step_id: str = ""
+    steps: Sequence[WorkflowStepExecution] = _dataclasses.field(default_factory=list)
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
-class BoundWorkflowDefinition:
+class WorkflowDefinition:
     """Native data copied from a workflow-provider definition."""
     __hash__ = None
 
     id: str = ""
+    generation: int = 0
     target: BoundWorkflowTarget | None = None
-    created_by_subject_id: str = ""
-    created_at: _dt.datetime | Any | None = None
-    provider_name: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class BoundWorkflowSchedule:
-    """Native data for a workflow-provider schedule."""
-    __hash__ = None
-
-    id: str = ""
-    cron: str = ""
-    timezone: str = ""
-    target: BoundWorkflowTarget | None = None
+    activations: Sequence[WorkflowActivation] = _dataclasses.field(default_factory=list)
     paused: bool = False
+    created_by_subject_id: str = ""
     created_at: _dt.datetime | Any | None = None
     updated_at: _dt.datetime | Any | None = None
-    next_run_at: _dt.datetime | Any | None = None
-    created_by_subject_id: str = ""
     provider_name: str = ""
-    definition_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class BoundWorkflowEventTrigger:
-    """Native data for a workflow-provider event trigger."""
-    __hash__ = None
-
-    id: str = ""
-    match: WorkflowEventMatch | None = None
-    target: BoundWorkflowTarget | None = None
-    paused: bool = False
-    created_at: _dt.datetime | Any | None = None
-    updated_at: _dt.datetime | Any | None = None
-    created_by_subject_id: str = ""
-    provider_name: str = ""
-    definition_id: str = ""
+    run_as: Subject | Mapping[str, Any] | None = None
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowStartRun:
     __hash__ = None
     provider_name: str = ""
-    target: BoundWorkflowTarget | None = None
     idempotency_key: str = ""
     workflow_key: str = ""
     definition_id: str = ""
+    input: WorkflowJsonObject | None = None
+    run_as: Subject | Mapping[str, Any] | None = None
+    expected_definition_generation: int = 0
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
@@ -365,17 +411,19 @@ class WorkflowSignalOrStartRun:
     __hash__ = None
     provider_name: str = ""
     workflow_key: str = ""
-    target: BoundWorkflowTarget | None = None
     idempotency_key: str = ""
     signal: WorkflowSignal | None = None
     definition_id: str = ""
+    input: WorkflowJsonObject | None = None
+    run_as: Subject | Mapping[str, Any] | None = None
+    expected_definition_generation: int = 0
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowCreateDefinition:
+class WorkflowApplyDefinition:
     __hash__ = None
     provider_name: str = ""
-    target: BoundWorkflowTarget | None = None
+    spec: WorkflowDefinitionSpec | None = None
     idempotency_key: str = ""
 
 
@@ -386,156 +434,60 @@ class WorkflowGetDefinition:
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowUpdateDefinition:
-    __hash__ = None
-    definition_id: str = ""
-    provider_name: str = ""
-    target: BoundWorkflowTarget | None = None
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowDeleteDefinition:
     __hash__ = None
     definition_id: str = ""
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowCreateSchedule:
+class WorkflowSetDefinitionPaused:
     __hash__ = None
-    provider_name: str = ""
-    cron: str = ""
-    timezone: str = ""
-    target: BoundWorkflowTarget | None = None
-    paused: bool = False
-    idempotency_key: str = ""
     definition_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowGetSchedule:
-    __hash__ = None
-    schedule_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowUpdateSchedule:
-    __hash__ = None
-    schedule_id: str = ""
-    provider_name: str = ""
-    cron: str = ""
-    timezone: str = ""
-    target: BoundWorkflowTarget | None = None
     paused: bool = False
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class WorkflowSetActivationPaused:
+    __hash__ = None
     definition_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowDeleteSchedule:
-    __hash__ = None
-    schedule_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowPauseSchedule:
-    __hash__ = None
-    schedule_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowResumeSchedule:
-    __hash__ = None
-    schedule_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowCreateEventTrigger:
-    __hash__ = None
-    provider_name: str = ""
-    match: WorkflowEventMatch | None = None
-    target: BoundWorkflowTarget | None = None
+    activation_id: str = ""
     paused: bool = False
-    idempotency_key: str = ""
-    definition_id: str = ""
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowGetEventTrigger:
+class WorkflowGetRun:
     __hash__ = None
-    trigger_id: str = ""
+    run_id: str = ""
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowUpdateEventTrigger:
+class WorkflowGetRunEvents:
     __hash__ = None
-    trigger_id: str = ""
-    provider_name: str = ""
-    match: WorkflowEventMatch | None = None
-    target: BoundWorkflowTarget | None = None
-    paused: bool = False
-    definition_id: str = ""
+    run_id: str = ""
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowDeleteEventTrigger:
+class WorkflowGetRunOutput:
     __hash__ = None
-    trigger_id: str = ""
+    run_id: str = ""
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowPauseEventTrigger:
+class WorkflowDeliverEvent:
     __hash__ = None
-    trigger_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowResumeEventTrigger:
-    __hash__ = None
-    trigger_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowPublishEvent:
-    __hash__ = None
+    app_name: str = ""
     provider_name: str = ""
     event: WorkflowEvent | None = None
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowRun:
-    __hash__ = None
-    provider_name: str = ""
-    run: BoundWorkflowRun | None = None
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowRunSignal:
     __hash__ = None
     provider_name: str = ""
-    run: BoundWorkflowRun | None = None
+    run: WorkflowRun | None = None
     signal: WorkflowSignal | None = None
     started_run: bool = False
     workflow_key: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowDefinition:
-    __hash__ = None
-    provider_name: str = ""
-    definition: BoundWorkflowDefinition | None = None
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowSchedule:
-    __hash__ = None
-    provider_name: str = ""
-    schedule: BoundWorkflowSchedule | None = None
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class WorkflowEventTrigger:
-    __hash__ = None
-    provider_name: str = ""
-    trigger: BoundWorkflowEventTrigger | None = None
 
 
 def _optional_struct(value: Any | None) -> Any | None:
@@ -657,6 +609,95 @@ def workflow_event_match_input_from_match(
     )
 
 
+def workflow_activation(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow activation."""
+
+    if isinstance(value, pb.WorkflowActivation):
+        return _copy(value)
+    data = _data(value, kwargs)
+    activation = pb.WorkflowActivation(
+        id=data.get("id", ""),
+        paused=data.get("paused", False),
+    )
+    if data.get("input") is not None:
+        activation.input.CopyFrom(_workflow_value_nested(data["input"]))
+    if data.get("schedule") is not None:
+        schedule_data = _message_mapping(data["schedule"])
+        activation.schedule.CopyFrom(
+            pb.WorkflowScheduleActivation(
+                cron=schedule_data.get("cron", ""),
+                timezone=schedule_data.get("timezone", ""),
+            )
+        )
+    if data.get("event") is not None:
+        event_data = _message_mapping(data["event"])
+        match = event_data.get("match")
+        activation.event.CopyFrom(
+            pb.WorkflowEventActivation(
+                match=workflow_event_match(match) if match is not None else None
+            )
+        )
+    return activation
+
+
+def workflow_activation_input_from_activation(value: Any | None) -> WorkflowActivation | None:
+    """Return input copied from a workflow activation."""
+
+    if value is None:
+        return None
+    trigger = which_oneof(value, "trigger")
+    return WorkflowActivation(
+        id=value.id,
+        input=workflow_value_input_from_value(value.input)
+        if has_field(value, "input")
+        else None,
+        paused=value.paused,
+        schedule={"cron": value.schedule.cron, "timezone": value.schedule.timezone}
+        if trigger == "schedule"
+        else None,
+        event={"match": workflow_event_match_input_from_match(value.event.match)}
+        if trigger == "event" and has_field(value.event, "match")
+        else None,
+    )
+
+
+def workflow_definition_spec(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow definition spec."""
+
+    if isinstance(value, pb.WorkflowDefinitionSpec):
+        return _copy(value)
+    data = _data(value, kwargs)
+    target = data.get("target")
+    return pb.WorkflowDefinitionSpec(
+        id=data.get("id", ""),
+        target=bound_workflow_target(target) if target is not None else None,
+        activations=[workflow_activation(item) for item in data.get("activations", [])],
+        paused=data.get("paused", False),
+        run_as=subject_to_proto(data.get("run_as")),
+    )
+
+
+def workflow_definition_spec_input_from_spec(value: Any | None) -> WorkflowDefinitionSpec | None:
+    """Return input copied from a workflow definition spec."""
+
+    if value is None:
+        return None
+    return WorkflowDefinitionSpec(
+        id=value.id,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        activations=[
+            cast(WorkflowActivation, workflow_activation_input_from_activation(item))
+            for item in value.activations
+        ],
+        paused=value.paused,
+        run_as=subject_from_proto(value.run_as)
+        if has_field(value, "run_as")
+        else None,
+    )
+
+
 def workflow_text(value: Any | None = None, **kwargs: Any) -> Any:
     """Create workflow text."""
 
@@ -752,9 +793,10 @@ def workflow_value(value: Any | None = None, **kwargs: Any) -> Any:
         "object",
         "array",
         "template",
-        "run_input",
-        "signal_payload",
+        "input",
+        "signal",
         "step_output",
+        "step_input",
     ):
         item = data.get(name)
         if item is not None and item != "":
@@ -786,12 +828,14 @@ def workflow_value(value: Any | None = None, **kwargs: Any) -> Any:
         )
     if name == "template":
         return pb.WorkflowValue(template=workflow_text(item))
-    if name == "run_input":
-        return pb.WorkflowValue(run_input=_workflow_path_source(item))
-    if name == "signal_payload":
-        return pb.WorkflowValue(signal_payload=_workflow_path_source(item))
+    if name == "input":
+        return pb.WorkflowValue(input=_workflow_path_source(item))
+    if name == "signal":
+        return pb.WorkflowValue(signal=_workflow_path_source(item))
     if name == "step_output":
         return pb.WorkflowValue(step_output=workflow_step_output_source(item))
+    if name == "step_input":
+        return pb.WorkflowValue(step_input=workflow_step_output_source(item))
     raise AssertionError(f"unknown workflow value kind {name}")
 
 
@@ -821,13 +865,17 @@ def workflow_value_input_from_value(value: Any | None) -> WorkflowValue | None:
         )
     if kind == "template":
         return WorkflowValue(template=workflow_text_input_from_text(value.template))
-    if kind == "run_input":
-        return WorkflowValue(run_input=value.run_input.path)
-    if kind == "signal_payload":
-        return WorkflowValue(signal_payload=value.signal_payload.path)
+    if kind == "input":
+        return WorkflowValue(input=value.input.path)
+    if kind == "signal":
+        return WorkflowValue(signal=value.signal.path)
     if kind == "step_output":
         return WorkflowValue(
             step_output=workflow_step_output_source_input_from_source(value.step_output)
+        )
+    if kind == "step_input":
+        return WorkflowValue(
+            step_input=workflow_step_output_source_input_from_source(value.step_input)
         )
     return WorkflowValue()
 
@@ -1156,7 +1204,7 @@ def workflow_signal(value: Any | None = None, **kwargs: Any) -> Any:
         name=data.get("name", ""),
         payload=_optional_struct(data.get("payload")),
         metadata=_optional_struct(data.get("metadata")),
-        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
+        created_by_subject_id=data.get("created_by_subject_id", ""),
         created_at=_optional_timestamp(data.get("created_at")),
         idempotency_key=data.get("idempotency_key", ""),
         sequence=data.get("sequence", 0),
@@ -1177,9 +1225,7 @@ def workflow_signal_input_from_signal(value: Any | None) -> WorkflowSignal | Non
         metadata=cast(WorkflowJsonObject, struct_to_dict(value.metadata))
         if has_field(value, "metadata")
         else None,
-        created_by_subject_id=value.created_by_subject_id.strip()
-        if has_field(value, "created_by_subject_id")
-        else "",
+        created_by_subject_id=value.created_by_subject_id,
         created_at=_timestamp_to_datetime(value, "created_at"),
         idempotency_key=value.idempotency_key,
         sequence=value.sequence,
@@ -1200,7 +1246,7 @@ def workflow_schedule_trigger(value: Any | None = None, **kwargs: Any) -> Any:
         return _copy(value)
     data = _data(value, kwargs)
     return pb.WorkflowScheduleTrigger(
-        schedule_id=data.get("schedule_id", ""),
+        activation_id=data.get("activation_id", ""),
         scheduled_for=_optional_timestamp(data.get("scheduled_for")),
     )
 
@@ -1213,7 +1259,7 @@ def workflow_event_trigger_invocation(value: Any | None = None, **kwargs: Any) -
     data = _data(value, kwargs)
     event = data.get("event")
     return pb.WorkflowEventTriggerInvocation(
-        trigger_id=data.get("trigger_id", ""),
+        activation_id=data.get("activation_id", ""),
         event=workflow_event(event) if event is not None else None,
     )
 
@@ -1258,14 +1304,14 @@ def workflow_run_trigger_input_from_trigger(
     if kind == "schedule":
         return WorkflowRunTrigger(
             schedule=WorkflowScheduleTrigger(
-                schedule_id=value.schedule.schedule_id,
+                activation_id=value.schedule.activation_id,
                 scheduled_for=_timestamp_to_datetime(value.schedule, "scheduled_for"),
             )
         )
     if kind == "event":
         return WorkflowRunTrigger(
             event=WorkflowEventTriggerInvocation(
-                trigger_id=value.event.trigger_id,
+                activation_id=value.event.activation_id,
                 event=workflow_event_input_from_event(value.event.event)
                 if has_field(value.event, "event")
                 else None,
@@ -1285,13 +1331,14 @@ def _workflow_start_run_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.StartWorkflowProviderRunRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    target = data.get("target")
     return pb.StartWorkflowProviderRunRequest(
         provider_name=data.get("provider_name", ""),
-        target=bound_workflow_target(target) if target is not None else None,
         idempotency_key=data.get("idempotency_key", ""),
         workflow_key=data.get("workflow_key", ""),
         definition_id=data.get("definition_id", ""),
+        run_as=subject_to_proto(data.get("run_as")),
+        input=_optional_struct(data.get("input")),
+        expected_definition_generation=data.get("expected_definition_generation", 0),
     )
 
 
@@ -1314,28 +1361,29 @@ def _workflow_signal_or_start_run_request(
     if isinstance(value, pb.SignalOrStartWorkflowProviderRunRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    target = data.get("target")
     signal = data.get("signal")
     return pb.SignalOrStartWorkflowProviderRunRequest(
         provider_name=data.get("provider_name", ""),
         workflow_key=data.get("workflow_key", ""),
-        target=bound_workflow_target(target) if target is not None else None,
         idempotency_key=data.get("idempotency_key", ""),
         signal=workflow_signal(signal) if signal is not None else None,
         definition_id=data.get("definition_id", ""),
+        run_as=subject_to_proto(data.get("run_as")),
+        input=_optional_struct(data.get("input")),
+        expected_definition_generation=data.get("expected_definition_generation", 0),
     )
 
 
-def _workflow_create_definition_request(
+def _workflow_apply_definition_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.CreateWorkflowProviderDefinitionRequest):
+    if isinstance(value, pb.ApplyWorkflowProviderDefinitionRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    target = data.get("target")
-    return pb.CreateWorkflowProviderDefinitionRequest(
+    spec = data.get("spec")
+    return pb.ApplyWorkflowProviderDefinitionRequest(
         provider_name=data.get("provider_name", ""),
-        target=bound_workflow_target(target) if target is not None else None,
+        spec=workflow_definition_spec(spec) if spec is not None else None,
         idempotency_key=data.get("idempotency_key", ""),
     )
 
@@ -1351,20 +1399,6 @@ def _workflow_get_definition_request(
     )
 
 
-def _workflow_update_definition_request(
-    value: Any | None = None, **kwargs: Any
-) -> Any:
-    if isinstance(value, pb.UpdateWorkflowProviderDefinitionRequest):
-        return _copy(value)
-    data = _data(value, kwargs)
-    target = data.get("target")
-    return pb.UpdateWorkflowProviderDefinitionRequest(
-        definition_id=data.get("definition_id", ""),
-        provider_name=data.get("provider_name", ""),
-        target=bound_workflow_target(target) if target is not None else None,
-    )
-
-
 def _workflow_delete_definition_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
@@ -1376,119 +1410,159 @@ def _workflow_delete_definition_request(
     )
 
 
-def _workflow_create_schedule_request(
+def _workflow_set_definition_paused_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.UpsertWorkflowProviderScheduleRequest):
+    if isinstance(value, pb.SetWorkflowProviderDefinitionPausedRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    target = data.get("target")
-    return pb.UpsertWorkflowProviderScheduleRequest(
-        provider_name=data.get("provider_name", ""),
-        cron=data.get("cron", ""),
-        timezone=data.get("timezone", ""),
-        target=bound_workflow_target(target) if target is not None else None,
-        paused=data.get("paused", False),
-        idempotency_key=data.get("idempotency_key", ""),
+    return pb.SetWorkflowProviderDefinitionPausedRequest(
         definition_id=data.get("definition_id", ""),
+        paused=data.get("paused", False),
     )
 
 
-def _workflow_get_schedule_request(
+def _workflow_set_activation_paused_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.GetWorkflowProviderScheduleRequest):
+    if isinstance(value, pb.SetWorkflowProviderActivationPausedRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.GetWorkflowProviderScheduleRequest(schedule_id=data.get("schedule_id", ""))
-
-
-def _workflow_update_schedule_request(
-    value: Any | None = None, **kwargs: Any
-) -> Any:
-    if isinstance(value, pb.UpsertWorkflowProviderScheduleRequest):
-        return _copy(value)
-    data = _data(value, kwargs)
-    target = data.get("target")
-    return pb.UpsertWorkflowProviderScheduleRequest(
-        schedule_id=data.get("schedule_id", ""),
-        provider_name=data.get("provider_name", ""),
-        cron=data.get("cron", ""),
-        timezone=data.get("timezone", ""),
-        target=bound_workflow_target(target) if target is not None else None,
-        paused=data.get("paused", False),
+    return pb.SetWorkflowProviderActivationPausedRequest(
         definition_id=data.get("definition_id", ""),
+        activation_id=data.get("activation_id", ""),
+        paused=data.get("paused", False),
     )
 
 
-def _workflow_id_request(
-    message_type: type[Any], id_field: str, value: Any | None = None, **kwargs: Any
-) -> Any:
-    if isinstance(value, message_type):
-        return _copy(value)
-    data = _data(value, kwargs)
-    return message_type(**{id_field: data.get(id_field, "")})
-
-
-def _workflow_create_event_trigger_request(
+def _workflow_get_run_events_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.UpsertWorkflowProviderEventTriggerRequest):
+    if isinstance(value, pb.GetWorkflowProviderRunEventsRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    target = data.get("target")
-    event_match = data.get("match")
-    return pb.UpsertWorkflowProviderEventTriggerRequest(
-        provider_name=data.get("provider_name", ""),
-        match=workflow_event_match(event_match) if event_match is not None else None,
-        target=bound_workflow_target(target) if target is not None else None,
-        paused=data.get("paused", False),
-        idempotency_key=data.get("idempotency_key", ""),
-        definition_id=data.get("definition_id", ""),
-    )
+    return pb.GetWorkflowProviderRunEventsRequest(run_id=data.get("run_id", ""))
 
 
-def _workflow_update_event_trigger_request(
+def _workflow_get_run_output_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.UpsertWorkflowProviderEventTriggerRequest):
+    if isinstance(value, pb.GetWorkflowProviderRunOutputRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    target = data.get("target")
-    event_match = data.get("match")
-    return pb.UpsertWorkflowProviderEventTriggerRequest(
-        trigger_id=data.get("trigger_id", ""),
-        provider_name=data.get("provider_name", ""),
-        match=workflow_event_match(event_match) if event_match is not None else None,
-        target=bound_workflow_target(target) if target is not None else None,
-        paused=data.get("paused", False),
-        definition_id=data.get("definition_id", ""),
-    )
+    return pb.GetWorkflowProviderRunOutputRequest(run_id=data.get("run_id", ""))
 
 
-def _workflow_publish_event_request(
+def _workflow_deliver_event_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.PublishWorkflowProviderEventRequest):
+    if isinstance(value, pb.DeliverWorkflowProviderEventRequest):
         return _copy(value)
     data = _data(value, kwargs)
     event = data.get("event")
-    return pb.PublishWorkflowProviderEventRequest(
+    return pb.DeliverWorkflowProviderEventRequest(
         app_name=data.get("app_name", ""),
         provider_name=data.get("provider_name", ""),
         event=workflow_event(event) if event is not None else None,
     )
 
 
-def bound_workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow-provider run ."""
+def workflow_step_attempt(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow step attempt."""
 
-    if isinstance(value, pb.BoundWorkflowRun):
+    if isinstance(value, pb.WorkflowStepAttempt):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.WorkflowStepAttempt(
+        id=data.get("id", ""),
+        status=data.get("status", WORKFLOW_STEP_STATUS_UNSPECIFIED),
+        idempotency_key=data.get("idempotency_key", ""),
+        input=_optional_value(data.get("input")),
+        output=_optional_value(data.get("output")),
+        status_message=data.get("status_message", ""),
+        started_at=_optional_timestamp(data.get("started_at")),
+        completed_at=_optional_timestamp(data.get("completed_at")),
+    )
+
+
+def workflow_step_attempt_input_from_attempt(
+    value: Any | None,
+) -> WorkflowStepAttempt | None:
+    """Return input copied from a workflow step attempt."""
+
+    if value is None:
+        return None
+    return WorkflowStepAttempt(
+        id=value.id,
+        status=value.status,
+        idempotency_key=value.idempotency_key,
+        input=cast(WorkflowJsonValue, value_to_json(value.input))
+        if has_field(value, "input")
+        else None,
+        output=cast(WorkflowJsonValue, value_to_json(value.output))
+        if has_field(value, "output")
+        else None,
+        status_message=value.status_message,
+        started_at=_timestamp_to_datetime(value, "started_at"),
+        completed_at=_timestamp_to_datetime(value, "completed_at"),
+    )
+
+
+def workflow_step_execution(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow step execution."""
+
+    if isinstance(value, pb.WorkflowStepExecution):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.WorkflowStepExecution(
+        step_id=data.get("step_id", ""),
+        status=data.get("status", WORKFLOW_STEP_STATUS_UNSPECIFIED),
+        attempts=[workflow_step_attempt(item) for item in data.get("attempts", [])],
+        input=_optional_value(data.get("input")),
+        output=_optional_value(data.get("output")),
+        status_message=data.get("status_message", ""),
+        skip_reason=data.get("skip_reason", ""),
+        started_at=_optional_timestamp(data.get("started_at")),
+        completed_at=_optional_timestamp(data.get("completed_at")),
+    )
+
+
+def workflow_step_execution_input_from_execution(
+    value: Any | None,
+) -> WorkflowStepExecution | None:
+    """Return input copied from a workflow step execution."""
+
+    if value is None:
+        return None
+    return WorkflowStepExecution(
+        step_id=value.step_id,
+        status=value.status,
+        attempts=[
+            cast(WorkflowStepAttempt, workflow_step_attempt_input_from_attempt(item))
+            for item in value.attempts
+        ],
+        input=cast(WorkflowJsonValue, value_to_json(value.input))
+        if has_field(value, "input")
+        else None,
+        output=cast(WorkflowJsonValue, value_to_json(value.output))
+        if has_field(value, "output")
+        else None,
+        status_message=value.status_message,
+        skip_reason=value.skip_reason,
+        started_at=_timestamp_to_datetime(value, "started_at"),
+        completed_at=_timestamp_to_datetime(value, "completed_at"),
+    )
+
+
+def workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow-provider run."""
+
+    if isinstance(value, pb.WorkflowRun):
         return _copy(value)
     data = _data(value, kwargs)
     target = data.get("target")
     trigger = data.get("trigger")
-    return pb.BoundWorkflowRun(
+    return pb.WorkflowRun(
         id=data.get("id", ""),
         status=data.get("status", WORKFLOW_RUN_STATUS_UNSPECIFIED),
         target=bound_workflow_target(target) if target is not None else None,
@@ -1497,22 +1571,27 @@ def bound_workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
         started_at=_optional_timestamp(data.get("started_at")),
         completed_at=_optional_timestamp(data.get("completed_at")),
         status_message=data.get("status_message", ""),
-        result_body=data.get("result_body", ""),
-        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
+        output=_optional_value(data.get("output")),
+        created_by_subject_id=data.get("created_by_subject_id", ""),
         workflow_key=data.get("workflow_key", ""),
         provider_name=data.get("provider_name", ""),
         definition_id=data.get("definition_id", ""),
+        run_as=subject_to_proto(data.get("run_as")),
+        input=_optional_struct(data.get("input")),
+        definition_generation=data.get("definition_generation", 0),
+        current_step_id=data.get("current_step_id", ""),
+        steps=[workflow_step_execution(item) for item in data.get("steps", [])],
     )
 
 
-def bound_workflow_run_input_from_run(
+def workflow_run_input_from_run(
     value: Any | None,
-) -> BoundWorkflowRun | None:
+) -> WorkflowRun | None:
     """Return input copied from a workflow-provider run."""
 
     if value is None:
         return None
-    return BoundWorkflowRun(
+    return WorkflowRun(
         id=value.id,
         status=value.status,
         target=bound_workflow_target_input_from_target(value.target)
@@ -1525,187 +1604,100 @@ def bound_workflow_run_input_from_run(
         started_at=_timestamp_to_datetime(value, "started_at"),
         completed_at=_timestamp_to_datetime(value, "completed_at"),
         status_message=value.status_message,
-        result_body=value.result_body,
-        created_by_subject_id=value.created_by_subject_id.strip()
-        if has_field(value, "created_by_subject_id")
-        else "",
+        output=cast(WorkflowJsonValue, value_to_json(value.output))
+        if has_field(value, "output")
+        else None,
+        created_by_subject_id=value.created_by_subject_id,
         workflow_key=value.workflow_key,
         provider_name=value.provider_name,
         definition_id=value.definition_id,
+        run_as=subject_from_proto(value.run_as)
+        if has_field(value, "run_as")
+        else None,
+        input=cast(WorkflowJsonObject, struct_to_dict(value.input))
+        if has_field(value, "input")
+        else None,
+        definition_generation=value.definition_generation,
+        current_step_id=value.current_step_id,
+        steps=[
+            cast(WorkflowStepExecution, workflow_step_execution_input_from_execution(item))
+            for item in value.steps
+        ],
     )
 
 
-def bound_workflow_run_from_run(value: Any | None) -> Any | None:
+def workflow_run_from_run(value: Any | None) -> Any | None:
     """Return a deep copy of a workflow-provider run."""
 
-    data = bound_workflow_run_input_from_run(value)
-    return bound_workflow_run(data) if data is not None else None
+    data = workflow_run_input_from_run(value)
+    return workflow_run(data) if data is not None else None
 
 
-def bound_workflow_definition(value: Any | None = None, **kwargs: Any) -> Any:
+def workflow_definition(value: Any | None = None, **kwargs: Any) -> Any:
     """Create a workflow-provider definition."""
 
-    if isinstance(value, pb.BoundWorkflowDefinition):
+    if isinstance(value, pb.WorkflowDefinition):
         return _copy(value)
     data = _data(value, kwargs)
     target = data.get("target")
-    return pb.BoundWorkflowDefinition(
+    return pb.WorkflowDefinition(
         id=data.get("id", ""),
+        generation=data.get("generation", 0),
         target=bound_workflow_target(target) if target is not None else None,
-        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
+        activations=[workflow_activation(item) for item in data.get("activations", [])],
+        paused=data.get("paused", False),
+        created_by_subject_id=data.get("created_by_subject_id", ""),
         created_at=_optional_timestamp(data.get("created_at")),
+        updated_at=_optional_timestamp(data.get("updated_at")),
         provider_name=data.get("provider_name", ""),
+        run_as=subject_to_proto(data.get("run_as")),
     )
 
 
-def bound_workflow_definition_input_from_definition(
+def workflow_definition_input_from_definition(
     value: Any | None,
-) -> BoundWorkflowDefinition | None:
+) -> WorkflowDefinition | None:
     """Return input copied from a workflow-provider definition."""
 
     if value is None:
         return None
-    return BoundWorkflowDefinition(
+    return WorkflowDefinition(
         id=value.id,
+        generation=value.generation,
         target=bound_workflow_target_input_from_target(value.target)
         if has_field(value, "target")
         else None,
-        created_by_subject_id=value.created_by_subject_id.strip()
-        if has_field(value, "created_by_subject_id")
-        else "",
+        activations=[
+            cast(WorkflowActivation, workflow_activation_input_from_activation(item))
+            for item in value.activations
+        ],
+        paused=value.paused,
+        created_by_subject_id=value.created_by_subject_id,
         created_at=_timestamp_to_datetime(value, "created_at"),
+        updated_at=_timestamp_to_datetime(value, "updated_at"),
         provider_name=value.provider_name,
+        run_as=subject_from_proto(value.run_as)
+        if has_field(value, "run_as")
+        else None,
     )
 
 
-def bound_workflow_definition_from_definition(value: Any | None) -> Any | None:
+def workflow_definition_from_definition(value: Any | None) -> Any | None:
     """Return a deep copy of a workflow-provider definition."""
 
-    data = bound_workflow_definition_input_from_definition(value)
-    return bound_workflow_definition(data) if data is not None else None
-
-
-def bound_workflow_schedule(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow-provider schedule ."""
-
-    if isinstance(value, pb.BoundWorkflowSchedule):
-        return _copy(value)
-    data = _data(value, kwargs)
-    target = data.get("target")
-    return pb.BoundWorkflowSchedule(
-        id=data.get("id", ""),
-        cron=data.get("cron", ""),
-        timezone=data.get("timezone", ""),
-        target=bound_workflow_target(target) if target is not None else None,
-        paused=data.get("paused", False),
-        created_at=_optional_timestamp(data.get("created_at")),
-        updated_at=_optional_timestamp(data.get("updated_at")),
-        next_run_at=_optional_timestamp(data.get("next_run_at")),
-        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
-        provider_name=data.get("provider_name", ""),
-        definition_id=data.get("definition_id", ""),
-    )
-
-
-def bound_workflow_schedule_input_from_schedule(
-    value: Any | None,
-) -> BoundWorkflowSchedule | None:
-    """Return input copied from a workflow-provider schedule."""
-
-    if value is None:
-        return None
-    return BoundWorkflowSchedule(
-        id=value.id,
-        cron=value.cron,
-        timezone=value.timezone,
-        target=bound_workflow_target_input_from_target(value.target)
-        if has_field(value, "target")
-        else None,
-        paused=value.paused,
-        created_at=_timestamp_to_datetime(value, "created_at"),
-        updated_at=_timestamp_to_datetime(value, "updated_at"),
-        next_run_at=_timestamp_to_datetime(value, "next_run_at"),
-        created_by_subject_id=value.created_by_subject_id.strip()
-        if has_field(value, "created_by_subject_id")
-        else "",
-        provider_name=value.provider_name,
-        definition_id=value.definition_id,
-    )
-
-
-def bound_workflow_schedule_from_schedule(value: Any | None) -> Any | None:
-    """Return a deep copy of a workflow-provider schedule."""
-
-    data = bound_workflow_schedule_input_from_schedule(value)
-    return bound_workflow_schedule(data) if data is not None else None
-
-
-def bound_workflow_event_trigger(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow-provider event trigger ."""
-
-    if isinstance(value, pb.BoundWorkflowEventTrigger):
-        return _copy(value)
-    data = _data(value, kwargs)
-    match = data.get("match")
-    target = data.get("target")
-    return pb.BoundWorkflowEventTrigger(
-        id=data.get("id", ""),
-        match=workflow_event_match(match) if match is not None else None,
-        target=bound_workflow_target(target) if target is not None else None,
-        paused=data.get("paused", False),
-        created_at=_optional_timestamp(data.get("created_at")),
-        updated_at=_optional_timestamp(data.get("updated_at")),
-        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
-        provider_name=data.get("provider_name", ""),
-        definition_id=data.get("definition_id", ""),
-    )
-
-
-def bound_workflow_event_trigger_input_from_trigger(
-    value: Any | None,
-) -> BoundWorkflowEventTrigger | None:
-    """Return input copied from a workflow-provider event trigger."""
-
-    if value is None:
-        return None
-    return BoundWorkflowEventTrigger(
-        id=value.id,
-        match=workflow_event_match_input_from_match(value.match)
-        if has_field(value, "match")
-        else None,
-        target=bound_workflow_target_input_from_target(value.target)
-        if has_field(value, "target")
-        else None,
-        paused=value.paused,
-        created_at=_timestamp_to_datetime(value, "created_at"),
-        updated_at=_timestamp_to_datetime(value, "updated_at"),
-        created_by_subject_id=value.created_by_subject_id.strip()
-        if has_field(value, "created_by_subject_id")
-        else "",
-        provider_name=value.provider_name,
-        definition_id=value.definition_id,
-    )
-
-
-def bound_workflow_event_trigger_from_trigger(value: Any | None) -> Any | None:
-    """Return a deep copy of a workflow-provider event trigger."""
-
-    data = bound_workflow_event_trigger_input_from_trigger(value)
-    return bound_workflow_event_trigger(data) if data is not None else None
+    data = workflow_definition_input_from_definition(value)
+    return workflow_definition(data) if data is not None else None
 
 
 def workflow_run_from_proto(value: Any) -> WorkflowRun:
-    return WorkflowRun(
-        provider_name=value.provider_name,
-        run=bound_workflow_run_input_from_run(value),
-    )
+    return workflow_run_input_from_run(value) or WorkflowRun()
 
 
 def workflow_run_signal_from_proto(value: Any) -> WorkflowRunSignal:
     run = value.run if has_field(value, "run") else None
     return WorkflowRunSignal(
         provider_name=run.provider_name if run is not None else "",
-        run=bound_workflow_run_input_from_run(run),
+        run=workflow_run_input_from_run(run),
         signal=workflow_signal_input_from_signal(value.signal)
         if has_field(value, "signal")
         else None,
@@ -1715,26 +1707,7 @@ def workflow_run_signal_from_proto(value: Any) -> WorkflowRunSignal:
 
 
 def workflow_definition_from_proto(value: Any) -> WorkflowDefinition:
-    return WorkflowDefinition(
-        provider_name=value.provider_name,
-        definition=bound_workflow_definition_input_from_definition(value),
-    )
-
-
-def workflow_schedule_from_proto(value: Any) -> WorkflowSchedule:
-    return WorkflowSchedule(
-        provider_name=value.provider_name,
-        schedule=bound_workflow_schedule_input_from_schedule(value),
-    )
-
-
-def workflow_event_trigger_from_proto(
-    value: Any,
-) -> WorkflowEventTrigger:
-    return WorkflowEventTrigger(
-        provider_name=value.provider_name,
-        trigger=bound_workflow_event_trigger_input_from_trigger(value),
-    )
+    return workflow_definition_input_from_definition(value) or WorkflowDefinition()
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
@@ -1742,11 +1715,13 @@ class StartWorkflowProviderRunRequest:
     """Start-run request passed to workflow providers."""
     __hash__ = None
 
-    target: BoundWorkflowTarget | None = None
     idempotency_key: str = ""
     created_by_subject_id: str = ""
     workflow_key: str = ""
     definition_id: str = ""
+    input: WorkflowJsonObject | None = None
+    run_as: Subject | Mapping[str, Any] | None = None
+    expected_definition_generation: int = 0
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
@@ -1773,8 +1748,53 @@ class ListWorkflowProviderRunsResponse:
     """Runs returned by workflow providers."""
     __hash__ = None
 
-    runs: Sequence[BoundWorkflowRun] = _dataclasses.field(default_factory=list)
+    runs: Sequence[WorkflowRun] = _dataclasses.field(default_factory=list)
     next_page_token: str = ""
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class WorkflowRunEvent:
+    """Run event returned by workflow providers."""
+    __hash__ = None
+
+    id: str = ""
+    run_id: str = ""
+    step_id: str = ""
+    type: str = ""
+    data: WorkflowJsonObject | None = None
+    created_at: _dt.datetime | Any | None = None
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class GetWorkflowProviderRunEventsRequest:
+    """Get-run-events request passed to workflow providers."""
+    __hash__ = None
+
+    run_id: str = ""
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class GetWorkflowProviderRunEventsResponse:
+    """Run events returned by workflow providers."""
+    __hash__ = None
+
+    events: Sequence[WorkflowRunEvent] = _dataclasses.field(default_factory=list)
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class GetWorkflowProviderRunOutputRequest:
+    """Get-run-output request passed to workflow providers."""
+    __hash__ = None
+
+    run_id: str = ""
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class GetWorkflowProviderRunOutputResponse:
+    """Run output returned by workflow providers."""
+    __hash__ = None
+
+    output: WorkflowJsonValue | None = None
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
@@ -1801,11 +1821,13 @@ class SignalOrStartWorkflowProviderRunRequest:
     __hash__ = None
 
     workflow_key: str = ""
-    target: BoundWorkflowTarget | None = None
     idempotency_key: str = ""
     created_by_subject_id: str = ""
     signal: WorkflowSignal | None = None
     definition_id: str = ""
+    input: WorkflowJsonObject | None = None
+    run_as: Subject | Mapping[str, Any] | None = None
+    expected_definition_generation: int = 0
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
@@ -1813,20 +1835,20 @@ class SignalWorkflowRunResponse:
     """Signal-run response returned by workflow providers."""
     __hash__ = None
 
-    run: BoundWorkflowRun | None = None
+    run: WorkflowRun | None = None
     signal: WorkflowSignal | None = None
     started_run: bool = False
     workflow_key: str = ""
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
-class CreateWorkflowProviderDefinitionRequest:
-    """Create-definition request passed to workflow providers."""
+class ApplyWorkflowProviderDefinitionRequest:
+    """Apply-definition request passed to workflow providers."""
     __hash__ = None
 
-    target: BoundWorkflowTarget | None = None
+    spec: WorkflowDefinitionSpec | None = None
     idempotency_key: str = ""
-    created_by_subject_id: str = ""
+    requested_by_subject_id: str = ""
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
@@ -1838,12 +1860,37 @@ class GetWorkflowProviderDefinitionRequest:
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
-class UpdateWorkflowProviderDefinitionRequest:
-    """Update-definition request passed to workflow providers."""
+class ListWorkflowProviderDefinitionsRequest:
+    """List-definitions request passed to workflow providers."""
+    __hash__ = None
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class ListWorkflowProviderDefinitionsResponse:
+    """Definitions returned by workflow providers."""
+    __hash__ = None
+
+    definitions: Sequence[WorkflowDefinition] = _dataclasses.field(default_factory=list)
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class SetWorkflowProviderDefinitionPausedRequest:
+    """Set-definition-paused request passed to workflow providers."""
     __hash__ = None
 
     definition_id: str = ""
-    target: BoundWorkflowTarget | None = None
+    paused: bool = False
+    requested_by_subject_id: str = ""
+
+
+@_dataclasses.dataclass(frozen=True, slots=True)
+class SetWorkflowProviderActivationPausedRequest:
+    """Set-activation-paused request passed to workflow providers."""
+    __hash__ = None
+
+    definition_id: str = ""
+    activation_id: str = ""
+    paused: bool = False
     requested_by_subject_id: str = ""
 
 
@@ -1856,153 +1903,30 @@ class DeleteWorkflowProviderDefinitionRequest:
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
-class UpsertWorkflowProviderScheduleRequest:
-    """Upsert-schedule request passed to workflow providers."""
-    __hash__ = None
-
-    schedule_id: str = ""
-    cron: str = ""
-    timezone: str = ""
-    target: BoundWorkflowTarget | None = None
-    paused: bool = False
-    requested_by_subject_id: str = ""
-    idempotency_key: str = ""
-    definition_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class GetWorkflowProviderScheduleRequest:
-    """Get-schedule request passed to workflow providers."""
-    __hash__ = None
-
-    schedule_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class ListWorkflowProviderSchedulesRequest:
-    """List-schedules request passed to workflow providers."""
-    __hash__ = None
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class ListWorkflowProviderSchedulesResponse:
-    """Schedules returned by workflow providers."""
-    __hash__ = None
-
-    schedules: Sequence[BoundWorkflowSchedule] = _dataclasses.field(
-        default_factory=list
-    )
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class DeleteWorkflowProviderScheduleRequest:
-    """Delete-schedule request passed to workflow providers."""
-    __hash__ = None
-
-    schedule_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class PauseWorkflowProviderScheduleRequest:
-    """Pause-schedule request passed to workflow providers."""
-    __hash__ = None
-
-    schedule_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class ResumeWorkflowProviderScheduleRequest:
-    """Resume-schedule request passed to workflow providers."""
-    __hash__ = None
-
-    schedule_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class UpsertWorkflowProviderEventTriggerRequest:
-    """Upsert-event-trigger request passed to workflow providers."""
-    __hash__ = None
-
-    trigger_id: str = ""
-    match: WorkflowEventMatch | None = None
-    target: BoundWorkflowTarget | None = None
-    paused: bool = False
-    requested_by_subject_id: str = ""
-    idempotency_key: str = ""
-    definition_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class GetWorkflowProviderEventTriggerRequest:
-    """Get-event-trigger request passed to workflow providers."""
-    __hash__ = None
-
-    trigger_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class ListWorkflowProviderEventTriggersRequest:
-    """List-event-triggers request passed to workflow providers."""
-    __hash__ = None
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class ListWorkflowProviderEventTriggersResponse:
-    """Event triggers returned by workflow providers."""
-    __hash__ = None
-
-    triggers: Sequence[BoundWorkflowEventTrigger] = _dataclasses.field(
-        default_factory=list
-    )
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class DeleteWorkflowProviderEventTriggerRequest:
-    """Delete-event-trigger request passed to workflow providers."""
-    __hash__ = None
-
-    trigger_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class PauseWorkflowProviderEventTriggerRequest:
-    """Pause-event-trigger request passed to workflow providers."""
-    __hash__ = None
-
-    trigger_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class ResumeWorkflowProviderEventTriggerRequest:
-    """Resume-event-trigger request passed to workflow providers."""
-    __hash__ = None
-
-    trigger_id: str = ""
-
-
-@_dataclasses.dataclass(frozen=True, slots=True)
-class PublishWorkflowProviderEventRequest:
-    """Publish-event request passed to workflow providers."""
+class DeliverWorkflowProviderEventRequest:
+    """Deliver-event request passed to workflow providers."""
     __hash__ = None
 
     app_name: str = ""
     event: WorkflowEvent | None = None
-    published_by_subject_id: str = ""
+    delivered_by_subject_id: str = ""
 
 
 def start_workflow_provider_run_request_from_proto(
     value: Any,
 ) -> StartWorkflowProviderRunRequest:
     return StartWorkflowProviderRunRequest(
-        target=bound_workflow_target_input_from_target(value.target)
-        if has_field(value, "target")
-        else None,
         idempotency_key=value.idempotency_key,
-        created_by_subject_id=value.created_by_subject_id.strip()
-        if has_field(value, "created_by_subject_id")
-        else "",
+        created_by_subject_id=value.created_by_subject_id,
         workflow_key=value.workflow_key,
         definition_id=value.definition_id,
+        input=cast(WorkflowJsonObject, struct_to_dict(value.input))
+        if has_field(value, "input")
+        else None,
+        run_as=subject_from_proto(value.run_as)
+        if has_field(value, "run_as")
+        else None,
+        expected_definition_generation=value.expected_definition_generation,
     )
 
 
@@ -2032,7 +1956,7 @@ def list_workflow_provider_runs_response_to_proto(value: Any) -> Any:
         "ListWorkflowProviderRunsResponse",
     )
     return pb.ListWorkflowProviderRunsResponse(
-        runs=[bound_workflow_run(item) for item in response.runs],
+        runs=[workflow_run(item) for item in response.runs],
         next_page_token=response.next_page_token,
     )
 
@@ -2059,17 +1983,19 @@ def signal_or_start_workflow_provider_run_request_from_proto(
 ) -> SignalOrStartWorkflowProviderRunRequest:
     return SignalOrStartWorkflowProviderRunRequest(
         workflow_key=value.workflow_key,
-        target=bound_workflow_target_input_from_target(value.target)
-        if has_field(value, "target")
-        else None,
         idempotency_key=value.idempotency_key,
-        created_by_subject_id=value.created_by_subject_id.strip()
-        if has_field(value, "created_by_subject_id")
-        else "",
+        created_by_subject_id=value.created_by_subject_id,
         signal=workflow_signal_input_from_signal(value.signal)
         if has_field(value, "signal")
         else None,
         definition_id=value.definition_id,
+        input=cast(WorkflowJsonObject, struct_to_dict(value.input))
+        if has_field(value, "input")
+        else None,
+        run_as=subject_from_proto(value.run_as)
+        if has_field(value, "run_as")
+        else None,
+        expected_definition_generation=value.expected_definition_generation,
     )
 
 
@@ -2082,23 +2008,21 @@ def signal_workflow_run_response_to_proto(value: Any) -> Any:
         workflow_key=response.workflow_key,
     )
     if response.run is not None:
-        out.run.CopyFrom(bound_workflow_run(response.run))
+        out.run.CopyFrom(workflow_run(response.run))
     if response.signal is not None:
         out.signal.CopyFrom(workflow_signal(response.signal))
     return out
 
 
-def create_workflow_provider_definition_request_from_proto(
+def apply_workflow_provider_definition_request_from_proto(
     value: Any,
-) -> CreateWorkflowProviderDefinitionRequest:
-    return CreateWorkflowProviderDefinitionRequest(
-        target=bound_workflow_target_input_from_target(value.target)
-        if has_field(value, "target")
+) -> ApplyWorkflowProviderDefinitionRequest:
+    return ApplyWorkflowProviderDefinitionRequest(
+        spec=workflow_definition_spec_input_from_spec(value.spec)
+        if has_field(value, "spec")
         else None,
         idempotency_key=value.idempotency_key,
-        created_by_subject_id=value.created_by_subject_id.strip()
-        if has_field(value, "created_by_subject_id")
-        else "",
+        requested_by_subject_id=value.requested_by_subject_id,
     )
 
 
@@ -2108,17 +2032,43 @@ def get_workflow_provider_definition_request_from_proto(
     return GetWorkflowProviderDefinitionRequest(definition_id=value.definition_id)
 
 
-def update_workflow_provider_definition_request_from_proto(
+def list_workflow_provider_definitions_request_from_proto(
+    _value: Any,
+) -> ListWorkflowProviderDefinitionsRequest:
+    return ListWorkflowProviderDefinitionsRequest()
+
+
+def list_workflow_provider_definitions_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.ListWorkflowProviderDefinitionsResponse):
+        return _copy(value)
+    response = _coerce(
+        value,
+        ListWorkflowProviderDefinitionsResponse,
+        "ListWorkflowProviderDefinitionsResponse",
+    )
+    return pb.ListWorkflowProviderDefinitionsResponse(
+        definitions=[workflow_definition(item) for item in response.definitions]
+    )
+
+
+def set_workflow_provider_definition_paused_request_from_proto(
     value: Any,
-) -> UpdateWorkflowProviderDefinitionRequest:
-    return UpdateWorkflowProviderDefinitionRequest(
+) -> SetWorkflowProviderDefinitionPausedRequest:
+    return SetWorkflowProviderDefinitionPausedRequest(
         definition_id=value.definition_id,
-        target=bound_workflow_target_input_from_target(value.target)
-        if has_field(value, "target")
-        else None,
-        requested_by_subject_id=value.requested_by_subject_id.strip()
-        if has_field(value, "requested_by_subject_id")
-        else "",
+        paused=value.paused,
+        requested_by_subject_id=value.requested_by_subject_id,
+    )
+
+
+def set_workflow_provider_activation_paused_request_from_proto(
+    value: Any,
+) -> SetWorkflowProviderActivationPausedRequest:
+    return SetWorkflowProviderActivationPausedRequest(
+        definition_id=value.definition_id,
+        activation_id=value.activation_id,
+        paused=value.paused,
+        requested_by_subject_id=value.requested_by_subject_id,
     )
 
 
@@ -2128,144 +2078,82 @@ def delete_workflow_provider_definition_request_from_proto(
     return DeleteWorkflowProviderDefinitionRequest(definition_id=value.definition_id)
 
 
-def upsert_workflow_provider_schedule_request_from_proto(
-    value: Any,
-) -> UpsertWorkflowProviderScheduleRequest:
-    return UpsertWorkflowProviderScheduleRequest(
-        schedule_id=value.schedule_id,
-        cron=value.cron,
-        timezone=value.timezone,
-        target=bound_workflow_target_input_from_target(value.target)
-        if has_field(value, "target")
-        else None,
-        paused=value.paused,
-        requested_by_subject_id=value.requested_by_subject_id.strip()
-        if has_field(value, "requested_by_subject_id")
-        else "",
-        idempotency_key=value.idempotency_key,
-        definition_id=value.definition_id,
+def workflow_run_event(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.WorkflowRunEvent):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.WorkflowRunEvent(
+        id=data.get("id", ""),
+        run_id=data.get("run_id", ""),
+        step_id=data.get("step_id", ""),
+        type=data.get("type", ""),
+        data=_optional_struct(data.get("data")),
+        created_at=_optional_timestamp(data.get("created_at")),
     )
 
 
-def get_workflow_provider_schedule_request_from_proto(
+def workflow_run_event_input_from_event(value: Any | None) -> WorkflowRunEvent | None:
+    if value is None:
+        return None
+    return WorkflowRunEvent(
+        id=value.id,
+        run_id=value.run_id,
+        step_id=value.step_id,
+        type=value.type,
+        data=cast(WorkflowJsonObject, struct_to_dict(value.data))
+        if has_field(value, "data")
+        else None,
+        created_at=_timestamp_to_datetime(value, "created_at"),
+    )
+
+
+def get_workflow_provider_run_events_request_from_proto(
     value: Any,
-) -> GetWorkflowProviderScheduleRequest:
-    return GetWorkflowProviderScheduleRequest(schedule_id=value.schedule_id)
+) -> GetWorkflowProviderRunEventsRequest:
+    return GetWorkflowProviderRunEventsRequest(run_id=value.run_id)
 
 
-def list_workflow_provider_schedules_request_from_proto(
-    _value: Any,
-) -> ListWorkflowProviderSchedulesRequest:
-    return ListWorkflowProviderSchedulesRequest()
-
-
-def list_workflow_provider_schedules_response_to_proto(value: Any) -> Any:
-    if isinstance(value, pb.ListWorkflowProviderSchedulesResponse):
+def get_workflow_provider_run_events_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.GetWorkflowProviderRunEventsResponse):
         return _copy(value)
     response = _coerce(
         value,
-        ListWorkflowProviderSchedulesResponse,
-        "ListWorkflowProviderSchedulesResponse",
+        GetWorkflowProviderRunEventsResponse,
+        "GetWorkflowProviderRunEventsResponse",
     )
-    return pb.ListWorkflowProviderSchedulesResponse(
-        schedules=[bound_workflow_schedule(item) for item in response.schedules]
-    )
-
-
-def delete_workflow_provider_schedule_request_from_proto(
-    value: Any,
-) -> DeleteWorkflowProviderScheduleRequest:
-    return DeleteWorkflowProviderScheduleRequest(schedule_id=value.schedule_id)
-
-
-def pause_workflow_provider_schedule_request_from_proto(
-    value: Any,
-) -> PauseWorkflowProviderScheduleRequest:
-    return PauseWorkflowProviderScheduleRequest(schedule_id=value.schedule_id)
-
-
-def resume_workflow_provider_schedule_request_from_proto(
-    value: Any,
-) -> ResumeWorkflowProviderScheduleRequest:
-    return ResumeWorkflowProviderScheduleRequest(schedule_id=value.schedule_id)
-
-
-def upsert_workflow_provider_event_trigger_request_from_proto(
-    value: Any,
-) -> UpsertWorkflowProviderEventTriggerRequest:
-    return UpsertWorkflowProviderEventTriggerRequest(
-        trigger_id=value.trigger_id,
-        match=workflow_event_match_input_from_match(value.match)
-        if has_field(value, "match")
-        else None,
-        target=bound_workflow_target_input_from_target(value.target)
-        if has_field(value, "target")
-        else None,
-        paused=value.paused,
-        requested_by_subject_id=value.requested_by_subject_id.strip()
-        if has_field(value, "requested_by_subject_id")
-        else "",
-        idempotency_key=value.idempotency_key,
-        definition_id=value.definition_id,
+    return pb.GetWorkflowProviderRunEventsResponse(
+        events=[workflow_run_event(item) for item in response.events]
     )
 
 
-def get_workflow_provider_event_trigger_request_from_proto(
+def get_workflow_provider_run_output_request_from_proto(
     value: Any,
-) -> GetWorkflowProviderEventTriggerRequest:
-    return GetWorkflowProviderEventTriggerRequest(trigger_id=value.trigger_id)
+) -> GetWorkflowProviderRunOutputRequest:
+    return GetWorkflowProviderRunOutputRequest(run_id=value.run_id)
 
 
-def list_workflow_provider_event_triggers_request_from_proto(
-    _value: Any,
-) -> ListWorkflowProviderEventTriggersRequest:
-    return ListWorkflowProviderEventTriggersRequest()
-
-
-def list_workflow_provider_event_triggers_response_to_proto(value: Any) -> Any:
-    if isinstance(value, pb.ListWorkflowProviderEventTriggersResponse):
+def get_workflow_provider_run_output_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.GetWorkflowProviderRunOutputResponse):
         return _copy(value)
-    response = _coerce(
-        value,
-        ListWorkflowProviderEventTriggersResponse,
-        "ListWorkflowProviderEventTriggersResponse",
-    )
-    return pb.ListWorkflowProviderEventTriggersResponse(
-        triggers=[
-            bound_workflow_event_trigger(item) for item in response.triggers
-        ]
-    )
+    if isinstance(value, GetWorkflowProviderRunOutputResponse):
+        output = value.output
+    else:
+        output = value
+    response = pb.GetWorkflowProviderRunOutputResponse()
+    if output is not None:
+        response.output.CopyFrom(_value(output))
+    return response
 
 
-def delete_workflow_provider_event_trigger_request_from_proto(
+def deliver_workflow_provider_event_request_from_proto(
     value: Any,
-) -> DeleteWorkflowProviderEventTriggerRequest:
-    return DeleteWorkflowProviderEventTriggerRequest(trigger_id=value.trigger_id)
-
-
-def pause_workflow_provider_event_trigger_request_from_proto(
-    value: Any,
-) -> PauseWorkflowProviderEventTriggerRequest:
-    return PauseWorkflowProviderEventTriggerRequest(trigger_id=value.trigger_id)
-
-
-def resume_workflow_provider_event_trigger_request_from_proto(
-    value: Any,
-) -> ResumeWorkflowProviderEventTriggerRequest:
-    return ResumeWorkflowProviderEventTriggerRequest(trigger_id=value.trigger_id)
-
-
-def publish_workflow_provider_event_request_from_proto(
-    value: Any,
-) -> PublishWorkflowProviderEventRequest:
-    return PublishWorkflowProviderEventRequest(
+) -> DeliverWorkflowProviderEventRequest:
+    return DeliverWorkflowProviderEventRequest(
         app_name=value.app_name,
         event=workflow_event_input_from_event(value.event)
         if has_field(value, "event")
         else None,
-        published_by_subject_id=value.published_by_subject_id.strip()
-        if has_field(value, "published_by_subject_id")
-        else "",
+        delivered_by_subject_id=value.delivered_by_subject_id,
     )
 
 
@@ -2285,49 +2173,19 @@ WorkflowSignalRunInput: TypeAlias = WorkflowSignalRun | WorkflowRequestMapping |
 WorkflowSignalOrStartRunInput: TypeAlias = (
     WorkflowSignalOrStartRun | WorkflowRequestMapping | None
 )
-WorkflowCreateDefinitionInput: TypeAlias = (
-    WorkflowCreateDefinition | WorkflowRequestMapping | None
+WorkflowApplyDefinitionInput: TypeAlias = (
+    WorkflowApplyDefinition | WorkflowRequestMapping | None
 )
 WorkflowGetDefinitionInput: TypeAlias = WorkflowGetDefinition | WorkflowRequestMapping | None
-WorkflowUpdateDefinitionInput: TypeAlias = (
-    WorkflowUpdateDefinition | WorkflowRequestMapping | None
-)
 WorkflowDeleteDefinitionInput: TypeAlias = (
     WorkflowDeleteDefinition | WorkflowRequestMapping | None
 )
-WorkflowCreateScheduleInput: TypeAlias = (
-    WorkflowCreateSchedule | WorkflowRequestMapping | None
-)
-WorkflowGetScheduleInput: TypeAlias = WorkflowGetSchedule | WorkflowRequestMapping | None
-WorkflowUpdateScheduleInput: TypeAlias = (
-    WorkflowUpdateSchedule | WorkflowRequestMapping | None
-)
-WorkflowDeleteScheduleInput: TypeAlias = (
-    WorkflowDeleteSchedule | WorkflowRequestMapping | None
-)
-WorkflowPauseScheduleInput: TypeAlias = WorkflowPauseSchedule | WorkflowRequestMapping | None
-WorkflowResumeScheduleInput: TypeAlias = (
-    WorkflowResumeSchedule | WorkflowRequestMapping | None
-)
-WorkflowCreateEventTriggerInput: TypeAlias = (
-    WorkflowCreateEventTrigger | WorkflowRequestMapping | None
-)
-WorkflowGetEventTriggerInput: TypeAlias = (
-    WorkflowGetEventTrigger | WorkflowRequestMapping | None
-)
-WorkflowUpdateEventTriggerInput: TypeAlias = (
-    WorkflowUpdateEventTrigger | WorkflowRequestMapping | None
-)
-WorkflowDeleteEventTriggerInput: TypeAlias = (
-    WorkflowDeleteEventTrigger | WorkflowRequestMapping | None
-)
-WorkflowPauseEventTriggerInput: TypeAlias = (
-    WorkflowPauseEventTrigger | WorkflowRequestMapping | None
-)
-WorkflowResumeEventTriggerInput: TypeAlias = (
-    WorkflowResumeEventTrigger | WorkflowRequestMapping | None
-)
-WorkflowPublishEventInput: TypeAlias = WorkflowPublishEvent | WorkflowRequestMapping | None
+WorkflowSetDefinitionPausedInput: TypeAlias = WorkflowSetDefinitionPaused | WorkflowRequestMapping | None
+WorkflowSetActivationPausedInput: TypeAlias = WorkflowSetActivationPaused | WorkflowRequestMapping | None
+WorkflowGetRunInput: TypeAlias = WorkflowGetRun | WorkflowRequestMapping | None
+WorkflowGetRunEventsInput: TypeAlias = WorkflowGetRunEvents | WorkflowRequestMapping | None
+WorkflowGetRunOutputInput: TypeAlias = WorkflowGetRunOutput | WorkflowRequestMapping | None
+WorkflowDeliverEventInput: TypeAlias = WorkflowDeliverEvent | WorkflowRequestMapping | None
 
 
 class WorkflowProtocol(Protocol):
@@ -2351,94 +2209,54 @@ class WorkflowProtocol(Protocol):
     ) -> WorkflowRunSignal:
         """Signal a run, or start it when no matching run exists."""
 
-    def create_definition(
-        self, request: WorkflowCreateDefinitionInput = None, **kwargs: object
+    def apply_definition(
+        self, request: WorkflowApplyDefinitionInput = None, **kwargs: object
     ) -> WorkflowDefinition:
-        """Create a reusable workflow definition."""
+        """Apply a reusable workflow definition."""
 
     def get_definition(
         self, request: WorkflowGetDefinitionInput = None, **kwargs: object
     ) -> WorkflowDefinition:
         """Fetch one workflow definition."""
 
-    def update_definition(
-        self, request: WorkflowUpdateDefinitionInput = None, **kwargs: object
+    def list_definitions(
+        self,
     ) -> WorkflowDefinition:
-        """Update a workflow definition."""
+        """List workflow definitions."""
 
     def delete_definition(
         self, request: WorkflowDeleteDefinitionInput = None, **kwargs: object
     ) -> None:
         """Delete a workflow definition."""
 
-    def create_schedule(
-        self, request: WorkflowCreateScheduleInput = None, **kwargs: object
-    ) -> WorkflowSchedule:
-        """Create a workflow schedule."""
+    def set_definition_paused(
+        self, request: WorkflowSetDefinitionPausedInput = None, **kwargs: object
+    ) -> WorkflowDefinition:
+        """Pause or resume a workflow definition."""
 
-    def get_schedule(
-        self, request: WorkflowGetScheduleInput = None, **kwargs: object
-    ) -> WorkflowSchedule:
-        """Fetch one workflow schedule."""
+    def set_activation_paused(
+        self, request: WorkflowSetActivationPausedInput = None, **kwargs: object
+    ) -> WorkflowDefinition:
+        """Pause or resume a workflow activation."""
 
-    def update_schedule(
-        self, request: WorkflowUpdateScheduleInput = None, **kwargs: object
-    ) -> WorkflowSchedule:
-        """Update a workflow schedule."""
+    def get_run_events(
+        self, request: WorkflowGetRunEventsInput = None, **kwargs: object
+    ) -> GetWorkflowProviderRunEventsResponse:
+        """Fetch run events."""
 
-    def delete_schedule(
-        self, request: WorkflowDeleteScheduleInput = None, **kwargs: object
-    ) -> None:
-        """Delete a workflow schedule."""
+    def get_run_output(
+        self, request: WorkflowGetRunOutputInput = None, **kwargs: object
+    ) -> GetWorkflowProviderRunOutputResponse:
+        """Fetch run output."""
 
-    def pause_schedule(
-        self, request: WorkflowPauseScheduleInput = None, **kwargs: object
-    ) -> WorkflowSchedule:
-        """Pause a workflow schedule."""
-
-    def resume_schedule(
-        self, request: WorkflowResumeScheduleInput = None, **kwargs: object
-    ) -> WorkflowSchedule:
-        """Resume a workflow schedule."""
-
-    def create_trigger(
-        self, request: WorkflowCreateEventTriggerInput = None, **kwargs: object
-    ) -> WorkflowEventTrigger:
-        """Create an event trigger."""
-
-    def get_trigger(
-        self, request: WorkflowGetEventTriggerInput = None, **kwargs: object
-    ) -> WorkflowEventTrigger:
-        """Fetch one event trigger."""
-
-    def update_trigger(
-        self, request: WorkflowUpdateEventTriggerInput = None, **kwargs: object
-    ) -> WorkflowEventTrigger:
-        """Update an event trigger."""
-
-    def delete_trigger(
-        self, request: WorkflowDeleteEventTriggerInput = None, **kwargs: object
-    ) -> None:
-        """Delete an event trigger."""
-
-    def pause_trigger(
-        self, request: WorkflowPauseEventTriggerInput = None, **kwargs: object
-    ) -> WorkflowEventTrigger:
-        """Pause an event trigger."""
-
-    def resume_trigger(
-        self, request: WorkflowResumeEventTriggerInput = None, **kwargs: object
-    ) -> WorkflowEventTrigger:
-        """Resume an event trigger."""
-
-    def publish_event(
-        self, request: WorkflowPublishEventInput = None, **kwargs: object
+    def deliver_event(
+        self, request: WorkflowDeliverEventInput = None, **kwargs: object
     ) -> WorkflowEvent | None:
-        """Publish an event into the workflow."""
+        """Deliver an event into workflow activation matching."""
 
 
 class Workflow:
-    """Client for starting runs and managing workflow schedules or triggers.
+    """Client for applying definitions, starting runs, signaling, and delivering events.
 
     This capability is for provider code that receives an invocation token. Methods
     attach that token to each request before calling the host service. The
@@ -2505,17 +2323,17 @@ class Workflow:
             _grpc_call(self._stub.SignalOrStartRun, request)
         )
 
-    def create_definition(
-        self, request: WorkflowCreateDefinitionInput = None, **kwargs: object
+    def apply_definition(
+        self, request: WorkflowApplyDefinitionInput = None, **kwargs: object
     ) -> WorkflowDefinition:
-        """Create a reusable workflow definition."""
+        """Apply a reusable workflow definition."""
 
-        request = _workflow_create_definition_request(request, **kwargs)
+        request = _workflow_apply_definition_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         if not getattr(request, "idempotency_key", "").strip():
             request.idempotency_key = self._idempotency_key
         return workflow_definition_from_proto(
-            _grpc_call(self._stub.CreateDefinition, request)
+            _grpc_call(self._stub.ApplyDefinition, request)
         )
 
     def get_definition(
@@ -2529,15 +2347,35 @@ class Workflow:
             _grpc_call(self._stub.GetDefinition, request)
         )
 
-    def update_definition(
-        self, request: WorkflowUpdateDefinitionInput = None, **kwargs: object
-    ) -> WorkflowDefinition:
-        """Update a workflow definition."""
+    def list_definitions(self) -> list[WorkflowDefinition]:
+        """List workflow definitions."""
 
-        request = _workflow_update_definition_request(request, **kwargs)
+        request = pb.ListWorkflowProviderDefinitionsRequest(
+            invocation_token=self._invocation_token
+        )
+        response = _grpc_call(self._stub.ListDefinitions, request)
+        return [workflow_definition_from_proto(item) for item in response.definitions]
+
+    def set_definition_paused(
+        self, request: WorkflowSetDefinitionPausedInput = None, **kwargs: object
+    ) -> WorkflowDefinition:
+        """Pause or resume a workflow definition."""
+
+        request = _workflow_set_definition_paused_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return workflow_definition_from_proto(
-            _grpc_call(self._stub.UpdateDefinition, request)
+            _grpc_call(self._stub.SetDefinitionPaused, request)
+        )
+
+    def set_activation_paused(
+        self, request: WorkflowSetActivationPausedInput = None, **kwargs: object
+    ) -> WorkflowDefinition:
+        """Pause or resume a workflow activation."""
+
+        request = _workflow_set_activation_paused_request(request, **kwargs)
+        request.invocation_token = self._invocation_token
+        return workflow_definition_from_proto(
+            _grpc_call(self._stub.SetActivationPaused, request)
         )
 
     def delete_definition(
@@ -2550,163 +2388,44 @@ class Workflow:
         _grpc_call(self._stub.DeleteDefinition, request)
         return None
 
-    def create_schedule(
-        self, request: WorkflowCreateScheduleInput = None, **kwargs: object
-    ) -> WorkflowSchedule:
-        """Create a workflow schedule."""
+    def get_run_events(
+        self, request: WorkflowGetRunEventsInput = None, **kwargs: object
+    ) -> GetWorkflowProviderRunEventsResponse:
+        """Fetch run events."""
 
-        request = _workflow_create_schedule_request(request, **kwargs)
+        request = _workflow_get_run_events_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        if not getattr(request, "idempotency_key", "").strip():
-            request.idempotency_key = self._idempotency_key
-        return workflow_schedule_from_proto(
-            _grpc_call(self._stub.UpsertSchedule, request)
+        response = _grpc_call(self._stub.GetRunEvents, request)
+        return GetWorkflowProviderRunEventsResponse(
+            events=[
+                cast(WorkflowRunEvent, workflow_run_event_input_from_event(item))
+                for item in response.events
+            ]
         )
 
-    def get_schedule(
-        self, request: WorkflowGetScheduleInput = None, **kwargs: object
-    ) -> WorkflowSchedule:
-        """Fetch one workflow schedule."""
+    def get_run_output(
+        self, request: WorkflowGetRunOutputInput = None, **kwargs: object
+    ) -> GetWorkflowProviderRunOutputResponse:
+        """Fetch run output."""
 
-        request = _workflow_get_schedule_request(request, **kwargs)
+        request = _workflow_get_run_output_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return workflow_schedule_from_proto(
-            _grpc_call(self._stub.GetSchedule, request)
+        response = _grpc_call(self._stub.GetRunOutput, request)
+        return GetWorkflowProviderRunOutputResponse(
+            output=cast(WorkflowJsonValue, value_to_json(response.output))
+            if has_field(response, "output")
+            else None
         )
 
-    def update_schedule(
-        self, request: WorkflowUpdateScheduleInput = None, **kwargs: object
-    ) -> WorkflowSchedule:
-        """Update a workflow schedule."""
-
-        request = _workflow_update_schedule_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
-        return workflow_schedule_from_proto(
-            _grpc_call(self._stub.UpsertSchedule, request)
-        )
-
-    def delete_schedule(
-        self, request: WorkflowDeleteScheduleInput = None, **kwargs: object
-    ) -> None:
-        """Delete a workflow schedule."""
-
-        request = _workflow_id_request(
-            pb.DeleteWorkflowProviderScheduleRequest, "schedule_id", request, **kwargs
-        )
-        request.invocation_token = self._invocation_token
-        _grpc_call(self._stub.DeleteSchedule, request)
-        return None
-
-    def pause_schedule(
-        self, request: WorkflowPauseScheduleInput = None, **kwargs: object
-    ) -> WorkflowSchedule:
-        """Pause a workflow schedule."""
-
-        request = _workflow_id_request(
-            pb.PauseWorkflowProviderScheduleRequest, "schedule_id", request, **kwargs
-        )
-        request.invocation_token = self._invocation_token
-        return workflow_schedule_from_proto(
-            _grpc_call(self._stub.PauseSchedule, request)
-        )
-
-    def resume_schedule(
-        self, request: WorkflowResumeScheduleInput = None, **kwargs: object
-    ) -> WorkflowSchedule:
-        """Resume a workflow schedule."""
-
-        request = _workflow_id_request(
-            pb.ResumeWorkflowProviderScheduleRequest, "schedule_id", request, **kwargs
-        )
-        request.invocation_token = self._invocation_token
-        return workflow_schedule_from_proto(
-            _grpc_call(self._stub.ResumeSchedule, request)
-        )
-
-    def create_trigger(
-        self, request: WorkflowCreateEventTriggerInput = None, **kwargs: object
-    ) -> WorkflowEventTrigger:
-        """Create an event trigger."""
-
-        request = _workflow_create_event_trigger_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
-        if not getattr(request, "idempotency_key", "").strip():
-            request.idempotency_key = self._idempotency_key
-        return workflow_event_trigger_from_proto(
-            _grpc_call(self._stub.UpsertEventTrigger, request)
-        )
-
-    def get_trigger(
-        self, request: WorkflowGetEventTriggerInput = None, **kwargs: object
-    ) -> WorkflowEventTrigger:
-        """Fetch one event trigger."""
-
-        request = _workflow_id_request(
-            pb.GetWorkflowProviderEventTriggerRequest, "trigger_id", request, **kwargs
-        )
-        request.invocation_token = self._invocation_token
-        return workflow_event_trigger_from_proto(
-            _grpc_call(self._stub.GetEventTrigger, request)
-        )
-
-    def update_trigger(
-        self, request: WorkflowUpdateEventTriggerInput = None, **kwargs: object
-    ) -> WorkflowEventTrigger:
-        """Update an event trigger."""
-
-        request = _workflow_update_event_trigger_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
-        return workflow_event_trigger_from_proto(
-            _grpc_call(self._stub.UpsertEventTrigger, request)
-        )
-
-    def delete_trigger(
-        self, request: WorkflowDeleteEventTriggerInput = None, **kwargs: object
-    ) -> None:
-        """Delete an event trigger."""
-
-        request = _workflow_id_request(
-            pb.DeleteWorkflowProviderEventTriggerRequest, "trigger_id", request, **kwargs
-        )
-        request.invocation_token = self._invocation_token
-        _grpc_call(self._stub.DeleteEventTrigger, request)
-        return None
-
-    def pause_trigger(
-        self, request: WorkflowPauseEventTriggerInput = None, **kwargs: object
-    ) -> WorkflowEventTrigger:
-        """Pause an event trigger."""
-
-        request = _workflow_id_request(
-            pb.PauseWorkflowProviderEventTriggerRequest, "trigger_id", request, **kwargs
-        )
-        request.invocation_token = self._invocation_token
-        return workflow_event_trigger_from_proto(
-            _grpc_call(self._stub.PauseEventTrigger, request)
-        )
-
-    def resume_trigger(
-        self, request: WorkflowResumeEventTriggerInput = None, **kwargs: object
-    ) -> WorkflowEventTrigger:
-        """Resume an event trigger."""
-
-        request = _workflow_id_request(
-            pb.ResumeWorkflowProviderEventTriggerRequest, "trigger_id", request, **kwargs
-        )
-        request.invocation_token = self._invocation_token
-        return workflow_event_trigger_from_proto(
-            _grpc_call(self._stub.ResumeEventTrigger, request)
-        )
-
-    def publish_event(
-        self, request: WorkflowPublishEventInput = None, **kwargs: object
+    def deliver_event(
+        self, request: WorkflowDeliverEventInput = None, **kwargs: object
     ) -> WorkflowEvent | None:
-        """Publish an event into the workflow host."""
+        """Deliver an event into workflow activation matching."""
 
-        request = _workflow_publish_event_request(request, **kwargs)
+        request = _workflow_deliver_event_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return workflow_event_input_from_event(
-            _grpc_call(self._stub.PublishEvent, request)
+            _grpc_call(self._stub.DeliverEvent, request)
         )
 
     def __enter__(self) -> Workflow:
@@ -2738,15 +2457,15 @@ class WorkflowExecutionRequest:
     created_by_subject_id: str = ""
     invocation_token: str = ""
     signals: Sequence[WorkflowSignal] = _dataclasses.field(default_factory=list)
+    steps: Mapping[str, Any] | None = None
 
 
 @_dataclasses.dataclass(frozen=True, slots=True)
 class WorkflowRunContextTrigger:
     __hash__ = None
     kind: str = ""
-    schedule_id: str = ""
+    activation_id: str = ""
     scheduled_for: str = ""
-    trigger_id: str = ""
     event: WorkflowJsonObject | None = None
 
 
@@ -2867,19 +2586,24 @@ def evaluate_workflow_value(
             else value.template
         )
         return render_workflow_template(ctx, template), True
-    if value.run_input.strip():
-        return map_path_value(ctx.request.input, value.run_input)
-    if value.signal_payload.strip():
+    if value.input.strip():
+        return map_path_value(ctx.request.input, value.input)
+    if value.signal.strip():
         signal = latest_workflow_signal(ctx.request.signals)
         if signal is None:
             return None, False
-        return path_value(signal.payload, value.signal_payload)
+        return path_value(signal.payload, value.signal)
     if value.step_output is not None:
         step_id = value.step_output.step_id.strip()
         outputs = ctx.outputs or {}
         if step_id not in outputs:
             raise WorkflowValueError(f'workflow step output references missing step "{step_id}"')
         return path_value(outputs[step_id], value.step_output.path)
+    if value.step_input is not None:
+        step_id = value.step_input.step_id.strip()
+        steps = getattr(ctx.request, "steps", None) or {}
+        step = steps.get(step_id, {})
+        return path_value(step.get("inputs", {}), value.step_input.path)
     return None, True
 
 
@@ -2926,9 +2650,8 @@ def workflow_run_context(req: WorkflowExecutionRequest) -> dict[str, Any]:
     signal_context = workflow_signals_context(req.signals)
     if signal_context:
         out["signals"] = signal_context
-    created_by_subject_id = (req.created_by_subject_id or "").strip()
-    if created_by_subject_id:
-        out["createdBySubjectId"] = created_by_subject_id
+    if req.created_by_subject_id.strip():
+        out["createdBySubjectId"] = req.created_by_subject_id.strip()
     return out
 
 
@@ -2944,9 +2667,7 @@ def parse_workflow_run_context(
         input=_workflow_context_object(data.get("input")),
         metadata=_workflow_context_object(data.get("metadata")),
         signals=_workflow_run_signals(data.get("signals")),
-        created_by_subject_id=_workflow_context_str(
-            data.get("createdBySubjectId", data.get("createdBy"))
-        ),
+        created_by_subject_id=_workflow_context_str(data.get("createdBySubjectId")),
     )
 
 
@@ -2954,9 +2675,8 @@ def _workflow_run_trigger(value: Any) -> WorkflowRunContextTrigger:
     data = value if isinstance(value, Mapping) else {}
     return WorkflowRunContextTrigger(
         kind=_workflow_context_str(data.get("kind")),
-        schedule_id=_workflow_context_str(data.get("scheduleId")),
+        activation_id=_workflow_context_str(data.get("activationId")),
         scheduled_for=_workflow_context_str(data.get("scheduledFor")),
-        trigger_id=_workflow_context_str(data.get("triggerId")),
         event=_workflow_context_optional_object(data.get("event")),
     )
 
@@ -2980,9 +2700,7 @@ def _workflow_run_signal(value: Any) -> WorkflowRunContextSignal | None:
         name=_workflow_context_str(value.get("name")),
         payload=_workflow_context_object(value.get("payload")),
         metadata=_workflow_context_object(value.get("metadata")),
-        created_by_subject_id=_workflow_context_str(
-            value.get("createdBySubjectId", value.get("createdBy"))
-        ),
+        created_by_subject_id=_workflow_context_str(value.get("createdBySubjectId")),
         created_at=_workflow_context_str(value.get("createdAt")),
         idempotency_key=_workflow_context_str(value.get("idempotencyKey")),
         sequence=_workflow_context_int(value.get("sequence")),
@@ -3052,7 +2770,7 @@ def _workflow_trigger_context(trigger: WorkflowRunTrigger | Any | None) -> dict[
         schedule = trigger.schedule
         out: dict[str, Any] = {
             "kind": "schedule",
-            "scheduleId": getattr(schedule, "schedule_id", ""),
+            "activationId": getattr(schedule, "activation_id", ""),
         }
         scheduled_for = _format_workflow_time(getattr(schedule, "scheduled_for", None))
         if scheduled_for:
@@ -3062,7 +2780,7 @@ def _workflow_trigger_context(trigger: WorkflowRunTrigger | Any | None) -> dict[
         event_trigger = trigger.event
         out = {
             "kind": "event",
-            "triggerId": getattr(event_trigger, "trigger_id", ""),
+            "activationId": getattr(event_trigger, "activation_id", ""),
         }
         event = _workflow_event_context(getattr(event_trigger, "event", None))
         if event:
@@ -3099,6 +2817,7 @@ def _workflow_event_context(event: WorkflowEvent | Any | None) -> dict[str, Any]
         out["extensions"] = dict(cast(Mapping[str, Any], extensions))
     return out
 
+
 def workflow_signals_context(signals: Sequence[WorkflowSignal] | None) -> list[dict[str, Any]]:
     if not signals:
         return []
@@ -3115,9 +2834,8 @@ def workflow_signals_context(signals: Sequence[WorkflowSignal] | None) -> list[d
                 item["payload"] = payload
         if signal.metadata is not None:
             item["metadata"] = _compact_json_value(signal.metadata, 4)
-        created_by_subject_id = (signal.created_by_subject_id or "").strip()
-        if created_by_subject_id:
-            item["createdBySubjectId"] = created_by_subject_id
+        if signal.created_by_subject_id.strip():
+            item["createdBySubjectId"] = signal.created_by_subject_id.strip()
         created_at = _format_workflow_time(signal.created_at)
         if created_at:
             item["createdAt"] = created_at
@@ -3165,13 +2883,15 @@ def _template_expression_value(ctx: WorkflowEvalContext, expr: str) -> tuple[Any
         if not ctx.allow_inputs:
             raise WorkflowValueError("inputs references are not allowed here")
         return map_path_value(ctx.inputs, expr.removeprefix("inputs."))
-    if expr.startswith("runInput."):
-        return map_path_value(ctx.request.input, expr.removeprefix("runInput."))
-    if expr.startswith("signalPayload."):
+    if expr.startswith("input."):
+        return map_path_value(ctx.request.input, expr.removeprefix("input."))
+    if expr.startswith("signal."):
         signal = latest_workflow_signal(ctx.request.signals)
         if signal is None:
             return None, False
-        return path_value(signal.payload, expr.removeprefix("signalPayload."))
+        return path_value(signal.payload, expr.removeprefix("signal."))
+    if expr.startswith("steps."):
+        return path_value(getattr(ctx.request, "steps", {}) or {}, expr.removeprefix("steps."))
     raise WorkflowValueError(f'unsupported template expression "{expr}"')
 
 

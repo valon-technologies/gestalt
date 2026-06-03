@@ -10,6 +10,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -39,23 +40,24 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerAppName)
+	providerName, provider, target, definitionGeneration, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.DefinitionID, req.CallerAppName)
 	if err != nil {
 		return nil, err
 	}
 	audit.setProvider(providerName)
 	audit.setWorkflowTarget(target)
 
-	targetProto, err := workflowwire.TargetToProto(target)
+	inputProto, err := protoutil.StructFromMap(req.Input)
 	if err != nil {
 		return nil, err
 	}
 	runProto, err := provider.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{
-		Target:             targetProto,
-		IdempotencyKey:     strings.TrimSpace(req.IdempotencyKey),
-		WorkflowKey:        strings.TrimSpace(req.WorkflowKey),
-		CreatedBySubjectId: workflowSubjectIDFromPrincipal(p),
-		DefinitionId:       strings.TrimSpace(req.DefinitionID),
+		DefinitionId:                 strings.TrimSpace(req.DefinitionID),
+		ExpectedDefinitionGeneration: expectedDefinitionGeneration(req.ExpectedDefinitionGeneration, definitionGeneration),
+		Input:                        inputProto,
+		IdempotencyKey:               strings.TrimSpace(req.IdempotencyKey),
+		WorkflowKey:                  strings.TrimSpace(req.WorkflowKey),
+		CreatedBySubjectId:           workflowSubjectIDFromPrincipal(p),
 	})
 	if err != nil {
 		return nil, err
@@ -69,6 +71,26 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 
 func (m *Manager) GetRun(ctx context.Context, p *principal.Principal, runID string) (*ManagedRun, error) {
 	return m.requireOwnedRun(ctx, p, runID, "")
+}
+
+func (m *Manager) GetRunEvents(ctx context.Context, p *principal.Principal, runID string) (*proto.GetWorkflowProviderRunEventsResponse, error) {
+	value, err := m.requireOwnedRun(ctx, p, runID, "")
+	if err != nil {
+		return nil, err
+	}
+	return value.provider.GetRunEvents(ctx, &proto.GetWorkflowProviderRunEventsRequest{
+		RunId: strings.TrimSpace(runID),
+	})
+}
+
+func (m *Manager) GetRunOutput(ctx context.Context, p *principal.Principal, runID string) (*proto.GetWorkflowProviderRunOutputResponse, error) {
+	value, err := m.requireOwnedRun(ctx, p, runID, "")
+	if err != nil {
+		return nil, err
+	}
+	return value.provider.GetRunOutput(ctx, &proto.GetWorkflowProviderRunOutputRequest{
+		RunId: strings.TrimSpace(runID),
+	})
 }
 
 func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (out *ManagedRun, err error) {
@@ -188,13 +210,14 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	}
 	phase = "resolve_provider_target"
 	var provider coreworkflow.Provider
-	providerName, provider, target, err = m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerAppName)
+	var definitionGeneration int64
+	providerName, provider, target, definitionGeneration, err = m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.DefinitionID, req.CallerAppName)
 	if err != nil {
 		if failure, ok := workflowTargetAuthorizationFailure(err); ok {
 			phase = "authorize_target"
 			targetAuthFailure = failure
 			audit.setProvider(providerName)
-			audit.setWorkflowTargetAuthorizationFailure(req.Target, *failure)
+			audit.setWorkflowTargetAuthorizationFailure(target, *failure)
 		}
 		return nil, err
 	}
@@ -207,21 +230,22 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	}
 
 	phase = "provider_signal_or_start"
-	targetProto, err := workflowwire.TargetToProto(target)
-	if err != nil {
-		return nil, err
-	}
 	signalProto, err := workflowwire.SignalToProto(signal)
 	if err != nil {
 		return nil, err
 	}
+	inputProto, err := protoutil.StructFromMap(req.Input)
+	if err != nil {
+		return nil, err
+	}
 	respProto, err := provider.SignalOrStartRun(ctx, &proto.SignalOrStartWorkflowProviderRunRequest{
-		WorkflowKey:        workflowKey,
-		Target:             targetProto,
-		IdempotencyKey:     strings.TrimSpace(req.IdempotencyKey),
-		CreatedBySubjectId: workflowSubjectIDFromPrincipal(p),
-		DefinitionId:       strings.TrimSpace(req.DefinitionID),
-		Signal:             signalProto,
+		WorkflowKey:                  workflowKey,
+		DefinitionId:                 strings.TrimSpace(req.DefinitionID),
+		ExpectedDefinitionGeneration: expectedDefinitionGeneration(req.ExpectedDefinitionGeneration, definitionGeneration),
+		Input:                        inputProto,
+		IdempotencyKey:               strings.TrimSpace(req.IdempotencyKey),
+		CreatedBySubjectId:           workflowSubjectIDFromPrincipal(p),
+		Signal:                       signalProto,
 	})
 	if err != nil {
 		return nil, err
@@ -232,6 +256,13 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	}
 	phase = "bind_response"
 	return managedSignalResponse(providerName, provider, resp)
+}
+
+func expectedDefinitionGeneration(requested, resolved int64) int64 {
+	if requested != 0 {
+		return requested
+	}
+	return resolved
 }
 
 func (m *Manager) logWorkflowSignalOrStartFailure(ctx context.Context, req RunSignalOrStart, phase string, targetAuthFailure *targetAuthorizationFailure, err error) {

@@ -81,10 +81,11 @@ agent, and runtime payloads. Agent provider handlers receive and return
 native dataclasses such as `CreateAgentProviderTurnRequest`, `AgentSession`,
 and `AgentTurn`; structured fields accept dictionaries or dataclass instances,
 and timestamp fields use timezone-aware `datetime` values. Workflow helpers such as
-`bound_workflow_target`, `workflow_signal`, and `bound_workflow_run` accept
-plain dictionaries, dataclass instances, and native `datetime` values for
-structured payloads and timestamp fields. Provider-facing APIs should accept
-native Python values and keep transport serialization inside SDK adapters.
+`bound_workflow_target`, `workflow_definition`, `workflow_run`, and
+`workflow_signal` accept plain dictionaries, dataclass instances, and native
+`datetime` values for structured payloads and timestamp fields. Provider-facing
+APIs should accept native Python values and keep transport serialization inside
+SDK adapters.
 
 ## API reference
 

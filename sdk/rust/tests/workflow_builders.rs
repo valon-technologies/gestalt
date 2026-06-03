@@ -1,14 +1,16 @@
-use std::time::{Duration, UNIX_EPOCH};
+#[allow(dead_code)]
+mod helpers;
 
 use serde::Serialize;
 use serde_json::json;
 
 use gestalt::{
-    AgentOutput, AgentToolRef, BoundWorkflowRun, BoundWorkflowTarget, WorkflowAgentMessage,
-    WorkflowRunStatus, WorkflowRunTrigger, WorkflowSignal, WorkflowStep, WorkflowStepAction,
-    WorkflowStepAgentTurn, WorkflowStepAppCall, WorkflowStepOutputSource, WorkflowStepWhen,
-    WorkflowText, WorkflowValue, new_bound_workflow_run, new_bound_workflow_target,
-    new_bound_workflow_target_from_target, new_workflow_signal,
+    BoundWorkflowTarget, WorkflowAgentMessage, WorkflowEvalContext, WorkflowExecutionRequest,
+    WorkflowSignal, WorkflowStep, WorkflowStepAction, WorkflowStepAgentTurn, WorkflowStepAppCall,
+    WorkflowStepWhen, WorkflowText, evaluate_workflow_value, new_bound_workflow_target,
+    new_bound_workflow_target_from_target, render_workflow_template, workflow_value_input,
+    workflow_value_literal, workflow_value_signal, workflow_value_step_input,
+    workflow_value_step_output,
 };
 
 #[derive(Serialize)]
@@ -18,98 +20,136 @@ struct Payload {
 }
 
 #[test]
-fn workflow_builders_accept_serde_values_and_system_time() -> gestalt::Result<()> {
-    let created_at = UNIX_EPOCH + Duration::from_secs(1_778_241_600);
-    let app = WorkflowStepAppCall {
-        name: "app".to_string(),
-        operation: "run".to_string(),
-        ..Default::default()
-    }
-    .with_input(Payload {
-        ok: false,
-        count: 0,
-    })?;
+fn workflow_steps_do_not_require_timeout() -> gestalt::Result<()> {
     let target = new_bound_workflow_target(BoundWorkflowTarget {
         steps: vec![WorkflowStep {
             id: "run".to_string(),
-            action: WorkflowStepAction::App(app),
+            action: Some(WorkflowStepAction::App(WorkflowStepAppCall {
+                name: "app".to_string(),
+                operation: "run".to_string(),
+                input: Some(workflow_value_literal(Payload {
+                    ok: false,
+                    count: 0,
+                })?),
+                ..Default::default()
+            })),
             ..Default::default()
         }],
     })?;
-    let signal = new_workflow_signal(
-        WorkflowSignal {
-            name: "ready".to_string(),
-            created_at: Some(created_at),
-            sequence: 0,
-            ..Default::default()
-        }
-        .with_payload(Payload { ok: true, count: 1 })?,
-    )?;
-    let run = new_bound_workflow_run(BoundWorkflowRun {
-        id: "run-1".to_string(),
-        status: WorkflowRunStatus::Pending,
-        target: Some(new_bound_workflow_target_from_target(&target)?),
-        trigger: Some(WorkflowRunTrigger::Manual),
-        created_at: Some(created_at),
-        ..Default::default()
-    })?;
 
+    assert_eq!(target.steps[0].timeout_seconds, 0);
     let app = app_step(&target, 0)?;
     assert_eq!(app.name, "app");
     assert_eq!(
-        app.input
-            .as_ref()
-            .and_then(literal_value)
-            .and_then(|input| input.get("count")),
-        Some(&json!(0))
+        evaluate_workflow_value(
+            &WorkflowEvalContext::default(),
+            app.input.as_ref().expect("input")
+        )?
+        .value,
+        Some(json!({"ok": false, "count": 0.0}))
     );
-    assert_eq!(signal.sequence, 0);
-    assert_eq!(run.created_at, Some(created_at));
     Ok(())
 }
 
 #[test]
 fn workflow_copy_helpers_do_not_alias_nested_payloads() -> gestalt::Result<()> {
-    let app = WorkflowStepAppCall {
-        name: "app".to_string(),
-        operation: "run".to_string(),
-        ..Default::default()
-    }
-    .with_input(serde_json::json!({"nested": {"value": "original"}}))?;
     let mut target = new_bound_workflow_target(BoundWorkflowTarget {
         steps: vec![WorkflowStep {
             id: "run".to_string(),
-            action: WorkflowStepAction::App(app),
+            action: Some(WorkflowStepAction::App(WorkflowStepAppCall {
+                name: "app".to_string(),
+                operation: "run".to_string(),
+                input: Some(workflow_value_literal(json!({
+                    "nested": {"value": "original"}
+                }))?),
+                ..Default::default()
+            })),
             ..Default::default()
         }],
     })?;
     let copied = new_bound_workflow_target_from_target(&target)?;
 
     let app = app_step_mut(&mut target, 0)?;
-    literal_value_mut(app.input.as_mut().expect("input"))?["nested"]["value"] = json!("changed");
+    app.input = Some(workflow_value_literal(json!({
+        "nested": {"value": "changed"}
+    }))?);
 
     let copied_app = app_step(&copied, 0)?;
     assert_eq!(
-        copied_app
-            .input
-            .as_ref()
-            .and_then(literal_value)
-            .and_then(|input| input.get("nested"))
-            .and_then(|nested| nested.get("value")),
-        Some(&json!("original"))
+        evaluate_workflow_value(
+            &WorkflowEvalContext::default(),
+            copied_app.input.as_ref().expect("input")
+        )?
+        .value,
+        Some(json!({"nested": {"value": "original"}}))
     );
     Ok(())
 }
 
 #[test]
-fn workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()> {
+fn workflow_values_and_templates_use_current_roots() -> gestalt::Result<()> {
+    let ctx = WorkflowEvalContext {
+        request: WorkflowExecutionRequest {
+            provider_name: "indexeddb".to_string(),
+            run_id: "run-1".to_string(),
+            input: Some(json!({"customer": {"id": "cust_1"}})),
+            signals: vec![WorkflowSignal {
+                id: "sig-1".to_string(),
+                payload: Some(helpers::struct_from_json(json!({
+                    "thread": {"ts": "123.456"}
+                }))),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+        outputs: [(
+            "diagnose".to_string(),
+            json!({"summary": {"action": "notify"}}),
+        )]
+        .into(),
+        inputs: [("notify".to_string(), json!({"channel": "C123"}))].into(),
+        allow_inputs: true,
+    };
+
+    assert_eq!(
+        evaluate_workflow_value(&ctx, &workflow_value_input("customer.id"))?.value,
+        Some(json!("cust_1"))
+    );
+    assert_eq!(
+        evaluate_workflow_value(&ctx, &workflow_value_signal("thread.ts"))?.value,
+        Some(json!("123.456"))
+    );
+    assert_eq!(
+        evaluate_workflow_value(
+            &ctx,
+            &workflow_value_step_output("diagnose", "summary.action")
+        )?
+        .value,
+        Some(json!("notify"))
+    );
+    assert_eq!(
+        evaluate_workflow_value(&ctx, &workflow_value_step_input("notify", "channel"))?.value,
+        Some(json!("C123"))
+    );
+    assert_eq!(
+        render_workflow_template(
+            &ctx,
+            "customer=${{ input.customer.id }} action=${{ steps.diagnose.outputs.summary.action }}",
+        )?,
+        "customer=cust_1 action=notify"
+    );
+    Ok(())
+}
+
+#[test]
+fn workflow_steps_round_trip_current_step_shapes() -> gestalt::Result<()> {
     let target = new_bound_workflow_target(BoundWorkflowTarget {
         steps: vec![
             WorkflowStep {
-                id: "diagnosis".to_string(),
-                action: WorkflowStepAction::Agent(WorkflowStepAgentTurn {
+                id: "diagnose".to_string(),
+                action: Some(WorkflowStepAction::Agent(WorkflowStepAgentTurn {
                     provider: "agent".to_string(),
-                    model: "claude".to_string(),
+                    model: "gpt-5.5".to_string(),
                     prompt: Some(WorkflowText {
                         template: "Diagnose the alert.".to_string(),
                     }),
@@ -120,43 +160,22 @@ fn workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()> {
                         }),
                         ..Default::default()
                     }],
-                    tools: vec![AgentToolRef {
-                        app: "datadog".to_string(),
-                        operation: "queryLogs".to_string(),
-                        ..Default::default()
-                    }],
-                    output: AgentOutput::structured_schema(json!({"type": "object"}))?,
-                    model_options: Some(json!({"temperature": 0})),
-                    session_key: String::new(),
-                }),
-                timeout_seconds: 45,
-                metadata: Some(json!({"kind": "diagnosis"})),
+                    ..Default::default()
+                })),
+                metadata: Some(helpers::struct_from_json(json!({"kind": "diagnosis"}))),
                 ..Default::default()
             },
             WorkflowStep {
-                id: "pr_fix".to_string(),
-                action: WorkflowStepAction::Agent(WorkflowStepAgentTurn {
-                    provider: "agent".to_string(),
-                    model: "claude".to_string(),
-                    prompt: Some(WorkflowText {
-                        template: "Open a PR.".to_string(),
-                    }),
-                    tools: vec![AgentToolRef {
-                        app: "github".to_string(),
-                        operation: "createPullRequest".to_string(),
-                        ..Default::default()
-                    }],
-                    output: AgentOutput::text(),
-                    session_key: String::new(),
-                    messages: Vec::new(),
-                    model_options: None,
-                }),
+                id: "notify".to_string(),
+                action: Some(WorkflowStepAction::App(WorkflowStepAppCall {
+                    name: "slack".to_string(),
+                    operation: "messages.post".to_string(),
+                    input: Some(workflow_value_step_output("diagnose", "summary")),
+                    ..Default::default()
+                })),
                 when: Some(WorkflowStepWhen {
-                    value: Some(WorkflowValue::StepOutput(WorkflowStepOutputSource {
-                        step_id: "diagnosis".to_string(),
-                        path: "agent.output.structured.value.actionable_for_pr".to_string(),
-                    })),
-                    equals: Some(json!(true)),
+                    value: Some(workflow_value_step_output("diagnose", "actionable")),
+                    equals: Some(helpers::json_to_prost(&json!(true))),
                 }),
                 timeout_seconds: 45,
                 ..Default::default()
@@ -165,28 +184,22 @@ fn workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()> {
     })?;
     let copied = new_bound_workflow_target_from_target(&target)?;
 
-    let diagnosis = agent_step(&target, 0)?;
+    let diagnosis = agent_step(&copied, 0)?;
+    assert_eq!(diagnosis.provider, "agent");
     assert_eq!(target.steps.len(), 2);
-    assert_eq!(diagnosis.tools[0].app, "datadog");
-    assert_eq!(
-        target.steps[1]
-            .when
-            .as_ref()
-            .and_then(|when| when.equals.as_ref()),
-        Some(&json!(true))
-    );
-
-    let copied_diagnosis = agent_step(&copied, 0)?;
-    assert_eq!(copied_diagnosis.tools[0].operation, "queryLogs");
     assert_eq!(
         copied.steps[1]
             .when
             .as_ref()
-            .and_then(|when| match when.value.as_ref() {
-                Some(WorkflowValue::StepOutput(source)) => Some(source.path.as_str()),
+            .and_then(|when| when.value.as_ref())
+            .and_then(|value| value.kind.as_ref())
+            .and_then(|kind| match kind {
+                gestalt::workflow::workflow_value::Kind::StepOutput(source) => {
+                    Some(source.path.as_str())
+                }
                 _ => None,
             }),
-        Some("agent.output.structured.value.actionable_for_pr")
+        Some("actionable")
     );
     Ok(())
 }
@@ -195,7 +208,11 @@ fn app_step(
     target: &gestalt::BoundWorkflowTarget,
     index: usize,
 ) -> gestalt::Result<&gestalt::WorkflowStepAppCall> {
-    match target.steps.get(index).map(|step| &step.action) {
+    match target
+        .steps
+        .get(index)
+        .and_then(|step| step.action.as_ref())
+    {
         Some(gestalt::WorkflowStepAction::App(app)) => Ok(app),
         _ => Err(gestalt::Error::bad_request("expected app step")),
     }
@@ -205,7 +222,11 @@ fn agent_step(
     target: &gestalt::BoundWorkflowTarget,
     index: usize,
 ) -> gestalt::Result<&gestalt::WorkflowStepAgentTurn> {
-    match target.steps.get(index).map(|step| &step.action) {
+    match target
+        .steps
+        .get(index)
+        .and_then(|step| step.action.as_ref())
+    {
         Some(gestalt::WorkflowStepAction::Agent(agent)) => Ok(agent),
         _ => Err(gestalt::Error::bad_request("expected agent step")),
     }
@@ -215,22 +236,12 @@ fn app_step_mut(
     target: &mut gestalt::BoundWorkflowTarget,
     index: usize,
 ) -> gestalt::Result<&mut gestalt::WorkflowStepAppCall> {
-    match target.steps.get_mut(index).map(|step| &mut step.action) {
+    match target
+        .steps
+        .get_mut(index)
+        .and_then(|step| step.action.as_mut())
+    {
         Some(gestalt::WorkflowStepAction::App(app)) => Ok(app),
         _ => Err(gestalt::Error::bad_request("expected app step")),
-    }
-}
-
-fn literal_value(input: &WorkflowValue) -> Option<&serde_json::Value> {
-    match input {
-        WorkflowValue::Literal(value) => Some(value),
-        _ => None,
-    }
-}
-
-fn literal_value_mut(input: &mut WorkflowValue) -> gestalt::Result<&mut serde_json::Value> {
-    match input {
-        WorkflowValue::Literal(value) => Ok(value),
-        _ => Err(gestalt::Error::bad_request("expected literal value")),
     }
 }

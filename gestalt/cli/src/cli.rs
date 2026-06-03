@@ -638,7 +638,7 @@ pub struct AuthorizationRelationshipListArgs {
 
 #[derive(Subcommand)]
 pub enum WorkflowCommands {
-    /// Publish workflow events
+    /// Deliver workflow events
     Events {
         #[command(subcommand)]
         command: WorkflowEventCommands,
@@ -647,16 +647,6 @@ pub enum WorkflowCommands {
     Runs {
         #[command(subcommand)]
         command: WorkflowRunCommands,
-    },
-    /// Manage workflow schedules
-    Schedules {
-        #[command(subcommand)]
-        command: WorkflowScheduleCommands,
-    },
-    /// Manage workflow triggers
-    Triggers {
-        #[command(subcommand)]
-        command: WorkflowTriggerCommands,
     },
 }
 
@@ -759,77 +749,6 @@ pub struct AgentResumeArgs {
     /// Optional execution budget in seconds for each created turn
     #[arg(long = "timeout-seconds", value_parser = clap::value_parser!(i32).range(1..))]
     pub timeout_seconds: Option<i32>,
-}
-
-#[derive(Subcommand)]
-pub enum WorkflowScheduleCommands {
-    /// Create a workflow schedule
-    Create(WorkflowScheduleCreateArgs),
-    /// Delete a workflow schedule
-    Delete {
-        /// Schedule ID
-        id: String,
-    },
-    /// Show a single workflow schedule
-    Get {
-        /// Schedule ID
-        id: String,
-    },
-    /// List workflow schedules
-    List {
-        /// Filter schedules by target app
-        #[arg(long)]
-        app: Option<String>,
-    },
-    /// Pause a workflow schedule
-    Pause {
-        /// Schedule ID
-        id: String,
-    },
-    /// Resume a paused workflow schedule
-    Resume {
-        /// Schedule ID
-        id: String,
-    },
-    /// Update an existing workflow schedule
-    Update(WorkflowScheduleUpdateArgs),
-}
-
-#[derive(Subcommand)]
-pub enum WorkflowTriggerCommands {
-    /// Create a workflow trigger
-    Create(WorkflowTriggerCreateArgs),
-    /// Delete a workflow trigger
-    Delete {
-        /// Trigger ID
-        id: String,
-    },
-    /// Show a single workflow trigger
-    Get {
-        /// Trigger ID
-        id: String,
-    },
-    /// List workflow triggers
-    List {
-        /// Filter triggers by target app
-        #[arg(long)]
-        app: Option<String>,
-        /// Filter triggers by event type
-        #[arg(long = "type")]
-        event_type: Option<String>,
-    },
-    /// Pause a workflow trigger
-    Pause {
-        /// Trigger ID
-        id: String,
-    },
-    /// Resume a paused workflow trigger
-    Resume {
-        /// Trigger ID
-        id: String,
-    },
-    /// Update an existing workflow trigger
-    Update(WorkflowTriggerUpdateArgs),
 }
 
 #[derive(Subcommand)]
@@ -939,47 +858,8 @@ pub enum AgentTurnEventCommands {
 
 #[derive(Subcommand)]
 pub enum WorkflowEventCommands {
-    /// Publish a workflow event
-    Publish(WorkflowEventPublishArgs),
-}
-
-#[derive(Args)]
-pub struct WorkflowScheduleCreateArgs {
-    /// Cron expression (e.g. "0 */5 * * *")
-    #[arg(long)]
-    pub cron: String,
-
-    /// Target app (e.g. "slack", "github")
-    #[arg(long)]
-    pub app: String,
-
-    /// Target operation (e.g. "chat.postMessage")
-    #[arg(long)]
-    pub operation: String,
-
-    /// IANA timezone for the cron expression
-    #[arg(long)]
-    pub timezone: Option<String>,
-
-    /// Select a named connection
-    #[arg(long)]
-    pub connection: Option<String>,
-
-    /// Select a stored connection instance
-    #[arg(long)]
-    pub instance: Option<String>,
-
-    /// Create the schedule in paused state
-    #[arg(long)]
-    pub paused: bool,
-
-    /// Target input parameters as key=value or key:=json
-    #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
-    pub params: Vec<params::ParamEntry>,
-
-    /// Load target input from a JSON file (use "-" for stdin)
-    #[arg(long = "input-file")]
-    pub input_file: Option<String>,
+    /// Deliver a workflow event
+    Deliver(WorkflowEventDeliverArgs),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1115,170 +995,7 @@ pub struct AgentTurnEventStreamArgs {
 }
 
 #[derive(Args)]
-pub struct WorkflowTriggerCreateArgs {
-    /// Workflow provider backend to store the trigger in
-    #[arg(long)]
-    pub provider: Option<String>,
-
-    /// Event type to match exactly
-    #[arg(long = "type")]
-    pub event_type: String,
-
-    /// Optional event source to match exactly
-    #[arg(long)]
-    pub source: Option<String>,
-
-    /// Optional event subject to match exactly
-    #[arg(long)]
-    pub subject: Option<String>,
-
-    /// Target app (e.g. "slack", "github")
-    #[arg(long)]
-    pub app: Option<String>,
-
-    /// Target operation (e.g. "chat.postMessage")
-    #[arg(long)]
-    pub operation: Option<String>,
-
-    /// Load the full target JSON object from a file (use "-" for stdin)
-    #[arg(long = "target-file")]
-    pub target_file: Option<String>,
-
-    /// Select a named connection
-    #[arg(long)]
-    pub connection: Option<String>,
-
-    /// Select a stored connection instance
-    #[arg(long)]
-    pub instance: Option<String>,
-
-    /// Create the trigger in paused state
-    #[arg(long)]
-    pub paused: bool,
-
-    /// Target input parameters as key=value or key:=json
-    #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
-    pub params: Vec<params::ParamEntry>,
-
-    /// Load target input from a JSON file (use "-" for stdin)
-    #[arg(long = "input-file")]
-    pub input_file: Option<String>,
-}
-
-#[derive(Args)]
-pub struct WorkflowScheduleUpdateArgs {
-    /// Schedule ID
-    pub id: String,
-
-    /// Cron expression (leave unset to keep existing)
-    #[arg(long)]
-    pub cron: Option<String>,
-
-    /// Target app (leave unset to keep existing)
-    #[arg(long)]
-    pub app: Option<String>,
-
-    /// Target operation (leave unset to keep existing)
-    #[arg(long)]
-    pub operation: Option<String>,
-
-    /// Target step ID to update when the workflow has multiple steps
-    #[arg(long = "step-id")]
-    pub step_id: Option<String>,
-
-    /// IANA timezone (leave unset to keep existing; pass empty string to clear)
-    #[arg(long)]
-    pub timezone: Option<String>,
-
-    /// Named connection (leave unset to keep existing; pass empty string to clear)
-    #[arg(long)]
-    pub connection: Option<String>,
-
-    /// Stored connection instance (leave unset to keep existing; pass empty string to clear)
-    #[arg(long)]
-    pub instance: Option<String>,
-
-    /// Mark the schedule as paused
-    #[arg(long, conflicts_with = "unpaused", action = clap::ArgAction::SetTrue)]
-    pub paused: bool,
-
-    /// Mark the schedule as not paused
-    #[arg(long = "no-paused", action = clap::ArgAction::SetTrue)]
-    pub unpaused: bool,
-
-    /// Replace target input with these key=value / key:=json entries
-    #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
-    pub params: Vec<params::ParamEntry>,
-
-    /// Replace target input with the contents of this JSON file ("-" for stdin)
-    #[arg(long = "input-file")]
-    pub input_file: Option<String>,
-
-    /// Clear the target input instead of keeping the existing value
-    #[arg(long = "clear-input", conflicts_with_all = ["params", "input_file"])]
-    pub clear_input: bool,
-}
-
-#[derive(Args)]
-pub struct WorkflowTriggerUpdateArgs {
-    /// Trigger ID
-    pub id: String,
-
-    /// Event type (leave unset to keep existing)
-    #[arg(long = "type")]
-    pub event_type: Option<String>,
-
-    /// Event source (leave unset to keep existing; pass empty string to clear)
-    #[arg(long)]
-    pub source: Option<String>,
-
-    /// Event subject (leave unset to keep existing; pass empty string to clear)
-    #[arg(long)]
-    pub subject: Option<String>,
-
-    /// Target app (leave unset to keep existing)
-    #[arg(long)]
-    pub app: Option<String>,
-
-    /// Target operation (leave unset to keep existing)
-    #[arg(long)]
-    pub operation: Option<String>,
-
-    /// Target step ID to update when the workflow has multiple steps
-    #[arg(long = "step-id")]
-    pub step_id: Option<String>,
-
-    /// Named connection (leave unset to keep existing; pass empty string to clear)
-    #[arg(long)]
-    pub connection: Option<String>,
-
-    /// Stored connection instance (leave unset to keep existing; pass empty string to clear)
-    #[arg(long)]
-    pub instance: Option<String>,
-
-    /// Mark the trigger as paused
-    #[arg(long, conflicts_with = "unpaused", action = clap::ArgAction::SetTrue)]
-    pub paused: bool,
-
-    /// Mark the trigger as not paused
-    #[arg(long = "no-paused", action = clap::ArgAction::SetTrue)]
-    pub unpaused: bool,
-
-    /// Replace target input with these key=value / key:=json entries
-    #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
-    pub params: Vec<params::ParamEntry>,
-
-    /// Replace target input with the contents of this JSON file ("-" for stdin)
-    #[arg(long = "input-file")]
-    pub input_file: Option<String>,
-
-    /// Clear the target input instead of keeping the existing value
-    #[arg(long = "clear-input", conflicts_with_all = ["params", "input_file"])]
-    pub clear_input: bool,
-}
-
-#[derive(Args)]
-pub struct WorkflowEventPublishArgs {
+pub struct WorkflowEventDeliverArgs {
     /// Event type
     #[arg(long = "type")]
     pub event_type: String,

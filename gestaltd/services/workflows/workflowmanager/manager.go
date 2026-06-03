@@ -29,7 +29,6 @@ import (
 var (
 	ErrWorkflowNotConfigured       = errors.New("workflow is not configured")
 	ErrWorkflowSubjectRequired     = errors.New("workflow subject is required")
-	ErrWorkflowScheduleSubject     = ErrWorkflowSubjectRequired
 	ErrDuplicateWorkflowObjects    = errors.New("workflow object matched multiple providers")
 	ErrWorkflowEventMatchRequired  = errors.New("workflow trigger match.type is required")
 	ErrWorkflowEventSourceRequired = errors.New("workflow event source is required")
@@ -67,31 +66,25 @@ type AgentControl interface {
 }
 
 type Service interface {
-	CreateDefinition(ctx context.Context, p *principal.Principal, req DefinitionUpsert) (*ManagedDefinition, error)
+	ApplyDefinition(ctx context.Context, p *principal.Principal, req DefinitionApply) (*ManagedDefinition, error)
 	GetDefinition(ctx context.Context, p *principal.Principal, definitionID string) (*ManagedDefinition, error)
-	UpdateDefinition(ctx context.Context, p *principal.Principal, definitionID string, req DefinitionUpsert) (*ManagedDefinition, error)
+	ListDefinitions(ctx context.Context, p *principal.Principal) (*ListDefinitionsResponse, error)
+	SetDefinitionPaused(ctx context.Context, p *principal.Principal, definitionID string, paused bool) (*ManagedDefinition, error)
+	SetActivationPaused(ctx context.Context, p *principal.Principal, definitionID, activationID string, paused bool) (*ManagedDefinition, error)
 	DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) error
-	ListSchedules(ctx context.Context, p *principal.Principal) ([]*ManagedSchedule, error)
-	CreateSchedule(ctx context.Context, p *principal.Principal, req ScheduleUpsert) (*ManagedSchedule, error)
-	GetSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*ManagedSchedule, error)
-	UpdateSchedule(ctx context.Context, p *principal.Principal, scheduleID string, req ScheduleUpsert) (*ManagedSchedule, error)
-	DeleteSchedule(ctx context.Context, p *principal.Principal, scheduleID string) error
-	PauseSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*ManagedSchedule, error)
-	ResumeSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*ManagedSchedule, error)
-	ListEventTriggers(ctx context.Context, p *principal.Principal) ([]*ManagedEventTrigger, error)
-	CreateEventTrigger(ctx context.Context, p *principal.Principal, req EventTriggerUpsert) (*ManagedEventTrigger, error)
-	GetEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error)
-	UpdateEventTrigger(ctx context.Context, p *principal.Principal, triggerID string, req EventTriggerUpsert) (*ManagedEventTrigger, error)
-	DeleteEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) error
-	PauseEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error)
-	ResumeEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error)
 	ListRuns(ctx context.Context, p *principal.Principal, req coreworkflow.ListRunsRequest) (*ListRunsResponse, error)
 	StartRun(ctx context.Context, p *principal.Principal, req RunStart) (*ManagedRun, error)
 	GetRun(ctx context.Context, p *principal.Principal, runID string) (*ManagedRun, error)
+	GetRunEvents(ctx context.Context, p *principal.Principal, runID string) (*proto.GetWorkflowProviderRunEventsResponse, error)
+	GetRunOutput(ctx context.Context, p *principal.Principal, runID string) (*proto.GetWorkflowProviderRunOutputResponse, error)
 	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*ManagedRun, error)
 	SignalRun(ctx context.Context, p *principal.Principal, req RunSignal) (*ManagedRunSignal, error)
 	SignalOrStartRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart) (*ManagedRunSignal, error)
-	PublishEvent(ctx context.Context, p *principal.Principal, req EventPublish) (coreworkflow.Event, error)
+	DeliverEvent(ctx context.Context, p *principal.Principal, req EventDeliver) (coreworkflow.Event, error)
+}
+
+type ListDefinitionsResponse struct {
+	Definitions []*ManagedDefinition
 }
 
 type ListRunsResponse struct {
@@ -127,41 +120,21 @@ type Manager struct {
 	logger            *slog.Logger
 }
 
-type ScheduleUpsert struct {
+type DefinitionApply struct {
 	ProviderName   string
-	Cron           string
-	Timezone       string
-	Target         coreworkflow.Target
-	DefinitionID   string
-	Paused         bool
-	IdempotencyKey string
-	CallerAppName  string
-}
-
-type DefinitionUpsert struct {
-	ProviderName   string
-	Target         coreworkflow.Target
-	IdempotencyKey string
-	CallerAppName  string
-}
-
-type EventTriggerUpsert struct {
-	ProviderName   string
-	Match          coreworkflow.EventMatch
-	Target         coreworkflow.Target
-	DefinitionID   string
-	Paused         bool
+	Spec           coreworkflow.DefinitionSpec
 	IdempotencyKey string
 	CallerAppName  string
 }
 
 type RunStart struct {
-	ProviderName   string
-	Target         coreworkflow.Target
-	DefinitionID   string
-	IdempotencyKey string
-	WorkflowKey    string
-	CallerAppName  string
+	ProviderName                 string
+	DefinitionID                 string
+	ExpectedDefinitionGeneration int64
+	Input                        map[string]any
+	IdempotencyKey               string
+	WorkflowKey                  string
+	CallerAppName                string
 }
 
 type RunSignal struct {
@@ -170,16 +143,17 @@ type RunSignal struct {
 }
 
 type RunSignalOrStart struct {
-	ProviderName   string
-	WorkflowKey    string
-	Target         coreworkflow.Target
-	DefinitionID   string
-	IdempotencyKey string
-	Signal         coreworkflow.Signal
-	CallerAppName  string
+	ProviderName                 string
+	WorkflowKey                  string
+	DefinitionID                 string
+	ExpectedDefinitionGeneration int64
+	Input                        map[string]any
+	IdempotencyKey               string
+	Signal                       coreworkflow.Signal
+	CallerAppName                string
 }
 
-type EventPublish struct {
+type EventDeliver struct {
 	ProviderName string
 	// AppName is trusted owner context. Callers must derive or authorize it before
 	// entering the workflow manager; the manager only normalizes and forwards it.
@@ -190,18 +164,6 @@ type EventPublish struct {
 type ManagedDefinition struct {
 	ProviderName string
 	Definition   *coreworkflow.Definition
-	provider     coreworkflow.Provider
-}
-
-type ManagedSchedule struct {
-	ProviderName string
-	Schedule     *coreworkflow.Schedule
-	provider     coreworkflow.Provider
-}
-
-type ManagedEventTrigger struct {
-	ProviderName string
-	Trigger      *coreworkflow.EventTrigger
 	provider     coreworkflow.Provider
 }
 
@@ -223,30 +185,19 @@ type ManagedRunSignal struct {
 const (
 	workflowAuditSource = "workflow_manager"
 
-	workflowAuditOperationDefinitionCreate   = "workflow.definition.create"
-	workflowAuditOperationDefinitionUpdate   = "workflow.definition.update"
-	workflowAuditOperationDefinitionDelete   = "workflow.definition.delete"
-	workflowAuditOperationScheduleCreate     = "workflow.schedule.create"
-	workflowAuditOperationScheduleUpdate     = "workflow.schedule.update"
-	workflowAuditOperationScheduleDelete     = "workflow.schedule.delete"
-	workflowAuditOperationSchedulePause      = "workflow.schedule.pause"
-	workflowAuditOperationScheduleResume     = "workflow.schedule.resume"
-	workflowAuditOperationEventTriggerCreate = "workflow.event_trigger.create"
-	workflowAuditOperationEventTriggerUpdate = "workflow.event_trigger.update"
-	workflowAuditOperationEventTriggerDelete = "workflow.event_trigger.delete"
-	workflowAuditOperationEventTriggerPause  = "workflow.event_trigger.pause"
-	workflowAuditOperationEventTriggerResume = "workflow.event_trigger.resume"
-	workflowAuditOperationRunStart           = "workflow.run.start"
-	workflowAuditOperationRunSignal          = "workflow.run.signal"
-	workflowAuditOperationRunSignalOrStart   = "workflow.run.signal_or_start"
-	workflowAuditOperationRunCancel          = "workflow.run.cancel"
-	workflowAuditOperationEventPublish       = "workflow.event.publish"
+	workflowAuditOperationDefinitionApply  = "workflow.definition.apply"
+	workflowAuditOperationDefinitionPause  = "workflow.definition.pause"
+	workflowAuditOperationDefinitionDelete = "workflow.definition.delete"
+	workflowAuditOperationActivationPause  = "workflow.activation.pause"
+	workflowAuditOperationRunStart         = "workflow.run.start"
+	workflowAuditOperationRunSignal        = "workflow.run.signal"
+	workflowAuditOperationRunSignalOrStart = "workflow.run.signal_or_start"
+	workflowAuditOperationRunCancel        = "workflow.run.cancel"
+	workflowAuditOperationEventDeliver     = "workflow.event.deliver"
 
-	workflowAuditTargetDefinition   = "workflow_definition"
-	workflowAuditTargetSchedule     = "workflow_schedule"
-	workflowAuditTargetEventTrigger = "workflow_event_trigger"
-	workflowAuditTargetRun          = "workflow_run"
-	workflowAuditTargetEvent        = "workflow_event"
+	workflowAuditTargetDefinition = "workflow_definition"
+	workflowAuditTargetRun        = "workflow_run"
+	workflowAuditTargetEvent      = "workflow_event"
 )
 
 type workflowAuditEvent struct {
@@ -869,9 +820,9 @@ func workflowTargetHasApp(target coreworkflow.Target, appName string) bool {
 	return false
 }
 
-func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req EventPublish) (out coreworkflow.Event, err error) {
+func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req EventDeliver) (out coreworkflow.Event, err error) {
 	p = principal.Canonicalized(p)
-	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationEventPublish)
+	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationEventDeliver)
 	appName := strings.TrimSpace(req.AppName)
 	audit.setCallerApp(appName)
 	finishAudit := true
@@ -902,7 +853,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 	if strings.TrimSpace(event.Type) == "" {
 		return coreworkflow.Event{}, ErrWorkflowEventTypeRequired
 	}
-	publishedBy := workflowSubjectIDFromPrincipal(p)
+	deliveredBySubjectID := workflowSubjectIDFromPrincipal(p)
 
 	if providerSelection != "" {
 		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
@@ -914,20 +865,20 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 		if err != nil {
 			return coreworkflow.Event{}, err
 		}
-		publishedProto, err := provider.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
+		deliveredProto, err := provider.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{
 			AppName:              appName,
 			Event:                eventProto,
-			PublishedBySubjectId: publishedBy,
+			DeliveredBySubjectId: deliveredBySubjectID,
 		})
 		if err != nil {
 			return coreworkflow.Event{}, err
 		}
-		if publishedProto != nil {
-			published, err := workflowwire.EventFromProto(publishedProto)
+		if deliveredProto != nil {
+			delivered, err := workflowwire.EventFromProto(deliveredProto)
 			if err != nil {
 				return coreworkflow.Event{}, err
 			}
-			return published, nil
+			return delivered, nil
 		}
 		return event, nil
 	}
@@ -950,10 +901,10 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 			providerAudit.finish(ctx, err)
 			return coreworkflow.Event{}, err
 		}
-		_, err = provider.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
+		_, err = provider.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{
 			AppName:              appName,
 			Event:                eventProto,
-			PublishedBySubjectId: publishedBy,
+			DeliveredBySubjectId: deliveredBySubjectID,
 		})
 		if err != nil {
 			providerAudit.finish(ctx, err)

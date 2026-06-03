@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"google.golang.org/grpc"
@@ -42,18 +41,18 @@ func (s *recordingWorkflowProviderServer) ConfigureProvider(context.Context, *pr
 	return &proto.ConfigureProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
 }
 
-func (s *recordingWorkflowProviderServer) StartRun(_ context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+func (s *recordingWorkflowProviderServer) ApplyDefinition(_ context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
+	s.record("ApplyDefinition", req.GetInvocationToken())
+	return &proto.WorkflowDefinition{Id: req.GetSpec().GetId(), Target: req.GetSpec().GetTarget()}, nil
+}
+
+func (s *recordingWorkflowProviderServer) StartRun(_ context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
 	s.record("StartRun", req.GetInvocationToken())
-	return &proto.BoundWorkflowRun{Id: "run-1", Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING}, nil
+	return &proto.WorkflowRun{Id: "run-1", Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING}, nil
 }
 
-func (s *recordingWorkflowProviderServer) ListSchedules(_ context.Context, req *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error) {
-	s.record("ListSchedules", req.GetInvocationToken())
-	return &proto.ListWorkflowProviderSchedulesResponse{}, nil
-}
-
-func (s *recordingWorkflowProviderServer) PublishEvent(_ context.Context, req *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
-	s.record("PublishEvent", req.GetInvocationToken())
+func (s *recordingWorkflowProviderServer) DeliverEvent(_ context.Context, req *proto.DeliverWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
+	s.record("DeliverEvent", req.GetInvocationToken())
 	return &proto.WorkflowEvent{Id: "event-1", Type: req.GetEvent().GetType()}, nil
 }
 
@@ -75,26 +74,24 @@ func TestRemoteWorkflowForwardsRestoredInvocationToken(t *testing.T) {
 	ctx := appaccessservice.RestoreTokenContext(context.Background(), tokenCtx, "")
 
 	workflow, server := newRecordingRemoteWorkflow(t)
-	target := coreworkflow.Target{Steps: []coreworkflow.Step{{
-		ID:  "call_app",
-		App: &coreworkflow.AppCall{Name: "slack", Operation: "chat.postMessage"},
+	target := &proto.BoundWorkflowTarget{Steps: []*proto.WorkflowStep{{
+		Id:     "call_app",
+		Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{Name: "slack", Operation: "chat.postMessage"}},
 	}}}
 
 	calls := map[string]func() error{
+		"ApplyDefinition": func() error {
+			_, err := workflow.ApplyDefinition(ctx, &proto.ApplyWorkflowProviderDefinitionRequest{
+				Spec: &proto.WorkflowDefinitionSpec{Id: "definition-1", Target: target},
+			})
+			return err
+		},
 		"StartRun": func() error {
-			targetProto, err := workflowwire.TargetToProto(target)
-			if err != nil {
-				return err
-			}
-			_, err = workflow.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{Target: targetProto})
+			_, err := workflow.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{DefinitionId: "definition-1"})
 			return err
 		},
-		"ListSchedules": func() error {
-			_, err := workflow.ListSchedules(ctx, &proto.ListWorkflowProviderSchedulesRequest{})
-			return err
-		},
-		"PublishEvent": func() error {
-			_, err := workflow.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{Event: &proto.WorkflowEvent{Type: "issue.created"}})
+		"DeliverEvent": func() error {
+			_, err := workflow.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{Event: &proto.WorkflowEvent{Type: "issue.created"}})
 			return err
 		},
 	}

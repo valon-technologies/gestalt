@@ -86,28 +86,40 @@ func staleRuntimeSessionForTest() *proto.RuntimeSession {
 
 type noopWorkflowProvider struct{}
 
-func (p *noopWorkflowProvider) CreateDefinition(context.Context, *proto.CreateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
+func (p *noopWorkflowProvider) ApplyDefinition(context.Context, *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	return nil, nil
 }
-func (p *noopWorkflowProvider) GetDefinition(context.Context, *proto.GetWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
+func (p *noopWorkflowProvider) GetDefinition(context.Context, *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	return nil, nil
 }
-func (p *noopWorkflowProvider) UpdateDefinition(context.Context, *proto.UpdateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
+func (p *noopWorkflowProvider) ListDefinitions(context.Context, *proto.ListWorkflowProviderDefinitionsRequest) (*proto.ListWorkflowProviderDefinitionsResponse, error) {
+	return &proto.ListWorkflowProviderDefinitionsResponse{}, nil
+}
+func (p *noopWorkflowProvider) SetDefinitionPaused(context.Context, *proto.SetWorkflowProviderDefinitionPausedRequest) (*proto.WorkflowDefinition, error) {
+	return nil, nil
+}
+func (p *noopWorkflowProvider) SetActivationPaused(context.Context, *proto.SetWorkflowProviderActivationPausedRequest) (*proto.WorkflowDefinition, error) {
 	return nil, nil
 }
 func (p *noopWorkflowProvider) DeleteDefinition(context.Context, *proto.DeleteWorkflowProviderDefinitionRequest) error {
 	return nil
 }
-func (p *noopWorkflowProvider) StartRun(context.Context, *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+func (p *noopWorkflowProvider) StartRun(context.Context, *proto.StartWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
 	return nil, nil
 }
-func (p *noopWorkflowProvider) GetRun(context.Context, *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+func (p *noopWorkflowProvider) GetRun(context.Context, *proto.GetWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
 	return nil, nil
 }
 func (p *noopWorkflowProvider) ListRuns(context.Context, *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
 	return &proto.ListWorkflowProviderRunsResponse{}, nil
 }
-func (p *noopWorkflowProvider) CancelRun(context.Context, *proto.CancelWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+func (p *noopWorkflowProvider) GetRunEvents(context.Context, *proto.GetWorkflowProviderRunEventsRequest) (*proto.GetWorkflowProviderRunEventsResponse, error) {
+	return &proto.GetWorkflowProviderRunEventsResponse{}, nil
+}
+func (p *noopWorkflowProvider) GetRunOutput(context.Context, *proto.GetWorkflowProviderRunOutputRequest) (*proto.GetWorkflowProviderRunOutputResponse, error) {
+	return &proto.GetWorkflowProviderRunOutputResponse{}, nil
+}
+func (p *noopWorkflowProvider) CancelRun(context.Context, *proto.CancelWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
 	return nil, nil
 }
 func (p *noopWorkflowProvider) SignalRun(context.Context, *proto.SignalWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
@@ -116,43 +128,7 @@ func (p *noopWorkflowProvider) SignalRun(context.Context, *proto.SignalWorkflowP
 func (p *noopWorkflowProvider) SignalOrStartRun(context.Context, *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
 	return nil, nil
 }
-func (p *noopWorkflowProvider) UpsertSchedule(context.Context, *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
-	return nil, nil
-}
-func (p *noopWorkflowProvider) GetSchedule(context.Context, *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
-	return nil, nil
-}
-func (p *noopWorkflowProvider) ListSchedules(context.Context, *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error) {
-	return &proto.ListWorkflowProviderSchedulesResponse{}, nil
-}
-func (p *noopWorkflowProvider) DeleteSchedule(context.Context, *proto.DeleteWorkflowProviderScheduleRequest) error {
-	return nil
-}
-func (p *noopWorkflowProvider) PauseSchedule(context.Context, *proto.PauseWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
-	return nil, nil
-}
-func (p *noopWorkflowProvider) ResumeSchedule(context.Context, *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
-	return nil, nil
-}
-func (p *noopWorkflowProvider) UpsertEventTrigger(context.Context, *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
-	return nil, nil
-}
-func (p *noopWorkflowProvider) GetEventTrigger(context.Context, *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
-	return nil, nil
-}
-func (p *noopWorkflowProvider) ListEventTriggers(context.Context, *proto.ListWorkflowProviderEventTriggersRequest) (*proto.ListWorkflowProviderEventTriggersResponse, error) {
-	return &proto.ListWorkflowProviderEventTriggersResponse{}, nil
-}
-func (p *noopWorkflowProvider) DeleteEventTrigger(context.Context, *proto.DeleteWorkflowProviderEventTriggerRequest) error {
-	return nil
-}
-func (p *noopWorkflowProvider) PauseEventTrigger(context.Context, *proto.PauseWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
-	return nil, nil
-}
-func (p *noopWorkflowProvider) ResumeEventTrigger(context.Context, *proto.ResumeWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
-	return nil, nil
-}
-func (p *noopWorkflowProvider) PublishEvent(_ context.Context, req *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
+func (p *noopWorkflowProvider) DeliverEvent(_ context.Context, req *proto.DeliverWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
 	return req.GetEvent(), nil
 }
 func (p *noopWorkflowProvider) Ping(context.Context) error { return nil }

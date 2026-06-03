@@ -192,29 +192,31 @@ apps:
     capabilities:
       workflow:
         operations:
-          - events.publish
+          - events.deliver
 
 workflows:
-  schedules:
+  definitions:
     nightly_summary:
       provider: local
-      cron: "0 3 * * *"
-      timezone: America/New_York
       runAs:
         subject:
           id: service_account:workspace-review-nightly
-      target:
-        steps:
-          - id: generate_report
-            app:
-              name: workspace_review
-              operation: reports.generateNightly
-              input:
-                bucket: workspace-review-reports
+      steps:
+        - id: generate_report
+          app:
+            name: workspace_review
+            operation: reports.generateNightly
+            input:
+              bucket: workspace-review-reports
+      on:
+        nightly:
+          schedule:
+            cron: "0 3 * * *"
+            timezone: America/New_York
 ```
 
 For the full configuration reference, see [Config File](/reference/config-file).
-For workflow schedules and event triggers, see
+For workflow definitions and activations, see
 [Providers > Workflow](/providers/workflow). For the
 `service_account:workspace-review-nightly` subject and `runAs`, see
 [Service Accounts](/service-accounts#runas).
@@ -332,8 +334,8 @@ details. Those come from the deployment bindings.
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
-      _, err = workflows.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
-        Event: &proto.WorkflowEvent{
+      _, err = workflows.DeliverEvent(ctx, gestalt.WorkflowDeliverEvent{
+        Event: &gestalt.WorkflowEvent{
           Type:            "workspace_review.report.generated",
           Source:          "workspace_review",
           Subject:         "nightly",
@@ -378,7 +380,7 @@ details. Those come from the deployment bindings.
         PresignOptions,
         PresignMethod,
         WorkflowEvent,
-        WorkflowPublishEvent,
+        WorkflowDeliverEvent,
     )
 
     app = App("workspace_review")
@@ -434,8 +436,8 @@ details. Those come from the deployment bindings.
         )
 
         with request.workflows() as workflows:
-            workflows.publish_event(
-                WorkflowPublishEvent(
+            workflows.deliver_event(
+                WorkflowDeliverEvent(
                     event=WorkflowEvent(
                         type="workspace_review.report.generated",
                         source="workspace_review",
@@ -457,7 +459,7 @@ details. Those come from the deployment bindings.
 
     use gestalt::{
         IndexedDB, PresignMethod, PresignOptions, S3, WorkflowEvent,
-        WorkflowPublishEvent,
+        WorkflowDeliverEvent,
     };
     use serde::{Deserialize, Serialize};
     use serde_json::json;
@@ -539,7 +541,7 @@ details. Those come from the deployment bindings.
 
         let mut workflows = request.workflows().await?;
         workflows
-            .publish_event(WorkflowPublishEvent {
+            .deliver_event(WorkflowDeliverEvent {
                 event: Some(WorkflowEvent {
                     event_type: "workspace_review.report.generated".to_string(),
                     source: "workspace_review".to_string(),
@@ -625,7 +627,7 @@ details. Those come from the deployment bindings.
             });
 
             const workflows = new Workflow(request);
-            await workflows.publishEvent({
+            await workflows.deliverEvent({
               event: workflowEvent({
                 type: "workspace_review.report.generated",
                 source: "workspace_review",

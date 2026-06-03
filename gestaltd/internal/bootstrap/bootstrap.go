@@ -1219,10 +1219,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
-		if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
-			return err
-		}
-		if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
+		if err := reconcileWorkflowConfigDefinitions(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
 			return err
 		}
 		return nil

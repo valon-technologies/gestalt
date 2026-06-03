@@ -16,12 +16,17 @@ from gestalt import (
     BoundWorkflowTarget,
     Request,
     Workflow,
-    WorkflowCreateDefinition,
-    WorkflowCreateSchedule,
+    WorkflowActivation,
+    WorkflowApplyDefinition,
+    WorkflowDefinitionSpec,
+    WorkflowDeliverEvent,
     WorkflowEvent,
-    WorkflowPublishEvent,
+    WorkflowSignal,
+    WorkflowSignalOrStartRun,
+    WorkflowStartRun,
     WorkflowStep,
     WorkflowStepAppCall,
+    WorkflowValue,
 )
 from gestalt._gen.v1 import workflow_pb2 as _workflow_pb2
 from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
@@ -35,48 +40,83 @@ _manager_relay_tokens: list[str] = []
 
 
 class _WorkflowServicer(workflow_pb2_grpc.WorkflowProviderServicer):
-    def CreateDefinition(self, request: Any, context: grpc.ServicerContext) -> Any:
+    def ApplyDefinition(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
+        spec = request.spec
         _manager_requests.append(
             {
-                "method": "create_definition",
+                "method": "apply_definition",
                 "invocation_token": request.invocation_token,
                 "idempotency_key": request.idempotency_key,
                 "provider_name": request.provider_name,
+                "definition_id": spec.id,
+                "activation_count": str(len(spec.activations)),
             }
         )
-        return workflow_pb2.BoundWorkflowDefinition(
+        return workflow_pb2.WorkflowDefinition(
             provider_name=request.provider_name or "basic",
-            id="def-1",
-            target=request.target,
+            id=spec.id or "def-1",
+            generation=7,
+            target=spec.target,
+            activations=spec.activations,
+            paused=spec.paused,
         )
 
-    def UpsertSchedule(self, request: Any, context: grpc.ServicerContext) -> Any:
+    def StartRun(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
         _manager_requests.append(
             {
-                "method": "create_schedule",
+                "method": "start_run",
                 "invocation_token": request.invocation_token,
                 "idempotency_key": request.idempotency_key,
-                "cron": request.cron,
+                "provider_name": request.provider_name,
+                "definition_id": request.definition_id,
+                "workflow_key": request.workflow_key,
             }
         )
-        return workflow_pb2.BoundWorkflowSchedule(
+        return workflow_pb2.WorkflowRun(
             provider_name=request.provider_name or "basic",
-            id="sched-1",
-            cron=request.cron,
-            timezone=request.timezone,
-            target=request.target,
-            paused=request.paused,
+            id="run-1",
+            definition_id=request.definition_id,
+            workflow_key=request.workflow_key,
+            status=workflow_pb2.WORKFLOW_RUN_STATUS_PENDING,
+            input=request.input,
         )
 
-    def PublishEvent(self, request: Any, context: grpc.ServicerContext) -> Any:
+    def SignalOrStartRun(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_manager_relay_tokens(context)
+        _manager_requests.append(
+            {
+                "method": "signal_or_start_run",
+                "invocation_token": request.invocation_token,
+                "idempotency_key": request.idempotency_key,
+                "provider_name": request.provider_name,
+                "definition_id": request.definition_id,
+                "workflow_key": request.workflow_key,
+                "signal_name": request.signal.name,
+            }
+        )
+        return workflow_pb2.SignalWorkflowRunResponse(
+            run=workflow_pb2.WorkflowRun(
+                provider_name=request.provider_name or "basic",
+                id="run-signal",
+                definition_id=request.definition_id,
+                workflow_key=request.workflow_key,
+                status=workflow_pb2.WORKFLOW_RUN_STATUS_RUNNING,
+                input=request.input,
+            ),
+            signal=request.signal,
+            started_run=True,
+            workflow_key=request.workflow_key,
+        )
+
+    def DeliverEvent(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
         event = workflow_pb2.WorkflowEvent()
         event.CopyFrom(request.event)
         _manager_requests.append(
             {
-                "method": "publish_event",
+                "method": "deliver_event",
                 "invocation_token": request.invocation_token,
                 "event_id": event.id,
                 "event_type": event.type,
@@ -87,7 +127,7 @@ class _WorkflowServicer(workflow_pb2_grpc.WorkflowProviderServicer):
             }
         )
         if not event.id:
-            event.id = "published-event-1"
+            event.id = "delivered-event-1"
         return event
 
 
@@ -130,7 +170,7 @@ class WorkflowTransportTests(unittest.TestCase):
         _manager_requests.clear()
         _manager_relay_tokens.clear()
 
-    def test_workflow_publish_event_roundtrip(self) -> None:
+    def test_workflow_deliver_event_roundtrip(self) -> None:
         event = workflow_pb2.WorkflowEvent(
             id="delivery-123",
             source="github",
@@ -141,23 +181,23 @@ class WorkflowTransportTests(unittest.TestCase):
         event.data.update({"github_event": "pull_request", "github_action": "opened"})
 
         with Workflow("token-123") as manager:
-            published = manager.publish_event(
-                workflow_pb2.PublishWorkflowProviderEventRequest(
+            delivered = manager.deliver_event(
+                WorkflowDeliverEvent(
                     app_name="github",
                     event=event,
                     provider_name="advanced",
                 )
             )
 
-        assert published is not None
-        self.assertEqual(published.id, "delivery-123")
-        self.assertEqual(published.type, "github.app.webhook")
+        assert delivered is not None
+        self.assertEqual(delivered.id, "delivery-123")
+        self.assertEqual(delivered.type, "github.app.webhook")
         self.assertEqual(_manager_relay_tokens, ["relay-token-py"])
         self.assertEqual(
             _manager_requests,
             [
                 {
-                    "method": "publish_event",
+                    "method": "deliver_event",
                     "invocation_token": "token-123",
                     "event_id": "delivery-123",
                     "event_type": "github.app.webhook",
@@ -176,31 +216,57 @@ class WorkflowTransportTests(unittest.TestCase):
         )
 
         with request.workflows() as manager:
-            created_definition = manager.create_definition(
-                WorkflowCreateDefinition(
+            definition = manager.apply_definition(
+                WorkflowApplyDefinition(
                     provider_name="managed",
-                    target=BoundWorkflowTarget(
-                        steps=[
-                            WorkflowStep(
-                                id="sync",
-                                app=WorkflowStepAppCall(
-                                    name="demo",
-                                    operation="sync",
-                                ),
+                    spec=WorkflowDefinitionSpec(
+                        id="def-managed",
+                        target=BoundWorkflowTarget(
+                            steps=[
+                                WorkflowStep(
+                                    id="sync",
+                                    app=WorkflowStepAppCall(
+                                        name="demo",
+                                        operation="sync",
+                                        input=WorkflowValue(input="repository"),
+                                    ),
+                                )
+                            ],
+                        ),
+                        activations=[
+                            WorkflowActivation(
+                                id="github",
+                                event={
+                                    "match": {
+                                        "type": "github.app.webhook",
+                                        "source": "github",
+                                    }
+                                },
+                                input=WorkflowValue(signal="data"),
                             )
                         ],
                     ),
                 )
             )
-            created = manager.create_schedule(
-                WorkflowCreateSchedule(
+            run = manager.start_run(
+                WorkflowStartRun(
                     provider_name="managed",
-                    cron="*/5 * * * *",
-                    timezone="UTC",
+                    definition_id="def-managed",
+                    workflow_key="repo:valon/app",
+                    input={"repository": "valon/app"},
                 )
             )
-            published = manager.publish_event(
-                WorkflowPublishEvent(
+            signal = manager.signal_or_start_run(
+                WorkflowSignalOrStartRun(
+                    provider_name="managed",
+                    definition_id="def-managed",
+                    workflow_key="repo:valon/app",
+                    signal=WorkflowSignal(name="github", payload={"state": "opened"}),
+                    input={"repository": "valon/app"},
+                )
+            )
+            delivered = manager.deliver_event(
+                WorkflowDeliverEvent(
                     provider_name="managed",
                     event=WorkflowEvent(
                         source="github",
@@ -210,35 +276,47 @@ class WorkflowTransportTests(unittest.TestCase):
                 )
             )
 
-        definition = created_definition.definition
-        schedule = created.schedule
-        assert definition is not None
-        assert schedule is not None
-        assert published is not None
-        self.assertEqual(definition.id, "def-1")
-        self.assertEqual(schedule.id, "sched-1")
-        self.assertEqual(published.id, "published-event-1")
+        assert signal.run is not None
+        assert delivered is not None
+        self.assertEqual(definition.id, "def-managed")
+        self.assertEqual(definition.generation, 7)
+        self.assertEqual(run.id, "run-1")
+        self.assertEqual(signal.run.id, "run-signal")
+        self.assertEqual(delivered.id, "delivered-event-1")
         self.assertEqual(
             _manager_relay_tokens,
-            ["relay-token-py", "relay-token-py", "relay-token-py"],
+            ["relay-token-py", "relay-token-py", "relay-token-py", "relay-token-py"],
         )
         self.assertEqual(
             _manager_requests,
             [
                 {
-                    "method": "create_definition",
+                    "method": "apply_definition",
                     "invocation_token": "token-embedded",
                     "idempotency_key": "workflow-request-key-py",
                     "provider_name": "managed",
+                    "definition_id": "def-managed",
+                    "activation_count": "1",
                 },
                 {
-                    "method": "create_schedule",
+                    "method": "start_run",
                     "invocation_token": "token-embedded",
                     "idempotency_key": "workflow-request-key-py",
-                    "cron": "*/5 * * * *",
+                    "provider_name": "managed",
+                    "definition_id": "def-managed",
+                    "workflow_key": "repo:valon/app",
                 },
                 {
-                    "method": "publish_event",
+                    "method": "signal_or_start_run",
+                    "invocation_token": "token-embedded",
+                    "idempotency_key": "workflow-request-key-py",
+                    "provider_name": "managed",
+                    "definition_id": "def-managed",
+                    "workflow_key": "repo:valon/app",
+                    "signal_name": "github",
+                },
+                {
+                    "method": "deliver_event",
                     "invocation_token": "token-embedded",
                     "event_id": "",
                     "event_type": "github.app.webhook",

@@ -14,10 +14,9 @@ var ErrInvalidValue = errors.New("invalid workflow value")
 
 // EvalContext carries runtime inputs for workflow value and template evaluation.
 type EvalContext struct {
-	Request     Request
-	Outputs     map[string]any
-	Inputs      map[string]any
-	AllowInputs bool
+	Request    Request
+	Outputs    map[string]any
+	StepInputs map[string]any
 }
 
 func (c EvalContext) EvaluateStepInputs(values map[string]gestalt.WorkflowValue) (map[string]any, error) {
@@ -71,14 +70,14 @@ func (c EvalContext) EvaluateValue(value gestalt.WorkflowValue) (any, bool, erro
 	case value.Template != nil:
 		rendered, err := c.RenderTemplate(value.Template.Template)
 		return rendered, err == nil, err
-	case strings.TrimSpace(value.RunInput) != "":
-		return MapPathValue(c.Request.Input, value.RunInput)
-	case strings.TrimSpace(value.SignalPayload) != "":
+	case strings.TrimSpace(value.Input) != "":
+		return MapPathValue(c.Request.Input, value.Input)
+	case strings.TrimSpace(value.Signal) != "":
 		signal := LatestSignal(c.Request.Signals)
 		if signal == nil {
 			return nil, false, nil
 		}
-		return PathValue(signal.Payload, value.SignalPayload)
+		return PathValue(signal.Payload, value.Signal)
 	case value.StepOutput != nil:
 		stepID := strings.TrimSpace(value.StepOutput.StepID)
 		output, ok := c.Outputs[stepID]
@@ -86,6 +85,13 @@ func (c EvalContext) EvaluateValue(value gestalt.WorkflowValue) (any, bool, erro
 			return nil, false, fmt.Errorf("%w: workflow step output references missing step %q", ErrInvalidValue, stepID)
 		}
 		return PathValue(output, value.StepOutput.Path)
+	case value.StepInput != nil:
+		stepID := strings.TrimSpace(value.StepInput.StepID)
+		input, ok := c.StepInputs[stepID]
+		if !ok {
+			return nil, false, fmt.Errorf("%w: workflow step input references missing step %q", ErrInvalidValue, stepID)
+		}
+		return PathValue(input, value.StepInput.Path)
 	default:
 		return nil, true, nil
 	}
@@ -94,21 +100,21 @@ func (c EvalContext) EvaluateValue(value gestalt.WorkflowValue) (any, bool, erro
 func (c EvalContext) RenderTemplate(template string) (string, error) {
 	var b strings.Builder
 	for i := 0; i < len(template); {
-		if strings.HasPrefix(template[i:], "$${") {
-			b.WriteString("${")
-			i += 3
+		if strings.HasPrefix(template[i:], "$${{") {
+			b.WriteString("${{")
+			i += 4
 			continue
 		}
-		if !strings.HasPrefix(template[i:], "${") {
+		if !strings.HasPrefix(template[i:], "${{") {
 			b.WriteByte(template[i])
 			i++
 			continue
 		}
-		end := strings.IndexByte(template[i+2:], '}')
+		end := strings.Index(template[i+3:], "}}")
 		if end < 0 {
 			return "", fmt.Errorf("%w: unterminated template expression", ErrInvalidValue)
 		}
-		expr := strings.TrimSpace(template[i+2 : i+2+end])
+		expr := strings.TrimSpace(template[i+3 : i+3+end])
 		value, ok, err := c.templateExpressionValue(expr)
 		if err != nil {
 			return "", err
@@ -121,28 +127,57 @@ func (c EvalContext) RenderTemplate(template string) (string, error) {
 			return "", err
 		}
 		b.WriteString(rendered)
-		i += 2 + end + 1
+		i += 3 + end + 2
 	}
 	return b.String(), nil
 }
 
 func (c EvalContext) templateExpressionValue(expr string) (any, bool, error) {
 	switch {
-	case strings.HasPrefix(expr, "inputs."):
-		if !c.AllowInputs {
-			return nil, false, fmt.Errorf("%w: inputs references are not allowed here", ErrInvalidValue)
-		}
-		return MapPathValue(c.Inputs, strings.TrimPrefix(expr, "inputs."))
-	case strings.HasPrefix(expr, "runInput."):
-		return MapPathValue(c.Request.Input, strings.TrimPrefix(expr, "runInput."))
-	case strings.HasPrefix(expr, "signalPayload."):
+	case strings.HasPrefix(expr, "input."):
+		return MapPathValue(c.Request.Input, strings.TrimPrefix(expr, "input."))
+	case expr == "input":
+		return c.Request.Input, true, nil
+	case strings.HasPrefix(expr, "signal."):
 		signal := LatestSignal(c.Request.Signals)
 		if signal == nil {
 			return nil, false, nil
 		}
-		return PathValue(signal.Payload, strings.TrimPrefix(expr, "signalPayload."))
+		return PathValue(signal.Payload, strings.TrimPrefix(expr, "signal."))
+	case expr == "signal":
+		signal := LatestSignal(c.Request.Signals)
+		if signal == nil {
+			return nil, false, nil
+		}
+		return signal.Payload, true, nil
+	case strings.HasPrefix(expr, "steps."):
+		return c.workflowStepExpressionValue(strings.TrimPrefix(expr, "steps."))
 	default:
 		return nil, false, fmt.Errorf("%w: unsupported template expression %q", ErrInvalidValue, expr)
+	}
+}
+
+func (c EvalContext) workflowStepExpressionValue(expr string) (any, bool, error) {
+	stepID, tail, ok := strings.Cut(expr, ".")
+	if !ok || strings.TrimSpace(stepID) == "" {
+		return nil, false, fmt.Errorf("%w: invalid step expression %q", ErrInvalidValue, expr)
+	}
+	kind, path, _ := strings.Cut(tail, ".")
+	switch kind {
+	case "outputs":
+		output, exists := c.Outputs[stepID]
+		if !exists {
+			return nil, false, fmt.Errorf("%w: workflow step output references missing step %q", ErrInvalidValue, stepID)
+		}
+		return PathValue(output, path)
+	case "inputs":
+		input, exists := c.StepInputs[stepID]
+		if !exists {
+			return nil, false, fmt.Errorf("%w: workflow step input references missing step %q", ErrInvalidValue, stepID)
+		}
+		return PathValue(input, path)
+	default:
+		return nil, false, fmt.Errorf("%w: unsupported step expression %q", ErrInvalidValue, expr)
 	}
 }
 

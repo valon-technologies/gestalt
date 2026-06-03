@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 
 import {
   WorkflowRunStatus,
-  boundWorkflowRun,
   boundWorkflowTarget,
   boundWorkflowTargetFromTarget,
+  workflowRun,
   workflowSignal,
   workflowStepWhen,
   workflowStepWhenToProto,
@@ -32,7 +32,7 @@ test("workflow builders accept native JSON objects and Dates", () => {
     createdAt,
     sequence: 0,
   });
-  const run = boundWorkflowRun({
+  const run = workflowRun({
     id: "run-1",
     status: WorkflowRunStatus.PENDING,
     target,
@@ -139,7 +139,7 @@ test("agent and app workflow steps round-trip through copy helpers", () => {
       {
         id: "diagnosis",
         inputs: {
-          thread: { signalPayload: "event.thread_ts" },
+          thread: { signal: "event.thread_ts" },
         },
         agent: {
           provider: "agent",

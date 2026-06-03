@@ -211,14 +211,9 @@ func appUIBundleFromNode(appNode *yaml.Node) string {
 func workflowNodesTargetingAppClosure(doc *yaml.Node, keepApps map[string]struct{}) map[string]workflowAppRefs {
 	refsByName := map[string]workflowAppRefs{}
 	workflowsNode := mappingValueNode(doc, "workflows")
-	for name, schedule := range mappingNodeEntries(mappingValueNode(workflowsNode, "schedules")) {
-		if workflowTargetNodeInAppClosure(mappingValueNode(schedule, "target"), keepApps) {
-			refsByName["schedule:"+name] = workflowRefsFromNode(schedule)
-		}
-	}
-	for name, trigger := range mappingNodeEntries(mappingValueNode(workflowsNode, "eventTriggers")) {
-		if workflowTargetNodeInAppClosure(mappingValueNode(trigger, "target"), keepApps) {
-			refsByName["trigger:"+name] = workflowRefsFromNode(trigger)
+	for name, definition := range mappingNodeEntries(mappingValueNode(workflowsNode, "definitions")) {
+		if workflowNodeInAppClosure(definition, keepApps) {
+			refsByName["definition:"+name] = workflowRefsFromNode(definition)
 		}
 	}
 	return refsByName
@@ -244,18 +239,13 @@ func filterWorkflowNodes(workflowsNode *yaml.Node, keep map[string]workflowAppRe
 	if workflowsNode == nil {
 		return
 	}
-	keepSchedules := map[string]struct{}{}
-	keepTriggers := map[string]struct{}{}
+	keepDefinitions := map[string]struct{}{}
 	for key := range keep {
-		switch {
-		case strings.HasPrefix(key, "schedule:"):
-			keepSchedules[strings.TrimPrefix(key, "schedule:")] = struct{}{}
-		case strings.HasPrefix(key, "trigger:"):
-			keepTriggers[strings.TrimPrefix(key, "trigger:")] = struct{}{}
+		if strings.HasPrefix(key, "definition:") {
+			keepDefinitions[strings.TrimPrefix(key, "definition:")] = struct{}{}
 		}
 	}
-	filterMappingNode(mappingValueNode(workflowsNode, "schedules"), keepSchedules)
-	filterMappingNode(mappingValueNode(workflowsNode, "eventTriggers"), keepTriggers)
+	filterMappingNode(mappingValueNode(workflowsNode, "definitions"), keepDefinitions)
 }
 
 type appScopeProviderRefs struct {
@@ -316,15 +306,10 @@ func providerRefsForAppScopeNode(doc *yaml.Node, keepApps map[string]struct{}, k
 		addAppProviderRefsFromNode(doc, &refs, appNode)
 	}
 	for key := range keptWorkflows {
-		switch {
-		case strings.HasPrefix(key, "schedule:"):
-			name := strings.TrimPrefix(key, "schedule:")
-			schedule := mappingValueNode(mappingValueNode(mappingValueNode(doc, "workflows"), "schedules"), name)
-			addWorkflowProviderRefsFromNode(doc, &refs, schedule)
-		case strings.HasPrefix(key, "trigger:"):
-			name := strings.TrimPrefix(key, "trigger:")
-			trigger := mappingValueNode(mappingValueNode(mappingValueNode(doc, "workflows"), "eventTriggers"), name)
-			addWorkflowProviderRefsFromNode(doc, &refs, trigger)
+		if strings.HasPrefix(key, "definition:") {
+			name := strings.TrimPrefix(key, "definition:")
+			definition := mappingValueNode(mappingValueNode(mappingValueNode(doc, "workflows"), "definitions"), name)
+			addWorkflowProviderRefsFromNode(doc, &refs, definition)
 		}
 	}
 	addProviderMapDependenciesFromNode(doc, "workflow", refs.Workflow, &refs)
@@ -432,7 +417,7 @@ func addWorkflowProviderRefsFromNode(doc *yaml.Node, refs *appScopeProviderRefs,
 			addProviderRef(refs.Workflow, name)
 		}
 	}
-	for _, stepNode := range workflowStepNodesFromTargetNode(mappingValueNode(workflowNode, "target")) {
+	for _, stepNode := range workflowStepNodesFromWorkflowNode(workflowNode) {
 		agentNode := mappingValueNode(stepNode, "agent")
 		if agentNode == nil {
 			continue
@@ -523,15 +508,9 @@ func retainedProviderEntryNodes(doc *yaml.Node, keepApps map[string]struct{}, ke
 	}
 	entries = append(entries, retainedProviderMapNodes(mappingValueNode(mappingValueNode(doc, "runtime"), "providers"), refs.Runtime)...)
 	for key := range keptWorkflows {
-		switch {
-		case strings.HasPrefix(key, "schedule:"):
-			name := strings.TrimPrefix(key, "schedule:")
-			if entry := mappingValueNode(mappingValueNode(mappingValueNode(doc, "workflows"), "schedules"), name); entry != nil {
-				entries = append(entries, entry)
-			}
-		case strings.HasPrefix(key, "trigger:"):
-			name := strings.TrimPrefix(key, "trigger:")
-			if entry := mappingValueNode(mappingValueNode(mappingValueNode(doc, "workflows"), "eventTriggers"), name); entry != nil {
+		if strings.HasPrefix(key, "definition:") {
+			name := strings.TrimPrefix(key, "definition:")
+			if entry := mappingValueNode(mappingValueNode(mappingValueNode(doc, "workflows"), "definitions"), name); entry != nil {
 				entries = append(entries, entry)
 			}
 		}
@@ -742,17 +721,10 @@ func providerRefsForAppScope(cfg *Config, keepApps map[string]struct{}, keptWork
 		}
 	}
 	for key := range keptWorkflows {
-		switch {
-		case strings.HasPrefix(key, "schedule:"):
-			name := strings.TrimPrefix(key, "schedule:")
-			schedule := cfg.Workflows.Schedules[name]
-			if err := addWorkflowProviderRefs(cfg, &refs, schedule.Provider, schedule.Target); err != nil {
-				return refs, err
-			}
-		case strings.HasPrefix(key, "trigger:"):
-			name := strings.TrimPrefix(key, "trigger:")
-			trigger := cfg.Workflows.EventTriggers[name]
-			if err := addWorkflowProviderRefs(cfg, &refs, trigger.Provider, trigger.Target); err != nil {
+		if strings.HasPrefix(key, "definition:") {
+			name := strings.TrimPrefix(key, "definition:")
+			definition := cfg.Workflows.Definitions[name]
+			if err := addWorkflowProviderRefs(cfg, &refs, definition.Provider, definition.Steps); err != nil {
 				return refs, err
 			}
 		}
@@ -847,17 +819,14 @@ func addRuntimeProviderRef(cfg *Config, keep map[string]struct{}, entry *Provide
 	return addSelectedRuntimeProviderRef(cfg, keep)
 }
 
-func addWorkflowProviderRefs(cfg *Config, refs *appScopeProviderRefs, workflowProvider string, target *WorkflowTargetConfig) error {
+func addWorkflowProviderRefs(cfg *Config, refs *appScopeProviderRefs, workflowProvider string, steps []WorkflowStepConfig) error {
 	if strings.TrimSpace(workflowProvider) != "" {
 		addProviderRef(refs.Workflow, workflowProvider)
 	} else if err := addSelectedWorkflowProviderRef(cfg, refs.Workflow); err != nil {
 		return err
 	}
-	if target == nil {
-		return nil
-	}
-	for i := range target.Steps {
-		step := &target.Steps[i]
+	for i := range steps {
+		step := &steps[i]
 		if step.Agent == nil {
 			continue
 		}

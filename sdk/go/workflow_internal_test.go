@@ -19,16 +19,18 @@ type workflowIdempotencyHarness struct {
 	signals []*proto.SignalOrStartWorkflowProviderRunRequest
 }
 
-func (h *workflowIdempotencyHarness) StartRun(_ context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+func (h *workflowIdempotencyHarness) StartRun(_ context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
 	h.mu.Lock()
 	h.starts = append(h.starts, gproto.Clone(req).(*proto.StartWorkflowProviderRunRequest))
 	h.mu.Unlock()
 
-	return &proto.BoundWorkflowRun{
-		ProviderName: req.GetProviderName(),
-		Id:           "run-1",
-		Status:       proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
-		WorkflowKey:  req.GetWorkflowKey(),
+	return &proto.WorkflowRun{
+		ProviderName:         req.GetProviderName(),
+		Id:                   "run-1",
+		Status:               proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
+		WorkflowKey:          req.GetWorkflowKey(),
+		DefinitionId:         req.GetDefinitionId(),
+		DefinitionGeneration: req.GetExpectedDefinitionGeneration(),
 	}, nil
 }
 
@@ -38,11 +40,13 @@ func (h *workflowIdempotencyHarness) SignalOrStartRun(_ context.Context, req *pr
 	h.mu.Unlock()
 
 	return &proto.SignalWorkflowRunResponse{
-		Run: &proto.BoundWorkflowRun{
-			ProviderName: req.GetProviderName(),
-			Id:           "run-2",
-			Status:       proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
-			WorkflowKey:  req.GetWorkflowKey(),
+		Run: &proto.WorkflowRun{
+			ProviderName:         req.GetProviderName(),
+			Id:                   "run-2",
+			Status:               proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
+			WorkflowKey:          req.GetWorkflowKey(),
+			DefinitionId:         req.GetDefinitionId(),
+			DefinitionGeneration: req.GetExpectedDefinitionGeneration(),
 		},
 		StartedRun:  true,
 		WorkflowKey: req.GetWorkflowKey(),
@@ -75,21 +79,25 @@ func TestWorkflowFromContextDefaultsRunIdempotencyKey(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	started, err := client.StartRun(context.Background(), WorkflowStartRun{
-		ProviderName: "basic",
-		WorkflowKey:  "workflow-key-1",
+		ProviderName:                 "basic",
+		DefinitionID:                 "definition-1",
+		ExpectedDefinitionGeneration: 7,
+		WorkflowKey:                  "workflow-key-1",
 	})
 	if err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}
 	signaled, err := client.SignalOrStartRun(context.Background(), WorkflowSignalOrStartRun{
-		ProviderName: "basic",
-		WorkflowKey:  "workflow-key-1",
+		ProviderName:                 "basic",
+		DefinitionID:                 "definition-1",
+		ExpectedDefinitionGeneration: 7,
+		WorkflowKey:                  "workflow-key-1",
 	})
 	if err != nil {
 		t.Fatalf("SignalOrStartRun: %v", err)
 	}
 
-	if started.Run == nil || started.Run.Status != WorkflowRunStatusValuePending {
+	if started == nil || started.Status != WorkflowRunStatusValuePending {
 		t.Fatalf("started run status = %#v, want pending", started)
 	}
 	if signaled.Run == nil || signaled.Run.Status != WorkflowRunStatusValuePending {
@@ -103,6 +111,9 @@ func TestWorkflowFromContextDefaultsRunIdempotencyKey(t *testing.T) {
 	}
 	if got := harness.starts[0].GetIdempotencyKey(); got != "request-key" {
 		t.Fatalf("start idempotency key = %q, want request-key", got)
+	}
+	if got := harness.starts[0].GetDefinitionId(); got != "definition-1" {
+		t.Fatalf("start definition id = %q, want definition-1", got)
 	}
 	if len(harness.signals) != 1 {
 		t.Fatalf("signals len = %d, want 1", len(harness.signals))

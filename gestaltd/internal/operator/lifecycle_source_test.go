@@ -1017,19 +1017,21 @@ connections:
       type: none
       token: ${GESTALT_SCOPED_APP_UNUSED_CONNECTION_MISSING_ENV}
 workflows:
-  schedules:
+  definitions:
     noisy:
-      target:
-        steps:
-          - id: ping
-            app:
-              name: beta
-              operation: ping
-      cron: "* * * * *"
       paused: ${GESTALT_SCOPED_APP_DROPPED_WORKFLOW_BOOL_MISSING_ENV}
+      steps:
+        - id: ping
+          app:
+            name: beta
+            operation: ping
       runAs:
         subject:
-          id: service_account:test
+          id: test
+      on:
+        every_minute:
+          schedule:
+            cron: "* * * * *"
 %s
   externalCredentials:
     local:

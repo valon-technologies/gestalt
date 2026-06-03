@@ -727,13 +727,13 @@ type relayTestWorkflowProviderServer struct {
 	calls *atomic.Int64
 }
 
-func (s relayTestWorkflowProviderServer) GetSchedule(_ context.Context, req *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+func (s relayTestWorkflowProviderServer) GetDefinition(_ context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	if s.calls != nil {
 		s.calls.Add(1)
 	}
-	return &proto.BoundWorkflowSchedule{
+	return &proto.WorkflowDefinition{
 		ProviderName: "registered",
-		Id:           req.GetScheduleId(),
+		Id:           req.GetDefinitionId(),
 	}, nil
 }
 
@@ -1189,12 +1189,12 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			},
 			call: func(t *testing.T, ctx context.Context, conn *grpc.ClientConn) {
 				t.Helper()
-				resp, err := proto.NewWorkflowProviderClient(conn).GetSchedule(ctx, &proto.GetWorkflowProviderScheduleRequest{ScheduleId: "schedule-1"})
+				resp, err := proto.NewWorkflowProviderClient(conn).GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"})
 				if err != nil {
-					t.Fatalf("WorkflowProvider.GetSchedule via relay: %v", err)
+					t.Fatalf("WorkflowProvider.GetDefinition via relay: %v", err)
 				}
-				if resp.GetProviderName() != "registered" || resp.GetId() != "schedule-1" {
-					t.Fatalf("WorkflowProvider.GetSchedule response = %+v, want registered schedule-1", resp)
+				if resp.GetProviderName() != "registered" || resp.GetId() != "definition-1" {
+					t.Fatalf("WorkflowProvider.GetDefinition response = %+v, want registered definition-1", resp)
 				}
 			},
 		},
@@ -1300,7 +1300,7 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
 			switch tc.service {
 			case "workflow_provider":
-				_, err = proto.NewWorkflowProviderClient(conn).GetSchedule(staleCtx, &proto.GetWorkflowProviderScheduleRequest{ScheduleId: "schedule-1"})
+				_, err = proto.NewWorkflowProviderClient(conn).GetDefinition(staleCtx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"})
 			case "agent_provider":
 				_, err = proto.NewAgentProviderClient(conn).GetSession(staleCtx, &proto.GetAgentProviderSessionRequest{SessionId: "agent-session-1"})
 			case "runtime_log_host":
