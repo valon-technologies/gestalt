@@ -94,13 +94,11 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
 	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
-	var pluginFlag *string
 	var pathFlag *string
 	var nameFlag *string
 	var portFlag *int
 	var watchFlag *bool
 	if opts.allowProviderLocal {
-		pluginFlag = fs.String("app", "", "run only the named app and its local dependency closure")
 		pathFlag = fs.String("path", "", "provider manifest path or directory for local source serve")
 		nameFlag = fs.String("name", "", "provider key override for --path")
 		portFlag = fs.Int("port", 0, "public port for --path (defaults to a free localhost port)")
@@ -142,7 +140,6 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 			ConfigPaths:   []string(configPaths),
 			Path:          flagStringValue(pathFlag),
 			Name:          flagStringValue(nameFlag),
-			App:           flagStringValue(pluginFlag),
 			Port:          flagIntValue(portFlag),
 			ArtifactsDir:  *artifactsDir,
 			LockfilePath:  *lockfilePath,
@@ -158,14 +155,12 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 		return runServeWatch(resolvedConfigPaths, operator.StatePaths{
 			ArtifactsDir: *artifactsDir,
 			LockfilePath: *lockfilePath,
-			AppScope:     []string{flagStringValue(pluginFlag)},
 		})
 	}
 
 	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, operator.StatePaths{
 		ArtifactsDir: *artifactsDir,
 		LockfilePath: *lockfilePath,
-		AppScope:     []string{flagStringValue(pluginFlag)},
 	}, locked)
 	if err != nil {
 		return err
@@ -177,7 +172,6 @@ type serveProviderLocalOptions struct {
 	ConfigPaths   []string
 	Path          string
 	Name          string
-	App           string
 	Port          int
 	ArtifactsDir  string
 	LockfilePath  string
@@ -189,12 +183,8 @@ type serveProviderLocalOptions struct {
 func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 	path := strings.TrimSpace(opts.Path)
 	name := strings.TrimSpace(opts.Name)
-	app := strings.TrimSpace(opts.App)
 
 	if path != "" {
-		if app != "" {
-			return true, fmt.Errorf("--app cannot be combined with --path")
-		}
 		if opts.Watch {
 			return true, fmt.Errorf("--watch cannot be combined with --path")
 		}
@@ -344,7 +334,6 @@ func runValidate(args []string) error {
 	var configPaths repeatedStringFlag
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
-	pluginFlag := fs.String("app", "", "validate only the named app and its local dependency closure")
 	platform := fs.String("platform", "", "target platform for static validation, formatted os/arch")
 	runtimeValidation := fs.Bool("runtime", false, "run deep runtime validation that starts configured providers")
 	if err := fs.Parse(args); err != nil {
@@ -360,7 +349,6 @@ func runValidate(args []string) error {
 	}
 	return validateConfig(configPaths, operator.StatePaths{
 		LockfilePath: *lockfilePath,
-		AppScope:     []string{*pluginFlag},
 	}, opts)
 }
 
@@ -394,7 +382,6 @@ func validateConfig(configFlags []string, state operator.StatePaths, opts valida
 	result, err := validateConfigWithStatePaths(configFlags, operator.StatePaths{
 		ArtifactsDir: scratchDir,
 		LockfilePath: state.LockfilePath,
-		AppScope:     state.AppScope,
 	}, opts)
 	if err != nil {
 		return err
@@ -470,11 +457,11 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
-	writeUsageLine(w, "  gestaltd serve [--app NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
-	writeUsageLine(w, "  gestaltd validate [--app NAME] [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
+	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  agent       Launch or inspect local agent harnesses")
@@ -493,11 +480,10 @@ func printMainUsage(w io.Writer) {
 
 func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd serve [--app NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Without --locked, auto lock/syncs if state is missing or stale.")
-	writeUsageLine(w, "Use --app for local scoped development of one configured app without preparing the full config.")
 	writeUsageLine(w, "Use --path to serve one local source app or UI bundle inside a synthesized Gestalt config.")
 	writeUsageLine(w, "Use --watch to rebuild/restart after debounced local file changes.")
 	writeUsageLine(w, "For production, strongly prefer --locked so startup uses the pinned")
@@ -548,10 +534,9 @@ func printSyncUsage(w io.Writer) {
 
 func printValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd validate [--app NAME] [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
+	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Validate configuration without starting the server or running migrations.")
-	writeUsageLine(w, "Use --app for scoped validation of one app closure; it does not validate the full deployment.")
 	writeUsageLine(w, "Static validation uses locked provider metadata and temporary scratch state.")
 	writeUsageLine(w, "Use --runtime to opt into deep validation that starts configured providers.")
 	writeUsageLine(w, "Repeated --config flags merge left-to-right.")

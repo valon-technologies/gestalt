@@ -33,7 +33,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "validate",
 			args:      []string{"validate", "--help"},
-			wantParts: []string{"gestaltd validate", "scoped validation of one app closure", "--app NAME", "--lockfile PATH", "--platform os/arch"},
+			wantParts: []string{"gestaltd validate", "--lockfile PATH", "--platform os/arch"},
 		},
 		{
 			name:      "lock",
@@ -55,7 +55,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "serve",
 			args:      []string{"serve", "--help"},
-			wantParts: []string{"gestaltd serve --path PATH", "--app NAME", "--port PORT", "--watch"},
+			wantParts: []string{"gestaltd serve --path PATH", "--port PORT", "--watch"},
 		},
 		{
 			name:      "provider repo",
@@ -453,11 +453,6 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 			name:     "top level trailing args",
 			args:     []string{"--config", "foo.yaml", "extra"},
 			wantPart: "unexpected arguments: extra",
-		},
-		{
-			name:     "top level app flag",
-			args:     []string{"--app", "alpha"},
-			wantPart: "flag provided but not defined: -app",
 		},
 		{
 			name:     "serve trailing args",

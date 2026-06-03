@@ -173,14 +173,14 @@ layered config points at local provider source paths or local
 server after local file changes settle. If reload preparation fails, the current
 server keeps running and the failure is logged.
 
-For faster iteration on one configured plugin, combine `--watch` with
-`--app NAME` so unrelated configured apps are not validated or prepared:
+For faster iteration on one local plugin, either use `gestaltd serve --path`
+for a standalone source tree or layer a small local config that includes only
+the app under test:
 
 ```sh
 gestaltd serve \
-  --app support \
   --config ./config.yaml \
-  --config ./local.yaml \
+  --config ./support-local.yaml \
   --watch
 ```
 
@@ -203,7 +203,7 @@ gestaltd lock --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd sync --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --config ./config.yaml --watch
-gestaltd serve --app support --config ./config.yaml --config ./local.yaml --watch
+gestaltd serve --path ./apps/support/manifest.yaml
 gestaltd serve --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd lock --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd sync --locked --config ./base.yaml --config ./overrides/prod.yaml
