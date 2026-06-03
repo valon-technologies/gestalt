@@ -1111,6 +1111,47 @@ func TestExpandEnvVariablesPreservesMissingPlaceholder(t *testing.T) {
 	}
 }
 
+func TestExpandEnvVariablesPreservesWorkflowExpressions(t *testing.T) {
+	t.Parallel()
+
+	got, firstMissing, err := expandEnvVariables(
+		"value: ${{ signal.data.github }} env: ${NAME} short: $SHORT escaped: $${{ literal }} other: ${json.path}",
+		func(key string) (string, bool) {
+			if key == "NAME" {
+				return "resolved", true
+			}
+			if key == "SHORT" {
+				return "short-resolved", true
+			}
+			return "", false
+		},
+		false,
+	)
+	if err != nil {
+		t.Fatalf("expandEnvVariables: %v", err)
+	}
+	if firstMissing != "" {
+		t.Fatalf("expandEnvVariables firstMissing = %q, want empty", firstMissing)
+	}
+	want := "value: ${{ signal.data.github }} env: resolved short: short-resolved escaped: $${{ literal }} other: ${json.path}"
+	if got != want {
+		t.Fatalf("expandEnvVariables = %q, want %q", got, want)
+	}
+
+	got, firstMissing, err = expandEnvVariables("other: ${json.path}", func(string) (string, bool) {
+		return "", false
+	}, true)
+	if err != nil {
+		t.Fatalf("expandEnvVariables preserve missing: %v", err)
+	}
+	if firstMissing != "" {
+		t.Fatalf("expandEnvVariables preserve missing firstMissing = %q, want empty", firstMissing)
+	}
+	if got != "other: ${json.path}" {
+		t.Fatalf("expandEnvVariables preserve missing = %q, want other: ${json.path}", got)
+	}
+}
+
 func TestExpandEnvVariablesRejectsNonEmptyDefault(t *testing.T) {
 	t.Parallel()
 
@@ -3035,6 +3076,79 @@ server:
 		}
 	})
 
+	t.Run("workflow scalar expressions compile to value refs", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apps:
+  roadmap:
+    source:
+      path: ./app/manifest.yaml
+workflows:
+  definitions:
+    review:
+      provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-events
+      steps:
+        - id: collect
+          app:
+              name: roadmap
+              operation: collect
+              input:
+                repo: "${{ input.github.repository }}"
+        - id: notify
+          app:
+              name: roadmap
+              operation: notify
+              input:
+                previous: "${{ steps.collect.outputs }}"
+                text: "repo=${{ input.github.repository }} status=${{ steps.collect.outputs.status }}"
+      on:
+        github_pr:
+          event:
+            type: github.pull_request
+            source: github
+          input:
+            github: "${{ signal.data.github }}"
+            raw: "${{ signal.data.raw }}"
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		definition := cfg.Workflows.Definitions["review"]
+		activationInput := definition.On["github_pr"].Input.Object
+		if got := activationInput["github"].Signal; got != "data.github" {
+			t.Fatalf("activation github signal = %q, want data.github", got)
+		}
+		if got := activationInput["raw"].Signal; got != "data.raw" {
+			t.Fatalf("activation raw signal = %q, want data.raw", got)
+		}
+		collectInput := definition.Steps[0].App.Input.Object
+		if got := collectInput["repo"].Input; got != "github.repository" {
+			t.Fatalf("collect repo input = %q, want github.repository", got)
+		}
+		notifyInput := definition.Steps[1].App.Input.Object
+		previous := notifyInput["previous"].StepOutput
+		if previous == nil || previous.StepID != "collect" || previous.Path != "" {
+			t.Fatalf("notify previous step output = %#v, want collect whole output", previous)
+		}
+		text := notifyInput["text"].Template
+		if text == nil || text.Template != "repo=${{ input.github.repository }} status=${{ steps.collect.outputs.status }}" {
+			t.Fatalf("notify text template = %#v", text)
+		}
+	})
+
 	t.Run("workflow target validation errors use canonical paths", func(t *testing.T) {
 		t.Parallel()
 
@@ -3249,6 +3363,41 @@ server:
   encryptionKey: server-key
 `,
 				want: `workflows.definitions.nightly.steps[0].inputs.source.step_output.step_id "pr_fix" must reference an earlier step`,
+			},
+			{
+				name: "app input template rejects future reference",
+				yaml: `
+apps:
+  roadmap:
+    source:
+      path: ./app/manifest.yaml
+workflows:
+  definitions:
+    nightly:
+      provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+      steps:
+        - id: diagnosis
+          app:
+              name: roadmap
+              operation: diagnose
+              input:
+                message: "fix ${{ steps.pr_fix.outputs.text }}"
+        - id: pr_fix
+          app:
+              name: roadmap
+              operation: fix
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.definitions.nightly.steps[0].app.input.message.template expression "steps.pr_fix.outputs.text": step "pr_fix" must reference an earlier step`,
 			},
 			{
 				name: "agent step when requires equals",

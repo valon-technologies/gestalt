@@ -19,6 +19,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"gopkg.in/yaml.v3"
@@ -1026,6 +1027,14 @@ func (c *WorkflowValueConfig) UnmarshalYAML(value *yaml.Node) error {
 		c.Array = out
 		return nil
 	default:
+		if value.Kind == yaml.ScalarNode && value.Tag == "!!str" {
+			var out string
+			if err := value.Decode(&out); err != nil {
+				return err
+			}
+			*c = workflowValueConfigFromScalarString(out)
+			return nil
+		}
 		var out any
 		if err := value.Decode(&out); err != nil {
 			return err
@@ -1033,6 +1042,87 @@ func (c *WorkflowValueConfig) UnmarshalYAML(value *yaml.Node) error {
 		c.Literal = out
 		c.LiteralSet = true
 		return nil
+	}
+}
+
+func workflowValueConfigFromScalarString(value string) WorkflowValueConfig {
+	if !strings.Contains(value, "${{") {
+		return WorkflowValueConfig{Literal: value, LiteralSet: true}
+	}
+	expressions, err := coreworkflow.TemplateExpressions(value)
+	if err == nil && len(expressions) == 1 {
+		if expr, ok := exactWorkflowTemplateExpression(value); ok {
+			if compiled, ok := workflowValueConfigFromExpression(expr); ok {
+				return compiled
+			}
+		}
+	}
+	return WorkflowValueConfig{Template: &WorkflowTextConfig{Template: value}}
+}
+
+func exactWorkflowTemplateExpression(value string) (string, bool) {
+	trimmed := strings.TrimSpace(value)
+	if !strings.HasPrefix(trimmed, "${{") {
+		return "", false
+	}
+	end := strings.Index(trimmed[3:], "}}")
+	if end < 0 {
+		return "", false
+	}
+	exprEnd := 3 + end
+	if strings.TrimSpace(trimmed[exprEnd+2:]) != "" {
+		return "", false
+	}
+	return strings.TrimSpace(trimmed[3:exprEnd]), true
+}
+
+func workflowValueConfigFromExpression(expr string) (WorkflowValueConfig, bool) {
+	expr = strings.TrimSpace(expr)
+	switch {
+	case strings.HasPrefix(expr, "input."):
+		path := strings.TrimSpace(strings.TrimPrefix(expr, "input."))
+		if path == "" {
+			return WorkflowValueConfig{}, false
+		}
+		return WorkflowValueConfig{Input: path}, true
+	case strings.HasPrefix(expr, "signal."):
+		path := strings.TrimSpace(strings.TrimPrefix(expr, "signal."))
+		if path == "" {
+			return WorkflowValueConfig{}, false
+		}
+		return WorkflowValueConfig{Signal: path}, true
+	case strings.HasPrefix(expr, "steps."):
+		return workflowValueConfigFromStepExpression(strings.TrimPrefix(expr, "steps."))
+	default:
+		return WorkflowValueConfig{}, false
+	}
+}
+
+func workflowValueConfigFromStepExpression(expr string) (WorkflowValueConfig, bool) {
+	stepID, tail, ok := strings.Cut(expr, ".")
+	stepID = strings.TrimSpace(stepID)
+	if !ok || stepID == "" {
+		return WorkflowValueConfig{}, false
+	}
+	switch {
+	case tail == "outputs":
+		return WorkflowValueConfig{StepOutput: &WorkflowStepOutputSourceConfig{StepID: stepID}}, true
+	case strings.HasPrefix(tail, "outputs."):
+		path := strings.TrimSpace(strings.TrimPrefix(tail, "outputs."))
+		if path == "" {
+			return WorkflowValueConfig{}, false
+		}
+		return WorkflowValueConfig{StepOutput: &WorkflowStepOutputSourceConfig{StepID: stepID, Path: path}}, true
+	case tail == "inputs":
+		return WorkflowValueConfig{StepInput: &WorkflowStepInputSourceConfig{StepID: stepID}}, true
+	case strings.HasPrefix(tail, "inputs."):
+		path := strings.TrimSpace(strings.TrimPrefix(tail, "inputs."))
+		if path == "" {
+			return WorkflowValueConfig{}, false
+		}
+		return WorkflowValueConfig{StepInput: &WorkflowStepInputSourceConfig{StepID: stepID, Path: path}}, true
+	default:
+		return WorkflowValueConfig{}, false
 	}
 }
 
@@ -3086,78 +3176,153 @@ func parseEnvPlaceholder(key string) (name string, allowEmptyDefault bool, err e
 }
 
 func expandEnvVariables(input string, lookup func(string) (string, bool), preserveMissing bool) (string, string, error) {
-	var expandErr error
 	var firstMissing string
-	resolved := os.Expand(input, func(key string) string {
-		if expandErr != nil {
-			return ""
-		}
+	resolved, err := expandConfigEnvPlaceholders(input, func(key string) (string, error) {
 		name, allowEmptyDefault, err := parseEnvPlaceholder(key)
 		if err != nil {
-			expandErr = err
-			return ""
+			return "", err
 		}
 		if val, ok := lookup(name); ok {
-			return val
+			return val, nil
 		}
 		filePath, ok := lookup(name + "_FILE")
 		if !ok || filePath == "" {
 			if allowEmptyDefault {
-				return ""
+				return "", nil
 			}
 			if preserveMissing {
 				if firstMissing == "" {
 					firstMissing = name
 				}
-				return "${" + key + "}"
+				return "${" + key + "}", nil
 			}
-			return ""
+			return "", nil
 		}
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			expandErr = fmt.Errorf("resolving %s_FILE: %w", name, err)
-			return ""
+			return "", fmt.Errorf("resolving %s_FILE: %w", name, err)
 		}
-		return strings.TrimRight(string(data), "\r\n")
+		return strings.TrimRight(string(data), "\r\n"), nil
 	})
-	if expandErr != nil {
-		return "", "", fmt.Errorf("expanding config environment variables: %w", expandErr)
+	if err != nil {
+		return "", "", fmt.Errorf("expanding config environment variables: %w", err)
 	}
 	return resolved, firstMissing, nil
 }
 
 func expandEnvVariablesWithMissingSentinels(input string, lookup func(string) (string, bool), sentinelPrefix string) (string, error) {
-	var expandErr error
-	resolved := os.Expand(input, func(key string) string {
-		if expandErr != nil {
-			return ""
-		}
+	resolved, err := expandConfigEnvPlaceholders(input, func(key string) (string, error) {
 		name, allowEmptyDefault, err := parseEnvPlaceholder(key)
 		if err != nil {
-			expandErr = err
-			return ""
+			return "", err
 		}
 		if val, ok := lookup(name); ok {
-			return val
+			return val, nil
 		}
 		filePath, ok := lookup(name + "_FILE")
 		if !ok || filePath == "" {
 			if allowEmptyDefault {
-				return ""
+				return "", nil
 			}
-			return sentinelPrefix + base64.RawURLEncoding.EncodeToString([]byte(name)) + missingEnvSentinelSuffix
+			return sentinelPrefix + base64.RawURLEncoding.EncodeToString([]byte(name)) + missingEnvSentinelSuffix, nil
 		}
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			expandErr = fmt.Errorf("resolving %s_FILE: %w", name, err)
-			return ""
+			return "", fmt.Errorf("resolving %s_FILE: %w", name, err)
 		}
-		return strings.TrimRight(string(data), "\r\n")
+		return strings.TrimRight(string(data), "\r\n"), nil
 	})
-	if expandErr != nil {
-		return "", fmt.Errorf("expanding config environment variables: %w", expandErr)
+	if err != nil {
+		return "", fmt.Errorf("expanding config environment variables: %w", err)
 	}
 	return resolved, nil
+}
+
+func expandConfigEnvPlaceholders(input string, resolve func(string) (string, error)) (string, error) {
+	var b strings.Builder
+	for i := 0; i < len(input); {
+		if input[i] != '$' {
+			next := strings.IndexByte(input[i:], '$')
+			if next < 0 {
+				b.WriteString(input[i:])
+				break
+			}
+			b.WriteString(input[i : i+next])
+			i += next
+			continue
+		}
+		if i+1 >= len(input) {
+			b.WriteByte(input[i])
+			i++
+			continue
+		}
+		if input[i+1] == '{' {
+			end := strings.IndexByte(input[i+2:], '}')
+			if end < 0 {
+				b.WriteByte(input[i])
+				i++
+				continue
+			}
+			keyEnd := i + 2 + end
+			key := input[i+2 : keyEnd]
+			if !isConfigEnvPlaceholderKey(key) {
+				b.WriteByte(input[i])
+				i++
+				continue
+			}
+			resolved, err := resolve(key)
+			if err != nil {
+				return "", err
+			}
+			b.WriteString(resolved)
+			i = keyEnd + 1
+			continue
+		}
+		if !isConfigEnvNameStart(input[i+1]) {
+			b.WriteByte(input[i])
+			i++
+			continue
+		}
+		keyEnd := i + 2
+		for keyEnd < len(input) && isConfigEnvNameChar(input[keyEnd]) {
+			keyEnd++
+		}
+		resolved, err := resolve(input[i+1 : keyEnd])
+		if err != nil {
+			return "", err
+		}
+		b.WriteString(resolved)
+		i = keyEnd
+	}
+	return b.String(), nil
+}
+
+func isConfigEnvPlaceholderKey(key string) bool {
+	name, _, hasDefault := strings.Cut(key, ":-")
+	if !isConfigEnvName(name) {
+		return false
+	}
+	return hasDefault || name == key
+}
+
+func isConfigEnvName(name string) bool {
+	if name == "" || !isConfigEnvNameStart(name[0]) {
+		return false
+	}
+	for i := 1; i < len(name); i++ {
+		if !isConfigEnvNameChar(name[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func isConfigEnvNameStart(ch byte) bool {
+	return ch == '_' || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
+}
+
+func isConfigEnvNameChar(ch byte) bool {
+	return isConfigEnvNameStart(ch) || (ch >= '0' && ch <= '9')
 }
 
 func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), preserveMissing bool) (yaml.Node, error) {

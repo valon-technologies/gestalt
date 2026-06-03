@@ -2143,7 +2143,7 @@ func normalizeWorkflowSteps(cfg *Config, path string, steps []WorkflowStepConfig
 			if step.Timeout != "" && parsedTimeout < 0 {
 				return fmt.Errorf("config validation: %s.timeout must not be negative for agent steps", stepPath)
 			}
-			if err := validateWorkflowStepAgentConfig(cfg, stepPath+".agent", step.Agent); err != nil {
+			if err := validateWorkflowStepAgentConfig(cfg, stepPath+".agent", step.Agent, seen); err != nil {
 				return err
 			}
 		}
@@ -2206,7 +2206,7 @@ func normalizeWorkflowStepAppCallConfig(path string, app *WorkflowStepAppCallCon
 	return nil
 }
 
-func validateWorkflowStepAgentConfig(cfg *Config, path string, agent *WorkflowStepAgentConfig) error {
+func validateWorkflowStepAgentConfig(cfg *Config, path string, agent *WorkflowStepAgentConfig, previousSteps map[string]struct{}) error {
 	if agent == nil {
 		return fmt.Errorf("config validation: %s is required", path)
 	}
@@ -2222,9 +2222,15 @@ func validateWorkflowStepAgentConfig(cfg *Config, path string, agent *WorkflowSt
 	agent.Model = strings.TrimSpace(agent.Model)
 	agent.SessionKey = strings.TrimSpace(agent.SessionKey)
 	agent.Prompt.Template = strings.TrimSpace(agent.Prompt.Template)
+	if err := coreworkflow.ValidateTemplateRefs(path+".prompt", agent.Prompt.Template, previousSteps); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
 	for i := range agent.Messages {
 		agent.Messages[i].Role = strings.TrimSpace(agent.Messages[i].Role)
 		agent.Messages[i].Text.Template = strings.TrimSpace(agent.Messages[i].Text.Template)
+		if err := coreworkflow.ValidateTemplateRefs(fmt.Sprintf("%s.messages[%d].text", path, i), agent.Messages[i].Text.Template, previousSteps); err != nil {
+			return fmt.Errorf("config validation: %w", err)
+		}
 	}
 	if agent.Prompt.Template == "" && len(agent.Messages) == 0 {
 		return fmt.Errorf("config validation: %s.prompt or messages is required", path)

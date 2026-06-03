@@ -1766,11 +1766,11 @@ export function evaluateWorkflowValue(ctx: WorkflowEvalContext, input: WorkflowV
 }
 
 export function renderWorkflowTemplate(ctx: WorkflowEvalContext, template: string): string {
-  return template.replace(/\$\$\{/g, "\u0000{").replace(/\$\{([^{}]+)\}/g, (_match, expr: string) => {
+  return template.replace(/\$\$\{\{/g, "\u0000{{").replace(/\$\{\{([^{}]+)\}\}/g, (_match, expr: string) => {
     const resolved = templateExpressionValue(ctx, expr.trim());
     if (!resolved.ok) throw new WorkflowValueError(`template expression "${expr.trim()}" did not resolve`);
     return renderTemplateValue(resolved.value);
-  }).replace(/\u0000\{/g, "${");
+  }).replace(/\u0000\{\{/g, "${{");
 }
 
 export function pathValue(value: unknown, path: string): { value: unknown; ok: boolean } {

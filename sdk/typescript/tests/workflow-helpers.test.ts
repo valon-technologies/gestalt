@@ -24,9 +24,9 @@ test("workflow execution helpers evaluate templates and paths", () => {
   expect(
     renderWorkflowTemplate(
       ctx,
-      "customer=${input.customer.id}; thread=${signal.payload.thread.ts}; input=${inputs.thread}; literal=$${x}",
+      "customer=${{ input.customer.id }}; thread=${{ signal.payload.thread.ts }}; input=${{ inputs.thread }}; literal=$${{ x }}",
     ),
-  ).toBe("customer=cust_1; thread=123.456; input=123.456; literal=${x}");
+  ).toBe("customer=cust_1; thread=123.456; input=123.456; literal=${{ x }}");
 
   expect(evaluateWorkflowValue(ctx, { input: "customer.id" })).toEqual({
     value: "cust_1",
