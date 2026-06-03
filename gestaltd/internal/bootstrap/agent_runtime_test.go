@@ -584,6 +584,7 @@ func TestHostedAgentPoolCleansNonIdempotentPreparedWorkspaceAfterCreateFailure(t
 	prepared := agentProvider.createReqs[0].PreparedWorkspace
 	if prepared == nil {
 		t.Fatal("provider did not receive prepared workspace before failure")
+		return
 	}
 	if _, statErr := os.Stat(prepared.Root); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("workspace root stat error = %v, want not exist", statErr)
@@ -622,6 +623,7 @@ func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepar
 	prepared := agentProvider.createReqs[0].PreparedWorkspace
 	if prepared == nil {
 		t.Fatal("provider did not receive prepared workspace")
+		return
 	}
 	runtimeProvider.prepareWorkspace = func(context.Context, *proto.PrepareRuntimeWorkspaceRequest) (*proto.PrepareRuntimeWorkspaceResponse, error) {
 		return nil, errors.New("prepare should not run for idempotent replay")
@@ -687,6 +689,7 @@ func TestHostedAgentPoolCleansPreparedWorkspaceWhenProviderReturnsWrongSessionID
 	prepared := agentProvider.createReqs[0].PreparedWorkspace
 	if prepared == nil {
 		t.Fatal("provider did not receive prepared workspace before mismatch")
+		return
 	}
 	if _, statErr := os.Stat(prepared.Root); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("workspace root stat error = %v, want not exist", statErr)
@@ -771,6 +774,7 @@ func TestHostedAgentPoolCleansPreparedWorkspaceWhenSessionArchived(t *testing.T)
 	prepared := agentProvider.createReqs[0].PreparedWorkspace
 	if prepared == nil {
 		t.Fatal("provider did not receive prepared workspace")
+		return
 	}
 	if _, err := os.Stat(prepared.Root); err != nil {
 		t.Fatalf("workspace root before archive stat: %v", err)

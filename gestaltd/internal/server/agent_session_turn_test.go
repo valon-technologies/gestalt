@@ -25,7 +25,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	gproto "google.golang.org/protobuf/proto"
@@ -39,225 +38,6 @@ func newServerTestAgentRunGrants(t testing.TB) *agentgrant.Manager {
 		t.Fatalf("agentgrant.NewManager: %v", err)
 	}
 	return grants
-}
-
-type dynamicProviderAuthorizer struct {
-	allowed atomic.Bool
-}
-
-func (a *dynamicProviderAuthorizer) Start(context.Context) error                    { return nil }
-func (a *dynamicProviderAuthorizer) Close() error                                   { return nil }
-func (a *dynamicProviderAuthorizer) ReloadAuthorizationState(context.Context) error { return nil }
-
-func (a *dynamicProviderAuthorizer) AllowProvider(context.Context, *principal.Principal, string) bool {
-	return a.allowed.Load()
-}
-
-func (a *dynamicProviderAuthorizer) AllowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
-	return a.AllowProvider(ctx, p, provider)
-}
-
-func (a *dynamicProviderAuthorizer) ResolveAccess(context.Context, *principal.Principal, string) (authorization.AccessContext, bool) {
-	return authorization.AccessContext{}, a.allowed.Load()
-}
-
-func (a *dynamicProviderAuthorizer) ResolvePolicyAccess(context.Context, *principal.Principal, string) (authorization.AccessContext, bool) {
-	return authorization.AccessContext{}, a.allowed.Load()
-}
-
-func (a *dynamicProviderAuthorizer) ResolveAdminAccess(context.Context, *principal.Principal, string) (authorization.AccessContext, bool) {
-	return authorization.AccessContext{}, a.allowed.Load()
-}
-
-func (a *dynamicProviderAuthorizer) AllowCatalogOperation(context.Context, *principal.Principal, string, catalog.CatalogOperation) bool {
-	return a.allowed.Load()
-}
-
-func (a *dynamicProviderAuthorizer) PolicyNameForProvider(string) string { return "agent_policy" }
-
-func (a *dynamicProviderAuthorizer) StaticRoleForPolicyIdentity(string, string) (authorization.AccessContext, bool) {
-	return authorization.AccessContext{}, false
-}
-
-func (a *dynamicProviderAuthorizer) StaticRoleForProviderIdentity(string, string) (authorization.AccessContext, bool) {
-	return authorization.AccessContext{}, false
-}
-
-func (a *dynamicProviderAuthorizer) StaticMembersForPolicy(string) ([]authorization.StaticSubjectMember, bool) {
-	return nil, false
-}
-
-func (a *dynamicProviderAuthorizer) StaticMembersForProvider(string) (string, []authorization.StaticSubjectMember, bool) {
-	return "", nil, false
-}
-
-func TestAgentSessionRejectsUnauthorizedProvider(t *testing.T) {
-	t.Parallel()
-
-	provider := newMemoryAgentProvider()
-	var createSessionCalled atomic.Bool
-	ts := newTestServer(t, func(cfg *server.Config) {
-		services := testutil.NewStubServices(t)
-		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
-		cfg.Services = services
-		cfg.Agent = agentControl
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"managed": {AuthorizationPolicy: "agent_policy"},
-		}
-		authz := mustAuthorizer(t, config.AuthorizationConfig{
-			Policies: map[string]config.SubjectPolicyDef{
-				"agent_policy": {Default: "deny"},
-			},
-		}, cfg.AppDefs)
-		cfg.Authorizer = authz
-		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      agentControl,
-			Authorizer: authz,
-			RunGrants:  newServerTestAgentRunGrants(t),
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	provider.createSessionHook = func() {
-		createSessionCalled.Store(true)
-	}
-	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
-	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	sessionResp, err := http.DefaultClient.Do(sessionReq)
-	if err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-	defer func() { _ = sessionResp.Body.Close() }()
-	if sessionResp.StatusCode != http.StatusForbidden {
-		body, _ := io.ReadAll(sessionResp.Body)
-		t.Fatalf("create session status = %d body=%s, want 403", sessionResp.StatusCode, body)
-	}
-	if createSessionCalled.Load() {
-		t.Fatal("agent provider CreateSession was called despite authorization denial")
-	}
-}
-
-func TestAgentTurnRechecksProviderAuthorization(t *testing.T) {
-	t.Parallel()
-
-	provider := newMemoryAgentProvider()
-	authz := &dynamicProviderAuthorizer{}
-	authz.allowed.Store(true)
-	ts := newTestServer(t, func(cfg *server.Config) {
-		services := testutil.NewStubServices(t)
-		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
-		cfg.Services = services
-		cfg.Agent = agentControl
-		cfg.Authorizer = authz
-		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      agentControl,
-			Authorizer: authz,
-			RunGrants:  newServerTestAgentRunGrants(t),
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
-	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	sessionResp, err := http.DefaultClient.Do(sessionReq)
-	if err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-	defer func() { _ = sessionResp.Body.Close() }()
-	if sessionResp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(sessionResp.Body)
-		t.Fatalf("create session status = %d body=%s, want 201", sessionResp.StatusCode, body)
-	}
-	var session map[string]any
-	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
-		t.Fatalf("decode session: %v", err)
-	}
-	sessionID := session["id"].(string)
-
-	authz.allowed.Store(false)
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
-	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	turnResp, err := http.DefaultClient.Do(turnReq)
-	if err != nil {
-		t.Fatalf("create turn: %v", err)
-	}
-	defer func() { _ = turnResp.Body.Close() }()
-	if turnResp.StatusCode != http.StatusForbidden {
-		body, _ := io.ReadAll(turnResp.Body)
-		t.Fatalf("create turn status = %d body=%s, want 403", turnResp.StatusCode, body)
-	}
-	if got := len(provider.capturedGetSessionRequests()); got != 0 {
-		t.Fatalf("provider get session requests len = %d, want 0", got)
-	}
-	if got := len(provider.capturedTurnRequests()); got != 0 {
-		t.Fatalf("provider turn requests len = %d, want 0", got)
-	}
-}
-
-func TestAgentCreateTurnReportsMissingSession(t *testing.T) {
-	t.Parallel()
-
-	provider := newMemoryAgentProvider()
-	authz := &dynamicProviderAuthorizer{}
-	authz.allowed.Store(true)
-	ts := newTestServer(t, func(cfg *server.Config) {
-		services := testutil.NewStubServices(t)
-		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
-		cfg.Services = services
-		cfg.Agent = agentControl
-		cfg.Authorizer = authz
-		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      agentControl,
-			Authorizer: authz,
-			RunGrants:  newServerTestAgentRunGrants(t),
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/missing-session/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
-	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	turnResp, err := http.DefaultClient.Do(turnReq)
-	if err != nil {
-		t.Fatalf("create turn: %v", err)
-	}
-	defer func() { _ = turnResp.Body.Close() }()
-	body, _ := io.ReadAll(turnResp.Body)
-	if turnResp.StatusCode != http.StatusNotFound {
-		t.Fatalf("create turn status = %d body=%s, want 404", turnResp.StatusCode, body)
-	}
-	if !strings.Contains(string(body), `session \"missing-session\" not found`) {
-		t.Fatalf("create turn body = %s, want missing session", body)
-	}
-	if strings.Contains(string(body), `turn \"missing-session\" not found`) {
-		t.Fatalf("create turn body = %s, should not report missing turn", body)
-	}
 }
 
 func TestAgentCreateTurnReportsProviderDeadlineAsUnavailable(t *testing.T) {
@@ -302,7 +82,7 @@ func TestAgentCreateTurnReportsProviderDeadlineAsUnavailable(t *testing.T) {
 		t.Fatalf("decode session: %v", err)
 	}
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+session["id"].(string)+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+session["id"].(string)+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -315,74 +95,6 @@ func TestAgentCreateTurnReportsProviderDeadlineAsUnavailable(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "agent provider unavailable") {
 		t.Fatalf("create turn body = %s, want unavailable message", body)
-	}
-}
-
-func TestAgentCreateTurnDoesNotReportSessionMissingAfterSessionResolved(t *testing.T) {
-	t.Parallel()
-
-	provider := newMemoryAgentProvider()
-	provider.createTurnHook = func(turn *coreagent.Turn) {
-		turn.CreatedBySubjectID = principal.UserSubjectID("someone-else")
-	}
-	authz := &dynamicProviderAuthorizer{}
-	authz.allowed.Store(true)
-	ts := newTestServer(t, func(cfg *server.Config) {
-		services := testutil.NewStubServices(t)
-		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
-		cfg.Services = services
-		cfg.Agent = agentControl
-		cfg.Authorizer = authz
-		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      agentControl,
-			Authorizer: authz,
-			RunGrants:  newServerTestAgentRunGrants(t),
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
-	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	sessionResp, err := http.DefaultClient.Do(sessionReq)
-	if err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-	defer func() { _ = sessionResp.Body.Close() }()
-	if sessionResp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(sessionResp.Body)
-		t.Fatalf("create session status = %d body=%s, want 201", sessionResp.StatusCode, body)
-	}
-	var session map[string]any
-	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
-		t.Fatalf("decode session: %v", err)
-	}
-	sessionID := session["id"].(string)
-
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
-	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	turnResp, err := http.DefaultClient.Do(turnReq)
-	if err != nil {
-		t.Fatalf("create turn: %v", err)
-	}
-	defer func() { _ = turnResp.Body.Close() }()
-	body, _ := io.ReadAll(turnResp.Body)
-	if turnResp.StatusCode != http.StatusNotFound {
-		t.Fatalf("create turn status = %d body=%s, want 404", turnResp.StatusCode, body)
-	}
-	if strings.Contains(string(body), `session \"`+sessionID+`\" not found`) {
-		t.Fatalf("create turn body = %s, should not report missing session", body)
-	}
-	if !strings.Contains(string(body), `turn \"`) {
-		t.Fatalf("create turn body = %s, want missing turn", body)
 	}
 }
 
@@ -448,7 +160,7 @@ func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 	}
 	provider.mu.Unlock()
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/session-managed/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/session-managed/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.Header.Set("Authorization", "Bearer "+plaintext)
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -1193,7 +905,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("supported tool sources = %#v, want mcp_catalog", got)
 	}
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolSource":"mcp_catalog","toolRefs":[{"app":"docs","operation":"search"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolSource":"mcp_catalog","toolRefs":[{"app":"docs","operation":"search"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -1525,13 +1237,13 @@ func TestAgentTurnToolRefsDefaultBroadAndExplicitEmptyNone(t *testing.T) {
 		}
 	}
 
-	createTurn("omitted", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`, http.StatusCreated)
-	createTurn("explicit empty", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[]}`, http.StatusCreated)
-	createTurn("plugin broad", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"docs"}]}`, http.StatusCreated)
+	createTurn("omitted", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`, http.StatusCreated)
+	createTurn("explicit empty", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[]}`, http.StatusCreated)
+	createTurn("plugin broad", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"docs"}]}`, http.StatusCreated)
 	createTurn("missing output", `{"messages":[{"role":"user","text":"hello"}]}`, http.StatusBadRequest)
 	createTurn("null toolRefs", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":null}`, http.StatusBadRequest)
 	createTurn("global credential mode", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"*","credentialMode":"none"}]}`, http.StatusBadRequest)
-	createTurn("system title", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"system":"workflow","operation":"definitions.apply","title":"Definitions"}]}`, http.StatusBadRequest)
+	createTurn("system title", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"system":"workflow","operation":"schedules.list","title":"Schedules"}]}`, http.StatusBadRequest)
 
 	turnRequests := provider.capturedTurnRequests()
 	if len(turnRequests) != 3 {
@@ -1610,12 +1322,12 @@ func TestAgentCreateTurnAcceptsNoneToolSourceWithStructuredOutput(t *testing.T) 
 		}
 	}
 
-	createTurn("structured none", `{"timeoutSeconds":120,"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"schema":{"type":"object","properties":{"score":{"type":"number"}}}}}}`, http.StatusCreated)
-	createTurn("null output", `{"timeoutSeconds":120,"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":null}`, http.StatusBadRequest)
-	createTurn("ambiguous output", `{"timeoutSeconds":120,"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":{},"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
-	createTurn("ambiguous null text output", `{"timeoutSeconds":120,"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":null,"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
-	createTurn("empty schema", `{"timeoutSeconds":120,"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"schema":{}}}}`, http.StatusBadRequest)
-	createTurn("none with tools", `{"timeoutSeconds":120,"messages":[{"role":"user","text":"grade"}],"toolSource":"none","toolRefs":[{"app":"docs"}],"output":{"text":{}}}`, http.StatusBadRequest)
+	createTurn("structured none", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"schema":{"type":"object","properties":{"score":{"type":"number"}}}}}}`, http.StatusCreated)
+	createTurn("null output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":null}`, http.StatusBadRequest)
+	createTurn("ambiguous output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":{},"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
+	createTurn("ambiguous null text output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":null,"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
+	createTurn("empty schema", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"schema":{}}}}`, http.StatusBadRequest)
+	createTurn("none with tools", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","toolRefs":[{"app":"docs"}],"output":{"text":{}}}`, http.StatusBadRequest)
 
 	turnRequests := provider.capturedTurnRequests()
 	if len(turnRequests) != 1 {
@@ -1670,7 +1382,7 @@ func TestAgentTurnOmittedToolsDoNotForceCatalogForUnsupportedProvider(t *testing
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
 		t.Fatalf("create turn: %v", err)
@@ -1720,7 +1432,7 @@ func TestAgentTurnEventsNormalizeToolPayloads(t *testing.T) {
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"metadata":{"emitToolEvents":true,"nilDisplayAliases":true},"output":{"text":{}},"messages":[{"role":"user","text":"lookup"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"metadata":{"emitToolEvents":true,"nilDisplayAliases":true},"output":{"text":{}},"messages":[{"role":"user","text":"lookup"}]}`))
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
 		t.Fatalf("create turn: %v", err)
@@ -1825,7 +1537,7 @@ func TestAgentSessionAndTurnMetrics(t *testing.T) {
 		t.Fatalf("session response missing id: %#v", session)
 	}
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "metric-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -1881,7 +1593,7 @@ func TestAgentSessionsAndTurnsRoundTripWithoutAuth(t *testing.T) {
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
 		t.Fatalf("create turn: %v", err)
@@ -1942,7 +1654,7 @@ func TestAgentTurnEventStreamSendsHeartbeatBeforeEvents(t *testing.T) {
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"wait"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"wait"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -2060,7 +1772,7 @@ func TestAgentTurnEventStreamReportsProviderContextErrorWhileRequestOpen(t *test
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"wait"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"wait"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -2161,7 +1873,7 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 	_ = json.NewDecoder(sessionResp.Body).Decode(&session)
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"metadata":{"requireInteraction":true},"output":{"text":{}},"messages":[{"role":"user","text":"proceed"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"metadata":{"requireInteraction":true},"output":{"text":{}},"messages":[{"role":"user","text":"proceed"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, _ := http.DefaultClient.Do(turnReq)
 	defer func() { _ = turnResp.Body.Close() }()

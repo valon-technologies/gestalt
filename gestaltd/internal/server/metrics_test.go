@@ -761,7 +761,6 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, srv)
 

@@ -8,8 +8,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-
-	sdkauthorization "github.com/valon-technologies/gestalt/sdk/go/authorization"
 )
 
 // Request carries execution-scoped metadata into typed handlers.
@@ -56,10 +54,6 @@ func (r Request) Workflow() (Workflow, error) {
 
 func (r Request) Agent() (Agent, error) {
 	return NewAgent(r.invocationToken)
-}
-
-func (r Request) Authorization() (sdkauthorization.Authorization, error) {
-	return Authorization()
 }
 
 // Response is the typed handler result marshaled into the provider response body.

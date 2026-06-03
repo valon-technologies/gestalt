@@ -2,8 +2,8 @@
 // @generated from file v1/authorization.proto (package gestalt.provider.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { EmptySchema, Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
@@ -12,7 +12,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file v1/authorization.proto.
  */
 export const file_v1_authorization: GenFile = /*@__PURE__*/
-  fileDesc("ChZ2MS9hdXRob3JpemF0aW9uLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIlAKB1N1YmplY3QSDAoEdHlwZRgBIAEoCRIKCgJpZBgCIAEoCRIrCgpwcm9wZXJ0aWVzGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJRCghSZXNvdXJjZRIMCgR0eXBlGAEgASgJEgoKAmlkGAIgASgJEisKCnByb3BlcnRpZXMYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Ik8KClN1YmplY3RTZXQSLwoIcmVzb3VyY2UYASABKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc291cmNlEhAKCHJlbGF0aW9uGAIgASgJIrgBChJSZWxhdGlvbnNoaXBUYXJnZXQSLwoHc3ViamVjdBgBIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdEgAEjEKCHJlc291cmNlGAIgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvdXJjZUgAEjYKC3N1YmplY3Rfc2V0GAMgASgLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5TdWJqZWN0U2V0SABCBgoEa2luZCJDCgZBY3Rpb24SDAoEbmFtZRgBIAEoCRIrCgpwcm9wZXJ0aWVzGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCLQAQoXQWNjZXNzRXZhbHVhdGlvblJlcXVlc3QSLQoHc3ViamVjdBgBIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdBIrCgZhY3Rpb24YAiABKAsyGy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFjdGlvbhIvCghyZXNvdXJjZRgDIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2USKAoHY29udGV4dBgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiXQoOQWNjZXNzRGVjaXNpb24SDwoHYWxsb3dlZBgBIAEoCBIoCgdjb250ZXh0GAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIQCghtb2RlbF9pZBgDIAEoCSJaChhBY2Nlc3NFdmFsdWF0aW9uc1JlcXVlc3QSPgoIcmVxdWVzdHMYASADKAsyLC5nZXN0YWx0LnByb3ZpZGVyLnYxLkFjY2Vzc0V2YWx1YXRpb25SZXF1ZXN0IlMKGUFjY2Vzc0V2YWx1YXRpb25zUmVzcG9uc2USNgoJZGVjaXNpb25zGAEgAygLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5BY2Nlc3NEZWNpc2lvbiLbAQoVUmVzb3VyY2VTZWFyY2hSZXF1ZXN0Ei0KB3N1YmplY3QYASABKAsyHC5nZXN0YWx0LnByb3ZpZGVyLnYxLlN1YmplY3QSKwoGYWN0aW9uGAIgASgLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5BY3Rpb24SFQoNcmVzb3VyY2VfdHlwZRgDIAEoCRIoCgdjb250ZXh0GAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIRCglwYWdlX3NpemUYBSABKAUSEgoKcGFnZV90b2tlbhgGIAEoCSJ1ChZSZXNvdXJjZVNlYXJjaFJlc3BvbnNlEjAKCXJlc291cmNlcxgBIAMoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2USFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEhAKCG1vZGVsX2lkGAMgASgJItsBChRTdWJqZWN0U2VhcmNoUmVxdWVzdBIvCghyZXNvdXJjZRgBIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2USKwoGYWN0aW9uGAIgASgLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5BY3Rpb24SFAoMc3ViamVjdF90eXBlGAMgASgJEigKB2NvbnRleHQYBCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhEKCXBhZ2Vfc2l6ZRgFIAEoBRISCgpwYWdlX3Rva2VuGAYgASgJInIKFVN1YmplY3RTZWFyY2hSZXNwb25zZRIuCghzdWJqZWN0cxgBIAMoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSEAoIbW9kZWxfaWQYAyABKAkizgEKHUVmZmVjdGl2ZVN1YmplY3RTZWFyY2hSZXF1ZXN0Ei8KCHJlc291cmNlGAEgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvdXJjZRIrCgZhY3Rpb24YAiABKAsyGy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFjdGlvbhIoCgdjb250ZXh0GAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIRCglwYWdlX3NpemUYBCABKAUSEgoKcGFnZV90b2tlbhgFIAEoCSKYAQoeRWZmZWN0aXZlU3ViamVjdFNlYXJjaFJlc3BvbnNlEjgKB3RhcmdldHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlbGF0aW9uc2hpcFRhcmdldBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSEAoIbW9kZWxfaWQYAyABKAkSEQoJdHJ1bmNhdGVkGAQgASgIIsYBChNBY3Rpb25TZWFyY2hSZXF1ZXN0Ei0KB3N1YmplY3QYASABKAsyHC5nZXN0YWx0LnByb3ZpZGVyLnYxLlN1YmplY3QSLwoIcmVzb3VyY2UYAiABKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc291cmNlEigKB2NvbnRleHQYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhEKCXBhZ2Vfc2l6ZRgEIAEoBRISCgpwYWdlX3Rva2VuGAUgASgJIm8KFEFjdGlvblNlYXJjaFJlc3BvbnNlEiwKB2FjdGlvbnMYASADKAsyGy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFjdGlvbhIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSEAoIbW9kZWxfaWQYAyABKAkiRgoVQXV0aG9yaXphdGlvbk1ldGFkYXRhEhQKDGNhcGFiaWxpdGllcxgBIAMoCRIXCg9hY3RpdmVfbW9kZWxfaWQYAiABKAki5gEKDFJlbGF0aW9uc2hpcBItCgdzdWJqZWN0GAEgASgLMhwuZ2VzdGFsdC5wcm92aWRlci52MS5TdWJqZWN0EhAKCHJlbGF0aW9uGAIgASgJEi8KCHJlc291cmNlGAMgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvdXJjZRIrCgpwcm9wZXJ0aWVzGAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBI3CgZ0YXJnZXQYBSABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlbGF0aW9uc2hpcFRhcmdldCK8AQoPUmVsYXRpb25zaGlwS2V5Ei0KB3N1YmplY3QYASABKAsyHC5nZXN0YWx0LnByb3ZpZGVyLnYxLlN1YmplY3QSEAoIcmVsYXRpb24YAiABKAkSLwoIcmVzb3VyY2UYAyABKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc291cmNlEjcKBnRhcmdldBgEIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwVGFyZ2V0Iv4BChhSZWFkUmVsYXRpb25zaGlwc1JlcXVlc3QSLQoHc3ViamVjdBgBIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdBIQCghyZWxhdGlvbhgCIAEoCRIvCghyZXNvdXJjZRgDIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2USEQoJcGFnZV9zaXplGAQgASgFEhIKCnBhZ2VfdG9rZW4YBSABKAkSEAoIbW9kZWxfaWQYBiABKAkSNwoGdGFyZ2V0GAcgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXBUYXJnZXQigAEKGVJlYWRSZWxhdGlvbnNoaXBzUmVzcG9uc2USOAoNcmVsYXRpb25zaGlwcxgBIAMoCzIhLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRIQCghtb2RlbF9pZBgDIAEoCSKXAQoZV3JpdGVSZWxhdGlvbnNoaXBzUmVxdWVzdBIxCgZ3cml0ZXMYASADKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlbGF0aW9uc2hpcBI1CgdkZWxldGVzGAIgAygLMiQuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXBLZXkSEAoIbW9kZWxfaWQYAyABKAkicgoSQXV0aG9yaXphdGlvbk1vZGVsEg8KB3ZlcnNpb24YASABKAUSSwoOcmVzb3VyY2VfdHlwZXMYAiADKAsyMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFJlc291cmNlVHlwZSKyAQoeQXV0aG9yaXphdGlvbk1vZGVsUmVzb3VyY2VUeXBlEgwKBG5hbWUYASABKAkSQgoJcmVsYXRpb25zGAIgAygLMi8uZ2VzdGFsdC5wcm92aWRlci52MS5BdXRob3JpemF0aW9uTW9kZWxSZWxhdGlvbhI+CgdhY3Rpb25zGAMgAygLMi0uZ2VzdGFsdC5wcm92aWRlci52MS5BdXRob3JpemF0aW9uTW9kZWxBY3Rpb24i0QEKGkF1dGhvcml6YXRpb25Nb2RlbFJlbGF0aW9uEgwKBG5hbWUYASABKAkSFQoNc3ViamVjdF90eXBlcxgCIAMoCRJNCg9hbGxvd2VkX3RhcmdldHMYAyADKAsyNC5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbEFsbG93ZWRUYXJnZXQSPwoHcmV3cml0ZRgEIAEoCzIuLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsUmV3cml0ZSJ8ChhBdXRob3JpemF0aW9uTW9kZWxBY3Rpb24SDAoEbmFtZRgBIAEoCRIRCglyZWxhdGlvbnMYAiADKAkSPwoHcmV3cml0ZRgDIAEoCzIuLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsUmV3cml0ZSKqAQofQXV0aG9yaXphdGlvbk1vZGVsQWxsb3dlZFRhcmdldBIWCgxzdWJqZWN0X3R5cGUYASABKAlIABIXCg1yZXNvdXJjZV90eXBlGAIgASgJSAASTgoLc3ViamVjdF9zZXQYAyABKAsyNy5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFN1YmplY3RTZXRUYXJnZXRIAEIGCgRraW5kIk0KIkF1dGhvcml6YXRpb25Nb2RlbFN1YmplY3RTZXRUYXJnZXQSFQoNcmVzb3VyY2VfdHlwZRgBIAEoCRIQCghyZWxhdGlvbhgCIAEoCSLUAgoZQXV0aG9yaXphdGlvbk1vZGVsUmV3cml0ZRJCCgR0aGlzGAEgASgLMjIuZ2VzdGFsdC5wcm92aWRlci52MS5BdXRob3JpemF0aW9uTW9kZWxSZXdyaXRlVGhpc0gAElIKEGNvbXB1dGVkX3VzZXJzZXQYAiABKAsyNi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbENvbXB1dGVkVXNlcnNldEgAElEKEHR1cGxlX3RvX3VzZXJzZXQYAyABKAsyNS5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFR1cGxlVG9Vc2Vyc2V0SAASRAoFdW5pb24YBCABKAsyMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFJld3JpdGVVbmlvbkgAQgYKBGtpbmQiHwodQXV0aG9yaXphdGlvbk1vZGVsUmV3cml0ZVRoaXMiNQohQXV0aG9yaXphdGlvbk1vZGVsQ29tcHV0ZWRVc2Vyc2V0EhAKCHJlbGF0aW9uGAEgASgJIlgKIEF1dGhvcml6YXRpb25Nb2RlbFR1cGxlVG9Vc2Vyc2V0EhkKEXR1cGxlc2V0X3JlbGF0aW9uGAEgASgJEhkKEWNvbXB1dGVkX3JlbGF0aW9uGAIgASgJImIKHkF1dGhvcml6YXRpb25Nb2RlbFJld3JpdGVVbmlvbhJACghjaGlsZHJlbhgBIAMoCzIuLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsUmV3cml0ZSJkChVBdXRob3JpemF0aW9uTW9kZWxSZWYSCgoCaWQYASABKAkSDwoHdmVyc2lvbhgCIAEoCRIuCgpjcmVhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKhAQoNRXhwYW5kUmVxdWVzdBIvCghyZXNvdXJjZRgBIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2USEAoIcmVsYXRpb24YAiABKAkSKAoHY29udGV4dBgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEQoJbWF4X2RlcHRoGAQgASgFEhAKCG1vZGVsX2lkGAUgASgJIooBCgpFeHBhbmROb2RlEjcKBnRhcmdldBgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwVGFyZ2V0EhAKCHJlbGF0aW9uGAIgASgJEjEKCGNoaWxkcmVuGAMgAygLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5FeHBhbmROb2RlIpcBCg5FeHBhbmRSZXNwb25zZRItCgRyb290GAEgASgLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5FeHBhbmROb2RlEhEKCXRydW5jYXRlZBgCIAEoCBIWCg5jeWNsZV9kZXRlY3RlZBgDIAEoCBIZChFtYXhfZGVwdGhfcmVhY2hlZBgEIAEoCBIQCghtb2RlbF9pZBgFIAEoCSJTChZHZXRBY3RpdmVNb2RlbFJlc3BvbnNlEjkKBW1vZGVsGAEgASgLMiouZ2VzdGFsdC5wcm92aWRlci52MS5BdXRob3JpemF0aW9uTW9kZWxSZWYiOgoRTGlzdE1vZGVsc1JlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkiaQoSTGlzdE1vZGVsc1Jlc3BvbnNlEjoKBm1vZGVscxgBIAMoCzIqLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsUmVmEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSJLChFXcml0ZU1vZGVsUmVxdWVzdBI2CgVtb2RlbBgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsMqoLChVBdXRob3JpemF0aW9uUHJvdmlkZXISXQoIRXZhbHVhdGUSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLkFjY2Vzc0V2YWx1YXRpb25SZXF1ZXN0GiMuZ2VzdGFsdC5wcm92aWRlci52MS5BY2Nlc3NEZWNpc2lvbhJtCgxFdmFsdWF0ZU1hbnkSLS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFjY2Vzc0V2YWx1YXRpb25zUmVxdWVzdBouLmdlc3RhbHQucHJvdmlkZXIudjEuQWNjZXNzRXZhbHVhdGlvbnNSZXNwb25zZRJqCg9TZWFyY2hSZXNvdXJjZXMSKi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc291cmNlU2VhcmNoUmVxdWVzdBorLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2VTZWFyY2hSZXNwb25zZRJnCg5TZWFyY2hTdWJqZWN0cxIpLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdFNlYXJjaFJlcXVlc3QaKi5nZXN0YWx0LnByb3ZpZGVyLnYxLlN1YmplY3RTZWFyY2hSZXNwb25zZRJzChhFZmZlY3RpdmVTZWFyY2hSZXNvdXJjZXMSKi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc291cmNlU2VhcmNoUmVxdWVzdBorLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2VTZWFyY2hSZXNwb25zZRKCAQoXRWZmZWN0aXZlU2VhcmNoU3ViamVjdHMSMi5nZXN0YWx0LnByb3ZpZGVyLnYxLkVmZmVjdGl2ZVN1YmplY3RTZWFyY2hSZXF1ZXN0GjMuZ2VzdGFsdC5wcm92aWRlci52MS5FZmZlY3RpdmVTdWJqZWN0U2VhcmNoUmVzcG9uc2USZAoNU2VhcmNoQWN0aW9ucxIoLmdlc3RhbHQucHJvdmlkZXIudjEuQWN0aW9uU2VhcmNoUmVxdWVzdBopLmdlc3RhbHQucHJvdmlkZXIudjEuQWN0aW9uU2VhcmNoUmVzcG9uc2USUQoGRXhwYW5kEiIuZ2VzdGFsdC5wcm92aWRlci52MS5FeHBhbmRSZXF1ZXN0GiMuZ2VzdGFsdC5wcm92aWRlci52MS5FeHBhbmRSZXNwb25zZRJRCgtHZXRNZXRhZGF0YRIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRoqLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1ldGFkYXRhEnIKEVJlYWRSZWxhdGlvbnNoaXBzEi0uZ2VzdGFsdC5wcm92aWRlci52MS5SZWFkUmVsYXRpb25zaGlwc1JlcXVlc3QaLi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlYWRSZWxhdGlvbnNoaXBzUmVzcG9uc2USXAoSV3JpdGVSZWxhdGlvbnNoaXBzEi4uZ2VzdGFsdC5wcm92aWRlci52MS5Xcml0ZVJlbGF0aW9uc2hpcHNSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5ElUKDkdldEFjdGl2ZU1vZGVsEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GisuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRBY3RpdmVNb2RlbFJlc3BvbnNlEl0KCkxpc3RNb2RlbHMSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RNb2RlbHNSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0TW9kZWxzUmVzcG9uc2USYAoKV3JpdGVNb2RlbBImLmdlc3RhbHQucHJvdmlkZXIudjEuV3JpdGVNb2RlbFJlcXVlc3QaKi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFJlZmIGcHJvdG8z", [file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("ChZ2MS9hdXRob3JpemF0aW9uLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIlAKB1N1YmplY3QSDAoEdHlwZRgBIAEoCRIKCgJpZBgCIAEoCRIrCgpwcm9wZXJ0aWVzGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJDCgZBY3Rpb24SDAoEbmFtZRgBIAEoCRIrCgpwcm9wZXJ0aWVzGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJRCghSZXNvdXJjZRIMCgR0eXBlGAEgASgJEgoKAmlkGAIgASgJEisKCnByb3BlcnRpZXMYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IqEBChJDaGVja0FjY2Vzc1JlcXVlc3QSLQoHc3ViamVjdBgBIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdBIrCgZhY3Rpb24YAiABKAsyGy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFjdGlvbhIvCghyZXNvdXJjZRgDIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2UiOAoTQ2hlY2tBY2Nlc3NSZXNwb25zZRIPCgdhbGxvd2VkGAEgASgIEhAKCG1vZGVsX2lkGAIgASgJIlMKFkNoZWNrQWNjZXNzTWFueVJlcXVlc3QSOQoIcmVxdWVzdHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzUmVxdWVzdCJWChdDaGVja0FjY2Vzc01hbnlSZXNwb25zZRI7CglkZWNpc2lvbnMYASADKAsyKC5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzUmVzcG9uc2UiegoYTGlzdFJlbGF0aW9uc2hpcHNSZXF1ZXN0EjcKBmZpbHRlchgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwRmlsdGVyEhEKCXBhZ2Vfc2l6ZRgCIAEoBRISCgpwYWdlX3Rva2VuGAMgASgJIr0CChJSZWxhdGlvbnNoaXBGaWx0ZXISNwoGdGFyZ2V0GAEgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXBUYXJnZXQSEAoIcmVsYXRpb24YAiABKAkSLwoIcmVzb3VyY2UYAyABKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc291cmNlEkAKC3RhcmdldF90eXBlGAQgASgOMisuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXBUYXJnZXRUeXBlEhoKEnRhcmdldF9lbnRpdHlfdHlwZRgFIAEoCRIVCg1yZXNvdXJjZV90eXBlGAYgASgJEjYKDHNvdXJjZV9sYXllchgHIAEoDjIgLmdlc3RhbHQucHJvdmlkZXIudjEuU291cmNlTGF5ZXIibgoZTGlzdFJlbGF0aW9uc2hpcHNSZXNwb25zZRI4Cg1yZWxhdGlvbnNoaXBzGAEgAygLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXASFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIlEKFkFkZFJlbGF0aW9uc2hpcFJlcXVlc3QSNwoMcmVsYXRpb25zaGlwGAEgASgLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXAiUgoXQWRkUmVsYXRpb25zaGlwUmVzcG9uc2USNwoMcmVsYXRpb25zaGlwGAEgASgLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5SZWxhdGlvbnNoaXAiXwoZRGVsZXRlUmVsYXRpb25zaGlwUmVxdWVzdBJCChJyZWxhdGlvbnNoaXBfdHVwbGUYASABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlbGF0aW9uc2hpcFR1cGxlIhwKGkRlbGV0ZVJlbGF0aW9uc2hpcFJlc3BvbnNlIpABChxTZXRBdXRob3JpemF0aW9uU3RhdGVSZXF1ZXN0EjYKBW1vZGVsGAEgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5BdXRob3JpemF0aW9uTW9kZWwSOAoNcmVsYXRpb25zaGlwcxgCIAMoCzIhLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwImEKHVNldEF1dGhvcml6YXRpb25TdGF0ZVJlc3BvbnNlEkAKDGFjdGl2ZV9tb2RlbBgBIAEoCzIqLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsUmVmIqoBCgxSZWxhdGlvbnNoaXASNQoFdHVwbGUYASABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlbGF0aW9uc2hpcFR1cGxlEisKCnByb3BlcnRpZXMYAiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EjYKDHNvdXJjZV9sYXllchgDIAEoDjIgLmdlc3RhbHQucHJvdmlkZXIudjEuU291cmNlTGF5ZXIijwEKEVJlbGF0aW9uc2hpcFR1cGxlEjcKBnRhcmdldBgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuUmVsYXRpb25zaGlwVGFyZ2V0EhAKCHJlbGF0aW9uGAIgASgJEi8KCHJlc291cmNlGAMgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvdXJjZSK4AQoSUmVsYXRpb25zaGlwVGFyZ2V0Ei8KB3N1YmplY3QYASABKAsyHC5nZXN0YWx0LnByb3ZpZGVyLnYxLlN1YmplY3RIABIxCghyZXNvdXJjZRgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2VIABI2CgtzdWJqZWN0X3NldBgDIAEoCzIfLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdFNldEgAQgYKBGtpbmQiTwoKU3ViamVjdFNldBIvCghyZXNvdXJjZRgBIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb3VyY2USEAoIcmVsYXRpb24YAiABKAkifgoSQXV0aG9yaXphdGlvbk1vZGVsEgoKAmlkGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSSwoOcmVzb3VyY2VfdHlwZXMYAyADKAsyMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFJlc291cmNlVHlwZSKZAgoeQXV0aG9yaXphdGlvbk1vZGVsUmVzb3VyY2VUeXBlEgwKBG5hbWUYASABKAkSNQoJcmVsYXRpb25zGAIgAygLMiIuZ2VzdGFsdC5wcm92aWRlci52MS5Nb2RlbFJlbGF0aW9uEjEKB2FjdGlvbnMYAyADKAsyIC5nZXN0YWx0LnByb3ZpZGVyLnYxLk1vZGVsQWN0aW9uEjYKDHNvdXJjZV9sYXllchgEIAEoDjIgLmdlc3RhbHQucHJvdmlkZXIudjEuU291cmNlTGF5ZXISRwoVZGVmYXVsdF9hY2Nlc3NfcG9saWN5GAUgASgOMiguZ2VzdGFsdC5wcm92aWRlci52MS5EZWZhdWx0QWNjZXNzUG9saWN5Il8KDU1vZGVsUmVsYXRpb24SDAoEbmFtZRgBIAEoCRJACg9hbGxvd2VkX3RhcmdldHMYAiADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk1vZGVsQWxsb3dlZFRhcmdldCIuCgtNb2RlbEFjdGlvbhIMCgRuYW1lGAEgASgJEhEKCXJlbGF0aW9ucxgCIAMoCSKOAQoSTW9kZWxBbGxvd2VkVGFyZ2V0EhYKDHN1YmplY3RfdHlwZRgBIAEoCUgAEhcKDXJlc291cmNlX3R5cGUYAiABKAlIABI/ChBzdWJqZWN0X3NldF90eXBlGAMgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5TdWJqZWN0U2V0VHlwZUgAQgYKBGtpbmQiOQoOU3ViamVjdFNldFR5cGUSFQoNcmVzb3VyY2VfdHlwZRgBIAEoCRIQCghyZWxhdGlvbhgCIAEoCSJkChVBdXRob3JpemF0aW9uTW9kZWxSZWYSCgoCaWQYASABKAkSDwoHdmVyc2lvbhgCIAEoCRIuCgpjcmVhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJWChlHZXRBY3RpdmVNb2RlbFJlZlJlc3BvbnNlEjkKBW1vZGVsGAEgASgLMiouZ2VzdGFsdC5wcm92aWRlci52MS5BdXRob3JpemF0aW9uTW9kZWxSZWYiTwoVU2V0QWN0aXZlTW9kZWxSZXF1ZXN0EjYKBW1vZGVsGAEgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5BdXRob3JpemF0aW9uTW9kZWwiUwoWU2V0QWN0aXZlTW9kZWxSZXNwb25zZRI5CgVtb2RlbBgBIAEoCzIqLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aG9yaXphdGlvbk1vZGVsUmVmIpcBCiNMaXN0QWN0aXZlTW9kZWxSZXNvdXJjZVR5cGVzUmVxdWVzdBJJCgZmaWx0ZXIYASABKAsyOS5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFJlc291cmNlVHlwZUZpbHRlchIRCglwYWdlX3NpemUYAiABKAUSEgoKcGFnZV90b2tlbhgDIAEoCSJsCiRBdXRob3JpemF0aW9uTW9kZWxSZXNvdXJjZVR5cGVGaWx0ZXISDAoEbmFtZRgBIAEoCRI2Cgxzb3VyY2VfbGF5ZXIYAiABKA4yIC5nZXN0YWx0LnByb3ZpZGVyLnYxLlNvdXJjZUxheWVyIp4BCiRMaXN0QWN0aXZlTW9kZWxSZXNvdXJjZVR5cGVzUmVzcG9uc2USSwoOcmVzb3VyY2VfdHlwZXMYASADKAsyMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6YXRpb25Nb2RlbFJlc291cmNlVHlwZRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSEAoIbW9kZWxfaWQYAyABKAkquQEKFlJlbGF0aW9uc2hpcFRhcmdldFR5cGUSKAokUkVMQVRJT05TSElQX1RBUkdFVF9UWVBFX1VOU1BFQ0lGSUVEEAASJAogUkVMQVRJT05TSElQX1RBUkdFVF9UWVBFX1NVQkpFQ1QQARIlCiFSRUxBVElPTlNISVBfVEFSR0VUX1RZUEVfUkVTT1VSQ0UQAhIoCiRSRUxBVElPTlNISVBfVEFSR0VUX1RZUEVfU1VCSkVDVF9TRVQQAypWChNEZWZhdWx0QWNjZXNzUG9saWN5Eh4KGkRFRkFVTFRfQUNDRVNTX1BPTElDWV9ERU5ZEAASHwobREVGQVVMVF9BQ0NFU1NfUE9MSUNZX0FMTE9XEAEqZQoLU291cmNlTGF5ZXISHAoYU09VUkNFX0xBWUVSX1VOU1BFQ0lGSUVEEAASHgoaU09VUkNFX0xBWUVSX1NUQVRJQ19DT05GSUcQARIYChRTT1VSQ0VfTEFZRVJfUlVOVElNRRACMp4IChVBdXRob3JpemF0aW9uUHJvdmlkZXISYAoLQ2hlY2tBY2Nlc3MSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzUmVxdWVzdBooLmdlc3RhbHQucHJvdmlkZXIudjEuQ2hlY2tBY2Nlc3NSZXNwb25zZRJsCg9DaGVja0FjY2Vzc01hbnkSKy5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzTWFueVJlcXVlc3QaLC5nZXN0YWx0LnByb3ZpZGVyLnYxLkNoZWNrQWNjZXNzTWFueVJlc3BvbnNlEnIKEUxpc3RSZWxhdGlvbnNoaXBzEi0uZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0UmVsYXRpb25zaGlwc1JlcXVlc3QaLi5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RSZWxhdGlvbnNoaXBzUmVzcG9uc2USbAoPQWRkUmVsYXRpb25zaGlwEisuZ2VzdGFsdC5wcm92aWRlci52MS5BZGRSZWxhdGlvbnNoaXBSZXF1ZXN0GiwuZ2VzdGFsdC5wcm92aWRlci52MS5BZGRSZWxhdGlvbnNoaXBSZXNwb25zZRJ1ChJEZWxldGVSZWxhdGlvbnNoaXASLi5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZVJlbGF0aW9uc2hpcFJlcXVlc3QaLy5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZVJlbGF0aW9uc2hpcFJlc3BvbnNlEn4KFVNldEF1dGhvcml6YXRpb25TdGF0ZRIxLmdlc3RhbHQucHJvdmlkZXIudjEuU2V0QXV0aG9yaXphdGlvblN0YXRlUmVxdWVzdBoyLmdlc3RhbHQucHJvdmlkZXIudjEuU2V0QXV0aG9yaXphdGlvblN0YXRlUmVzcG9uc2USWwoRR2V0QWN0aXZlTW9kZWxSZWYSFi5nb29nbGUucHJvdG9idWYuRW1wdHkaLi5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldEFjdGl2ZU1vZGVsUmVmUmVzcG9uc2USaQoOU2V0QWN0aXZlTW9kZWwSKi5nZXN0YWx0LnByb3ZpZGVyLnYxLlNldEFjdGl2ZU1vZGVsUmVxdWVzdBorLmdlc3RhbHQucHJvdmlkZXIudjEuU2V0QWN0aXZlTW9kZWxSZXNwb25zZRKTAQocTGlzdEFjdGl2ZU1vZGVsUmVzb3VyY2VUeXBlcxI4Lmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEFjdGl2ZU1vZGVsUmVzb3VyY2VUeXBlc1JlcXVlc3QaOS5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RBY3RpdmVNb2RlbFJlc291cmNlVHlwZXNSZXNwb25zZWIGcHJvdG8z", [file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message gestalt.provider.v1.Subject
@@ -42,6 +42,28 @@ export const SubjectSchema: GenMessage<Subject> = /*@__PURE__*/
   messageDesc(file_v1_authorization, 0);
 
 /**
+ * @generated from message gestalt.provider.v1.Action
+ */
+export type Action = Message<"gestalt.provider.v1.Action"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct properties = 2;
+   */
+  properties?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.Action.
+ * Use `create(ActionSchema)` to create a new message.
+ */
+export const ActionSchema: GenMessage<Action> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 1);
+
+/**
  * @generated from message gestalt.provider.v1.Resource
  */
 export type Resource = Message<"gestalt.provider.v1.Resource"> & {
@@ -66,37 +88,345 @@ export type Resource = Message<"gestalt.provider.v1.Resource"> & {
  * Use `create(ResourceSchema)` to create a new message.
  */
 export const ResourceSchema: GenMessage<Resource> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 1);
+  messageDesc(file_v1_authorization, 2);
 
 /**
- * @generated from message gestalt.provider.v1.SubjectSet
+ * @generated from message gestalt.provider.v1.CheckAccessRequest
  */
-export type SubjectSet = Message<"gestalt.provider.v1.SubjectSet"> & {
+export type CheckAccessRequest = Message<"gestalt.provider.v1.CheckAccessRequest"> & {
   /**
-   * @generated from field: gestalt.provider.v1.Resource resource = 1;
+   * @generated from field: gestalt.provider.v1.Subject subject = 1;
+   */
+  subject?: Subject | undefined;
+
+  /**
+   * @generated from field: gestalt.provider.v1.Action action = 2;
+   */
+  action?: Action | undefined;
+
+  /**
+   * @generated from field: gestalt.provider.v1.Resource resource = 3;
    */
   resource?: Resource | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.CheckAccessRequest.
+ * Use `create(CheckAccessRequestSchema)` to create a new message.
+ */
+export const CheckAccessRequestSchema: GenMessage<CheckAccessRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 3);
+
+/**
+ * @generated from message gestalt.provider.v1.CheckAccessResponse
+ */
+export type CheckAccessResponse = Message<"gestalt.provider.v1.CheckAccessResponse"> & {
+  /**
+   * @generated from field: bool allowed = 1;
+   */
+  allowed: boolean;
+
+  /**
+   * @generated from field: string model_id = 2;
+   */
+  modelId: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.CheckAccessResponse.
+ * Use `create(CheckAccessResponseSchema)` to create a new message.
+ */
+export const CheckAccessResponseSchema: GenMessage<CheckAccessResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 4);
+
+/**
+ * @generated from message gestalt.provider.v1.CheckAccessManyRequest
+ */
+export type CheckAccessManyRequest = Message<"gestalt.provider.v1.CheckAccessManyRequest"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.CheckAccessRequest requests = 1;
+   */
+  requests: CheckAccessRequest[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.CheckAccessManyRequest.
+ * Use `create(CheckAccessManyRequestSchema)` to create a new message.
+ */
+export const CheckAccessManyRequestSchema: GenMessage<CheckAccessManyRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 5);
+
+/**
+ * @generated from message gestalt.provider.v1.CheckAccessManyResponse
+ */
+export type CheckAccessManyResponse = Message<"gestalt.provider.v1.CheckAccessManyResponse"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.CheckAccessResponse decisions = 1;
+   */
+  decisions: CheckAccessResponse[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.CheckAccessManyResponse.
+ * Use `create(CheckAccessManyResponseSchema)` to create a new message.
+ */
+export const CheckAccessManyResponseSchema: GenMessage<CheckAccessManyResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 6);
+
+/**
+ * @generated from message gestalt.provider.v1.ListRelationshipsRequest
+ */
+export type ListRelationshipsRequest = Message<"gestalt.provider.v1.ListRelationshipsRequest"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.RelationshipFilter filter = 1;
+   */
+  filter?: RelationshipFilter | undefined;
+
+  /**
+   * @generated from field: int32 page_size = 2;
+   */
+  pageSize: number;
+
+  /**
+   * @generated from field: string page_token = 3;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ListRelationshipsRequest.
+ * Use `create(ListRelationshipsRequestSchema)` to create a new message.
+ */
+export const ListRelationshipsRequestSchema: GenMessage<ListRelationshipsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 7);
+
+/**
+ * @generated from message gestalt.provider.v1.RelationshipFilter
+ */
+export type RelationshipFilter = Message<"gestalt.provider.v1.RelationshipFilter"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.RelationshipTarget target = 1;
+   */
+  target?: RelationshipTarget | undefined;
 
   /**
    * @generated from field: string relation = 2;
    */
   relation: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.Resource resource = 3;
+   */
+  resource?: Resource | undefined;
+
+  /**
+   * @generated from field: gestalt.provider.v1.RelationshipTargetType target_type = 4;
+   */
+  targetType: RelationshipTargetType;
+
+  /**
+   * @generated from field: string target_entity_type = 5;
+   */
+  targetEntityType: string;
+
+  /**
+   * @generated from field: string resource_type = 6;
+   */
+  resourceType: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.SourceLayer source_layer = 7;
+   */
+  sourceLayer: SourceLayer;
 };
 
 /**
- * Describes the message gestalt.provider.v1.SubjectSet.
- * Use `create(SubjectSetSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.RelationshipFilter.
+ * Use `create(RelationshipFilterSchema)` to create a new message.
  */
-export const SubjectSetSchema: GenMessage<SubjectSet> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 2);
+export const RelationshipFilterSchema: GenMessage<RelationshipFilter> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 8);
 
 /**
- * RelationshipTarget identifies the left side of an authorization relationship.
- *
- * Subject preserves the existing user/group/service-principal tuple shape.
- * Resource and SubjectSet allow Zanzibar-style usersets, for example:
- * document:roadmap#viewer@group:eng#member.
- *
+ * @generated from message gestalt.provider.v1.ListRelationshipsResponse
+ */
+export type ListRelationshipsResponse = Message<"gestalt.provider.v1.ListRelationshipsResponse"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.Relationship relationships = 1;
+   */
+  relationships: Relationship[];
+
+  /**
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ListRelationshipsResponse.
+ * Use `create(ListRelationshipsResponseSchema)` to create a new message.
+ */
+export const ListRelationshipsResponseSchema: GenMessage<ListRelationshipsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 9);
+
+/**
+ * @generated from message gestalt.provider.v1.AddRelationshipRequest
+ */
+export type AddRelationshipRequest = Message<"gestalt.provider.v1.AddRelationshipRequest"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.Relationship relationship = 1;
+   */
+  relationship?: Relationship | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AddRelationshipRequest.
+ * Use `create(AddRelationshipRequestSchema)` to create a new message.
+ */
+export const AddRelationshipRequestSchema: GenMessage<AddRelationshipRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 10);
+
+/**
+ * @generated from message gestalt.provider.v1.AddRelationshipResponse
+ */
+export type AddRelationshipResponse = Message<"gestalt.provider.v1.AddRelationshipResponse"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.Relationship relationship = 1;
+   */
+  relationship?: Relationship | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AddRelationshipResponse.
+ * Use `create(AddRelationshipResponseSchema)` to create a new message.
+ */
+export const AddRelationshipResponseSchema: GenMessage<AddRelationshipResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 11);
+
+/**
+ * @generated from message gestalt.provider.v1.DeleteRelationshipRequest
+ */
+export type DeleteRelationshipRequest = Message<"gestalt.provider.v1.DeleteRelationshipRequest"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.RelationshipTuple relationship_tuple = 1;
+   */
+  relationshipTuple?: RelationshipTuple | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.DeleteRelationshipRequest.
+ * Use `create(DeleteRelationshipRequestSchema)` to create a new message.
+ */
+export const DeleteRelationshipRequestSchema: GenMessage<DeleteRelationshipRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 12);
+
+/**
+ * @generated from message gestalt.provider.v1.DeleteRelationshipResponse
+ */
+export type DeleteRelationshipResponse = Message<"gestalt.provider.v1.DeleteRelationshipResponse"> & {
+};
+
+/**
+ * Describes the message gestalt.provider.v1.DeleteRelationshipResponse.
+ * Use `create(DeleteRelationshipResponseSchema)` to create a new message.
+ */
+export const DeleteRelationshipResponseSchema: GenMessage<DeleteRelationshipResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 13);
+
+/**
+ * @generated from message gestalt.provider.v1.SetAuthorizationStateRequest
+ */
+export type SetAuthorizationStateRequest = Message<"gestalt.provider.v1.SetAuthorizationStateRequest"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.AuthorizationModel model = 1;
+   */
+  model?: AuthorizationModel | undefined;
+
+  /**
+   * @generated from field: repeated gestalt.provider.v1.Relationship relationships = 2;
+   */
+  relationships: Relationship[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.SetAuthorizationStateRequest.
+ * Use `create(SetAuthorizationStateRequestSchema)` to create a new message.
+ */
+export const SetAuthorizationStateRequestSchema: GenMessage<SetAuthorizationStateRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 14);
+
+/**
+ * @generated from message gestalt.provider.v1.SetAuthorizationStateResponse
+ */
+export type SetAuthorizationStateResponse = Message<"gestalt.provider.v1.SetAuthorizationStateResponse"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.AuthorizationModelRef active_model = 1;
+   */
+  activeModel?: AuthorizationModelRef | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.SetAuthorizationStateResponse.
+ * Use `create(SetAuthorizationStateResponseSchema)` to create a new message.
+ */
+export const SetAuthorizationStateResponseSchema: GenMessage<SetAuthorizationStateResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 15);
+
+/**
+ * @generated from message gestalt.provider.v1.Relationship
+ */
+export type Relationship = Message<"gestalt.provider.v1.Relationship"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.RelationshipTuple tuple = 1;
+   */
+  tuple?: RelationshipTuple | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Struct properties = 2;
+   */
+  properties?: JsonObject | undefined;
+
+  /**
+   * @generated from field: gestalt.provider.v1.SourceLayer source_layer = 3;
+   */
+  sourceLayer: SourceLayer;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.Relationship.
+ * Use `create(RelationshipSchema)` to create a new message.
+ */
+export const RelationshipSchema: GenMessage<Relationship> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 16);
+
+/**
+ * @generated from message gestalt.provider.v1.RelationshipTuple
+ */
+export type RelationshipTuple = Message<"gestalt.provider.v1.RelationshipTuple"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.RelationshipTarget target = 1;
+   */
+  target?: RelationshipTarget | undefined;
+
+  /**
+   * @generated from field: string relation = 2;
+   */
+  relation: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.Resource resource = 3;
+   */
+  resource?: Resource | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.RelationshipTuple.
+ * Use `create(RelationshipTupleSchema)` to create a new message.
+ */
+export const RelationshipTupleSchema: GenMessage<RelationshipTuple> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 17);
+
+/**
  * @generated from message gestalt.provider.v1.RelationshipTarget
  */
 export type RelationshipTarget = Message<"gestalt.provider.v1.RelationshipTarget"> & {
@@ -129,608 +459,46 @@ export type RelationshipTarget = Message<"gestalt.provider.v1.RelationshipTarget
  * Use `create(RelationshipTargetSchema)` to create a new message.
  */
 export const RelationshipTargetSchema: GenMessage<RelationshipTarget> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 3);
-
-/**
- * @generated from message gestalt.provider.v1.Action
- */
-export type Action = Message<"gestalt.provider.v1.Action"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct properties = 2;
-   */
-  properties?: JsonObject | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.Action.
- * Use `create(ActionSchema)` to create a new message.
- */
-export const ActionSchema: GenMessage<Action> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 4);
-
-/**
- * @generated from message gestalt.provider.v1.AccessEvaluationRequest
- */
-export type AccessEvaluationRequest = Message<"gestalt.provider.v1.AccessEvaluationRequest"> & {
-  /**
-   * @generated from field: gestalt.provider.v1.Subject subject = 1;
-   */
-  subject?: Subject | undefined;
-
-  /**
-   * @generated from field: gestalt.provider.v1.Action action = 2;
-   */
-  action?: Action | undefined;
-
-  /**
-   * @generated from field: gestalt.provider.v1.Resource resource = 3;
-   */
-  resource?: Resource | undefined;
-
-  /**
-   * @generated from field: google.protobuf.Struct context = 4;
-   */
-  context?: JsonObject | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.AccessEvaluationRequest.
- * Use `create(AccessEvaluationRequestSchema)` to create a new message.
- */
-export const AccessEvaluationRequestSchema: GenMessage<AccessEvaluationRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 5);
-
-/**
- * @generated from message gestalt.provider.v1.AccessDecision
- */
-export type AccessDecision = Message<"gestalt.provider.v1.AccessDecision"> & {
-  /**
-   * @generated from field: bool allowed = 1;
-   */
-  allowed: boolean;
-
-  /**
-   * @generated from field: google.protobuf.Struct context = 2;
-   */
-  context?: JsonObject | undefined;
-
-  /**
-   * @generated from field: string model_id = 3;
-   */
-  modelId: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.AccessDecision.
- * Use `create(AccessDecisionSchema)` to create a new message.
- */
-export const AccessDecisionSchema: GenMessage<AccessDecision> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 6);
-
-/**
- * @generated from message gestalt.provider.v1.AccessEvaluationsRequest
- */
-export type AccessEvaluationsRequest = Message<"gestalt.provider.v1.AccessEvaluationsRequest"> & {
-  /**
-   * @generated from field: repeated gestalt.provider.v1.AccessEvaluationRequest requests = 1;
-   */
-  requests: AccessEvaluationRequest[];
-};
-
-/**
- * Describes the message gestalt.provider.v1.AccessEvaluationsRequest.
- * Use `create(AccessEvaluationsRequestSchema)` to create a new message.
- */
-export const AccessEvaluationsRequestSchema: GenMessage<AccessEvaluationsRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 7);
-
-/**
- * @generated from message gestalt.provider.v1.AccessEvaluationsResponse
- */
-export type AccessEvaluationsResponse = Message<"gestalt.provider.v1.AccessEvaluationsResponse"> & {
-  /**
-   * @generated from field: repeated gestalt.provider.v1.AccessDecision decisions = 1;
-   */
-  decisions: AccessDecision[];
-};
-
-/**
- * Describes the message gestalt.provider.v1.AccessEvaluationsResponse.
- * Use `create(AccessEvaluationsResponseSchema)` to create a new message.
- */
-export const AccessEvaluationsResponseSchema: GenMessage<AccessEvaluationsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 8);
-
-/**
- * @generated from message gestalt.provider.v1.ResourceSearchRequest
- */
-export type ResourceSearchRequest = Message<"gestalt.provider.v1.ResourceSearchRequest"> & {
-  /**
-   * @generated from field: gestalt.provider.v1.Subject subject = 1;
-   */
-  subject?: Subject | undefined;
-
-  /**
-   * @generated from field: gestalt.provider.v1.Action action = 2;
-   */
-  action?: Action | undefined;
-
-  /**
-   * @generated from field: string resource_type = 3;
-   */
-  resourceType: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct context = 4;
-   */
-  context?: JsonObject | undefined;
-
-  /**
-   * @generated from field: int32 page_size = 5;
-   */
-  pageSize: number;
-
-  /**
-   * @generated from field: string page_token = 6;
-   */
-  pageToken: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ResourceSearchRequest.
- * Use `create(ResourceSearchRequestSchema)` to create a new message.
- */
-export const ResourceSearchRequestSchema: GenMessage<ResourceSearchRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 9);
-
-/**
- * @generated from message gestalt.provider.v1.ResourceSearchResponse
- */
-export type ResourceSearchResponse = Message<"gestalt.provider.v1.ResourceSearchResponse"> & {
-  /**
-   * @generated from field: repeated gestalt.provider.v1.Resource resources = 1;
-   */
-  resources: Resource[];
-
-  /**
-   * @generated from field: string next_page_token = 2;
-   */
-  nextPageToken: string;
-
-  /**
-   * @generated from field: string model_id = 3;
-   */
-  modelId: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ResourceSearchResponse.
- * Use `create(ResourceSearchResponseSchema)` to create a new message.
- */
-export const ResourceSearchResponseSchema: GenMessage<ResourceSearchResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 10);
-
-/**
- * @generated from message gestalt.provider.v1.SubjectSearchRequest
- */
-export type SubjectSearchRequest = Message<"gestalt.provider.v1.SubjectSearchRequest"> & {
-  /**
-   * @generated from field: gestalt.provider.v1.Resource resource = 1;
-   */
-  resource?: Resource | undefined;
-
-  /**
-   * @generated from field: gestalt.provider.v1.Action action = 2;
-   */
-  action?: Action | undefined;
-
-  /**
-   * @generated from field: string subject_type = 3;
-   */
-  subjectType: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct context = 4;
-   */
-  context?: JsonObject | undefined;
-
-  /**
-   * @generated from field: int32 page_size = 5;
-   */
-  pageSize: number;
-
-  /**
-   * @generated from field: string page_token = 6;
-   */
-  pageToken: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.SubjectSearchRequest.
- * Use `create(SubjectSearchRequestSchema)` to create a new message.
- */
-export const SubjectSearchRequestSchema: GenMessage<SubjectSearchRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 11);
-
-/**
- * @generated from message gestalt.provider.v1.SubjectSearchResponse
- */
-export type SubjectSearchResponse = Message<"gestalt.provider.v1.SubjectSearchResponse"> & {
-  /**
-   * @generated from field: repeated gestalt.provider.v1.Subject subjects = 1;
-   */
-  subjects: Subject[];
-
-  /**
-   * @generated from field: string next_page_token = 2;
-   */
-  nextPageToken: string;
-
-  /**
-   * @generated from field: string model_id = 3;
-   */
-  modelId: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.SubjectSearchResponse.
- * Use `create(SubjectSearchResponseSchema)` to create a new message.
- */
-export const SubjectSearchResponseSchema: GenMessage<SubjectSearchResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 12);
-
-/**
- * @generated from message gestalt.provider.v1.EffectiveSubjectSearchRequest
- */
-export type EffectiveSubjectSearchRequest = Message<"gestalt.provider.v1.EffectiveSubjectSearchRequest"> & {
-  /**
-   * @generated from field: gestalt.provider.v1.Resource resource = 1;
-   */
-  resource?: Resource | undefined;
-
-  /**
-   * @generated from field: gestalt.provider.v1.Action action = 2;
-   */
-  action?: Action | undefined;
-
-  /**
-   * @generated from field: google.protobuf.Struct context = 3;
-   */
-  context?: JsonObject | undefined;
-
-  /**
-   * @generated from field: int32 page_size = 4;
-   */
-  pageSize: number;
-
-  /**
-   * @generated from field: string page_token = 5;
-   */
-  pageToken: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.EffectiveSubjectSearchRequest.
- * Use `create(EffectiveSubjectSearchRequestSchema)` to create a new message.
- */
-export const EffectiveSubjectSearchRequestSchema: GenMessage<EffectiveSubjectSearchRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 13);
-
-/**
- * @generated from message gestalt.provider.v1.EffectiveSubjectSearchResponse
- */
-export type EffectiveSubjectSearchResponse = Message<"gestalt.provider.v1.EffectiveSubjectSearchResponse"> & {
-  /**
-   * @generated from field: repeated gestalt.provider.v1.RelationshipTarget targets = 1;
-   */
-  targets: RelationshipTarget[];
-
-  /**
-   * @generated from field: string next_page_token = 2;
-   */
-  nextPageToken: string;
-
-  /**
-   * @generated from field: string model_id = 3;
-   */
-  modelId: string;
-
-  /**
-   * @generated from field: bool truncated = 4;
-   */
-  truncated: boolean;
-};
-
-/**
- * Describes the message gestalt.provider.v1.EffectiveSubjectSearchResponse.
- * Use `create(EffectiveSubjectSearchResponseSchema)` to create a new message.
- */
-export const EffectiveSubjectSearchResponseSchema: GenMessage<EffectiveSubjectSearchResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 14);
-
-/**
- * @generated from message gestalt.provider.v1.ActionSearchRequest
- */
-export type ActionSearchRequest = Message<"gestalt.provider.v1.ActionSearchRequest"> & {
-  /**
-   * @generated from field: gestalt.provider.v1.Subject subject = 1;
-   */
-  subject?: Subject | undefined;
-
-  /**
-   * @generated from field: gestalt.provider.v1.Resource resource = 2;
-   */
-  resource?: Resource | undefined;
-
-  /**
-   * @generated from field: google.protobuf.Struct context = 3;
-   */
-  context?: JsonObject | undefined;
-
-  /**
-   * @generated from field: int32 page_size = 4;
-   */
-  pageSize: number;
-
-  /**
-   * @generated from field: string page_token = 5;
-   */
-  pageToken: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ActionSearchRequest.
- * Use `create(ActionSearchRequestSchema)` to create a new message.
- */
-export const ActionSearchRequestSchema: GenMessage<ActionSearchRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 15);
-
-/**
- * @generated from message gestalt.provider.v1.ActionSearchResponse
- */
-export type ActionSearchResponse = Message<"gestalt.provider.v1.ActionSearchResponse"> & {
-  /**
-   * @generated from field: repeated gestalt.provider.v1.Action actions = 1;
-   */
-  actions: Action[];
-
-  /**
-   * @generated from field: string next_page_token = 2;
-   */
-  nextPageToken: string;
-
-  /**
-   * @generated from field: string model_id = 3;
-   */
-  modelId: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ActionSearchResponse.
- * Use `create(ActionSearchResponseSchema)` to create a new message.
- */
-export const ActionSearchResponseSchema: GenMessage<ActionSearchResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 16);
-
-/**
- * @generated from message gestalt.provider.v1.AuthorizationMetadata
- */
-export type AuthorizationMetadata = Message<"gestalt.provider.v1.AuthorizationMetadata"> & {
-  /**
-   * @generated from field: repeated string capabilities = 1;
-   */
-  capabilities: string[];
-
-  /**
-   * @generated from field: string active_model_id = 2;
-   */
-  activeModelId: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.AuthorizationMetadata.
- * Use `create(AuthorizationMetadataSchema)` to create a new message.
- */
-export const AuthorizationMetadataSchema: GenMessage<AuthorizationMetadata> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 17);
-
-/**
- * @generated from message gestalt.provider.v1.Relationship
- */
-export type Relationship = Message<"gestalt.provider.v1.Relationship"> & {
-  /**
-   * Deprecated for generalized Zanzibar tuples. Writers should prefer target.
-   * Providers accepting both fields must reject mismatched subject and target values.
-   *
-   * @generated from field: gestalt.provider.v1.Subject subject = 1;
-   */
-  subject?: Subject | undefined;
-
-  /**
-   * @generated from field: string relation = 2;
-   */
-  relation: string;
-
-  /**
-   * @generated from field: gestalt.provider.v1.Resource resource = 3;
-   */
-  resource?: Resource | undefined;
-
-  /**
-   * @generated from field: google.protobuf.Struct properties = 4;
-   */
-  properties?: JsonObject | undefined;
-
-  /**
-   * Generalized tuple target. For compatibility, subject-only tuples may still
-   * be written using subject without setting target.
-   *
-   * @generated from field: gestalt.provider.v1.RelationshipTarget target = 5;
-   */
-  target?: RelationshipTarget | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.Relationship.
- * Use `create(RelationshipSchema)` to create a new message.
- */
-export const RelationshipSchema: GenMessage<Relationship> = /*@__PURE__*/
   messageDesc(file_v1_authorization, 18);
 
 /**
- * @generated from message gestalt.provider.v1.RelationshipKey
+ * @generated from message gestalt.provider.v1.SubjectSet
  */
-export type RelationshipKey = Message<"gestalt.provider.v1.RelationshipKey"> & {
+export type SubjectSet = Message<"gestalt.provider.v1.SubjectSet"> & {
   /**
-   * Deprecated for generalized Zanzibar tuples. Callers should prefer target.
-   *
-   * @generated from field: gestalt.provider.v1.Subject subject = 1;
+   * @generated from field: gestalt.provider.v1.Resource resource = 1;
    */
-  subject?: Subject | undefined;
+  resource?: Resource | undefined;
 
   /**
    * @generated from field: string relation = 2;
    */
   relation: string;
-
-  /**
-   * @generated from field: gestalt.provider.v1.Resource resource = 3;
-   */
-  resource?: Resource | undefined;
-
-  /**
-   * @generated from field: gestalt.provider.v1.RelationshipTarget target = 4;
-   */
-  target?: RelationshipTarget | undefined;
 };
 
 /**
- * Describes the message gestalt.provider.v1.RelationshipKey.
- * Use `create(RelationshipKeySchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.SubjectSet.
+ * Use `create(SubjectSetSchema)` to create a new message.
  */
-export const RelationshipKeySchema: GenMessage<RelationshipKey> = /*@__PURE__*/
+export const SubjectSetSchema: GenMessage<SubjectSet> = /*@__PURE__*/
   messageDesc(file_v1_authorization, 19);
-
-/**
- * @generated from message gestalt.provider.v1.ReadRelationshipsRequest
- */
-export type ReadRelationshipsRequest = Message<"gestalt.provider.v1.ReadRelationshipsRequest"> & {
-  /**
-   * Direct tuple filter only. This RPC does not expand computed usersets or
-   * inheritance rewrites.
-   *
-   * @generated from field: gestalt.provider.v1.Subject subject = 1;
-   */
-  subject?: Subject | undefined;
-
-  /**
-   * @generated from field: string relation = 2;
-   */
-  relation: string;
-
-  /**
-   * @generated from field: gestalt.provider.v1.Resource resource = 3;
-   */
-  resource?: Resource | undefined;
-
-  /**
-   * @generated from field: int32 page_size = 4;
-   */
-  pageSize: number;
-
-  /**
-   * @generated from field: string page_token = 5;
-   */
-  pageToken: string;
-
-  /**
-   * @generated from field: string model_id = 6;
-   */
-  modelId: string;
-
-  /**
-   * @generated from field: gestalt.provider.v1.RelationshipTarget target = 7;
-   */
-  target?: RelationshipTarget | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ReadRelationshipsRequest.
- * Use `create(ReadRelationshipsRequestSchema)` to create a new message.
- */
-export const ReadRelationshipsRequestSchema: GenMessage<ReadRelationshipsRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 20);
-
-/**
- * @generated from message gestalt.provider.v1.ReadRelationshipsResponse
- */
-export type ReadRelationshipsResponse = Message<"gestalt.provider.v1.ReadRelationshipsResponse"> & {
-  /**
-   * @generated from field: repeated gestalt.provider.v1.Relationship relationships = 1;
-   */
-  relationships: Relationship[];
-
-  /**
-   * @generated from field: string next_page_token = 2;
-   */
-  nextPageToken: string;
-
-  /**
-   * @generated from field: string model_id = 3;
-   */
-  modelId: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ReadRelationshipsResponse.
- * Use `create(ReadRelationshipsResponseSchema)` to create a new message.
- */
-export const ReadRelationshipsResponseSchema: GenMessage<ReadRelationshipsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 21);
-
-/**
- * @generated from message gestalt.provider.v1.WriteRelationshipsRequest
- */
-export type WriteRelationshipsRequest = Message<"gestalt.provider.v1.WriteRelationshipsRequest"> & {
-  /**
-   * @generated from field: repeated gestalt.provider.v1.Relationship writes = 1;
-   */
-  writes: Relationship[];
-
-  /**
-   * @generated from field: repeated gestalt.provider.v1.RelationshipKey deletes = 2;
-   */
-  deletes: RelationshipKey[];
-
-  /**
-   * @generated from field: string model_id = 3;
-   */
-  modelId: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.WriteRelationshipsRequest.
- * Use `create(WriteRelationshipsRequestSchema)` to create a new message.
- */
-export const WriteRelationshipsRequestSchema: GenMessage<WriteRelationshipsRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 22);
 
 /**
  * @generated from message gestalt.provider.v1.AuthorizationModel
  */
 export type AuthorizationModel = Message<"gestalt.provider.v1.AuthorizationModel"> & {
   /**
-   * @generated from field: int32 version = 1;
+   * @generated from field: string id = 1;
    */
-  version: number;
+  id: string;
 
   /**
-   * @generated from field: repeated gestalt.provider.v1.AuthorizationModelResourceType resource_types = 2;
+   * @generated from field: string version = 2;
+   */
+  version: string;
+
+  /**
+   * @generated from field: repeated gestalt.provider.v1.AuthorizationModelResourceType resource_types = 3;
    */
   resourceTypes: AuthorizationModelResourceType[];
 };
@@ -740,7 +508,7 @@ export type AuthorizationModel = Message<"gestalt.provider.v1.AuthorizationModel
  * Use `create(AuthorizationModelSchema)` to create a new message.
  */
 export const AuthorizationModelSchema: GenMessage<AuthorizationModel> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 23);
+  messageDesc(file_v1_authorization, 20);
 
 /**
  * @generated from message gestalt.provider.v1.AuthorizationModelResourceType
@@ -752,14 +520,24 @@ export type AuthorizationModelResourceType = Message<"gestalt.provider.v1.Author
   name: string;
 
   /**
-   * @generated from field: repeated gestalt.provider.v1.AuthorizationModelRelation relations = 2;
+   * @generated from field: repeated gestalt.provider.v1.ModelRelation relations = 2;
    */
-  relations: AuthorizationModelRelation[];
+  relations: ModelRelation[];
 
   /**
-   * @generated from field: repeated gestalt.provider.v1.AuthorizationModelAction actions = 3;
+   * @generated from field: repeated gestalt.provider.v1.ModelAction actions = 3;
    */
-  actions: AuthorizationModelAction[];
+  actions: ModelAction[];
+
+  /**
+   * @generated from field: gestalt.provider.v1.SourceLayer source_layer = 4;
+   */
+  sourceLayer: SourceLayer;
+
+  /**
+   * @generated from field: gestalt.provider.v1.DefaultAccessPolicy default_access_policy = 5;
+   */
+  defaultAccessPolicy: DefaultAccessPolicy;
 };
 
 /**
@@ -767,44 +545,34 @@ export type AuthorizationModelResourceType = Message<"gestalt.provider.v1.Author
  * Use `create(AuthorizationModelResourceTypeSchema)` to create a new message.
  */
 export const AuthorizationModelResourceTypeSchema: GenMessage<AuthorizationModelResourceType> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 24);
+  messageDesc(file_v1_authorization, 21);
 
 /**
- * @generated from message gestalt.provider.v1.AuthorizationModelRelation
+ * @generated from message gestalt.provider.v1.ModelRelation
  */
-export type AuthorizationModelRelation = Message<"gestalt.provider.v1.AuthorizationModelRelation"> & {
+export type ModelRelation = Message<"gestalt.provider.v1.ModelRelation"> & {
   /**
    * @generated from field: string name = 1;
    */
   name: string;
 
   /**
-   * @generated from field: repeated string subject_types = 2;
+   * @generated from field: repeated gestalt.provider.v1.ModelAllowedTarget allowed_targets = 2;
    */
-  subjectTypes: string[];
-
-  /**
-   * @generated from field: repeated gestalt.provider.v1.AuthorizationModelAllowedTarget allowed_targets = 3;
-   */
-  allowedTargets: AuthorizationModelAllowedTarget[];
-
-  /**
-   * @generated from field: gestalt.provider.v1.AuthorizationModelRewrite rewrite = 4;
-   */
-  rewrite?: AuthorizationModelRewrite | undefined;
+  allowedTargets: ModelAllowedTarget[];
 };
 
 /**
- * Describes the message gestalt.provider.v1.AuthorizationModelRelation.
- * Use `create(AuthorizationModelRelationSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.ModelRelation.
+ * Use `create(ModelRelationSchema)` to create a new message.
  */
-export const AuthorizationModelRelationSchema: GenMessage<AuthorizationModelRelation> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 25);
+export const ModelRelationSchema: GenMessage<ModelRelation> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 22);
 
 /**
- * @generated from message gestalt.provider.v1.AuthorizationModelAction
+ * @generated from message gestalt.provider.v1.ModelAction
  */
-export type AuthorizationModelAction = Message<"gestalt.provider.v1.AuthorizationModelAction"> & {
+export type ModelAction = Message<"gestalt.provider.v1.ModelAction"> & {
   /**
    * @generated from field: string name = 1;
    */
@@ -814,26 +582,21 @@ export type AuthorizationModelAction = Message<"gestalt.provider.v1.Authorizatio
    * @generated from field: repeated string relations = 2;
    */
   relations: string[];
-
-  /**
-   * @generated from field: gestalt.provider.v1.AuthorizationModelRewrite rewrite = 3;
-   */
-  rewrite?: AuthorizationModelRewrite | undefined;
 };
 
 /**
- * Describes the message gestalt.provider.v1.AuthorizationModelAction.
- * Use `create(AuthorizationModelActionSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.ModelAction.
+ * Use `create(ModelActionSchema)` to create a new message.
  */
-export const AuthorizationModelActionSchema: GenMessage<AuthorizationModelAction> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 26);
+export const ModelActionSchema: GenMessage<ModelAction> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 23);
 
 /**
- * @generated from message gestalt.provider.v1.AuthorizationModelAllowedTarget
+ * @generated from message gestalt.provider.v1.ModelAllowedTarget
  */
-export type AuthorizationModelAllowedTarget = Message<"gestalt.provider.v1.AuthorizationModelAllowedTarget"> & {
+export type ModelAllowedTarget = Message<"gestalt.provider.v1.ModelAllowedTarget"> & {
   /**
-   * @generated from oneof gestalt.provider.v1.AuthorizationModelAllowedTarget.kind
+   * @generated from oneof gestalt.provider.v1.ModelAllowedTarget.kind
    */
   kind: {
     /**
@@ -849,24 +612,24 @@ export type AuthorizationModelAllowedTarget = Message<"gestalt.provider.v1.Autho
     case: "resourceType";
   } | {
     /**
-     * @generated from field: gestalt.provider.v1.AuthorizationModelSubjectSetTarget subject_set = 3;
+     * @generated from field: gestalt.provider.v1.SubjectSetType subject_set_type = 3;
      */
-    value: AuthorizationModelSubjectSetTarget;
-    case: "subjectSet";
+    value: SubjectSetType;
+    case: "subjectSetType";
   } | { case: undefined; value?: undefined };
 };
 
 /**
- * Describes the message gestalt.provider.v1.AuthorizationModelAllowedTarget.
- * Use `create(AuthorizationModelAllowedTargetSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.ModelAllowedTarget.
+ * Use `create(ModelAllowedTargetSchema)` to create a new message.
  */
-export const AuthorizationModelAllowedTargetSchema: GenMessage<AuthorizationModelAllowedTarget> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 27);
+export const ModelAllowedTargetSchema: GenMessage<ModelAllowedTarget> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 24);
 
 /**
- * @generated from message gestalt.provider.v1.AuthorizationModelSubjectSetTarget
+ * @generated from message gestalt.provider.v1.SubjectSetType
  */
-export type AuthorizationModelSubjectSetTarget = Message<"gestalt.provider.v1.AuthorizationModelSubjectSetTarget"> & {
+export type SubjectSetType = Message<"gestalt.provider.v1.SubjectSetType"> & {
   /**
    * @generated from field: string resource_type = 1;
    */
@@ -879,121 +642,11 @@ export type AuthorizationModelSubjectSetTarget = Message<"gestalt.provider.v1.Au
 };
 
 /**
- * Describes the message gestalt.provider.v1.AuthorizationModelSubjectSetTarget.
- * Use `create(AuthorizationModelSubjectSetTargetSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.SubjectSetType.
+ * Use `create(SubjectSetTypeSchema)` to create a new message.
  */
-export const AuthorizationModelSubjectSetTargetSchema: GenMessage<AuthorizationModelSubjectSetTarget> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 28);
-
-/**
- * @generated from message gestalt.provider.v1.AuthorizationModelRewrite
- */
-export type AuthorizationModelRewrite = Message<"gestalt.provider.v1.AuthorizationModelRewrite"> & {
-  /**
-   * @generated from oneof gestalt.provider.v1.AuthorizationModelRewrite.kind
-   */
-  kind: {
-    /**
-     * @generated from field: gestalt.provider.v1.AuthorizationModelRewriteThis this = 1;
-     */
-    value: AuthorizationModelRewriteThis;
-    case: "this";
-  } | {
-    /**
-     * @generated from field: gestalt.provider.v1.AuthorizationModelComputedUserset computed_userset = 2;
-     */
-    value: AuthorizationModelComputedUserset;
-    case: "computedUserset";
-  } | {
-    /**
-     * @generated from field: gestalt.provider.v1.AuthorizationModelTupleToUserset tuple_to_userset = 3;
-     */
-    value: AuthorizationModelTupleToUserset;
-    case: "tupleToUserset";
-  } | {
-    /**
-     * @generated from field: gestalt.provider.v1.AuthorizationModelRewriteUnion union = 4;
-     */
-    value: AuthorizationModelRewriteUnion;
-    case: "union";
-  } | { case: undefined; value?: undefined };
-};
-
-/**
- * Describes the message gestalt.provider.v1.AuthorizationModelRewrite.
- * Use `create(AuthorizationModelRewriteSchema)` to create a new message.
- */
-export const AuthorizationModelRewriteSchema: GenMessage<AuthorizationModelRewrite> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 29);
-
-/**
- * @generated from message gestalt.provider.v1.AuthorizationModelRewriteThis
- */
-export type AuthorizationModelRewriteThis = Message<"gestalt.provider.v1.AuthorizationModelRewriteThis"> & {
-};
-
-/**
- * Describes the message gestalt.provider.v1.AuthorizationModelRewriteThis.
- * Use `create(AuthorizationModelRewriteThisSchema)` to create a new message.
- */
-export const AuthorizationModelRewriteThisSchema: GenMessage<AuthorizationModelRewriteThis> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 30);
-
-/**
- * @generated from message gestalt.provider.v1.AuthorizationModelComputedUserset
- */
-export type AuthorizationModelComputedUserset = Message<"gestalt.provider.v1.AuthorizationModelComputedUserset"> & {
-  /**
-   * @generated from field: string relation = 1;
-   */
-  relation: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.AuthorizationModelComputedUserset.
- * Use `create(AuthorizationModelComputedUsersetSchema)` to create a new message.
- */
-export const AuthorizationModelComputedUsersetSchema: GenMessage<AuthorizationModelComputedUserset> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 31);
-
-/**
- * @generated from message gestalt.provider.v1.AuthorizationModelTupleToUserset
- */
-export type AuthorizationModelTupleToUserset = Message<"gestalt.provider.v1.AuthorizationModelTupleToUserset"> & {
-  /**
-   * @generated from field: string tupleset_relation = 1;
-   */
-  tuplesetRelation: string;
-
-  /**
-   * @generated from field: string computed_relation = 2;
-   */
-  computedRelation: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.AuthorizationModelTupleToUserset.
- * Use `create(AuthorizationModelTupleToUsersetSchema)` to create a new message.
- */
-export const AuthorizationModelTupleToUsersetSchema: GenMessage<AuthorizationModelTupleToUserset> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 32);
-
-/**
- * @generated from message gestalt.provider.v1.AuthorizationModelRewriteUnion
- */
-export type AuthorizationModelRewriteUnion = Message<"gestalt.provider.v1.AuthorizationModelRewriteUnion"> & {
-  /**
-   * @generated from field: repeated gestalt.provider.v1.AuthorizationModelRewrite children = 1;
-   */
-  children: AuthorizationModelRewrite[];
-};
-
-/**
- * Describes the message gestalt.provider.v1.AuthorizationModelRewriteUnion.
- * Use `create(AuthorizationModelRewriteUnionSchema)` to create a new message.
- */
-export const AuthorizationModelRewriteUnionSchema: GenMessage<AuthorizationModelRewriteUnion> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 33);
+export const SubjectSetTypeSchema: GenMessage<SubjectSetType> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 25);
 
 /**
  * @generated from message gestalt.provider.v1.AuthorizationModelRef
@@ -1020,113 +673,12 @@ export type AuthorizationModelRef = Message<"gestalt.provider.v1.AuthorizationMo
  * Use `create(AuthorizationModelRefSchema)` to create a new message.
  */
 export const AuthorizationModelRefSchema: GenMessage<AuthorizationModelRef> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 34);
+  messageDesc(file_v1_authorization, 26);
 
 /**
- * @generated from message gestalt.provider.v1.ExpandRequest
+ * @generated from message gestalt.provider.v1.GetActiveModelRefResponse
  */
-export type ExpandRequest = Message<"gestalt.provider.v1.ExpandRequest"> & {
-  /**
-   * @generated from field: gestalt.provider.v1.Resource resource = 1;
-   */
-  resource?: Resource | undefined;
-
-  /**
-   * @generated from field: string relation = 2;
-   */
-  relation: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct context = 3;
-   */
-  context?: JsonObject | undefined;
-
-  /**
-   * @generated from field: int32 max_depth = 4;
-   */
-  maxDepth: number;
-
-  /**
-   * @generated from field: string model_id = 5;
-   */
-  modelId: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ExpandRequest.
- * Use `create(ExpandRequestSchema)` to create a new message.
- */
-export const ExpandRequestSchema: GenMessage<ExpandRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 35);
-
-/**
- * @generated from message gestalt.provider.v1.ExpandNode
- */
-export type ExpandNode = Message<"gestalt.provider.v1.ExpandNode"> & {
-  /**
-   * @generated from field: gestalt.provider.v1.RelationshipTarget target = 1;
-   */
-  target?: RelationshipTarget | undefined;
-
-  /**
-   * @generated from field: string relation = 2;
-   */
-  relation: string;
-
-  /**
-   * @generated from field: repeated gestalt.provider.v1.ExpandNode children = 3;
-   */
-  children: ExpandNode[];
-};
-
-/**
- * Describes the message gestalt.provider.v1.ExpandNode.
- * Use `create(ExpandNodeSchema)` to create a new message.
- */
-export const ExpandNodeSchema: GenMessage<ExpandNode> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 36);
-
-/**
- * @generated from message gestalt.provider.v1.ExpandResponse
- */
-export type ExpandResponse = Message<"gestalt.provider.v1.ExpandResponse"> & {
-  /**
-   * @generated from field: gestalt.provider.v1.ExpandNode root = 1;
-   */
-  root?: ExpandNode | undefined;
-
-  /**
-   * @generated from field: bool truncated = 2;
-   */
-  truncated: boolean;
-
-  /**
-   * @generated from field: bool cycle_detected = 3;
-   */
-  cycleDetected: boolean;
-
-  /**
-   * @generated from field: bool max_depth_reached = 4;
-   */
-  maxDepthReached: boolean;
-
-  /**
-   * @generated from field: string model_id = 5;
-   */
-  modelId: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ExpandResponse.
- * Use `create(ExpandResponseSchema)` to create a new message.
- */
-export const ExpandResponseSchema: GenMessage<ExpandResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 37);
-
-/**
- * @generated from message gestalt.provider.v1.GetActiveModelResponse
- */
-export type GetActiveModelResponse = Message<"gestalt.provider.v1.GetActiveModelResponse"> & {
+export type GetActiveModelRefResponse = Message<"gestalt.provider.v1.GetActiveModelRefResponse"> & {
   /**
    * @generated from field: gestalt.provider.v1.AuthorizationModelRef model = 1;
    */
@@ -1134,60 +686,16 @@ export type GetActiveModelResponse = Message<"gestalt.provider.v1.GetActiveModel
 };
 
 /**
- * Describes the message gestalt.provider.v1.GetActiveModelResponse.
- * Use `create(GetActiveModelResponseSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.GetActiveModelRefResponse.
+ * Use `create(GetActiveModelRefResponseSchema)` to create a new message.
  */
-export const GetActiveModelResponseSchema: GenMessage<GetActiveModelResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 38);
+export const GetActiveModelRefResponseSchema: GenMessage<GetActiveModelRefResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 27);
 
 /**
- * @generated from message gestalt.provider.v1.ListModelsRequest
+ * @generated from message gestalt.provider.v1.SetActiveModelRequest
  */
-export type ListModelsRequest = Message<"gestalt.provider.v1.ListModelsRequest"> & {
-  /**
-   * @generated from field: int32 page_size = 1;
-   */
-  pageSize: number;
-
-  /**
-   * @generated from field: string page_token = 2;
-   */
-  pageToken: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ListModelsRequest.
- * Use `create(ListModelsRequestSchema)` to create a new message.
- */
-export const ListModelsRequestSchema: GenMessage<ListModelsRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 39);
-
-/**
- * @generated from message gestalt.provider.v1.ListModelsResponse
- */
-export type ListModelsResponse = Message<"gestalt.provider.v1.ListModelsResponse"> & {
-  /**
-   * @generated from field: repeated gestalt.provider.v1.AuthorizationModelRef models = 1;
-   */
-  models: AuthorizationModelRef[];
-
-  /**
-   * @generated from field: string next_page_token = 2;
-   */
-  nextPageToken: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ListModelsResponse.
- * Use `create(ListModelsResponseSchema)` to create a new message.
- */
-export const ListModelsResponseSchema: GenMessage<ListModelsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 40);
-
-/**
- * @generated from message gestalt.provider.v1.WriteModelRequest
- */
-export type WriteModelRequest = Message<"gestalt.provider.v1.WriteModelRequest"> & {
+export type SetActiveModelRequest = Message<"gestalt.provider.v1.SetActiveModelRequest"> & {
   /**
    * @generated from field: gestalt.provider.v1.AuthorizationModel model = 1;
    */
@@ -1195,140 +703,258 @@ export type WriteModelRequest = Message<"gestalt.provider.v1.WriteModelRequest">
 };
 
 /**
- * Describes the message gestalt.provider.v1.WriteModelRequest.
- * Use `create(WriteModelRequestSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.SetActiveModelRequest.
+ * Use `create(SetActiveModelRequestSchema)` to create a new message.
  */
-export const WriteModelRequestSchema: GenMessage<WriteModelRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authorization, 41);
+export const SetActiveModelRequestSchema: GenMessage<SetActiveModelRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 28);
+
+/**
+ * @generated from message gestalt.provider.v1.SetActiveModelResponse
+ */
+export type SetActiveModelResponse = Message<"gestalt.provider.v1.SetActiveModelResponse"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.AuthorizationModelRef model = 1;
+   */
+  model?: AuthorizationModelRef | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.SetActiveModelResponse.
+ * Use `create(SetActiveModelResponseSchema)` to create a new message.
+ */
+export const SetActiveModelResponseSchema: GenMessage<SetActiveModelResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 29);
+
+/**
+ * @generated from message gestalt.provider.v1.ListActiveModelResourceTypesRequest
+ */
+export type ListActiveModelResourceTypesRequest = Message<"gestalt.provider.v1.ListActiveModelResourceTypesRequest"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.AuthorizationModelResourceTypeFilter filter = 1;
+   */
+  filter?: AuthorizationModelResourceTypeFilter | undefined;
+
+  /**
+   * @generated from field: int32 page_size = 2;
+   */
+  pageSize: number;
+
+  /**
+   * @generated from field: string page_token = 3;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ListActiveModelResourceTypesRequest.
+ * Use `create(ListActiveModelResourceTypesRequestSchema)` to create a new message.
+ */
+export const ListActiveModelResourceTypesRequestSchema: GenMessage<ListActiveModelResourceTypesRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 30);
+
+/**
+ * @generated from message gestalt.provider.v1.AuthorizationModelResourceTypeFilter
+ */
+export type AuthorizationModelResourceTypeFilter = Message<"gestalt.provider.v1.AuthorizationModelResourceTypeFilter"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.SourceLayer source_layer = 2;
+   */
+  sourceLayer: SourceLayer;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AuthorizationModelResourceTypeFilter.
+ * Use `create(AuthorizationModelResourceTypeFilterSchema)` to create a new message.
+ */
+export const AuthorizationModelResourceTypeFilterSchema: GenMessage<AuthorizationModelResourceTypeFilter> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 31);
+
+/**
+ * @generated from message gestalt.provider.v1.ListActiveModelResourceTypesResponse
+ */
+export type ListActiveModelResourceTypesResponse = Message<"gestalt.provider.v1.ListActiveModelResourceTypesResponse"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.AuthorizationModelResourceType resource_types = 1;
+   */
+  resourceTypes: AuthorizationModelResourceType[];
+
+  /**
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+
+  /**
+   * @generated from field: string model_id = 3;
+   */
+  modelId: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ListActiveModelResourceTypesResponse.
+ * Use `create(ListActiveModelResourceTypesResponseSchema)` to create a new message.
+ */
+export const ListActiveModelResourceTypesResponseSchema: GenMessage<ListActiveModelResourceTypesResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authorization, 32);
+
+/**
+ * @generated from enum gestalt.provider.v1.RelationshipTargetType
+ */
+export enum RelationshipTargetType {
+  /**
+   * @generated from enum value: RELATIONSHIP_TARGET_TYPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: RELATIONSHIP_TARGET_TYPE_SUBJECT = 1;
+   */
+  SUBJECT = 1,
+
+  /**
+   * @generated from enum value: RELATIONSHIP_TARGET_TYPE_RESOURCE = 2;
+   */
+  RESOURCE = 2,
+
+  /**
+   * @generated from enum value: RELATIONSHIP_TARGET_TYPE_SUBJECT_SET = 3;
+   */
+  SUBJECT_SET = 3,
+}
+
+/**
+ * Describes the enum gestalt.provider.v1.RelationshipTargetType.
+ */
+export const RelationshipTargetTypeSchema: GenEnum<RelationshipTargetType> = /*@__PURE__*/
+  enumDesc(file_v1_authorization, 0);
+
+/**
+ * @generated from enum gestalt.provider.v1.DefaultAccessPolicy
+ */
+export enum DefaultAccessPolicy {
+  /**
+   * @generated from enum value: DEFAULT_ACCESS_POLICY_DENY = 0;
+   */
+  DENY = 0,
+
+  /**
+   * @generated from enum value: DEFAULT_ACCESS_POLICY_ALLOW = 1;
+   */
+  ALLOW = 1,
+}
+
+/**
+ * Describes the enum gestalt.provider.v1.DefaultAccessPolicy.
+ */
+export const DefaultAccessPolicySchema: GenEnum<DefaultAccessPolicy> = /*@__PURE__*/
+  enumDesc(file_v1_authorization, 1);
+
+/**
+ * @generated from enum gestalt.provider.v1.SourceLayer
+ */
+export enum SourceLayer {
+  /**
+   * @generated from enum value: SOURCE_LAYER_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: SOURCE_LAYER_STATIC_CONFIG = 1;
+   */
+  STATIC_CONFIG = 1,
+
+  /**
+   * @generated from enum value: SOURCE_LAYER_RUNTIME = 2;
+   */
+  RUNTIME = 2,
+}
+
+/**
+ * Describes the enum gestalt.provider.v1.SourceLayer.
+ */
+export const SourceLayerSchema: GenEnum<SourceLayer> = /*@__PURE__*/
+  enumDesc(file_v1_authorization, 2);
 
 /**
  * @generated from service gestalt.provider.v1.AuthorizationProvider
  */
 export const AuthorizationProvider: GenService<{
   /**
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.Evaluate
+   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.CheckAccess
    */
-  evaluate: {
+  checkAccess: {
     methodKind: "unary";
-    input: typeof AccessEvaluationRequestSchema;
-    output: typeof AccessDecisionSchema;
+    input: typeof CheckAccessRequestSchema;
+    output: typeof CheckAccessResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.EvaluateMany
+   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.CheckAccessMany
    */
-  evaluateMany: {
+  checkAccessMany: {
     methodKind: "unary";
-    input: typeof AccessEvaluationsRequestSchema;
-    output: typeof AccessEvaluationsResponseSchema;
+    input: typeof CheckAccessManyRequestSchema;
+    output: typeof CheckAccessManyResponseSchema;
   },
   /**
-   * Direct search over stored relationships. Implementations must not expand
-   * inherited or computed permissions here.
-   *
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.SearchResources
+   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.ListRelationships
    */
-  searchResources: {
+  listRelationships: {
     methodKind: "unary";
-    input: typeof ResourceSearchRequestSchema;
-    output: typeof ResourceSearchResponseSchema;
+    input: typeof ListRelationshipsRequestSchema;
+    output: typeof ListRelationshipsResponseSchema;
   },
   /**
-   * Direct search over stored relationships. Implementations must not expand
-   * inherited or computed permissions here.
-   *
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.SearchSubjects
+   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.AddRelationship
    */
-  searchSubjects: {
+  addRelationship: {
     methodKind: "unary";
-    input: typeof SubjectSearchRequestSchema;
-    output: typeof SubjectSearchResponseSchema;
+    input: typeof AddRelationshipRequestSchema;
+    output: typeof AddRelationshipResponseSchema;
   },
   /**
-   * Effective search that evaluates rewrites and inherited relations.
-   *
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.EffectiveSearchResources
+   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.DeleteRelationship
    */
-  effectiveSearchResources: {
+  deleteRelationship: {
     methodKind: "unary";
-    input: typeof ResourceSearchRequestSchema;
-    output: typeof ResourceSearchResponseSchema;
+    input: typeof DeleteRelationshipRequestSchema;
+    output: typeof DeleteRelationshipResponseSchema;
   },
   /**
-   * Effective search that evaluates rewrites and inherited relations.
-   *
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.EffectiveSearchSubjects
+   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.SetAuthorizationState
    */
-  effectiveSearchSubjects: {
+  setAuthorizationState: {
     methodKind: "unary";
-    input: typeof EffectiveSubjectSearchRequestSchema;
-    output: typeof EffectiveSubjectSearchResponseSchema;
+    input: typeof SetAuthorizationStateRequestSchema;
+    output: typeof SetAuthorizationStateResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.SearchActions
+   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.GetActiveModelRef
    */
-  searchActions: {
-    methodKind: "unary";
-    input: typeof ActionSearchRequestSchema;
-    output: typeof ActionSearchResponseSchema;
-  },
-  /**
-   * Expands one resource relation into the relationship targets that contribute
-   * to it. Responses may be partial when truncated or max_depth_reached is true.
-   *
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.Expand
-   */
-  expand: {
-    methodKind: "unary";
-    input: typeof ExpandRequestSchema;
-    output: typeof ExpandResponseSchema;
-  },
-  /**
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.GetMetadata
-   */
-  getMetadata: {
+  getActiveModelRef: {
     methodKind: "unary";
     input: typeof EmptySchema;
-    output: typeof AuthorizationMetadataSchema;
+    output: typeof GetActiveModelRefResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.ReadRelationships
+   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.SetActiveModel
    */
-  readRelationships: {
+  setActiveModel: {
     methodKind: "unary";
-    input: typeof ReadRelationshipsRequestSchema;
-    output: typeof ReadRelationshipsResponseSchema;
+    input: typeof SetActiveModelRequestSchema;
+    output: typeof SetActiveModelResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.WriteRelationships
+   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.ListActiveModelResourceTypes
    */
-  writeRelationships: {
+  listActiveModelResourceTypes: {
     methodKind: "unary";
-    input: typeof WriteRelationshipsRequestSchema;
-    output: typeof EmptySchema;
-  },
-  /**
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.GetActiveModel
-   */
-  getActiveModel: {
-    methodKind: "unary";
-    input: typeof EmptySchema;
-    output: typeof GetActiveModelResponseSchema;
-  },
-  /**
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.ListModels
-   */
-  listModels: {
-    methodKind: "unary";
-    input: typeof ListModelsRequestSchema;
-    output: typeof ListModelsResponseSchema;
-  },
-  /**
-   * @generated from rpc gestalt.provider.v1.AuthorizationProvider.WriteModel
-   */
-  writeModel: {
-    methodKind: "unary";
-    input: typeof WriteModelRequestSchema;
-    output: typeof AuthorizationModelRefSchema;
+    input: typeof ListActiveModelResourceTypesRequestSchema;
+    output: typeof ListActiveModelResourceTypesResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_authorization, 0);

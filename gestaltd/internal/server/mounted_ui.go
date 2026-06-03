@@ -377,11 +377,6 @@ func mountedUITelemetryHandler(mounted MountedUI, next http.Handler) http.Handle
 }
 
 func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Request, mounted MountedUI, redirectLogin protectedUILoginRedirect) (context.Context, bool) {
-	if s.authorizer == nil {
-		writeError(w, http.StatusInternalServerError, "app authorization is unavailable")
-		return nil, false
-	}
-
 	p, authenticated, err := s.resolveMountedUIPrincipal(r, mounted)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
@@ -399,22 +394,7 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		return nil, false
 	}
 
-	var (
-		access  invocation.AccessContext
-		allowed bool
-	)
-	switch {
-	case mounted.AppName != "":
-		access, allowed = s.authorizer.ResolveAccess(r.Context(), p, mounted.AppName)
-	case mounted.builtInAdmin:
-		access, allowed = s.authorizer.ResolveAdminAccess(r.Context(), p, mounted.AuthorizationPolicy)
-	default:
-		access, allowed = s.authorizer.ResolvePolicyAccess(r.Context(), p, mounted.AuthorizationPolicy)
-	}
-	if !allowed {
-		writeError(w, http.StatusForbidden, "app access denied")
-		return nil, false
-	}
+	access := invocation.AccessContext{}
 	route, matched := mounted.routeForRequestPath(r.URL.Path)
 	if !matched || len(route.AllowedRoles) == 0 || !mountedUIRoleAllowed(access.Role, route.AllowedRoles) {
 		writeError(w, http.StatusForbidden, "app access denied")

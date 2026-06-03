@@ -17,25 +17,22 @@ const tracerName = "gestaltd"
 type tracerProviderContextKey struct{}
 
 var (
-	AttrAgentOperation         = attribute.Key("gestalt.agent.operation")
-	AttrAgentProvider          = attribute.Key("gestalt.agent.provider")
-	AttrAgentRuntimePhase      = attribute.Key("gestalt.agent.runtime.phase")
-	AttrAgentRuntimeReason     = attribute.Key("gestalt.agent.runtime.reason")
-	AttrAgentToolSource        = attribute.Key("gestalt.agent.tool.source")
-	AttrErrorType              = attribute.Key("error.type")
-	AttrGenAIOperationName     = attribute.Key("gen_ai.operation.name")
-	AttrGenAIProviderName      = attribute.Key("gen_ai.provider.name")
-	AttrGenAIAgentName         = attribute.Key("gen_ai.agent.name")
-	AttrGenAIConversationID    = attribute.Key("gen_ai.conversation.id")
-	AttrGenAIToolName          = attribute.Key("gen_ai.tool.name")
-	AttrGenAIToolCallID        = attribute.Key("gen_ai.tool.call.id")
-	AttrGenAIToolType          = attribute.Key("gen_ai.tool.type")
-	AttrAuthorizationOperation = attribute.Key("gestalt.authorization.operation")
-	AttrAuthorizationProvider  = attribute.Key("gestalt.authorization.provider")
-	AttrAuthorizationScope     = attribute.Key("gestalt.authorization.scope")
-	AttrCredentialProvider     = attribute.Key("gestalt.credential.provider")
-	AttrCredentialOperation    = attribute.Key("gestalt.credential.operation")
-	AttrCatalogSource          = attribute.Key("gestalt.catalog.source")
+	AttrAgentOperation      = attribute.Key("gestalt.agent.operation")
+	AttrAgentProvider       = attribute.Key("gestalt.agent.provider")
+	AttrAgentRuntimePhase   = attribute.Key("gestalt.agent.runtime.phase")
+	AttrAgentRuntimeReason  = attribute.Key("gestalt.agent.runtime.reason")
+	AttrAgentToolSource     = attribute.Key("gestalt.agent.tool.source")
+	AttrErrorType           = attribute.Key("error.type")
+	AttrGenAIOperationName  = attribute.Key("gen_ai.operation.name")
+	AttrGenAIProviderName   = attribute.Key("gen_ai.provider.name")
+	AttrGenAIAgentName      = attribute.Key("gen_ai.agent.name")
+	AttrGenAIConversationID = attribute.Key("gen_ai.conversation.id")
+	AttrGenAIToolName       = attribute.Key("gen_ai.tool.name")
+	AttrGenAIToolCallID     = attribute.Key("gen_ai.tool.call.id")
+	AttrGenAIToolType       = attribute.Key("gen_ai.tool.type")
+	AttrCredentialProvider  = attribute.Key("gestalt.credential.provider")
+	AttrCredentialOperation = attribute.Key("gestalt.credential.operation")
+	AttrCatalogSource       = attribute.Key("gestalt.catalog.source")
 )
 
 type metricSet struct {
@@ -56,18 +53,16 @@ type countMetricSet struct {
 }
 
 var (
-	agentOperationMetrics                metricutil.MeterCache[metricSet]
-	agentProviderOperationMetrics        metricutil.MeterCache[metricSet]
-	agentRuntimeInstanceMetrics          metricutil.MeterCache[agentRuntimeInstanceMetricSet]
-	agentRuntimeStartMetrics             metricutil.MeterCache[metricSet]
-	agentRuntimeHealthCheckMetrics       metricutil.MeterCache[metricSet]
-	agentRuntimeReplacementMetrics       metricutil.MeterCache[countMetricSet]
-	agentToolResolveMetrics              metricutil.MeterCache[metricSet]
-	genAIClientOperationDurationMetrics  metricutil.MeterCache[metric.Float64Histogram]
-	authorizationProviderOperationMetric metricutil.MeterCache[metricSet]
-	authorizationProviderEvaluateMetrics metricutil.MeterCache[metricSet]
-	catalogOperationResolveMetrics       metricutil.MeterCache[metricSet]
-	credentialProviderOperationMetrics   metricutil.MeterCache[metricSet]
+	agentOperationMetrics               metricutil.MeterCache[metricSet]
+	agentProviderOperationMetrics       metricutil.MeterCache[metricSet]
+	agentRuntimeInstanceMetrics         metricutil.MeterCache[agentRuntimeInstanceMetricSet]
+	agentRuntimeStartMetrics            metricutil.MeterCache[metricSet]
+	agentRuntimeHealthCheckMetrics      metricutil.MeterCache[metricSet]
+	agentRuntimeReplacementMetrics      metricutil.MeterCache[countMetricSet]
+	agentToolResolveMetrics             metricutil.MeterCache[metricSet]
+	genAIClientOperationDurationMetrics metricutil.MeterCache[metric.Float64Histogram]
+	catalogOperationResolveMetrics      metricutil.MeterCache[metricSet]
+	credentialProviderOperationMetrics  metricutil.MeterCache[metricSet]
 )
 
 var genAIClientOperationDurationBuckets = []float64{0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92}
@@ -189,14 +184,6 @@ func RecordGenAIClientOperationDuration(ctx context.Context, startedAt time.Time
 		)
 	})
 	duration.Record(ctx, time.Since(startedAt).Seconds(), metric.WithAttributes(attrs...))
-}
-
-func RecordAuthorizationProviderOperation(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
-	record(ctx, &authorizationProviderOperationMetric, "gestaltd.authorization.provider.operation", "gestaltd authorization provider operations", startedAt, failed, attrs...)
-}
-
-func RecordAuthorizationProviderEvaluate(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
-	record(ctx, &authorizationProviderEvaluateMetrics, "gestaltd.authorization.provider.evaluate", "gestaltd provider-backed authorization evaluations", startedAt, failed, attrs...)
 }
 
 func RecordCatalogOperationResolve(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {

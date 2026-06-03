@@ -7,7 +7,7 @@ config API version is `gestaltd.config/v6`, and every config file must declare
 it with `apiVersion`. When you pass multiple `--config` flags, Gestalt merges
 them left-to-right before validation and bootstrap. The top-level keys are
 `server` (listener, encryption, egress, and host-provider selection),
-`authorization` (shared subject access policy), `connections` (reusable
+`authorization` (static authorization model and relationships), `connections` (reusable
 upstream credential definitions), `providers` (named
 authentication, secrets, telemetry, audit, UI, indexeddb, authorization,
 workflow, cache, s3, and agent entries), `providerRepositories` (package index
@@ -20,7 +20,8 @@ apiVersion: gestaltd.config/v6
 server:
   # listener, encryption, egress, host-provider selectors
 authorization:
-  policies: {}
+  models: {}
+  relationships: []
 connections: {}
 providerRepositories: {}
 runtime:
@@ -173,16 +174,19 @@ server:
     authentication: oidc
     indexeddb: main
 authorization:
-  policies:
-    support_staff:
-      default: deny
-      members:
-        - subjectID: user:viewer-user
-          role: viewer
-        - subjectID: user:admin-user
-          role: admin
-        - subjectID: service_account:triage-bot
-          role: viewer
+  models:
+    default:
+      resourceTypes:
+        support:
+          defaultAccessPolicy: deny
+          relations:
+            viewer:
+              subjectTypes: [subject]
+            admin:
+              subjectTypes: [subject]
+          actions:
+            ticket.read:
+              relations: [viewer, admin]
 ```
 
 `public.host` and `public.port` control the public listener address. Both default to all-interfaces on port `8080`.
@@ -201,13 +205,11 @@ authorization:
 
 `agent.defaultToolNarrowingThreshold` controls implicit default MCP catalog grants for agent providers that support the catalog. When the total visible catalog is larger than this threshold and the latest user message exactly names a provider, Gestalt grants that provider instead of a global wildcard. Omit it to use the server default; set it to `0` to narrow whenever any visible catalog tool exists.
 
-`admin.authorizationPolicy` binds the built-in `/admin` route to one shared subject access policy from `authorization.policies`. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
+`admin.authorizationPolicy` names the policy used to protect the built-in `/admin` route. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 
 `admin.ui` optionally pins `/admin` to one named `providers.ui.<name>` bundle. The selected bundle must ship `admin/index.html` inside its prepared asset root. When `admin.ui` is omitted, Gestalt first auto-discovers admin assets from the root-mounted UI bundle (`path: /`) when that bundle contains `admin/index.html`, then falls back to the built-in admin shell.
 
-`authorization.policies` configures shared subject access policies. Each policy resolves a caller to exactly one role by matching canonical `subjectID` values such as `user:<id>` or `service_account:<id>`, then applies a `default` fallback (`allow` or `deny`) when no member matches. Apps opt into a policy explicitly through `authorizationPolicy`.
-
-`authorization.models` defines deployment-owned authorization model fragments as generic resource types, relations, actions, and allowed targets. `authorization.relationships` defines static relationship tuples against those resource types. These fields are parsed and validated alongside existing `authorization.policies`; provider reconciliation consumes both the compatibility policy inputs and the generic model fragments when the authorization composer is enabled.
+`authorization.models` defines deployment-owned authorization model fragments as generic resource types, relations, actions, allowed targets, and per-resource `defaultAccessPolicy`. `authorization.relationships` defines static relationship tuples against those resource types.
 
 ```yaml
 authorization:
@@ -266,9 +268,9 @@ authorization:
         id: authorization.relationships[0]
 ```
 
-Dynamic grants are app-scoped, not policy-scoped. When a app sets `authorizationPolicy`, built-in Gestalt admins can manage additional dynamic members from the admin UI at `/admin/?tab=members`, and callers with role `admin` on a specific app can manage dynamic members for that app through `/admin/api/v1/authorization/apps/{app}/members` or `gestalt authorization apps members ...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for subjects that already have static authorization on that app. The `email` write field is a user-only convenience alias; `subjectId` accepts any canonical non-system subject ID, such as `user:<id>`, `service_account:<id>`, or another deployment-defined subject kind.
+Dynamic grants are app-scoped. The `email` write field is a user-only convenience alias; `subjectId` accepts any canonical non-system subject ID, such as `user:<id>`, `service_account:<id>`, or another deployment-defined subject kind.
 
-Non-human callers are modeled as [service account subjects](/service-accounts), typically `service_account:<id>`. Grant app access with `authorization.policies` or provider-backed dynamic memberships using the canonical subject ID, and store third-party credentials through the configured external credentials provider under the same subject ID.
+Non-human callers are modeled as [service account subjects](/service-accounts), typically `service_account:<id>`. Grant access with static authorization relationships or provider-backed dynamic memberships using the canonical subject ID, and store third-party credentials through the configured external credentials provider under the same subject ID.
 
 Apps without `authorizationPolicy` are open to any authenticated subject. Bind a app to a policy when non-human access should be explicit.
 
@@ -290,7 +292,6 @@ Apps without `authorizationPolicy` are open to any authenticated subject. Bind a
 | `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `admin.ui` | | Optional named `providers.ui` bundle whose `admin/` assets should back `/admin`. When omitted, Gestalt auto-discovers `admin/` assets from the root UI bundle before using the built-in fallback. |
-| `authorization.policies` | | Shared subject access policies resolved by canonical `subjectID`. |
 | `authorization.models` | | Static authorization model fragments keyed by model name. Each fragment defines `resourceTypes`, relation `subjectTypes` or `allowedTargets`, and actions. |
 | `authorization.relationships` | | Static relationship tuples with `subject`, `relation`, and `resource` fields. |
 | `authorization.resourceTypes.<type>.dynamic.allowAdditionalRelationships` | `false` | Allows later dynamic source state to add relationship tuples for a static resource type. Dynamic override/removal of static relationships is not supported. |
@@ -525,16 +526,8 @@ providers:
         indexeddb: main
 ```
 
-Authorization providers are optional only when you are relying on static human
-policy members from config. When configured, Gestalt uses the selected
-provider for dynamic subject app/admin authorization, relationship storage,
-model lifecycle, and the built-in admin authorization APIs under
-`/admin/api/v1/authorization/...`.
-
-If `providers.authorization` is omitted, static policy members under
-`authorization.policies` still work, but there is no provider-backed
-relationship store and the dynamic subject authorization control plane is
-unavailable.
+When configured, Gestalt uses the selected authorization provider for
+relationship storage and model lifecycle.
 
 The exact config fields depend on the selected authorization provider package. The first-party `authorization/indexeddb` provider expects the name of a host IndexedDB provider and stores authorization models plus relationships there.
 
@@ -1219,7 +1212,7 @@ apps:
 | `displayName` | Human-readable name shown in the UI and API. |
 | `description` | Short description of the app. |
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
-| `authorizationPolicy` | Optional shared subject access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this app, and the built-in admin UI / admin API can manage app-scoped dynamic grants for additional members. Static policy members still take precedence. |
+| `authorizationPolicy` | Optional named policy used by host-side operation filtering and execution checks for this app. |
 | `ui` | Optional app-backed mounted UI binding. Use `ui.path` plus optional `ui.bundle`. `ui.bundle` names a `providers.ui` entry; omit it to mount the app manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#appssource) below. |
 | `source.auth` | Optional metadata-fetch auth for package repositories, `source.url`, `source.githubRelease`, `source.git`, or local `provider-release.yaml` metadata. |
@@ -1767,7 +1760,7 @@ Mounted UI bundles are served on the public listener only. The built-in admin UI
 
 `server.egress.defaultAction` must be `allow` or `deny`.
 
-`authorization.policies.<name>.default` must be `allow` or `deny` when set. Each policy member must set a non-empty `subjectID` and a non-empty `role`.
+`authorization.models.<model>.resourceTypes.<type>.defaultAccessPolicy` must be `allow` or `deny` when set.
 
 Server listener ports must be greater than zero. When `server.management` is configured, it must differ from `server.public`.
 

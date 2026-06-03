@@ -18,7 +18,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
-	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
@@ -58,9 +57,6 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 	)
 	if deps.Services != nil && !core.ExternalCredentialProviderMissing(deps.Services.ExternalCredentials) {
 		hostServices = append(hostServices, buildPluginExternalCredentialsHostService(deps.Services.ExternalCredentials))
-	}
-	if deps.AuthorizationProvider != nil {
-		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
 	}
 	hostServices = append(hostServices, extraHostServices...)
 	return hostServices, invTokens, nil
@@ -472,16 +468,6 @@ func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *a
 				tokens,
 				agentservice.WithWorkflowRunResolver(workflowRuns),
 			))
-		},
-	}
-}
-
-func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) runtimehost.HostService {
-	return runtimehost.HostService{
-		Name:           "authorization",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.AuthorizationProvider_ServiceDesc.ServiceName)},
-		Register: func(srv *grpc.Server) {
-			proto.RegisterAuthorizationProviderServer(srv, authorizationservice.NewProviderServer(provider))
 		},
 	}
 }

@@ -53,6 +53,7 @@ fragment TeamFields on Team {
 	}
 	if def == nil {
 		t.Fatal("StaticAllowedOperationsDefinition returned nil definition")
+		return
 	}
 
 	op := def.Operations["teams"]

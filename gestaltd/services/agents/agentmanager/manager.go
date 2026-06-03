@@ -24,7 +24,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	integration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
@@ -134,7 +133,6 @@ type Config struct {
 	WorkflowTools     WorkflowSystemTools
 	RunGrants         *agentgrant.Manager
 	Invoker           invocation.Invoker
-	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
 	AgentConnections  map[string][]string
@@ -152,7 +150,6 @@ type Manager struct {
 	workflowTools                 WorkflowSystemTools
 	runGrants                     *agentgrant.Manager
 	invoker                       invocation.Invoker
-	authorizer                    authorization.RuntimeAuthorizer
 	defaultConnection             map[string]string
 	catalogConnection             map[string]string
 	agentConnections              map[string][]string
@@ -167,7 +164,6 @@ func New(cfg Config) *Manager {
 		workflowTools:     cfg.WorkflowTools,
 		runGrants:         cfg.RunGrants,
 		invoker:           cfg.Invoker,
-		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
@@ -1735,7 +1731,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if credentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
 	}
-	if m.authorizer != nil && principal.IsNonUserPrincipal(p) && (connection != "" || instance != "") {
+	if principal.IsNonUserPrincipal(p) && (connection != "" || instance != "") {
 		return coreagent.Tool{}, fmt.Errorf("%w: non-user subjects may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
 	}
 
@@ -1751,9 +1747,6 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		return coreagent.Tool{}, err
 	}
 	if !principal.AllowsOperationPermission(p, appName, opMeta.ID) {
-		return coreagent.Tool{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
-	}
-	if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, appName, opMeta) {
 		return coreagent.Tool{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
 	}
 	if connection == "" {
@@ -1985,9 +1978,6 @@ func (m *Manager) visitToolSearchCandidates(
 					if !m.allowOperation(ctx, p, appName, operation) || !principal.AllowsOperationPermission(p, appName, operation) {
 						continue
 					}
-					if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, appName, op) {
-						continue
-					}
 					ref := searchCatalog.ref
 					if strings.TrimSpace(ref.Operation) == "" {
 						ref.Title = ""
@@ -2118,7 +2108,7 @@ func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.P
 	if credentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
 	}
-	if m.authorizer != nil && principal.IsNonUserPrincipal(p) && (connection != "" || instance != "") {
+	if principal.IsNonUserPrincipal(p) && (connection != "" || instance != "") {
 		return nil, fmt.Errorf("%w: non-user subjects may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
 	}
 	var resolver invocation.TokenResolver
@@ -2349,10 +2339,7 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 }
 
 func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
-	if m == nil || m.authorizer == nil {
-		return true
-	}
-	return m.authorizer.AllowProvider(ctx, p, provider)
+	return true
 }
 
 func (m *Manager) allowsAgentProvider(ctx context.Context, p *principal.Principal, provider string) bool {
@@ -2360,18 +2347,11 @@ func (m *Manager) allowsAgentProvider(ctx context.Context, p *principal.Principa
 }
 
 func (m *Manager) allowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
-	if m == nil || m.authorizer == nil {
-		return true
-	}
-	return m.authorizer.AllowOperation(ctx, p, provider, operation)
+	return true
 }
 
 func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Principal, provider string) invocation.AccessContext {
-	if m == nil || m.authorizer == nil {
-		return invocation.AccessContext{}
-	}
-	access, _ := m.authorizer.ResolveAccess(ctx, p, provider)
-	return access
+	return invocation.AccessContext{}
 }
 
 func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {

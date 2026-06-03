@@ -29,7 +29,6 @@ else:
 if TYPE_CHECKING:
     from ._agent import Agent, AgentToolRef
     from ._app_access import AppProtocol
-    from ._authorization import Authorization
     from ._workflow import Workflow, WorkflowRunContext
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
@@ -135,11 +134,6 @@ class Request:
         from ._workflow import parse_workflow_run_context
 
         return parse_workflow_run_context(self.workflow)
-
-    def authorization(self) -> "Authorization":
-        from ._authorization import _shared_authorization_client
-
-        return _shared_authorization_client()
 
 
 @dataclasses.dataclass(slots=True)

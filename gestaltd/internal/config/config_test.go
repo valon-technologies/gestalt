@@ -466,6 +466,7 @@ apps:
 	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if auth == nil {
 		t.Fatal("SelectedAuthenticationProvider = nil")
+		return
 	}
 	authCfg := mustDecodeNode(t, auth.Config)
 	if authCfg["clientId"] != "client-from-env" {
@@ -745,57 +746,7 @@ server:
 	}
 }
 
-func TestValidateStructureRejectsDuplicateAuthorizationPolicyMembers(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		members []SubjectPolicyMemberDef
-		want    string
-	}{
-		{
-			name: "duplicate subject id",
-			members: []SubjectPolicyMemberDef{
-				{SubjectID: "user:123", Role: "viewer"},
-				{SubjectID: "user:123", Role: "admin"},
-			},
-			want: "subjectID duplicates",
-		},
-		{
-			name: "missing subject id",
-			members: []SubjectPolicyMemberDef{
-				{Role: "viewer"},
-			},
-			want: "subjectID is required",
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			cfg := &Config{
-				APIVersion: ConfigAPIVersion,
-				Authorization: AuthorizationConfig{
-					Policies: map[string]SubjectPolicyDef{
-						"roadmap": {
-							Default: "deny",
-							Members: tc.members,
-						},
-					},
-				},
-			}
-
-			err := ValidateStructure(cfg)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("ValidateStructure error = %v, want substring %q", err, tc.want)
-			}
-		})
-	}
-}
-
-func TestLoadAuthorizationModelFragments(t *testing.T) {
+func TestLoadRejectsAuthorizationPolicies(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
@@ -806,10 +757,27 @@ authorization:
       members:
         - subjectID: user:legacy
           role: admin
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), `field policies not found`) {
+		t.Fatalf("Load error = %v, want unknown policies field", err)
+	}
+}
+
+func TestLoadAuthorizationModelFragments(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+authorization:
   models:
     default:
       resourceTypes:
         team:
+          defaultAccessPolicy: deny
           relations:
             member:
               subjectTypes: [subject]
@@ -851,10 +819,10 @@ authorization:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.Authorization.Policies["legacy_admins"].Members[0].SubjectID; got != "user:legacy" {
-		t.Fatalf("legacy policy subjectID = %q, want user:legacy", got)
-	}
 	team := cfg.Authorization.Models["default"].ResourceTypes["team"]
+	if got := team.DefaultAccessPolicy; got != "deny" {
+		t.Fatalf("team defaultAccessPolicy = %q, want deny", got)
+	}
 	if !team.Dynamic.AllowAdditionalRelationships {
 		t.Fatal("team dynamic allowAdditionalRelationships = false, want true")
 	}
@@ -911,6 +879,18 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 				}),
 			}},
 			wantErr: `references unknown relation "admin"`,
+		},
+		{
+			name: "invalid default access policy",
+			authz: AuthorizationConfig{Models: map[string]AuthorizationModelDef{
+				"default": model(map[string]AuthorizationResourceTypeDef{
+					"team": {
+						DefaultAccessPolicy: "sometimes",
+						Relations:           map[string]AuthorizationRelationDef{"member": subjectRelation("subject")},
+					},
+				}),
+			}},
+			wantErr: `authorization.models.default.resourceTypes.team.defaultAccessPolicy must be "allow" or "deny"`,
 		},
 		{
 			name: "model key has surrounding whitespace",
@@ -1026,6 +1006,61 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 				t.Fatalf("ValidateStructure error = %v, want substring %q", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestValidateAuthorizationRelationshipAllowsExplicitSubjectSetTarget(t *testing.T) {
+	t.Parallel()
+
+	err := ValidateStructure(&Config{
+		APIVersion: ConfigAPIVersion,
+		Authorization: AuthorizationConfig{
+			Models: map[string]AuthorizationModelDef{
+				"default": {
+					ResourceTypes: map[string]AuthorizationResourceTypeDef{
+						"team": {
+							Relations: map[string]AuthorizationRelationDef{
+								"member": {SubjectTypes: []string{"subject"}},
+							},
+						},
+						"AuthorizationProvider": {
+							Relations: map[string]AuthorizationRelationDef{
+								"admin": {
+									AllowedTargets: []AuthorizationAllowedTargetDef{
+										{SubjectType: "subject"},
+										{SubjectSet: &AuthorizationSubjectSetTargetDef{
+											ResourceType: "team",
+											Relation:     "member",
+										}},
+									},
+								},
+							},
+							Actions: map[string]AuthorizationActionDef{
+								"SetAuthorizationState": {Relations: []string{"admin"}},
+							},
+						},
+					},
+				},
+			},
+			Relationships: []AuthorizationRelationshipDef{
+				{
+					Subject:  AuthorizationSubjectDef{Type: "subject", ID: "user:michael.wang@valon.com"},
+					Relation: "member",
+					Resource: AuthorizationResourceDef{Type: "team", ID: "gestalt_admins"},
+				},
+				{
+					Target: AuthorizationRelationshipTargetDef{SubjectSet: &AuthorizationSubjectSetDef{
+						Resource: AuthorizationResourceDef{Type: "team", ID: "gestalt_admins"},
+						Relation: "member",
+					}},
+					Relation: "admin",
+					Resource: AuthorizationResourceDef{Type: "AuthorizationProvider", ID: "authorization"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ValidateStructure error = %v, want nil", err)
 	}
 }
 
@@ -1249,10 +1284,6 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-authorization:
-  policies:
-    admin_policy:
-      default: deny
 `)
 
 		_, err := Load(path)
@@ -1289,10 +1320,6 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-authorization:
-  policies:
-    admin_policy:
-      default: deny
 `)
 
 		_, err := Load(path)
@@ -1327,10 +1354,6 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-authorization:
-  policies:
-    admin_policy:
-      default: deny
 `)
 
 		_, err := Load(path)
@@ -1364,10 +1387,6 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-authorization:
-  policies:
-    admin_policy:
-      default: deny
 `)
 
 		_, err := Load(path)
@@ -1827,6 +1846,7 @@ apps:
 		gitSource := entry.Source.GitSource()
 		if gitSource == nil {
 			t.Fatal("Source.GitSource() = nil")
+			return
 		}
 		repo, ref, manifestPath := gitSource.NormalizedLocationParts()
 		if repo != "https://github.com/Valon-Technologies/Gestalt-Providers.git" ||
@@ -2010,6 +2030,7 @@ server:
 		entry := cfg.Providers.UI["roadmap"]
 		if entry == nil {
 			t.Fatal(`Providers.UI["roadmap"] = nil`)
+			return
 		}
 		wantPath := filepath.Join(filepath.Dir(path), "ui", "default", "provider.yaml")
 		if got := entry.Source.Path; got != wantPath {
@@ -2043,6 +2064,7 @@ server:
 		entry := cfg.Providers.S3["minio"]
 		if entry == nil {
 			t.Fatal(`Providers.S3["minio"] = nil`)
+			return
 		}
 		wantPath := filepath.Join(filepath.Dir(path), "providers", "s3", "minio", "manifest.yaml")
 		if got := entry.Source.Path; got != wantPath {
@@ -2081,6 +2103,7 @@ server:
 		entry := cfg.Providers.UI["roadmap"]
 		if entry == nil {
 			t.Fatal(`Providers.UI["roadmap"] = nil`)
+			return
 		}
 		wantSourcePath := filepath.Join(filepath.Dir(path), "web", "roadmap", "manifest.yaml")
 		if got := entry.Source.Path; got != wantSourcePath {
@@ -2112,13 +2135,6 @@ apps:
       bundle: roadmap
       path: /create-customer-roadmap-review/
     authorizationPolicy: roadmap_policy
-authorization:
-  policies:
-    roadmap_policy:
-      default: deny
-      members:
-        - subjectID: user:viewer-user
-          role: viewer
 server:
   providers:
     indexeddb: sqlite
@@ -2132,6 +2148,7 @@ server:
 		entry := cfg.Providers.UI["roadmap"]
 		if entry == nil {
 			t.Fatal(`Providers.UI["roadmap"] = nil`)
+			return
 		}
 		if got := entry.Path; got != "/create-customer-roadmap-review" {
 			t.Fatalf(`Providers.UI["roadmap"].Path = %q, want %q`, got, "/create-customer-roadmap-review")
@@ -4242,6 +4259,7 @@ server:
 		auth := cfg.Providers.Agent["simple"].Runtime.ImagePullAuth
 		if auth == nil {
 			t.Fatal("imagePullAuth = nil")
+			return
 		}
 		if auth.DockerConfigJSON != `{"auths":{"ghcr.io":{"username":"ghcr-user","password":"ghcr-token"}}}` {
 			t.Fatalf("dockerConfigJson = %q", auth.DockerConfigJSON)
@@ -4290,6 +4308,7 @@ server:
 		auth := cfg.Providers.Agent["simple"].Runtime.ImagePullAuth
 		if auth == nil {
 			t.Fatal("imagePullAuth = nil")
+			return
 		}
 		if _, isSecretRef, err := ParseSecretRefTransport(auth.DockerConfigJSON); err != nil || !isSecretRef {
 			t.Fatalf("dockerConfigJson secret ref parse = %v, %v; want encoded secret ref", isSecretRef, err)
@@ -5038,6 +5057,7 @@ apps:
 	entry := cfg.Apps["service"]
 	if entry == nil {
 		t.Fatal(`Apps["service"] = nil`)
+		return
 	}
 	if !entry.Source.IsPackage() {
 		t.Fatal("Source.IsPackage = false, want true")
@@ -5095,6 +5115,7 @@ providers:
 	} {
 		if entry == nil {
 			t.Fatalf("%s entry = nil", subject)
+			return
 		}
 		if got := entry.Source.Builtin; got != "" {
 			t.Fatalf("%s Source.Builtin = %q, want empty for package source", subject, got)
@@ -6150,6 +6171,7 @@ func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
 	canonical := connections[core.AppConnectionName]
 	if canonical == nil {
 		t.Fatalf("connections[%q] missing", core.AppConnectionName)
+		return
 	}
 	if canonical.ConnectionID != "shared" || canonical.Ref != "shared" || !canonical.BindingResolved {
 		t.Fatalf("canonical binding = %+v, want resolved shared connection", canonical)
@@ -6232,6 +6254,7 @@ func TestValidateStructureCanonicalizesAppInvokeRunAs(t *testing.T) {
 	subject := cfg.Apps["source"].Invokes[0].RunAsSubject()
 	if subject == nil {
 		t.Fatal("RunAsSubject() = nil, want subject")
+		return
 	}
 	if subject.SubjectID != "service_account:automation" {
 		t.Fatalf("RunAsSubject().SubjectID = %q", subject.SubjectID)
@@ -6402,6 +6425,7 @@ server:
 	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if auth == nil {
 		t.Fatal("SelectedAuthenticationProvider = nil")
+		return
 	}
 	if got := auth.SourcePath(); got != filepath.Join(dir, "auth-app", "provider.yaml") {
 		t.Fatalf("auth app source path = %q, want %q", got, filepath.Join(dir, "auth-app", "provider.yaml"))
@@ -6492,6 +6516,7 @@ server:
 	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if auth == nil {
 		t.Fatal("SelectedAuthenticationProvider = nil")
+		return
 	}
 	authCfg := mustDecodeNode(t, auth.Config)
 	if len(authCfg) != 3 {

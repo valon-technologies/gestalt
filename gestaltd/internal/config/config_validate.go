@@ -58,9 +58,6 @@ func CanonicalizeStructure(cfg *Config) error {
 // already run on the config.
 func ValidateCanonicalStructure(cfg *Config) error {
 	appOwnedUIBindings := appOwnedUIBindings(cfg)
-	if err := validateAuthorizationPolicies(cfg); err != nil {
-		return err
-	}
 	if err := validateAuthorizationModelConfig(cfg); err != nil {
 		return err
 	}
@@ -123,9 +120,6 @@ func ValidateCanonicalStructure(cfg *Config) error {
 			return fmt.Errorf("config validation: ui %q does not support builtin providers; use a provider source reference", name)
 		}
 		if err := validateProviderEntrySource("ui", name, &entry.ProviderEntry); err != nil {
-			return err
-		}
-		if err := validateAuthorizationPolicyReference(cfg, "ui", name, entry.AuthorizationPolicy); err != nil {
 			return err
 		}
 		if entry.Path == "" {
@@ -926,9 +920,6 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 	if err := validateAppS3Bindings(cfg, name, entry); err != nil {
 		return err
 	}
-	if err := validateAuthorizationPolicyReference(cfg, "app", name, entry.AuthorizationPolicy); err != nil {
-		return err
-	}
 	if _, err := cfg.EffectiveRuntimePlacement("apps."+name, entry); err != nil {
 		return err
 	}
@@ -1548,35 +1539,6 @@ func normalizeProviderRuntimeConfig(subject string, entry *ProviderEntry, allowL
 	return nil
 }
 
-func validateAuthorizationPolicies(cfg *Config) error {
-	for name, policy := range cfg.Authorization.Policies {
-		if strings.TrimSpace(name) == "" {
-			return fmt.Errorf("config validation: authorization.policies keys must be non-empty")
-		}
-		switch strings.TrimSpace(policy.Default) {
-		case "", "allow", "deny":
-		default:
-			return fmt.Errorf("config validation: authorization.policies.%s.default must be %q or %q", name, "allow", "deny")
-		}
-		seenSubjectIDs := make(map[string]int, len(policy.Members))
-		for i, member := range policy.Members {
-			subjectID := strings.TrimSpace(member.SubjectID)
-			role := strings.TrimSpace(member.Role)
-			switch {
-			case role == "":
-				return fmt.Errorf("config validation: authorization.policies.%s.members[%d].role is required", name, i)
-			case subjectID == "":
-				return fmt.Errorf("config validation: authorization.policies.%s.members[%d].subjectID is required", name, i)
-			}
-			if prev, exists := seenSubjectIDs[subjectID]; exists {
-				return fmt.Errorf("config validation: authorization.policies.%s.members[%d].subjectID duplicates members[%d]", name, i, prev)
-			}
-			seenSubjectIDs[subjectID] = i
-		}
-	}
-	return nil
-}
-
 func validateAuthorizationModelConfig(cfg *Config) error {
 	definedResourceTypes := make(map[string]string)
 	resourceTypeRelations := make(map[string]map[string]AuthorizationRelationDef)
@@ -1662,6 +1624,11 @@ func validateAuthorizationResourceTypeDef(parentPath, name, path string, def Aut
 	if err := validateAuthorizationSourceMetadata(path+".source", def.Source); err != nil {
 		return err
 	}
+	switch strings.TrimSpace(def.DefaultAccessPolicy) {
+	case "", "allow", "deny":
+	default:
+		return fmt.Errorf("config validation: %s.defaultAccessPolicy must be %q or %q", path, "allow", "deny")
+	}
 	for relationName, relation := range def.Relations {
 		relationPath := path + ".relations." + relationName
 		if err := validateAuthorizationMapKey(path+".relations", relationName); err != nil {
@@ -1729,8 +1696,14 @@ func validateAuthorizationAllowedTargetDef(path string, target AuthorizationAllo
 }
 
 func validateAuthorizationRelationshipDef(path string, relationship AuthorizationRelationshipDef, resourceTypes map[string]map[string]AuthorizationRelationDef) error {
-	if err := validateAuthorizationSubjectDef(path+".subject", relationship.Subject); err != nil {
-		return err
+	if hasAuthorizationRelationshipTarget(relationship.Target) {
+		if err := validateAuthorizationRelationshipTargetDef(path+".target", relationship.Target, resourceTypes); err != nil {
+			return err
+		}
+	} else {
+		if err := validateAuthorizationSubjectDef(path+".subject", relationship.Subject); err != nil {
+			return err
+		}
 	}
 	if strings.TrimSpace(relationship.Relation) == "" {
 		return fmt.Errorf("config validation: %s.relation is required", path)
@@ -1746,13 +1719,14 @@ func validateAuthorizationRelationshipDef(path string, relationship Authorizatio
 	if _, ok := relations[strings.TrimSpace(relationship.Relation)]; !ok {
 		return fmt.Errorf("config validation: %s.relation references unknown relation %q for resource type %q", path, relationship.Relation, resourceType)
 	}
-	if err := validateAuthorizationRelationshipTargetDef(path+".target", relationship.Target, resourceTypes); err != nil {
-		return err
-	}
 	if err := validateAuthorizationSourceMetadata(path+".source", relationship.Source); err != nil {
 		return err
 	}
 	return nil
+}
+
+func hasAuthorizationRelationshipTarget(target AuthorizationRelationshipTargetDef) bool {
+	return target.Subject != nil || target.Resource != nil || target.SubjectSet != nil
 }
 
 func validateAuthorizationMapKey(path, key string) error {
@@ -1855,17 +1829,6 @@ func validateStringList(path string, values []string) error {
 	return nil
 }
 
-func validateAuthorizationPolicyReference(cfg *Config, kind, name, policy string) error {
-	policy = strings.TrimSpace(policy)
-	if policy == "" {
-		return nil
-	}
-	if _, ok := cfg.Authorization.Policies[policy]; !ok {
-		return fmt.Errorf("config validation: %s %q authorizationPolicy references unknown policy %q", kind, name, policy)
-	}
-	return nil
-}
-
 func validateAdminConfig(cfg *Config) error {
 	if cfg == nil {
 		return nil
@@ -1888,9 +1851,6 @@ func validateAdminConfig(cfg *Config) error {
 		}
 		if authProvider == nil {
 			return fmt.Errorf("config validation: server.admin.authorizationPolicy requires providers.authentication to be configured")
-		}
-		if err := validateAuthorizationPolicyReference(cfg, "server.admin", "/admin", policy); err != nil {
-			return err
 		}
 		if len(admin.AllowedRoles) == 0 {
 			return fmt.Errorf("config validation: server.admin.allowedRoles must not be empty when server.admin.authorizationPolicy is set")

@@ -48,7 +48,6 @@ import (
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
-	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -62,7 +61,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	gproto "google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
@@ -101,101 +99,6 @@ type requestContextBody struct {
 type nestedInvokeHarness struct {
 	invoker  invocation.Invoker
 	services *coredata.Services
-}
-
-type hostedHTTPAuthorizationProvider struct{}
-
-func (p *hostedHTTPAuthorizationProvider) Name() string { return "authz" }
-
-func (p *hostedHTTPAuthorizationProvider) Evaluate(context.Context, *core.AccessEvaluationRequest) (*core.AccessDecision, error) {
-	return &core.AccessDecision{}, nil
-}
-
-func (p *hostedHTTPAuthorizationProvider) EvaluateMany(context.Context, *core.AccessEvaluationsRequest) (*core.AccessEvaluationsResponse, error) {
-	return &core.AccessEvaluationsResponse{}, nil
-}
-
-func (p *hostedHTTPAuthorizationProvider) SearchResources(context.Context, *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
-	return &core.ResourceSearchResponse{}, nil
-}
-
-func (p *hostedHTTPAuthorizationProvider) SearchSubjects(context.Context, *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
-	return &core.SubjectSearchResponse{}, nil
-}
-
-func (p *hostedHTTPAuthorizationProvider) SearchActions(context.Context, *core.ActionSearchRequest) (*core.ActionSearchResponse, error) {
-	return &core.ActionSearchResponse{}, nil
-}
-
-func (p *hostedHTTPAuthorizationProvider) GetMetadata(context.Context) (*core.AuthorizationMetadata, error) {
-	return &core.AuthorizationMetadata{}, nil
-}
-
-func (p *hostedHTTPAuthorizationProvider) ReadRelationships(context.Context, *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
-	return &core.ReadRelationshipsResponse{}, nil
-}
-
-func (p *hostedHTTPAuthorizationProvider) WriteRelationships(context.Context, *core.WriteRelationshipsRequest) error {
-	return nil
-}
-
-func (p *hostedHTTPAuthorizationProvider) GetActiveModel(context.Context) (*core.GetActiveModelResponse, error) {
-	return &core.GetActiveModelResponse{}, nil
-}
-
-func (p *hostedHTTPAuthorizationProvider) ListModels(context.Context, *core.ListModelsRequest) (*core.ListModelsResponse, error) {
-	return &core.ListModelsResponse{}, nil
-}
-
-func (p *hostedHTTPAuthorizationProvider) WriteModel(context.Context, *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
-	return &core.AuthorizationModelRef{}, nil
-}
-
-type authorizationSearchCall struct {
-	SubjectType  string
-	ResourceType string
-	ResourceID   string
-	ActionName   string
-	PageSize     int32
-}
-
-type recordingHostedAuthorizationProvider struct {
-	hostedHTTPAuthorizationProvider
-
-	mu          sync.Mutex
-	searchCalls []authorizationSearchCall
-}
-
-func (p *recordingHostedAuthorizationProvider) SearchSubjects(_ context.Context, req *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
-	call := authorizationSearchCall{
-		SubjectType: req.GetSubjectType(),
-		PageSize:    req.GetPageSize(),
-	}
-	if resource := req.GetResource(); resource != nil {
-		call.ResourceType = resource.GetType()
-		call.ResourceID = resource.GetId()
-	}
-	if action := req.GetAction(); action != nil {
-		call.ActionName = action.GetName()
-	}
-
-	p.mu.Lock()
-	p.searchCalls = append(p.searchCalls, call)
-	p.mu.Unlock()
-
-	return &core.SubjectSearchResponse{
-		Subjects: []*core.SubjectRef{{
-			Type: "user",
-			Id:   "user:user-123",
-		}},
-		ModelId: "authz-model-1",
-	}, nil
-}
-
-func (p *recordingHostedAuthorizationProvider) Calls() []authorizationSearchCall {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return slices.Clone(p.searchCalls)
 }
 
 type capturingRuntime struct {
@@ -559,10 +462,6 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 					Method: http.MethodPost,
 				},
 				{
-					ID:     "authorization_roundtrip",
-					Method: http.MethodPost,
-				},
-				{
 					ID:     "make_http_request",
 					Method: http.MethodGet,
 					Parameters: []catalog.CatalogParameter{
@@ -653,16 +552,6 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "agent_manager_roundtrip":
 				record, err := fakeHostedAgentManagerRoundTrip(appaccessservice.InvocationTokenFromContext(ctx), env)
-				if err != nil {
-					return nil, err
-				}
-				body, err := json.Marshal(record)
-				if err != nil {
-					return nil, err
-				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
-			case "authorization_roundtrip":
-				record, err := fakeHostedAuthorizationRoundTrip(env)
 				if err != nil {
 					return nil, err
 				}
@@ -1024,57 +913,6 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		"activation_id": fetched.GetActivations()[0].GetId(),
 		"generation":    fetched.GetGeneration(),
 		"operation":     fetched.GetTarget().GetSteps()[0].GetApp().GetOperation(),
-	}, nil
-}
-
-func fakeHostedAuthorizationRoundTrip(env map[string]string) (map[string]any, error) {
-	address, token, err := fakeHostedHostServiceRelay("authorization", env)
-	if err != nil {
-		return nil, err
-	}
-
-	conn, err := grpc.NewClient(
-		address,
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-			InsecureSkipVerify: true,
-			MinVersion:         tls.VersionTLS12,
-			NextProtos:         []string{"h2"},
-		})),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("connect authorization relay: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	ctx, cancel := fakeHostedHostServiceContext(token, "")
-	defer cancel()
-
-	client := proto.NewAuthorizationProviderClient(conn)
-	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
-	if err != nil {
-		return nil, fmt.Errorf("get authorization metadata: %w", err)
-	}
-	resp, err := client.SearchSubjects(ctx, &proto.SubjectSearchRequest{
-		SubjectType: "user",
-		Resource: &proto.Resource{
-			Type: "slack_identity",
-			Id:   "team:T123:user:U456",
-		},
-		Action:   &proto.Action{Name: "assume"},
-		PageSize: 1,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("search authorization subjects: %w", err)
-	}
-	if len(resp.GetSubjects()) == 0 {
-		return nil, fmt.Errorf("authorization search did not return any subjects")
-	}
-
-	return map[string]any{
-		"model_id":     resp.GetModelId(),
-		"subject_id":   resp.GetSubjects()[0].GetId(),
-		"subject_type": resp.GetSubjects()[0].GetType(),
-		"capabilities": meta.GetCapabilities(),
 	}, nil
 }
 
@@ -2916,7 +2754,7 @@ func pluginInvokeGraphQLSchema() graphqlschema.Schema {
 	}
 }
 
-func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurface bool, authCfg config.AuthorizationConfig, brokerOpts ...invocation.BrokerOption) *nestedInvokeHarness {
+func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurface bool, _ config.AuthorizationConfig, brokerOpts ...invocation.BrokerOption) *nestedInvokeHarness {
 	t.Helper()
 
 	callerBin := buildEchoPluginBinary(t)
@@ -2972,7 +2810,6 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 
 	bridge := newLazyInvoker()
 	cfg := &config.Config{
-		Authorization: authCfg,
 		Apps: map[string]*config.ProviderEntry{
 			"caller": {
 				Command:              callerBin,
@@ -3005,13 +2842,6 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 	testutil.AttachStubExternalCredentials(services)
 	t.Cleanup(func() { _ = services.Close() })
 
-	if len(authCfg.Policies) > 0 {
-		authz, err := authorizationservice.New(config.AuthorizationStaticConfig(authCfg, cfg.Apps))
-		if err != nil {
-			t.Fatalf("authorization.New: %v", err)
-		}
-		brokerOpts = append(brokerOpts, invocation.WithAuthorizer(authz))
-	}
 	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials, brokerOpts...)
 	bridge.SetTarget(invocation.NewGuarded(broker, nil, "app", nil, invocation.WithoutRateLimit()))
 
@@ -3922,77 +3752,6 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	}
 	if len(turnReq.GetToolRefs()) != 1 || turnReq.GetToolRefs()[0].GetApp() != "roadmap" || turnReq.GetToolRefs()[0].GetOperation() != "sync" {
 		t.Fatalf("CreateTurn tool refs = %#v", turnReq.GetToolRefs())
-	}
-}
-
-func TestPluginHostedHTTPBindingsExposeAuthorizationSocketEnv(t *testing.T) {
-	t.Parallel()
-
-	bin := buildEchoPluginBinary(t)
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "echo",
-		Operations: []catalog.CatalogOperation{
-			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
-		},
-	})
-	manifest := newExecutableManifest("Echo", "Hosted HTTP subject resolution env")
-	manifest.Spec.SecuritySchemes = map[string]*providermanifestv1.HTTPSecurityScheme{
-		"public": {
-			Type: providermanifestv1.HTTPSecuritySchemeTypeNone,
-		},
-	}
-	manifest.Spec.HTTP = map[string]*providermanifestv1.HTTPBinding{
-		"command": {
-			Path:     "/command",
-			Method:   http.MethodPost,
-			Security: "public",
-			Target:   "read_env",
-			RequestBody: &providermanifestv1.HTTPRequestBody{
-				Content: map[string]*providermanifestv1.HTTPMediaType{
-					"application/x-www-form-urlencoded": {},
-				},
-			},
-		},
-	}
-
-	cfg := &config.Config{
-		Apps: map[string]*config.ProviderEntry{
-			"echo": {
-				Command:              bin,
-				Args:                 []string{"provider"},
-				ResolvedManifest:     manifest,
-				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-			},
-		},
-	}
-
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
-		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
-	}))
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
-	}
-	defer func() { _ = CloseProviders(providers) }()
-
-	prov, err := providers.Get("echo")
-	if err != nil {
-		t.Fatalf("providers.Get(echo): %v", err)
-	}
-
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.HostServiceSocketEnv}, "")
-	if err != nil {
-		t.Fatalf("Execute read_env: %v", err)
-	}
-
-	var env struct {
-		Value string `json:"value"`
-		Found bool   `json:"found"`
-	}
-	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
-	}
-	if !env.Found || env.Value == "" {
-		t.Fatalf("host-service env %q should be set for executable apps with hosted HTTP bindings", runtimehost.HostServiceSocketEnv)
 	}
 }
 
@@ -5722,143 +5481,6 @@ func TestRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *tes
 	}
 }
 
-func TestRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCapability(t *testing.T) {
-	t.Parallel()
-
-	bin := buildEchoPluginBinary(t)
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "echoext",
-		Operations: []catalog.CatalogOperation{
-			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
-		},
-	})
-	manifest := newExecutableManifest("Echo", "Hosted HTTP auth lookup env")
-	manifest.Spec.SecuritySchemes = map[string]*providermanifestv1.HTTPSecurityScheme{
-		"public": {
-			Type: providermanifestv1.HTTPSecuritySchemeTypeNone,
-		},
-	}
-	manifest.Spec.HTTP = map[string]*providermanifestv1.HTTPBinding{
-		"command": {
-			Path:     "/command",
-			Method:   http.MethodPost,
-			Security: "public",
-			Target:   "read_env",
-			RequestBody: &providermanifestv1.HTTPRequestBody{
-				Content: map[string]*providermanifestv1.HTTPMediaType{
-					"application/x-www-form-urlencoded": {},
-				},
-			},
-		},
-	}
-	artifactPath := filepath.Join(manifestRoot, filepath.Base(bin))
-	artifactBytes, err := os.ReadFile(bin)
-	if err != nil {
-		t.Fatalf("os.ReadFile(bin): %v", err)
-	}
-	if err := os.WriteFile(artifactPath, artifactBytes, 0o755); err != nil {
-		t.Fatalf("os.WriteFile(artifact): %v", err)
-	}
-	digest, err := providerpkg.FileSHA256(artifactPath)
-	if err != nil {
-		t.Fatalf("providerpkg.FileSHA256(artifact): %v", err)
-	}
-	manifest.Artifacts = []providermanifestv1.Artifact{{
-		OS:     runtime.GOOS,
-		Arch:   runtime.GOARCH,
-		Path:   filepath.Base(artifactPath),
-		SHA256: digest,
-	}}
-	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(artifactPath)}
-	manifestData, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("providerpkg.EncodeManifestFormat(manifest): %v", err)
-	}
-	manifestPath := filepath.Join(manifestRoot, "manifest.yaml")
-	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
-		t.Fatalf("os.WriteFile(manifest): %v", err)
-	}
-
-	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
-	runtimeProvider.fakeHosted = true
-	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
-		return runtimeProvider, nil
-	}
-	cfg := &config.Config{
-		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
-		},
-		Runtime: config.RuntimeConfig{
-			Providers: map[string]*config.RuntimeProviderEntry{
-				"hosted": {
-					Driver: config.RuntimeProviderDriver("capture"),
-				},
-			},
-		},
-		Apps: map[string]*config.ProviderEntry{
-			"echoext": {
-				Command:              bin,
-				Args:                 []string{"provider"},
-				ResolvedManifest:     manifest,
-				ResolvedManifestPath: manifestPath,
-				Runtime:              &config.RuntimePlacementConfig{},
-			},
-		},
-	}
-
-	deps := Deps{
-		BaseURL:               "https://gestalt.example.test",
-		EncryptionKey:         []byte("0123456789abcdef0123456789abcdef"),
-		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
-	}
-	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseProviders(providers) })
-
-	prov, err := providers.Get("echoext")
-	if err != nil {
-		t.Fatalf("providers.Get(echoext): %v", err)
-	}
-
-	checkEnv := func(envName string) (string, bool) {
-		t.Helper()
-		result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": envName}, "")
-		if err != nil {
-			t.Fatalf("Execute read_env(%s): %v", envName, err)
-		}
-		var env struct {
-			Value string `json:"value"`
-			Found bool   `json:"found"`
-		}
-		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
-			t.Fatalf("json.Unmarshal(%s): %v", envName, err)
-		}
-		return env.Value, env.Found
-	}
-
-	if got, found := checkEnv(runtimehost.HostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
-		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.HostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
-	}
-	if got, found := checkEnv(runtimehost.HostServiceTokenEnv); !found || got == "" {
-		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.HostServiceTokenEnv, got, found)
-	}
-
-	startRequests := runtimeProvider.startAppRequestsCopy()
-	if len(startRequests) != 1 {
-		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
-	}
-	assertStartAppRelayEnv(t, startRequests[0], "authorization")
-	if allowedHosts := slices.Clone(startRequests[0].GetAllowedHosts()); len(allowedHosts) != 0 {
-		t.Fatalf("StartApp allowed hosts = %#v, want none when hostname egress enforcement is not required", allowedHosts)
-	}
-}
-
 func TestRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapability(t *testing.T) {
 	t.Parallel()
 
@@ -7377,142 +6999,6 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
 	assertStartAppRelayEnv(t, startRequests[0], "workflow provider relay")
-}
-
-func TestRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing.T) {
-	t.Parallel()
-
-	secret := []byte("0123456789abcdef0123456789abcdef")
-	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
-	relaySrv.EnableHTTP2 = true
-	relaySrv.StartTLS()
-	testutil.CloseOnCleanup(t, relaySrv)
-
-	bin := buildEchoPluginBinary(t)
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "echoext",
-		Operations: []catalog.CatalogOperation{
-			{ID: "authorization_roundtrip", Method: http.MethodPost},
-		},
-	})
-	manifest := newExecutableManifest("Echo", "Authorization relay roundtrip")
-	manifest.Spec.SecuritySchemes = map[string]*providermanifestv1.HTTPSecurityScheme{
-		"public": {
-			Type: providermanifestv1.HTTPSecuritySchemeTypeNone,
-		},
-	}
-	manifest.Spec.HTTP = map[string]*providermanifestv1.HTTPBinding{
-		"command": {
-			Path:     "/command",
-			Method:   http.MethodPost,
-			Security: "public",
-			Target:   "authorization_roundtrip",
-			RequestBody: &providermanifestv1.HTTPRequestBody{
-				Content: map[string]*providermanifestv1.HTTPMediaType{
-					"application/x-www-form-urlencoded": {},
-				},
-			},
-		},
-	}
-	runtimeProvider := newCapturingBundleRuntime()
-	runtimeProvider.support.EgressMode = proto.RuntimeEgressMode_RUNTIME_EGRESS_MODE_HOSTNAME
-	runtimeProvider.fakeHosted = true
-	factories := NewFactoryRegistry()
-	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (runtimeprovider.Provider, error) {
-		return runtimeProvider, nil
-	}
-	cfg := &config.Config{
-		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
-		},
-		Runtime: config.RuntimeConfig{
-			Providers: map[string]*config.RuntimeProviderEntry{
-				"hosted": {
-					Driver: config.RuntimeProviderDriver("capture"),
-				},
-			},
-		},
-		Apps: map[string]*config.ProviderEntry{
-			"echoext": {
-				Command:              bin,
-				Args:                 []string{"provider"},
-				ResolvedManifest:     manifest,
-				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.RuntimePlacementConfig{},
-			},
-		},
-	}
-
-	authz := &recordingHostedAuthorizationProvider{}
-	deps := Deps{
-		BaseURL:               relaySrv.URL,
-		EncryptionKey:         secret,
-		AuthorizationProvider: authz,
-		PublicHostServices:    publicHostServices,
-	}
-	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
-
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseProviders(providers) })
-
-	prov, err := providers.Get("echoext")
-	if err != nil {
-		t.Fatalf("providers.Get: %v", err)
-	}
-
-	result, err := prov.Execute(context.Background(), "authorization_roundtrip", nil, "")
-	if err != nil {
-		t.Fatalf("Execute authorization_roundtrip: %v", err)
-	}
-
-	var body struct {
-		ModelID      string   `json:"model_id"`
-		SubjectID    string   `json:"subject_id"`
-		SubjectType  string   `json:"subject_type"`
-		Capabilities []string `json:"capabilities"`
-	}
-	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
-		t.Fatalf("unmarshal authorization_roundtrip: %v", err)
-	}
-	if body.ModelID != "authz-model-1" {
-		t.Fatalf("model_id = %q, want %q", body.ModelID, "authz-model-1")
-	}
-	if body.SubjectID != "user:user-123" {
-		t.Fatalf("subject_id = %q, want %q", body.SubjectID, "user:user-123")
-	}
-	if body.SubjectType != "user" {
-		t.Fatalf("subject_type = %q, want %q", body.SubjectType, "user")
-	}
-	if !slices.Equal(body.Capabilities, []string{"search_subjects"}) {
-		t.Fatalf("capabilities = %#v, want [search_subjects]", body.Capabilities)
-	}
-
-	if got := authz.Calls(); len(got) != 1 {
-		t.Fatalf("authorization search calls = %d, want 1", len(got))
-	} else {
-		if got[0].SubjectType != "user" {
-			t.Fatalf("subject type = %q, want %q", got[0].SubjectType, "user")
-		}
-		if got[0].ResourceType != "slack_identity" || got[0].ResourceID != "team:T123:user:U456" {
-			t.Fatalf("resource = (%q, %q), want (%q, %q)", got[0].ResourceType, got[0].ResourceID, "slack_identity", "team:T123:user:U456")
-		}
-		if got[0].ActionName != "assume" {
-			t.Fatalf("action name = %q, want %q", got[0].ActionName, "assume")
-		}
-		if got[0].PageSize != 1 {
-			t.Fatalf("page size = %d, want 1", got[0].PageSize)
-		}
-	}
-
-	startRequests := runtimeProvider.startAppRequestsCopy()
-	if len(startRequests) != 1 {
-		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
-	}
-	assertStartAppRelayEnv(t, startRequests[0], "authorization")
 }
 
 func TestRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapability(t *testing.T) {

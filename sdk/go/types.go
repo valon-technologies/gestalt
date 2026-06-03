@@ -16,7 +16,8 @@ const (
 	// ProviderKindAuthentication serves interactive login and token-validation
 	// flows.
 	ProviderKindAuthentication ProviderKind = "authentication"
-	// ProviderKindAuthorization serves authorization decision and control-plane flows.
+	// ProviderKindAuthorization serves generic authorization model,
+	// relationship, and access-check flows.
 	ProviderKindAuthorization ProviderKind = "authorization"
 	// ProviderKindIndexedDB serves the IndexedDB-style datastore surface.
 	ProviderKindIndexedDB ProviderKind = "datastore"

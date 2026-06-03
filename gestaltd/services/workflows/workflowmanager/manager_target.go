@@ -154,9 +154,6 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 	if !principal.AllowsOperationPermission(p, appName, opMeta.ID) && !callerAppCanInvoke(callerAppName, appName, opMeta.ID) {
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
 	}
-	if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, appName, opMeta) {
-		return coreworkflow.AppCall{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
-	}
 	if connection == "" {
 		connection = resolvedConnection
 	}
@@ -252,25 +249,15 @@ func isWorkflowProviderNotFound(err error) bool {
 }
 
 func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
-	if m == nil || m.authorizer == nil {
-		return true
-	}
-	return m.authorizer.AllowProvider(ctx, p, provider)
+	return true
 }
 
 func (m *Manager) allowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
-	if m == nil || m.authorizer == nil {
-		return true
-	}
-	return m.authorizer.AllowOperation(ctx, p, provider, operation)
+	return true
 }
 
 func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Principal, provider string) invocation.AccessContext {
-	if m == nil || m.authorizer == nil {
-		return invocation.AccessContext{}
-	}
-	access, _ := m.authorizer.ResolveAccess(ctx, p, provider)
-	return access
+	return invocation.AccessContext{}
 }
 
 const (

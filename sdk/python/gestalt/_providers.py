@@ -19,32 +19,6 @@ from typing import (
     runtime_checkable,
 )
 
-from ._authorization import (
-    AccessDecision,
-    AccessEvaluationRequest,
-    AccessEvaluationsRequest,
-    AccessEvaluationsResponse,
-    ActionSearchRequest,
-    ActionSearchResponse,
-    AuthorizationMetadata,
-    AuthorizationModelRef,
-    EffectiveSubjectSearchRequest,
-    EffectiveSubjectSearchResponse,
-    ExpandRequest,
-    ExpandResponse,
-    GetActiveModelResponse,
-    ListModelsRequest,
-    ListModelsResponse,
-    ReadRelationshipsRequest,
-    ReadRelationshipsResponse,
-    ResourceSearchRequest,
-    ResourceSearchResponse,
-    SubjectSearchRequest,
-    SubjectSearchResponse,
-    WriteModelRequest,
-    WriteRelationshipsRequest,
-)
-
 if TYPE_CHECKING:
     from ._agent import (
         AgentInteraction,
@@ -75,6 +49,25 @@ if TYPE_CHECKING:
         BeginLoginRequest,
         BeginLoginResponse,
         CompleteLoginRequest,
+    )
+    from ._authorization import (
+        AddRelationshipRequest,
+        AddRelationshipResponse,
+        CheckAccessManyRequest,
+        CheckAccessManyResponse,
+        CheckAccessRequest,
+        CheckAccessResponse,
+        DeleteRelationshipRequest,
+        DeleteRelationshipResponse,
+        GetActiveModelRefResponse,
+        ListActiveModelResourceTypesRequest,
+        ListActiveModelResourceTypesResponse,
+        ListRelationshipsRequest,
+        ListRelationshipsResponse,
+        SetActiveModelRequest,
+        SetActiveModelResponse,
+        SetAuthorizationStateRequest,
+        SetAuthorizationStateResponse,
     )
     from ._cache import CacheEntry
     from ._runtime_provider import (
@@ -138,8 +131,8 @@ class ProviderKind(str, Enum):
     """Runtime kinds supported by the Python SDK."""
 
     INTEGRATION = "integration"
-    AUTHENTICATION = "authentication"
     AUTHORIZATION = "authorization"
+    AUTHENTICATION = "authentication"
     CACHE = "cache"
     S3 = "s3"
     AGENT = "agent"
@@ -278,59 +271,64 @@ class AuthenticationProvider(AppProvider):
 
 
 class AuthorizationProvider(AppProvider):
-    """Base class for authorization-provider runtimes."""
+    """Base class for authorization providers."""
 
-    def evaluate(self, request: AccessEvaluationRequest) -> AccessDecision:
-        self._unimplemented("evaluate")
+    def check_access(self, request: CheckAccessRequest) -> CheckAccessResponse:
+        """Return whether a single access request is allowed."""
 
-    def evaluate_many(
-        self, request: AccessEvaluationsRequest
-    ) -> AccessEvaluationsResponse:
-        self._unimplemented("evaluate_many")
+        raise NotImplementedError
 
-    def search_resources(
-        self, request: ResourceSearchRequest
-    ) -> ResourceSearchResponse:
-        self._unimplemented("search_resources")
+    def check_access_many(
+        self, request: CheckAccessManyRequest
+    ) -> CheckAccessManyResponse:
+        """Return decisions for a batch of access requests."""
 
-    def search_subjects(self, request: SubjectSearchRequest) -> SubjectSearchResponse:
-        self._unimplemented("search_subjects")
+        raise NotImplementedError
 
-    def effective_search_resources(
-        self, request: ResourceSearchRequest
-    ) -> ResourceSearchResponse:
-        self._unimplemented("effective_search_resources")
+    def list_relationships(
+        self, request: ListRelationshipsRequest
+    ) -> ListRelationshipsResponse:
+        """List relationships matching the supplied filter."""
 
-    def effective_search_subjects(
-        self, request: EffectiveSubjectSearchRequest
-    ) -> EffectiveSubjectSearchResponse:
-        self._unimplemented("effective_search_subjects")
+        raise NotImplementedError
 
-    def search_actions(self, request: ActionSearchRequest) -> ActionSearchResponse:
-        self._unimplemented("search_actions")
+    def add_relationship(
+        self, request: AddRelationshipRequest
+    ) -> AddRelationshipResponse:
+        """Add a relationship and return the stored relationship."""
 
-    def expand(self, request: ExpandRequest) -> ExpandResponse:
-        self._unimplemented("expand")
+        raise NotImplementedError
 
-    def get_metadata(self) -> AuthorizationMetadata:
-        self._unimplemented("get_metadata")
+    def delete_relationship(
+        self, request: DeleteRelationshipRequest
+    ) -> DeleteRelationshipResponse | None:
+        """Delete a relationship tuple."""
 
-    def read_relationships(
-        self, request: ReadRelationshipsRequest
-    ) -> ReadRelationshipsResponse:
-        self._unimplemented("read_relationships")
+        raise NotImplementedError
 
-    def write_relationships(self, request: WriteRelationshipsRequest) -> None:
-        self._unimplemented("write_relationships")
+    def set_authorization_state(
+        self, request: SetAuthorizationStateRequest
+    ) -> SetAuthorizationStateResponse:
+        """Atomically replace the model and relationships."""
 
-    def get_active_model(self) -> GetActiveModelResponse:
-        self._unimplemented("get_active_model")
+        raise NotImplementedError
 
-    def list_models(self, request: ListModelsRequest) -> ListModelsResponse:
-        self._unimplemented("list_models")
+    def get_active_model_ref(self) -> GetActiveModelRefResponse:
+        """Return the active authorization model reference."""
 
-    def write_model(self, request: WriteModelRequest) -> AuthorizationModelRef:
-        self._unimplemented("write_model")
+        raise NotImplementedError
+
+    def set_active_model(self, request: SetActiveModelRequest) -> SetActiveModelResponse:
+        """Set the active authorization model."""
+
+        raise NotImplementedError
+
+    def list_active_model_resource_types(
+        self, request: ListActiveModelResourceTypesRequest
+    ) -> ListActiveModelResourceTypesResponse:
+        """List resource types in the active authorization model."""
+
+        raise NotImplementedError
 
     def serve(self) -> None:
         """Start the authorization runtime."""

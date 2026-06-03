@@ -17,7 +17,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
-	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	secretsservice "github.com/valon-technologies/gestalt/server/services/secrets"
@@ -245,106 +244,6 @@ func TestProviderPackageExpandsRequestedPlatformSets(t *testing.T) {
 		if targets[i].Generic || targets[i].PlatformSuffix != wantSuffix {
 			t.Fatalf("target[%d] = %+v, want suffix %q", i, targets[i], wantSuffix)
 		}
-	}
-}
-
-func TestRun_ProviderPackageAndReleaseBuildsGoSourceAuthorizationProvider(t *testing.T) {
-	t.Parallel()
-
-	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
-		appName:    authorizationReleaseAppName,
-		schemaPath: authorizationReleaseSchemaPath,
-		sourceFile: "authorization.go",
-		sourceCode: testutil.GeneratedAuthorizationPackageSource(),
-		manifest: &providermanifestv1.Manifest{
-			Kind:   providermanifestv1.KindAuthorization,
-			Source: authorizationReleaseSource, Version: "0.0.1", DisplayName: "Authorization Release",
-			Spec: &providermanifestv1.Spec{ConfigSchemaPath: authorizationReleaseSchemaPath},
-		},
-	})
-	outputDir := t.TempDir()
-	const testVersion = "0.0.18-test"
-
-	runProviderPackageAndReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
-		"--output", outputDir,
-	)
-
-	archiveName := platformArchiveNameForTest(authorizationReleaseAppName, testVersion, runtime.GOOS, runtime.GOARCH)
-	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-	binaryName := ".gestalt/build/provider"
-
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
-		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
-	}
-	assertExpectedGoArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
-	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != binaryName {
-		t.Fatalf("authorization entrypoint = %+v, want artifact path %q", manifest.Entrypoint, binaryName)
-	}
-	if _, err := os.Stat(filepath.Join(extractDir, authorizationReleaseSchemaPath)); err != nil {
-		t.Fatalf("expected %s in archive: %v", authorizationReleaseSchemaPath, err)
-	}
-
-	metadata := readProviderReleaseMetadata(t, outputDir)
-	if metadata.Package != authorizationReleaseSource {
-		t.Fatalf("release metadata package = %q, want %q", metadata.Package, authorizationReleaseSource)
-	}
-	if metadata.Kind != providermanifestv1.KindAuthorization {
-		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindAuthorization)
-	}
-	if metadata.Runtime != providerReleaseRuntimeKindExecutable {
-		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
-	}
-
-	authz, err := authorizationservice.NewExecutable(context.Background(), authorizationservice.ExecConfig{
-		Command: filepath.Join(extractDir, binaryName),
-		Name:    "authorization-release",
-	})
-	if err != nil {
-		t.Fatalf("authorizationservice.NewExecutable: %v", err)
-	}
-	defer func() {
-		if closer, ok := authz.(interface{ Close() error }); ok {
-			_ = closer.Close()
-		}
-	}()
-
-	decision, err := authz.Evaluate(context.Background(), &core.AccessEvaluationRequest{
-		Subject:  &core.SubjectRef{Type: "user", Id: "generated-user"},
-		Action:   &core.ActionRef{Name: "invoke"},
-		Resource: &core.ResourceRef{Type: "plugin", Id: "github"},
-	})
-	if err != nil {
-		t.Fatalf("Evaluate: %v", err)
-	}
-	if decision == nil || !decision.Allowed || decision.ModelId != "model-v1" {
-		t.Fatalf("decision = %+v", decision)
-	}
-
-	providerMetadata, err := authz.GetMetadata(context.Background())
-	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
-	}
-	if providerMetadata == nil || providerMetadata.ActiveModelId != "model-v1" {
-		t.Fatalf("metadata = %+v", providerMetadata)
-	}
-
-	activeModel, err := authz.GetActiveModel(context.Background())
-	if err != nil {
-		t.Fatalf("GetActiveModel: %v", err)
-	}
-	if activeModel == nil || activeModel.Model == nil || activeModel.Model.Id != "model-v1" {
-		t.Fatalf("active model = %+v", activeModel)
-	}
-
-	relationships, err := authz.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{})
-	if err != nil {
-		t.Fatalf("ReadRelationships: %v", err)
-	}
-	if relationships == nil || len(relationships.Relationships) != 1 {
-		t.Fatalf("relationships = %+v", relationships)
 	}
 }
 

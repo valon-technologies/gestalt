@@ -165,57 +165,55 @@ _AUTHENTICATION_AUTHORED_EXPORTS = (
     "CompleteLoginRequest",
 )
 
+_AUTHORIZATION_AUTHORED_EXPORTS = (
+    "AddRelationshipRequest",
+    "AddRelationshipResponse",
+    "AuthorizationAction",
+    "AuthorizationModel",
+    "AuthorizationModelRef",
+    "AuthorizationModelResourceType",
+    "AuthorizationModelResourceTypeFilter",
+    "AuthorizationResource",
+    "AuthorizationSubject",
+    "CheckAccessManyRequest",
+    "CheckAccessManyResponse",
+    "CheckAccessRequest",
+    "CheckAccessResponse",
+    "DEFAULT_ACCESS_POLICY_ALLOW",
+    "DEFAULT_ACCESS_POLICY_DENY",
+    "DeleteRelationshipRequest",
+    "DeleteRelationshipResponse",
+    "GetActiveModelRefResponse",
+    "ListActiveModelResourceTypesRequest",
+    "ListActiveModelResourceTypesResponse",
+    "ListRelationshipsRequest",
+    "ListRelationshipsResponse",
+    "ModelAction",
+    "ModelAllowedTarget",
+    "ModelRelation",
+    "RELATIONSHIP_TARGET_TYPE_RESOURCE",
+    "RELATIONSHIP_TARGET_TYPE_SUBJECT",
+    "RELATIONSHIP_TARGET_TYPE_SUBJECT_SET",
+    "RELATIONSHIP_TARGET_TYPE_UNSPECIFIED",
+    "Relationship",
+    "RelationshipFilter",
+    "RelationshipTarget",
+    "RelationshipTuple",
+    "SOURCE_LAYER_RUNTIME",
+    "SOURCE_LAYER_STATIC_CONFIG",
+    "SOURCE_LAYER_UNSPECIFIED",
+    "SetActiveModelRequest",
+    "SetActiveModelResponse",
+    "SetAuthorizationStateRequest",
+    "SetAuthorizationStateResponse",
+    "SubjectSet",
+    "SubjectSetType",
+)
+
 _PROTOCOL_TYPE_EXPORTS = (
     "JsonObject",
     "JsonValue",
 )
-
-_AUTHORIZATION_AUTHORED_EXPORTS = (
-    "AccessDecision",
-    "AccessEvaluationRequest",
-    "AccessEvaluationsRequest",
-    "AccessEvaluationsResponse",
-    "ActionSearchRequest",
-    "ActionSearchResponse",
-    "AuthorizationAction",
-    "AuthorizationMetadata",
-    "AuthorizationModel",
-    "AuthorizationModelAction",
-    "AuthorizationModelAllowedTarget",
-    "AuthorizationModelComputedUserset",
-    "AuthorizationModelRef",
-    "AuthorizationModelRelation",
-    "AuthorizationModelResourceType",
-    "AuthorizationModelRewrite",
-    "AuthorizationModelRewriteThis",
-    "AuthorizationModelRewriteUnion",
-    "AuthorizationModelSubjectSetTarget",
-    "AuthorizationModelTupleToUserset",
-    "AuthorizationRelationshipTarget",
-    "AuthorizationResource",
-    "AuthorizationSubject",
-    "AuthorizationSubjectSet",
-    "EffectiveSubjectSearchRequest",
-    "EffectiveSubjectSearchResponse",
-    "ExpandNode",
-    "ExpandRequest",
-    "ExpandResponse",
-    "GetActiveModelResponse",
-    "ListModelsRequest",
-    "ListModelsResponse",
-    "ReadRelationshipsRequest",
-    "ReadRelationshipsResponse",
-    "Relationship",
-    "RelationshipKey",
-    "ResourceSearchRequest",
-    "ResourceSearchResponse",
-    "SubjectSearchRequest",
-    "SubjectSearchResponse",
-    "WriteModelRequest",
-    "WriteRelationshipsRequest",
-)
-
-_AUTHORIZATION_HELPER_EXPORTS = ("AUTHORIZATION_SUBJECT_TYPE_SUBJECT",)
 
 _RUNTIME_PROVIDER_AUTHORED_EXPORTS = (
     "GetRuntimeSessionRequest",
@@ -392,10 +390,8 @@ _LAZY_EXPORTS = {
     "AgentProvider": ("._providers", "AgentProvider"),
     "AlreadyExistsError": ("._indexeddb", "AlreadyExistsError"),
     "AuthenticatedUser": ("._authentication", "AuthenticatedUser"),
-    "AuthenticationProvider": ("._providers", "AuthenticationProvider"),
-    "Authorization": ("._authorization", "Authorization"),
-    "AuthorizationProtocol": ("._authorization", "AuthorizationProtocol"),
     "AuthorizationProvider": ("._providers", "AuthorizationProvider"),
+    "AuthenticationProvider": ("._providers", "AuthenticationProvider"),
     "BeginLoginRequest": ("._authentication", "BeginLoginRequest"),
     "BeginLoginResponse": ("._authentication", "BeginLoginResponse"),
     "ByteRange": ("._s3", "ByteRange"),
@@ -507,13 +503,10 @@ _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_HELPER_EXPORTS}
 _LAZY_EXPORTS.update(
     {name: ("._authentication", name) for name in _AUTHENTICATION_AUTHORED_EXPORTS}
 )
-_LAZY_EXPORTS.update({name: ("._protocol", name) for name in _PROTOCOL_TYPE_EXPORTS})
 _LAZY_EXPORTS.update(
     {name: ("._authorization", name) for name in _AUTHORIZATION_AUTHORED_EXPORTS}
 )
-_LAZY_EXPORTS.update(
-    {name: ("._authorization", name) for name in _AUTHORIZATION_HELPER_EXPORTS}
-)
+_LAZY_EXPORTS.update({name: ("._protocol", name) for name in _PROTOCOL_TYPE_EXPORTS})
 _LAZY_EXPORTS.update(
     {name: ("._runtime_provider", name) for name in _RUNTIME_PROVIDER_AUTHORED_EXPORTS}
 )
@@ -549,9 +542,8 @@ __all__ = [
     *_AGENT_PROTOCOL_EXPORTS,
     *_AGENT_HELPER_EXPORTS,
     *_AUTHENTICATION_AUTHORED_EXPORTS,
-    *_PROTOCOL_TYPE_EXPORTS,
     *_AUTHORIZATION_AUTHORED_EXPORTS,
-    *_AUTHORIZATION_HELPER_EXPORTS,
+    *_PROTOCOL_TYPE_EXPORTS,
     *_RUNTIME_PROVIDER_AUTHORED_EXPORTS,
     *_WORKFLOW_AUTHORED_EXPORTS,
     *_WORKFLOW_HELPER_EXPORTS,
@@ -559,10 +551,8 @@ __all__ = [
     "Agent",
     "AgentProvider",
     "AlreadyExistsError",
-    "AuthenticationProvider",
-    "Authorization",
-    "AuthorizationProtocol",
     "AuthorizationProvider",
+    "AuthenticationProvider",
     "Cache",
     "CacheEntry",
     "CacheProtocol",

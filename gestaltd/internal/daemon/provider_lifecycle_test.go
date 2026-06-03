@@ -44,6 +44,7 @@ func TestE2EProviderAddDefaultsToPackageSource(t *testing.T) {
 	entry := cfg.Apps["alpha"]
 	if entry == nil {
 		t.Fatal(`Apps["alpha"] = nil`)
+		return
 	}
 	if !entry.Source.IsPackage() {
 		t.Fatal("Source.IsPackage = false, want true")

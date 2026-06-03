@@ -54,15 +54,14 @@
 // and typed [Operation] definitions.
 //
 // Provider runtimes are modeled by [AuthenticationProvider],
-// [AuthorizationProvider], [CacheProvider], [IndexedDBProvider], [S3Provider],
-// [SecretsProvider], [WorkflowProvider], [AgentProvider], and
-// [RuntimeProvider].
+// [CacheProvider], [IndexedDBProvider], [S3Provider], [SecretsProvider],
+// [WorkflowProvider], [AgentProvider], and [RuntimeProvider].
 //
 // Workflow and agent provider surfaces use native Go structs. The SDK owns the
 // generated provider protocol conversion at the transport boundary.
 //
 // Host-service capabilities include [Cache], [Workflow], [AgentHost],
-// [Agent], [Authorization], and [App].
+// [Agent], and [App].
 // Apps reach IndexedDB and S3 through [IndexedDB] and [S3], which return the
 // capability interfaces rather than transport-specific client types.
 //
@@ -80,13 +79,12 @@
 //
 // Provider, Operation, Register, and Router model integration providers. The
 // package also exposes provider interfaces for host-service backends, including
-// AuthenticationProvider, AuthorizationProvider, CacheProvider,
-// IndexedDBProvider, S3Provider, SecretsProvider, WorkflowProvider,
-// AgentProvider, and RuntimeProvider.
+// AuthenticationProvider, CacheProvider, IndexedDBProvider, S3Provider,
+// SecretsProvider, WorkflowProvider, AgentProvider, and RuntimeProvider.
 //
 // Use the host-service capabilities when provider code needs to call sibling
 // services exposed by gestaltd. These include Cache, Workflow, AgentHost,
-// Agent, Authorization, and App. Apps use
+// Agent, and App. Apps use
 // [IndexedDB] and [S3] for datastore and object storage bindings.
 //
 // Workflow, Agent, and AgentHost use native Go request and response structs at

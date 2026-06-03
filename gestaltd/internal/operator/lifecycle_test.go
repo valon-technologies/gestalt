@@ -1362,6 +1362,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedUIWithoutLockfile(t *testing
 		ownedUIPath  string
 		uiManifest   string
 		sourceBuild  bool
+		createApp    bool
 		wantErr      string
 	}{
 		{
@@ -1389,30 +1390,22 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedUIWithoutLockfile(t *testing
 		},
 		{
 			name: "plugin ui object binds explicit ui",
-			uiConfigYAML: `  ui:
-    roadmap:
-      source:
-        path: ./ui/manifest.yaml
-apps:
-    roadmap:
-      source:
-        path: ./app/manifest.yaml
-      ui:
-        bundle: roadmap
-        path: /create-customer-roadmap-review
-      authorizationPolicy: roadmap_policy
-`,
-			extraYAML: `authorization:
-  policies:
-    roadmap_policy:
-      default: deny
-      members:
-        - subjectID: user:viewer-user
-          role: viewer
-`,
+			uiConfigYAML: "  ui:\n" +
+				"    roadmap:\n" +
+				"      source:\n" +
+				"        path: ./ui/manifest.yaml\n" +
+				"apps:\n" +
+				"    roadmap:\n" +
+				"      source:\n" +
+				"        path: ./app/manifest.yaml\n" +
+				"      ui:\n" +
+				"        bundle: roadmap\n" +
+				"        path: /create-customer-roadmap-review\n" +
+				"      authorizationPolicy: roadmap_policy\n",
 			uiKey:      "roadmap",
 			wantPath:   "/create-customer-roadmap-review",
 			wantPolicy: "roadmap_policy",
+			createApp:  true,
 		},
 		{
 			name: "plugin owned ui via app ui path",
@@ -1423,14 +1416,6 @@ apps:
       ui:
         path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_policy
-`,
-			extraYAML: `authorization:
-  policies:
-    roadmap_policy:
-      default: deny
-      members:
-        - subjectID: user:viewer-user
-          role: viewer
 `,
 			uiKey:       "roadmap",
 			wantPath:    "/create-customer-roadmap-review",
@@ -1461,14 +1446,6 @@ apps:
         path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_policy
 `,
-			extraYAML: `authorization:
-  policies:
-    roadmap_policy:
-      default: deny
-      members:
-        - subjectID: user:viewer-user
-          role: viewer
-`,
 			uiKey:       "roadmap",
 			wantPath:    "/create-customer-roadmap-review",
 			wantPolicy:  "roadmap_policy",
@@ -1488,14 +1465,6 @@ apps:
       ui:
         path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_policy
-`,
-			extraYAML: `authorization:
-  policies:
-    roadmap_policy:
-      default: deny
-      members:
-        - subjectID: user:viewer-user
-          role: viewer
 `,
 			uiKey:       "roadmap",
 			wantPath:    "/create-customer-roadmap-review",
@@ -1563,7 +1532,7 @@ apps:
 			if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
 				t.Fatalf("WriteFile manifest: %v", err)
 			}
-			if tc.extraYAML != "" || tc.ownedUIPath != "" {
+			if tc.createApp || tc.extraYAML != "" || tc.ownedUIPath != "" {
 				pluginManifestPath := filepath.Join(dir, "app", "manifest.yaml")
 				if err := os.MkdirAll(filepath.Dir(pluginManifestPath), 0o755); err != nil {
 					t.Fatalf("MkdirAll app dir: %v", err)
@@ -2422,13 +2391,6 @@ func TestPrepareAtPath_RejectsPolicyBoundManagedMountedUIWithoutExplicitRouteCov
       source: ` + srv.URL + `/providers/sample-portal/v0.0.1-alpha.1/provider-release.yaml
       path: /sample-portal
       authorizationPolicy: sample_policy
-authorization:
-  policies:
-    sample_policy:
-      default: deny
-      members:
-        - subjectID: user:viewer-user
-          role: viewer
 ` + `server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
@@ -3764,6 +3726,9 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 				t.Fatalf("WriteFile(artifact): %v", err)
 			}
 			manifest += "entrypoint:\n  artifactPath: .gestalt/build/provider\n"
+			if kind == providermanifestv1.KindApp {
+				manifest += "spec: {}\n"
+			}
 		}
 		if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
 			t.Fatalf("WriteFile(%q): %v", manifestPath, err)
@@ -3796,8 +3761,8 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		root := t.TempDir()
 		firstConfigDir := filepath.Join(root, "one", "deploy")
 		secondConfigDir := filepath.Join(root, "two", "deploy")
-		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthorization)
-		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthorization)
+		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthentication)
+		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthentication)
 
 		firstProvider := &config.ProviderEntry{
 			Source: config.ProviderSource{Path: firstManifestPath},
@@ -3854,9 +3819,9 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		root := t.TempDir()
 		firstConfigDir := filepath.Join(root, "one", "deploy")
 		secondConfigDir := filepath.Join(root, "two", "deploy")
-		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthorization)
-		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthorization)
-		if err := os.WriteFile(secondManifestPath, []byte("source: github.com/test-org/two/component\nversion: 0.0.2\nkind: authorization\nentrypoint:\n  artifactPath: .gestalt/build/provider\n"), 0o644); err != nil {
+		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthentication)
+		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "apps/sample/manifest.yaml", providermanifestv1.KindAuthentication)
+		if err := os.WriteFile(secondManifestPath, []byte("source: github.com/test-org/two/component\nversion: 0.0.2\nkind: authentication\nentrypoint:\n  artifactPath: .gestalt/build/provider\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile(%q): %v", secondManifestPath, err)
 		}
 

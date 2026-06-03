@@ -42,7 +42,6 @@ var (
 	errNotAuthenticated = errors.New("not authenticated")
 	errResolveUser      = errors.New("failed to resolve user")
 	errUserRequired     = errors.New("user caller is required on this route")
-	errOperationAccess  = errors.New("operation access denied")
 )
 
 var (
@@ -172,9 +171,6 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	names := s.providers.List()
 	out := make([]integrationInfo, 0, len(names))
 	for _, name := range names {
-		if !s.allowProviderContext(r.Context(), p, name) {
-			continue
-		}
 		prov, err := s.providers.Get(name)
 		if err != nil {
 			continue
@@ -542,11 +538,6 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		Surface:        metricutil.InvocationSurfaceHTTP,
 	})
 	p := PrincipalFromContext(r.Context())
-	if !s.allowProviderContext(r.Context(), p, name) {
-		s.auditHTTPEvent(r.Context(), p, name, operation, false, errOperationAccess)
-		writeError(w, http.StatusForbidden, errOperationAccess.Error())
-		return
-	}
 	requestedConnection := r.URL.Query().Get(httpConnectionParam)
 	if requestedConnection != "" {
 		var ok bool
@@ -582,7 +573,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	} else if core.SupportsSessionCatalog(prov) {
 		strictCatalog = true
 	}
-	ctx := invocation.WithAccessContext(r.Context(), s.providerAccessContextWithContext(r.Context(), p, name))
+	ctx := r.Context()
 	cat, metadata, err := invocation.ResolveCatalogForTargetsWithMetadata(
 		ctx,
 		prov,
@@ -603,7 +594,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	if recordDiscoveryMetrics {
 		metricutil.RecordDiscoveryMetrics(r.Context(), discoveryStartedAt, name, "list_operations", discoveryConnectionMode, discoveryFailed)
 	}
-	cat = invocation.FilterCatalogForPrincipal(ctx, cat, name, p, s.authorizer)
+	cat = invocation.FilterCatalogForPrincipal(ctx, cat, name, p, nil)
 	ops := s.publicHTTPOperations(name, prov, cat.Operations)
 	sort.Slice(ops, func(i, j int) bool {
 		return ops[i].ID < ops[j].ID
@@ -618,23 +609,6 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	p := PrincipalFromContext(r.Context())
 	prov, ok := s.getProvider(w, providerName)
 	if !ok {
-		return
-	}
-	access := s.providerAccessContextWithContext(r.Context(), p, providerName)
-	providerAllowed := s.allowProviderContext(r.Context(), p, providerName)
-	operationAllowed := s.authorizer == nil || s.authorizer.AllowOperation(r.Context(), p, providerName, operationName)
-	if !providerAllowed || !operationAllowed {
-		authz := auditAuthorization{
-			Policy: access.Policy,
-			Role:   access.Role,
-		}
-		if !providerAllowed {
-			authz.Decision = auditDecisionProviderAccessDenied
-		} else {
-			authz.Decision = auditDecisionOperationBindingDenied
-		}
-		s.auditHTTPAuthorizationEvent(r.Context(), p, providerName, operationName, false, errOperationAccess, authz)
-		writeError(w, http.StatusForbidden, errOperationAccess.Error())
 		return
 	}
 	requestedConnectionInput := r.URL.Query().Get(httpConnectionParam)
@@ -711,7 +685,6 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		connectionInput = requestedConnectionInput
 	}
 	ctx := r.Context()
-	ctx = invocation.WithAccessContext(ctx, access)
 
 	var resolver invocation.TokenResolver
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
@@ -742,15 +715,6 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.validatePublicOperationInvocation(providerName, prov, opMeta, params, connection); err != nil {
 		s.writeInvocationError(w, r, providerName, operationName, err)
-		return
-	}
-	if s.authorizer != nil && !s.authorizer.AllowCatalogOperation(ctx, p, providerName, opMeta) {
-		s.auditHTTPAuthorizationEvent(ctx, p, providerName, operationName, false, errOperationAccess, auditAuthorization{
-			Policy:   access.Policy,
-			Role:     access.Role,
-			Decision: auditDecisionCatalogRoleDenied,
-		})
-		writeError(w, http.StatusForbidden, "operation access denied")
 		return
 	}
 	operationConnection := resolvedConnection

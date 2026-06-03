@@ -41,6 +41,7 @@ operations:
 	}
 	if cat == nil {
 		t.Fatal("expected catalog")
+		return
 	}
 	if cat.DisplayName != "Demo Provider" {
 		t.Fatalf("DisplayName = %q, want %q", cat.DisplayName, "Demo Provider")

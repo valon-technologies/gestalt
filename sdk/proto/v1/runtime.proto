@@ -5,7 +5,6 @@ package gestalt.provider.v1;
 // SDK Naming Convention (all languages):
 //   Base provider interface:  Provider
 //   Authentication provider:  AuthenticationProvider
-//   Authorization provider:   AuthorizationProvider
 //   External credential provider: ExternalCredentialProvider
 //   IndexedDB provider:       IndexedDBProvider
 //   Lifecycle service:        ProviderLifecycle (internal, not user-facing)

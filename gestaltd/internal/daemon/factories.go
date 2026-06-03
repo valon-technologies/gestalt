@@ -129,9 +129,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 			SessionKey:         deps.EncryptionKey,
 		})
 	}
-	factories.Authorization = func(node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (core.AuthorizationProvider, error) {
-		return providerdrivers.AuthorizationFactory(node, hostServices)
-	}
+	factories.Authorization = providerdrivers.AuthorizationFactory
 	factories.ExternalCredentials = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (core.ExternalCredentialProvider, error) {
 		return providerdrivers.ExternalCredentialsFactory(ctx, name, node, hostServices)
 	}

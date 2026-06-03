@@ -90,7 +90,6 @@ func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testi
 		Services: &coredata.Services{
 			ExternalCredentials: coretesting.NewStubExternalCredentialProvider(),
 		},
-		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
 	})
 	if err != nil {
 		t.Fatalf("buildProviderHostServices: %v", err)
@@ -100,7 +99,7 @@ func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testi
 	}
 
 	names := hostServiceNames(hostServices)
-	for _, want := range []string{"app", "workflow_provider", "agent_provider", "external_credentials", "authorization"} {
+	for _, want := range []string{"app", "workflow_provider", "agent_provider", "external_credentials"} {
 		if !hasHostServiceName(names, want) {
 			t.Fatalf("provider host services missing %q: %v", want, names)
 		}
@@ -146,34 +145,6 @@ func TestBuildWorkflowRegistersIndexedDBPublicRelay(t *testing.T) {
 	}
 	if services := deps.PublicHostServices.Snapshot(); len(services) != 0 {
 		t.Fatalf("public host services after provider close = %#v, want none", services)
-	}
-}
-
-func TestBuildWorkflowPassesAuthorizationHostService(t *testing.T) {
-	t.Parallel()
-
-	var hostServiceNames []string
-	factories := NewFactoryRegistry()
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ Deps) (coreworkflow.Provider, error) {
-		for _, hostService := range hostServices {
-			hostServiceNames = append(hostServiceNames, hostService.Name)
-		}
-		return startupTestWorkflowProvider{}, nil
-	}
-	provider, err := buildWorkflow(context.Background(), "local", &config.ProviderEntry{
-		Config: mustNode(t, map[string]any{"command": "/bin/workflow-provider"}),
-	}, factories, Deps{
-		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
-	})
-	if err != nil {
-		t.Fatalf("buildWorkflow: %v", err)
-	}
-	if err := provider.Close(); err != nil {
-		t.Fatalf("provider.Close: %v", err)
-	}
-
-	if !hasHostServiceName(hostServiceNames, "authorization") {
-		t.Fatalf("workflow provider host services = %v, want authorization", hostServiceNames)
 	}
 }
 

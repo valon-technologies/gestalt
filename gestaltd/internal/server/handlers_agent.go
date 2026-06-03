@@ -1012,13 +1012,7 @@ func (s *Server) resolveAgentActor(w http.ResponseWriter, r *http.Request) (*pri
 }
 
 func (s *Server) allowsAgentProvider(ctx context.Context, p *principal.Principal, providerName string) bool {
-	if !principal.AllowsProviderPermission(p, providerName) {
-		return false
-	}
-	if s == nil || s.authorizer == nil {
-		return true
-	}
-	return s.authorizer.AllowProvider(ctx, p, providerName)
+	return principal.AllowsProviderPermission(p, providerName)
 }
 
 func resolveAgentIdempotencyKey(w http.ResponseWriter, r *http.Request, bodyValue string) (string, bool) {

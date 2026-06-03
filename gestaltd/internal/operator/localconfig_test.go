@@ -131,6 +131,7 @@ func TestResolveStartConfigPathsGeneratesDefaultLocalSourceConfig(t *testing.T) 
 	rootUI := cfg.Providers.UI["root"]
 	if rootUI == nil {
 		t.Fatal(`Providers.UI["root"] = nil`)
+		return
 	}
 	wantUIPath := config.DefaultLocalProviderManifestPath(providersDir, config.DefaultUIProvider)
 	if got := rootUI.SourcePath(); got != wantUIPath {

@@ -12,6 +12,7 @@ import (
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
 
@@ -45,8 +46,8 @@ func (s *Server) deliverWorkflowEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appName := strings.TrimSpace(req.Source)
-	if appName != "" && (!principal.AllowsProviderPermission(p, appName) || !s.allowProviderContext(r.Context(), p, appName)) {
-		writeError(w, http.StatusForbidden, errOperationAccess.Error())
+	if appName != "" && !principal.AllowsProviderPermission(p, appName) {
+		writeError(w, http.StatusForbidden, invocation.ErrAuthorizationDenied.Error())
 		return
 	}
 

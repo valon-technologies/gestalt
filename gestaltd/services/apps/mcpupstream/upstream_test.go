@@ -158,6 +158,7 @@ func TestUpstream_ExecuteCallsTool(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("Execute result is nil")
+		return
 	}
 	if result.Status != http.StatusOK {
 		t.Fatalf("status = %d, want 200", result.Status)
@@ -185,6 +186,7 @@ func TestUpstream_ExecuteCallsTool(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("Execute result is nil")
+		return
 	}
 	if result.Status != http.StatusOK {
 		t.Fatalf("status = %d, want 200", result.Status)

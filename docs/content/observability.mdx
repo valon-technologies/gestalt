@@ -414,25 +414,6 @@ typical `POST /api/v1/agent/sessions/{id}/turns` trace contains
 `agent.operation`, `agent.tool.resolve`, `catalog.operation.resolve`,
 and `agent.provider.operation` spans under the inbound HTTP server span.
 
-### Authorization Provider Metrics
-
-Authorization provider metrics cover both direct provider interface calls and
-provider-backed subject-access evaluation performed by `gestaltd`.
-
-| OpenTelemetry family | Prometheus families | Meaning |
-| --- | --- | --- |
-| `gestaltd.authorization.provider.operation.*` | `gestaltd_authorization_provider_operation_count_total`, `gestaltd_authorization_provider_operation_error_count_total`, `gestaltd_authorization_provider_operation_duration_seconds` | Calls to the configured authorization provider interface |
-| `gestaltd.authorization.provider.evaluate.*` | `gestaltd_authorization_provider_evaluate_count_total`, `gestaltd_authorization_provider_evaluate_error_count_total`, `gestaltd_authorization_provider_evaluate_duration_seconds` | Batched authorization evaluations used by provider-backed subject-access checks |
-
-These metrics carry low-cardinality attributes:
-
-- `gestalt.authorization.provider` identifies the configured authorization
-  provider.
-- `gestalt.authorization.operation` identifies the provider method for
-  `gestaltd.authorization.provider.operation.*`.
-- `gestalt.authorization.scope` identifies the resource type for
-  provider-backed evaluation, such as `integration` or `operation`.
-
 ### Credential And Catalog Resolution Metrics
 
 Credential and catalog resolution metrics make the pre-invocation and agent

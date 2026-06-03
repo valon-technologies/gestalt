@@ -3024,116 +3024,171 @@ pub mod authorization_provider_client {
             self
         }
         ///
-        pub async fn evaluate(
+        pub async fn check_access(
             &mut self,
-            request: impl tonic::IntoRequest<super::AccessEvaluationRequest>,
-        ) -> std::result::Result<tonic::Response<super::AccessDecision>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::CheckAccessRequest>,
+        ) -> std::result::Result<tonic::Response<super::CheckAccessResponse>, tonic::Status>
+        {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/Evaluate",
+                "/gestalt.provider.v1.AuthorizationProvider/CheckAccess",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.AuthorizationProvider",
-                "Evaluate",
+                "CheckAccess",
             ));
             self.inner.unary(req, path, codec).await
         }
         ///
-        pub async fn evaluate_many(
+        pub async fn check_access_many(
             &mut self,
-            request: impl tonic::IntoRequest<super::AccessEvaluationsRequest>,
-        ) -> std::result::Result<tonic::Response<super::AccessEvaluationsResponse>, tonic::Status>
+            request: impl tonic::IntoRequest<super::CheckAccessManyRequest>,
+        ) -> std::result::Result<tonic::Response<super::CheckAccessManyResponse>, tonic::Status>
         {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/EvaluateMany",
+                "/gestalt.provider.v1.AuthorizationProvider/CheckAccessMany",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.AuthorizationProvider",
-                "EvaluateMany",
+                "CheckAccessMany",
             ));
             self.inner.unary(req, path, codec).await
         }
-        /** Direct search over stored relationships. Implementations must not expand
-         inherited or computed permissions here.
-        */
-        pub async fn search_resources(
+        ///
+        pub async fn list_relationships(
             &mut self,
-            request: impl tonic::IntoRequest<super::ResourceSearchRequest>,
-        ) -> std::result::Result<tonic::Response<super::ResourceSearchResponse>, tonic::Status>
+            request: impl tonic::IntoRequest<super::ListRelationshipsRequest>,
+        ) -> std::result::Result<tonic::Response<super::ListRelationshipsResponse>, tonic::Status>
         {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/SearchResources",
+                "/gestalt.provider.v1.AuthorizationProvider/ListRelationships",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.AuthorizationProvider",
-                "SearchResources",
+                "ListRelationships",
             ));
             self.inner.unary(req, path, codec).await
         }
-        /** Direct search over stored relationships. Implementations must not expand
-         inherited or computed permissions here.
-        */
-        pub async fn search_subjects(
+        ///
+        pub async fn add_relationship(
             &mut self,
-            request: impl tonic::IntoRequest<super::SubjectSearchRequest>,
-        ) -> std::result::Result<tonic::Response<super::SubjectSearchResponse>, tonic::Status>
+            request: impl tonic::IntoRequest<super::AddRelationshipRequest>,
+        ) -> std::result::Result<tonic::Response<super::AddRelationshipResponse>, tonic::Status>
         {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/SearchSubjects",
+                "/gestalt.provider.v1.AuthorizationProvider/AddRelationship",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.AuthorizationProvider",
-                "SearchSubjects",
+                "AddRelationship",
             ));
             self.inner.unary(req, path, codec).await
         }
-        /** Effective search that evaluates rewrites and inherited relations.
-        */
-        pub async fn effective_search_resources(
+        ///
+        pub async fn delete_relationship(
             &mut self,
-            request: impl tonic::IntoRequest<super::ResourceSearchRequest>,
-        ) -> std::result::Result<tonic::Response<super::ResourceSearchResponse>, tonic::Status>
+            request: impl tonic::IntoRequest<super::DeleteRelationshipRequest>,
+        ) -> std::result::Result<tonic::Response<super::DeleteRelationshipResponse>, tonic::Status>
         {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchResources",
+                "/gestalt.provider.v1.AuthorizationProvider/DeleteRelationship",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.AuthorizationProvider",
-                "EffectiveSearchResources",
+                "DeleteRelationship",
             ));
             self.inner.unary(req, path, codec).await
         }
-        /** Effective search that evaluates rewrites and inherited relations.
-        */
-        pub async fn effective_search_subjects(
+        ///
+        pub async fn set_authorization_state(
             &mut self,
-            request: impl tonic::IntoRequest<super::EffectiveSubjectSearchRequest>,
+            request: impl tonic::IntoRequest<super::SetAuthorizationStateRequest>,
+        ) -> std::result::Result<tonic::Response<super::SetAuthorizationStateResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AuthorizationProvider/SetAuthorizationState",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthorizationProvider",
+                "SetAuthorizationState",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn get_active_model_ref(
+            &mut self,
+            request: impl tonic::IntoRequest<()>,
+        ) -> std::result::Result<tonic::Response<super::GetActiveModelRefResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AuthorizationProvider/GetActiveModelRef",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthorizationProvider",
+                "GetActiveModelRef",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn set_active_model(
+            &mut self,
+            request: impl tonic::IntoRequest<super::SetActiveModelRequest>,
+        ) -> std::result::Result<tonic::Response<super::SetActiveModelResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AuthorizationProvider/SetActiveModel",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthorizationProvider",
+                "SetActiveModel",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn list_active_model_resource_types(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListActiveModelResourceTypesRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::EffectiveSubjectSearchResponse>,
+            tonic::Response<super::ListActiveModelResourceTypesResponse>,
             tonic::Status,
         > {
             self.inner.ready().await.map_err(|e| {
@@ -3141,172 +3196,12 @@ pub mod authorization_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchSubjects",
+                "/gestalt.provider.v1.AuthorizationProvider/ListActiveModelResourceTypes",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.AuthorizationProvider",
-                "EffectiveSearchSubjects",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn search_actions(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ActionSearchRequest>,
-        ) -> std::result::Result<tonic::Response<super::ActionSearchResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/SearchActions",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
-                "SearchActions",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        /** Expands one resource relation into the relationship targets that contribute
-         to it. Responses may be partial when truncated or max_depth_reached is true.
-        */
-        pub async fn expand(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ExpandRequest>,
-        ) -> std::result::Result<tonic::Response<super::ExpandResponse>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/Expand",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
-                "Expand",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn get_metadata(
-            &mut self,
-            request: impl tonic::IntoRequest<()>,
-        ) -> std::result::Result<tonic::Response<super::AuthorizationMetadata>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/GetMetadata",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
-                "GetMetadata",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn read_relationships(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ReadRelationshipsRequest>,
-        ) -> std::result::Result<tonic::Response<super::ReadRelationshipsResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/ReadRelationships",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
-                "ReadRelationships",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn write_relationships(
-            &mut self,
-            request: impl tonic::IntoRequest<super::WriteRelationshipsRequest>,
-        ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/WriteRelationships",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
-                "WriteRelationships",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn get_active_model(
-            &mut self,
-            request: impl tonic::IntoRequest<()>,
-        ) -> std::result::Result<tonic::Response<super::GetActiveModelResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/GetActiveModel",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
-                "GetActiveModel",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn list_models(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ListModelsRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListModelsResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/ListModels",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
-                "ListModels",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn write_model(
-            &mut self,
-            request: impl tonic::IntoRequest<super::WriteModelRequest>,
-        ) -> std::result::Result<tonic::Response<super::AuthorizationModelRef>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/WriteModel",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
-                "WriteModel",
+                "ListActiveModelResourceTypes",
             ));
             self.inner.unary(req, path, codec).await
         }
@@ -3326,86 +3221,53 @@ pub mod authorization_provider_server {
     #[async_trait]
     pub trait AuthorizationProvider: std::marker::Send + std::marker::Sync + 'static {
         ///
-        async fn evaluate(
+        async fn check_access(
             &self,
-            request: tonic::Request<super::AccessEvaluationRequest>,
-        ) -> std::result::Result<tonic::Response<super::AccessDecision>, tonic::Status>;
+            request: tonic::Request<super::CheckAccessRequest>,
+        ) -> std::result::Result<tonic::Response<super::CheckAccessResponse>, tonic::Status>;
         ///
-        async fn evaluate_many(
+        async fn check_access_many(
             &self,
-            request: tonic::Request<super::AccessEvaluationsRequest>,
-        ) -> std::result::Result<tonic::Response<super::AccessEvaluationsResponse>, tonic::Status>;
-        /** Direct search over stored relationships. Implementations must not expand
-         inherited or computed permissions here.
-        */
-        async fn search_resources(
+            request: tonic::Request<super::CheckAccessManyRequest>,
+        ) -> std::result::Result<tonic::Response<super::CheckAccessManyResponse>, tonic::Status>;
+        ///
+        async fn list_relationships(
             &self,
-            request: tonic::Request<super::ResourceSearchRequest>,
-        ) -> std::result::Result<tonic::Response<super::ResourceSearchResponse>, tonic::Status>;
-        /** Direct search over stored relationships. Implementations must not expand
-         inherited or computed permissions here.
-        */
-        async fn search_subjects(
+            request: tonic::Request<super::ListRelationshipsRequest>,
+        ) -> std::result::Result<tonic::Response<super::ListRelationshipsResponse>, tonic::Status>;
+        ///
+        async fn add_relationship(
             &self,
-            request: tonic::Request<super::SubjectSearchRequest>,
-        ) -> std::result::Result<tonic::Response<super::SubjectSearchResponse>, tonic::Status>;
-        /** Effective search that evaluates rewrites and inherited relations.
-        */
-        async fn effective_search_resources(
+            request: tonic::Request<super::AddRelationshipRequest>,
+        ) -> std::result::Result<tonic::Response<super::AddRelationshipResponse>, tonic::Status>;
+        ///
+        async fn delete_relationship(
             &self,
-            request: tonic::Request<super::ResourceSearchRequest>,
-        ) -> std::result::Result<tonic::Response<super::ResourceSearchResponse>, tonic::Status>;
-        /** Effective search that evaluates rewrites and inherited relations.
-        */
-        async fn effective_search_subjects(
+            request: tonic::Request<super::DeleteRelationshipRequest>,
+        ) -> std::result::Result<tonic::Response<super::DeleteRelationshipResponse>, tonic::Status>;
+        ///
+        async fn set_authorization_state(
             &self,
-            request: tonic::Request<super::EffectiveSubjectSearchRequest>,
+            request: tonic::Request<super::SetAuthorizationStateRequest>,
+        ) -> std::result::Result<tonic::Response<super::SetAuthorizationStateResponse>, tonic::Status>;
+        ///
+        async fn get_active_model_ref(
+            &self,
+            request: tonic::Request<()>,
+        ) -> std::result::Result<tonic::Response<super::GetActiveModelRefResponse>, tonic::Status>;
+        ///
+        async fn set_active_model(
+            &self,
+            request: tonic::Request<super::SetActiveModelRequest>,
+        ) -> std::result::Result<tonic::Response<super::SetActiveModelResponse>, tonic::Status>;
+        ///
+        async fn list_active_model_resource_types(
+            &self,
+            request: tonic::Request<super::ListActiveModelResourceTypesRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::EffectiveSubjectSearchResponse>,
+            tonic::Response<super::ListActiveModelResourceTypesResponse>,
             tonic::Status,
         >;
-        ///
-        async fn search_actions(
-            &self,
-            request: tonic::Request<super::ActionSearchRequest>,
-        ) -> std::result::Result<tonic::Response<super::ActionSearchResponse>, tonic::Status>;
-        /** Expands one resource relation into the relationship targets that contribute
-         to it. Responses may be partial when truncated or max_depth_reached is true.
-        */
-        async fn expand(
-            &self,
-            request: tonic::Request<super::ExpandRequest>,
-        ) -> std::result::Result<tonic::Response<super::ExpandResponse>, tonic::Status>;
-        ///
-        async fn get_metadata(
-            &self,
-            request: tonic::Request<()>,
-        ) -> std::result::Result<tonic::Response<super::AuthorizationMetadata>, tonic::Status>;
-        ///
-        async fn read_relationships(
-            &self,
-            request: tonic::Request<super::ReadRelationshipsRequest>,
-        ) -> std::result::Result<tonic::Response<super::ReadRelationshipsResponse>, tonic::Status>;
-        ///
-        async fn write_relationships(
-            &self,
-            request: tonic::Request<super::WriteRelationshipsRequest>,
-        ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
-        ///
-        async fn get_active_model(
-            &self,
-            request: tonic::Request<()>,
-        ) -> std::result::Result<tonic::Response<super::GetActiveModelResponse>, tonic::Status>;
-        ///
-        async fn list_models(
-            &self,
-            request: tonic::Request<super::ListModelsRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListModelsResponse>, tonic::Status>;
-        ///
-        async fn write_model(
-            &self,
-            request: tonic::Request<super::WriteModelRequest>,
-        ) -> std::result::Result<tonic::Response<super::AuthorizationModelRef>, tonic::Status>;
     }
     ///
     #[derive(Debug)]
@@ -3481,22 +3343,22 @@ pub mod authorization_provider_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.AuthorizationProvider/Evaluate" => {
+                "/gestalt.provider.v1.AuthorizationProvider/CheckAccess" => {
                     #[allow(non_camel_case_types)]
-                    struct EvaluateSvc<T: AuthorizationProvider>(pub Arc<T>);
+                    struct CheckAccessSvc<T: AuthorizationProvider>(pub Arc<T>);
                     impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::AccessEvaluationRequest>
-                        for EvaluateSvc<T>
+                        tonic::server::UnaryService<super::CheckAccessRequest>
+                        for CheckAccessSvc<T>
                     {
-                        type Response = super::AccessDecision;
+                        type Response = super::CheckAccessResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::AccessEvaluationRequest>,
+                            request: tonic::Request<super::CheckAccessRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::evaluate(&inner, request).await
+                                <T as AuthorizationProvider>::check_access(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -3507,7 +3369,7 @@ pub mod authorization_provider_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = EvaluateSvc(inner);
+                        let method = CheckAccessSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -3523,64 +3385,22 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthorizationProvider/EvaluateMany" => {
+                "/gestalt.provider.v1.AuthorizationProvider/CheckAccessMany" => {
                     #[allow(non_camel_case_types)]
-                    struct EvaluateManySvc<T: AuthorizationProvider>(pub Arc<T>);
+                    struct CheckAccessManySvc<T: AuthorizationProvider>(pub Arc<T>);
                     impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::AccessEvaluationsRequest>
-                        for EvaluateManySvc<T>
+                        tonic::server::UnaryService<super::CheckAccessManyRequest>
+                        for CheckAccessManySvc<T>
                     {
-                        type Response = super::AccessEvaluationsResponse;
+                        type Response = super::CheckAccessManyResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::AccessEvaluationsRequest>,
+                            request: tonic::Request<super::CheckAccessManyRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::evaluate_many(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = EvaluateManySvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AuthorizationProvider/SearchResources" => {
-                    #[allow(non_camel_case_types)]
-                    struct SearchResourcesSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::ResourceSearchRequest>
-                        for SearchResourcesSvc<T>
-                    {
-                        type Response = super::ResourceSearchResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ResourceSearchRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AuthorizationProvider>::search_resources(&inner, request)
+                                <T as AuthorizationProvider>::check_access_many(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -3592,7 +3412,7 @@ pub mod authorization_provider_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = SearchResourcesSvc(inner);
+                        let method = CheckAccessManySvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -3608,22 +3428,23 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthorizationProvider/SearchSubjects" => {
+                "/gestalt.provider.v1.AuthorizationProvider/ListRelationships" => {
                     #[allow(non_camel_case_types)]
-                    struct SearchSubjectsSvc<T: AuthorizationProvider>(pub Arc<T>);
+                    struct ListRelationshipsSvc<T: AuthorizationProvider>(pub Arc<T>);
                     impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::SubjectSearchRequest>
-                        for SearchSubjectsSvc<T>
+                        tonic::server::UnaryService<super::ListRelationshipsRequest>
+                        for ListRelationshipsSvc<T>
                     {
-                        type Response = super::SubjectSearchResponse;
+                        type Response = super::ListRelationshipsResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::SubjectSearchRequest>,
+                            request: tonic::Request<super::ListRelationshipsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::search_subjects(&inner, request).await
+                                <T as AuthorizationProvider>::list_relationships(&inner, request)
+                                    .await
                             };
                             Box::pin(fut)
                         }
@@ -3634,7 +3455,7 @@ pub mod authorization_provider_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = SearchSubjectsSvc(inner);
+                        let method = ListRelationshipsSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -3650,22 +3471,108 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchResources" => {
+                "/gestalt.provider.v1.AuthorizationProvider/AddRelationship" => {
                     #[allow(non_camel_case_types)]
-                    struct EffectiveSearchResourcesSvc<T: AuthorizationProvider>(pub Arc<T>);
+                    struct AddRelationshipSvc<T: AuthorizationProvider>(pub Arc<T>);
                     impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::ResourceSearchRequest>
-                        for EffectiveSearchResourcesSvc<T>
+                        tonic::server::UnaryService<super::AddRelationshipRequest>
+                        for AddRelationshipSvc<T>
                     {
-                        type Response = super::ResourceSearchResponse;
+                        type Response = super::AddRelationshipResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::ResourceSearchRequest>,
+                            request: tonic::Request<super::AddRelationshipRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::effective_search_resources(
+                                <T as AuthorizationProvider>::add_relationship(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = AddRelationshipSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AuthorizationProvider/DeleteRelationship" => {
+                    #[allow(non_camel_case_types)]
+                    struct DeleteRelationshipSvc<T: AuthorizationProvider>(pub Arc<T>);
+                    impl<T: AuthorizationProvider>
+                        tonic::server::UnaryService<super::DeleteRelationshipRequest>
+                        for DeleteRelationshipSvc<T>
+                    {
+                        type Response = super::DeleteRelationshipResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DeleteRelationshipRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AuthorizationProvider>::delete_relationship(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = DeleteRelationshipSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AuthorizationProvider/SetAuthorizationState" => {
+                    #[allow(non_camel_case_types)]
+                    struct SetAuthorizationStateSvc<T: AuthorizationProvider>(pub Arc<T>);
+                    impl<T: AuthorizationProvider>
+                        tonic::server::UnaryService<super::SetAuthorizationStateRequest>
+                        for SetAuthorizationStateSvc<T>
+                    {
+                        type Response = super::SetAuthorizationStateResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::SetAuthorizationStateRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AuthorizationProvider>::set_authorization_state(
                                     &inner, request,
                                 )
                                 .await
@@ -3679,7 +3586,7 @@ pub mod authorization_provider_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = EffectiveSearchResourcesSvc(inner);
+                        let method = SetAuthorizationStateSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -3695,22 +3602,102 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchSubjects" => {
+                "/gestalt.provider.v1.AuthorizationProvider/GetActiveModelRef" => {
                     #[allow(non_camel_case_types)]
-                    struct EffectiveSearchSubjectsSvc<T: AuthorizationProvider>(pub Arc<T>);
+                    struct GetActiveModelRefSvc<T: AuthorizationProvider>(pub Arc<T>);
+                    impl<T: AuthorizationProvider> tonic::server::UnaryService<()> for GetActiveModelRefSvc<T> {
+                        type Response = super::GetActiveModelRefResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AuthorizationProvider>::get_active_model_ref(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetActiveModelRefSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AuthorizationProvider/SetActiveModel" => {
+                    #[allow(non_camel_case_types)]
+                    struct SetActiveModelSvc<T: AuthorizationProvider>(pub Arc<T>);
                     impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::EffectiveSubjectSearchRequest>
-                        for EffectiveSearchSubjectsSvc<T>
+                        tonic::server::UnaryService<super::SetActiveModelRequest>
+                        for SetActiveModelSvc<T>
                     {
-                        type Response = super::EffectiveSubjectSearchResponse;
+                        type Response = super::SetActiveModelResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::EffectiveSubjectSearchRequest>,
+                            request: tonic::Request<super::SetActiveModelRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::effective_search_subjects(
+                                <T as AuthorizationProvider>::set_active_model(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = SetActiveModelSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AuthorizationProvider/ListActiveModelResourceTypes" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListActiveModelResourceTypesSvc<T: AuthorizationProvider>(pub Arc<T>);
+                    impl<T: AuthorizationProvider>
+                        tonic::server::UnaryService<super::ListActiveModelResourceTypesRequest>
+                        for ListActiveModelResourceTypesSvc<T>
+                    {
+                        type Response = super::ListActiveModelResourceTypesResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ListActiveModelResourceTypesRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AuthorizationProvider>::list_active_model_resource_types(
                                     &inner, request,
                                 )
                                 .await
@@ -3724,329 +3711,7 @@ pub mod authorization_provider_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = EffectiveSearchSubjectsSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AuthorizationProvider/SearchActions" => {
-                    #[allow(non_camel_case_types)]
-                    struct SearchActionsSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::ActionSearchRequest>
-                        for SearchActionsSvc<T>
-                    {
-                        type Response = super::ActionSearchResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ActionSearchRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AuthorizationProvider>::search_actions(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = SearchActionsSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AuthorizationProvider/Expand" => {
-                    #[allow(non_camel_case_types)]
-                    struct ExpandSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider> tonic::server::UnaryService<super::ExpandRequest> for ExpandSvc<T> {
-                        type Response = super::ExpandResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ExpandRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AuthorizationProvider>::expand(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = ExpandSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AuthorizationProvider/GetMetadata" => {
-                    #[allow(non_camel_case_types)]
-                    struct GetMetadataSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider> tonic::server::UnaryService<()> for GetMetadataSvc<T> {
-                        type Response = super::AuthorizationMetadata;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AuthorizationProvider>::get_metadata(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = GetMetadataSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AuthorizationProvider/ReadRelationships" => {
-                    #[allow(non_camel_case_types)]
-                    struct ReadRelationshipsSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::ReadRelationshipsRequest>
-                        for ReadRelationshipsSvc<T>
-                    {
-                        type Response = super::ReadRelationshipsResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ReadRelationshipsRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AuthorizationProvider>::read_relationships(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = ReadRelationshipsSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AuthorizationProvider/WriteRelationships" => {
-                    #[allow(non_camel_case_types)]
-                    struct WriteRelationshipsSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::WriteRelationshipsRequest>
-                        for WriteRelationshipsSvc<T>
-                    {
-                        type Response = ();
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::WriteRelationshipsRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AuthorizationProvider>::write_relationships(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = WriteRelationshipsSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AuthorizationProvider/GetActiveModel" => {
-                    #[allow(non_camel_case_types)]
-                    struct GetActiveModelSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider> tonic::server::UnaryService<()> for GetActiveModelSvc<T> {
-                        type Response = super::GetActiveModelResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AuthorizationProvider>::get_active_model(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = GetActiveModelSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AuthorizationProvider/ListModels" => {
-                    #[allow(non_camel_case_types)]
-                    struct ListModelsSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::ListModelsRequest> for ListModelsSvc<T>
-                    {
-                        type Response = super::ListModelsResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ListModelsRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AuthorizationProvider>::list_models(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = ListModelsSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AuthorizationProvider/WriteModel" => {
-                    #[allow(non_camel_case_types)]
-                    struct WriteModelSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::WriteModelRequest> for WriteModelSvc<T>
-                    {
-                        type Response = super::AuthorizationModelRef;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::WriteModelRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AuthorizationProvider>::write_model(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = WriteModelSvc(inner);
+                        let method = ListActiveModelResourceTypesSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
