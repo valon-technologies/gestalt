@@ -3755,7 +3755,7 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 		if !ok {
 			return nil
 		}
-		staticManifest, err := portableStaticValidationManifest(entry.ResolvedManifest, entry.ResolvedManifestPath, entry.HasReleaseMetadataSource())
+		staticManifest, err := portableStaticValidationManifest(entry.ResolvedManifest, entry.ResolvedManifestPath, lockEntryUsesPortableStaticManifest(entry, lockEntry))
 		if err != nil {
 			return fmt.Errorf("project static validation manifest for %s: %w", name, err)
 		}
@@ -3897,11 +3897,11 @@ func synthesizedCommittedOwnedUIEntry(paths lifecyclePaths, cfg *config.Config, 
 	return providerRequiresCommittedLock(cfg.Apps[owner])
 }
 
-func portableStaticValidationManifest(manifest *providermanifestv1.Manifest, manifestPath string, releaseBacked bool) (*providermanifestv1.Manifest, error) {
+func portableStaticValidationManifest(manifest *providermanifestv1.Manifest, manifestPath string, platformNeutral bool) (*providermanifestv1.Manifest, error) {
 	if manifest == nil {
 		return nil, nil
 	}
-	if releaseBacked {
+	if platformNeutral {
 		cloned, err := packageio.CloneManifest(manifest)
 		if err != nil {
 			return nil, err
