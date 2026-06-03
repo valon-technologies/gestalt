@@ -1009,6 +1009,61 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 	}
 }
 
+func TestValidateAuthorizationRelationshipAllowsExplicitSubjectSetTarget(t *testing.T) {
+	t.Parallel()
+
+	err := ValidateStructure(&Config{
+		APIVersion: ConfigAPIVersion,
+		Authorization: AuthorizationConfig{
+			Models: map[string]AuthorizationModelDef{
+				"default": {
+					ResourceTypes: map[string]AuthorizationResourceTypeDef{
+						"team": {
+							Relations: map[string]AuthorizationRelationDef{
+								"member": {SubjectTypes: []string{"subject"}},
+							},
+						},
+						"AuthorizationProvider": {
+							Relations: map[string]AuthorizationRelationDef{
+								"admin": {
+									AllowedTargets: []AuthorizationAllowedTargetDef{
+										{SubjectType: "subject"},
+										{SubjectSet: &AuthorizationSubjectSetTargetDef{
+											ResourceType: "team",
+											Relation:     "member",
+										}},
+									},
+								},
+							},
+							Actions: map[string]AuthorizationActionDef{
+								"SetAuthorizationState": {Relations: []string{"admin"}},
+							},
+						},
+					},
+				},
+			},
+			Relationships: []AuthorizationRelationshipDef{
+				{
+					Subject:  AuthorizationSubjectDef{Type: "subject", ID: "user:michael.wang@valon.com"},
+					Relation: "member",
+					Resource: AuthorizationResourceDef{Type: "team", ID: "gestalt_admins"},
+				},
+				{
+					Target: AuthorizationRelationshipTargetDef{SubjectSet: &AuthorizationSubjectSetDef{
+						Resource: AuthorizationResourceDef{Type: "team", ID: "gestalt_admins"},
+						Relation: "member",
+					}},
+					Relation: "admin",
+					Resource: AuthorizationResourceDef{Type: "AuthorizationProvider", ID: "authorization"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ValidateStructure error = %v, want nil", err)
+	}
+}
+
 func TestNormalizedAuthorizationRelationshipTargetDefCopiesSubjectSet(t *testing.T) {
 	t.Parallel()
 

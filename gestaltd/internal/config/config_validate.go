@@ -1696,8 +1696,14 @@ func validateAuthorizationAllowedTargetDef(path string, target AuthorizationAllo
 }
 
 func validateAuthorizationRelationshipDef(path string, relationship AuthorizationRelationshipDef, resourceTypes map[string]map[string]AuthorizationRelationDef) error {
-	if err := validateAuthorizationSubjectDef(path+".subject", relationship.Subject); err != nil {
-		return err
+	if hasAuthorizationRelationshipTarget(relationship.Target) {
+		if err := validateAuthorizationRelationshipTargetDef(path+".target", relationship.Target, resourceTypes); err != nil {
+			return err
+		}
+	} else {
+		if err := validateAuthorizationSubjectDef(path+".subject", relationship.Subject); err != nil {
+			return err
+		}
 	}
 	if strings.TrimSpace(relationship.Relation) == "" {
 		return fmt.Errorf("config validation: %s.relation is required", path)
@@ -1713,13 +1719,14 @@ func validateAuthorizationRelationshipDef(path string, relationship Authorizatio
 	if _, ok := relations[strings.TrimSpace(relationship.Relation)]; !ok {
 		return fmt.Errorf("config validation: %s.relation references unknown relation %q for resource type %q", path, relationship.Relation, resourceType)
 	}
-	if err := validateAuthorizationRelationshipTargetDef(path+".target", relationship.Target, resourceTypes); err != nil {
-		return err
-	}
 	if err := validateAuthorizationSourceMetadata(path+".source", relationship.Source); err != nil {
 		return err
 	}
 	return nil
+}
+
+func hasAuthorizationRelationshipTarget(target AuthorizationRelationshipTargetDef) bool {
+	return target.Subject != nil || target.Resource != nil || target.SubjectSet != nil
 }
 
 func validateAuthorizationMapKey(path, key string) error {
