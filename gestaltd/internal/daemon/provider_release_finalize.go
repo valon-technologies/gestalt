@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
@@ -286,6 +287,10 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 	if err != nil {
 		return nil, fmt.Errorf("project static validation manifest: %w", err)
 	}
+	staticCatalog, err := staticValidationCatalogForRelease(manifest, archives)
+	if err != nil {
+		return nil, err
+	}
 
 	metadata := &providerReleaseMetadata{
 		Schema:        providerReleaseSchemaName,
@@ -297,6 +302,7 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 		Artifacts:     make(map[string]providerReleaseArtifact, len(archives)),
 		StaticValidation: &providerReleaseStaticValidationData{
 			Manifest: staticManifest,
+			Catalog:  staticCatalog,
 		},
 	}
 	for _, archive := range archives {
@@ -307,6 +313,52 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 		}
 	}
 	return metadata, nil
+}
+
+func staticValidationCatalogForRelease(manifest *providermanifestv1.Manifest, archives []releaseArchive) (*catalog.Catalog, error) {
+	if manifest == nil || len(archives) == 0 {
+		return nil, nil
+	}
+	var firstCatalog *catalog.Catalog
+	var firstData []byte
+	for i, archive := range archives {
+		data, cat, err := staticValidationCatalogFromArchive(manifest, archive)
+		if err != nil {
+			return nil, err
+		}
+		if i == 0 {
+			firstData = data
+			firstCatalog = cat
+			continue
+		}
+		if !bytes.Equal(bytes.TrimSpace(firstData), bytes.TrimSpace(data)) {
+			return nil, fmt.Errorf("static validation catalog in %s does not match %s", filepath.Base(archive.Path), filepath.Base(archives[0].Path))
+		}
+	}
+	return firstCatalog, nil
+}
+
+func staticValidationCatalogFromArchive(manifest *providermanifestv1.Manifest, archive releaseArchive) ([]byte, *catalog.Catalog, error) {
+	data, err := packageio.ReadArchiveEntry(archive.Path, packageio.StaticCatalogFile)
+	if err != nil {
+		if !packageio.StaticCatalogRequired(manifest) && strings.Contains(err.Error(), "does not contain") {
+			return nil, nil, nil
+		}
+		return nil, nil, fmt.Errorf("read static validation catalog from %s: %w", filepath.Base(archive.Path), err)
+	}
+	var cat catalog.Catalog
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&cat); err != nil {
+		return nil, nil, fmt.Errorf("decode static validation catalog from %s: %w", filepath.Base(archive.Path), err)
+	}
+	if strings.TrimSpace(cat.Name) == "" {
+		cat.Name = manifest.Source
+	}
+	if err := cat.Validate(); err != nil {
+		return nil, nil, fmt.Errorf("validate static validation catalog from %s: %w", filepath.Base(archive.Path), err)
+	}
+	return data, &cat, nil
 }
 
 func providerReleaseArtifactTarget(manifest *providermanifestv1.Manifest, archive releaseArchive) string {

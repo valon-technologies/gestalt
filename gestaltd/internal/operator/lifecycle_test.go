@@ -1129,7 +1129,7 @@ server:
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
-	if lock.Providers["caller"].Executable == "" || lock.Providers["target"].Executable == "" {
+	if lock.Providers.App["caller"].Executable == "" || lock.Providers.App["target"].Executable == "" {
 		t.Fatalf("prepared app executables = %#v", lock.Providers)
 	}
 }
@@ -1726,7 +1726,7 @@ server:
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	delete(lock.UIs, "roadmap")
+	delete(lock.Providers.UI, "roadmap")
 	if err := WriteLockfile(lockPath, lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
@@ -1871,9 +1871,9 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	pluginLock := lock.Providers["roadmap"]
-	pluginLock.Manifest = ""
-	lock.Providers["roadmap"] = pluginLock
+	pluginLock := lock.Providers.App["roadmap"]
+	pluginLock.ArtifactManifest = ""
+	lock.Providers.App["roadmap"] = pluginLock
 	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
@@ -1903,11 +1903,11 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	if got := rewrittenLock.Providers["roadmap"].Manifest; got != "" {
-		t.Fatalf("lock.Providers[roadmap].Manifest = %q, want stale value preserved", got)
+	if got := rewrittenLock.Providers.App["roadmap"].ArtifactManifest; got != "" {
+		t.Fatalf("lock.Providers.App[roadmap].ArtifactManifest = %q, want stale value preserved", got)
 	}
-	if len(rewrittenLock.UIs) != 0 {
-		t.Fatalf("lock.UIs = %#v, want no separate UI entries for in-package owned UI", rewrittenLock.UIs)
+	if len(rewrittenLock.Providers.UI) != 0 {
+		t.Fatalf("lock.Providers.UI = %#v, want no separate UI entries for in-package owned UI", rewrittenLock.Providers.UI)
 	}
 }
 
@@ -1964,13 +1964,15 @@ server:
 	}
 	paths := lifecyclePathsForConfig(cfgPath)
 	staleLock := &Lockfile{
-		Providers: map[string]LockEntry{
-			"roadmap": {
-				Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Apps["roadmap"], paths.configDir),
-				Source:      srv.URL + "/providers/roadmap-plugin/v" + version + "/provider-release.yaml",
-				Version:     version,
-				Archives: map[string]LockArchive{
-					"generic": {URL: "https://example.com/roadmap.tar.gz", SHA256: "abc123"},
+		Providers: providerLockBuckets{
+			App: map[string]LockEntry{
+				"roadmap": {
+					InputDigest: mustFingerprint(t, "roadmap", loadedCfg.Apps["roadmap"], paths.configDir),
+					Source:      srv.URL + "/providers/roadmap-plugin/v" + version + "/provider-release.yaml",
+					Version:     version,
+					Archives: map[string]LockArchive{
+						"generic": {URL: "https://example.com/roadmap.tar.gz", SHA256: "abc123"},
+					},
 				},
 			},
 		},
@@ -1995,11 +1997,11 @@ server:
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	if _, ok := rewrittenLock.Providers["roadmap"].Archives["generic"]; ok {
-		t.Fatalf("rewritten lock still contains generic archive: %#v", rewrittenLock.Providers["roadmap"].Archives)
+	if _, ok := rewrittenLock.Providers.App["roadmap"].Archives["generic"]; ok {
+		t.Fatalf("rewritten lock still contains generic archive: %#v", rewrittenLock.Providers.App["roadmap"].Archives)
 	}
-	if _, ok := rewrittenLock.Providers["roadmap"].Archives[providerpkg.CurrentPlatformString()]; !ok {
-		t.Fatalf("rewritten lock missing current platform archive: %#v", rewrittenLock.Providers["roadmap"].Archives)
+	if _, ok := rewrittenLock.Providers.App["roadmap"].Archives[providerpkg.CurrentPlatformString()]; !ok {
+		t.Fatalf("rewritten lock missing current platform archive: %#v", rewrittenLock.Providers.App["roadmap"].Archives)
 	}
 }
 
@@ -2109,9 +2111,9 @@ server:
 	}
 	paths := lifecyclePathsForConfig(cfgPath)
 	lock := normalizeLockfile(initialLock)
-	lock.Providers = map[string]LockEntry{
+	lock.Providers.App = map[string]LockEntry{
 		"roadmap": {
-			Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Apps["roadmap"], paths.configDir),
+			InputDigest: mustFingerprint(t, "roadmap", loadedCfg.Apps["roadmap"], paths.configDir),
 			Source:      srv.URL + "/providers/roadmap-plugin/v" + newVersion + "/provider-release.yaml",
 			Package:     pluginRef,
 			Kind:        providermanifestv1.KindApp,
@@ -2194,22 +2196,22 @@ server:
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
 
-	lock.Providers["example"] = LockEntry{
-		Fingerprint: lock.Providers["example"].Fingerprint,
-		Source:      lock.Providers["example"].Source,
-		Version:     lock.Providers["example"].Version,
-		Archives:    lock.Providers["example"].Archives,
-		Manifest:    "stale/provider/manifest.json",
-		Executable:  "stale/provider/executable",
+	lock.Providers.App["example"] = LockEntry{
+		InputDigest:      lock.Providers.App["example"].InputDigest,
+		Source:           lock.Providers.App["example"].Source,
+		Version:          lock.Providers.App["example"].Version,
+		Archives:         lock.Providers.App["example"].Archives,
+		ArtifactManifest: "stale/provider/manifest.json",
+		Executable:       "stale/provider/executable",
 	}
-	indexedDBEntry := lock.IndexedDBs["main"]
-	indexedDBEntry.Manifest = "stale/indexeddb/manifest.json"
+	indexedDBEntry := lock.Providers.IndexedDB["main"]
+	indexedDBEntry.ArtifactManifest = "stale/indexeddb/manifest.json"
 	indexedDBEntry.Executable = "stale/indexeddb/executable"
-	lock.IndexedDBs["main"] = indexedDBEntry
-	uiEntry := lock.UIs["roadmap"]
-	uiEntry.Manifest = "stale/ui/manifest.json"
+	lock.Providers.IndexedDB["main"] = indexedDBEntry
+	uiEntry := lock.Providers.UI["roadmap"]
+	uiEntry.ArtifactManifest = "stale/ui/manifest.json"
 	uiEntry.AssetRoot = "stale/ui/assets"
-	lock.UIs["roadmap"] = uiEntry
+	lock.Providers.UI["roadmap"] = uiEntry
 	lockPath := filepath.Join(dir, LockfileName)
 	if err := WriteLockfile(lockPath, lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
@@ -3540,18 +3542,20 @@ func TestAttachStaticValidationMetadataProjectsPortableArchiveBackedSources(t *t
 		"linux/amd64":  {URL: "https://example.invalid/linux-amd64.tar.gz", SHA256: "linux-sha"},
 	}
 	lock := &Lockfile{
-		Providers: map[string]LockEntry{
-			"release":                          {},
-			"local":                            {},
-			"gitSource":                        {},
-			"gitSnapshot":                      {SourceRef: gitSnapshotLockRef, Archives: archives},
-			"gitSnapshotMissingSourceRef":      {Archives: archives},
-			"gitSnapshotSourceMaterialization": {SourceRef: &gitSnapshotSourceMaterializationRef, Archives: archives},
-			"gitSnapshotNoArchives":            {SourceRef: gitSourceLockRef(cfg.Apps["gitSnapshotNoArchives"], "gestalt-ref")},
-			"gitSnapshotWrongSourceRefType":    {SourceRef: &gitSnapshotWrongTypeRef, Archives: archives},
-		},
-		Agents: map[string]LockEntry{
-			"agentSnapshot": {SourceRef: gitSourceLockRef(cfg.Providers.Agent["agentSnapshot"], "gestalt-ref"), Archives: archives},
+		Providers: providerLockBuckets{
+			App: map[string]LockEntry{
+				"release":                          {},
+				"local":                            {},
+				"gitSource":                        {},
+				"gitSnapshot":                      {SourceRef: gitSnapshotLockRef, Archives: archives},
+				"gitSnapshotMissingSourceRef":      {Archives: archives},
+				"gitSnapshotSourceMaterialization": {SourceRef: &gitSnapshotSourceMaterializationRef, Archives: archives},
+				"gitSnapshotNoArchives":            {SourceRef: gitSourceLockRef(cfg.Apps["gitSnapshotNoArchives"], "gestalt-ref")},
+				"gitSnapshotWrongSourceRefType":    {SourceRef: &gitSnapshotWrongTypeRef, Archives: archives},
+			},
+			Agent: map[string]LockEntry{
+				"agentSnapshot": {SourceRef: gitSourceLockRef(cfg.Providers.Agent["agentSnapshot"], "gestalt-ref"), Archives: archives},
+			},
 		},
 	}
 
@@ -3559,8 +3563,8 @@ func TestAttachStaticValidationMetadataProjectsPortableArchiveBackedSources(t *t
 		t.Fatalf("attachStaticValidationMetadata: %v", err)
 	}
 
-	for _, name := range []string{"release", "gitSnapshot"} {
-		staticManifest := lock.Providers[name].StaticManifest
+	for _, name := range []string{"release", "local", "gitSource", "gitSnapshot", "gitSnapshotMissingSourceRef", "gitSnapshotSourceMaterialization", "gitSnapshotNoArchives", "gitSnapshotWrongSourceRefType"} {
+		staticManifest := lock.Providers.App[name].ValidationManifest
 		if len(staticManifest.Artifacts) != 0 {
 			t.Fatalf("%s artifacts = %+v, want nil", name, staticManifest.Artifacts)
 		}
@@ -3568,21 +3572,12 @@ func TestAttachStaticValidationMetadataProjectsPortableArchiveBackedSources(t *t
 			t.Fatalf("%s entrypoint = %+v, want nil", name, staticManifest.Entrypoint)
 		}
 	}
-	agentManifest := lock.Agents["agentSnapshot"].StaticManifest
+	agentManifest := lock.Providers.Agent["agentSnapshot"].ValidationManifest
 	if len(agentManifest.Artifacts) != 0 {
 		t.Fatalf("agentSnapshot artifacts = %+v, want nil", agentManifest.Artifacts)
 	}
 	if agentManifest.Entrypoint != nil {
 		t.Fatalf("agentSnapshot entrypoint = %+v, want nil", agentManifest.Entrypoint)
-	}
-	for _, name := range []string{"local", "gitSource", "gitSnapshotMissingSourceRef", "gitSnapshotSourceMaterialization", "gitSnapshotNoArchives", "gitSnapshotWrongSourceRefType"} {
-		staticManifest := lock.Providers[name].StaticManifest
-		if len(staticManifest.Artifacts) != 1 {
-			t.Fatalf("%s artifacts = %+v, want preserved runtime artifact", name, staticManifest.Artifacts)
-		}
-		if staticManifest.Entrypoint == nil {
-			t.Fatalf("%s entrypoint = nil, want original entrypoint", name)
-		}
 	}
 }
 
@@ -3627,15 +3622,17 @@ func TestArchiveBackedGitSnapshotStaticProjectionAvoidsAgentPlatformDrift(t *tes
 			},
 		}
 		lock := &Lockfile{
-			Agents: map[string]LockEntry{
-				"deep": {
-					Fingerprint: "same-input-digest",
-					Package:     "github.com/acme/provider/agent",
-					Kind:        providermanifestv1.KindAgent,
-					Runtime:     providerReleaseRuntimeExecutable,
-					SourceRef:   gitSourceLockRef(cfg.Providers.Agent["deep"], "gestalt-ref"),
-					Version:     "1.2.3",
-					Archives:    archives,
+			Providers: providerLockBuckets{
+				Agent: map[string]LockEntry{
+					"deep": {
+						InputDigest: "same-input-digest",
+						Package:     "github.com/acme/provider/agent",
+						Kind:        providermanifestv1.KindAgent,
+						Runtime:     providerReleaseRuntimeExecutable,
+						SourceRef:   gitSourceLockRef(cfg.Providers.Agent["deep"], "gestalt-ref"),
+						Version:     "1.2.3",
+						Archives:    archives,
+					},
 				},
 			},
 		}
@@ -3651,7 +3648,7 @@ func TestArchiveBackedGitSnapshotStaticProjectionAvoidsAgentPlatformDrift(t *tes
 		t.Fatalf("platform-specific agent manifests produced lock drift: %+v", drifts)
 	}
 
-	entry := darwinLock.Agents["deep"]
+	entry := darwinLock.Providers.Agent["deep"]
 	if got := entry.Archives["darwin/arm64"].SHA256; got != "darwin-sha" {
 		t.Fatalf("darwin archive SHA256 = %q, want darwin-sha", got)
 	}
@@ -3661,11 +3658,11 @@ func TestArchiveBackedGitSnapshotStaticProjectionAvoidsAgentPlatformDrift(t *tes
 	if entry.SourceRef == nil || entry.SourceRef.Type != gitSourceRefType || entry.SourceRef.Materialization != gitMaterializationSnapshot {
 		t.Fatalf("sourceRef = %+v, want git snapshot sourceRef", entry.SourceRef)
 	}
-	if entry.StaticManifest == nil || len(entry.StaticManifest.Artifacts) != 0 {
-		t.Fatalf("static manifest artifacts = %+v, want nil", entry.StaticManifest)
+	if entry.ValidationManifest == nil || len(entry.ValidationManifest.Artifacts) != 0 {
+		t.Fatalf("static manifest artifacts = %+v, want nil", entry.ValidationManifest)
 	}
-	if entry.StaticManifest.Entrypoint != nil {
-		t.Fatalf("static manifest entrypoint = %+v, want nil", entry.StaticManifest.Entrypoint)
+	if entry.ValidationManifest.Entrypoint != nil {
+		t.Fatalf("static manifest entrypoint = %+v, want nil", entry.ValidationManifest.Entrypoint)
 	}
 
 	lockPath := filepath.Join(t.TempDir(), LockfileName)
@@ -3676,7 +3673,7 @@ func TestArchiveBackedGitSnapshotStaticProjectionAvoidsAgentPlatformDrift(t *tes
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	readBackManifest := readBack.Agents["deep"].StaticManifest
+	readBackManifest := readBack.Providers.Agent["deep"].ValidationManifest
 	if readBackManifest == nil || len(readBackManifest.Artifacts) != 0 {
 		t.Fatalf("read-back static manifest artifacts = %+v, want nil", readBackManifest)
 	}
@@ -3685,7 +3682,7 @@ func TestArchiveBackedGitSnapshotStaticProjectionAvoidsAgentPlatformDrift(t *tes
 	}
 }
 
-func TestLockMatchesConfig_RemoteS3UsesResourceNameFingerprint(t *testing.T) {
+func TestLockFreshForConfig_RemoteS3UsesResourceNameFingerprint(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -3704,12 +3701,12 @@ func TestLockMatchesConfig_RemoteS3UsesResourceNameFingerprint(t *testing.T) {
 		t.Fatalf("MkdirAll artifacts: %v", err)
 	}
 	lockEntry := LockEntry{
-		Source:      cfg.Providers.S3["assets"].SourceRemoteLocation(),
-		Version:     "0.0.1-alpha.1",
-		Fingerprint: mustFingerprint(t, "assets", cfg.Providers.S3["assets"], paths.configDir),
-		Manifest:    filepath.ToSlash(filepath.Join("s3", "assets", "manifest.yaml")),
+		Source:           cfg.Providers.S3["assets"].SourceRemoteLocation(),
+		Version:          "0.0.1-alpha.1",
+		InputDigest:      mustFingerprint(t, "assets", cfg.Providers.S3["assets"], paths.configDir),
+		ArtifactManifest: filepath.ToSlash(filepath.Join("s3", "assets", "manifest.yaml")),
 	}
-	manifestPath := resolveLockPath(paths.artifactsDir, lockEntry.Manifest)
+	manifestPath := resolveLockPath(paths.artifactsDir, lockEntry.ArtifactManifest)
 	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll manifest dir: %v", err)
 	}
@@ -3718,12 +3715,14 @@ func TestLockMatchesConfig_RemoteS3UsesResourceNameFingerprint(t *testing.T) {
 	}
 
 	lock := &Lockfile{
-		S3: map[string]LockEntry{
-			"assets": lockEntry,
+		Providers: providerLockBuckets{
+			S3: map[string]LockEntry{
+				"assets": lockEntry,
+			},
 		},
 	}
-	if !lockMatchesConfig(cfg, paths, lock) {
-		t.Fatal("lockMatchesConfig returned false for matching remote S3 lock entry")
+	if !lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{RequireArtifacts: true}) {
+		t.Fatal("lockFreshForConfig returned false for matching remote S3 lock entry")
 	}
 }
 
@@ -4048,98 +4047,100 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	lockPath := filepath.Join(dir, LockfileName)
 	want := &Lockfile{
-		Providers: map[string]LockEntry{
-			"example": {
-				Fingerprint: "provider-fp",
-				Source:      "github.com/test-org/test-repo/test-plugin",
-				Version:     "1.0.0",
-				Archives: map[string]LockArchive{
-					"darwin/arm64": {URL: "https://example.com/example.tar.gz", SHA256: "abc123"},
-				},
-				Manifest:   ".gestaltd/providers/example/manifest.json",
-				Executable: ".gestaltd/providers/example/artifacts/darwin/arm64/provider",
-			},
-		},
-		Authentication: map[string]LockEntry{
-			"oauth": {
-				Fingerprint: "auth-fp",
-				Source:      "github.com/test-org/test-repo/auth-oauth",
-				Version:     "1.0.1",
-				Archives: map[string]LockArchive{
-					"darwin/arm64": {URL: "https://example.com/auth-oauth.tar.gz", SHA256: "auth123"},
-				},
-				Manifest:   ".gestaltd/providers/auth/oauth/manifest.json",
-				Executable: ".gestaltd/providers/auth/oauth/artifacts/darwin/arm64/auth-oauth",
-			},
-		},
-		IndexedDBs: map[string]LockEntry{
-			"main": {
-				Fingerprint: "indexeddb-main-fp",
-				Source:      "github.com/test-org/test-repo/indexeddb-main",
-				Version:     "1.1.0",
-				Archives: map[string]LockArchive{
-					"darwin/arm64": {URL: "https://example.com/indexeddb-main.tar.gz", SHA256: "abc999"},
-				},
-				Manifest:   "indexeddb/main/manifest.json",
-				Executable: "indexeddb/main/artifacts/darwin/arm64/indexeddb-main",
-			},
-			"archive": {
-				Fingerprint: "indexeddb-archive-fp",
-				Source:      "github.com/test-org/test-repo/indexeddb-archive",
-				Version:     "1.2.0",
-				Archives: map[string]LockArchive{
-					"darwin/arm64": {URL: "https://example.com/indexeddb-archive.tar.gz", SHA256: "def999"},
-				},
-				Manifest:   "indexeddb/archive/manifest.json",
-				Executable: "indexeddb/archive/artifacts/darwin/arm64/indexeddb-archive",
-			},
-		},
-		Workflows: map[string]LockEntry{
-			"temporal": {
-				Fingerprint: "workflow-temporal-fp",
-				Source:      "github.com/test-org/test-repo/workflow-temporal",
-				Version:     "1.3.0",
-				Archives: map[string]LockArchive{
-					"darwin/arm64": {URL: "https://example.com/workflow-temporal.tar.gz", SHA256: "workflow123"},
-				},
-				Manifest:   "workflow/temporal/manifest.json",
-				Executable: "workflow/temporal/artifacts/darwin/arm64/workflow-temporal",
-			},
-		},
-		Telemetry: map[string]LockEntry{
-			"default": {
-				Fingerprint: "telemetry-fp",
-				Source:      "github.com/test-org/test-repo/telemetry-declarative",
-				Kind:        providermanifestv1.KindApp,
-				Runtime:     providerReleaseRuntimeDeclarative,
-				Version:     "1.4.0",
-				Archives: map[string]LockArchive{
-					"generic": {URL: "https://example.com/telemetry.tar.gz", SHA256: "telemetry123"},
+		Providers: providerLockBuckets{
+			App: map[string]LockEntry{
+				"example": {
+					InputDigest: "provider-fp",
+					Source:      "github.com/test-org/test-repo/test-plugin",
+					Version:     "1.0.0",
+					Archives: map[string]LockArchive{
+						"darwin/arm64": {URL: "https://example.com/example.tar.gz", SHA256: "abc123"},
+					},
+					ArtifactManifest: ".gestaltd/providers/example/manifest.json",
+					Executable:       ".gestaltd/providers/example/artifacts/darwin/arm64/provider",
 				},
 			},
-		},
-		Audit: map[string]LockEntry{
-			"default": {
-				Fingerprint: "audit-fp",
-				Source:      "github.com/test-org/test-repo/audit-declarative",
-				Kind:        providermanifestv1.KindApp,
-				Runtime:     providerReleaseRuntimeDeclarative,
-				Version:     "1.5.0",
-				Archives: map[string]LockArchive{
-					"generic": {URL: "https://example.com/audit.tar.gz", SHA256: "audit123"},
+			Authentication: map[string]LockEntry{
+				"oauth": {
+					InputDigest: "auth-fp",
+					Source:      "github.com/test-org/test-repo/auth-oauth",
+					Version:     "1.0.1",
+					Archives: map[string]LockArchive{
+						"darwin/arm64": {URL: "https://example.com/auth-oauth.tar.gz", SHA256: "auth123"},
+					},
+					ArtifactManifest: ".gestaltd/providers/auth/oauth/manifest.json",
+					Executable:       ".gestaltd/providers/auth/oauth/artifacts/darwin/arm64/auth-oauth",
 				},
 			},
-		},
-		UIs: map[string]LockEntry{
-			"roadmap": {
-				Fingerprint: "ui-fp",
-				Source:      "github.com/test-org/test-repo/test-ui",
-				Version:     "2.0.0",
-				Archives: map[string]LockArchive{
-					"generic": {URL: "https://example.com/ui.tar.gz", SHA256: "def456"},
+			IndexedDB: map[string]LockEntry{
+				"main": {
+					InputDigest: "indexeddb-main-fp",
+					Source:      "github.com/test-org/test-repo/indexeddb-main",
+					Version:     "1.1.0",
+					Archives: map[string]LockArchive{
+						"darwin/arm64": {URL: "https://example.com/indexeddb-main.tar.gz", SHA256: "abc999"},
+					},
+					ArtifactManifest: "indexeddb/main/manifest.json",
+					Executable:       "indexeddb/main/artifacts/darwin/arm64/indexeddb-main",
 				},
-				Manifest:  ".gestaltd/ui/roadmap/manifest.json",
-				AssetRoot: ".gestaltd/ui/roadmap/assets",
+				"archive": {
+					InputDigest: "indexeddb-archive-fp",
+					Source:      "github.com/test-org/test-repo/indexeddb-archive",
+					Version:     "1.2.0",
+					Archives: map[string]LockArchive{
+						"darwin/arm64": {URL: "https://example.com/indexeddb-archive.tar.gz", SHA256: "def999"},
+					},
+					ArtifactManifest: "indexeddb/archive/manifest.json",
+					Executable:       "indexeddb/archive/artifacts/darwin/arm64/indexeddb-archive",
+				},
+			},
+			Workflow: map[string]LockEntry{
+				"temporal": {
+					InputDigest: "workflow-temporal-fp",
+					Source:      "github.com/test-org/test-repo/workflow-temporal",
+					Version:     "1.3.0",
+					Archives: map[string]LockArchive{
+						"darwin/arm64": {URL: "https://example.com/workflow-temporal.tar.gz", SHA256: "workflow123"},
+					},
+					ArtifactManifest: "workflow/temporal/manifest.json",
+					Executable:       "workflow/temporal/artifacts/darwin/arm64/workflow-temporal",
+				},
+			},
+			Telemetry: map[string]LockEntry{
+				"default": {
+					InputDigest: "telemetry-fp",
+					Source:      "github.com/test-org/test-repo/telemetry-declarative",
+					Kind:        providermanifestv1.KindApp,
+					Runtime:     providerReleaseRuntimeDeclarative,
+					Version:     "1.4.0",
+					Archives: map[string]LockArchive{
+						"generic": {URL: "https://example.com/telemetry.tar.gz", SHA256: "telemetry123"},
+					},
+				},
+			},
+			Audit: map[string]LockEntry{
+				"default": {
+					InputDigest: "audit-fp",
+					Source:      "github.com/test-org/test-repo/audit-declarative",
+					Kind:        providermanifestv1.KindApp,
+					Runtime:     providerReleaseRuntimeDeclarative,
+					Version:     "1.5.0",
+					Archives: map[string]LockArchive{
+						"generic": {URL: "https://example.com/audit.tar.gz", SHA256: "audit123"},
+					},
+				},
+			},
+			UI: map[string]LockEntry{
+				"roadmap": {
+					InputDigest: "ui-fp",
+					Source:      "github.com/test-org/test-repo/test-ui",
+					Version:     "2.0.0",
+					Archives: map[string]LockArchive{
+						"generic": {URL: "https://example.com/ui.tar.gz", SHA256: "def456"},
+					},
+					ArtifactManifest: ".gestaltd/ui/roadmap/manifest.json",
+					AssetRoot:        ".gestaltd/ui/roadmap/assets",
+				},
 			},
 		},
 	}
@@ -4157,25 +4158,25 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if strings.Contains(string(lockData), `"manifest":`) || strings.Contains(string(lockData), `"executable":`) || strings.Contains(string(lockData), `"assetRoot":`) {
 		t.Fatalf("lockfile = %s, want portable entries only", lockData)
 	}
-	var diskLock providerLockfile
+	var diskLock Lockfile
 	if err := json.Unmarshal(lockData, &diskLock); err != nil {
 		t.Fatalf("Unmarshal lockfile: %v", err)
 	}
 	if diskLock.SchemaVersion != providerLockSchemaVersion {
 		t.Fatalf("lock schemaVersion = %d, want %d", diskLock.SchemaVersion, providerLockSchemaVersion)
 	}
-	if diskLock.SchemaVersion != 9 {
-		t.Fatalf("lock schemaVersion = %d, want explicit v9 schema", diskLock.SchemaVersion)
+	if diskLock.SchemaVersion != 10 {
+		t.Fatalf("lock schemaVersion = %d, want explicit v10 schema", diskLock.SchemaVersion)
 	}
 	providerEntry, ok := diskLock.Providers.App["example"]
 	if !ok {
 		t.Fatal(`disk lock providers.plugin["example"] not found`)
 	}
-	if providerEntry.InputDigest != want.Providers["example"].Fingerprint {
-		t.Fatalf("provider inputDigest = %q, want %q", providerEntry.InputDigest, want.Providers["example"].Fingerprint)
+	if providerEntry.InputDigest != want.Providers.App["example"].InputDigest {
+		t.Fatalf("provider inputDigest = %q, want %q", providerEntry.InputDigest, want.Providers.App["example"].InputDigest)
 	}
-	if providerEntry.Package != want.Providers["example"].Source {
-		t.Fatalf("provider package = %q, want %q", providerEntry.Package, want.Providers["example"].Source)
+	if providerEntry.Package != want.Providers.App["example"].Source {
+		t.Fatalf("provider package = %q, want %q", providerEntry.Package, want.Providers.App["example"].Source)
 	}
 	if providerEntry.Source != "" {
 		t.Fatalf("provider source = %q, want omitted portable source", providerEntry.Source)
@@ -4190,11 +4191,11 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal(`disk lock providers.authentication["oauth"] not found`)
 	}
-	if authEntry.InputDigest != want.Authentication["oauth"].Fingerprint {
-		t.Fatalf("authentication inputDigest = %q, want %q", authEntry.InputDigest, want.Authentication["oauth"].Fingerprint)
+	if authEntry.InputDigest != want.Providers.Authentication["oauth"].InputDigest {
+		t.Fatalf("authentication inputDigest = %q, want %q", authEntry.InputDigest, want.Providers.Authentication["oauth"].InputDigest)
 	}
-	if authEntry.Package != want.Authentication["oauth"].Source {
-		t.Fatalf("authentication package = %q, want %q", authEntry.Package, want.Authentication["oauth"].Source)
+	if authEntry.Package != want.Providers.Authentication["oauth"].Source {
+		t.Fatalf("authentication package = %q, want %q", authEntry.Package, want.Providers.Authentication["oauth"].Source)
 	}
 	if authEntry.Source != "" {
 		t.Fatalf("authentication source = %q, want omitted portable source", authEntry.Source)
@@ -4209,8 +4210,8 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal(`disk lock providers.telemetry["default"] not found`)
 	}
-	if telemetryEntry.Package != want.Telemetry["default"].Source {
-		t.Fatalf("telemetry package = %q, want %q", telemetryEntry.Package, want.Telemetry["default"].Source)
+	if telemetryEntry.Package != want.Providers.Telemetry["default"].Source {
+		t.Fatalf("telemetry package = %q, want %q", telemetryEntry.Package, want.Providers.Telemetry["default"].Source)
 	}
 	if telemetryEntry.Kind != providermanifestv1.KindApp {
 		t.Fatalf("telemetry kind = %q, want %q", telemetryEntry.Kind, providermanifestv1.KindApp)
@@ -4222,8 +4223,8 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal(`disk lock providers.audit["default"] not found`)
 	}
-	if auditEntry.Package != want.Audit["default"].Source {
-		t.Fatalf("audit package = %q, want %q", auditEntry.Package, want.Audit["default"].Source)
+	if auditEntry.Package != want.Providers.Audit["default"].Source {
+		t.Fatalf("audit package = %q, want %q", auditEntry.Package, want.Providers.Audit["default"].Source)
 	}
 	if auditEntry.Kind != providermanifestv1.KindApp {
 		t.Fatalf("audit kind = %q, want %q", auditEntry.Kind, providermanifestv1.KindApp)
@@ -4235,8 +4236,8 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal(`disk lock providers.ui["roadmap"] not found`)
 	}
-	if uiEntry.InputDigest != want.UIs["roadmap"].Fingerprint {
-		t.Fatalf("ui inputDigest = %q, want %q", uiEntry.InputDigest, want.UIs["roadmap"].Fingerprint)
+	if uiEntry.InputDigest != want.Providers.UI["roadmap"].InputDigest {
+		t.Fatalf("ui inputDigest = %q, want %q", uiEntry.InputDigest, want.Providers.UI["roadmap"].InputDigest)
 	}
 	if uiEntry.Source != "" {
 		t.Fatalf("ui source = %q, want omitted portable source", uiEntry.Source)
@@ -4252,37 +4253,37 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	if got.Providers["example"].Fingerprint != want.Providers["example"].Fingerprint {
+	if got.Providers.App["example"].InputDigest != want.Providers.App["example"].InputDigest {
 		t.Fatal("provider fingerprint mismatch")
 	}
-	if got.Providers["example"].Source != want.Providers["example"].Source || got.Providers["example"].Version != want.Providers["example"].Version {
+	if got.Providers.App["example"].Source != want.Providers.App["example"].Source || got.Providers.App["example"].Version != want.Providers.App["example"].Version {
 		t.Fatal("provider source mismatch")
 	}
-	if got.Authentication["oauth"].Fingerprint != want.Authentication["oauth"].Fingerprint {
+	if got.Providers.Authentication["oauth"].InputDigest != want.Providers.Authentication["oauth"].InputDigest {
 		t.Fatal("authentication fingerprint mismatch")
 	}
-	if got.IndexedDBs["main"].Fingerprint != want.IndexedDBs["main"].Fingerprint {
+	if got.Providers.IndexedDB["main"].InputDigest != want.Providers.IndexedDB["main"].InputDigest {
 		t.Fatal("indexeddb fingerprint mismatch")
 	}
-	if got.IndexedDBs["archive"].Executable != "" {
+	if got.Providers.IndexedDB["archive"].Executable != "" {
 		t.Fatal("indexeddb executable should not round-trip from portable lock schema")
 	}
-	if got.Workflows["temporal"].Source != want.Workflows["temporal"].Source || got.Workflows["temporal"].Version != want.Workflows["temporal"].Version {
+	if got.Providers.Workflow["temporal"].Source != want.Providers.Workflow["temporal"].Source || got.Providers.Workflow["temporal"].Version != want.Providers.Workflow["temporal"].Version {
 		t.Fatal("workflow lock entry mismatch")
 	}
-	if got.Workflows["temporal"].Executable != "" {
+	if got.Providers.Workflow["temporal"].Executable != "" {
 		t.Fatal("workflow executable should not round-trip from portable lock schema")
 	}
-	if got.Telemetry["default"].Runtime != providerReleaseRuntimeDeclarative {
-		t.Fatalf("telemetry runtime = %q, want %q", got.Telemetry["default"].Runtime, providerReleaseRuntimeDeclarative)
+	if got.Providers.Telemetry["default"].Runtime != providerReleaseRuntimeDeclarative {
+		t.Fatalf("telemetry runtime = %q, want %q", got.Providers.Telemetry["default"].Runtime, providerReleaseRuntimeDeclarative)
 	}
-	if got.Audit["default"].Runtime != providerReleaseRuntimeDeclarative {
-		t.Fatalf("audit runtime = %q, want %q", got.Audit["default"].Runtime, providerReleaseRuntimeDeclarative)
+	if got.Providers.Audit["default"].Runtime != providerReleaseRuntimeDeclarative {
+		t.Fatalf("audit runtime = %q, want %q", got.Providers.Audit["default"].Runtime, providerReleaseRuntimeDeclarative)
 	}
-	if got.UIs["roadmap"].Source != want.UIs["roadmap"].Source || got.UIs["roadmap"].Version != want.UIs["roadmap"].Version {
+	if got.Providers.UI["roadmap"].Source != want.Providers.UI["roadmap"].Source || got.Providers.UI["roadmap"].Version != want.Providers.UI["roadmap"].Version {
 		t.Fatal("ui lock entry mismatch")
 	}
-	if got.Providers["example"].Manifest != "" || got.UIs["roadmap"].AssetRoot != "" {
+	if got.Providers.App["example"].ArtifactManifest != "" || got.Providers.UI["roadmap"].AssetRoot != "" {
 		t.Fatal("portable lock schema should not populate local path fields on read")
 	}
 }

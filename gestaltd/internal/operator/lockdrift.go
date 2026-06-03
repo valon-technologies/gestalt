@@ -17,10 +17,10 @@ type lockDrift struct {
 }
 
 func diagnoseLockfileDrift(expected, committed *Lockfile) []lockDrift {
-	expectedPortable := providerLockfileFromLockfile(expected)
-	committedPortable := providerLockfileFromLockfile(committed)
+	expectedLock := canonicalLockfile(expected)
+	committedLock := canonicalLockfile(committed)
 	var drifts []lockDrift
-	forEachPortableBucketPair(expectedPortable, committedPortable, func(path string, expectedEntries, committedEntries map[string]portableLockEntry) {
+	forEachLockBucketPair(expectedLock, committedLock, func(path string, expectedEntries, committedEntries map[string]LockEntry) {
 		names := map[string]struct{}{}
 		for name := range expectedEntries {
 			names[name] = struct{}{}
@@ -37,7 +37,7 @@ func diagnoseLockfileDrift(expected, committed *Lockfile) []lockDrift {
 				drifts = append(drifts, lockDrift{status: "missing", path: providerPath})
 			case !expectedFound:
 				drifts = append(drifts, lockDrift{status: "extra", path: providerPath})
-			case !portableLockEntryEqual(expectedEntry, committedEntry):
+			case !lockEntryEqual(expectedEntry, committedEntry):
 				drifts = append(drifts, lockDrift{status: "stale", path: providerPath})
 			}
 		}
@@ -45,7 +45,7 @@ func diagnoseLockfileDrift(expected, committed *Lockfile) []lockDrift {
 	return drifts
 }
 
-func portableLockEntryEqual(a, b portableLockEntry) bool {
+func lockEntryEqual(a, b LockEntry) bool {
 	aData, aErr := json.Marshal(a)
 	bData, bErr := json.Marshal(b)
 	return aErr == nil && bErr == nil && bytes.Equal(aData, bData)

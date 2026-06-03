@@ -3,8 +3,6 @@ package operator
 import (
 	"strings"
 	"testing"
-
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 func TestDecodeProviderReleaseMetadataAcceptsStaticValidation(t *testing.T) {
@@ -132,26 +130,4 @@ func staticValidationBlock(block *string) string {
 
 func ptr(value string) *string {
 	return &value
-}
-
-func (metadata providerReleaseMetadata) MarshalYAML() (any, error) {
-	type providerReleaseMetadataYAML providerReleaseMetadata
-	out := providerReleaseMetadataYAML(metadata)
-	if out.StaticValidation == nil {
-		out.StaticValidation = defaultProviderReleaseStaticValidationForTest(&metadata)
-	}
-	return out, nil
-}
-
-func defaultProviderReleaseStaticValidationForTest(metadata *providerReleaseMetadata) *providerReleaseStaticValidationData {
-	if metadata == nil {
-		return nil
-	}
-	manifest := &providermanifestv1.Manifest{
-		Kind:    providermanifestv1.NormalizeKind(metadata.Kind),
-		Source:  strings.TrimSpace(metadata.Package),
-		Version: strings.TrimSpace(metadata.Version),
-		Spec:    &providermanifestv1.Spec{},
-	}
-	return &providerReleaseStaticValidationData{Manifest: manifest}
 }
