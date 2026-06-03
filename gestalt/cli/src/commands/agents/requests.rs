@@ -421,6 +421,14 @@ pub(crate) fn build_turn_create_body(args: &AgentTurnCreateArgs) -> Result<Value
             Value::String(idempotency_key.to_string()),
         );
     }
+    if let Some(timeout_seconds) = args.timeout_seconds {
+        body.insert(
+            "timeoutSeconds".to_string(),
+            Value::Number(timeout_seconds.into()),
+        );
+    } else {
+        require_positive_timeout_seconds(&body)?;
+    }
 
     let messages = build_messages(&args.system, &args.messages);
     if !messages.is_empty() {
@@ -438,6 +446,16 @@ pub(crate) fn build_turn_create_body(args: &AgentTurnCreateArgs) -> Result<Value
 
     validate_turn_create_body(&body)?;
     Ok(Value::Object(body))
+}
+
+fn require_positive_timeout_seconds(body: &Map<String, Value>) -> Result<()> {
+    let Some(value) = body.get("timeoutSeconds") else {
+        bail!("--timeout-seconds is required unless input sets timeoutSeconds");
+    };
+    if value.as_i64().is_some_and(|seconds| seconds > 0) {
+        return Ok(());
+    }
+    bail!("timeoutSeconds must be a positive integer");
 }
 
 fn validate_turn_create_body(body: &Map<String, Value>) -> Result<()> {

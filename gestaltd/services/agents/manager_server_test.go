@@ -201,6 +201,7 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 		t.Fatalf("NewStruct: %v", err)
 	}
 	_, err = server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds:  1,
 		SessionId:       "session-1",
 		InvocationToken: token,
 		Workflow:        workflow,
@@ -298,8 +299,9 @@ func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationTokenFromAppSt
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if _, err := server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		SessionId: "session-1",
-		Workflow:  workflow,
+		TimeoutSeconds: 1,
+		SessionId:      "session-1",
+		Workflow:       workflow,
 	}); err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
@@ -336,8 +338,9 @@ func TestManagerServerCreateTurnRequiresTokenOrPersistedWorkflowRunAs(t *testing
 				}
 			}
 			_, err := server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-				SessionId: "session-1",
-				Workflow:  workflow,
+				TimeoutSeconds: 1,
+				SessionId:      "session-1",
+				Workflow:       workflow,
 			})
 			if status.Code(err) != codes.FailedPrecondition {
 				t.Fatalf("CreateTurn code = %v, want %v (err=%v)", status.Code(err), codes.FailedPrecondition, err)
@@ -372,6 +375,7 @@ func TestManagerServerCreateTurnRequiresInvocationTokenCallerApp(t *testing.T) {
 	}, tokens)
 
 	if _, err := server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds:  1,
 		SessionId:       "session-1",
 		InvocationToken: token,
 	}); status.Code(err) != codes.FailedPrecondition {

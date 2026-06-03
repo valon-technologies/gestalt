@@ -161,6 +161,7 @@ test("agent and app workflow steps round-trip through copy helpers", () => {
           output: { text: {} },
           tools: [{ app: "github", operation: "createPullRequest" }],
         },
+        timeoutSeconds: 45,
         when: {
           value: {
             stepOutput: {

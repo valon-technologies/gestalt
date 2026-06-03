@@ -3124,6 +3124,7 @@ workflows:
       target:
         steps:
           - id: diagnosis
+            timeout: 1s
             agent:
               provider: simple
               prompt: "diagnose"
@@ -3163,6 +3164,7 @@ workflows:
       target:
         steps:
           - id: diagnosis
+            timeout: 1s
             inputs:
               source:
                 stepOutput:
@@ -3174,6 +3176,7 @@ workflows:
               output:
                 text: {}
           - id: pr_fix
+            timeout: 1s
             agent:
               provider: simple
               prompt: "fix"
@@ -3204,12 +3207,14 @@ workflows:
       target:
         steps:
           - id: diagnosis
+            timeout: 1s
             agent:
               provider: simple
               prompt: "diagnose"
               output:
                 text: {}
           - id: pr_fix
+            timeout: 1s
             agent:
               provider: simple
               prompt: "fix"
@@ -3245,12 +3250,14 @@ workflows:
       target:
         steps:
           - id: diagnosis
+            timeout: 1s
             agent:
               provider: simple
               prompt: "diagnose"
               output:
                 text: {}
           - id: pr_fix
+            timeout: 1s
             agent:
               provider: simple
               prompt: "fix"
@@ -3284,6 +3291,7 @@ workflows:
       target:
         steps:
           - id: run
+            timeout: 1s
             agent:
               model: gpt-5.5
 providers:

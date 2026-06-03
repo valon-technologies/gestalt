@@ -69,8 +69,9 @@ func testWorkflowAppCall(appName, operation string, input map[string]any, creden
 
 func testWorkflowAgentStepTarget(agent coreworkflow.AgentTurn) coreworkflow.Target {
 	return coreworkflow.Target{Steps: []coreworkflow.Step{{
-		ID:    "run",
-		Agent: &agent,
+		ID:             "run",
+		TimeoutSeconds: 1,
+		Agent:          &agent,
 	}}}
 }
 
@@ -886,7 +887,8 @@ func TestSignalOrStartRunResolvesDeclaredAppCredentialModes(t *testing.T) {
 		CallerAppName: "github",
 		Target: coreworkflow.Target{Steps: []coreworkflow.Step{
 			{
-				ID: "run",
+				ID:             "run",
+				TimeoutSeconds: 1,
 				Agent: &coreworkflow.AgentTurn{
 					ProviderName: "simple",
 					Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
@@ -985,7 +987,8 @@ func TestSignalOrStartRunRejectsStepWhenMissingEquals(t *testing.T) {
 		WorkflowKey:  "agent:steps:missing-equals",
 		Target: coreworkflow.Target{Steps: []coreworkflow.Step{
 			{
-				ID: "diagnosis",
+				ID:             "diagnosis",
+				TimeoutSeconds: 1,
 				Agent: &coreworkflow.AgentTurn{
 					ProviderName: "simple",
 					Prompt:       coreworkflow.Text{Template: "Diagnose the alert."},
@@ -993,7 +996,8 @@ func TestSignalOrStartRunRejectsStepWhenMissingEquals(t *testing.T) {
 				},
 			},
 			{
-				ID: "pr_fix",
+				ID:             "pr_fix",
+				TimeoutSeconds: 1,
 				Agent: &coreworkflow.AgentTurn{
 					ProviderName: "simple",
 					Prompt:       coreworkflow.Text{Template: "Open a PR."},
@@ -1041,7 +1045,8 @@ func TestSignalOrStartRunRejectsStepWhenMissingValue(t *testing.T) {
 		WorkflowKey:  "agent:steps:missing-when-value",
 		Target: coreworkflow.Target{Steps: []coreworkflow.Step{
 			{
-				ID: "diagnosis",
+				ID:             "diagnosis",
+				TimeoutSeconds: 1,
 				Agent: &coreworkflow.AgentTurn{
 					ProviderName: "simple",
 					Prompt:       coreworkflow.Text{Template: "Diagnose the alert."},
@@ -1049,7 +1054,8 @@ func TestSignalOrStartRunRejectsStepWhenMissingValue(t *testing.T) {
 				},
 			},
 			{
-				ID: "pr_fix",
+				ID:             "pr_fix",
+				TimeoutSeconds: 1,
 				Agent: &coreworkflow.AgentTurn{
 					ProviderName: "simple",
 					Prompt:       coreworkflow.Text{Template: "Open a PR."},
@@ -1178,7 +1184,8 @@ func TestSignalOrStartRunRejectsAgentStepWithoutPromptOrMessages(t *testing.T) {
 		ProviderName: "local",
 		WorkflowKey:  "agent:steps:empty-agent",
 		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
-			ID: "agent",
+			ID:             "agent",
+			TimeoutSeconds: 1,
 			Agent: &coreworkflow.AgentTurn{
 				ProviderName: "simple",
 				Output:       testWorkflowAgentTextOutput(),

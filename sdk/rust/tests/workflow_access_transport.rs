@@ -1101,6 +1101,7 @@ async fn workflow_signal_or_start_accepts_native_values() {
                         tools: Vec::new(),
                         model_options: None,
                     }),
+                    timeout_seconds: 45,
                     ..Default::default()
                 }],
             }),

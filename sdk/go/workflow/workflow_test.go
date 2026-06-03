@@ -116,7 +116,8 @@ func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 			CredentialSubjectID: "service_account:workflow-runner",
 		},
 		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
-			ID: "review",
+			ID:             "review",
+			TimeoutSeconds: 45,
 			Agent: &gestalt.WorkflowStepAgentTurn{
 				Provider: "claude",
 				Model:    "default",
@@ -139,6 +140,9 @@ func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 	}
 	if agent.turn.SessionID != "session-1" || agent.turn.Messages[0].Text != "review Ada" {
 		t.Fatalf("turn = %#v", agent.turn)
+	}
+	if agent.turn.TimeoutSeconds != 45 {
+		t.Fatalf("turn timeout = %d, want 45", agent.turn.TimeoutSeconds)
 	}
 	runAs := agent.turnWorkflow["runAs"].(map[string]any)
 	if runAs["id"] != "service_account:workflow-runner" {

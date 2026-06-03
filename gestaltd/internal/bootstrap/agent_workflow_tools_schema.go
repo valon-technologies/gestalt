@@ -89,15 +89,29 @@ func workflowSystemToolTargetSchema() map[string]any {
 }
 
 func workflowSystemToolStepSchema() map[string]any {
-	return workflowSystemToolObjectSchema([]string{"id"}, map[string]any{
+	schema := workflowSystemToolObjectSchema([]string{"id"}, map[string]any{
 		"id":             workflowSystemToolStringSchema("Stable step ID."),
 		"inputs":         map[string]any{"type": "object"},
 		"app":            workflowSystemToolAppCallSchema("App name."),
 		"agent":          workflowSystemToolAgentTurnSchema(),
 		"when":           workflowSystemToolStepWhenSchema(),
-		"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0},
+		"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0, "description": "Execution budget in seconds. Required and positive for agent steps."},
 		"metadata":       map[string]any{"type": "object"},
 	})
+	schema["oneOf"] = []any{
+		map[string]any{
+			"required": []string{"app"},
+			"not":      map[string]any{"required": []string{"agent"}},
+		},
+		map[string]any{
+			"required": []string{"agent", "timeoutSeconds"},
+			"properties": map[string]any{
+				"timeoutSeconds": map[string]any{"type": "integer", "minimum": 1},
+			},
+			"not": map[string]any{"required": []string{"app"}},
+		},
+	}
+	return schema
 }
 
 func workflowSystemToolAppCallSchema(nameDescription string) map[string]any {

@@ -193,7 +193,7 @@ func TestAgentTurnRechecksProviderAuthorization(t *testing.T) {
 	sessionID := session["id"].(string)
 
 	authz.allowed.Store(false)
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -241,7 +241,7 @@ func TestAgentCreateTurnReportsMissingSession(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/missing-session/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/missing-session/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -302,7 +302,7 @@ func TestAgentCreateTurnReportsProviderDeadlineAsUnavailable(t *testing.T) {
 		t.Fatalf("decode session: %v", err)
 	}
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+session["id"].(string)+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+session["id"].(string)+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -367,7 +367,7 @@ func TestAgentCreateTurnDoesNotReportSessionMissingAfterSessionResolved(t *testi
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -448,7 +448,7 @@ func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 	}
 	provider.mu.Unlock()
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/session-managed/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/session-managed/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.Header.Set("Authorization", "Bearer "+plaintext)
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -1193,7 +1193,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("supported tool sources = %#v, want mcp_catalog", got)
 	}
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolSource":"mcp_catalog","toolRefs":[{"app":"docs","operation":"search"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolSource":"mcp_catalog","toolRefs":[{"app":"docs","operation":"search"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -1525,13 +1525,13 @@ func TestAgentTurnToolRefsDefaultBroadAndExplicitEmptyNone(t *testing.T) {
 		}
 	}
 
-	createTurn("omitted", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`, http.StatusCreated)
-	createTurn("explicit empty", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[]}`, http.StatusCreated)
-	createTurn("plugin broad", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"docs"}]}`, http.StatusCreated)
+	createTurn("omitted", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`, http.StatusCreated)
+	createTurn("explicit empty", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[]}`, http.StatusCreated)
+	createTurn("plugin broad", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"docs"}]}`, http.StatusCreated)
 	createTurn("missing output", `{"messages":[{"role":"user","text":"hello"}]}`, http.StatusBadRequest)
-	createTurn("null toolRefs", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":null}`, http.StatusBadRequest)
-	createTurn("global credential mode", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"*","credentialMode":"none"}]}`, http.StatusBadRequest)
-	createTurn("system title", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"system":"workflow","operation":"schedules.list","title":"Schedules"}]}`, http.StatusBadRequest)
+	createTurn("null toolRefs", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":null}`, http.StatusBadRequest)
+	createTurn("global credential mode", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"*","credentialMode":"none"}]}`, http.StatusBadRequest)
+	createTurn("system title", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"system":"workflow","operation":"schedules.list","title":"Schedules"}]}`, http.StatusBadRequest)
 
 	turnRequests := provider.capturedTurnRequests()
 	if len(turnRequests) != 3 {
@@ -1610,12 +1610,12 @@ func TestAgentCreateTurnAcceptsNoneToolSourceWithStructuredOutput(t *testing.T) 
 		}
 	}
 
-	createTurn("structured none", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"schema":{"type":"object","properties":{"score":{"type":"number"}}}}}}`, http.StatusCreated)
-	createTurn("null output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":null}`, http.StatusBadRequest)
-	createTurn("ambiguous output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":{},"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
-	createTurn("ambiguous null text output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":null,"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
-	createTurn("empty schema", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"schema":{}}}}`, http.StatusBadRequest)
-	createTurn("none with tools", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","toolRefs":[{"app":"docs"}],"output":{"text":{}}}`, http.StatusBadRequest)
+	createTurn("structured none", `{"timeoutSeconds":120,"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"schema":{"type":"object","properties":{"score":{"type":"number"}}}}}}`, http.StatusCreated)
+	createTurn("null output", `{"timeoutSeconds":120,"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":null}`, http.StatusBadRequest)
+	createTurn("ambiguous output", `{"timeoutSeconds":120,"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":{},"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
+	createTurn("ambiguous null text output", `{"timeoutSeconds":120,"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":null,"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
+	createTurn("empty schema", `{"timeoutSeconds":120,"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"schema":{}}}}`, http.StatusBadRequest)
+	createTurn("none with tools", `{"timeoutSeconds":120,"messages":[{"role":"user","text":"grade"}],"toolSource":"none","toolRefs":[{"app":"docs"}],"output":{"text":{}}}`, http.StatusBadRequest)
 
 	turnRequests := provider.capturedTurnRequests()
 	if len(turnRequests) != 1 {
@@ -1670,7 +1670,7 @@ func TestAgentTurnOmittedToolsDoNotForceCatalogForUnsupportedProvider(t *testing
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
 		t.Fatalf("create turn: %v", err)
@@ -1720,7 +1720,7 @@ func TestAgentTurnEventsNormalizeToolPayloads(t *testing.T) {
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"metadata":{"emitToolEvents":true,"nilDisplayAliases":true},"output":{"text":{}},"messages":[{"role":"user","text":"lookup"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"metadata":{"emitToolEvents":true,"nilDisplayAliases":true},"output":{"text":{}},"messages":[{"role":"user","text":"lookup"}]}`))
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
 		t.Fatalf("create turn: %v", err)
@@ -1825,7 +1825,7 @@ func TestAgentSessionAndTurnMetrics(t *testing.T) {
 		t.Fatalf("session response missing id: %#v", session)
 	}
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "metric-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -1881,7 +1881,7 @@ func TestAgentSessionsAndTurnsRoundTripWithoutAuth(t *testing.T) {
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
 		t.Fatalf("create turn: %v", err)
@@ -1942,7 +1942,7 @@ func TestAgentTurnEventStreamSendsHeartbeatBeforeEvents(t *testing.T) {
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"wait"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"wait"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -2060,7 +2060,7 @@ func TestAgentTurnEventStreamReportsProviderContextErrorWhileRequestOpen(t *test
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"wait"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"wait"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -2161,7 +2161,7 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 	_ = json.NewDecoder(sessionResp.Body).Decode(&session)
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"metadata":{"requireInteraction":true},"output":{"text":{}},"messages":[{"role":"user","text":"proceed"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"timeoutSeconds":120,"metadata":{"requireInteraction":true},"output":{"text":{}},"messages":[{"role":"user","text":"proceed"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, _ := http.DefaultClient.Do(turnReq)
 	defer func() { _ = turnResp.Body.Close() }()

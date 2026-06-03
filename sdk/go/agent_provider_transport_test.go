@@ -356,6 +356,7 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 
 	turn, err := agentClient.CreateTurn(rpcCtx, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		TurnId:         "turn-1",
 		SessionId:      "session-1",
 		IdempotencyKey: "turn-req-1",

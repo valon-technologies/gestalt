@@ -145,7 +145,7 @@ func (r *remoteAgent) UpdateSession(ctx context.Context, req *proto.UpdateAgentP
 }
 
 func (r *remoteAgent) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
-	ctx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
+	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderTurnRequest{})
 	providerReq.InvocationToken = appaccess.InvocationTokenFromContext(ctx)
@@ -157,7 +157,7 @@ func (r *remoteAgent) CreateTurn(ctx context.Context, req *proto.CreateAgentProv
 }
 
 func (r *remoteAgent) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
-	ctx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
+	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.GetAgentProviderTurnRequest{})
 	providerReq.InvocationToken = appaccess.InvocationTokenFromContext(ctx)

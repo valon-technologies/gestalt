@@ -1074,6 +1074,9 @@ export type CreateAgentProviderTurnRequest = Message<"gestalt.provider.v1.Create
   runGrant: string;
 
   /**
+   * Required positive budget, in seconds, for provider-owned turn execution.
+   * This does not control the CreateTurn RPC deadline.
+   *
    * @generated from field: int32 timeout_seconds = 18;
    */
   timeoutSeconds: number;

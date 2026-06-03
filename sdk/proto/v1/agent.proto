@@ -295,6 +295,8 @@ message CreateAgentProviderTurnRequest {
   SubjectContext subject = 14;
   google.protobuf.Struct model_options = 16;
   string run_grant = 17;
+  // Required positive budget, in seconds, for provider-owned turn execution.
+  // This does not control the CreateTurn RPC deadline.
   int32 timeout_seconds = 18;
   string invocation_token = 19;
   bool tool_refs_set = 20;

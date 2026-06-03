@@ -196,6 +196,7 @@ func TestBoundWorkflowTargetAgentStepCopiesNativeFields(t *testing.T) {
 					},
 					Equals: true,
 				},
+				TimeoutSeconds: 45,
 			},
 		},
 	})

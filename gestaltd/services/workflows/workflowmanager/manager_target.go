@@ -97,6 +97,9 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 			}
 			step.App = &app
 		case step.Agent != nil:
+			if step.TimeoutSeconds <= 0 {
+				return coreworkflow.Target{}, fmt.Errorf("%w: workflow target.steps[%d].timeout_seconds must be positive for agent steps", invocation.ErrInvalidInvocation, i)
+			}
 			agent, err := m.resolveWorkflowStepAgent(ctx, p, *step.Agent)
 			if err != nil {
 				return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d].agent: %w", i, err)

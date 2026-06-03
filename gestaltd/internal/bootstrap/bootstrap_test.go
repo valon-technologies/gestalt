@@ -2767,6 +2767,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	req := &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "demo-idempotency-key",
 		Model:          "gpt-test",
@@ -2832,6 +2833,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	}
 
 	_, err = result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "global-search-idempotency-key",
 		Model:          "gpt-test",
@@ -2850,6 +2852,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	}
 
 	_, err = result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "scoped-unavailable-idempotency-key",
 		Model:          "gpt-test",
@@ -3059,6 +3062,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "linear-search-idempotency-key",
 		Model:          "gpt-test",
@@ -3081,6 +3085,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 	}
 
 	second, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "linear-search-after-unavailable-idempotency-key",
 		Model:          "gpt-test",
@@ -3192,6 +3197,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "candidate-search-idempotency-key",
 		Model:          "gpt-test",
@@ -3252,6 +3258,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		t.Fatalf("listed tools = %#v, want visible destructive epsilon_delete", listResp.GetTools())
 	}
 	exact, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "candidate-load-ref-idempotency-key",
 		Model:          "gpt-test",
@@ -3274,6 +3281,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 	}
 
 	mixed, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "candidate-mixed-global-exact-hidden-idempotency-key",
 		Model:          "gpt-test",
@@ -3423,6 +3431,7 @@ func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalog
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "configured-narrowing-linear",
 		Model:          "gpt-test",
@@ -3539,6 +3548,7 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *t
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(agentmanager.WithCallerAppName(ctx, "slack"), p, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "http-slack-linear-search",
 		Model:          "gpt-test",
@@ -3671,6 +3681,7 @@ func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T)
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(agentmanager.WithCallerAppName(ctx, "slack"), p, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "http-global-linear-search",
 		Model:          "gpt-test",
@@ -3759,6 +3770,7 @@ func TestBootstrapAgentProviderSupportsDirectTurnInteractionLifecycle(t *testing
 		Model:              "gpt-test",
 		CreatedBySubjectId: "system:config",
 		Output:             bootstrapTextAgentOutput(),
+		TimeoutSeconds:     1,
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -3868,9 +3880,10 @@ func TestBootstrapAgentManagerResolvesProviderOwnedInteractions(t *testing.T) {
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
-		SessionId: session.ID,
-		Model:     "gpt-test",
-		Output:    bootstrapTextAgentOutput(),
+		TimeoutSeconds: 1,
+		SessionId:      session.ID,
+		Model:          "gpt-test",
+		Output:         bootstrapTextAgentOutput(),
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -3969,9 +3982,10 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundWhenProviderInter
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
-		SessionId: session.ID,
-		Model:     "gpt-test",
-		Output:    bootstrapTextAgentOutput(),
+		TimeoutSeconds: 1,
+		SessionId:      session.ID,
+		Model:          "gpt-test",
+		Output:         bootstrapTextAgentOutput(),
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -4053,9 +4067,10 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundOnProviderInterac
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
-		SessionId: session.ID,
-		Model:     "gpt-test",
-		Output:    bootstrapTextAgentOutput(),
+		TimeoutSeconds: 1,
+		SessionId:      session.ID,
+		Model:          "gpt-test",
+		Output:         bootstrapTextAgentOutput(),
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -4138,9 +4153,10 @@ func TestBootstrapAgentManagerListInteractionsRejectsMissingSessionID(t *testing
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
-		SessionId: session.ID,
-		Model:     "gpt-test",
-		Output:    bootstrapTextAgentOutput(),
+		TimeoutSeconds: 1,
+		SessionId:      session.ID,
+		Model:          "gpt-test",
+		Output:         bootstrapTextAgentOutput(),
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -4207,9 +4223,10 @@ func TestBootstrapAgentManagerResolveInteractionRejectsMissingSessionID(t *testi
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
-		SessionId: session.ID,
-		Model:     "gpt-test",
-		Output:    bootstrapTextAgentOutput(),
+		TimeoutSeconds: 1,
+		SessionId:      session.ID,
+		Model:          "gpt-test",
+		Output:         bootstrapTextAgentOutput(),
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -4313,6 +4330,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 	}
 
 	first, err := result.AgentManager.CreateTurn(fullCtx, full, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "same-run",
 		Model:          "gpt-test",
@@ -4341,6 +4359,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 	restrictedCtx := principal.WithPrincipal(context.Background(), restricted)
 
 	_, err = result.AgentManager.CreateTurn(restrictedCtx, restricted, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "same-run",
 		Model:          "gpt-test",
@@ -6403,9 +6422,10 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(startCtx, systemPrincipal, &proto.CreateAgentProviderTurnRequest{
-		SessionId: session.ID,
-		Model:     "gpt-test",
-		Output:    bootstrapTextAgentOutput(),
+		TimeoutSeconds: 1,
+		SessionId:      session.ID,
+		Model:          "gpt-test",
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "roadmap",
 			Operation: "sync",
@@ -6593,9 +6613,10 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(startCtx, systemPrincipal, &proto.CreateAgentProviderTurnRequest{
-		SessionId: session.ID,
-		Model:     "gpt-test",
-		Output:    bootstrapTextAgentOutput(),
+		TimeoutSeconds: 1,
+		SessionId:      session.ID,
+		Model:          "gpt-test",
+		Output:         bootstrapTextAgentOutput(),
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "roadmap",
 			Operation: "sync",
@@ -6746,6 +6767,7 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 		CreatedBySubjectId: "system:config",
 		Output:             bootstrapTextAgentOutput(),
 		Tools:              bootstrapAgentToolsToProto([]coreagent.Tool{tool}),
+		TimeoutSeconds:     1,
 	}); err == nil {
 		t.Fatal("CreateTurn error = nil, want mismatched turn id failure")
 	} else if !strings.Contains(err.Error(), `returned turn id "generated-turn-1" for requested turn id "agent-turn-1"`) {
@@ -6771,6 +6793,7 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 		CreatedBySubjectId: "system:config",
 		Output:             bootstrapTextAgentOutput(),
 		Tools:              bootstrapAgentToolsToProto([]coreagent.Tool{tool}),
+		TimeoutSeconds:     1,
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn idempotent replay: %v", err)

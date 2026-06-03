@@ -152,7 +152,8 @@ func TestTransport_WorkflowSignalOrStartRunInjectsInvocationToken(t *testing.T) 
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
 		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
-			ID: "respond",
+			ID:             "respond",
+			TimeoutSeconds: 120,
 			Agent: &gestalt.WorkflowStepAgentTurn{
 				Provider: "simple",
 				Model:    "gpt-5.5",
@@ -237,7 +238,8 @@ func TestTransport_WorkflowSignalOrStartRunNativeValues(t *testing.T) {
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
 		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
-			ID: "respond",
+			ID:             "respond",
+			TimeoutSeconds: 120,
 			Agent: &gestalt.WorkflowStepAgentTurn{
 				Provider: "simple",
 				Model:    "gpt-5.5",

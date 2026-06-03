@@ -816,6 +816,8 @@ pub struct CreateAgentProviderTurnRequest {
     pub model_options: ::core::option::Option<::prost_types::Struct>,
     #[prost(string, tag = "17")]
     pub run_grant: ::prost::alloc::string::String,
+    /// Required positive budget, in seconds, for provider-owned turn execution.
+    /// This does not control the CreateTurn RPC deadline.
     #[prost(int32, tag = "18")]
     pub timeout_seconds: i32,
     #[prost(string, tag = "19")]

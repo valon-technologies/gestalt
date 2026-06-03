@@ -592,6 +592,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
             turn_id: "turn-1".to_string(),
             session_id: "session-1".to_string(),
             model: "gpt-5.1".to_string(),
+            timeout_seconds: 120,
             messages: vec![pb::AgentMessage {
                 role: "user".to_string(),
                 text: "Plan it".to_string(),

@@ -861,7 +861,7 @@ func telemetryCoreAppStepTarget() coreworkflow.Target {
 
 func telemetryCoreAgentStepTarget(tools []coreagent.ToolRef) coreworkflow.Target {
 	return coreworkflow.Target{
-		Steps: []coreworkflow.Step{{ID: "run", Agent: &coreworkflow.AgentTurn{
+		Steps: []coreworkflow.Step{{ID: "run", TimeoutSeconds: 1, Agent: &coreworkflow.AgentTurn{
 			ProviderName: "simple",
 			Prompt:       coreworkflow.Text{Template: "handle the Slack message"},
 			ToolRefs:     tools,
@@ -891,7 +891,8 @@ func telemetryProtoAppStepTarget(appName, operation string) *proto.BoundWorkflow
 func telemetryProtoAgentStepTarget(tools []*proto.AgentToolRef) *proto.BoundWorkflowTarget {
 	return &proto.BoundWorkflowTarget{
 		Steps: []*proto.WorkflowStep{{
-			Id: "run",
+			Id:             "run",
+			TimeoutSeconds: 1,
 			Action: &proto.WorkflowStep_Agent{Agent: &proto.WorkflowStepAgentTurn{
 				Provider: "simple",
 				Prompt:   &proto.WorkflowText{Template: "handle the Slack message"},

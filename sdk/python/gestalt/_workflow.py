@@ -998,19 +998,23 @@ def workflow_step(value: Any | None = None, **kwargs: Any) -> Any:
     """Create a workflow step."""
 
     if isinstance(value, pb.WorkflowStep):
+        _validate_workflow_step_timeout(value)
         return _copy(value)
     data = _data(value, kwargs)
     app = data.get("app")
     agent = data.get("agent")
     if app is not None and agent is not None:
         raise ValueError("workflow step must set either app or agent")
+    timeout_seconds = data.get("timeout_seconds", 0)
+    if agent is not None and timeout_seconds <= 0:
+        raise ValueError("workflow agent step timeout_seconds must be positive")
     step = pb.WorkflowStep(
         id=data.get("id", ""),
         inputs={
             key: _workflow_value_nested(item)
             for key, item in (data.get("inputs") or {}).items()
         },
-        timeout_seconds=data.get("timeout_seconds", 0),
+        timeout_seconds=timeout_seconds,
         metadata=_optional_struct(data.get("metadata")),
     )
     if app is not None:
@@ -1021,6 +1025,11 @@ def workflow_step(value: Any | None = None, **kwargs: Any) -> Any:
     if when is not None:
         step.when.CopyFrom(workflow_step_when(when))
     return step
+
+
+def _validate_workflow_step_timeout(value: Any) -> None:
+    if has_field(value, "agent") and value.timeout_seconds <= 0:
+        raise ValueError("workflow agent step timeout_seconds must be positive")
 
 
 def workflow_step_input_from_step(value: Any | None) -> WorkflowStep | None:
@@ -1054,6 +1063,8 @@ def bound_workflow_target(value: Any | None = None, **kwargs: Any) -> Any:
     """Create a bound workflow target."""
 
     if isinstance(value, pb.BoundWorkflowTarget):
+        for step in value.steps:
+            _validate_workflow_step_timeout(step)
         return _copy(value)
     data = _data(value, kwargs)
     return pb.BoundWorkflowTarget(

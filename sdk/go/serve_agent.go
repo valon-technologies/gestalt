@@ -57,7 +57,11 @@ func (s agentProviderServer) UpdateSession(ctx context.Context, req *proto.Updat
 }
 
 func (s agentProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
-	turn, err := s.provider.CreateTurn(ctx, createAgentProviderTurnRequestFromProto(req))
+	providerReq, err := createAgentProviderTurnRequestFromProto(req)
+	if err != nil {
+		return nil, providerRPCError("agent create turn", err)
+	}
+	turn, err := s.provider.CreateTurn(ctx, providerReq)
 	if err != nil {
 		return nil, providerRPCError("agent create turn", err)
 	}

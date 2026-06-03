@@ -118,6 +118,7 @@ type agentTurnCreateRequest struct {
 	Metadata       map[string]any        `json:"metadata,omitempty"`
 	ModelOptions   map[string]any        `json:"modelOptions,omitempty"`
 	IdempotencyKey string                `json:"idempotencyKey,omitempty"`
+	TimeoutSeconds int32                 `json:"timeoutSeconds,omitempty"`
 }
 
 type agentOutputRequest struct {
@@ -612,6 +613,7 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		Output:         outputProto,
 		Metadata:       metadata,
 		ModelOptions:   modelOptions,
+		TimeoutSeconds: req.TimeoutSeconds,
 	})
 	if err != nil {
 		if errors.Is(err, agentmanager.ErrAgentSessionNotFound) {

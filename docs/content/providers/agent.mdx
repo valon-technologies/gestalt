@@ -128,6 +128,7 @@ Create a turn inside that session:
 ```json
 {
   "model": "fast",
+  "timeoutSeconds": 120,
   "messages": [
     {
       "role": "user",
@@ -167,8 +168,8 @@ tool_result | image_ref`.
 Use `gestalt agent` for an interactive session:
 
 ```sh
-gestalt agent
-gestalt agent resume <session-id>
+gestalt agent --timeout-seconds 120
+gestalt agent resume <session-id> --timeout-seconds 120
 ```
 
 Use the session and turn subcommands for automation:
@@ -180,6 +181,7 @@ gestalt agent sessions get <session-id>
 gestalt agent sessions update <session-id> --state archived
 
 gestalt agent turns create <session-id> \
+  --timeout-seconds 120 \
   --message "Summarize the latest roadmap risk."
 gestalt agent turns list <session-id> --status succeeded
 gestalt agent turns get <turn-id>
@@ -195,6 +197,7 @@ For structured input, pipe JSON into `--input -`:
 cat <<'JSON' | gestalt --format json agent turns create <session-id> --input -
 {
   "model": "fast",
+  "timeoutSeconds": 120,
   "messages": [
     {
       "role": "user",
@@ -238,6 +241,7 @@ Provider code can invoke agents through the SDK `Agent` capability:
 
         turn, err := agents.CreateTurn(ctx, gestalt.AgentCreateTurn{
             SessionID: session.GetId(),
+            TimeoutSeconds: 120,
             Messages: []gestalt.AgentMessage{{
                 Role: "user",
                 Text: "Summarize the latest roadmap risk.",
@@ -263,6 +267,7 @@ Provider code can invoke agents through the SDK `Agent` capability:
             turn = agents.create_turn(
                 AgentCreateTurn(
                     session_id=session.id,
+                    timeout_seconds=120,
                     messages=[
                         AgentMessage(
                             role="user",
@@ -290,6 +295,7 @@ Provider code can invoke agents through the SDK `Agent` capability:
 
         let turn = agents.create_turn(AgentCreateTurn {
             session_id: session.id,
+            timeout_seconds: 120,
             messages: vec![AgentMessage {
                 role: "user".into(),
                 text: "Summarize the latest roadmap risk.".into(),
@@ -313,6 +319,7 @@ Provider code can invoke agents through the SDK `Agent` capability:
       });
       const turn = await agents.createTurn({
         sessionId: session.id,
+        timeoutSeconds: 120,
         messages: [
           {
             role: "user",
@@ -343,6 +350,7 @@ workflows:
       target:
         steps:
           - id: summarize
+            timeout: 120s
             agent:
               provider: simple
               model: fast
@@ -368,6 +376,7 @@ gestalt workflow triggers create \
   "steps": [
     {
       "id": "summarize",
+      "timeoutSeconds": 120,
       "agent": {
         "provider": "simple",
         "model": "fast",
@@ -455,9 +464,11 @@ provider.
 ### Execution model
 
 `CreateTurn` should persist the turn and return quickly, usually in `RUNNING` or
-`PENDING`. Long-running model and tool work should continue in the background.
-Callers use `GetTurn`, `ListTurnEvents`, and `ListInteractions` to observe
-progress or resolve pending human input.
+`PENDING`. `timeoutSeconds` is a required positive execution budget for the
+provider-owned turn; it does not extend the `CreateTurn` RPC deadline.
+Long-running model and tool work should continue in the background. Callers use
+`GetTurn`, `ListTurnEvents`, and `ListInteractions` to observe progress or
+resolve pending human input.
 
 If your provider needs durable state, configure
 `providers.agent.<name>.indexeddb` and store canonical session and turn records
