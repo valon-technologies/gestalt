@@ -13,6 +13,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -114,6 +115,7 @@ type Broker struct {
 	connMapper        ConnectionMapper
 	mcpMapper         ConnectionMapper
 	connectionRuntime ConnectionRuntimeResolver
+	authorization     core.AuthorizationProvider
 	logger            *slog.Logger
 	tracerProvider    trace.TracerProvider
 }
@@ -130,6 +132,10 @@ func WithMCPConnectionMapper(m ConnectionMapper) BrokerOption {
 
 func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
 	return func(b *Broker) { b.connectionRuntime = r }
+}
+
+func WithAuthorizationProvider(provider core.AuthorizationProvider) BrokerOption {
+	return func(b *Broker) { b.authorization = provider }
 }
 
 func WithLogger(l *slog.Logger) BrokerOption {
@@ -262,6 +268,9 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
+	}
+	if err := b.checkAuthorizationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+		return fail(err)
 	}
 	metricOperation = operation
 	metricTransport = metricutil.AttrValue(transport)
@@ -449,6 +458,9 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	}
 	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
+	if err := b.checkAuthorizationAccess(ctx, p, providerName, graphQLOperationID); err != nil {
+		return fail(err)
+	}
 
 	conn := ConnectionFromContext(ctx)
 	if conn == "" && b.connMapper != nil {
@@ -512,6 +524,41 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		return ctx, "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 	}
 	return b.resolveToken(ctx, prov, p, providerName, connection, instance)
+}
+
+func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
+	if b == nil || b.authorization == nil {
+		return nil
+	}
+	req := authorizationAccessRequest(p, providerName, operationID)
+	resp, err := b.authorization.CheckAccess(ctx, req)
+	if err != nil {
+		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+	}
+	if resp == nil || !resp.GetAllowed() {
+		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
+	}
+	return nil
+}
+
+func authorizationAccessRequest(p *principal.Principal, providerName, operationID string) *proto.CheckAccessRequest {
+	p = principal.Canonicalized(p)
+	subjectID := principal.EffectiveCredentialSubjectID(p)
+	subjectType := strings.TrimSpace(string(principal.KindFromSubjectID(subjectID)))
+	if subjectType == "" && p != nil {
+		subjectType = strings.TrimSpace(string(p.Kind))
+	}
+	return &proto.CheckAccessRequest{
+		Subject: &proto.Subject{
+			Type: subjectType,
+			Id:   subjectID,
+		},
+		Action: &proto.Action{Name: strings.TrimSpace(operationID)},
+		Resource: &proto.Resource{
+			Type: "app",
+			Id:   strings.TrimSpace(providerName),
+		},
+	}
 }
 
 func (b *Broker) resolveConnectionMode(ctx context.Context, prov core.Provider, providerName, connection string) core.ConnectionMode {

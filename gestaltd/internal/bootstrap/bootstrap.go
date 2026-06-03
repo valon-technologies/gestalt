@@ -1125,10 +1125,16 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
+	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, prepared.Authorization)
+	if err != nil {
+		failPendingStartupProviders(prepared.Deps, err)
+		return nil, err
+	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
+		invocation.WithAuthorizationProvider(authorizationProvider),
 	)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)

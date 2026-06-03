@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -252,12 +253,200 @@ func TestOperationConnectionOverrideAllowedForPluginTransportOperations(t *testi
 	}
 }
 
+func TestBrokerInvokeChecksAuthorizationBeforeExecution(t *testing.T) {
+	t.Parallel()
+
+	executed := false
+	provider := &coretesting.StubIntegration{
+		N:        "slack",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "slack",
+			Operations: []catalog.CatalogOperation{{
+				ID:     "chat.postMessage",
+				Method: "POST",
+			}},
+		},
+		ExecuteFn: func(_ context.Context, operation string, _ map[string]any, token string) (*core.OperationResult, error) {
+			executed = true
+			if operation != "chat.postMessage" {
+				t.Fatalf("operation = %q, want chat.postMessage", operation)
+			}
+			if token != "" {
+				t.Fatalf("token = %q, want empty", token)
+			}
+			return &core.OperationResult{Status: 200, Body: "ok"}, nil
+		},
+	}
+	authz := &recordingAuthorizationProvider{allowed: true}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		nil,
+		nil,
+		WithAuthorizationProvider(authz),
+	)
+
+	result, err := broker.Invoke(
+		context.Background(),
+		&principal.Principal{SubjectID: "user:u-123", UserID: "u-123", Kind: principal.KindUser},
+		"slack",
+		"",
+		"chat.postMessage",
+		map[string]any{"channel": "C123"},
+	)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if result.Body != "ok" {
+		t.Fatalf("result body = %q, want ok", result.Body)
+	}
+	if !executed {
+		t.Fatal("Execute was not called")
+	}
+	req := authz.lastCheckAccess
+	if req == nil {
+		t.Fatal("CheckAccess was not called")
+	}
+	if got := req.GetSubject().GetType(); got != "user" {
+		t.Fatalf("subject type = %q, want user", got)
+	}
+	if got := req.GetSubject().GetId(); got != "user:u-123" {
+		t.Fatalf("subject id = %q, want user:u-123", got)
+	}
+	if got := req.GetResource().GetType(); got != "app" {
+		t.Fatalf("resource type = %q, want app", got)
+	}
+	if got := req.GetResource().GetId(); got != "slack" {
+		t.Fatalf("resource id = %q, want slack", got)
+	}
+	if got := req.GetAction().GetName(); got != "chat.postMessage" {
+		t.Fatalf("action name = %q, want chat.postMessage", got)
+	}
+}
+
+func TestBrokerInvokeGraphQLAuthorizationDeniesBeforeCredentialResolution(t *testing.T) {
+	t.Parallel()
+
+	graphQLInvoked := false
+	provider := &brokerGraphQLProvider{
+		StubIntegration: &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeSubject,
+		},
+		invokeGraphQL: func(context.Context, core.GraphQLRequest, string) (*core.OperationResult, error) {
+			graphQLInvoked = true
+			return &core.OperationResult{Status: 200}, nil
+		},
+	}
+	authz := &recordingAuthorizationProvider{allowed: false}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		nil,
+		nil,
+		WithAuthorizationProvider(authz),
+	)
+
+	_, err := broker.InvokeGraphQL(
+		context.Background(),
+		&principal.Principal{SubjectID: "service_account:reports", Kind: principal.Kind("service_account")},
+		"github",
+		"",
+		GraphQLRequest{Document: "query { viewer { login } }"},
+	)
+	if err == nil {
+		t.Fatal("InvokeGraphQL succeeded, want authorization denied")
+	}
+	if !errors.Is(err, ErrAuthorizationDenied) {
+		t.Fatalf("InvokeGraphQL error = %v, want ErrAuthorizationDenied", err)
+	}
+	if graphQLInvoked {
+		t.Fatal("InvokeGraphQL provider was called after authorization denial")
+	}
+	req := authz.lastCheckAccess
+	if req == nil {
+		t.Fatal("CheckAccess was not called")
+	}
+	if got := req.GetSubject().GetType(); got != "service_account" {
+		t.Fatalf("subject type = %q, want service_account", got)
+	}
+	if got := req.GetSubject().GetId(); got != "service_account:reports" {
+		t.Fatalf("subject id = %q, want service_account:reports", got)
+	}
+	if got := req.GetResource().GetType(); got != "app" {
+		t.Fatalf("resource type = %q, want app", got)
+	}
+	if got := req.GetResource().GetId(); got != "github" {
+		t.Fatalf("resource id = %q, want github", got)
+	}
+	if got := req.GetAction().GetName(); got != graphQLOperationID {
+		t.Fatalf("action name = %q, want %s", got, graphQLOperationID)
+	}
+}
+
 type brokerOperationConnectionProvider struct {
 	*coretesting.StubIntegration
 	operationConnections map[string]string
 	selector             core.OperationConnectionSelector
 	allowOverride        bool
 }
+
+type brokerGraphQLProvider struct {
+	*coretesting.StubIntegration
+	invokeGraphQL func(context.Context, core.GraphQLRequest, string) (*core.OperationResult, error)
+}
+
+func (p *brokerGraphQLProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
+	if p.invokeGraphQL != nil {
+		return p.invokeGraphQL(ctx, request, token)
+	}
+	return &core.OperationResult{Status: 200}, nil
+}
+
+type recordingAuthorizationProvider struct {
+	allowed         bool
+	lastCheckAccess *proto.CheckAccessRequest
+}
+
+func (p *recordingAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	p.lastCheckAccess = req
+	return &proto.CheckAccessResponse{Allowed: p.allowed}, nil
+}
+
+func (p *recordingAuthorizationProvider) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	return &proto.CheckAccessManyResponse{}, nil
+}
+
+func (p *recordingAuthorizationProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	return &proto.ListRelationshipsResponse{}, nil
+}
+
+func (p *recordingAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
+	return &proto.AddRelationshipResponse{}, nil
+}
+
+func (p *recordingAuthorizationProvider) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
+	return &proto.DeleteRelationshipResponse{}, nil
+}
+
+func (p *recordingAuthorizationProvider) SetAuthorizationState(context.Context, *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
+	return &proto.SetAuthorizationStateResponse{}, nil
+}
+
+func (p *recordingAuthorizationProvider) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
+	return &proto.GetActiveModelRefResponse{}, nil
+}
+
+func (p *recordingAuthorizationProvider) SetActiveModel(context.Context, *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
+	return &proto.SetActiveModelResponse{}, nil
+}
+
+func (p *recordingAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	return &proto.ListActiveModelResourceTypesResponse{}, nil
+}
+
+func (p *recordingAuthorizationProvider) Ping(context.Context) error { return nil }
+
+func (p *recordingAuthorizationProvider) Close() error { return nil }
 
 func (p *brokerOperationConnectionProvider) ConnectionForOperation(operation string) string {
 	return p.operationConnections[operation]
