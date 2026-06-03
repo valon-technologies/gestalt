@@ -8,6 +8,7 @@ import {
   structFromObject,
   type JsonObjectInput,
 } from "./protocol.ts";
+import { hostInvocationContext } from "./invocation-context.ts";
 import {
   createHostServiceGrpcTransport,
   hostServiceMetadataInterceptors,
@@ -72,12 +73,12 @@ export interface App {
  */
 class AppImpl implements App {
   private readonly client: Client<typeof AppService>;
-  private readonly invocationToken: string;
+  private readonly invocationContext: ReturnType<typeof hostInvocationContext>;
 
   constructor(request: Request);
   constructor(invocationToken: string);
   constructor(requestOrToken: Request | string) {
-    this.invocationToken = normalizeInvocationToken(requestOrToken);
+    this.invocationContext = hostInvocationContext(requestOrToken);
 
     const { target, token } = requireHostServiceTarget("app");
     const transport = createHostServiceGrpcTransport(
@@ -95,7 +96,7 @@ class AppImpl implements App {
     options?: AppInvokeOptions,
   ): Promise<OperationResult> {
     const response = await this.client.invoke({
-      invocationToken: this.invocationToken,
+      ...this.invocationContext,
       app,
       operation,
       params: structFromObject(params),
@@ -123,7 +124,7 @@ class AppImpl implements App {
     }
 
     const response = await this.client.invokeGraphQL({
-      invocationToken: this.invocationToken,
+      invocationToken: this.invocationContext.invocationToken,
       app,
       document: trimmedDocument,
       ...(options?.variables !== undefined
@@ -148,7 +149,7 @@ class AppImpl implements App {
     ttlSeconds?: number;
   }): Promise<string> {
     const response = await this.client.exchangeInvocationToken({
-      parentInvocationToken: this.invocationToken,
+      parentInvocationToken: this.invocationContext.invocationToken,
       grants: (options?.grants ?? [])
         .map((grant) => ({
           app: grant.app.trim(),
@@ -168,15 +169,3 @@ class AppImpl implements App {
 }
 
 export const App = AppImpl;
-
-function normalizeInvocationToken(requestOrToken: Request | string): string {
-  const invocationToken =
-    typeof requestOrToken === "string"
-      ? requestOrToken
-      : requestOrToken.invocationToken;
-  const trimmed = invocationToken.trim();
-  if (!trimmed) {
-    throw new Error("app: invocation token is not available");
-  }
-  return trimmed;
-}

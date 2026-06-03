@@ -38,6 +38,8 @@ test("App forwards invocation tokens from strings and Request objects", async ()
     connection: string;
     instance: string;
     idempotencyKey: string;
+    workflowRunId?: string;
+    workflowKeys?: string[];
   }> = [];
   const graphqlCalls: Array<{
     invocationToken: string;
@@ -92,6 +94,8 @@ test("App forwards invocation tokens from strings and Request objects", async ()
               connection: input.connection,
               instance: input.instance,
               idempotencyKey: input.idempotencyKey,
+              ...(typeof input.workflow?.runId === "string" ? { workflowRunId: input.workflow.runId } : {}),
+              ...(input.workflow !== undefined ? { workflowKeys: Object.keys(input.workflow).sort() } : {}),
             });
             return create(OperationResultSchema, {
               status: 207,
@@ -230,6 +234,16 @@ test("App forwards invocation tokens from strings and Request objects", async ()
       fromRequest.invoke("slack", "bad", { when: new Date() } as any),
     ).rejects.toThrow(TypeError);
 
+    const fromWorkflow = new App(
+      request("", {}, {}, {}, {}, {
+        provider: "local",
+        runId: "run-123",
+        runAs: { id: "service_account:caller-supplied" },
+        trigger: { event: { data: { ignored: true } } },
+      }),
+    );
+    await fromWorkflow.invoke("testApp", "runWorkflowStep");
+
     const graphql = await fromRequest.invokeGraphQL(
       "linear",
       "query Viewer($team: String!) { viewer(team: $team) { id } }",
@@ -305,6 +319,17 @@ test("App forwards invocation tokens from strings and Request objects", async ()
         instance: "",
         idempotencyKey: "",
       },
+      {
+        invocationToken: "",
+        app: "testApp",
+        operation: "runWorkflowStep",
+        params: {},
+        connection: "",
+        instance: "",
+        idempotencyKey: "",
+        workflowRunId: "run-123",
+        workflowKeys: ["provider", "providerName", "runId"],
+      },
     ]);
 
     expect(graphqlCalls).toEqual([
@@ -335,14 +360,12 @@ test("App forwards invocation tokens from strings and Request objects", async ()
   }
 });
 
-test("App prioritizes invocation-token validation over socket configuration", () => {
+test("App still requires host service socket configuration", () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
 
   try {
     delete process.env[ENV_HOST_SERVICE_SOCKET];
-    expect(() => new App("   ")).toThrow(
-      "app: invocation token is not available",
-    );
+    expect(() => new App("   ")).toThrow("app: GESTALT_HOST_SERVICE_SOCKET is not set");
   } finally {
     if (previousSocket === undefined) {
       delete process.env[ENV_HOST_SERVICE_SOCKET];
