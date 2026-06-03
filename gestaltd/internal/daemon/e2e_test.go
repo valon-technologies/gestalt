@@ -279,6 +279,7 @@ workflows:
       target:
         steps:
           - id: summarize
+            timeout: 120s
             agent:
               provider: simple
               model: fast
