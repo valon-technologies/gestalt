@@ -104,12 +104,12 @@ class Request:
     def app(self) -> "AppProtocol":
         from ._app_access import _AppClient
 
-        return _AppClient(self.invocation_token)
+        return _AppClient(self.invocation_token, workflow=self.workflow)
 
     def agent(self) -> "Agent":
         from ._agent import Agent
 
-        return Agent(self.invocation_token)
+        return Agent(self.invocation_token, workflow=self.workflow)
 
     def workflows(self) -> "Workflow":
         from ._workflow import Workflow
