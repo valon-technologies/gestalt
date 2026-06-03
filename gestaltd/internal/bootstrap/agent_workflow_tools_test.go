@@ -2106,12 +2106,3 @@ func mustWorkflowSystemTool(t *testing.T, runtime *agentRuntime, operation strin
 	tool.ID = mustMintAgentToolID(t, workflowSystemRunGrants(t, runtime), tool.Target)
 	return tool
 }
-
-func stringSliceContains(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
