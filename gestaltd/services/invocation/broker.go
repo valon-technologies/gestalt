@@ -544,19 +544,16 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 func authorizationAccessRequest(p *principal.Principal, providerName, operationID string) *proto.CheckAccessRequest {
 	p = principal.Canonicalized(p)
 	subjectID := principal.EffectiveCredentialSubjectID(p)
-	subjectType := strings.TrimSpace(string(principal.KindFromSubjectID(subjectID)))
-	if subjectType == "" && p != nil {
-		subjectType = strings.TrimSpace(string(p.Kind))
-	}
+	providerName = strings.TrimSpace(providerName)
 	return &proto.CheckAccessRequest{
 		Subject: &proto.Subject{
-			Type: subjectType,
+			Type: "subject",
 			Id:   subjectID,
 		},
 		Action: &proto.Action{Name: strings.TrimSpace(operationID)},
 		Resource: &proto.Resource{
-			Type: "app",
-			Id:   strings.TrimSpace(providerName),
+			Type: providerName,
+			Id:   providerName,
 		},
 	}
 }

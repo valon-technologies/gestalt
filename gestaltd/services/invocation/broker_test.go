@@ -307,14 +307,14 @@ func TestBrokerInvokeChecksAuthorizationBeforeExecution(t *testing.T) {
 	if req == nil {
 		t.Fatal("CheckAccess was not called")
 	}
-	if got := req.GetSubject().GetType(); got != "user" {
-		t.Fatalf("subject type = %q, want user", got)
+	if got := req.GetSubject().GetType(); got != "subject" {
+		t.Fatalf("subject type = %q, want subject", got)
 	}
 	if got := req.GetSubject().GetId(); got != "user:u-123" {
 		t.Fatalf("subject id = %q, want user:u-123", got)
 	}
-	if got := req.GetResource().GetType(); got != "app" {
-		t.Fatalf("resource type = %q, want app", got)
+	if got := req.GetResource().GetType(); got != "slack" {
+		t.Fatalf("resource type = %q, want slack", got)
 	}
 	if got := req.GetResource().GetId(); got != "slack" {
 		t.Fatalf("resource id = %q, want slack", got)
@@ -366,14 +366,14 @@ func TestBrokerInvokeGraphQLAuthorizationDeniesBeforeCredentialResolution(t *tes
 	if req == nil {
 		t.Fatal("CheckAccess was not called")
 	}
-	if got := req.GetSubject().GetType(); got != "service_account" {
-		t.Fatalf("subject type = %q, want service_account", got)
+	if got := req.GetSubject().GetType(); got != "subject" {
+		t.Fatalf("subject type = %q, want subject", got)
 	}
 	if got := req.GetSubject().GetId(); got != "service_account:reports" {
 		t.Fatalf("subject id = %q, want service_account:reports", got)
 	}
-	if got := req.GetResource().GetType(); got != "app" {
-		t.Fatalf("resource type = %q, want app", got)
+	if got := req.GetResource().GetType(); got != "github" {
+		t.Fatalf("resource type = %q, want github", got)
 	}
 	if got := req.GetResource().GetId(); got != "github" {
 		t.Fatalf("resource id = %q, want github", got)
