@@ -518,8 +518,7 @@ By default, input decode failures return a structured `400` response, and unhand
 Hosted HTTP endpoints let an external product call an app through a stable
 HTTP route, while the app still handles the request as a normal operation.
 They are useful for webhooks and other inbound requests whose path, signature
-verification, body shape, or acknowledgment response needs to match the calling
-product.
+verification, or body shape needs to match the calling product.
 
 The endpoint declaration belongs in the app manifest under `spec.http` and
 `spec.securitySchemes`. Deployment config selects the app and may override
