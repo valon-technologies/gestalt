@@ -3755,7 +3755,7 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 		if !ok {
 			return nil
 		}
-		staticManifest, err := portableStaticValidationManifest(entry.ResolvedManifest, entry.ResolvedManifestPath, entry.HasReleaseMetadataSource())
+		staticManifest, err := portableStaticValidationManifest(entry.ResolvedManifest, entry.ResolvedManifestPath, shouldProjectStaticManifestPortable(entry, lockEntry))
 		if err != nil {
 			return fmt.Errorf("project static validation manifest for %s: %w", name, err)
 		}
@@ -3821,6 +3821,24 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 		}
 	}
 	return nil
+}
+
+func shouldProjectStaticManifestPortable(entry *config.ProviderEntry, lockEntry LockEntry) bool {
+	if entry == nil {
+		return false
+	}
+	if entry.HasReleaseMetadataSource() {
+		return true
+	}
+	if !entry.HasGitSource() || gitSourceMaterialization(gitSourceDef(entry)) != gitMaterializationSnapshot {
+		return false
+	}
+	if len(lockEntry.Archives) == 0 || lockEntry.SourceRef == nil {
+		return false
+	}
+	return lockEntry.SourceRef.Type == gitSourceRefType &&
+		lockEntry.SourceRef.Materialization == gitMaterializationSnapshot &&
+		gitSourceMatchesLockRef(entry, lockEntry.SourceRef)
 }
 
 func validateResolvedStructureForCommittedLock(paths lifecyclePaths, cfg *config.Config) error {

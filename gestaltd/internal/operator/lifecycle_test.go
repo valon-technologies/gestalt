@@ -3453,16 +3453,16 @@ func TestPortableStaticValidationManifestProjectsReleaseRuntimeFields(t *testing
 	}
 }
 
-func TestAttachStaticValidationMetadataProjectsOnlyReleaseSources(t *testing.T) {
+func TestAttachStaticValidationMetadataProjectsPortableArchiveBackedSources(t *testing.T) {
 	t.Parallel()
 
-	manifest := func(binary string) *providermanifestv1.Manifest {
+	manifest := func(kind, binary, goos, goarch string) *providermanifestv1.Manifest {
 		return &providermanifestv1.Manifest{
-			Kind:    providermanifestv1.KindApp,
+			Kind:    kind,
 			Version: "1.2.3",
 			Artifacts: []providermanifestv1.Artifact{{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
+				OS:     goos,
+				Arch:   goarch,
 				Path:   binary,
 				SHA256: "sha",
 			}},
@@ -3470,27 +3470,89 @@ func TestAttachStaticValidationMetadataProjectsOnlyReleaseSources(t *testing.T) 
 			Spec:       &providermanifestv1.Spec{},
 		}
 	}
+	appManifest := func(binary string) *providermanifestv1.Manifest {
+		return manifest(providermanifestv1.KindApp, binary, runtime.GOOS, runtime.GOARCH)
+	}
+	gitSnapshotSource := config.NewGitSource(config.GitSourceDef{
+		Repo:               "https://github.com/acme/provider.git",
+		Ref:                "main",
+		Path:               "manifest.yaml",
+		ArtifactRepository: "default",
+		Materialization:    gitMaterializationSnapshot,
+	})
+	gitSource := config.NewGitSource(config.GitSourceDef{
+		Repo:               "https://github.com/acme/provider.git",
+		Ref:                "main",
+		Path:               "manifest.yaml",
+		ArtifactRepository: "default",
+		Materialization:    gitMaterializationSource,
+	})
 	cfg := &config.Config{
 		Apps: map[string]*config.ProviderEntry{
 			"release": {
 				Source:           config.NewMetadataSource("https://example.invalid/provider-release.yaml"),
-				ResolvedManifest: manifest("release-provider"),
+				ResolvedManifest: appManifest("release-provider"),
 			},
 			"local": {
 				Source:           config.ProviderSource{Path: "./local"},
-				ResolvedManifest: manifest("local-provider"),
+				ResolvedManifest: appManifest("local-provider"),
 			},
-			"git": {
-				Source:           config.NewGitSource(config.GitSourceDef{Repo: "github.com/acme/provider", Ref: "main"}),
-				ResolvedManifest: manifest("git-provider"),
+			"gitSource": {
+				Source:           gitSource,
+				ResolvedManifest: appManifest("git-source-provider"),
+			},
+			"gitSnapshot": {
+				Source:           gitSnapshotSource,
+				ResolvedManifest: appManifest("git-snapshot-provider"),
+			},
+			"gitSnapshotMissingSourceRef": {
+				Source:           gitSnapshotSource,
+				ResolvedManifest: appManifest("git-snapshot-missing-source-ref-provider"),
+			},
+			"gitSnapshotSourceMaterialization": {
+				Source:           gitSnapshotSource,
+				ResolvedManifest: appManifest("git-snapshot-source-materialization-provider"),
+			},
+			"gitSnapshotNoArchives": {
+				Source:           gitSnapshotSource,
+				ResolvedManifest: appManifest("git-snapshot-no-archives-provider"),
+			},
+			"gitSnapshotWrongSourceRefType": {
+				Source:           gitSnapshotSource,
+				ResolvedManifest: appManifest("git-snapshot-wrong-source-ref-type-provider"),
+			},
+		},
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"agentSnapshot": {
+					Source:           gitSnapshotSource,
+					ResolvedManifest: manifest(providermanifestv1.KindAgent, "agent-snapshot-provider", runtime.GOOS, runtime.GOARCH),
+				},
 			},
 		},
 	}
+	gitSnapshotLockRef := gitSourceLockRef(cfg.Apps["gitSnapshot"], "gestalt-ref")
+	gitSnapshotSourceMaterializationRef := *gitSnapshotLockRef
+	gitSnapshotSourceMaterializationRef.Materialization = gitMaterializationSource
+	gitSnapshotWrongTypeRef := *gitSnapshotLockRef
+	gitSnapshotWrongTypeRef.Type = "metadata"
+	archives := map[string]LockArchive{
+		"darwin/arm64": {URL: "https://example.invalid/darwin-arm64.tar.gz", SHA256: "darwin-sha"},
+		"linux/amd64":  {URL: "https://example.invalid/linux-amd64.tar.gz", SHA256: "linux-sha"},
+	}
 	lock := &Lockfile{
 		Providers: map[string]LockEntry{
-			"release": {},
-			"local":   {},
-			"git":     {},
+			"release":                          {},
+			"local":                            {},
+			"gitSource":                        {},
+			"gitSnapshot":                      {SourceRef: gitSnapshotLockRef, Archives: archives},
+			"gitSnapshotMissingSourceRef":      {Archives: archives},
+			"gitSnapshotSourceMaterialization": {SourceRef: &gitSnapshotSourceMaterializationRef, Archives: archives},
+			"gitSnapshotNoArchives":            {SourceRef: gitSourceLockRef(cfg.Apps["gitSnapshotNoArchives"], "gestalt-ref")},
+			"gitSnapshotWrongSourceRefType":    {SourceRef: &gitSnapshotWrongTypeRef, Archives: archives},
+		},
+		Agents: map[string]LockEntry{
+			"agentSnapshot": {SourceRef: gitSourceLockRef(cfg.Providers.Agent["agentSnapshot"], "gestalt-ref"), Archives: archives},
 		},
 	}
 
@@ -3498,21 +3560,129 @@ func TestAttachStaticValidationMetadataProjectsOnlyReleaseSources(t *testing.T) 
 		t.Fatalf("attachStaticValidationMetadata: %v", err)
 	}
 
-	releaseManifest := lock.Providers["release"].StaticManifest
-	if len(releaseManifest.Artifacts) != 0 {
-		t.Fatalf("release artifacts = %+v, want nil", releaseManifest.Artifacts)
+	for _, name := range []string{"release", "gitSnapshot"} {
+		staticManifest := lock.Providers[name].StaticManifest
+		if len(staticManifest.Artifacts) != 0 {
+			t.Fatalf("%s artifacts = %+v, want nil", name, staticManifest.Artifacts)
+		}
+		if staticManifest.Entrypoint == nil || staticManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
+			t.Fatalf("%s entrypoint = %+v, want placeholder", name, staticManifest.Entrypoint)
+		}
 	}
-	if releaseManifest.Entrypoint == nil || releaseManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
-		t.Fatalf("release entrypoint = %+v, want placeholder", releaseManifest.Entrypoint)
+	agentManifest := lock.Agents["agentSnapshot"].StaticManifest
+	if len(agentManifest.Artifacts) != 0 {
+		t.Fatalf("agentSnapshot artifacts = %+v, want nil", agentManifest.Artifacts)
 	}
-	for _, name := range []string{"local", "git"} {
+	if agentManifest.Entrypoint == nil || agentManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
+		t.Fatalf("agentSnapshot entrypoint = %+v, want placeholder", agentManifest.Entrypoint)
+	}
+	for _, name := range []string{"local", "gitSource", "gitSnapshotMissingSourceRef", "gitSnapshotSourceMaterialization", "gitSnapshotNoArchives", "gitSnapshotWrongSourceRefType"} {
 		staticManifest := lock.Providers[name].StaticManifest
 		if len(staticManifest.Artifacts) != 1 {
 			t.Fatalf("%s artifacts = %+v, want preserved runtime artifact", name, staticManifest.Artifacts)
 		}
-		if staticManifest.Entrypoint == nil || staticManifest.Entrypoint.ArtifactPath != name+"-provider" {
+		if staticManifest.Entrypoint == nil || staticManifest.Entrypoint.ArtifactPath == staticValidationEntrypointPlaceholder {
 			t.Fatalf("%s entrypoint = %+v, want original entrypoint", name, staticManifest.Entrypoint)
 		}
+	}
+}
+
+func TestArchiveBackedGitSnapshotStaticProjectionAvoidsAgentPlatformDrift(t *testing.T) {
+	t.Parallel()
+
+	gitSnapshotSource := config.NewGitSource(config.GitSourceDef{
+		Repo:               "https://github.com/acme/provider.git",
+		Ref:                "main",
+		Path:               "agent/manifest.yaml",
+		ArtifactRepository: "default",
+		Materialization:    gitMaterializationSnapshot,
+	})
+	archives := map[string]LockArchive{
+		"darwin/arm64": {URL: "https://example.invalid/agent-darwin-arm64.tar.gz", SHA256: "darwin-sha"},
+		"linux/amd64":  {URL: "https://example.invalid/agent-linux-amd64.tar.gz", SHA256: "linux-sha"},
+	}
+	buildLock := func(goos, goarch string) *Lockfile {
+		t.Helper()
+		cfg := &config.Config{
+			Providers: config.ProvidersConfig{
+				Agent: map[string]*config.ProviderEntry{
+					"deep": {
+						Source: gitSnapshotSource,
+						ResolvedManifest: &providermanifestv1.Manifest{
+							Kind:    providermanifestv1.KindAgent,
+							Source:  "github.com/acme/provider/agent",
+							Version: "1.2.3",
+							Artifacts: []providermanifestv1.Artifact{{
+								OS:     goos,
+								Arch:   goarch,
+								Path:   filepath.ToSlash(filepath.Join("artifacts", goos, goarch, "agent")),
+								SHA256: goos + "-" + goarch + "-sha",
+							}},
+							Entrypoint: &providermanifestv1.Entrypoint{
+								ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", goos, goarch, "agent")),
+							},
+							Spec: &providermanifestv1.Spec{},
+						},
+					},
+				},
+			},
+		}
+		lock := &Lockfile{
+			Agents: map[string]LockEntry{
+				"deep": {
+					Fingerprint: "same-input-digest",
+					Package:     "github.com/acme/provider/agent",
+					Kind:        providermanifestv1.KindAgent,
+					Runtime:     providerReleaseRuntimeExecutable,
+					SourceRef:   gitSourceLockRef(cfg.Providers.Agent["deep"], "gestalt-ref"),
+					Version:     "1.2.3",
+					Archives:    archives,
+				},
+			},
+		}
+		if err := attachStaticValidationMetadata(lock, cfg, nil); err != nil {
+			t.Fatalf("attachStaticValidationMetadata: %v", err)
+		}
+		return lock
+	}
+
+	darwinLock := buildLock("darwin", "arm64")
+	linuxLock := buildLock("linux", "amd64")
+	if drifts := diagnoseLockfileDrift(darwinLock, linuxLock); len(drifts) != 0 {
+		t.Fatalf("platform-specific agent manifests produced lock drift: %+v", drifts)
+	}
+
+	entry := darwinLock.Agents["deep"]
+	if got := entry.Archives["darwin/arm64"].SHA256; got != "darwin-sha" {
+		t.Fatalf("darwin archive SHA256 = %q, want darwin-sha", got)
+	}
+	if got := entry.Archives["linux/amd64"].SHA256; got != "linux-sha" {
+		t.Fatalf("linux archive SHA256 = %q, want linux-sha", got)
+	}
+	if entry.SourceRef == nil || entry.SourceRef.Type != gitSourceRefType || entry.SourceRef.Materialization != gitMaterializationSnapshot {
+		t.Fatalf("sourceRef = %+v, want git snapshot sourceRef", entry.SourceRef)
+	}
+	if entry.StaticManifest == nil || len(entry.StaticManifest.Artifacts) != 0 {
+		t.Fatalf("static manifest artifacts = %+v, want nil", entry.StaticManifest)
+	}
+	if entry.StaticManifest.Entrypoint == nil || entry.StaticManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
+		t.Fatalf("static manifest entrypoint = %+v, want placeholder", entry.StaticManifest.Entrypoint)
+	}
+
+	lockPath := filepath.Join(t.TempDir(), LockfileName)
+	if err := WriteLockfile(lockPath, darwinLock); err != nil {
+		t.Fatalf("WriteLockfile: %v", err)
+	}
+	readBack, err := ReadLockfile(lockPath)
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	readBackManifest := readBack.Agents["deep"].StaticManifest
+	if readBackManifest == nil || len(readBackManifest.Artifacts) != 0 {
+		t.Fatalf("read-back static manifest artifacts = %+v, want nil", readBackManifest)
+	}
+	if readBackManifest.Entrypoint == nil || readBackManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
+		t.Fatalf("read-back static manifest entrypoint = %+v, want placeholder", readBackManifest.Entrypoint)
 	}
 }
 
