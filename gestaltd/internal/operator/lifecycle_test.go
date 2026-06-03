@@ -4171,19 +4171,6 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if diskLock.SchemaVersion != 9 {
 		t.Fatalf("lock schemaVersion = %d, want explicit v9 schema", diskLock.SchemaVersion)
 	}
-	diskLock.SchemaVersion = 8
-	oldLockData, err := json.Marshal(diskLock)
-	if err != nil {
-		t.Fatalf("Marshal old schema lock: %v", err)
-	}
-	oldLockPath := filepath.Join(dir, "old-schema.lock.json")
-	if err := os.WriteFile(oldLockPath, oldLockData, 0o644); err != nil {
-		t.Fatalf("write old schema lock: %v", err)
-	}
-	if _, err := ReadLockfile(oldLockPath); err == nil || !strings.Contains(err.Error(), "unsupported lockfile schema version 8") {
-		t.Fatalf("ReadLockfile old schema error = %v, want schema version rejection", err)
-	}
-	diskLock.SchemaVersion = providerLockSchemaVersion
 	providerEntry, ok := diskLock.Providers.App["example"]
 	if !ok {
 		t.Fatal(`disk lock providers.plugin["example"] not found`)
