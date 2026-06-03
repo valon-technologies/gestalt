@@ -906,8 +906,8 @@ server:
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 	}
 	callerStatic := lock.Providers["caller"].StaticManifest
-	if callerStatic == nil || callerStatic.Entrypoint == nil || callerStatic.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
-		t.Fatalf("caller static manifest entrypoint = %+v, want placeholder", callerStatic)
+	if callerStatic == nil || callerStatic.Entrypoint != nil {
+		t.Fatalf("caller static manifest entrypoint = %+v, want nil", callerStatic)
 	}
 
 	writeConfig(`
@@ -5874,8 +5874,8 @@ func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 			if len(entry.StaticManifest.Artifacts) != 0 {
 				t.Fatalf("lock static manifest artifacts = %+v, want nil", entry.StaticManifest.Artifacts)
 			}
-			if entry.StaticManifest.Entrypoint == nil || entry.StaticManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
-				t.Fatalf("lock static manifest entrypoint = %+v, want placeholder", entry.StaticManifest.Entrypoint)
+			if entry.StaticManifest.Entrypoint != nil {
+				t.Fatalf("lock static manifest entrypoint = %+v, want nil", entry.StaticManifest.Entrypoint)
 			}
 			wantCurrentSHA := hex.EncodeToString(currentArchiveSum[:])
 			wantExtraSHA := hex.EncodeToString(extraArchiveSum[:])
@@ -5903,8 +5903,8 @@ func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 			if len(readBackManifest.Artifacts) != 0 {
 				t.Fatalf("readBack static manifest artifacts = %+v, want nil", readBackManifest.Artifacts)
 			}
-			if readBackManifest.Entrypoint == nil || readBackManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
-				t.Fatalf("readBack static manifest entrypoint = %+v, want placeholder", readBackManifest.Entrypoint)
+			if readBackManifest.Entrypoint != nil {
+				t.Fatalf("readBack static manifest entrypoint = %+v, want nil", readBackManifest.Entrypoint)
 			}
 			if got := readBack.Caches["session"].Archives[providerpkg.CurrentPlatformString()].SHA256; got != wantCurrentSHA {
 				t.Fatalf("readBack current-platform SHA256 = %q, want %q", got, wantCurrentSHA)

@@ -8,8 +8,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 )
 
-const EntrypointPlaceholder = "static-validation-placeholder"
-
 func ProjectManifest(manifest *providermanifestv1.Manifest, manifestPath string, platformNeutral bool) (*providermanifestv1.Manifest, error) {
 	if manifest == nil {
 		return nil, nil
@@ -20,9 +18,7 @@ func ProjectManifest(manifest *providermanifestv1.Manifest, manifestPath string,
 			return nil, err
 		}
 		cloned.Artifacts = nil
-		if cloned.Entrypoint != nil {
-			cloned.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: EntrypointPlaceholder}
-		}
+		cloned.Entrypoint = nil
 		return RelativizeManifest(cloned, manifestPath), nil
 	}
 	return RelativizeManifest(manifest, manifestPath), nil

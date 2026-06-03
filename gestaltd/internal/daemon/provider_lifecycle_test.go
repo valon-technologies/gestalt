@@ -16,7 +16,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
-	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"gopkg.in/yaml.v3"
@@ -504,10 +503,7 @@ func writeProviderLifecycleRelease(t *testing.T, dir, pkg, version string) strin
 				"kind":    providermanifestv1.KindApp,
 				"source":  pkg,
 				"version": version,
-				"entrypoint": map[string]any{
-					"artifactPath": staticvalidation.EntrypointPlaceholder,
-				},
-				"spec": map[string]any{},
+				"spec":    map[string]any{},
 			},
 			"catalog": map[string]any{
 				"name": "alpha",
