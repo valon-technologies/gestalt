@@ -200,7 +200,7 @@ func TestManagerServerPublishEventThreadsCallerAppToSelectedProvider(t *testing.
 		"target_name":    "valon_sats.attempt.submitted",
 		"caller_app":     "valonSats",
 		"subject_id":     "user:user-123",
-				"request_id_set": true,
+		"request_id_set": true,
 		"allowed":        true,
 	})
 }
@@ -261,7 +261,7 @@ func TestManagerServerPublishEventThreadsCallerAppToFanoutProviders(t *testing.T
 			"target_name":    "valon_sats.attempt.submitted",
 			"caller_app":     "valonSats",
 			"subject_id":     "user:user-123",
-						"request_id_set": true,
+			"request_id_set": true,
 			"allowed":        true,
 		})
 	}

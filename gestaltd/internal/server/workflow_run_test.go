@@ -67,11 +67,11 @@ func TestGlobalWorkflowRunListPassesPaginationAndFilters(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.runs["run-page"] = &coreworkflow.Run{
-		ID:        "run-page",
-		Status:    coreworkflow.RunStatusRunning,
-		Target:    workflowAppStepTarget("roadmap", "sync"),
+		ID:                 "run-page",
+		Status:             coreworkflow.RunStatusRunning,
+		Target:             workflowAppStepTarget("roadmap", "sync"),
 		CreatedBySubjectID: principal.UserSubjectID(user.ID),
-		CreatedAt: &now,
+		CreatedAt:          &now,
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -170,18 +170,18 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 	provider := newMemoryWorkflowProvider()
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.runs["run-sync"] = &coreworkflow.Run{
-		ID:        "run-sync",
-		Status:    coreworkflow.RunStatusSucceeded,
-		Target:    workflowAppStepTarget("roadmap", "sync"),
+		ID:                 "run-sync",
+		Status:             coreworkflow.RunStatusSucceeded,
+		Target:             workflowAppStepTarget("roadmap", "sync"),
 		CreatedBySubjectID: principal.UserSubjectID(user.ID),
-		CreatedAt: &now,
+		CreatedAt:          &now,
 	}
 	provider.runs["run-export"] = &coreworkflow.Run{
-		ID:        "run-export",
-		Status:    coreworkflow.RunStatusFailed,
-		Target:    workflowAppStepTarget("roadmap", "export"),
+		ID:                 "run-export",
+		Status:             coreworkflow.RunStatusFailed,
+		Target:             workflowAppStepTarget("roadmap", "export"),
 		CreatedBySubjectID: principal.UserSubjectID(user.ID),
-		CreatedAt: &now,
+		CreatedAt:          &now,
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -250,12 +250,12 @@ func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	run := &coreworkflow.Run{
-		ID:        "run-cancel",
-		Status:    coreworkflow.RunStatusRunning,
-		Target:    workflowAppStepTarget("roadmap", "sync"),
+		ID:                 "run-cancel",
+		Status:             coreworkflow.RunStatusRunning,
+		Target:             workflowAppStepTarget("roadmap", "sync"),
 		CreatedBySubjectID: principal.UserSubjectID(user.ID),
-		CreatedAt: &now,
-		StartedAt: &now,
+		CreatedAt:          &now,
+		StartedAt:          &now,
 	}
 	provider.runs[run.ID] = run
 

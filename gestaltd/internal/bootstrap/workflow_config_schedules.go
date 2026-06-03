@@ -77,13 +77,13 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
 		if _, err := provider.UpsertSchedule(providerCtx, &proto.UpsertWorkflowProviderScheduleRequest{
-			ScheduleId:  desiredEntry.ScheduleID,
-			Cron:        schedule.Cron,
-			Timezone:    schedule.Timezone,
-			Target:      targetProto,
-			Paused:      schedule.Paused,
+			ScheduleId:           desiredEntry.ScheduleID,
+			Cron:                 schedule.Cron,
+			Timezone:             schedule.Timezone,
+			Target:               targetProto,
+			Paused:               schedule.Paused,
 			RequestedBySubjectId: workflowConfigOwnerSubjectID(),
-			RunAs:       agentwire.RunAsSubjectToProto(runAs),
+			RunAs:                agentwire.RunAsSubjectToProto(runAs),
 		}); err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}

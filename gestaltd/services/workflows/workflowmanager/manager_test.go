@@ -504,9 +504,9 @@ func TestListRunsResumesTokenlessProviderOverrun(t *testing.T) {
 	createdBy := principal.UserSubjectID("ada")
 	for _, id := range []string{"1", "2", "3"} {
 		provider.runs["run-"+id] = &coreworkflow.Run{
-			ID:        "run-" + id,
-			Status:    coreworkflow.RunStatusRunning,
-			Target:    target,
+			ID:                 "run-" + id,
+			Status:             coreworkflow.RunStatusRunning,
+			Target:             target,
 			CreatedBySubjectID: createdBy,
 		}
 	}
@@ -537,11 +537,11 @@ func TestListRunsOrdersCandidatesAcrossProvidersNewestFirst(t *testing.T) {
 	createdBy := principal.UserSubjectID("ada")
 	addRun := func(provider *testWorkflowProvider, runID string, createdAt time.Time) {
 		provider.runs[runID] = &coreworkflow.Run{
-			ID:        runID,
-			Status:    coreworkflow.RunStatusRunning,
-			Target:    target,
+			ID:                 runID,
+			Status:             coreworkflow.RunStatusRunning,
+			Target:             target,
 			CreatedBySubjectID: createdBy,
-			CreatedAt: &createdAt,
+			CreatedAt:          &createdAt,
 		}
 	}
 	addRun(localProvider, "run-old", time.Unix(100, 0).UTC())
@@ -618,21 +618,21 @@ func TestListRunsFiltersTargetAppInManager(t *testing.T) {
 		}
 		return &coreworkflow.ListRunsResponse{Runs: []*coreworkflow.Run{
 			{
-				ID:        "run-github",
-				Status:    coreworkflow.RunStatusRunning,
-				Target:    githubTarget,
+				ID:                 "run-github",
+				Status:             coreworkflow.RunStatusRunning,
+				Target:             githubTarget,
 				CreatedBySubjectID: principal.UserSubjectID("ada"),
 			},
 			{
-				ID:        "run-slack",
-				Status:    coreworkflow.RunStatusRunning,
-				Target:    slackTarget,
+				ID:                 "run-slack",
+				Status:             coreworkflow.RunStatusRunning,
+				Target:             slackTarget,
 				CreatedBySubjectID: principal.UserSubjectID("ada"),
 			},
 			{
-				ID:        "run-multi",
-				Status:    coreworkflow.RunStatusRunning,
-				Target:    multiTarget,
+				ID:                 "run-multi",
+				Status:             coreworkflow.RunStatusRunning,
+				Target:             multiTarget,
 				CreatedBySubjectID: principal.UserSubjectID("ada"),
 			},
 		}}, nil
@@ -689,18 +689,18 @@ func TestListRunsKeepsUnorderedTokenlessProviderRunsReachable(t *testing.T) {
 	provider.listRunsHook = func(coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
 		return &coreworkflow.ListRunsResponse{Runs: []*coreworkflow.Run{
 			{
-				ID:        "run-old",
-				Status:    coreworkflow.RunStatusRunning,
-				Target:    target,
+				ID:                 "run-old",
+				Status:             coreworkflow.RunStatusRunning,
+				Target:             target,
 				CreatedBySubjectID: principal.UserSubjectID("ada"),
-				CreatedAt: &oldCreatedAt,
+				CreatedAt:          &oldCreatedAt,
 			},
 			{
-				ID:        "run-new",
-				Status:    coreworkflow.RunStatusRunning,
-				Target:    target,
+				ID:                 "run-new",
+				Status:             coreworkflow.RunStatusRunning,
+				Target:             target,
 				CreatedBySubjectID: principal.UserSubjectID("ada"),
-				CreatedAt: &newCreatedAt,
+				CreatedAt:          &newCreatedAt,
 			},
 		}}, nil
 	}
@@ -1394,7 +1394,7 @@ func TestSignalOrStartRunRejectsAgentToolRunAsDelegationBeforeEnqueue(t *testing
 
 	runAs := &core.RunAsSubject{
 		SubjectID:           "service_account:automation",
-				CredentialSubjectID: "service_account:automation",
+		CredentialSubjectID: "service_account:automation",
 	}
 	for _, tc := range []struct {
 		name string
@@ -1562,10 +1562,10 @@ func TestSignalRunUsesCurrentPrincipalForTargetValidation(t *testing.T) {
 		},
 	})
 	provider.runs["run-stale-permissions"] = &coreworkflow.Run{
-		ID:          "run-stale-permissions",
-		Status:      coreworkflow.RunStatusRunning,
-		WorkflowKey: "github:99:acme/widgets:7",
-		Target:      target,
+		ID:                 "run-stale-permissions",
+		Status:             coreworkflow.RunStatusRunning,
+		WorkflowKey:        "github:99:acme/widgets:7",
+		Target:             target,
 		CreatedBySubjectID: "system:http_binding:github:event",
 	}
 	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
@@ -1730,8 +1730,8 @@ func (p *testWorkflowProvider) CreateDefinition(_ context.Context, req *proto.Cr
 		id = fmt.Sprintf("definition-%d", len(p.definitions)+1)
 	}
 	definition := &coreworkflow.Definition{
-		ID:        id,
-		Target:    workflowwire.TargetFromProto(req.GetTarget()),
+		ID:                 id,
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}
 	p.definitions[definition.ID] = definition
@@ -1754,8 +1754,8 @@ func (p *testWorkflowProvider) UpdateDefinition(_ context.Context, req *proto.Up
 		return nil, core.ErrNotFound
 	}
 	definition := &coreworkflow.Definition{
-		ID:        id,
-		Target:    workflowwire.TargetFromProto(req.GetTarget()),
+		ID:                 id,
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
 		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 	}
 	p.definitions[id] = definition
@@ -1787,10 +1787,10 @@ func (p *testWorkflowProvider) SignalOrStartRun(_ context.Context, req *proto.Si
 		return nil, p.signalOrStartErr
 	}
 	run := &coreworkflow.Run{
-		ID:          "run-signaled",
-		Status:      coreworkflow.RunStatusRunning,
-		WorkflowKey: strings.TrimSpace(req.GetWorkflowKey()),
-		Target:      workflowwire.TargetFromProto(req.GetTarget()),
+		ID:                 "run-signaled",
+		Status:             coreworkflow.RunStatusRunning,
+		WorkflowKey:        strings.TrimSpace(req.GetWorkflowKey()),
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}
 	p.runs[run.ID] = run
@@ -1889,12 +1889,12 @@ func (p *testWorkflowProvider) UpsertSchedule(_ context.Context, req *proto.Upse
 	target := workflowwire.TargetFromProto(req.GetTarget())
 	p.upsertedSchedules = append(p.upsertedSchedules, gproto.Clone(req).(*proto.UpsertWorkflowProviderScheduleRequest))
 	schedule := &coreworkflow.Schedule{
-		ID:           strings.TrimSpace(req.GetScheduleId()),
-		Cron:         strings.TrimSpace(req.GetCron()),
-		Timezone:     strings.TrimSpace(req.GetTimezone()),
-		Target:       target,
-		DefinitionID: strings.TrimSpace(req.GetDefinitionId()),
-		Paused:       req.GetPaused(),
+		ID:                 strings.TrimSpace(req.GetScheduleId()),
+		Cron:               strings.TrimSpace(req.GetCron()),
+		Timezone:           strings.TrimSpace(req.GetTimezone()),
+		Target:             target,
+		DefinitionID:       strings.TrimSpace(req.GetDefinitionId()),
+		Paused:             req.GetPaused(),
 		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 	}
 	p.schedules[schedule.ID] = schedule
@@ -1916,11 +1916,11 @@ func (p *testWorkflowProvider) UpsertEventTrigger(_ context.Context, req *proto.
 	match := workflowwire.EventMatchFromProto(req.GetMatch())
 	p.upsertedEventTriggers = append(p.upsertedEventTriggers, gproto.Clone(req).(*proto.UpsertWorkflowProviderEventTriggerRequest))
 	trigger := &coreworkflow.EventTrigger{
-		ID:           strings.TrimSpace(req.GetTriggerId()),
-		Match:        match,
-		Target:       target,
-		DefinitionID: strings.TrimSpace(req.GetDefinitionId()),
-		Paused:       req.GetPaused(),
+		ID:                 strings.TrimSpace(req.GetTriggerId()),
+		Match:              match,
+		Target:             target,
+		DefinitionID:       strings.TrimSpace(req.GetDefinitionId()),
+		Paused:             req.GetPaused(),
 		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 	}
 	p.eventTriggers[trigger.ID] = trigger

@@ -13,6 +13,7 @@ const objects = new Map<string, {
 }>();
 
 export const provider = defineS3Provider({
+  displayName: "Fixture S3",
   description: "S3 fixture used by SDK tests",
   async headObject(ref) {
     const stored = objects.get(ref.key);

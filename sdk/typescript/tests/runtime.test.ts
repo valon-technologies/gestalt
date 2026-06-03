@@ -182,6 +182,7 @@ test("runtime main writes a static catalog in catalog mode", async () => {
       `import { defineApp, s } from ${JSON.stringify(indexPath)};
 
 export const app = defineApp({
+  displayName: "Catalog Provider",
   operations: [
     {
       id: "ping",
@@ -266,6 +267,7 @@ test("loadProviderFromTarget formats package target in errors when explicit targ
         name: "broken-provider",
         gestalt: {
           provider: {
+            kind: "authentication",
             target: "./provider.ts#missing",
           },
         },
@@ -1625,6 +1627,7 @@ test("runtime provider serves runtime metadata plus sessions", async () => {
   let startAppWorkdir: string | undefined;
   const provider = defineRuntimeProvider({
     name: "runtime-provider",
+    displayName: "Fixture Runtime",
     warnings: ["set RUNTIME_ENDPOINT"],
     getSupport() {
       return {

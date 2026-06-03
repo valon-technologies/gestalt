@@ -44,8 +44,8 @@ func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, 
 		return nil, err
 	}
 	definitionProto, err := provider.CreateDefinition(ctx, &proto.CreateWorkflowProviderDefinitionRequest{
-		Target:         targetProto,
-		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
+		Target:             targetProto,
+		IdempotencyKey:     strings.TrimSpace(req.IdempotencyKey),
 		CreatedBySubjectId: workflowSubjectIDFromPrincipal(p),
 	})
 	if err != nil {
@@ -105,8 +105,8 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 		return nil, err
 	}
 	definitionProto, err := provider.UpdateDefinition(ctx, &proto.UpdateWorkflowProviderDefinitionRequest{
-		DefinitionId: strings.TrimSpace(definitionID),
-		Target:       targetProto,
+		DefinitionId:         strings.TrimSpace(definitionID),
+		Target:               targetProto,
 		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
 	})
 	if err != nil {

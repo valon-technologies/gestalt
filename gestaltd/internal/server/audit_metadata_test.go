@@ -221,7 +221,7 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 			authHeader:     "Bearer invalid-session-token",
 			withMCPHandler: true,
 			wantSource:     "mcp",
-			wantError: "invalid token",
+			wantError:      "invalid token",
 		},
 		{
 			name:         "missing_plugin_route_auth_uses_named_provider_in_audit",

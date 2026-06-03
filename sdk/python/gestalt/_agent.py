@@ -640,7 +640,7 @@ def create_agent_provider_session_request_from_proto(
         else None,
         created_by_subject_id=request.created_by_subject_id.strip()
         if has_field(request, "created_by_subject_id")
-        else None,
+        else "",
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
@@ -712,7 +712,7 @@ def create_agent_provider_turn_request_from_proto(
         else None,
         created_by_subject_id=request.created_by_subject_id.strip()
         if has_field(request, "created_by_subject_id")
-        else None,
+        else "",
         execution_ref=request.execution_ref,
         tool_refs=[agent_tool_ref_from_proto(ref) for ref in request.tool_refs],
         tool_source=request.tool_source,

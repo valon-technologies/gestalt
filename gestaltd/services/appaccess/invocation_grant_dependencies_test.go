@@ -15,8 +15,8 @@ func TestInvocationGrantsFromDependenciesPreservesBroadAccessAndConfiguredMetada
 			Operation:      "vds.schemaVersions",
 			CredentialMode: core.ConnectionModeSubject,
 			RunAs: &core.RunAsSubject{
-				SubjectID:   "service_account:data-schema-explorer",
-							},
+				SubjectID: "service_account:data-schema-explorer",
+			},
 			ApplyByDefault: true,
 		},
 		{

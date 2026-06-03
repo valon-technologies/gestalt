@@ -390,7 +390,7 @@ func TestRequestContextProto_RunAsServiceAccountDoesNotInheritUserEmail(t *testi
 	})
 	ctx, _ = invocation.ApplyDelegation(ctx, principal.FromContext(ctx), &core.RunAsSubject{
 		SubjectID:           "service_account:review-bot",
-				CredentialSubjectID: "service_account:review-bot",
+		CredentialSubjectID: "service_account:review-bot",
 	})
 
 	reqCtx, err := requestContextProto(ctx, "")
@@ -418,9 +418,9 @@ func TestRequestContextProto_IncludesRunAsAgentSubject(t *testing.T) {
 	})
 	ctx = invocation.WithRunAsAudit(ctx, &core.RunAsSubject{
 		SubjectID:           "user:user-123",
-				CredentialSubjectID: "user:user-123",
+		CredentialSubjectID: "user:user-123",
 	}, &core.RunAsSubject{
-		SubjectID:   "service_account:event-handler",
+		SubjectID: "service_account:event-handler",
 	})
 
 	reqCtx, err := requestContextProto(ctx, "")
@@ -510,7 +510,7 @@ func TestRequestContextProto_PreservesToolRefsContext(t *testing.T) {
 		Operation: "reviews.get",
 		RunAs: &core.RunAsSubject{
 			SubjectID:           "service_account:review-worker",
-						CredentialSubjectID: "service_account:review-worker",
+			CredentialSubjectID: "service_account:review-worker",
 		},
 	}})
 

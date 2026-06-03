@@ -1,6 +1,7 @@
 import { defineApp, ok, operation, s } from "../../../src/index.ts";
 
 const provider = defineApp({
+  displayName: "Fixture Provider Default Export",
   operations: [
     operation({
       id: "hello",

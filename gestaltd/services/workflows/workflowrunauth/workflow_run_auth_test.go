@@ -36,8 +36,8 @@ func TestResolveInvocationFromWorkflowRunUsesPersistedRunAs(t *testing.T) {
 	}
 	resolver := &recordingResolver{run: &coreworkflow.Run{
 		RunAs: &core.RunAsSubject{
-			SubjectID:   "service_account:persisted",
-					},
+			SubjectID: "service_account:persisted",
+		},
 		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
 			App: &coreworkflow.AppCall{Name: "ledger", Operation: "post"},
 		}}},

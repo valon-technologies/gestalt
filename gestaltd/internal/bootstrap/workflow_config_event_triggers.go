@@ -69,12 +69,12 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}
 		if _, err := provider.UpsertEventTrigger(providerCtx, &proto.UpsertWorkflowProviderEventTriggerRequest{
-			TriggerId:   desiredEntry.TriggerID,
-			Match:       workflowwire.EventMatchToProto(workflowConfigEventTriggerMatch(trigger)),
-			Target:      targetProto,
-			Paused:      trigger.Paused,
+			TriggerId:            desiredEntry.TriggerID,
+			Match:                workflowwire.EventMatchToProto(workflowConfigEventTriggerMatch(trigger)),
+			Target:               targetProto,
+			Paused:               trigger.Paused,
 			RequestedBySubjectId: workflowConfigOwnerSubjectID(),
-			RunAs:       agentwire.RunAsSubjectToProto(runAs),
+			RunAs:                agentwire.RunAsSubjectToProto(runAs),
 		}); err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for app %q: %w", desiredEntry.TriggerKey, appName, err)
 		}

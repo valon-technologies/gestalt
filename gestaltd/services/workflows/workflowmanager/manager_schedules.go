@@ -133,13 +133,13 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 		return nil, err
 	}
 	scheduleProto, err := provider.UpsertSchedule(ctx, &proto.UpsertWorkflowProviderScheduleRequest{
-		ScheduleId:   scheduleID,
-		Cron:         strings.TrimSpace(req.Cron),
-		Timezone:     strings.TrimSpace(req.Timezone),
-		Target:       targetProto,
-		Paused:       req.Paused,
+		ScheduleId:           scheduleID,
+		Cron:                 strings.TrimSpace(req.Cron),
+		Timezone:             strings.TrimSpace(req.Timezone),
+		Target:               targetProto,
+		Paused:               req.Paused,
 		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
-		DefinitionId: strings.TrimSpace(req.DefinitionID),
+		DefinitionId:         strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
 		return nil, err
@@ -211,13 +211,13 @@ func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, sc
 		return nil, err
 	}
 	scheduleProto, err := nextProvider.UpsertSchedule(ctx, &proto.UpsertWorkflowProviderScheduleRequest{
-		ScheduleId:   strings.TrimSpace(existing.Schedule.ID),
-		Cron:         strings.TrimSpace(req.Cron),
-		Timezone:     strings.TrimSpace(req.Timezone),
-		Target:       targetProto,
-		Paused:       req.Paused,
+		ScheduleId:           strings.TrimSpace(existing.Schedule.ID),
+		Cron:                 strings.TrimSpace(req.Cron),
+		Timezone:             strings.TrimSpace(req.Timezone),
+		Target:               targetProto,
+		Paused:               req.Paused,
 		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
-		DefinitionId: strings.TrimSpace(req.DefinitionID),
+		DefinitionId:         strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
 		return nil, err
@@ -419,12 +419,12 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 		return nil, err
 	}
 	triggerProto, err := provider.UpsertEventTrigger(ctx, &proto.UpsertWorkflowProviderEventTriggerRequest{
-		TriggerId:    triggerID,
-		Match:        workflowwire.EventMatchToProto(match),
-		Target:       targetProto,
-		Paused:       req.Paused,
+		TriggerId:            triggerID,
+		Match:                workflowwire.EventMatchToProto(match),
+		Target:               targetProto,
+		Paused:               req.Paused,
 		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
-		DefinitionId: strings.TrimSpace(req.DefinitionID),
+		DefinitionId:         strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
 		return nil, err
@@ -497,12 +497,12 @@ func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal
 		return nil, err
 	}
 	triggerProto, err := nextProvider.UpsertEventTrigger(ctx, &proto.UpsertWorkflowProviderEventTriggerRequest{
-		TriggerId:    strings.TrimSpace(existing.Trigger.ID),
-		Match:        workflowwire.EventMatchToProto(match),
-		Target:       targetProto,
-		Paused:       req.Paused,
+		TriggerId:            strings.TrimSpace(existing.Trigger.ID),
+		Match:                workflowwire.EventMatchToProto(match),
+		Target:               targetProto,
+		Paused:               req.Paused,
 		RequestedBySubjectId: workflowSubjectIDFromPrincipal(p),
-		DefinitionId: strings.TrimSpace(req.DefinitionID),
+		DefinitionId:         strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
 		return nil, err

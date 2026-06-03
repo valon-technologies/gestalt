@@ -420,7 +420,7 @@ func TestAppServerInvokeAppliesConfiguredDelegationMetadata(t *testing.T) {
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID:           "user:test-user",
 		CredentialSubjectID: "user:test-user",
-				Kind:                principal.KindUser,
+		Kind:                principal.KindUser,
 		Source:              principal.SourceSession,
 	})
 	rootToken, err := tokens.MintRootToken(ctx, "data-schema-explorer", InvocationGrants{
@@ -433,8 +433,8 @@ func TestAppServerInvokeAppliesConfiguredDelegationMetadata(t *testing.T) {
 				"vds.schemaVersions": {
 					RunAs: &core.RunAsSubject{
 						SubjectID:           "service_account:data-schema-explorer",
-												CredentialSubjectID: "service_account:data-schema-explorer",
-																	},
+						CredentialSubjectID: "service_account:data-schema-explorer",
+					},
 				},
 			},
 		},

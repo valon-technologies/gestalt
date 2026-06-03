@@ -519,7 +519,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"allowed":              true,
 		"caller_app":           "slack",
 		"subject_id":           "user:user-123",
-				"workflow_target_kind": "steps",
+		"workflow_target_kind": "steps",
 	})
 	assertWorkflowAuditLog(t, auditOutput, failureKey, map[string]any{
 		"level":                "WARN",
@@ -532,7 +532,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"error":                "grpc_status",
 		"caller_app":           "slack",
 		"subject_id":           "user:user-123",
-				"workflow_target_kind": "steps",
+		"workflow_target_kind": "steps",
 	})
 	assertWorkflowAuditLog(t, auditOutput, authorizerDeniedKey, map[string]any{
 		"level":                     "WARN",
@@ -546,7 +546,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"authorization_decision":    "workflow_target_authorizer_provider_denied",
 		"caller_app":                "slack",
 		"subject_id":                "user:authorizer-denied",
-				"workflow_target_kind":      "steps",
+		"workflow_target_kind":      "steps",
 		"workflow_target_component": "agent_tool_ref",
 		"workflow_target_provider":  "datadog",
 		"workflow_target_operation": "listAlerts",
@@ -804,10 +804,10 @@ func (p *workflowManagerTelemetryProvider) SignalOrStartRun(_ context.Context, r
 		signal.ID = "signal-1"
 	}
 	run, err := workflowwire.RunToProto(&coreworkflow.Run{
-		ID:          "run-signal-started",
-		Status:      coreworkflow.RunStatusRunning,
-		WorkflowKey: req.GetWorkflowKey(),
-		Target:      workflowwire.TargetFromProto(req.GetTarget()),
+		ID:                 "run-signal-started",
+		Status:             coreworkflow.RunStatusRunning,
+		WorkflowKey:        req.GetWorkflowKey(),
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	})
 	if err != nil {

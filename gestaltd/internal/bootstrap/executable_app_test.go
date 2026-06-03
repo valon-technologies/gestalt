@@ -1401,10 +1401,10 @@ func (m *stubWorkflowManager) CreateDefinition(_ context.Context, p *principal.P
 	value := &workflowmanager.ManagedDefinition{
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
 		Definition: &coreworkflow.Definition{
-			ID:        id,
-			Target:    cloneWorkflowTarget(req.Target),
+			ID:                 id,
+			Target:             cloneWorkflowTarget(req.Target),
 			CreatedBySubjectID: subjectIDOf(p),
-			CreatedAt: &now,
+			CreatedAt:          &now,
 		},
 	}
 	m.definitions[id] = value
@@ -1672,11 +1672,11 @@ func (m *stubWorkflowManager) StartRun(_ context.Context, p *principal.Principal
 	value := &workflowmanager.ManagedRun{
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
 		Run: &coreworkflow.Run{
-			ID:           id,
-			Target:       cloneWorkflowTarget(req.Target),
-			DefinitionID: strings.TrimSpace(req.DefinitionID),
-			WorkflowKey:  req.WorkflowKey,
-			CreatedAt:    &now,
+			ID:                 id,
+			Target:             cloneWorkflowTarget(req.Target),
+			DefinitionID:       strings.TrimSpace(req.DefinitionID),
+			WorkflowKey:        req.WorkflowKey,
+			CreatedAt:          &now,
 			CreatedBySubjectID: subjectIDOf(p),
 		},
 	}
@@ -1791,15 +1791,15 @@ func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req *pro
 	now := time.Now().UTC().Truncate(time.Second)
 	p.createSessionRequests = append(p.createSessionRequests, req)
 	session := &coreagent.Session{
-		ID:           req.GetSessionId(),
-		ProviderName: "managed",
-		Model:        req.GetModel(),
-		ClientRef:    req.GetClientRef(),
-		State:        coreagent.SessionStateActive,
-		Metadata:     stubAgentProtoStructToMap(req.GetMetadata()),
+		ID:                 req.GetSessionId(),
+		ProviderName:       "managed",
+		Model:              req.GetModel(),
+		ClientRef:          req.GetClientRef(),
+		State:              coreagent.SessionStateActive,
+		Metadata:           stubAgentProtoStructToMap(req.GetMetadata()),
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
+		CreatedAt:          &now,
+		UpdatedAt:          &now,
 	}
 	p.sessions[session.ID] = session
 	return cloneAgentSession(session), nil
@@ -1854,18 +1854,18 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req *proto.
 	p.createTurnRequests = append(p.createTurnRequests, req)
 
 	turn := &coreagent.Turn{
-		ID:           req.GetTurnId(),
-		SessionID:    req.GetSessionId(),
-		ProviderName: "managed",
-		Model:        req.GetModel(),
-		Status:       coreagent.ExecutionStatusSucceeded,
-		Messages:     stubAgentMessagesFromProto(req.GetMessages()),
-		Output:       coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
+		ID:                 req.GetTurnId(),
+		SessionID:          req.GetSessionId(),
+		ProviderName:       "managed",
+		Model:              req.GetModel(),
+		Status:             coreagent.ExecutionStatusSucceeded,
+		Messages:           stubAgentMessagesFromProto(req.GetMessages()),
+		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
-		CreatedAt:    &now,
-		StartedAt:    &now,
-		CompletedAt:  &now,
-		ExecutionRef: req.GetExecutionRef(),
+		CreatedAt:          &now,
+		StartedAt:          &now,
+		CompletedAt:        &now,
+		ExecutionRef:       req.GetExecutionRef(),
 	}
 	p.turns[turn.ID] = turn
 	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": req.GetSessionId()})

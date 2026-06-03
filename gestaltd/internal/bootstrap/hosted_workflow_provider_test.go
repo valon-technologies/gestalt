@@ -308,8 +308,8 @@ func TestWorkflowConfigReconciliationReconcilesReadyRuntimeProvidersIndependentl
 					Target:   workflowConfigTestAgentStepTarget(),
 					RunAs: &config.WorkflowRunAsConfig{
 						Subject: &config.WorkflowRunAsSubjectConfig{
-							ID:   "service_account:ready-workflow",
-													},
+							ID: "service_account:ready-workflow",
+						},
 					},
 					Cron: "* * * * *",
 				},
@@ -820,13 +820,13 @@ func (p *recordingWorkflowControlProvider) UpsertSchedule(_ context.Context, req
 		p.schedules = map[string]*workflow.Schedule{}
 	}
 	schedule := &workflow.Schedule{
-		ID:           req.GetScheduleId(),
-		Cron:         req.GetCron(),
-		Timezone:     req.GetTimezone(),
-		Target:       workflowwire.TargetFromProto(req.GetTarget()),
-		Paused:       req.GetPaused(),
+		ID:                 req.GetScheduleId(),
+		Cron:               req.GetCron(),
+		Timezone:           req.GetTimezone(),
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
+		Paused:             req.GetPaused(),
 		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
-		DefinitionID: req.GetDefinitionId(),
+		DefinitionID:       req.GetDefinitionId(),
 	}
 	p.schedules[req.GetScheduleId()] = schedule
 	return workflowwire.ScheduleToProto(cloneWorkflowSchedule(schedule))
@@ -857,12 +857,12 @@ func (p *recordingWorkflowControlProvider) UpsertEventTrigger(_ context.Context,
 		p.eventTriggers = map[string]*workflow.EventTrigger{}
 	}
 	trigger := &workflow.EventTrigger{
-		ID:           req.GetTriggerId(),
-		Match:        workflowwire.EventMatchFromProto(req.GetMatch()),
-		Target:       workflowwire.TargetFromProto(req.GetTarget()),
-		Paused:       req.GetPaused(),
+		ID:                 req.GetTriggerId(),
+		Match:              workflowwire.EventMatchFromProto(req.GetMatch()),
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
+		Paused:             req.GetPaused(),
 		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
-		DefinitionID: req.GetDefinitionId(),
+		DefinitionID:       req.GetDefinitionId(),
 	}
 	p.eventTriggers[req.GetTriggerId()] = trigger
 	return workflowwire.EventTriggerToProto(cloneWorkflowEventTrigger(trigger))

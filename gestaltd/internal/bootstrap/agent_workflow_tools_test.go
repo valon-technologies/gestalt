@@ -723,8 +723,8 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithGrantedCallerToolRefs(
 	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runAs := &core.RunAsSubject{
-		SubjectID:   "service_account:review-worker",
-			}
+		SubjectID: "service_account:review-worker",
+	}
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		CallerAppName: "source",
 		Permissions: []core.AccessPermission{{
@@ -1153,19 +1153,19 @@ func TestAgentRuntimeWorkflowSystemToolUpdateDefinitionScheduleUsesManagementPri
 		schedule: &workflowmanager.ManagedSchedule{
 			ProviderName: "temporal",
 			Schedule: &coreworkflow.Schedule{
-				ID:           "schedule-1",
-				Cron:         "*/5 * * * *",
-				Timezone:     "UTC",
-				Target:       target,
-				DefinitionID: "definition-1",
+				ID:                 "schedule-1",
+				Cron:               "*/5 * * * *",
+				Timezone:           "UTC",
+				Target:             target,
+				DefinitionID:       "definition-1",
 				CreatedBySubjectID: owner,
 			},
 		},
 		definition: &workflowmanager.ManagedDefinition{
 			ProviderName: "temporal",
 			Definition: &coreworkflow.Definition{
-				ID:        "definition-1",
-				Target:    target,
+				ID:                 "definition-1",
+				Target:             target,
 				CreatedBySubjectID: owner,
 			},
 		},
@@ -1648,9 +1648,9 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 			"managed": &routingAgentProvider{
 				getTurn: func(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
 					return &coreagent.Turn{
-						ID:        req.GetTurnId(),
-						SessionID: "session-1",
-						Status:    coreagent.ExecutionStatusRunning,
+						ID:                 req.GetTurnId(),
+						SessionID:          "session-1",
+						Status:             coreagent.ExecutionStatusRunning,
 						CreatedBySubjectID: strings.TrimSpace(req.GetSubject().GetId()),
 					}, nil
 				},
@@ -1771,8 +1771,8 @@ func (p *workflowSystemToolRecordingProvider) CreateDefinition(_ context.Context
 		return workflowwire.DefinitionToProto(&value)
 	}
 	definition := &coreworkflow.Definition{
-		ID:        id,
-		Target:    workflowwire.TargetFromProto(req.GetTarget()),
+		ID:                 id,
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}
 	p.definitions[id] = definition
@@ -1798,8 +1798,8 @@ func (p *workflowSystemToolRecordingProvider) UpdateDefinition(_ context.Context
 		return nil, core.ErrNotFound
 	}
 	definition := &coreworkflow.Definition{
-		ID:        id,
-		Target:    workflowwire.TargetFromProto(req.GetTarget()),
+		ID:                 id,
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
 		CreatedBySubjectID: existing.CreatedBySubjectID,
 	}
 	p.definitions[id] = definition
@@ -1849,11 +1849,11 @@ func (p *workflowSystemToolRecordingProvider) StartRun(_ context.Context, req *p
 		runID = fmt.Sprintf("run-%d", len(p.runs)+1)
 	}
 	run := &coreworkflow.Run{
-		ID:           runID,
-		Status:       coreworkflow.RunStatusPending,
-		WorkflowKey:  workflowKey,
-		Target:       target,
-		DefinitionID: definitionID,
+		ID:                 runID,
+		Status:             coreworkflow.RunStatusPending,
+		WorkflowKey:        workflowKey,
+		Target:             target,
+		DefinitionID:       definitionID,
 		CreatedBySubjectID: createdBy,
 	}
 	p.runs[run.ID] = run
@@ -1954,12 +1954,12 @@ func (p *workflowSystemToolRecordingProvider) SignalOrStartRun(context.Context, 
 func (p *workflowSystemToolRecordingProvider) UpsertSchedule(_ context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	p.upsertedSchedules = append(p.upsertedSchedules, gproto.Clone(req).(*proto.UpsertWorkflowProviderScheduleRequest))
 	schedule := &coreworkflow.Schedule{
-		ID:           req.GetScheduleId(),
-		Cron:         req.GetCron(),
-		Timezone:     req.GetTimezone(),
-		Target:       workflowwire.TargetFromProto(req.GetTarget()),
-		DefinitionID: req.GetDefinitionId(),
-		Paused:       req.GetPaused(),
+		ID:                 req.GetScheduleId(),
+		Cron:               req.GetCron(),
+		Timezone:           req.GetTimezone(),
+		Target:             workflowwire.TargetFromProto(req.GetTarget()),
+		DefinitionID:       req.GetDefinitionId(),
+		Paused:             req.GetPaused(),
 		CreatedBySubjectID: strings.TrimSpace(req.GetRequestedBySubjectId()),
 	}
 	if p.schedules == nil {
@@ -2038,7 +2038,7 @@ func mustMintWorkflowSystemRunGrant(t *testing.T, runtime *agentRuntime, scope w
 		TurnID:              "turn-1",
 		CallerAppName:       strings.TrimSpace(scope.CallerAppName),
 		SubjectID:           principal.UserSubjectID("ada"),
-				CredentialSubjectID: principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
 		Permissions:         append([]core.AccessPermission(nil), scope.Permissions...),
 		ToolRefs:            append([]coreagent.ToolRef(nil), scope.ToolRefs...),
 		Tools:               append([]coreagent.Tool(nil), scope.Tools...),

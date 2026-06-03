@@ -28,8 +28,8 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 		Timestamp:               eventTime,
 		RequestID:               "req-abc-123",
 		Source:                  "binding:test-hook",
-		SubjectID: principal.UserSubjectID("user-42"),
-		Provider:  "alpha",
+		SubjectID:               principal.UserSubjectID("user-42"),
+		Provider:                "alpha",
 		Operation:               "fetch",
 		Depth:                   1,
 		Allowed:                 true,
@@ -115,15 +115,15 @@ func TestSlogAuditSink_DeniedEntry(t *testing.T) {
 	sink := invocation.NewSlogAuditSink(&buf)
 
 	entry := core.AuditEntry{
-		Timestamp:   time.Now(),
-		RequestID:   "req-deny-456",
-		Source:      "binding:test-hook",
+		Timestamp: time.Now(),
+		RequestID: "req-deny-456",
+		Source:    "binding:test-hook",
 		SubjectID: principal.UserSubjectID("user-99"),
 		Provider:  "beta",
-		Operation:   "write",
-		Depth:       2,
-		Allowed:     false,
-		Error:       "provider \"beta\" is not available in this scope",
+		Operation: "write",
+		Depth:     2,
+		Allowed:   false,
+		Error:     "provider \"beta\" is not available in this scope",
 	}
 
 	sink.Log(context.Background(), entry)

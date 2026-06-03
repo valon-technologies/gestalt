@@ -8,8 +8,6 @@ import {
   defineWorkflowProvider,
   workflowEvent,
   type BoundWorkflowDefinition,
-  type BoundWorkflowEventTrigger,
-  type BoundWorkflowSchedule,
   type BoundWorkflowTarget,
   type DeleteWorkflowProviderDefinitionRequest,
   type DeleteWorkflowProviderEventTriggerRequest,
@@ -42,6 +40,7 @@ function appStepTarget(appName: string, operation: string): BoundWorkflowTarget 
 }
 
 export const provider = defineWorkflowProvider({
+  displayName: "Fixture Workflow",
   description: "Workflow provider fixture used by SDK tests",
   configure() {
     runs.clear();
@@ -318,7 +317,7 @@ function createRun(
 
 function createSchedule(
   request: UpsertWorkflowProviderScheduleRequest,
-  existing?: BoundWorkflowSchedule,
+  existing?: { createdBySubjectId?: UpsertWorkflowProviderScheduleRequest["requestedBySubjectId"] },
 ) {
   return boundWorkflowSchedule({
     id: request.scheduleId,
@@ -337,7 +336,7 @@ function createSchedule(
 
 function createTrigger(
   request: UpsertWorkflowProviderEventTriggerRequest,
-  existing?: BoundWorkflowEventTrigger,
+  existing?: { createdBySubjectId?: UpsertWorkflowProviderEventTriggerRequest["requestedBySubjectId"] },
 ) {
   return boundWorkflowEventTrigger({
     id: request.triggerId,

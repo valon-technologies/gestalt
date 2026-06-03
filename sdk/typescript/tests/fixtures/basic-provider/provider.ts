@@ -9,6 +9,7 @@ let configuredName = "";
 let configuredConfig: Record<string, unknown> = {};
 
 export const app = defineApp({
+  displayName: "Fixture Provider",
   description: "Provider fixture used by SDK tests",
   configure(name, config) {
     configuredName = name;

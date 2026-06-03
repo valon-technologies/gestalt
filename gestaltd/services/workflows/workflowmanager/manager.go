@@ -915,8 +915,8 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 			return coreworkflow.Event{}, err
 		}
 		publishedProto, err := provider.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
-			AppName:     appName,
-			Event:       eventProto,
+			AppName:              appName,
+			Event:                eventProto,
 			PublishedBySubjectId: publishedBy,
 		})
 		if err != nil {
@@ -951,8 +951,8 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 			return coreworkflow.Event{}, err
 		}
 		_, err = provider.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
-			AppName:     appName,
-			Event:       eventProto,
+			AppName:              appName,
+			Event:                eventProto,
 			PublishedBySubjectId: publishedBy,
 		})
 		if err != nil {

@@ -51,11 +51,11 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 		return nil, err
 	}
 	runProto, err := provider.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{
-		Target:         targetProto,
-		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
-		WorkflowKey:    strings.TrimSpace(req.WorkflowKey),
+		Target:             targetProto,
+		IdempotencyKey:     strings.TrimSpace(req.IdempotencyKey),
+		WorkflowKey:        strings.TrimSpace(req.WorkflowKey),
 		CreatedBySubjectId: workflowSubjectIDFromPrincipal(p),
-		DefinitionId:   strings.TrimSpace(req.DefinitionID),
+		DefinitionId:       strings.TrimSpace(req.DefinitionID),
 	})
 	if err != nil {
 		return nil, err
@@ -216,12 +216,12 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 		return nil, err
 	}
 	respProto, err := provider.SignalOrStartRun(ctx, &proto.SignalOrStartWorkflowProviderRunRequest{
-		WorkflowKey:    workflowKey,
-		Target:         targetProto,
-		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
+		WorkflowKey:        workflowKey,
+		Target:             targetProto,
+		IdempotencyKey:     strings.TrimSpace(req.IdempotencyKey),
 		CreatedBySubjectId: workflowSubjectIDFromPrincipal(p),
-		DefinitionId:   strings.TrimSpace(req.DefinitionID),
-		Signal:         signalProto,
+		DefinitionId:       strings.TrimSpace(req.DefinitionID),
+		Signal:             signalProto,
 	})
 	if err != nil {
 		return nil, err

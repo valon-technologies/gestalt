@@ -175,12 +175,12 @@ func newRouteCountingAgentProvider(name string) *routeCountingAgentProvider {
 func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	p.createSessionReqs = append(p.createSessionReqs, cloneAgentRequest(req, &proto.CreateAgentProviderSessionRequest{}))
 	session := &coreagent.Session{
-		ID:           req.GetSessionId(),
-		ProviderName: p.name,
-		Model:        req.GetModel(),
-		ClientRef:    req.GetClientRef(),
-		State:        coreagent.SessionStateActive,
-		Metadata:     mapsCloneAny(protoutil.MapFromStruct(req.GetMetadata())),
+		ID:                 req.GetSessionId(),
+		ProviderName:       p.name,
+		Model:              req.GetModel(),
+		ClientRef:          req.GetClientRef(),
+		State:              coreagent.SessionStateActive,
+		Metadata:           mapsCloneAny(protoutil.MapFromStruct(req.GetMetadata())),
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}
 	p.sessions[session.ID] = session
@@ -272,15 +272,15 @@ func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req *proto.Cr
 		status = coreagent.ExecutionStatusRunning
 	}
 	turn := &coreagent.Turn{
-		ID:           turnID,
-		SessionID:    req.GetSessionId(),
-		ProviderName: p.name,
-		Model:        req.GetModel(),
-		Status:       status,
-		Messages:     agentwire.MessagesFromProto(req.GetMessages()),
-		Output:       p.createTurnOutput,
+		ID:                 turnID,
+		SessionID:          req.GetSessionId(),
+		ProviderName:       p.name,
+		Model:              req.GetModel(),
+		Status:             status,
+		Messages:           agentwire.MessagesFromProto(req.GetMessages()),
+		Output:             p.createTurnOutput,
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
-		ExecutionRef: req.GetExecutionRef(),
+		ExecutionRef:       req.GetExecutionRef(),
 	}
 	p.turns[turn.ID] = turn
 	return cloneRouteTurn(turn), nil
@@ -722,9 +722,9 @@ func TestManagerGetSessionContinuesAfterProviderUnavailable(t *testing.T) {
 	manager := newTestManager(t, Config{Agent: control})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 	session := &coreagent.Session{
-		ID:           "session-1",
-		ProviderName: "alpha",
-		State:        coreagent.SessionStateActive,
+		ID:                 "session-1",
+		ProviderName:       "alpha",
+		State:              coreagent.SessionStateActive,
 		CreatedBySubjectID: principal.UserSubjectID("user-1"),
 	}
 	alpha.sessions[session.ID] = session
@@ -786,17 +786,17 @@ func TestManagerGetTurnContinuesAfterProviderUnavailable(t *testing.T) {
 	manager := newTestManager(t, Config{Agent: control})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 	session := &coreagent.Session{
-		ID:           "session-1",
-		ProviderName: "alpha",
-		State:        coreagent.SessionStateActive,
+		ID:                 "session-1",
+		ProviderName:       "alpha",
+		State:              coreagent.SessionStateActive,
 		CreatedBySubjectID: principal.UserSubjectID("user-1"),
 	}
 	turn := &coreagent.Turn{
-		ID:           "turn-1",
-		SessionID:    session.ID,
-		ProviderName: "alpha",
-		Status:       coreagent.ExecutionStatusSucceeded,
-		Output:       coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "done"}},
+		ID:                 "turn-1",
+		SessionID:          session.ID,
+		ProviderName:       "alpha",
+		Status:             coreagent.ExecutionStatusSucceeded,
+		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "done"}},
 		CreatedBySubjectID: principal.UserSubjectID("user-1"),
 	}
 	alpha.sessions[session.ID] = session
@@ -1029,9 +1029,9 @@ func TestManagerListTurnsRequiresBoundedHydrationForSummaryLists(t *testing.T) {
 	}
 	subjectID := principal.UserSubjectID("user-1")
 	provider.sessions["session-1"] = &coreagent.Session{
-		ID:           "session-1",
-		ProviderName: "unbounded",
-		State:        coreagent.SessionStateActive,
+		ID:                 "session-1",
+		ProviderName:       "unbounded",
+		State:              coreagent.SessionStateActive,
 		CreatedBySubjectID: subjectID,
 	}
 	manager := newTestManager(t, Config{
@@ -1169,8 +1169,8 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	p := &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 		Identity: &core.UserIdentity{
-			Email:       "ada@example.com",
-					},
+			Email: "ada@example.com",
+		},
 	}
 
 	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
@@ -2038,7 +2038,7 @@ func TestManagerCancelTurnRevokesRunGrantWithoutBootstrapWrapper(t *testing.T) {
 		ProviderName: "alpha",
 		SessionID:    session.ID,
 		TurnID:       turn.ID,
-		SubjectID: principal.UserSubjectID("user-1"),
+		SubjectID:    principal.UserSubjectID("user-1"),
 	})
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
@@ -2101,7 +2101,7 @@ func TestManagerCancelTurnRevokesExecutionRefGrantWithoutBootstrapWrapper(t *tes
 		ProviderName: "alpha",
 		SessionID:    session.ID,
 		TurnID:       turn.ExecutionRef,
-		SubjectID: principal.UserSubjectID("user-1"),
+		SubjectID:    principal.UserSubjectID("user-1"),
 	})
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
@@ -2357,7 +2357,7 @@ func TestNormalizeToolRefsRejectsProviderRunAsDelegation(t *testing.T) {
 
 	runAs := &core.RunAsSubject{
 		SubjectID:           "service_account:automation",
-				CredentialSubjectID: "service_account:automation",
+		CredentialSubjectID: "service_account:automation",
 	}
 	for _, tc := range []struct {
 		name string

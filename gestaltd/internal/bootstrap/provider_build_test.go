@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"net/http"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -36,9 +36,9 @@ func (providerBuildOrderingAgentProvider) SupportsWorkspaceRequests() bool { ret
 
 func (providerBuildOrderingAgentProvider) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	return &coreagent.Session{
-		ID:           req.GetSessionId(),
-		ProviderName: "managed",
-		Model:        req.GetModel(),
+		ID:                 req.GetSessionId(),
+		ProviderName:       "managed",
+		Model:              req.GetModel(),
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}, nil
 }

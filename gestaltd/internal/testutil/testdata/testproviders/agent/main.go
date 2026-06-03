@@ -282,16 +282,16 @@ func (p *agentProvider) startTurn(
 	session.LastTurnAt = &now
 	session.UpdatedAt = now
 	turn := &gestalt.AgentTurn{
-		ID:           turnID,
-		SessionID:    sessionID,
-		ProviderName: providerName,
-		Model:        model,
-		Status:       gestalt.AgentExecutionStatusRunning,
-		Messages:     cloneMessages(messages),
+		ID:                 turnID,
+		SessionID:          sessionID,
+		ProviderName:       providerName,
+		Model:              model,
+		Status:             gestalt.AgentExecutionStatusRunning,
+		Messages:           cloneMessages(messages),
 		CreatedBySubjectID: strings.TrimSpace(createdBySubjectID),
-		CreatedAt:    now,
-		StartedAt:    &now,
-		ExecutionRef: executionRef,
+		CreatedAt:          now,
+		StartedAt:          &now,
+		ExecutionRef:       executionRef,
 	}
 	p.turns[turnID] = turn
 	p.appendTurnEventLocked(turnID, "turn.started", map[string]any{
@@ -358,15 +358,15 @@ func (p *agentProvider) startTurn(
 	turn = p.turns[turnID]
 	if turn == nil {
 		turn = &gestalt.AgentTurn{
-			ID:           turnID,
-			SessionID:    sessionID,
-			ProviderName: providerName,
-			Model:        model,
-			Messages:     cloneMessages(messages),
+			ID:                 turnID,
+			SessionID:          sessionID,
+			ProviderName:       providerName,
+			Model:              model,
+			Messages:           cloneMessages(messages),
 			CreatedBySubjectID: strings.TrimSpace(createdBySubjectID),
-			CreatedAt:    now,
-			StartedAt:    &now,
-			ExecutionRef: executionRef,
+			CreatedAt:          now,
+			StartedAt:          &now,
+			ExecutionRef:       executionRef,
 		}
 	}
 	if requestedOutput != nil && requestedOutput.Structured != nil {
@@ -447,15 +447,15 @@ func (p *agentProvider) createOrUpdateSessionLocked(
 	}
 	now := time.Now()
 	session := &gestalt.AgentSession{
-		ID:           sessionID,
-		ProviderName: p.providerNameLocked(""),
-		Model:        model,
-		ClientRef:    clientRef,
-		State:        gestalt.AgentSessionStateActive,
-		Metadata:     cloneMap(metadata),
+		ID:                 sessionID,
+		ProviderName:       p.providerNameLocked(""),
+		Model:              model,
+		ClientRef:          clientRef,
+		State:              gestalt.AgentSessionStateActive,
+		Metadata:           cloneMap(metadata),
 		CreatedBySubjectID: strings.TrimSpace(createdBySubjectID),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 	p.sessions[sessionID] = session
 	return session
@@ -659,16 +659,16 @@ func cloneSession(input *gestalt.AgentSession) *gestalt.AgentSession {
 		return nil
 	}
 	return &gestalt.AgentSession{
-		ID:           input.ID,
-		ProviderName: input.ProviderName,
-		Model:        input.Model,
-		ClientRef:    input.ClientRef,
-		State:        input.State,
-		Metadata:     cloneMap(input.Metadata),
+		ID:                 input.ID,
+		ProviderName:       input.ProviderName,
+		Model:              input.Model,
+		ClientRef:          input.ClientRef,
+		State:              input.State,
+		Metadata:           cloneMap(input.Metadata),
 		CreatedBySubjectID: input.CreatedBySubjectID,
-		CreatedAt:    input.CreatedAt,
-		UpdatedAt:    input.UpdatedAt,
-		LastTurnAt:   cloneTime(input.LastTurnAt),
+		CreatedAt:          input.CreatedAt,
+		UpdatedAt:          input.UpdatedAt,
+		LastTurnAt:         cloneTime(input.LastTurnAt),
 	}
 }
 
@@ -677,19 +677,19 @@ func cloneTurn(input *gestalt.AgentTurn) *gestalt.AgentTurn {
 		return nil
 	}
 	return &gestalt.AgentTurn{
-		ID:            input.ID,
-		SessionID:     input.SessionID,
-		ProviderName:  input.ProviderName,
-		Model:         input.Model,
-		Status:        input.Status,
-		Messages:      cloneMessages(input.Messages),
-		Output:        cloneTurnOutput(input.Output),
-		StatusMessage: input.StatusMessage,
+		ID:                 input.ID,
+		SessionID:          input.SessionID,
+		ProviderName:       input.ProviderName,
+		Model:              input.Model,
+		Status:             input.Status,
+		Messages:           cloneMessages(input.Messages),
+		Output:             cloneTurnOutput(input.Output),
+		StatusMessage:      input.StatusMessage,
 		CreatedBySubjectID: input.CreatedBySubjectID,
-		CreatedAt:     input.CreatedAt,
-		StartedAt:     cloneTime(input.StartedAt),
-		CompletedAt:   cloneTime(input.CompletedAt),
-		ExecutionRef:  input.ExecutionRef,
+		CreatedAt:          input.CreatedAt,
+		StartedAt:          cloneTime(input.StartedAt),
+		CompletedAt:        cloneTime(input.CompletedAt),
+		ExecutionRef:       input.ExecutionRef,
 	}
 }
 

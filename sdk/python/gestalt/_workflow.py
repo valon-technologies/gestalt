@@ -1168,7 +1168,7 @@ def workflow_signal_input_from_signal(value: Any | None) -> WorkflowSignal | Non
         else None,
         created_by_subject_id=value.created_by_subject_id.strip()
         if has_field(value, "created_by_subject_id")
-        else None,
+        else "",
         created_at=_timestamp_to_datetime(value, "created_at"),
         idempotency_key=value.idempotency_key,
         sequence=value.sequence,
@@ -1517,7 +1517,7 @@ def bound_workflow_run_input_from_run(
         result_body=value.result_body,
         created_by_subject_id=value.created_by_subject_id.strip()
         if has_field(value, "created_by_subject_id")
-        else None,
+        else "",
         workflow_key=value.workflow_key,
         provider_name=value.provider_name,
         definition_id=value.definition_id,
@@ -1561,7 +1561,7 @@ def bound_workflow_definition_input_from_definition(
         else None,
         created_by_subject_id=value.created_by_subject_id.strip()
         if has_field(value, "created_by_subject_id")
-        else None,
+        else "",
         created_at=_timestamp_to_datetime(value, "created_at"),
         provider_name=value.provider_name,
     )
@@ -1616,7 +1616,7 @@ def bound_workflow_schedule_input_from_schedule(
         next_run_at=_timestamp_to_datetime(value, "next_run_at"),
         created_by_subject_id=value.created_by_subject_id.strip()
         if has_field(value, "created_by_subject_id")
-        else None,
+        else "",
         provider_name=value.provider_name,
         definition_id=value.definition_id,
     )
@@ -1670,7 +1670,7 @@ def bound_workflow_event_trigger_input_from_trigger(
         updated_at=_timestamp_to_datetime(value, "updated_at"),
         created_by_subject_id=value.created_by_subject_id.strip()
         if has_field(value, "created_by_subject_id")
-        else None,
+        else "",
         provider_name=value.provider_name,
         definition_id=value.definition_id,
     )
@@ -1989,7 +1989,7 @@ def start_workflow_provider_run_request_from_proto(
         idempotency_key=value.idempotency_key,
         created_by_subject_id=value.created_by_subject_id.strip()
         if has_field(value, "created_by_subject_id")
-        else None,
+        else "",
         workflow_key=value.workflow_key,
         definition_id=value.definition_id,
     )
@@ -2054,7 +2054,7 @@ def signal_or_start_workflow_provider_run_request_from_proto(
         idempotency_key=value.idempotency_key,
         created_by_subject_id=value.created_by_subject_id.strip()
         if has_field(value, "created_by_subject_id")
-        else None,
+        else "",
         signal=workflow_signal_input_from_signal(value.signal)
         if has_field(value, "signal")
         else None,
@@ -2087,7 +2087,7 @@ def create_workflow_provider_definition_request_from_proto(
         idempotency_key=value.idempotency_key,
         created_by_subject_id=value.created_by_subject_id.strip()
         if has_field(value, "created_by_subject_id")
-        else None,
+        else "",
     )
 
 
@@ -2107,7 +2107,7 @@ def update_workflow_provider_definition_request_from_proto(
         else None,
         requested_by_subject_id=value.requested_by_subject_id.strip()
         if has_field(value, "requested_by_subject_id")
-        else None,
+        else "",
     )
 
 
@@ -2130,7 +2130,7 @@ def upsert_workflow_provider_schedule_request_from_proto(
         paused=value.paused,
         requested_by_subject_id=value.requested_by_subject_id.strip()
         if has_field(value, "requested_by_subject_id")
-        else None,
+        else "",
         idempotency_key=value.idempotency_key,
         definition_id=value.definition_id,
     )
@@ -2193,7 +2193,7 @@ def upsert_workflow_provider_event_trigger_request_from_proto(
         paused=value.paused,
         requested_by_subject_id=value.requested_by_subject_id.strip()
         if has_field(value, "requested_by_subject_id")
-        else None,
+        else "",
         idempotency_key=value.idempotency_key,
         definition_id=value.definition_id,
     )
@@ -2254,7 +2254,7 @@ def publish_workflow_provider_event_request_from_proto(
         else None,
         published_by_subject_id=value.published_by_subject_id.strip()
         if has_field(value, "published_by_subject_id")
-        else None,
+        else "",
     )
 
 

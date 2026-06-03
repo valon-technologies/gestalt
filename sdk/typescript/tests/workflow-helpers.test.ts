@@ -68,8 +68,10 @@ test("workflow run context matches runtime shape", () => {
   });
 
   expect(ctx.target).toEqual({
+    kind: "steps",
     steps: [{
       id: "notify",
+      kind: "app",
       app: "slack",
       operation: "chat.postMessage",
       credentialMode: "subject",
@@ -96,6 +98,7 @@ test("workflow run context parses request workflow metadata", () => {
       runId: "run-1",
       target: { kind: "steps", steps: [{ id: "review" }] },
       trigger: {
+        kind: "schedule",
         scheduleId: "sched-1",
         scheduledFor: "2026-05-08T12:00:00Z",
       },
@@ -146,6 +149,7 @@ test("workflow run context parser tolerates malformed values", () => {
     runId: null,
     target: [],
     trigger: {
+      kind: "event",
       triggerId: "trigger-1",
       event: {
         type: "github.pull_request",
