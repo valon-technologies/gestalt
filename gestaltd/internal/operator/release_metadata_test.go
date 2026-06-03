@@ -84,18 +84,6 @@ func TestDecodeProviderReleaseMetadataRejectsInvalidStaticValidation(t *testing.
 			wantErr: "staticValidation.manifest must not include platform artifacts",
 		},
 		{
-			name: "static manifest entrypoint placeholder",
-			block: ptr(`
-  manifest:
-    kind: app
-    source: github.com/acme/providers/provider
-    version: 1.2.3
-    entrypoint:
-      artifactPath: static-validation-placeholder
-    spec: {}`),
-			wantErr: "staticValidation.manifest must not include entrypoint",
-		},
-		{
 			name: "static manifest entrypoint",
 			block: ptr(`
   manifest:
