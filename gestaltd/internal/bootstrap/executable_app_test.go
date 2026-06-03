@@ -45,6 +45,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/egress"
@@ -77,8 +78,10 @@ type invokePluginEnvelope struct {
 
 type requestContextBody struct {
 	Subject struct {
-		ID    string `json:"id"`
-		Email string `json:"email"`
+		ID          string `json:"id"`
+		Kind        string `json:"kind"`
+		DisplayName string `json:"display_name"`
+		AuthSource  string `json:"auth_source"`
 	} `json:"subject"`
 	Credential struct {
 		Mode       string `json:"mode"`
@@ -865,41 +868,50 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 	defer cancel()
 
 	client := proto.NewWorkflowProviderClient(conn)
-	created, err := client.UpsertSchedule(ctx, &proto.UpsertWorkflowProviderScheduleRequest{
+	applied, err := client.ApplyDefinition(ctx, &proto.ApplyWorkflowProviderDefinitionRequest{
 		InvocationToken: invocationToken,
 		ProviderName:    "managed",
-		Cron:            "*/5 * * * *",
-		Timezone:        "UTC",
 		IdempotencyKey:  "workflow-manager-roundtrip",
-		Target: &proto.BoundWorkflowTarget{
-			Steps: []*proto.WorkflowStep{{
-				Id: "sync",
-				Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{
-					Name:      "roadmap",
-					Operation: "sync",
+		Spec: &proto.WorkflowDefinitionSpec{
+			Id: "workflow-manager-roundtrip",
+			Target: &proto.BoundWorkflowTarget{
+				Steps: []*proto.WorkflowStep{{
+					Id: "sync",
+					Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{
+						Name:      "roadmap",
+						Operation: "sync",
+					}},
+				}},
+			},
+			Activations: []*proto.WorkflowActivation{{
+				Id: "nightly",
+				Trigger: &proto.WorkflowActivation_Schedule{Schedule: &proto.WorkflowScheduleActivation{
+					Cron:     "*/5 * * * *",
+					Timezone: "UTC",
 				}},
 			}},
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create workflow schedule: %w", err)
+		return nil, fmt.Errorf("apply workflow definition: %w", err)
 	}
-	scheduleID := strings.TrimSpace(created.GetId())
-	if scheduleID == "" {
-		return nil, fmt.Errorf("workflow manager create did not return a schedule id")
+	definitionID := strings.TrimSpace(applied.GetId())
+	if definitionID == "" {
+		return nil, fmt.Errorf("workflow manager apply did not return a definition id")
 	}
-	fetched, err := client.GetSchedule(ctx, &proto.GetWorkflowProviderScheduleRequest{
+	fetched, err := client.GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{
 		InvocationToken: invocationToken,
-		ScheduleId:      scheduleID,
+		DefinitionId:    definitionID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("get workflow schedule: %w", err)
+		return nil, fmt.Errorf("get workflow definition: %w", err)
 	}
 
 	return map[string]any{
-		"provider_name": created.GetProviderName(),
-		"schedule_id":   scheduleID,
-		"cron":          fetched.GetCron(),
+		"provider_name": applied.GetProviderName(),
+		"definition_id": definitionID,
+		"activation_id": fetched.GetActivations()[0].GetId(),
+		"generation":    fetched.GetGeneration(),
 		"operation":     fetched.GetTarget().GetSteps()[0].GetApp().GetOperation(),
 	}, nil
 }
@@ -950,6 +962,7 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 	}
 
 	turn, err := client.CreateTurn(ctx, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds:  1,
 		InvocationToken: invocationToken,
 		SessionId:       sessionID,
 		Model:           "gpt-test",
@@ -1208,40 +1221,41 @@ type stubWorkflowManager struct {
 	subjects               []string
 	nextDefinitionID       int
 	nextRunID              int
-	nextScheduleID         int
-	nextTriggerID          int
 	definitions            map[string]*workflowmanager.ManagedDefinition
 	runs                   map[string]*workflowmanager.ManagedRun
-	schedules              map[string]*workflowmanager.ManagedSchedule
-	triggers               map[string]*workflowmanager.ManagedEventTrigger
 	publishedEvents        []coreworkflow.Event
 	publishedProviderNames []string
-	scheduleKeys           []string
-	triggerKeys            []string
+	definitionKeys         []string
 }
 
 func newStubWorkflowManager() *stubWorkflowManager {
 	return &stubWorkflowManager{
 		definitions: make(map[string]*workflowmanager.ManagedDefinition),
 		runs:        make(map[string]*workflowmanager.ManagedRun),
-		schedules:   make(map[string]*workflowmanager.ManagedSchedule),
-		triggers:    make(map[string]*workflowmanager.ManagedEventTrigger),
 	}
 }
 
-func (m *stubWorkflowManager) CreateDefinition(_ context.Context, p *principal.Principal, req workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+func (m *stubWorkflowManager) ApplyDefinition(_ context.Context, p *principal.Principal, req workflowmanager.DefinitionApply) (*workflowmanager.ManagedDefinition, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.nextDefinitionID++
-	id := fmt.Sprintf("def-%d", m.nextDefinitionID)
+	id := strings.TrimSpace(req.Spec.ID)
+	if id == "" {
+		m.nextDefinitionID++
+		id = fmt.Sprintf("def-%d", m.nextDefinitionID)
+	}
 	now := time.Now().UTC().Truncate(time.Second)
+	m.definitionKeys = append(m.definitionKeys, strings.TrimSpace(req.IdempotencyKey))
 	value := &workflowmanager.ManagedDefinition{
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
 		Definition: &coreworkflow.Definition{
 			ID:                 id,
-			Target:             cloneWorkflowTarget(req.Target),
+			Generation:         1,
+			Target:             cloneWorkflowTarget(req.Spec.Target),
+			Activations:        append([]coreworkflow.Activation(nil), req.Spec.Activations...),
+			Paused:             req.Spec.Paused,
 			CreatedBySubjectID: subjectIDOf(p),
 			CreatedAt:          &now,
+			UpdatedAt:          &now,
 		},
 	}
 	m.definitions[id] = value
@@ -1260,7 +1274,17 @@ func (m *stubWorkflowManager) GetDefinition(_ context.Context, p *principal.Prin
 	return cloneManagedDefinition(value), nil
 }
 
-func (m *stubWorkflowManager) UpdateDefinition(_ context.Context, p *principal.Principal, definitionID string, req workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+func (m *stubWorkflowManager) ListDefinitions(context.Context, *principal.Principal) (*workflowmanager.ListDefinitionsResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]*workflowmanager.ManagedDefinition, 0, len(m.definitions))
+	for _, item := range m.definitions {
+		out = append(out, cloneManagedDefinition(item))
+	}
+	return &workflowmanager.ListDefinitionsResponse{Definitions: out}, nil
+}
+
+func (m *stubWorkflowManager) SetDefinitionPaused(_ context.Context, p *principal.Principal, definitionID string, paused bool) (*workflowmanager.ManagedDefinition, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subjects = append(m.subjects, subjectIDOf(p))
@@ -1268,9 +1292,25 @@ func (m *stubWorkflowManager) UpdateDefinition(_ context.Context, p *principal.P
 	if !ok {
 		return nil, core.ErrNotFound
 	}
-	value.ProviderName = defaultWorkflowProviderName(req.ProviderName)
-	value.Definition.Target = cloneWorkflowTarget(req.Target)
+	value.Definition.Paused = paused
 	return cloneManagedDefinition(value), nil
+}
+
+func (m *stubWorkflowManager) SetActivationPaused(_ context.Context, p *principal.Principal, definitionID, activationID string, paused bool) (*workflowmanager.ManagedDefinition, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	value, ok := m.definitions[definitionID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	for i := range value.Definition.Activations {
+		if value.Definition.Activations[i].ID == activationID {
+			value.Definition.Activations[i].Paused = paused
+			return cloneManagedDefinition(value), nil
+		}
+	}
+	return nil, core.ErrNotFound
 }
 
 func (m *stubWorkflowManager) DeleteDefinition(_ context.Context, p *principal.Principal, definitionID string) error {
@@ -1282,212 +1322,6 @@ func (m *stubWorkflowManager) DeleteDefinition(_ context.Context, p *principal.P
 	}
 	delete(m.definitions, definitionID)
 	return nil
-}
-
-func (m *stubWorkflowManager) ListSchedules(context.Context, *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]*workflowmanager.ManagedSchedule, 0, len(m.schedules))
-	for _, item := range m.schedules {
-		out = append(out, cloneManagedSchedule(item))
-	}
-	return out, nil
-}
-
-func (m *stubWorkflowManager) CreateSchedule(_ context.Context, p *principal.Principal, req workflowmanager.ScheduleUpsert) (*workflowmanager.ManagedSchedule, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.nextScheduleID++
-	id := fmt.Sprintf("sched-%d", m.nextScheduleID)
-	now := time.Now().UTC().Truncate(time.Second)
-	m.scheduleKeys = append(m.scheduleKeys, strings.TrimSpace(req.IdempotencyKey))
-	value := &workflowmanager.ManagedSchedule{
-		ProviderName: defaultWorkflowProviderName(req.ProviderName),
-		Schedule: &coreworkflow.Schedule{
-			ID:           id,
-			Cron:         req.Cron,
-			Timezone:     req.Timezone,
-			Target:       cloneWorkflowTarget(req.Target),
-			DefinitionID: strings.TrimSpace(req.DefinitionID),
-			Paused:       req.Paused,
-			CreatedAt:    &now,
-			UpdatedAt:    &now,
-		},
-	}
-	m.schedules[id] = value
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	return cloneManagedSchedule(value), nil
-}
-
-func (m *stubWorkflowManager) GetSchedule(_ context.Context, p *principal.Principal, scheduleID string) (*workflowmanager.ManagedSchedule, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.schedules[scheduleID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	return cloneManagedSchedule(value), nil
-}
-
-func (m *stubWorkflowManager) UpdateSchedule(_ context.Context, p *principal.Principal, scheduleID string, req workflowmanager.ScheduleUpsert) (*workflowmanager.ManagedSchedule, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.schedules[scheduleID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	value.ProviderName = defaultWorkflowProviderName(req.ProviderName)
-	value.Schedule.Cron = req.Cron
-	value.Schedule.Timezone = req.Timezone
-	value.Schedule.Target = cloneWorkflowTarget(req.Target)
-	value.Schedule.DefinitionID = strings.TrimSpace(req.DefinitionID)
-	value.Schedule.Paused = req.Paused
-	value.Schedule.UpdatedAt = &now
-	return cloneManagedSchedule(value), nil
-}
-
-func (m *stubWorkflowManager) DeleteSchedule(_ context.Context, p *principal.Principal, scheduleID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	if _, ok := m.schedules[scheduleID]; !ok {
-		return core.ErrNotFound
-	}
-	delete(m.schedules, scheduleID)
-	return nil
-}
-
-func (m *stubWorkflowManager) PauseSchedule(_ context.Context, p *principal.Principal, scheduleID string) (*workflowmanager.ManagedSchedule, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.schedules[scheduleID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	value.Schedule.Paused = true
-	value.Schedule.UpdatedAt = &now
-	return cloneManagedSchedule(value), nil
-}
-
-func (m *stubWorkflowManager) ResumeSchedule(_ context.Context, p *principal.Principal, scheduleID string) (*workflowmanager.ManagedSchedule, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.schedules[scheduleID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	value.Schedule.Paused = false
-	value.Schedule.UpdatedAt = &now
-	return cloneManagedSchedule(value), nil
-}
-
-func (m *stubWorkflowManager) ListEventTriggers(context.Context, *principal.Principal) ([]*workflowmanager.ManagedEventTrigger, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]*workflowmanager.ManagedEventTrigger, 0, len(m.triggers))
-	for _, item := range m.triggers {
-		out = append(out, cloneManagedEventTrigger(item))
-	}
-	return out, nil
-}
-
-func (m *stubWorkflowManager) CreateEventTrigger(_ context.Context, p *principal.Principal, req workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.nextTriggerID++
-	id := fmt.Sprintf("trg-%d", m.nextTriggerID)
-	now := time.Now().UTC().Truncate(time.Second)
-	m.triggerKeys = append(m.triggerKeys, strings.TrimSpace(req.IdempotencyKey))
-	value := &workflowmanager.ManagedEventTrigger{
-		ProviderName: defaultWorkflowProviderName(req.ProviderName),
-		Trigger: &coreworkflow.EventTrigger{
-			ID:           id,
-			Match:        cloneWorkflowEventMatch(req.Match),
-			Target:       cloneWorkflowTarget(req.Target),
-			DefinitionID: strings.TrimSpace(req.DefinitionID),
-			Paused:       req.Paused,
-			CreatedAt:    &now,
-			UpdatedAt:    &now,
-		},
-	}
-	m.triggers[id] = value
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	return cloneManagedEventTrigger(value), nil
-}
-
-func (m *stubWorkflowManager) GetEventTrigger(_ context.Context, p *principal.Principal, triggerID string) (*workflowmanager.ManagedEventTrigger, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.triggers[triggerID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	return cloneManagedEventTrigger(value), nil
-}
-
-func (m *stubWorkflowManager) UpdateEventTrigger(_ context.Context, p *principal.Principal, triggerID string, req workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.triggers[triggerID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	value.ProviderName = defaultWorkflowProviderName(req.ProviderName)
-	value.Trigger.Match = cloneWorkflowEventMatch(req.Match)
-	value.Trigger.Target = cloneWorkflowTarget(req.Target)
-	value.Trigger.DefinitionID = strings.TrimSpace(req.DefinitionID)
-	value.Trigger.Paused = req.Paused
-	value.Trigger.UpdatedAt = &now
-	return cloneManagedEventTrigger(value), nil
-}
-
-func (m *stubWorkflowManager) DeleteEventTrigger(_ context.Context, p *principal.Principal, triggerID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	if _, ok := m.triggers[triggerID]; !ok {
-		return core.ErrNotFound
-	}
-	delete(m.triggers, triggerID)
-	return nil
-}
-
-func (m *stubWorkflowManager) PauseEventTrigger(_ context.Context, p *principal.Principal, triggerID string) (*workflowmanager.ManagedEventTrigger, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.triggers[triggerID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	value.Trigger.Paused = true
-	value.Trigger.UpdatedAt = &now
-	return cloneManagedEventTrigger(value), nil
-}
-
-func (m *stubWorkflowManager) ResumeEventTrigger(_ context.Context, p *principal.Principal, triggerID string) (*workflowmanager.ManagedEventTrigger, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.triggers[triggerID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	value.Trigger.Paused = false
-	value.Trigger.UpdatedAt = &now
-	return cloneManagedEventTrigger(value), nil
 }
 
 func (m *stubWorkflowManager) ListRuns(context.Context, *principal.Principal, coreworkflow.ListRunsRequest) (*workflowmanager.ListRunsResponse, error) {
@@ -1510,7 +1344,7 @@ func (m *stubWorkflowManager) StartRun(_ context.Context, p *principal.Principal
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
 		Run: &coreworkflow.Run{
 			ID:                 id,
-			Target:             cloneWorkflowTarget(req.Target),
+			Target:             cloneWorkflowTarget(m.workflowTargetForDefinition(req.DefinitionID)),
 			DefinitionID:       strings.TrimSpace(req.DefinitionID),
 			WorkflowKey:        req.WorkflowKey,
 			CreatedAt:          &now,
@@ -1522,8 +1356,23 @@ func (m *stubWorkflowManager) StartRun(_ context.Context, p *principal.Principal
 	return cloneManagedRun(value), nil
 }
 
+func (m *stubWorkflowManager) workflowTargetForDefinition(definitionID string) coreworkflow.Target {
+	if definition := m.definitions[strings.TrimSpace(definitionID)]; definition != nil && definition.Definition != nil {
+		return definition.Definition.Target
+	}
+	return coreworkflow.Target{}
+}
+
 func (m *stubWorkflowManager) GetRun(context.Context, *principal.Principal, string) (*workflowmanager.ManagedRun, error) {
 	return nil, core.ErrNotFound
+}
+
+func (m *stubWorkflowManager) GetRunEvents(context.Context, *principal.Principal, string) (*proto.GetWorkflowProviderRunEventsResponse, error) {
+	return &proto.GetWorkflowProviderRunEventsResponse{}, nil
+}
+
+func (m *stubWorkflowManager) GetRunOutput(context.Context, *principal.Principal, string) (*proto.GetWorkflowProviderRunOutputResponse, error) {
+	return &proto.GetWorkflowProviderRunOutputResponse{}, nil
 }
 
 func (m *stubWorkflowManager) CancelRun(context.Context, *principal.Principal, string, string) (*workflowmanager.ManagedRun, error) {
@@ -1538,7 +1387,7 @@ func (m *stubWorkflowManager) SignalOrStartRun(context.Context, *principal.Princ
 	return nil, core.ErrNotFound
 }
 
-func (m *stubWorkflowManager) PublishEvent(_ context.Context, p *principal.Principal, req workflowmanager.EventPublish) (coreworkflow.Event, error) {
+func (m *stubWorkflowManager) DeliverEvent(_ context.Context, p *principal.Principal, req workflowmanager.EventDeliver) (coreworkflow.Event, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subjects = append(m.subjects, subjectIDOf(p))
@@ -1557,16 +1406,10 @@ func (m *stubWorkflowManager) Subjects() []string {
 	return append([]string(nil), m.subjects...)
 }
 
-func (m *stubWorkflowManager) ScheduleIdempotencyKeys() []string {
+func (m *stubWorkflowManager) DefinitionIdempotencyKeys() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return slices.Clone(m.scheduleKeys)
-}
-
-func (m *stubWorkflowManager) ScheduleCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.schedules)
+	return slices.Clone(m.definitionKeys)
 }
 
 type stubAgentTurnManagerProvider struct {
@@ -1634,7 +1477,7 @@ func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req *pro
 		ClientRef:          req.GetClientRef(),
 		State:              coreagent.SessionStateActive,
 		Metadata:           stubAgentProtoStructToMap(req.GetMetadata()),
-		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedBySubjectID: req.GetCreatedBySubjectId(),
 		CreatedAt:          &now,
 		UpdatedAt:          &now,
 	}
@@ -1698,7 +1541,7 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req *proto.
 		Status:             coreagent.ExecutionStatusSucceeded,
 		Messages:           stubAgentMessagesFromProto(req.GetMessages()),
 		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
-		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedBySubjectID: req.GetCreatedBySubjectId(),
 		CreatedAt:          &now,
 		StartedAt:          &now,
 		CompletedAt:        &now,
@@ -1908,33 +1751,6 @@ func cloneAgentInteraction(src *coreagent.Interaction) *coreagent.Interaction {
 	return &dst
 }
 
-func cloneManagedSchedule(value *workflowmanager.ManagedSchedule) *workflowmanager.ManagedSchedule {
-	if value == nil {
-		return nil
-	}
-	out := *value
-	if value.Schedule != nil {
-		schedule := *value.Schedule
-		schedule.Target = cloneWorkflowTarget(value.Schedule.Target)
-		out.Schedule = &schedule
-	}
-	return &out
-}
-
-func cloneManagedEventTrigger(value *workflowmanager.ManagedEventTrigger) *workflowmanager.ManagedEventTrigger {
-	if value == nil {
-		return nil
-	}
-	out := *value
-	if value.Trigger != nil {
-		trigger := *value.Trigger
-		trigger.Match = cloneWorkflowEventMatch(value.Trigger.Match)
-		trigger.Target = cloneWorkflowTarget(value.Trigger.Target)
-		out.Trigger = &trigger
-	}
-	return &out
-}
-
 func cloneManagedDefinition(value *workflowmanager.ManagedDefinition) *workflowmanager.ManagedDefinition {
 	if value == nil {
 		return nil
@@ -2000,14 +1816,6 @@ func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
 		out.Steps[i] = step
 	}
 	return out
-}
-
-func cloneWorkflowEventMatch(value coreworkflow.EventMatch) coreworkflow.EventMatch {
-	return coreworkflow.EventMatch{
-		Type:    value.Type,
-		Source:  value.Source,
-		Subject: value.Subject,
-	}
 }
 
 func cloneWorkflowEvent(value coreworkflow.Event) coreworkflow.Event {
@@ -2913,6 +2721,136 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 	}
 }
 
+func graphqlStringPtr(value string) *string {
+	return &value
+}
+
+func pluginInvokeGraphQLSchema() graphqlschema.Schema {
+	return graphqlschema.Schema{
+		QueryType: &graphqlschema.TypeName{Name: "Query"},
+		Types: []graphqlschema.FullType{
+			{
+				Kind: "OBJECT",
+				Name: "Query",
+				Fields: []graphqlschema.Field{
+					{
+						Name: "viewer",
+						Args: []graphqlschema.InputValue{
+							{Name: "team", Type: graphqlschema.TypeRef{Kind: "NON_NULL", OfType: &graphqlschema.TypeRef{Kind: "SCALAR", Name: graphqlStringPtr("String")}}},
+						},
+						Type: graphqlschema.TypeRef{Kind: "OBJECT", Name: graphqlStringPtr("Viewer")},
+					},
+				},
+			},
+			{
+				Kind: "OBJECT",
+				Name: "Viewer",
+				Fields: []graphqlschema.Field{
+					{Name: "id", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: graphqlStringPtr("ID")}},
+					{Name: "name", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: graphqlStringPtr("String")}},
+				},
+			},
+		},
+	}
+}
+
+func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurface bool, _ config.AuthorizationConfig, brokerOpts ...invocation.BrokerOption) *nestedInvokeHarness {
+	t.Helper()
+
+	callerBin := buildEchoPluginBinary(t)
+	callerRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "caller",
+		Operations: []catalog.CatalogOperation{
+			{ID: "invoke_plugin_graphql", Method: http.MethodPost},
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	callerManifest := newExecutableManifest("Caller", "Invokes graphql on another plugin")
+	callerManifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
+		"default": {
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		},
+	}
+
+	linearRoot := t.TempDir()
+	linearManifestPath := filepath.Join(linearRoot, "manifest.yaml")
+	if err := os.WriteFile(linearManifestPath, []byte("kind: app\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(manifest.yaml): %v", err)
+	}
+	linearManifest := &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
+		Source:      "github.com/acme/apps/linear",
+		Version:     "1.0.0",
+		DisplayName: "Linear",
+		Description: "GraphQL target",
+		Spec: &providermanifestv1.Spec{
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+				},
+			},
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				GraphQL: &providermanifestv1.GraphQLSurface{
+					Connection: "default",
+					URL:        graphQLURL,
+				},
+			},
+		},
+	}
+
+	callerInvokes := []config.AppInvocationDependency{
+		{App: "linear", Operation: "viewer"},
+	}
+	if allowSurface {
+		callerInvokes = append(callerInvokes, config.AppInvocationDependency{
+			App:     "linear",
+			Surface: "graphql",
+		})
+	}
+
+	bridge := newLazyInvoker()
+	cfg := &config.Config{
+		Apps: map[string]*config.ProviderEntry{
+			"caller": {
+				Command:              callerBin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     callerManifest,
+				ResolvedManifestPath: filepath.Join(callerRoot, "manifest.yaml"),
+				Invokes:              callerInvokes,
+			},
+			"linear": {
+				ResolvedManifest:     linearManifest,
+				ResolvedManifestPath: linearManifestPath,
+			},
+		},
+	}
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
+		EncryptionKey: secret,
+		AppInvocation: bridge,
+	}))
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	testutil.AttachStubExternalCredentials(services)
+	t.Cleanup(func() { _ = services.Close() })
+
+	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials, brokerOpts...)
+	bridge.SetTarget(invocation.NewGuarded(broker, nil, "app", nil, invocation.WithoutRateLimit()))
+
+	return &nestedInvokeHarness{
+		invoker:  invocation.NewGuarded(broker, nil, "test", nil, invocation.WithoutRateLimit()),
+		services: services,
+	}
+}
+
 func newNestedInvokeUser(t *testing.T, harness *nestedInvokeHarness, ctx context.Context, email string) *core.User {
 	t.Helper()
 
@@ -3790,7 +3728,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if sessionReq.IdempotencyKey != "plugin-agent-session" {
 		t.Fatalf("CreateSession idempotency_key = %q, want %q", sessionReq.IdempotencyKey, "plugin-agent-session")
 	}
-	if strings.TrimSpace(sessionReq.GetCreatedBySubjectId()) != "user:user-123" {
+	if sessionReq.GetCreatedBySubjectId() != "user:user-123" {
 		t.Fatalf("CreateSession created_by_subject_id = %q, want %q", sessionReq.GetCreatedBySubjectId(), "user:user-123")
 	}
 	if turnReq.IdempotencyKey != "plugin-agent-turn" {
@@ -3799,7 +3737,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if turnReq.GetSessionId() != roundTrip.SessionID {
 		t.Fatalf("CreateTurn session_id = %q, want %q", turnReq.GetSessionId(), roundTrip.SessionID)
 	}
-	if strings.TrimSpace(turnReq.GetCreatedBySubjectId()) != "user:user-123" {
+	if turnReq.GetCreatedBySubjectId() != "user:user-123" {
 		t.Fatalf("CreateTurn created_by_subject_id = %q, want %q", turnReq.GetCreatedBySubjectId(), "user:user-123")
 	}
 	turnMetadata := stubAgentProtoStructToMap(turnReq.GetMetadata())
@@ -3817,44 +3755,30 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	}
 }
 
-func TestAppWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
+func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
 	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
 		Name: "echo",
 		Operations: []catalog.CatalogOperation{
-			{ID: "create_workflow_schedule", Method: http.MethodPost},
-			{ID: "get_workflow_schedule", Method: http.MethodGet},
-			{ID: "update_workflow_schedule", Method: http.MethodPost},
-			{ID: "delete_workflow_schedule", Method: http.MethodPost},
-			{ID: "pause_workflow_schedule", Method: http.MethodPost},
-			{ID: "resume_workflow_schedule", Method: http.MethodPost},
-			{ID: "create_workflow_trigger", Method: http.MethodPost},
-			{ID: "get_workflow_trigger", Method: http.MethodGet},
-			{ID: "update_workflow_trigger", Method: http.MethodPost},
-			{ID: "delete_workflow_trigger", Method: http.MethodPost},
-			{ID: "pause_workflow_trigger", Method: http.MethodPost},
-			{ID: "resume_workflow_trigger", Method: http.MethodPost},
-			{ID: "publish_workflow_event", Method: http.MethodPost},
+			{ID: "apply_workflow_definition", Method: http.MethodPost},
+			{ID: "get_workflow_definition", Method: http.MethodGet},
+			{ID: "set_workflow_definition_paused", Method: http.MethodPost},
+			{ID: "set_workflow_activation_paused", Method: http.MethodPost},
+			{ID: "delete_workflow_definition", Method: http.MethodPost},
+			{ID: "deliver_workflow_event", Method: http.MethodPost},
 		},
 	})
-	manifest := newExecutableManifest("Echo", "Workflow manager CRUD")
+	manifest := newExecutableManifest("Echo", "Workflow manager definitions")
 	manager := newStubWorkflowManager()
 	workflowManagerOperations := []string{
-		workflowgrants.OperationSchedulesCreate,
-		workflowgrants.OperationSchedulesGet,
-		workflowgrants.OperationSchedulesUpdate,
-		workflowgrants.OperationSchedulesDelete,
-		workflowgrants.OperationSchedulesPause,
-		workflowgrants.OperationSchedulesResume,
-		workflowgrants.OperationEventTriggersCreate,
-		workflowgrants.OperationEventTriggersGet,
-		workflowgrants.OperationEventTriggersUpdate,
-		workflowgrants.OperationEventTriggersDelete,
-		workflowgrants.OperationEventTriggersPause,
-		workflowgrants.OperationEventTriggersResume,
-		workflowgrants.OperationEventsPublish,
+		workflowgrants.OperationDefinitionsApply,
+		workflowgrants.OperationDefinitionsGet,
+		workflowgrants.OperationDefinitionsSetPaused,
+		workflowgrants.OperationDefinitionsSetActivationPaused,
+		workflowgrants.OperationDefinitionsDelete,
+		workflowgrants.OperationEventsDeliver,
 	}
 
 	cfg := &config.Config{
@@ -3896,10 +3820,9 @@ func TestAppWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 		Scopes:    []string{"echo"},
 	})
 
-	createResult, err := prov.Execute(ctx, "create_workflow_schedule", map[string]any{
+	applyResult, err := prov.Execute(ctx, "apply_workflow_definition", map[string]any{
+		"definition_id": "roadmap_sync",
 		"provider_name": "basic",
-		"cron":          "*/5 * * * *",
-		"timezone":      "America/New_York",
 		"target": map[string]any{
 			"app":        "roadmap",
 			"operation":  "sync",
@@ -3909,44 +3832,59 @@ func TestAppWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 				"mode": "incremental",
 			},
 		},
+		"activations": []any{
+			map[string]any{
+				"id": "nightly",
+				"schedule": map[string]any{
+					"cron":     "*/5 * * * *",
+					"timezone": "America/New_York",
+				},
+			},
+		},
 	}, "")
 	if err != nil {
-		t.Fatalf("Execute(create_workflow_schedule): %v", err)
+		t.Fatalf("Execute(apply_workflow_definition): %v", err)
 	}
-	var created struct {
+	var applied struct {
 		ProviderName string `json:"provider_name"`
-		Schedule     struct {
-			ID     string `json:"id"`
-			Cron   string `json:"cron"`
-			Paused bool   `json:"paused"`
+		Definition   struct {
+			ID          string `json:"id"`
+			Paused      bool   `json:"paused"`
+			Activations []struct {
+				ID       string `json:"id"`
+				Schedule struct {
+					Cron     string `json:"cron"`
+					Timezone string `json:"timezone"`
+				} `json:"schedule"`
+			} `json:"activations"`
 			Target struct {
 				App       string         `json:"app"`
 				Operation string         `json:"operation"`
 				Input     map[string]any `json:"input"`
 			} `json:"target"`
-		} `json:"schedule"`
+		} `json:"definition"`
 	}
-	if err := json.Unmarshal([]byte(createResult.Body), &created); err != nil {
-		t.Fatalf("json.Unmarshal(create): %v", err)
+	if err := json.Unmarshal([]byte(applyResult.Body), &applied); err != nil {
+		t.Fatalf("json.Unmarshal(apply): %v", err)
 	}
-	if created.ProviderName != "basic" {
-		t.Fatalf("provider_name = %q, want basic", created.ProviderName)
+	if applied.ProviderName != "basic" || applied.Definition.ID != "roadmap_sync" {
+		t.Fatalf("unexpected apply result: %+v", applied)
 	}
-	if created.Schedule.ID == "" {
-		t.Fatal("created schedule id should be set")
+	if applied.Definition.Target.App != "roadmap" || applied.Definition.Target.Operation != "sync" {
+		t.Fatalf("unexpected target: %+v", applied.Definition.Target)
 	}
-	if created.Schedule.Target.App != "roadmap" || created.Schedule.Target.Operation != "sync" {
-		t.Fatalf("unexpected target: %+v", created.Schedule.Target)
-	}
-	if got := created.Schedule.Target.Input["mode"]; got != "incremental" {
+	if got := applied.Definition.Target.Input["mode"]; got != "incremental" {
 		t.Fatalf("target.input.mode = %v, want incremental", got)
 	}
+	if len(applied.Definition.Activations) != 1 || applied.Definition.Activations[0].ID != "nightly" || applied.Definition.Activations[0].Schedule.Cron != "*/5 * * * *" {
+		t.Fatalf("unexpected activations: %+v", applied.Definition.Activations)
+	}
 
-	getResult, err := prov.Execute(ctx, "get_workflow_schedule", map[string]any{
-		"schedule_id": created.Schedule.ID,
+	getResult, err := prov.Execute(ctx, "get_workflow_definition", map[string]any{
+		"definition_id": applied.Definition.ID,
 	}, "")
 	if err != nil {
-		t.Fatalf("Execute(get_workflow_schedule): %v", err)
+		t.Fatalf("Execute(get_workflow_definition): %v", err)
 	}
 	var fetched map[string]any
 	if err := json.Unmarshal([]byte(getResult.Body), &fetched); err != nil {
@@ -3956,78 +3894,53 @@ func TestAppWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 		t.Fatalf("fetched provider_name = %v, want basic", fetched["provider_name"])
 	}
 
-	updateResult, err := prov.Execute(ctx, "update_workflow_schedule", map[string]any{
-		"schedule_id":   created.Schedule.ID,
-		"provider_name": "secondary",
-		"cron":          "0 * * * *",
-		"timezone":      "UTC",
+	pauseDefinitionResult, err := prov.Execute(ctx, "set_workflow_definition_paused", map[string]any{
+		"definition_id": applied.Definition.ID,
 		"paused":        true,
-		"target": map[string]any{
-			"app":       "roadmap",
-			"operation": "status",
-		},
 	}, "")
 	if err != nil {
-		t.Fatalf("Execute(update_workflow_schedule): %v", err)
+		t.Fatalf("Execute(set_workflow_definition_paused): %v", err)
 	}
-	var updated struct {
-		ProviderName string `json:"provider_name"`
-		Schedule     struct {
-			Cron   string `json:"cron"`
-			Paused bool   `json:"paused"`
-			Target struct {
-				Operation string `json:"operation"`
-			} `json:"target"`
-		} `json:"schedule"`
-	}
-	if err := json.Unmarshal([]byte(updateResult.Body), &updated); err != nil {
-		t.Fatalf("json.Unmarshal(update): %v", err)
-	}
-	if updated.ProviderName != "secondary" || updated.Schedule.Cron != "0 * * * *" || !updated.Schedule.Paused || updated.Schedule.Target.Operation != "status" {
-		t.Fatalf("unexpected update result: %+v", updated)
-	}
-
-	pauseResult, err := prov.Execute(ctx, "pause_workflow_schedule", map[string]any{
-		"schedule_id": created.Schedule.ID,
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute(pause_workflow_schedule): %v", err)
-	}
-	var paused struct {
-		Schedule struct {
+	var pausedDefinition struct {
+		Definition struct {
 			Paused bool `json:"paused"`
-		} `json:"schedule"`
+		} `json:"definition"`
 	}
-	if err := json.Unmarshal([]byte(pauseResult.Body), &paused); err != nil {
-		t.Fatalf("json.Unmarshal(pause): %v", err)
+	if err := json.Unmarshal([]byte(pauseDefinitionResult.Body), &pausedDefinition); err != nil {
+		t.Fatalf("json.Unmarshal(definition pause): %v", err)
 	}
-	if !paused.Schedule.Paused {
-		t.Fatalf("pause result = %+v, want paused schedule", paused)
-	}
-
-	resumeResult, err := prov.Execute(ctx, "resume_workflow_schedule", map[string]any{
-		"schedule_id": created.Schedule.ID,
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute(resume_workflow_schedule): %v", err)
-	}
-	var resumed struct {
-		Schedule struct {
-			Paused bool `json:"paused"`
-		} `json:"schedule"`
-	}
-	if err := json.Unmarshal([]byte(resumeResult.Body), &resumed); err != nil {
-		t.Fatalf("json.Unmarshal(resume): %v", err)
-	}
-	if resumed.Schedule.Paused {
-		t.Fatalf("resume result = %+v, want resumed schedule", resumed)
+	if !pausedDefinition.Definition.Paused {
+		t.Fatalf("pause definition result = %+v, want paused definition", pausedDefinition)
 	}
 
-	deleteResult, err := prov.Execute(ctx, "delete_workflow_schedule", map[string]any{
-		"schedule_id": created.Schedule.ID,
+	pauseActivationResult, err := prov.Execute(ctx, "set_workflow_activation_paused", map[string]any{
+		"definition_id": applied.Definition.ID,
+		"activation_id": "nightly",
+		"paused":        true,
 	}, "")
 	if err != nil {
-		t.Fatalf("Execute(delete_workflow_schedule): %v", err)
+		t.Fatalf("Execute(set_workflow_activation_paused): %v", err)
+	}
+	var pausedActivation struct {
+		Definition struct {
+			Activations []struct {
+				ID     string `json:"id"`
+				Paused bool   `json:"paused"`
+			} `json:"activations"`
+		} `json:"definition"`
+	}
+	if err := json.Unmarshal([]byte(pauseActivationResult.Body), &pausedActivation); err != nil {
+		t.Fatalf("json.Unmarshal(activation pause): %v", err)
+	}
+	if len(pausedActivation.Definition.Activations) != 1 || !pausedActivation.Definition.Activations[0].Paused {
+		t.Fatalf("pause activation result = %+v, want paused activation", pausedActivation)
+	}
+
+	deleteResult, err := prov.Execute(ctx, "delete_workflow_definition", map[string]any{
+		"definition_id": applied.Definition.ID,
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(delete_workflow_definition): %v", err)
 	}
 	var deleted struct {
 		Deleted bool `json:"deleted"`
@@ -4039,148 +3952,7 @@ func TestAppWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 		t.Fatalf("delete result = %+v, want deleted", deleted)
 	}
 
-	createTriggerResult, err := prov.Execute(ctx, "create_workflow_trigger", map[string]any{
-		"provider_name": "basic",
-		"match": map[string]any{
-			"type":    "roadmap.item.updated",
-			"source":  "roadmap",
-			"subject": "item-123",
-		},
-		"target": map[string]any{
-			"app":       "slack",
-			"operation": "chat.postMessage",
-		},
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute(create_workflow_trigger): %v", err)
-	}
-	var createdTrigger struct {
-		ProviderName string `json:"provider_name"`
-		Trigger      struct {
-			ID     string `json:"id"`
-			Paused bool   `json:"paused"`
-			Match  struct {
-				Type    string `json:"type"`
-				Source  string `json:"source"`
-				Subject string `json:"subject"`
-			} `json:"match"`
-			Target struct {
-				App       string `json:"app"`
-				Operation string `json:"operation"`
-			} `json:"target"`
-		} `json:"trigger"`
-	}
-	if err := json.Unmarshal([]byte(createTriggerResult.Body), &createdTrigger); err != nil {
-		t.Fatalf("json.Unmarshal(create trigger): %v", err)
-	}
-	if createdTrigger.ProviderName != "basic" || createdTrigger.Trigger.ID == "" {
-		t.Fatalf("unexpected create trigger result: %+v", createdTrigger)
-	}
-	if createdTrigger.Trigger.Match.Type != "roadmap.item.updated" || createdTrigger.Trigger.Target.App != "slack" || createdTrigger.Trigger.Target.Operation != "chat.postMessage" {
-		t.Fatalf("unexpected trigger payload: %+v", createdTrigger.Trigger)
-	}
-
-	getTriggerResult, err := prov.Execute(ctx, "get_workflow_trigger", map[string]any{
-		"trigger_id": createdTrigger.Trigger.ID,
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute(get_workflow_trigger): %v", err)
-	}
-	var fetchedTrigger map[string]any
-	if err := json.Unmarshal([]byte(getTriggerResult.Body), &fetchedTrigger); err != nil {
-		t.Fatalf("json.Unmarshal(get trigger): %v", err)
-	}
-	if fetchedTrigger["provider_name"] != "basic" {
-		t.Fatalf("fetched trigger provider_name = %v, want basic", fetchedTrigger["provider_name"])
-	}
-
-	updateTriggerResult, err := prov.Execute(ctx, "update_workflow_trigger", map[string]any{
-		"trigger_id":    createdTrigger.Trigger.ID,
-		"provider_name": "secondary",
-		"paused":        true,
-		"match": map[string]any{
-			"type": "roadmap.item.synced",
-		},
-		"target": map[string]any{
-			"app":       "roadmap",
-			"operation": "status",
-		},
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute(update_workflow_trigger): %v", err)
-	}
-	var updatedTrigger struct {
-		ProviderName string `json:"provider_name"`
-		Trigger      struct {
-			Paused bool `json:"paused"`
-			Match  struct {
-				Type string `json:"type"`
-			} `json:"match"`
-			Target struct {
-				Operation string `json:"operation"`
-			} `json:"target"`
-		} `json:"trigger"`
-	}
-	if err := json.Unmarshal([]byte(updateTriggerResult.Body), &updatedTrigger); err != nil {
-		t.Fatalf("json.Unmarshal(update trigger): %v", err)
-	}
-	if updatedTrigger.ProviderName != "secondary" || !updatedTrigger.Trigger.Paused || updatedTrigger.Trigger.Match.Type != "roadmap.item.synced" || updatedTrigger.Trigger.Target.Operation != "status" {
-		t.Fatalf("unexpected update trigger result: %+v", updatedTrigger)
-	}
-
-	pauseTriggerResult, err := prov.Execute(ctx, "pause_workflow_trigger", map[string]any{
-		"trigger_id": createdTrigger.Trigger.ID,
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute(pause_workflow_trigger): %v", err)
-	}
-	var pausedTrigger struct {
-		Trigger struct {
-			Paused bool `json:"paused"`
-		} `json:"trigger"`
-	}
-	if err := json.Unmarshal([]byte(pauseTriggerResult.Body), &pausedTrigger); err != nil {
-		t.Fatalf("json.Unmarshal(pause trigger): %v", err)
-	}
-	if !pausedTrigger.Trigger.Paused {
-		t.Fatalf("pause trigger result = %+v, want paused trigger", pausedTrigger)
-	}
-
-	resumeTriggerResult, err := prov.Execute(ctx, "resume_workflow_trigger", map[string]any{
-		"trigger_id": createdTrigger.Trigger.ID,
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute(resume_workflow_trigger): %v", err)
-	}
-	var resumedTrigger struct {
-		Trigger struct {
-			Paused bool `json:"paused"`
-		} `json:"trigger"`
-	}
-	if err := json.Unmarshal([]byte(resumeTriggerResult.Body), &resumedTrigger); err != nil {
-		t.Fatalf("json.Unmarshal(resume trigger): %v", err)
-	}
-	if resumedTrigger.Trigger.Paused {
-		t.Fatalf("resume trigger result = %+v, want resumed trigger", resumedTrigger)
-	}
-
-	deleteTriggerResult, err := prov.Execute(ctx, "delete_workflow_trigger", map[string]any{
-		"trigger_id": createdTrigger.Trigger.ID,
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute(delete_workflow_trigger): %v", err)
-	}
-	var deletedTrigger struct {
-		Deleted bool `json:"deleted"`
-	}
-	if err := json.Unmarshal([]byte(deleteTriggerResult.Body), &deletedTrigger); err != nil {
-		t.Fatalf("json.Unmarshal(delete trigger): %v", err)
-	}
-	if !deletedTrigger.Deleted {
-		t.Fatalf("delete trigger result = %+v, want deleted", deletedTrigger)
-	}
-
-	publishEventResult, err := prov.Execute(ctx, "publish_workflow_event", map[string]any{
+	deliverEventResult, err := prov.Execute(ctx, "deliver_workflow_event", map[string]any{
 		"provider_name": "advanced",
 		"type":          "roadmap.item.updated",
 		"source":        "roadmap",
@@ -4194,9 +3966,9 @@ func TestAppWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 		},
 	}, "")
 	if err != nil {
-		t.Fatalf("Execute(publish_workflow_event): %v", err)
+		t.Fatalf("Execute(deliver_workflow_event): %v", err)
 	}
-	var publishedEvent struct {
+	var deliveredEvent struct {
 		ID         string         `json:"id"`
 		Type       string         `json:"type"`
 		Source     string         `json:"source"`
@@ -4204,27 +3976,20 @@ func TestAppWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 		Data       map[string]any `json:"data"`
 		Extensions map[string]any `json:"extensions"`
 	}
-	if err := json.Unmarshal([]byte(publishEventResult.Body), &publishedEvent); err != nil {
-		t.Fatalf("json.Unmarshal(publish event): %v", err)
+	if err := json.Unmarshal([]byte(deliverEventResult.Body), &deliveredEvent); err != nil {
+		t.Fatalf("json.Unmarshal(deliver event): %v", err)
 	}
-	if publishedEvent.ID == "" || publishedEvent.Type != "roadmap.item.updated" || publishedEvent.Source != "roadmap" || publishedEvent.Subject != "item-123" {
-		t.Fatalf("unexpected published event result: %+v", publishedEvent)
+	if deliveredEvent.ID == "" || deliveredEvent.Type != "roadmap.item.updated" || deliveredEvent.Source != "roadmap" || deliveredEvent.Subject != "item-123" {
+		t.Fatalf("unexpected delivered event result: %+v", deliveredEvent)
 	}
-	if publishedEvent.Data["title"] != "Ship parity" || publishedEvent.Extensions["tenant"] != "acme" {
-		t.Fatalf("unexpected published event data: %+v", publishedEvent)
+	if deliveredEvent.Data["title"] != "Ship parity" || deliveredEvent.Extensions["tenant"] != "acme" {
+		t.Fatalf("unexpected delivered event data: %+v", deliveredEvent)
 	}
 	if !slices.Equal(manager.publishedProviderNames, []string{"advanced"}) {
-		t.Fatalf("published provider names = %v, want [advanced]", manager.publishedProviderNames)
+		t.Fatalf("delivered provider names = %v, want [advanced]", manager.publishedProviderNames)
 	}
 
-	if got := manager.Subjects(); len(got) != 13 || slices.Contains(got, "") || !slices.Equal(got, []string{
-		"user:user-123",
-		"user:user-123",
-		"user:user-123",
-		"user:user-123",
-		"user:user-123",
-		"user:user-123",
-		"user:user-123",
+	if got := manager.Subjects(); len(got) != 6 || slices.Contains(got, "") || !slices.Equal(got, []string{
 		"user:user-123",
 		"user:user-123",
 		"user:user-123",
@@ -4243,8 +4008,8 @@ func TestAppWorkflowManagerHostMethodsUseProviderTokenGrants(t *testing.T) {
 	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
 		Name: "echo",
 		Operations: []catalog.CatalogOperation{
-			{ID: "create_workflow_schedule", Method: http.MethodPost},
-			{ID: "publish_workflow_event", Method: http.MethodPost},
+			{ID: "apply_workflow_definition", Method: http.MethodPost},
+			{ID: "deliver_workflow_event", Method: http.MethodPost},
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Workflow manager capabilities")
@@ -4259,7 +4024,7 @@ func TestAppWorkflowManagerHostMethodsUseProviderTokenGrants(t *testing.T) {
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Capabilities: &config.AppCapabilitiesConfig{
 					Workflow: &config.AppWorkflowCapabilitiesConfig{
-						Operations: []string{workflowgrants.OperationEventsPublish},
+						Operations: []string{workflowgrants.OperationEventsDeliver},
 					},
 				},
 			},
@@ -4288,50 +4053,47 @@ func TestAppWorkflowManagerHostMethodsUseProviderTokenGrants(t *testing.T) {
 		Scopes:    []string{"echo"},
 	})
 
-	publishEventResult, err := prov.Execute(ctx, "publish_workflow_event", map[string]any{
+	deliverEventResult, err := prov.Execute(ctx, "deliver_workflow_event", map[string]any{
 		"provider_name": "advanced",
 		"type":          "roadmap.item.updated",
 		"source":        "roadmap",
 		"subject":       "item-123",
 	}, "")
 	if err != nil {
-		t.Fatalf("Execute(publish_workflow_event): %v", err)
+		t.Fatalf("Execute(deliver_workflow_event): %v", err)
 	}
-	var publishedEvent struct {
+	var deliveredEvent struct {
 		ID string `json:"id"`
 	}
-	if err := json.Unmarshal([]byte(publishEventResult.Body), &publishedEvent); err != nil {
-		t.Fatalf("json.Unmarshal(publish event): %v", err)
+	if err := json.Unmarshal([]byte(deliverEventResult.Body), &deliveredEvent); err != nil {
+		t.Fatalf("json.Unmarshal(deliver event): %v", err)
 	}
-	if publishedEvent.ID == "" {
-		t.Fatalf("publish event result = %+v, want event id", publishedEvent)
+	if deliveredEvent.ID == "" {
+		t.Fatalf("deliver event result = %+v, want event id", deliveredEvent)
 	}
 	if !slices.Equal(manager.publishedProviderNames, []string{"advanced"}) {
-		t.Fatalf("published provider names = %v, want [advanced]", manager.publishedProviderNames)
+		t.Fatalf("delivered provider names = %v, want [advanced]", manager.publishedProviderNames)
 	}
 
-	createResult, err := prov.Execute(ctx, "create_workflow_schedule", map[string]any{
+	applyResult, err := prov.Execute(ctx, "apply_workflow_definition", map[string]any{
+		"definition_id": "roadmap_sync",
 		"provider_name": "basic",
-		"cron":          "*/5 * * * *",
 		"target": map[string]any{
 			"app":       "roadmap",
 			"operation": "sync",
 		},
 	}, "")
 	if err != nil {
-		t.Fatalf("Execute(create_workflow_schedule): %v", err)
+		t.Fatalf("Execute(apply_workflow_definition): %v", err)
 	}
-	var createBody struct {
+	var applyBody struct {
 		Error string `json:"error"`
 	}
-	if err := json.Unmarshal([]byte(createResult.Body), &createBody); err != nil {
-		t.Fatalf("json.Unmarshal(create): %v", err)
+	if err := json.Unmarshal([]byte(applyResult.Body), &applyBody); err != nil {
+		t.Fatalf("json.Unmarshal(apply): %v", err)
 	}
-	if createBody.Error != "" {
-		t.Fatalf("create workflow schedule error = %q, want success", createBody.Error)
-	}
-	if got := manager.ScheduleCount(); got != 1 {
-		t.Fatalf("schedule count = %d, want 1", got)
+	if !strings.Contains(applyBody.Error, `workflow manager operation "definitions.apply" is not allowed`) {
+		t.Fatalf("apply workflow definition error = %q, want definitions.apply permission denied", applyBody.Error)
 	}
 }
 
@@ -4342,7 +4104,7 @@ func TestAppWorkflowManagerRejectsInvalidInvocationToken(t *testing.T) {
 	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
 		Name: "echo",
 		Operations: []catalog.CatalogOperation{
-			{ID: "create_workflow_schedule", Method: http.MethodPost},
+			{ID: "apply_workflow_definition", Method: http.MethodPost},
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Workflow manager invalid handle")
@@ -4374,16 +4136,16 @@ func TestAppWorkflowManagerRejectsInvalidInvocationToken(t *testing.T) {
 		t.Fatalf("providers.Get(echo): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "create_workflow_schedule", map[string]any{
+	result, err := prov.Execute(context.Background(), "apply_workflow_definition", map[string]any{
+		"definition_id":    "roadmap_sync",
 		"invocation_token": "forged-token",
-		"cron":             "*/5 * * * *",
 		"target": map[string]any{
 			"app":       "roadmap",
 			"operation": "sync",
 		},
 	}, "")
 	if err != nil {
-		t.Fatalf("Execute(create_workflow_schedule): %v", err)
+		t.Fatalf("Execute(apply_workflow_definition): %v", err)
 	}
 
 	var body struct {
@@ -4642,6 +4404,272 @@ func TestPluginInvokesSupportInvokerFromContext(t *testing.T) {
 	}
 	if got.Credential.Instance != "primary" {
 		t.Fatalf("nested credential.instance = %q, want %q", got.Credential.Instance, "primary")
+	}
+}
+
+func TestPluginInvokesGraphQLSurface(t *testing.T) {
+	t.Parallel()
+
+	type capturedGraphQLRequest struct {
+		Query         string
+		Variables     map[string]any
+		Authorization string
+	}
+
+	var (
+		mu                 sync.Mutex
+		captured           []capturedGraphQLRequest
+		introspectionCalls atomic.Int32
+	)
+	schema := pluginInvokeGraphQLSchema()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(payload.Query, "__schema") {
+			introspectionCalls.Add(1)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"__schema": schema,
+				},
+			})
+			return
+		}
+		mu.Lock()
+		captured = append(captured, capturedGraphQLRequest{
+			Query:         payload.Query,
+			Variables:     maps.Clone(payload.Variables),
+			Authorization: r.Header.Get("Authorization"),
+		})
+		mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"echo": map[string]any{
+					"authorization": r.Header.Get("Authorization"),
+					"query":         payload.Query,
+					"variables":     payload.Variables,
+				},
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	harness := newGraphQLSurfaceInvokeHarness(t, srv.URL, true, config.AuthorizationConfig{})
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-graphql-surface@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "linear", "work", "default")
+
+	document := "query Viewer($team: String!) { viewer(team: $team) { id } }"
+	result, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID: user.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"caller", "linear"},
+		},
+		"caller",
+		"",
+		"invoke_plugin_graphql",
+		map[string]any{
+			"app":      "linear",
+			"document": document,
+			"variables": map[string]any{
+				"team": "eng",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin_graphql): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+
+	var got struct {
+		OK                     bool           `json:"ok"`
+		TargetApp              string         `json:"target_app"`
+		TargetOperation        string         `json:"target_operation"`
+		UsedConnectionOverride bool           `json:"used_connection_override"`
+		Status                 int            `json:"status"`
+		Body                   map[string]any `json:"body"`
+		Error                  string         `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if !got.OK {
+		t.Fatalf("invoke_plugin_graphql returned error envelope: %+v", got)
+	}
+	if got.TargetApp != "linear" || got.TargetOperation != "graphql" {
+		t.Fatalf("unexpected target: %+v", got)
+	}
+	if got.UsedConnectionOverride {
+		t.Fatalf("used_connection_override = %v, want false", got.UsedConnectionOverride)
+	}
+	if got.Status != http.StatusOK {
+		t.Fatalf("nested status = %d, want %d", got.Status, http.StatusOK)
+	}
+
+	echo, ok := got.Body["echo"].(map[string]any)
+	if !ok {
+		t.Fatalf("body.echo = %#v, want object", got.Body["echo"])
+	}
+	if echo["authorization"] != "Bearer linear-work-token" {
+		t.Fatalf("body.echo.authorization = %#v, want %q", echo["authorization"], "Bearer linear-work-token")
+	}
+	if echo["query"] != document {
+		t.Fatalf("body.echo.query = %#v, want %q", echo["query"], document)
+	}
+	variables, ok := echo["variables"].(map[string]any)
+	if !ok {
+		t.Fatalf("body.echo.variables = %#v, want object", echo["variables"])
+	}
+	if variables["team"] != "eng" {
+		t.Fatalf("body.echo.variables.team = %#v, want %q", variables["team"], "eng")
+	}
+
+	missingUser := newNestedInvokeUser(t, harness, ctx, "nested-graphql-surface-missing@test.com")
+	storeNestedInvokeToken(t, harness, ctx, missingUser.ID, "caller", "work", "default")
+	missingResult, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID: missingUser.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"caller", "linear"},
+		},
+		"caller",
+		"",
+		"invoke_plugin_graphql",
+		map[string]any{
+			"app":      "linear",
+			"document": document,
+			"variables": map[string]any{
+				"team": "eng",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin_graphql missing credential): %v", err)
+	}
+	var missingGot struct {
+		OK     bool   `json:"ok"`
+		Status int    `json:"status"`
+		Body   any    `json:"body"`
+		Error  string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(missingResult.Body), &missingGot); err != nil {
+		t.Fatalf("json.Unmarshal missing credential: %v", err)
+	}
+	if !missingGot.OK {
+		t.Fatalf("expected missing credential operation result, got error: %+v", missingGot)
+	}
+	if missingGot.Status != http.StatusPreconditionFailed {
+		t.Fatalf("missing credential nested status = %d, want %d", missingGot.Status, http.StatusPreconditionFailed)
+	}
+	body, ok := missingGot.Body.(string)
+	if !ok || !strings.Contains(body, `no external credential stored for integration "linear"`) {
+		t.Fatalf("missing credential body = %#v, want missing linear credential", missingGot.Body)
+	}
+
+	if got := introspectionCalls.Load(); got != 0 {
+		t.Fatalf("introspection calls = %d, want 0", got)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(captured) != 1 {
+		t.Fatalf("captured graphql requests = %d, want 1", len(captured))
+	}
+	if captured[0].Query != document {
+		t.Fatalf("captured query = %q, want %q", captured[0].Query, document)
+	}
+	if captured[0].Authorization != "Bearer linear-work-token" {
+		t.Fatalf("captured authorization = %q, want %q", captured[0].Authorization, "Bearer linear-work-token")
+	}
+	if captured[0].Variables["team"] != "eng" {
+		t.Fatalf("captured variables.team = %#v, want %q", captured[0].Variables["team"], "eng")
+	}
+}
+
+func TestPluginInvokesAllowGraphQLSurfaceThroughProviderToken(t *testing.T) {
+	t.Parallel()
+
+	var nonIntrospectionCalls atomic.Int32
+	schema := pluginInvokeGraphQLSchema()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(payload.Query, "__schema") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"__schema": schema,
+				},
+			})
+			return
+		}
+		nonIntrospectionCalls.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"ok": true},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	harness := newGraphQLSurfaceInvokeHarness(t, srv.URL, false, config.AuthorizationConfig{})
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-graphql-surface-denied@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "linear", "work", "default")
+
+	result, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID: user.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"caller", "linear"},
+		},
+		"caller",
+		"",
+		"invoke_plugin_graphql",
+		map[string]any{
+			"app":      "linear",
+			"document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
+			"variables": map[string]any{
+				"team": "eng",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin_graphql): %v", err)
+	}
+
+	var got struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if !got.OK {
+		t.Fatalf("expected graphql surface success, got error: %q", got.Error)
+	}
+	if got := nonIntrospectionCalls.Load(); got != 1 {
+		t.Fatalf("non-introspection graphql calls = %d, want 1", got)
 	}
 }
 
@@ -6653,7 +6681,7 @@ func newRuntimeEgressProxyTestHandler(t *testing.T, stateSecret []byte) http.Han
 		t.Fatalf("NewTokenManager: %v", err)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := extractRuntimeProxyTestAuthorizationToken(r.Header.Get("Proxy-Authorization"))
+		token := extractRuntimeProxyAuthorizationToken(r.Header.Get("Proxy-Authorization"))
 		target, err := tokenManager.ResolveToken(token)
 		if err != nil {
 			http.Error(w, "invalid egress proxy token", http.StatusProxyAuthRequired)
@@ -6672,13 +6700,10 @@ func newRuntimeEgressProxyTestHandler(t *testing.T, stateSecret []byte) http.Han
 	})
 }
 
-func extractRuntimeProxyTestAuthorizationToken(header string) string {
+func extractRuntimeProxyAuthorizationToken(header string) string {
 	header = strings.TrimSpace(header)
 	if header == "" {
 		return ""
-	}
-	if token, ok := strings.CutPrefix(header, "Bearer "); ok {
-		return strings.TrimSpace(token)
 	}
 	if token, ok := strings.CutPrefix(header, "Basic "); ok {
 		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(token))
@@ -6877,8 +6902,8 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 				Capabilities: &config.AppCapabilitiesConfig{
 					Workflow: &config.AppWorkflowCapabilitiesConfig{
 						Operations: []string{
-							workflowgrants.OperationSchedulesCreate,
-							workflowgrants.OperationSchedulesGet,
+							workflowgrants.OperationDefinitionsApply,
+							workflowgrants.OperationDefinitionsGet,
 						},
 					},
 				},
@@ -6927,8 +6952,8 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 
 	var body struct {
 		ProviderName string `json:"provider_name"`
-		ScheduleID   string `json:"schedule_id"`
-		Cron         string `json:"cron"`
+		DefinitionID string `json:"definition_id"`
+		ActivationID string `json:"activation_id"`
 		Operation    string `json:"operation"`
 	}
 	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
@@ -6937,36 +6962,36 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 	if body.ProviderName != "managed" {
 		t.Fatalf("provider_name = %q, want %q", body.ProviderName, "managed")
 	}
-	if body.ScheduleID == "" {
-		t.Fatal("workflow_manager_roundtrip should return a schedule id")
+	if body.DefinitionID == "" {
+		t.Fatal("workflow_manager_roundtrip should return a definition id")
 	}
-	if body.Cron != "*/5 * * * *" {
-		t.Fatalf("cron = %q, want %q", body.Cron, "*/5 * * * *")
+	if body.ActivationID != "nightly" {
+		t.Fatalf("activation_id = %q, want %q", body.ActivationID, "nightly")
 	}
 	if body.Operation != "sync" {
 		t.Fatalf("operation = %q, want %q", body.Operation, "sync")
 	}
 
-	schedules, err := manager.ListSchedules(context.Background(), nil)
+	definitions, err := manager.ListDefinitions(context.Background(), nil)
 	if err != nil {
-		t.Fatalf("manager.ListSchedules: %v", err)
+		t.Fatalf("manager.ListDefinitions: %v", err)
 	}
-	if len(schedules) != 1 {
-		t.Fatalf("manager schedules len = %d, want 1", len(schedules))
+	if len(definitions.Definitions) != 1 {
+		t.Fatalf("manager definitions len = %d, want 1", len(definitions.Definitions))
 	}
-	if len(schedules[0].Schedule.Target.Steps) == 0 || schedules[0].Schedule.Target.Steps[0].App == nil {
-		t.Fatalf("stored target app step is missing: %#v", schedules[0].Schedule.Target)
+	if len(definitions.Definitions[0].Definition.Target.Steps) == 0 || definitions.Definitions[0].Definition.Target.Steps[0].App == nil {
+		t.Fatalf("stored target app step is missing: %#v", definitions.Definitions[0].Definition.Target)
 		return
 	}
-	scheduleTarget := schedules[0].Schedule.Target.Steps[0].App
-	if got := scheduleTarget.Operation; got != "sync" {
+	definitionTarget := definitions.Definitions[0].Definition.Target.Steps[0].App
+	if got := definitionTarget.Operation; got != "sync" {
 		t.Fatalf("stored target operation = %q, want %q", got, "sync")
 	}
 	if got := manager.Subjects(); !slices.Equal(got, []string{"user:user-123", "user:user-123"}) {
 		t.Fatalf("manager subjects = %v, want two user:user-123 entries", got)
 	}
-	if got := manager.ScheduleIdempotencyKeys(); !slices.Equal(got, []string{"workflow-manager-roundtrip"}) {
-		t.Fatalf("manager schedule idempotency keys = %v, want [workflow-manager-roundtrip]", got)
+	if got := manager.DefinitionIdempotencyKeys(); !slices.Equal(got, []string{"workflow-manager-roundtrip"}) {
+		t.Fatalf("manager definition idempotency keys = %v, want [workflow-manager-roundtrip]", got)
 	}
 
 	startRequests := runtimeProvider.startAppRequestsCopy()

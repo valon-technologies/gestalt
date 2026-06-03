@@ -3,21 +3,30 @@ package workflows
 import (
 	"context"
 	"net"
+	"strings"
+	"sync/atomic"
 	"testing"
 
-	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -43,11 +52,41 @@ func (workflowTelemetryProviderServer) HealthCheck(context.Context, *emptypb.Emp
 	return &proto.HealthCheckResponse{Ready: true}, nil
 }
 
-func (workflowTelemetryProviderServer) StartRun(context.Context, *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+func (workflowTelemetryProviderServer) ApplyDefinition(_ context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
+	return telemetryDefinition(req.GetSpec().GetId(), req.GetSpec().GetTarget()), nil
+}
+
+func (workflowTelemetryProviderServer) GetDefinition(_ context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
+	return telemetryDefinition(req.GetDefinitionId(), telemetryProtoAppStepTarget("github", "issues.triage")), nil
+}
+
+func (workflowTelemetryProviderServer) ListDefinitions(context.Context, *proto.ListWorkflowProviderDefinitionsRequest) (*proto.ListWorkflowProviderDefinitionsResponse, error) {
+	return &proto.ListWorkflowProviderDefinitionsResponse{
+		Definitions: []*proto.WorkflowDefinition{telemetryDefinition("definition-1", telemetryProtoAppStepTarget("github", "issues.triage"))},
+	}, nil
+}
+
+func (workflowTelemetryProviderServer) SetDefinitionPaused(_ context.Context, req *proto.SetWorkflowProviderDefinitionPausedRequest) (*proto.WorkflowDefinition, error) {
+	definition := telemetryDefinition(req.GetDefinitionId(), telemetryProtoAppStepTarget("github", "issues.triage"))
+	definition.Paused = req.GetPaused()
+	return definition, nil
+}
+
+func (workflowTelemetryProviderServer) SetActivationPaused(_ context.Context, req *proto.SetWorkflowProviderActivationPausedRequest) (*proto.WorkflowDefinition, error) {
+	definition := telemetryDefinition(req.GetDefinitionId(), telemetryProtoAppStepTarget("github", "issues.triage"))
+	definition.Activations = []*proto.WorkflowActivation{{Id: req.GetActivationId(), Paused: req.GetPaused()}}
+	return definition, nil
+}
+
+func (workflowTelemetryProviderServer) DeleteDefinition(context.Context, *proto.DeleteWorkflowProviderDefinitionRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
+}
+
+func (workflowTelemetryProviderServer) StartRun(context.Context, *proto.StartWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
 	return telemetryRun("run-start", proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING), nil
 }
 
-func (workflowTelemetryProviderServer) GetRun(_ context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+func (workflowTelemetryProviderServer) GetRun(_ context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
 	if req.GetRunId() == "fail" {
 		return nil, status.Error(codes.InvalidArgument, "bad run")
 	}
@@ -55,10 +94,18 @@ func (workflowTelemetryProviderServer) GetRun(_ context.Context, req *proto.GetW
 }
 
 func (workflowTelemetryProviderServer) ListRuns(context.Context, *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
-	return &proto.ListWorkflowProviderRunsResponse{Runs: []*proto.BoundWorkflowRun{telemetryRun("run-1", proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_SUCCEEDED)}}, nil
+	return &proto.ListWorkflowProviderRunsResponse{Runs: []*proto.WorkflowRun{telemetryRun("run-1", proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_SUCCEEDED)}}, nil
 }
 
-func (workflowTelemetryProviderServer) CancelRun(context.Context, *proto.CancelWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+func (workflowTelemetryProviderServer) GetRunEvents(context.Context, *proto.GetWorkflowProviderRunEventsRequest) (*proto.GetWorkflowProviderRunEventsResponse, error) {
+	return &proto.GetWorkflowProviderRunEventsResponse{Events: []*proto.WorkflowRunEvent{{Id: "event-1", RunId: "run-1", Type: "step.completed"}}}, nil
+}
+
+func (workflowTelemetryProviderServer) GetRunOutput(context.Context, *proto.GetWorkflowProviderRunOutputRequest) (*proto.GetWorkflowProviderRunOutputResponse, error) {
+	return &proto.GetWorkflowProviderRunOutputResponse{Output: structpb.NewStringValue("ok")}, nil
+}
+
+func (workflowTelemetryProviderServer) CancelRun(context.Context, *proto.CancelWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
 	return telemetryRun("run-canceled", proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED), nil
 }
 
@@ -73,55 +120,7 @@ func (workflowTelemetryProviderServer) SignalOrStartRun(context.Context, *proto.
 	}, nil
 }
 
-func (workflowTelemetryProviderServer) UpsertSchedule(context.Context, *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
-	return telemetrySchedule("sched-1"), nil
-}
-
-func (workflowTelemetryProviderServer) GetSchedule(context.Context, *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
-	return telemetrySchedule("sched-1"), nil
-}
-
-func (workflowTelemetryProviderServer) ListSchedules(context.Context, *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error) {
-	return &proto.ListWorkflowProviderSchedulesResponse{Schedules: []*proto.BoundWorkflowSchedule{telemetrySchedule("sched-1")}}, nil
-}
-
-func (workflowTelemetryProviderServer) DeleteSchedule(context.Context, *proto.DeleteWorkflowProviderScheduleRequest) (*emptypb.Empty, error) {
-	return &emptypb.Empty{}, nil
-}
-
-func (workflowTelemetryProviderServer) PauseSchedule(context.Context, *proto.PauseWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
-	return telemetrySchedule("sched-1"), nil
-}
-
-func (workflowTelemetryProviderServer) ResumeSchedule(context.Context, *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
-	return telemetrySchedule("sched-1"), nil
-}
-
-func (workflowTelemetryProviderServer) UpsertEventTrigger(context.Context, *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
-	return telemetryEventTrigger("trigger-1"), nil
-}
-
-func (workflowTelemetryProviderServer) GetEventTrigger(context.Context, *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
-	return telemetryEventTrigger("trigger-1"), nil
-}
-
-func (workflowTelemetryProviderServer) ListEventTriggers(context.Context, *proto.ListWorkflowProviderEventTriggersRequest) (*proto.ListWorkflowProviderEventTriggersResponse, error) {
-	return &proto.ListWorkflowProviderEventTriggersResponse{Triggers: []*proto.BoundWorkflowEventTrigger{telemetryEventTrigger("trigger-1")}}, nil
-}
-
-func (workflowTelemetryProviderServer) DeleteEventTrigger(context.Context, *proto.DeleteWorkflowProviderEventTriggerRequest) (*emptypb.Empty, error) {
-	return &emptypb.Empty{}, nil
-}
-
-func (workflowTelemetryProviderServer) PauseEventTrigger(context.Context, *proto.PauseWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
-	return telemetryEventTrigger("trigger-1"), nil
-}
-
-func (workflowTelemetryProviderServer) ResumeEventTrigger(context.Context, *proto.ResumeWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
-	return telemetryEventTrigger("trigger-1"), nil
-}
-
-func (workflowTelemetryProviderServer) PublishEvent(context.Context, *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
+func (workflowTelemetryProviderServer) DeliverEvent(context.Context, *proto.DeliverWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
 	return &proto.WorkflowEvent{Type: "ignored"}, nil
 }
 
@@ -132,6 +131,7 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 	workflow := newTelemetryRemoteWorkflow(t)
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
 
+	definitionTarget := telemetryProtoAppStepTarget("github", "issues.triage")
 	type workflowProviderMetricCall struct {
 		name      string
 		operation string
@@ -139,8 +139,31 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 		call      func(context.Context, coreworkflow.Provider) error
 	}
 	calls := []workflowProviderMetricCall{
-		{"start run", observability.WorkflowOperationStartRun, workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{Target: mustWorkflowTelemetryTarget(t, telemetryCoreAppStepTarget())})
+		{"apply definition", observability.WorkflowOperationApplyDefinition, workflowMetricAttrsWith(observability.WorkflowOperationApplyDefinition, observability.WorkflowTriggerKindNone, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.ApplyDefinition(ctx, &proto.ApplyWorkflowProviderDefinitionRequest{Spec: &proto.WorkflowDefinitionSpec{Id: "definition-1", Target: definitionTarget}})
+			return err
+		}},
+		{"get definition", observability.WorkflowOperationGetDefinition, workflowMetricAttrs(observability.WorkflowOperationGetDefinition), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"})
+			return err
+		}},
+		{"list definitions", observability.WorkflowOperationListDefinitions, workflowMetricAttrs(observability.WorkflowOperationListDefinitions), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.ListDefinitions(ctx, &proto.ListWorkflowProviderDefinitionsRequest{})
+			return err
+		}},
+		{"set definition paused", observability.WorkflowOperationSetDefinitionPaused, workflowMetricAttrs(observability.WorkflowOperationSetDefinitionPaused), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.SetDefinitionPaused(ctx, &proto.SetWorkflowProviderDefinitionPausedRequest{DefinitionId: "definition-1", Paused: true})
+			return err
+		}},
+		{"set activation paused", observability.WorkflowOperationSetActivationPaused, workflowMetricAttrs(observability.WorkflowOperationSetActivationPaused), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.SetActivationPaused(ctx, &proto.SetWorkflowProviderActivationPausedRequest{DefinitionId: "definition-1", ActivationId: "github_pr", Paused: true})
+			return err
+		}},
+		{"delete definition", observability.WorkflowOperationDeleteDefinition, workflowMetricAttrs(observability.WorkflowOperationDeleteDefinition), func(ctx context.Context, p coreworkflow.Provider) error {
+			return p.DeleteDefinition(ctx, &proto.DeleteWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"})
+		}},
+		{"start run", observability.WorkflowOperationStartRun, workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{DefinitionId: "definition-1"})
 			return err
 		}},
 		{"get run", observability.WorkflowOperationGetRun, workflowMetricAttrs(observability.WorkflowOperationGetRun), func(ctx context.Context, p coreworkflow.Provider) error {
@@ -151,6 +174,14 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 			_, err := p.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{})
 			return err
 		}},
+		{"get run events", observability.WorkflowOperationGetRunEvents, workflowMetricAttrs(observability.WorkflowOperationGetRunEvents), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.GetRunEvents(ctx, &proto.GetWorkflowProviderRunEventsRequest{RunId: "run-1"})
+			return err
+		}},
+		{"get run output", observability.WorkflowOperationGetRunOutput, workflowMetricAttrs(observability.WorkflowOperationGetRunOutput), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.GetRunOutput(ctx, &proto.GetWorkflowProviderRunOutputRequest{RunId: "run-1"})
+			return err
+		}},
 		{"cancel run", observability.WorkflowOperationCancelRun, workflowMetricAttrs(observability.WorkflowOperationCancelRun), func(ctx context.Context, p coreworkflow.Provider) error {
 			_, err := p.CancelRun(ctx, &proto.CancelWorkflowProviderRunRequest{RunId: "run-1"})
 			return err
@@ -159,58 +190,12 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 			_, err := p.SignalRun(ctx, &proto.SignalWorkflowProviderRunRequest{RunId: "run-1", Signal: &proto.WorkflowSignal{Name: "poke"}})
 			return err
 		}},
-		{"signal or start run", observability.WorkflowOperationSignalOrStartRun, workflowMetricAttrsWith(observability.WorkflowOperationSignalOrStartRun, observability.WorkflowTriggerKindSignal, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.SignalOrStartRun(ctx, &proto.SignalOrStartWorkflowProviderRunRequest{Target: mustWorkflowTelemetryTarget(t, telemetryCoreAgentStepTarget(nil)), Signal: &proto.WorkflowSignal{Name: "poke"}})
+		{"signal or start run", observability.WorkflowOperationSignalOrStartRun, workflowMetricAttrsWith(observability.WorkflowOperationSignalOrStartRun, observability.WorkflowTriggerKindSignal, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.SignalOrStartRun(ctx, &proto.SignalOrStartWorkflowProviderRunRequest{DefinitionId: "definition-1", Signal: &proto.WorkflowSignal{Name: "poke"}})
 			return err
 		}},
-		{"upsert schedule", observability.WorkflowOperationUpsertSchedule, workflowMetricAttrsWith(observability.WorkflowOperationUpsertSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.UpsertSchedule(ctx, &proto.UpsertWorkflowProviderScheduleRequest{Target: mustWorkflowTelemetryTarget(t, telemetryCoreAppStepTarget())})
-			return err
-		}},
-		{"get schedule", observability.WorkflowOperationGetSchedule, workflowMetricAttrsWith(observability.WorkflowOperationGetSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.GetSchedule(ctx, &proto.GetWorkflowProviderScheduleRequest{ScheduleId: "sched-1"})
-			return err
-		}},
-		{"list schedules", observability.WorkflowOperationListSchedules, workflowMetricAttrsWith(observability.WorkflowOperationListSchedules, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.ListSchedules(ctx, &proto.ListWorkflowProviderSchedulesRequest{})
-			return err
-		}},
-		{"delete schedule", observability.WorkflowOperationDeleteSchedule, workflowMetricAttrsWith(observability.WorkflowOperationDeleteSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			return p.DeleteSchedule(ctx, &proto.DeleteWorkflowProviderScheduleRequest{ScheduleId: "sched-1"})
-		}},
-		{"pause schedule", observability.WorkflowOperationPauseSchedule, workflowMetricAttrsWith(observability.WorkflowOperationPauseSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.PauseSchedule(ctx, &proto.PauseWorkflowProviderScheduleRequest{ScheduleId: "sched-1"})
-			return err
-		}},
-		{"resume schedule", observability.WorkflowOperationResumeSchedule, workflowMetricAttrsWith(observability.WorkflowOperationResumeSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.ResumeSchedule(ctx, &proto.ResumeWorkflowProviderScheduleRequest{ScheduleId: "sched-1"})
-			return err
-		}},
-		{"upsert trigger", observability.WorkflowOperationUpsertEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationUpsertEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.UpsertEventTrigger(ctx, &proto.UpsertWorkflowProviderEventTriggerRequest{Target: mustWorkflowTelemetryTarget(t, telemetryCoreAppStepTarget())})
-			return err
-		}},
-		{"get trigger", observability.WorkflowOperationGetEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationGetEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.GetEventTrigger(ctx, &proto.GetWorkflowProviderEventTriggerRequest{TriggerId: "trigger-1"})
-			return err
-		}},
-		{"list triggers", observability.WorkflowOperationListEventTriggers, workflowMetricAttrsWith(observability.WorkflowOperationListEventTriggers, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.ListEventTriggers(ctx, &proto.ListWorkflowProviderEventTriggersRequest{})
-			return err
-		}},
-		{"delete trigger", observability.WorkflowOperationDeleteEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationDeleteEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			return p.DeleteEventTrigger(ctx, &proto.DeleteWorkflowProviderEventTriggerRequest{TriggerId: "trigger-1"})
-		}},
-		{"pause trigger", observability.WorkflowOperationPauseEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationPauseEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.PauseEventTrigger(ctx, &proto.PauseWorkflowProviderEventTriggerRequest{TriggerId: "trigger-1"})
-			return err
-		}},
-		{"resume trigger", observability.WorkflowOperationResumeEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationResumeEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.ResumeEventTrigger(ctx, &proto.ResumeWorkflowProviderEventTriggerRequest{TriggerId: "trigger-1"})
-			return err
-		}},
-		{"publish event", observability.WorkflowOperationPublishEvent, workflowMetricAttrsWith(observability.WorkflowOperationPublishEvent, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{Event: &proto.WorkflowEvent{Type: "ignored"}})
+		{"deliver event", observability.WorkflowOperationDeliverEvent, workflowMetricAttrsWith(observability.WorkflowOperationDeliverEvent, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.DeliverEvent(ctx, &proto.DeliverWorkflowProviderEventRequest{Event: &proto.WorkflowEvent{Type: "ignored"}})
 			return err
 		}},
 		{"ping", observability.WorkflowOperationPing, workflowMetricAttrs(observability.WorkflowOperationPing), func(ctx context.Context, p coreworkflow.Provider) error {
@@ -240,7 +225,7 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 		"error.type":                         "grpc.invalid_argument",
 	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.events.published.count", 1, workflowMetricAttrsWith(observability.WorkflowOperationPublishEvent, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown))
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.events.delivered.count", 1, workflowMetricAttrsWith(observability.WorkflowOperationDeliverEvent, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown))
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.runs.started.count", 1, map[string]string{
 		"gestaltd.workflow.provider.name":    "workflow-metrics",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationStartRun,
@@ -257,9 +242,114 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusPending,
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 	})
-	startRunAttrs := workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown)
-	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.run.id")
-	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.app.operation")
+}
+
+func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	provider := newWorkflowManagerTelemetryProvider()
+	manager := workflowmanager.New(workflowmanager.Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "issues.triage", Method: "POST"},
+				},
+			},
+		}),
+		Workflow: workflowManagerTelemetryControl{provider: provider},
+	})
+	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-telemetry-test-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		App:        "github",
+		Operations: []string{"issues.triage"},
+	}})
+	token, err := tokens.MintRootTokenWithWorkflowGrants(
+		principal.WithPrincipal(context.Background(), principal.Canonicalize(&principal.Principal{
+			SubjectID:        "user:user-123",
+			UserID:           "user-123",
+			Kind:             principal.KindUser,
+			Source:           principal.SourceSession,
+			TokenPermissions: permissions,
+			Scopes:           principal.PermissionApps(permissions),
+		})),
+		"slack",
+		nil,
+		workflowgrants.Grants{workflowgrants.OperationRunsSignalOrStart: {}},
+	)
+	if err != nil {
+		t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	srv := grpc.NewServer(grpc.UnaryInterceptor(func(
+		ctx context.Context,
+		req any,
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		return handler(metricutil.WithMeterProvider(ctx, metrics.Provider), req)
+	}))
+	proto.RegisterWorkflowProviderServer(srv, NewProviderServer("slack", manager, tokens))
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+	})
+	conn, err := grpc.NewClient("passthrough:///workflow-manager",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+	)
+	if err != nil {
+		t.Fatalf("grpc.NewClient: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	client := proto.NewWorkflowProviderClient(conn)
+
+	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(token, "slack:T123:C123:1712161829.000300", "idem-success"))
+	if err != nil {
+		t.Fatalf("SignalOrStartRun success: %v", err)
+	}
+	provider.signalOrStartErr = status.Error(codes.FailedPrecondition, "provider rejected run")
+	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(token, "slack:T123:C123:1712161830.000400", "idem-failure"))
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("SignalOrStartRun failure = %v, want FailedPrecondition", err)
+	}
+	if got := provider.signalOrStartCalls.Load(); got != 2 {
+		t.Fatalf("provider SignalOrStartRun calls = %d, want 2", got)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	successAttrs := map[string]string{
+		"gestaltd.workflow.provider.name":    "local",
+		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
+		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindSteps,
+		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusRunning,
+		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
+	}
+	failureAttrs := map[string]string{
+		"gestaltd.workflow.provider.name":    "local",
+		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
+		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindUnknown,
+		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusUnknown,
+		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
+		"error.type":                         "grpc.failed_precondition",
+	}
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.count", 1, successAttrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.workflows.manager.operation.duration", successAttrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", 1, failureAttrs)
 }
 
 func newTelemetryRemoteWorkflow(t *testing.T) coreworkflow.Provider {
@@ -301,58 +391,106 @@ func newTelemetryRemoteWorkflow(t *testing.T) coreworkflow.Provider {
 	return workflow
 }
 
-func telemetryRun(id string, status proto.WorkflowRunStatus) *proto.BoundWorkflowRun {
-	return &proto.BoundWorkflowRun{
+func workflowManagerTelemetrySignalOrStartRequest(token, workflowKey, idempotencyKey string) *proto.SignalOrStartWorkflowProviderRunRequest {
+	return &proto.SignalOrStartWorkflowProviderRunRequest{
+		ProviderName:    "local",
+		WorkflowKey:     workflowKey,
+		IdempotencyKey:  idempotencyKey,
+		InvocationToken: token,
+		DefinitionId:    "definition-1",
+		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
+	}
+}
+
+type workflowManagerTelemetryControl struct {
+	provider coreworkflow.Provider
+}
+
+func (c workflowManagerTelemetryControl) ResolveProvider(_ context.Context, name string) (string, coreworkflow.Provider, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "local"
+	}
+	return name, c.provider, nil
+}
+
+func (workflowManagerTelemetryControl) ProviderNames() []string {
+	return []string{"local"}
+}
+
+type workflowManagerTelemetryProvider struct {
+	coreworkflow.Provider
+	signalOrStartCalls atomic.Int64
+	signalOrStartErr   error
+}
+
+func newWorkflowManagerTelemetryProvider() *workflowManagerTelemetryProvider {
+	return &workflowManagerTelemetryProvider{}
+}
+
+func (p *workflowManagerTelemetryProvider) GetDefinition(context.Context, *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
+	return &proto.WorkflowDefinition{
+		Id:                 "definition-1",
+		Generation:         7,
+		Target:             telemetryProtoAppStepTarget("github", "issues.triage"),
+		CreatedBySubjectId: "user:user-123",
+	}, nil
+}
+
+func (p *workflowManagerTelemetryProvider) SignalOrStartRun(_ context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
+	p.signalOrStartCalls.Add(1)
+	if p.signalOrStartErr != nil {
+		return nil, p.signalOrStartErr
+	}
+	signal := workflowwire.SignalFromProto(req.GetSignal())
+	if signal.ID == "" {
+		signal.ID = "signal-1"
+	}
+	run, err := workflowwire.RunToProto(&coreworkflow.Run{
+		ID:                   "run-signal-started",
+		Status:               coreworkflow.RunStatusRunning,
+		WorkflowKey:          req.GetWorkflowKey(),
+		DefinitionID:         req.GetDefinitionId(),
+		DefinitionGeneration: req.GetExpectedDefinitionGeneration(),
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+			ID:  "run",
+			App: &coreworkflow.AppCall{Name: "github", Operation: "issues.triage"},
+		}}},
+		CreatedBySubjectID: req.GetCreatedBySubjectId(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	signalProto, err := workflowwire.SignalToProto(signal)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.SignalWorkflowRunResponse{
+		Run:         run,
+		Signal:      signalProto,
+		StartedRun:  true,
+		WorkflowKey: req.GetWorkflowKey(),
+	}, nil
+}
+
+func telemetryDefinition(id string, target *proto.BoundWorkflowTarget) *proto.WorkflowDefinition {
+	return &proto.WorkflowDefinition{
+		Id:                 id,
+		Generation:         1,
+		Target:             target,
+		CreatedAt:          timestamppb.Now(),
+		UpdatedAt:          timestamppb.Now(),
+		CreatedBySubjectId: "user:user-123",
+	}
+}
+
+func telemetryRun(id string, status proto.WorkflowRunStatus) *proto.WorkflowRun {
+	return &proto.WorkflowRun{
 		Id:        id,
 		Status:    status,
 		CreatedAt: timestamppb.Now(),
-		Target:    telemetryProtoAppStepTarget("ignored", "ignored"),
+		Target:    telemetryProtoAppStepTarget("github", "issues.triage"),
 	}
-}
-
-func telemetrySchedule(id string) *proto.BoundWorkflowSchedule {
-	return &proto.BoundWorkflowSchedule{
-		Id:        id,
-		CreatedAt: timestamppb.Now(),
-		UpdatedAt: timestamppb.Now(),
-		Target:    telemetryProtoAppStepTarget("ignored", "ignored"),
-	}
-}
-
-func telemetryEventTrigger(id string) *proto.BoundWorkflowEventTrigger {
-	return &proto.BoundWorkflowEventTrigger{
-		Id:        id,
-		CreatedAt: timestamppb.Now(),
-		UpdatedAt: timestamppb.Now(),
-		Match:     &proto.WorkflowEventMatch{Type: "ignored"},
-		Target:    telemetryProtoAppStepTarget("ignored", "ignored"),
-	}
-}
-
-func telemetryCoreAppStepTarget() coreworkflow.Target {
-	return coreworkflow.Target{
-		Steps: []coreworkflow.Step{{ID: "run", App: &coreworkflow.AppCall{Name: "ignored", Operation: "ignored"}}},
-	}
-}
-
-func telemetryCoreAgentStepTarget(tools []coreagent.ToolRef) coreworkflow.Target {
-	return coreworkflow.Target{
-		Steps: []coreworkflow.Step{{ID: "run", Agent: &coreworkflow.AgentTurn{
-			ProviderName: "simple",
-			Prompt:       coreworkflow.Text{Template: "handle the Slack message"},
-			ToolRefs:     tools,
-			Output:       coreagent.Output{Text: &coreagent.TextOutput{}},
-		}}},
-	}
-}
-
-func mustWorkflowTelemetryTarget(t *testing.T, target coreworkflow.Target) *proto.BoundWorkflowTarget {
-	t.Helper()
-	out, err := workflowwire.TargetToProto(target)
-	if err != nil {
-		t.Fatalf("workflowTargetToProto: %v", err)
-	}
-	return out
 }
 
 func telemetryProtoAppStepTarget(appName, operation string) *proto.BoundWorkflowTarget {

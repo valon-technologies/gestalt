@@ -133,7 +133,6 @@ type Server struct {
 	adminRoute             AdminRouteConfig
 	adminUI                http.Handler
 	routeProfile           RouteProfile
-	httpBindingReplayStore httpBindingReplayStore
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
