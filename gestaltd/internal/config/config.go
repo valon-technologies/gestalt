@@ -781,25 +781,33 @@ func (c *RuntimePlacementConfig) lifecyclePolicyConfig() RuntimePlacementPoolCon
 }
 
 type WorkflowsConfig struct {
-	Schedules     map[string]WorkflowScheduleConfig     `yaml:"schedules,omitempty"`
-	EventTriggers map[string]WorkflowEventTriggerConfig `yaml:"eventTriggers,omitempty"`
+	Definitions map[string]WorkflowDefinitionConfig `yaml:"definitions,omitempty"`
 }
 
-type WorkflowScheduleConfig struct {
-	Provider string                `yaml:"provider,omitempty"`
-	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
-	RunAs    *WorkflowRunAsConfig  `yaml:"runAs,omitempty"`
-	Cron     string                `yaml:"cron,omitempty"`
-	Timezone string                `yaml:"timezone,omitempty"`
-	Paused   bool                  `yaml:"paused,omitempty"`
+type WorkflowDefinitionConfig struct {
+	Provider string                              `yaml:"provider,omitempty"`
+	Steps    []WorkflowStepConfig                `yaml:"steps,omitempty"`
+	RunAs    *WorkflowRunAsConfig                `yaml:"runAs,omitempty"`
+	Paused   bool                                `yaml:"paused,omitempty"`
+	On       map[string]WorkflowActivationConfig `yaml:"on,omitempty"`
 }
 
-type WorkflowEventTriggerConfig struct {
-	Provider string                `yaml:"provider,omitempty"`
-	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
-	RunAs    *WorkflowRunAsConfig  `yaml:"runAs,omitempty"`
-	Match    WorkflowEventMatch    `yaml:"match,omitempty"`
-	Paused   bool                  `yaml:"paused,omitempty"`
+type WorkflowActivationConfig struct {
+	Schedule *WorkflowScheduleActivationConfig `yaml:"schedule,omitempty"`
+	Event    *WorkflowEventActivationConfig    `yaml:"event,omitempty"`
+	Input    WorkflowValueConfig               `yaml:"input,omitempty"`
+	Paused   bool                              `yaml:"paused,omitempty"`
+}
+
+type WorkflowScheduleActivationConfig struct {
+	Cron     string `yaml:"cron,omitempty"`
+	Timezone string `yaml:"timezone,omitempty"`
+}
+
+type WorkflowEventActivationConfig struct {
+	Type    string `yaml:"type,omitempty"`
+	Source  string `yaml:"source,omitempty"`
+	Subject string `yaml:"subject,omitempty"`
 }
 
 type WorkflowRunAsConfig struct {
@@ -927,17 +935,23 @@ func (c *WorkflowStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type WorkflowValueConfig struct {
-	Literal       any
-	LiteralSet    bool
-	Object        map[string]WorkflowValueConfig
-	Array         []WorkflowValueConfig
-	Template      *WorkflowTextConfig
-	RunInput      string
-	SignalPayload string
-	StepOutput    *WorkflowStepOutputSourceConfig
+	Literal    any
+	LiteralSet bool
+	Object     map[string]WorkflowValueConfig
+	Array      []WorkflowValueConfig
+	Template   *WorkflowTextConfig
+	Input      string
+	Signal     string
+	StepOutput *WorkflowStepOutputSourceConfig
+	StepInput  *WorkflowStepInputSourceConfig
 }
 
 type WorkflowStepOutputSourceConfig struct {
+	StepID string `yaml:"stepId,omitempty"`
+	Path   string `yaml:"path,omitempty"`
+}
+
+type WorkflowStepInputSourceConfig struct {
 	StepID string `yaml:"stepId,omitempty"`
 	Path   string `yaml:"path,omitempty"`
 }
@@ -978,16 +992,23 @@ func (c *WorkflowValueConfig) UnmarshalYAML(value *yaml.Node) error {
 				}
 				c.Template = &out
 				return nil
-			case "runInput":
-				return workflowValuePathSource(node, &c.RunInput)
-			case "signalPayload":
-				return workflowValuePathSource(node, &c.SignalPayload)
+			case "input":
+				return workflowValuePathSource(node, &c.Input)
+			case "signal":
+				return workflowValuePathSource(node, &c.Signal)
 			case "stepOutput":
 				var out WorkflowStepOutputSourceConfig
 				if err := node.Decode(&out); err != nil {
 					return err
 				}
 				c.StepOutput = &out
+				return nil
+			case "stepInput":
+				var out WorkflowStepInputSourceConfig
+				if err := node.Decode(&out); err != nil {
+					return err
+				}
+				c.StepInput = &out
 				return nil
 			}
 		}
@@ -3382,8 +3403,7 @@ func applyDefaults(cfg *Config) {
 		cfg.Connections = map[string]*ConnectionDef{}
 	}
 	cfg.Apps = nonNilProviderEntryMap(cfg.Apps)
-	cfg.Workflows.Schedules = nonNilWorkflowScheduleMap(cfg.Workflows.Schedules)
-	cfg.Workflows.EventTriggers = nonNilWorkflowEventTriggerMap(cfg.Workflows.EventTriggers)
+	cfg.Workflows.Definitions = nonNilWorkflowDefinitionMap(cfg.Workflows.Definitions)
 	cfg.Providers.UI = nonNilUIEntryMap(cfg.Providers.UI)
 	cfg.Providers.Authentication = nonNilProviderEntryMap(cfg.Providers.Authentication)
 	cfg.Providers.Authorization = nonNilProviderEntryMap(cfg.Providers.Authorization)
@@ -3398,16 +3418,9 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.Agent = nonNilProviderEntryMap(cfg.Providers.Agent)
 }
 
-func nonNilWorkflowScheduleMap(in map[string]WorkflowScheduleConfig) map[string]WorkflowScheduleConfig {
+func nonNilWorkflowDefinitionMap(in map[string]WorkflowDefinitionConfig) map[string]WorkflowDefinitionConfig {
 	if in == nil {
-		return map[string]WorkflowScheduleConfig{}
-	}
-	return in
-}
-
-func nonNilWorkflowEventTriggerMap(in map[string]WorkflowEventTriggerConfig) map[string]WorkflowEventTriggerConfig {
-	if in == nil {
-		return map[string]WorkflowEventTriggerConfig{}
+		return map[string]WorkflowDefinitionConfig{}
 	}
 	return in
 }

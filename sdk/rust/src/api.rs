@@ -80,7 +80,7 @@ pub struct Request {
     pub idempotency_key: String,
     /// Workflow callback metadata uses a JSON-style lowerCamelCase object
     /// such as `runId`, `target.steps[0].app.name`,
-    /// `trigger.scheduleId`, and `trigger.event.specVersion`.
+    /// `trigger.activationId`, and `trigger.event.specVersion`.
     pub workflow: serde_json::Map<String, serde_json::Value>,
     /// Agent tool refs granted to the current operation request.
     pub tool_refs: Vec<AgentToolRef>,

@@ -128,9 +128,9 @@ apps:
 
 ## Workflow Providers
 
-Workflow providers back global runs, schedules, and triggers. They are
+Workflow providers back durable workflow definitions, activations, and runs. They are
 configured under `providers.workflow.<name>`, then referenced by top-level
-`workflows.*` config or the global workflow API/CLI.
+`workflows.definitions.*` config or the global workflow API/CLI.
 
 ```yaml
 providers:
@@ -154,21 +154,26 @@ providers:
         pollInterval: 1s
 
 workflows:
-  schedules:
+  definitions:
     nightly_sync:
       provider: local
-      cron: "0 3 * * *"
-      target:
-        steps:
-          - id: sync_items
-            app:
-              name: roadmap
-              operation: sync_items
+      runAs:
+        subject:
+          id: service_account:roadmap-sync
+      steps:
+        - id: sync_items
+          app:
+            name: roadmap
+            operation: sync_items
+      on:
+        nightly:
+          schedule:
+            cron: "0 3 * * *"
 ```
 
 | Name | Purpose |
 | --- | --- |
-| `indexeddb` | Stores workflow runs, schedules, and triggers in IndexedDB and invokes app operations through the workflow host. |
+| `indexeddb` | Stores workflow definitions, activations, runs, and per-step state in IndexedDB and invokes app operations through the workflow provider. |
 
 ## Agent Providers
 

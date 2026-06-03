@@ -2,8 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,7 +11,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -23,20 +20,20 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type desiredWorkflowConfigSchedule struct {
-	ScheduleKey  string
-	ProviderName string
-	ScheduleID   string
-	schedule     config.WorkflowScheduleConfig
+type desiredWorkflowConfigDefinition struct {
+	DefinitionKey string
+	ProviderName  string
+	DefinitionID  string
+	definition    config.WorkflowDefinitionConfig
 }
 
 type workflowConfigProviderFilter func(providerName string) bool
 
-func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, includeProvider workflowConfigProviderFilter) error {
+func reconcileWorkflowConfigDefinitions(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, includeProvider workflowConfigProviderFilter) error {
 	if cfg == nil || runtime == nil {
 		return nil
 	}
-	desired, err := desiredWorkflowConfigSchedules(cfg)
+	desired, err := desiredWorkflowConfigDefinitions(cfg)
 	if err != nil {
 		return err
 	}
@@ -46,50 +43,52 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if !workflowConfigProviderIncluded(includeProvider, desiredEntry.ProviderName) {
 			continue
 		}
-		schedule := desiredEntry.schedule
-		target := workflowConfigTarget(schedule.Target)
+		definition := desiredEntry.definition
+		target := workflowConfigTarget(definition.Steps)
 		appName := workflowConfigTargetLabel(target)
-		_, provider, err := runtime.ResolveProvider(ctx, schedule.Provider)
+		_, provider, err := runtime.ResolveProvider(ctx, definition.Provider)
 		if err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
+			return fmt.Errorf("bootstrap: workflow definition %q for app %q: %w", desiredEntry.DefinitionKey, appName, err)
 		}
 		providerCtx := invocation.WithWorkflowContextString(ctx, "app", appName)
-		existingProto, err := provider.GetSchedule(providerCtx, &proto.GetWorkflowProviderScheduleRequest{ScheduleId: desiredEntry.ScheduleID})
+		existingProto, err := provider.GetDefinition(providerCtx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: desiredEntry.DefinitionID})
 		switch {
 		case err == nil:
-			existing, existingErr := workflowwire.ScheduleFromProto(existingProto)
+			existing, existingErr := workflowwire.DefinitionFromProto(existingProto)
 			if existingErr != nil {
-				return fmt.Errorf("bootstrap: decode workflow schedule %q for app %q: %w", desiredEntry.ScheduleID, appName, existingErr)
+				return fmt.Errorf("bootstrap: decode workflow definition %q for app %q: %w", desiredEntry.DefinitionID, appName, existingErr)
 			}
-			if !isWorkflowConfigOwnedSchedule(existing, appName, desiredEntry.ScheduleID) {
-				return fmt.Errorf("bootstrap: workflow schedule %q for app %q conflicts with existing unmanaged schedule id %q", desiredEntry.ScheduleKey, appName, desiredEntry.ScheduleID)
+			if !isWorkflowConfigOwnedDefinition(existing, desiredEntry.DefinitionID) {
+				return fmt.Errorf("bootstrap: workflow definition %q for app %q conflicts with existing unmanaged definition id %q", desiredEntry.DefinitionKey, appName, desiredEntry.DefinitionID)
 			}
 		case isWorkflowObjectNotFound(err):
 		default:
-			return fmt.Errorf("bootstrap: get workflow schedule %q for app %q: %w", desiredEntry.ScheduleID, appName, err)
+			return fmt.Errorf("bootstrap: get workflow definition %q for app %q: %w", desiredEntry.DefinitionID, appName, err)
 		}
-		runAs := schedule.RunAs.SubjectRef()
+		runAs := definition.RunAs.SubjectRef()
 		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs); err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
+			return fmt.Errorf("bootstrap: workflow definition %q for app %q: %w", desiredEntry.DefinitionKey, appName, err)
 		}
-		targetProto, err := workflowwire.TargetToProto(target)
+		spec := coreworkflow.DefinitionSpec{
+			ID:          desiredEntry.DefinitionID,
+			Target:      target,
+			Activations: workflowConfigActivations(definition.On),
+			Paused:      definition.Paused,
+			RunAs:       runAs,
+		}
+		specProto, err := workflowwire.DefinitionSpecToProto(&spec)
 		if err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
+			return fmt.Errorf("bootstrap: workflow definition %q for app %q: %w", desiredEntry.DefinitionKey, appName, err)
 		}
-		if _, err := provider.UpsertSchedule(providerCtx, &proto.UpsertWorkflowProviderScheduleRequest{
-			ScheduleId:           desiredEntry.ScheduleID,
-			Cron:                 schedule.Cron,
-			Timezone:             schedule.Timezone,
-			Target:               targetProto,
-			Paused:               schedule.Paused,
+		if _, err := provider.ApplyDefinition(providerCtx, &proto.ApplyWorkflowProviderDefinitionRequest{
+			Spec:                 specProto,
 			RequestedBySubjectId: workflowConfigOwnerSubjectID(),
-			RunAs:                agentwire.RunAsSubjectToProto(runAs),
 		}); err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
+			return fmt.Errorf("bootstrap: workflow definition %q for app %q: %w", desiredEntry.DefinitionKey, appName, err)
 		}
 	}
 
-	if err := cleanupRemovedWorkflowConfigSchedules(ctx, runtime, desired, includeProvider); err != nil {
+	if err := cleanupRemovedWorkflowConfigDefinitions(ctx, runtime, desired, includeProvider); err != nil {
 		return err
 	}
 	return nil
@@ -102,40 +101,72 @@ func workflowConfigProviderIncluded(includeProvider workflowConfigProviderFilter
 	return includeProvider(strings.TrimSpace(providerName))
 }
 
-func desiredWorkflowConfigSchedules(cfg *config.Config) (map[string]desiredWorkflowConfigSchedule, error) {
-	desired := make(map[string]desiredWorkflowConfigSchedule)
+func desiredWorkflowConfigDefinitions(cfg *config.Config) (map[string]desiredWorkflowConfigDefinition, error) {
+	desired := make(map[string]desiredWorkflowConfigDefinition)
 	if cfg == nil {
 		return desired, nil
 	}
-	for _, scheduleKey := range slices.Sorted(maps.Keys(cfg.Workflows.Schedules)) {
-		schedule := cfg.Workflows.Schedules[scheduleKey]
-		providerName, _, err := cfg.EffectiveWorkflowProvider(schedule.Provider)
+	for _, definitionKey := range slices.Sorted(maps.Keys(cfg.Workflows.Definitions)) {
+		definition := cfg.Workflows.Definitions[definitionKey]
+		providerName, _, err := cfg.EffectiveWorkflowProvider(definition.Provider)
 		if err != nil {
 			return nil, err
 		}
-		rowID := strings.TrimSpace(scheduleKey)
-		desired[rowID] = desiredWorkflowConfigSchedule{
-			ScheduleKey:  scheduleKey,
-			ProviderName: providerName,
-			ScheduleID:   workflowConfigScheduleID(scheduleKey),
-			schedule:     schedule,
+		rowID := strings.TrimSpace(definitionKey)
+		desired[rowID] = desiredWorkflowConfigDefinition{
+			DefinitionKey: definitionKey,
+			ProviderName:  providerName,
+			DefinitionID:  workflowConfigDefinitionID(definitionKey),
+			definition:    definition,
 		}
 	}
 	return desired, nil
+}
+
+func workflowConfigActivations(values map[string]config.WorkflowActivationConfig) []coreworkflow.Activation {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]coreworkflow.Activation, 0, len(values))
+	for _, activationID := range slices.Sorted(maps.Keys(values)) {
+		value := values[activationID]
+		activation := coreworkflow.Activation{
+			ID:     strings.TrimSpace(activationID),
+			Input:  config.WorkflowValueToCore(value.Input),
+			Paused: value.Paused,
+		}
+		if value.Schedule != nil {
+			activation.Schedule = &coreworkflow.ScheduleActivation{
+				Cron:     strings.TrimSpace(value.Schedule.Cron),
+				Timezone: strings.TrimSpace(value.Schedule.Timezone),
+			}
+		}
+		if value.Event != nil {
+			activation.Event = &coreworkflow.EventActivation{
+				Match: coreworkflow.EventMatch{
+					Type:    strings.TrimSpace(value.Event.Type),
+					Source:  strings.TrimSpace(value.Event.Source),
+					Subject: strings.TrimSpace(value.Event.Subject),
+				},
+			}
+		}
+		out = append(out, activation)
+	}
+	return out
 }
 
 func isWorkflowObjectNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
-func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflowRuntime, desired map[string]desiredWorkflowConfigSchedule, includeProvider workflowConfigProviderFilter) error {
-	desiredByProviderSchedule := make(map[string]struct{}, len(desired))
+func cleanupRemovedWorkflowConfigDefinitions(ctx context.Context, runtime *workflowRuntime, desired map[string]desiredWorkflowConfigDefinition, includeProvider workflowConfigProviderFilter) error {
+	desiredByProviderDefinition := make(map[string]struct{}, len(desired))
 	for rowID := range desired {
 		entry := desired[rowID]
 		if !workflowConfigProviderIncluded(includeProvider, entry.ProviderName) {
 			continue
 		}
-		desiredByProviderSchedule[workflowConfigProviderObjectKey(entry.ProviderName, entry.ScheduleID)] = struct{}{}
+		desiredByProviderDefinition[workflowConfigProviderObjectKey(entry.ProviderName, entry.DefinitionID)] = struct{}{}
 	}
 	for _, providerName := range runtime.ProviderNames() {
 		if !workflowConfigProviderIncluded(includeProvider, providerName) {
@@ -143,28 +174,26 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 		}
 		_, provider, err := runtime.ResolveProvider(ctx, providerName)
 		if err != nil {
-			return fmt.Errorf("bootstrap: cleanup workflow schedules requires provider %q: %w", providerName, err)
+			return fmt.Errorf("bootstrap: cleanup workflow definitions requires provider %q: %w", providerName, err)
 		}
-		resp, err := provider.ListSchedules(ctx, &proto.ListWorkflowProviderSchedulesRequest{})
+		resp, err := provider.ListDefinitions(ctx, &proto.ListWorkflowProviderDefinitionsRequest{})
 		if err != nil {
-			workflowLogSkippedConfigWorkflowCleanup(ctx, "schedules", providerName, err)
+			workflowLogSkippedConfigWorkflowCleanup(ctx, "definitions", providerName, err)
 			continue
 		}
-		for _, scheduleProto := range resp.GetSchedules() {
-			schedule, err := workflowwire.ScheduleFromProto(scheduleProto)
+		for _, definitionProto := range resp.GetDefinitions() {
+			definition, err := workflowwire.DefinitionFromProto(definitionProto)
 			if err != nil {
-				return fmt.Errorf("bootstrap: decode workflow schedule from provider %q: %w", providerName, err)
+				return fmt.Errorf("bootstrap: decode workflow definition from provider %q: %w", providerName, err)
 			}
-			if schedule == nil || !isWorkflowConfigOwnedSchedule(schedule, workflowConfigTargetLabel(schedule.Target), schedule.ID) {
+			if definition == nil || !isWorkflowConfigOwnedDefinition(definition, definition.ID) {
 				continue
 			}
-			if _, ok := desiredByProviderSchedule[workflowConfigProviderObjectKey(providerName, schedule.ID)]; ok {
+			if _, ok := desiredByProviderDefinition[workflowConfigProviderObjectKey(providerName, definition.ID)]; ok {
 				continue
 			}
-			appName := workflowConfigTargetLabel(schedule.Target)
-			providerCtx := invocation.WithWorkflowContextString(ctx, "app", appName)
-			if err := provider.DeleteSchedule(providerCtx, &proto.DeleteWorkflowProviderScheduleRequest{ScheduleId: schedule.ID}); err != nil && !isWorkflowObjectNotFound(err) {
-				return fmt.Errorf("bootstrap: delete workflow schedule %q for app %q: %w", schedule.ID, appName, err)
+			if err := provider.DeleteDefinition(ctx, &proto.DeleteWorkflowProviderDefinitionRequest{DefinitionId: definition.ID}); err != nil && !isWorkflowObjectNotFound(err) {
+				return fmt.Errorf("bootstrap: delete workflow definition %q: %w", definition.ID, err)
 			}
 		}
 	}
@@ -183,13 +212,13 @@ func workflowLogSkippedConfigWorkflowCleanup(ctx context.Context, objectType, pr
 	)
 }
 
-func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, appName, scheduleID string) bool {
+func isWorkflowConfigOwnedDefinition(existing *coreworkflow.Definition, definitionID string) bool {
 	if existing == nil {
 		return false
 	}
-	return existing.ID == scheduleID &&
-		workflowConfigTargetLabel(existing.Target) == appName &&
-		existing.CreatedBySubjectID == workflowConfigOwnerSubjectID()
+	return existing.ID == definitionID &&
+		strings.HasPrefix(existing.ID, "cfg_") &&
+		strings.TrimSpace(existing.CreatedBySubjectID) == workflowConfigOwnerSubjectID()
 }
 
 func workflowConfigTargetLabel(target coreworkflow.Target) string {
@@ -209,13 +238,12 @@ func workflowConfigTargetLabel(target coreworkflow.Target) string {
 	return ""
 }
 
-func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Target {
-	return config.WorkflowTargetToCore(target)
+func workflowConfigTarget(steps []config.WorkflowStepConfig) coreworkflow.Target {
+	return config.WorkflowStepsToCore(steps)
 }
 
-func workflowConfigScheduleID(scheduleKey string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(scheduleKey)))
-	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
+func workflowConfigDefinitionID(definitionKey string) string {
+	return "cfg_" + strings.TrimSpace(definitionKey)
 }
 
 func workflowConfigValidateExecutionTarget(cfg *config.Config, target coreworkflow.Target, runAs *core.RunAsSubject) error {

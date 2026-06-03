@@ -181,7 +181,7 @@ struct Output {
     invocation_token: String,
     idempotency_key: String,
     workflow_run_id: String,
-    workflow_trigger_id: String,
+    workflow_activation_id: String,
     workflow_event_spec_version: String,
     workflow_event_data_content_type: String,
     workflow_created_by_subject_id: String,
@@ -225,11 +225,11 @@ async fn serves_provider_requests_over_unix_socket() {
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or_default()
                         .to_string(),
-                    workflow_trigger_id: request
+                    workflow_activation_id: request
                         .workflow
                         .get("trigger")
                         .and_then(serde_json::Value::as_object)
-                        .and_then(|trigger| trigger.get("triggerId"))
+                        .and_then(|trigger| trigger.get("activationId"))
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or_default()
                         .to_string(),
@@ -388,7 +388,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     "createdBySubjectId": "user:user-123",
                     "trigger": {
                         "kind": "event",
-                        "triggerId": "trigger-1",
+                        "activationId": "activation-1",
                         "event": {
                             "id": "evt-1",
                             "source": "urn:test",
@@ -421,7 +421,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"subject","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123","tool_refs_set":true,"tool_ref_app":"target","tool_ref_operation":"reviews.get","tool_ref_run_as":"service_account:review-worker"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"subject","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_activation_id":"activation-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123","tool_refs_set":true,"tool_ref_app":"target","tool_ref_operation":"reviews.get","tool_ref_run_as":"service_account:review-worker"}"#
     );
 
     let session_catalog = client

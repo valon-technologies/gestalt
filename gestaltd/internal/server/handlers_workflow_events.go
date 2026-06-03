@@ -11,10 +11,11 @@ import (
 	"time"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
 
-type workflowEventPublishRequest struct {
+type workflowEventDeliverRequest struct {
 	ID              string         `json:"id,omitempty"`
 	Source          string         `json:"source,omitempty"`
 	SpecVersion     string         `json:"specVersion,omitempty"`
@@ -26,38 +27,45 @@ type workflowEventPublishRequest struct {
 	Extensions      map[string]any `json:"extensions,omitempty"`
 }
 
-type workflowEventPublishResponse struct {
+type workflowEventDeliverResponse struct {
 	Status string               `json:"status"`
 	Event  workflowRunEventInfo `json:"event"`
 }
 
-func (s *Server) publishWorkflowEvent(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
+func (s *Server) deliverWorkflowEvent(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveWorkflowActor(w, r)
 	if !ok {
 		return
 	}
 
-	var req workflowEventPublishRequest
+	var req workflowEventDeliverRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
-	event, err := s.workflowSchedules.PublishEvent(r.Context(), p, workflowmanager.EventPublish{
-		Event: workflowEventFromPublishRequest(req),
-	})
-	if err != nil {
-		s.writeWorkflowPublishEventError(w, r, err)
+	appName := strings.TrimSpace(req.Source)
+	if appName != "" && (!principal.AllowsProviderPermission(p, appName) || !s.allowProviderContext(r.Context(), p, appName)) {
+		writeError(w, http.StatusForbidden, errOperationAccess.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusAccepted, workflowEventPublishResponse{
-		Status: "published",
+	event, err := s.workflowSchedules.DeliverEvent(r.Context(), p, workflowmanager.EventDeliver{
+		AppName: appName,
+		Event:   workflowEventFromPublishRequest(req),
+	})
+	if err != nil {
+		s.writeWorkflowDeliverEventError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, workflowEventDeliverResponse{
+		Status: "delivered",
 		Event:  workflowRunEventInfoFromCore(event),
 	})
 }
 
-func workflowEventFromPublishRequest(req workflowEventPublishRequest) coreworkflow.Event {
+func workflowEventFromPublishRequest(req workflowEventDeliverRequest) coreworkflow.Event {
 	return coreworkflow.Event{
 		ID:              strings.TrimSpace(req.ID),
 		Source:          strings.TrimSpace(req.Source),
@@ -85,22 +93,21 @@ func workflowRunEventInfoFromCore(event coreworkflow.Event) workflowRunEventInfo
 	}
 }
 
-func (s *Server) writeWorkflowPublishEventError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Server) writeWorkflowDeliverEventError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
-	case errors.Is(err, workflowmanager.ErrWorkflowSubjectRequired),
-		errors.Is(err, workflowmanager.ErrWorkflowScheduleSubject):
+	case errors.Is(err, workflowmanager.ErrWorkflowSubjectRequired):
 		writeError(w, http.StatusUnauthorized, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowEventSourceRequired),
 		errors.Is(err, workflowmanager.ErrWorkflowEventTypeRequired):
 		writeError(w, http.StatusBadRequest, err.Error())
 	default:
-		s.writeWorkflowPublishEventProviderError(r.Context(), w, err)
+		s.writeWorkflowDeliverEventProviderError(r.Context(), w, err)
 	}
 }
 
-func (s *Server) writeWorkflowPublishEventProviderError(ctx context.Context, w http.ResponseWriter, err error) {
-	slog.ErrorContext(ctx, "workflow event publish failed", "error", err)
-	writeError(w, http.StatusInternalServerError, "workflow event publish failed")
+func (s *Server) writeWorkflowDeliverEventProviderError(ctx context.Context, w http.ResponseWriter, err error) {
+	slog.ErrorContext(ctx, "workflow event delivery failed", "error", err)
+	writeError(w, http.StatusInternalServerError, "workflow event delivery failed")
 }

@@ -914,8 +914,8 @@ func TestPrepareAtPath_RejectsInvalidAppWorkflowCapabilitiesShape(t *testing.T) 
       capabilities:
         workflow:
           operations:
-            - events.publish
-            - events.publish
+            - events.deliver
+            - events.deliver
 `,
 			want: `apps.caller.capabilities.workflow.operations[1] duplicates operations[0]`,
 		},
@@ -928,7 +928,7 @@ func TestPrepareAtPath_RejectsInvalidAppWorkflowCapabilitiesShape(t *testing.T) 
       capabilities:
         workflow:
           operations:
-            - events.publish
+            - events.deliver
 `,
 			want: `providers.cache.shared.capabilities is only supported on apps.*`,
 		},

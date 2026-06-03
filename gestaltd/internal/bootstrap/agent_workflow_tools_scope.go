@@ -15,7 +15,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
 
 func workflowSystemToolFromRef(ref coreagent.ToolRef) (coreagent.Tool, error) {
@@ -352,16 +351,6 @@ func workflowSystemToolPermissionsForTarget(target coreworkflow.Target, defaultA
 		out = append(out, core.AccessPermission{App: appName, Operations: operations})
 	}
 	return out
-}
-
-func workflowSystemToolExistingScheduleTarget(schedule *workflowmanager.ManagedSchedule) coreworkflow.Target {
-	if schedule == nil {
-		return coreworkflow.Target{}
-	}
-	if schedule.Schedule != nil {
-		return schedule.Schedule.Target
-	}
-	return coreworkflow.Target{}
 }
 
 func workflowSystemToolTrustedAgentProvider(req agentSystemToolExecutionRequest, target coreworkflow.Target) string {

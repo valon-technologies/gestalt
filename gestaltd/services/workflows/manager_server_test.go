@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -34,12 +35,7 @@ func TestManagerServerMissingOrEmptyWorkflowGrantsDenyWorkflowManagerMethods(t *
 				t.Fatalf("NewInvocationTokenManager: %v", err)
 			}
 			token, err := tokens.MintRootTokenWithWorkflowGrants(
-				principal.WithPrincipal(context.Background(), &principal.Principal{
-					SubjectID: "user:user-123",
-					UserID:    "user-123",
-					Kind:      principal.KindUser,
-					Source:    principal.SourceSession,
-				}),
+				principal.WithPrincipal(context.Background(), testWorkflowPrincipal()),
 				"caller",
 				nil,
 				grants,
@@ -49,32 +45,11 @@ func TestManagerServerMissingOrEmptyWorkflowGrantsDenyWorkflowManagerMethods(t *
 			}
 
 			server := NewProviderServer("caller", nil, tokens)
-			_, err = server.UpsertSchedule(context.Background(), &proto.UpsertWorkflowProviderScheduleRequest{
+			_, err = server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
 				InvocationToken: token,
 			})
 			if status.Code(err) != codes.PermissionDenied {
-				t.Fatalf("CreateSchedule error = %v, want PermissionDenied", err)
-			}
-		})
-	}
-}
-
-func TestWorkflowManagerTargetOrDefinitionAllowsDefinitionOnlyRequests(t *testing.T) {
-	t.Parallel()
-
-	for name, target := range map[string]*proto.BoundWorkflowTarget{
-		"nil target":   nil,
-		"empty target": {},
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			got, err := workflowManagerTargetOrDefinition(target, "workflow_definition:abc")
-			if err != nil {
-				t.Fatalf("workflowManagerTargetOrDefinition: %v", err)
-			}
-			if len(got.Steps) != 0 {
-				t.Fatalf("target = %#v, want empty target for definition-only request", got)
+				t.Fatalf("ApplyDefinition error = %v, want PermissionDenied", err)
 			}
 		})
 	}
@@ -88,14 +63,13 @@ func TestManagerServerRejectsCallerSuppliedRunAs(t *testing.T) {
 		t.Fatalf("NewInvocationTokenManager: %v", err)
 	}
 	token, err := tokens.MintRootTokenWithWorkflowGrants(
-		principal.WithPrincipal(context.Background(), publishEventPrincipal()),
+		principal.WithPrincipal(context.Background(), testWorkflowPrincipal()),
 		"caller",
 		nil,
 		workflowgrants.Grants{
-			workflowgrants.OperationSchedulesCreate:     {},
-			workflowgrants.OperationEventTriggersCreate: {},
-			workflowgrants.OperationRunsStart:           {},
-			workflowgrants.OperationRunsSignalOrStart:   {},
+			workflowgrants.OperationDefinitionsApply:  {},
+			workflowgrants.OperationRunsStart:         {},
+			workflowgrants.OperationRunsSignalOrStart: {},
 		},
 	)
 	if err != nil {
@@ -105,10 +79,10 @@ func TestManagerServerRejectsCallerSuppliedRunAs(t *testing.T) {
 	runAs := &proto.SubjectContext{Id: "user:ada"}
 
 	for name, call := range map[string]func() error{
-		"upsert schedule": func() error {
-			_, callErr := server.UpsertSchedule(context.Background(), &proto.UpsertWorkflowProviderScheduleRequest{
+		"apply definition": func() error {
+			_, callErr := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
 				InvocationToken: token,
-				RunAs:           runAs,
+				Spec:            &proto.WorkflowDefinitionSpec{RunAs: runAs},
 			})
 			return callErr
 		},
@@ -126,13 +100,6 @@ func TestManagerServerRejectsCallerSuppliedRunAs(t *testing.T) {
 			})
 			return callErr
 		},
-		"upsert event trigger": func() error {
-			_, callErr := server.UpsertEventTrigger(context.Background(), &proto.UpsertWorkflowProviderEventTriggerRequest{
-				InvocationToken: token,
-				RunAs:           runAs,
-			})
-			return callErr
-		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -143,15 +110,15 @@ func TestManagerServerRejectsCallerSuppliedRunAs(t *testing.T) {
 	}
 }
 
-func TestManagerServerPublishEventThreadsCallerAppToSelectedProvider(t *testing.T) {
+func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.T) {
 	t.Parallel()
 
-	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-publish-selected-secret"))
+	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-deliver-selected-secret"))
 	if err != nil {
 		t.Fatalf("NewInvocationTokenManager: %v", err)
 	}
-	token := mintPublishEventToken(t, tokens, "valonSats")
-	selected := &recordingWorkflowProvider{publishedID: "provider-event"}
+	token := mintDeliverEventToken(t, tokens, "valonSats")
+	selected := &recordingWorkflowProvider{deliveredID: "provider-event"}
 	other := &recordingWorkflowProvider{}
 	var auditBuf bytes.Buffer
 	manager := workflowmanager.New(workflowmanager.Config{
@@ -167,35 +134,35 @@ func TestManagerServerPublishEventThreadsCallerAppToSelectedProvider(t *testing.
 	})
 	server := NewProviderServer("valonSats", manager, tokens)
 
-	published, err := server.PublishEvent(context.Background(), &proto.PublishWorkflowProviderEventRequest{
+	delivered, err := server.DeliverEvent(context.Background(), &proto.DeliverWorkflowProviderEventRequest{
 		ProviderName:    "selected",
 		InvocationToken: token,
 		Event:           &proto.WorkflowEvent{Type: "valon_sats.attempt.submitted", Source: "slack"},
 	})
 	if err != nil {
-		t.Fatalf("PublishEvent: %v", err)
+		t.Fatalf("DeliverEvent: %v", err)
 	}
-	if got := published.GetId(); got != "provider-event" {
-		t.Fatalf("published event id = %q, want provider-event", got)
+	if got := delivered.GetId(); got != "provider-event" {
+		t.Fatalf("delivered event id = %q, want provider-event", got)
 	}
-	if len(selected.publishReqs) != 1 {
-		t.Fatalf("selected publish requests = %d, want 1", len(selected.publishReqs))
+	if len(selected.deliverReqs) != 1 {
+		t.Fatalf("selected deliver requests = %d, want 1", len(selected.deliverReqs))
 	}
-	if got := selected.publishReqs[0].GetAppName(); got != "valonSats" {
-		t.Fatalf("selected publish app = %q, want valonSats", got)
+	if got := selected.deliverReqs[0].GetAppName(); got != "valonSats" {
+		t.Fatalf("selected deliver app = %q, want valonSats", got)
 	}
-	if got := selected.publishReqs[0].GetEvent().GetSource(); got != "valonSats" {
-		t.Fatalf("selected publish source = %q, want valonSats", got)
+	if got := selected.deliverReqs[0].GetEvent().GetSource(); got != "valonSats" {
+		t.Fatalf("selected deliver source = %q, want valonSats", got)
 	}
-	if len(other.publishReqs) != 0 {
-		t.Fatalf("other publish requests = %d, want 0", len(other.publishReqs))
+	if len(other.deliverReqs) != 0 {
+		t.Fatalf("other deliver requests = %d, want 0", len(other.deliverReqs))
 	}
 	assertManagerServerWorkflowAudit(t, auditBuf.String(), map[string]any{
 		"level":          "INFO",
 		"log.type":       "audit",
 		"source":         "workflow_manager",
 		"provider":       "selected",
-		"operation":      "workflow.event.publish",
+		"operation":      "workflow.event.deliver",
 		"target_kind":    "workflow_event",
 		"target_name":    "valon_sats.attempt.submitted",
 		"caller_app":     "valonSats",
@@ -205,69 +172,7 @@ func TestManagerServerPublishEventThreadsCallerAppToSelectedProvider(t *testing.
 	})
 }
 
-func TestManagerServerPublishEventThreadsCallerAppToFanoutProviders(t *testing.T) {
-	t.Parallel()
-
-	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-publish-fanout-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	token := mintPublishEventToken(t, tokens, "valonSats")
-	first := &recordingWorkflowProvider{}
-	second := &recordingWorkflowProvider{}
-	var auditBuf bytes.Buffer
-	manager := workflowmanager.New(workflowmanager.Config{
-		Workflow: managerServerWorkflowControl{
-			defaultName: "first",
-			names:       []string{"first", "second"},
-			providers: map[string]coreworkflow.Provider{
-				"first":  first,
-				"second": second,
-			},
-		},
-		Audit: invocation.NewSlogAuditSink(&auditBuf),
-	})
-	server := NewProviderServer(" valonSats ", manager, tokens)
-
-	_, err = server.PublishEvent(context.Background(), &proto.PublishWorkflowProviderEventRequest{
-		InvocationToken: token,
-		Event:           &proto.WorkflowEvent{Type: "valon_sats.attempt.submitted"},
-	})
-	if err != nil {
-		t.Fatalf("PublishEvent: %v", err)
-	}
-	for name, provider := range map[string]*recordingWorkflowProvider{
-		"first":  first,
-		"second": second,
-	} {
-		if len(provider.publishReqs) != 1 {
-			t.Fatalf("%s publish requests = %d, want 1", name, len(provider.publishReqs))
-		}
-		if got := provider.publishReqs[0].GetAppName(); got != "valonSats" {
-			t.Fatalf("%s publish app = %q, want valonSats", name, got)
-		}
-		if got := provider.publishReqs[0].GetEvent().GetSource(); got != "valonSats" {
-			t.Fatalf("%s publish source = %q, want valonSats", name, got)
-		}
-	}
-	for _, providerName := range []string{"first", "second"} {
-		assertManagerServerWorkflowAudit(t, auditBuf.String(), map[string]any{
-			"level":          "INFO",
-			"log.type":       "audit",
-			"source":         "workflow_manager",
-			"provider":       providerName,
-			"operation":      "workflow.event.publish",
-			"target_kind":    "workflow_event",
-			"target_name":    "valon_sats.attempt.submitted",
-			"caller_app":     "valonSats",
-			"subject_id":     "user:user-123",
-			"request_id_set": true,
-			"allowed":        true,
-		})
-	}
-}
-
-func TestWorkflowManagerPublishEventSelectedProviderRequiresCallerApp(t *testing.T) {
+func TestWorkflowManagerDeliverEventSelectedProviderRequiresCallerApp(t *testing.T) {
 	t.Parallel()
 
 	selected := &recordingWorkflowProvider{}
@@ -281,16 +186,16 @@ func TestWorkflowManagerPublishEventSelectedProviderRequiresCallerApp(t *testing
 		},
 	})
 
-	_, err := manager.PublishEvent(context.Background(), publishEventPrincipal(), workflowmanager.EventPublish{
+	_, err := manager.DeliverEvent(context.Background(), testWorkflowPrincipal(), workflowmanager.EventDeliver{
 		ProviderName: "selected",
 		AppName:      "   ",
 		Event:        coreworkflow.Event{Type: "valon_sats.attempt.submitted"},
 	})
 	if !errors.Is(err, workflowmanager.ErrWorkflowEventSourceRequired) {
-		t.Fatalf("PublishEvent error = %v, want ErrWorkflowEventSourceRequired", err)
+		t.Fatalf("DeliverEvent error = %v, want ErrWorkflowEventSourceRequired", err)
 	}
-	if len(selected.publishReqs) != 0 {
-		t.Fatalf("selected publish requests = %d, want 0", len(selected.publishReqs))
+	if len(selected.deliverReqs) != 0 {
+		t.Fatalf("selected deliver requests = %d, want 0", len(selected.deliverReqs))
 	}
 }
 
@@ -334,13 +239,13 @@ func managerServerAuditStringPresent(record map[string]any, key string) bool {
 	return ok && value != ""
 }
 
-func mintPublishEventToken(t *testing.T, tokens *InvocationTokenManager, callerApp string) string {
+func mintDeliverEventToken(t *testing.T, tokens *InvocationTokenManager, callerApp string) string {
 	t.Helper()
 	token, err := tokens.MintRootTokenWithWorkflowGrants(
-		principal.WithPrincipal(context.Background(), publishEventPrincipal()),
+		principal.WithPrincipal(context.Background(), testWorkflowPrincipal()),
 		callerApp,
 		nil,
-		workflowgrants.Grants{workflowgrants.OperationEventsPublish: {}},
+		workflowgrants.Grants{workflowgrants.OperationEventsDeliver: {}},
 	)
 	if err != nil {
 		t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
@@ -348,7 +253,7 @@ func mintPublishEventToken(t *testing.T, tokens *InvocationTokenManager, callerA
 	return token
 }
 
-func publishEventPrincipal() *principal.Principal {
+func testWorkflowPrincipal() *principal.Principal {
 	return &principal.Principal{
 		SubjectID: "user:user-123",
 		UserID:    "user-123",
@@ -381,18 +286,29 @@ func (c managerServerWorkflowControl) ProviderNames() []string {
 
 type recordingWorkflowProvider struct {
 	coreworkflow.Provider
-	publishReqs []*proto.PublishWorkflowProviderEventRequest
-	publishedID string
+	deliverReqs []*proto.DeliverWorkflowProviderEventRequest
+	deliveredID string
 }
 
-func (p *recordingWorkflowProvider) PublishEvent(_ context.Context, req *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
-	p.publishReqs = append(p.publishReqs, gproto.Clone(req).(*proto.PublishWorkflowProviderEventRequest))
+func (p *recordingWorkflowProvider) DeliverEvent(_ context.Context, req *proto.DeliverWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
+	p.deliverReqs = append(p.deliverReqs, gproto.Clone(req).(*proto.DeliverWorkflowProviderEventRequest))
 	event := &proto.WorkflowEvent{}
 	if req.GetEvent() != nil {
 		event = gproto.Clone(req.GetEvent()).(*proto.WorkflowEvent)
 	}
-	if p.publishedID != "" {
-		event.Id = p.publishedID
+	if p.deliveredID != "" {
+		event.Id = p.deliveredID
 	}
 	return event, nil
+}
+
+func (p *recordingWorkflowProvider) GetDefinition(context.Context, *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
+	target, err := workflowwire.TargetToProto(coreworkflow.Target{Steps: []coreworkflow.Step{{
+		ID:  "run",
+		App: &coreworkflow.AppCall{Name: "slack", Operation: "chat.postMessage"},
+	}}})
+	if err != nil {
+		return nil, err
+	}
+	return &proto.WorkflowDefinition{Id: "definition-1", Target: target, CreatedBySubjectId: "user:user-123"}, nil
 }

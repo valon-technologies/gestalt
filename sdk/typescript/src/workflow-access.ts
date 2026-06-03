@@ -13,42 +13,104 @@ import {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
 } from "./host-service.ts";
-import type { Request } from "./api.ts";
+import type { Request, SubjectInput } from "./api.ts";
+import { jsonFromValue, structFromObject, type JsonObjectInput } from "./protocol.ts";
 import {
-  boundWorkflowTargetToProto,
+  subjectToProto,
   workflowDefinitionFromProto,
-  workflowEventTriggerFromProto,
+  workflowDefinitionSpecToProto,
+  workflowEventFromProto,
+  workflowEventToProto,
+  workflowRunEventFromProto,
   workflowRunFromProto,
   workflowRunSignalFromProto,
-  workflowScheduleFromProto,
-  workflowEventFromProto,
-  workflowEventMatchToProto,
-  workflowEventToProto,
   workflowSignalToProto,
-  type BoundWorkflowTarget,
+  type GetWorkflowProviderRunOutputResponse,
+  type SignalWorkflowRunResponse,
   type WorkflowDefinition,
-  type WorkflowEventTrigger,
-  type WorkflowRun,
-  type WorkflowRunSignal,
-  type WorkflowSchedule,
+  type WorkflowDefinitionSpec,
   type WorkflowEvent,
-  type WorkflowEventMatch,
+  type WorkflowRun,
+  type WorkflowRunEvent,
+  type WorkflowRunStatus,
   type WorkflowSignal,
 } from "./workflow.ts";
 
-/**
- * Environment variable containing the gestaltd workflow-provider facade target.
- *
- * Workflow calls call the facade. Provider runtimes still listen on
- * GESTALT_PROVIDER_SOCKET.
- */
+/** Shape accepted when applying a workflow definition. */
+export interface WorkflowApplyDefinition {
+  providerName: string;
+  spec?: WorkflowDefinitionSpec | undefined;
+  idempotencyKey?: string | undefined;
+  requestedBySubjectId?: string | undefined;
+}
+
+/** Shape accepted when fetching a workflow definition. */
+export interface WorkflowGetDefinition {
+  definitionId: string;
+}
+
+/** Shape accepted when listing workflow definitions. */
+export interface WorkflowListDefinitions {}
+
+/** Shape accepted when pausing or resuming a workflow definition. */
+export interface WorkflowSetDefinitionPaused {
+  definitionId: string;
+  paused: boolean;
+  requestedBySubjectId?: string | undefined;
+}
+
+/** Shape accepted when pausing or resuming a workflow activation. */
+export interface WorkflowSetActivationPaused {
+  definitionId: string;
+  activationId: string;
+  paused: boolean;
+  requestedBySubjectId?: string | undefined;
+}
+
+/** Shape accepted when deleting a workflow definition. */
+export interface WorkflowDeleteDefinition {
+  definitionId: string;
+}
+
 /** Shape accepted when starting a workflow run. */
 export interface WorkflowStartRun {
   providerName: string;
-  target?: BoundWorkflowTarget | undefined;
+  definitionId: string;
+  expectedDefinitionGeneration?: bigint | number | undefined;
+  input?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
   workflowKey?: string | undefined;
-  definitionId?: string | undefined;
+  createdBySubjectId?: string | undefined;
+  runAs?: SubjectInput | undefined;
+}
+
+/** Shape accepted when fetching one workflow run. */
+export interface WorkflowGetRun {
+  runId: string;
+}
+
+/** Shape accepted when listing workflow runs. */
+export interface WorkflowListRuns {
+  pageSize?: number | undefined;
+  pageToken?: string | undefined;
+  status?: WorkflowRunStatus | undefined;
+  targetApp?: string | undefined;
+}
+
+/** Shape accepted when fetching workflow run events. */
+export interface WorkflowGetRunEvents {
+  runId: string;
+}
+
+/** Shape accepted when fetching the terminal workflow run output. */
+export interface WorkflowGetRunOutput {
+  runId: string;
+}
+
+/** Shape accepted when canceling a workflow run. */
+export interface WorkflowCancelRun {
+  runId: string;
+  reason?: string | undefined;
 }
 
 /** Shape accepted when signaling an existing workflow run. */
@@ -61,185 +123,66 @@ export interface WorkflowSignalRun {
 export interface WorkflowSignalOrStartRun {
   providerName: string;
   workflowKey: string;
-  target?: BoundWorkflowTarget | undefined;
+  definitionId: string;
+  expectedDefinitionGeneration?: bigint | number | undefined;
+  input?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
+  createdBySubjectId?: string | undefined;
+  runAs?: SubjectInput | undefined;
   signal?: WorkflowSignal | undefined;
-  definitionId?: string | undefined;
 }
 
-/** Shape accepted when creating a workflow definition. */
-export interface WorkflowCreateDefinition {
-  providerName: string;
-  target?: BoundWorkflowTarget | undefined;
-  idempotencyKey?: string | undefined;
-}
-
-/** Shape accepted when fetching a workflow definition. */
-export interface WorkflowGetDefinition {
-  definitionId: string;
-}
-
-/** Shape accepted when updating a workflow definition. */
-export interface WorkflowUpdateDefinition {
-  definitionId: string;
+/** Shape accepted when delivering an app event to workflow activations. */
+export interface WorkflowDeliverEvent {
+  appName?: string | undefined;
   providerName?: string | undefined;
-  target?: BoundWorkflowTarget | undefined;
-}
-
-/** Shape accepted when deleting a workflow definition. */
-export interface WorkflowDeleteDefinition {
-  definitionId: string;
-}
-
-/** Shape accepted when creating a workflow schedule. */
-export interface WorkflowCreateSchedule {
-  providerName: string;
-  cron: string;
-  timezone?: string | undefined;
-  target?: BoundWorkflowTarget | undefined;
-  paused?: boolean | undefined;
-  idempotencyKey?: string | undefined;
-  definitionId?: string | undefined;
-}
-
-/** Shape accepted when creating an event trigger. */
-export interface WorkflowCreateTrigger {
-  providerName: string;
-  match?: WorkflowEventMatch | undefined;
-  target?: BoundWorkflowTarget | undefined;
-  paused?: boolean | undefined;
-  idempotencyKey?: string | undefined;
-  definitionId?: string | undefined;
-}
-
-/** Shape accepted when fetching a workflow schedule. */
-export interface WorkflowGetSchedule {
-  scheduleId: string;
-}
-
-/** Shape accepted when fetching an event trigger. */
-export interface WorkflowGetTrigger {
-  triggerId: string;
-}
-
-/** Shape accepted when updating a workflow schedule. */
-export interface WorkflowUpdateSchedule {
-  scheduleId: string;
-  providerName?: string | undefined;
-  cron?: string | undefined;
-  timezone?: string | undefined;
-  target?: BoundWorkflowTarget | undefined;
-  paused?: boolean | undefined;
-  definitionId?: string | undefined;
-}
-
-/** Shape accepted when updating an event trigger. */
-export interface WorkflowUpdateTrigger {
-  triggerId: string;
-  providerName?: string | undefined;
-  match?: WorkflowEventMatch | undefined;
-  target?: BoundWorkflowTarget | undefined;
-  paused?: boolean | undefined;
-  definitionId?: string | undefined;
-}
-
-/** Shape accepted when deleting a workflow schedule. */
-export interface WorkflowDeleteSchedule {
-  scheduleId: string;
-}
-
-/** Shape accepted when deleting an event trigger. */
-export interface WorkflowDeleteTrigger {
-  triggerId: string;
-}
-
-/** Shape accepted when pausing a workflow schedule. */
-export interface WorkflowPauseSchedule {
-  scheduleId: string;
-}
-
-/** Shape accepted when pausing an event trigger. */
-export interface WorkflowPauseTrigger {
-  triggerId: string;
-}
-
-/** Shape accepted when resuming a workflow schedule. */
-export interface WorkflowResumeSchedule {
-  scheduleId: string;
-}
-
-/** Shape accepted when resuming an event trigger. */
-export interface WorkflowResumeTrigger {
-  triggerId: string;
-}
-
-/** Shape accepted when publishing a workflow event. */
-export interface WorkflowPublishEvent {
   event?: WorkflowEvent | undefined;
-  providerName?: string | undefined;
+  deliveredBySubjectId?: string | undefined;
 }
 
 /** Fakeable client contract for workflow calls. */
 export interface Workflow {
-  startRun(request: WorkflowStartRun): Promise<WorkflowRun>;
-  signalRun(
-    request: WorkflowSignalRun,
-  ): Promise<WorkflowRunSignal>;
-  signalOrStartRun(
-    request: WorkflowSignalOrStartRun,
-  ): Promise<WorkflowRunSignal>;
-  createDefinition(
-    request: WorkflowCreateDefinition,
+  applyDefinition(
+    request: WorkflowApplyDefinition,
   ): Promise<WorkflowDefinition>;
   getDefinition(
     request: WorkflowGetDefinition,
   ): Promise<WorkflowDefinition>;
-  updateDefinition(
-    request: WorkflowUpdateDefinition,
+  listDefinitions(
+    request?: WorkflowListDefinitions,
+  ): Promise<readonly WorkflowDefinition[]>;
+  setDefinitionPaused(
+    request: WorkflowSetDefinitionPaused,
+  ): Promise<WorkflowDefinition>;
+  setActivationPaused(
+    request: WorkflowSetActivationPaused,
   ): Promise<WorkflowDefinition>;
   deleteDefinition(request: WorkflowDeleteDefinition): Promise<void>;
-  createSchedule(
-    request: WorkflowCreateSchedule,
-  ): Promise<WorkflowSchedule>;
-  getSchedule(
-    request: WorkflowGetSchedule,
-  ): Promise<WorkflowSchedule>;
-  updateSchedule(
-    request: WorkflowUpdateSchedule,
-  ): Promise<WorkflowSchedule>;
-  deleteSchedule(request: WorkflowDeleteSchedule): Promise<void>;
-  pauseSchedule(
-    request: WorkflowPauseSchedule,
-  ): Promise<WorkflowSchedule>;
-  resumeSchedule(
-    request: WorkflowResumeSchedule,
-  ): Promise<WorkflowSchedule>;
-  createTrigger(
-    request: WorkflowCreateTrigger,
-  ): Promise<WorkflowEventTrigger>;
-  getTrigger(
-    request: WorkflowGetTrigger,
-  ): Promise<WorkflowEventTrigger>;
-  updateTrigger(
-    request: WorkflowUpdateTrigger,
-  ): Promise<WorkflowEventTrigger>;
-  deleteTrigger(request: WorkflowDeleteTrigger): Promise<void>;
-  pauseTrigger(
-    request: WorkflowPauseTrigger,
-  ): Promise<WorkflowEventTrigger>;
-  resumeTrigger(
-    request: WorkflowResumeTrigger,
-  ): Promise<WorkflowEventTrigger>;
-  publishEvent(request: WorkflowPublishEvent): Promise<WorkflowEvent>;
+  startRun(request: WorkflowStartRun): Promise<WorkflowRun>;
+  getRun(request: WorkflowGetRun): Promise<WorkflowRun>;
+  listRuns(request?: WorkflowListRuns): Promise<{
+    runs: readonly WorkflowRun[];
+    nextPageToken?: string | undefined;
+  }>;
+  getRunEvents(request: WorkflowGetRunEvents): Promise<readonly WorkflowRunEvent[]>;
+  getRunOutput(request: WorkflowGetRunOutput): Promise<GetWorkflowProviderRunOutputResponse>;
+  cancelRun(request: WorkflowCancelRun): Promise<WorkflowRun>;
+  signalRun(
+    request: WorkflowSignalRun,
+  ): Promise<SignalWorkflowRunResponse>;
+  signalOrStartRun(
+    request: WorkflowSignalOrStartRun,
+  ): Promise<SignalWorkflowRunResponse>;
+  deliverEvent(request: WorkflowDeliverEvent): Promise<WorkflowEvent>;
 }
 
 /**
- * Client for creating and controlling workflow schedules and event triggers.
+ * Client for applying workflow definitions and controlling durable runs.
  *
  * The constructor accepts either a Gestalt request or an invocation token. Each
- * agent call forwards that token to the workflow-provider facade. When
- * constructed from a request, create operations reuse the request idempotency
- * key unless the call provides one explicitly.
+ * workflow call forwards that token to the workflow-provider facade. When
+ * constructed from a request, mutating calls reuse the request idempotency key
+ * unless the call provides one explicitly.
  */
 class WorkflowImpl implements Workflow {
   private readonly client: Client<typeof WorkflowProviderService>;
@@ -268,63 +211,21 @@ class WorkflowImpl implements Workflow {
     this.client = createClient(WorkflowProviderService, transport);
   }
 
-  /** Starts a workflow run immediately. */
-  async startRun(
-    request: WorkflowStartRun,
-  ): Promise<WorkflowRun> {
-    return workflowRunFromProto(
-      await this.client.startRun({
-        providerName: request.providerName,
-        target: boundWorkflowTargetToProto(request.target),
-        idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
-        workflowKey: request.workflowKey ?? "",
-        invocationToken: this.invocationToken,
-        definitionId: request.definitionId ?? "",
-      }),
-    );
-  }
-
-  /** Signals an existing workflow run. */
-  async signalRun(
-    request: WorkflowSignalRun,
-  ): Promise<WorkflowRunSignal> {
-    return workflowRunSignalFromProto(
-      await this.client.signalRun({
-        runId: request.runId,
-        signal: workflowSignalToProto(request.signal),
-        invocationToken: this.invocationToken,
-      }),
-    );
-  }
-
-  /** Signals a workflow run, or starts it when no run exists for the key. */
-  async signalOrStartRun(
-    request: WorkflowSignalOrStartRun,
-  ): Promise<WorkflowRunSignal> {
-    return workflowRunSignalFromProto(
-      await this.client.signalOrStartRun({
-        providerName: request.providerName,
-        workflowKey: request.workflowKey,
-        target: boundWorkflowTargetToProto(request.target),
-        idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
-        signal: workflowSignalToProto(request.signal),
-        invocationToken: this.invocationToken,
-        definitionId: request.definitionId ?? "",
-      }),
-    );
-  }
-
-  /** Creates a reusable workflow definition. */
-  async createDefinition(
-    request: WorkflowCreateDefinition,
+  /** Applies a durable workflow definition atomically. */
+  async applyDefinition(
+    request: WorkflowApplyDefinition,
   ): Promise<WorkflowDefinition> {
-    return workflowDefinitionFromProto(
-      await this.client.createDefinition({
-        providerName: request.providerName,
-        target: boundWorkflowTargetToProto(request.target),
-        invocationToken: this.invocationToken,
-        idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
-      }),
+    return requireDefinition(
+      workflowDefinitionFromProto(
+        await this.client.applyDefinition({
+          providerName: request.providerName,
+          spec: workflowDefinitionSpecToProto(request.spec),
+          invocationToken: this.invocationToken,
+          idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
+          requestedBySubjectId: request.requestedBySubjectId ?? "",
+        }),
+      ),
+      "Workflow.applyDefinition returned no definition",
     );
   }
 
@@ -332,25 +233,61 @@ class WorkflowImpl implements Workflow {
   async getDefinition(
     request: WorkflowGetDefinition,
   ): Promise<WorkflowDefinition> {
-    return workflowDefinitionFromProto(
-      await this.client.getDefinition({
-        definitionId: request.definitionId,
-        invocationToken: this.invocationToken,
-      }),
+    return requireDefinition(
+      workflowDefinitionFromProto(
+        await this.client.getDefinition({
+          definitionId: request.definitionId,
+          invocationToken: this.invocationToken,
+        }),
+      ),
+      "Workflow.getDefinition returned no definition",
     );
   }
 
-  /** Updates a workflow definition. */
-  async updateDefinition(
-    request: WorkflowUpdateDefinition,
+  /** Lists workflow definitions visible to the current invocation token. */
+  async listDefinitions(
+    _request: WorkflowListDefinitions = {},
+  ): Promise<readonly WorkflowDefinition[]> {
+    const response = await this.client.listDefinitions({
+      invocationToken: this.invocationToken,
+    });
+    return response.definitions.map((definition) =>
+      requireDefinition(workflowDefinitionFromProto(definition), "Workflow.listDefinitions returned an empty definition")
+    );
+  }
+
+  /** Pauses or resumes a workflow definition. */
+  async setDefinitionPaused(
+    request: WorkflowSetDefinitionPaused,
   ): Promise<WorkflowDefinition> {
-    return workflowDefinitionFromProto(
-      await this.client.updateDefinition({
-        definitionId: request.definitionId,
-        providerName: request.providerName ?? "",
-        target: boundWorkflowTargetToProto(request.target),
-        invocationToken: this.invocationToken,
-      }),
+    return requireDefinition(
+      workflowDefinitionFromProto(
+        await this.client.setDefinitionPaused({
+          definitionId: request.definitionId,
+          paused: request.paused,
+          invocationToken: this.invocationToken,
+          requestedBySubjectId: request.requestedBySubjectId ?? "",
+        }),
+      ),
+      "Workflow.setDefinitionPaused returned no definition",
+    );
+  }
+
+  /** Pauses or resumes one activation within a workflow definition. */
+  async setActivationPaused(
+    request: WorkflowSetActivationPaused,
+  ): Promise<WorkflowDefinition> {
+    return requireDefinition(
+      workflowDefinitionFromProto(
+        await this.client.setActivationPaused({
+          definitionId: request.definitionId,
+          activationId: request.activationId,
+          paused: request.paused,
+          invocationToken: this.invocationToken,
+          requestedBySubjectId: request.requestedBySubjectId ?? "",
+        }),
+      ),
+      "Workflow.setActivationPaused returned no definition",
     );
   }
 
@@ -364,183 +301,159 @@ class WorkflowImpl implements Workflow {
     });
   }
 
-  /** Creates a workflow schedule. */
-  async createSchedule(
-    request: WorkflowCreateSchedule,
-  ): Promise<WorkflowSchedule> {
-    return workflowScheduleFromProto(
-      await this.client.upsertSchedule({
-        providerName: request.providerName,
-        cron: request.cron,
-        timezone: request.timezone ?? "",
-        target: boundWorkflowTargetToProto(request.target),
-        paused: request.paused ?? false,
-        invocationToken: this.invocationToken,
-        idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
-        definitionId: request.definitionId ?? "",
-      }),
+  /** Starts a workflow run immediately. */
+  async startRun(
+    request: WorkflowStartRun,
+  ): Promise<WorkflowRun> {
+    return requireRun(
+      workflowRunFromProto(
+        await this.client.startRun({
+          providerName: request.providerName,
+          definitionId: request.definitionId,
+          expectedDefinitionGeneration: generationToBigInt(request.expectedDefinitionGeneration),
+          input: structFromObject(request.input),
+          idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
+          workflowKey: request.workflowKey ?? "",
+          invocationToken: this.invocationToken,
+          createdBySubjectId: request.createdBySubjectId ?? "",
+          runAs: subjectToProto(request.runAs),
+        }),
+      ),
+      "Workflow.startRun returned no run",
     );
   }
 
-  /** Fetches one workflow schedule. */
-  async getSchedule(
-    request: WorkflowGetSchedule,
-  ): Promise<WorkflowSchedule> {
-    return workflowScheduleFromProto(
-      await this.client.getSchedule({
-        scheduleId: request.scheduleId,
-        invocationToken: this.invocationToken,
-      }),
+  /** Fetches one workflow run. */
+  async getRun(
+    request: WorkflowGetRun,
+  ): Promise<WorkflowRun> {
+    return requireRun(
+      workflowRunFromProto(
+        await this.client.getRun({
+          runId: request.runId,
+          invocationToken: this.invocationToken,
+        }),
+      ),
+      "Workflow.getRun returned no run",
     );
   }
 
-  /** Updates a workflow schedule. */
-  async updateSchedule(
-    request: WorkflowUpdateSchedule,
-  ): Promise<WorkflowSchedule> {
-    return workflowScheduleFromProto(
-      await this.client.upsertSchedule({
-        scheduleId: request.scheduleId,
-        providerName: request.providerName ?? "",
-        cron: request.cron ?? "",
-        timezone: request.timezone ?? "",
-        target: boundWorkflowTargetToProto(request.target),
-        paused: request.paused ?? false,
-        invocationToken: this.invocationToken,
-        definitionId: request.definitionId ?? "",
-      }),
-    );
-  }
-
-  /** Deletes a workflow schedule. */
-  async deleteSchedule(
-    request: WorkflowDeleteSchedule,
-  ): Promise<void> {
-    await this.client.deleteSchedule({
-      scheduleId: request.scheduleId,
+  /** Lists workflow runs visible to the current invocation token. */
+  async listRuns(
+    request: WorkflowListRuns = {},
+  ): Promise<{ runs: readonly WorkflowRun[]; nextPageToken?: string | undefined }> {
+    const response = await this.client.listRuns({
+      pageSize: request.pageSize ?? 0,
+      pageToken: request.pageToken ?? "",
+      status: request.status ?? 0,
+      targetApp: request.targetApp ?? "",
       invocationToken: this.invocationToken,
     });
+    return {
+      runs: response.runs.map((run) => requireRun(workflowRunFromProto(run), "Workflow.listRuns returned an empty run")),
+      nextPageToken: response.nextPageToken || undefined,
+    };
   }
 
-  /** Pauses a workflow schedule. */
-  async pauseSchedule(
-    request: WorkflowPauseSchedule,
-  ): Promise<WorkflowSchedule> {
-    return workflowScheduleFromProto(
-      await this.client.pauseSchedule({
-        scheduleId: request.scheduleId,
-        invocationToken: this.invocationToken,
-      }),
-    );
-  }
-
-  /** Resumes a workflow schedule. */
-  async resumeSchedule(
-    request: WorkflowResumeSchedule,
-  ): Promise<WorkflowSchedule> {
-    return workflowScheduleFromProto(
-      await this.client.resumeSchedule({
-        scheduleId: request.scheduleId,
-        invocationToken: this.invocationToken,
-      }),
-    );
-  }
-
-  /** Creates an event trigger. */
-  async createTrigger(
-    request: WorkflowCreateTrigger,
-  ): Promise<WorkflowEventTrigger> {
-    return workflowEventTriggerFromProto(
-      await this.client.upsertEventTrigger({
-        providerName: request.providerName,
-        match: workflowEventMatchToProto(request.match),
-        target: boundWorkflowTargetToProto(request.target),
-        paused: request.paused ?? false,
-        invocationToken: this.invocationToken,
-        idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
-        definitionId: request.definitionId ?? "",
-      }),
-    );
-  }
-
-  /** Fetches one event trigger. */
-  async getTrigger(
-    request: WorkflowGetTrigger,
-  ): Promise<WorkflowEventTrigger> {
-    return workflowEventTriggerFromProto(
-      await this.client.getEventTrigger({
-        triggerId: request.triggerId,
-        invocationToken: this.invocationToken,
-      }),
-    );
-  }
-
-  /** Updates an event trigger. */
-  async updateTrigger(
-    request: WorkflowUpdateTrigger,
-  ): Promise<WorkflowEventTrigger> {
-    return workflowEventTriggerFromProto(
-      await this.client.upsertEventTrigger({
-        triggerId: request.triggerId,
-        providerName: request.providerName ?? "",
-        match: workflowEventMatchToProto(request.match),
-        target: boundWorkflowTargetToProto(request.target),
-        paused: request.paused ?? false,
-        invocationToken: this.invocationToken,
-        definitionId: request.definitionId ?? "",
-      }),
-    );
-  }
-
-  /** Deletes an event trigger. */
-  async deleteTrigger(
-    request: WorkflowDeleteTrigger,
-  ): Promise<void> {
-    await this.client.deleteEventTrigger({
-      triggerId: request.triggerId,
+  /** Fetches workflow run events. */
+  async getRunEvents(
+    request: WorkflowGetRunEvents,
+  ): Promise<readonly WorkflowRunEvent[]> {
+    const response = await this.client.getRunEvents({
+      runId: request.runId,
       invocationToken: this.invocationToken,
     });
-  }
-
-  /** Pauses an event trigger. */
-  async pauseTrigger(
-    request: WorkflowPauseTrigger,
-  ): Promise<WorkflowEventTrigger> {
-    return workflowEventTriggerFromProto(
-      await this.client.pauseEventTrigger({
-        triggerId: request.triggerId,
-        invocationToken: this.invocationToken,
-      }),
+    return response.events.map((event) =>
+      requireRunEvent(workflowRunEventFromProto(event), "Workflow.getRunEvents returned an empty event")
     );
   }
 
-  /** Resumes an event trigger. */
-  async resumeTrigger(
-    request: WorkflowResumeTrigger,
-  ): Promise<WorkflowEventTrigger> {
-    return workflowEventTriggerFromProto(
-      await this.client.resumeEventTrigger({
-        triggerId: request.triggerId,
-        invocationToken: this.invocationToken,
-      }),
+  /** Fetches the terminal workflow run output. */
+  async getRunOutput(
+    request: WorkflowGetRunOutput,
+  ): Promise<GetWorkflowProviderRunOutputResponse> {
+    const response = await this.client.getRunOutput({
+      runId: request.runId,
+      invocationToken: this.invocationToken,
+    });
+    return {
+      output: response.output === undefined
+        ? undefined
+        : jsonFromValue(response.output),
+    };
+  }
+
+  /** Cancels a workflow run. */
+  async cancelRun(
+    request: WorkflowCancelRun,
+  ): Promise<WorkflowRun> {
+    return requireRun(
+      workflowRunFromProto(
+        await this.client.cancelRun({
+          runId: request.runId,
+          reason: request.reason ?? "",
+          invocationToken: this.invocationToken,
+        }),
+      ),
+      "Workflow.cancelRun returned no run",
     );
   }
 
-  /** Publishes an event into the workflow. */
-  async publishEvent(
-    request: WorkflowPublishEvent,
+  /** Signals an existing workflow run. */
+  async signalRun(
+    request: WorkflowSignalRun,
+  ): Promise<SignalWorkflowRunResponse> {
+    return requireSignalResponse(
+      workflowRunSignalFromProto(
+        await this.client.signalRun({
+          runId: request.runId,
+          signal: workflowSignalToProto(request.signal),
+          invocationToken: this.invocationToken,
+        }),
+      ),
+      "Workflow.signalRun returned no response",
+    );
+  }
+
+  /** Signals a workflow run, or starts it when no run exists for the key. */
+  async signalOrStartRun(
+    request: WorkflowSignalOrStartRun,
+  ): Promise<SignalWorkflowRunResponse> {
+    return requireSignalResponse(
+      workflowRunSignalFromProto(
+        await this.client.signalOrStartRun({
+          providerName: request.providerName,
+          workflowKey: request.workflowKey,
+          definitionId: request.definitionId,
+          expectedDefinitionGeneration: generationToBigInt(request.expectedDefinitionGeneration),
+          input: structFromObject(request.input),
+          idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
+          signal: workflowSignalToProto(request.signal),
+          invocationToken: this.invocationToken,
+          createdBySubjectId: request.createdBySubjectId ?? "",
+          runAs: subjectToProto(request.runAs),
+        }),
+      ),
+      "Workflow.signalOrStartRun returned no response",
+    );
+  }
+
+  /** Delivers an event into workflow activation matching. */
+  async deliverEvent(
+    request: WorkflowDeliverEvent,
   ): Promise<WorkflowEvent> {
-    const event = workflowEventFromProto(
-      await this.client.publishEvent({
-        event: workflowEventToProto(request.event),
-        invocationToken: this.invocationToken,
-        providerName: request.providerName ?? "",
-      }),
+    return requireEvent(
+      workflowEventFromProto(
+        await this.client.deliverEvent({
+          appName: request.appName ?? "",
+          event: workflowEventToProto(request.event),
+          deliveredBySubjectId: request.deliveredBySubjectId ?? "",
+          invocationToken: this.invocationToken,
+          providerName: request.providerName ?? "",
+        }),
+      ),
+      "Workflow.deliverEvent returned no event",
     );
-    if (event === undefined) {
-      throw new Error("Workflow.publishEvent returned no event");
-    }
-    return event;
   }
 }
 
@@ -563,4 +476,46 @@ function normalizeIdempotencyKey(requestOrToken: Request | string): string {
     return "";
   }
   return requestOrToken.idempotencyKey.trim();
+}
+
+function generationToBigInt(value: bigint | number | undefined): bigint {
+  if (value === undefined) {
+    return 0n;
+  }
+  return typeof value === "bigint" ? value : BigInt(value);
+}
+
+function requireDefinition(value: WorkflowDefinition | undefined, message: string): WorkflowDefinition {
+  if (value === undefined) {
+    throw new Error(message);
+  }
+  return value;
+}
+
+function requireRun(value: WorkflowRun | undefined, message: string): WorkflowRun {
+  if (value === undefined) {
+    throw new Error(message);
+  }
+  return value;
+}
+
+function requireRunEvent(value: WorkflowRunEvent | undefined, message: string): WorkflowRunEvent {
+  if (value === undefined) {
+    throw new Error(message);
+  }
+  return value;
+}
+
+function requireSignalResponse(value: SignalWorkflowRunResponse | undefined, message: string): SignalWorkflowRunResponse {
+  if (value === undefined) {
+    throw new Error(message);
+  }
+  return value;
+}
+
+function requireEvent(value: WorkflowEvent | undefined, message: string): WorkflowEvent {
+  if (value === undefined) {
+    throw new Error(message);
+  }
+  return value;
 }

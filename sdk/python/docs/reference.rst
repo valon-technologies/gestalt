@@ -127,27 +127,28 @@ non-aliased message copies.
    WorkflowStepAppCall
    WorkflowStepAgentTurn
    WorkflowValue
-   BoundWorkflowRun
-   BoundWorkflowSchedule
-   BoundWorkflowEventTrigger
+   WorkflowActivation
+   WorkflowDefinitionSpec
+   WorkflowDefinition
+   WorkflowRun
+   WorkflowStepExecution
+   WorkflowRunEvent
    bound_workflow_target
    bound_workflow_target_from_target
    workflow_step
    workflow_step_app_call
    workflow_step_agent_turn
    workflow_value
+   workflow_definition_spec
+   workflow_definition
    workflow_event
    workflow_event_from_event
    workflow_signal
    workflow_signal_from_signal
    workflow_run_trigger
    workflow_run_trigger_from_trigger
-   bound_workflow_run
-   bound_workflow_run_from_run
-   bound_workflow_schedule
-   bound_workflow_schedule_from_schedule
-   bound_workflow_event_trigger
-   bound_workflow_event_trigger_from_trigger
+   workflow_run
+   workflow_run_from_run
 
 .. autoclass:: BoundWorkflowTarget
 
@@ -159,11 +160,17 @@ non-aliased message copies.
 
 .. autoclass:: WorkflowValue
 
-.. autoclass:: BoundWorkflowRun
+.. autoclass:: WorkflowActivation
 
-.. autoclass:: BoundWorkflowSchedule
+.. autoclass:: WorkflowDefinitionSpec
 
-.. autoclass:: BoundWorkflowEventTrigger
+.. autoclass:: WorkflowDefinition
+
+.. autoclass:: WorkflowRun
+
+.. autoclass:: WorkflowStepExecution
+
+.. autoclass:: WorkflowRunEvent
 
 .. autofunction:: bound_workflow_target
 
@@ -189,17 +196,17 @@ non-aliased message copies.
 
 .. autofunction:: workflow_run_trigger_from_trigger
 
-.. autofunction:: bound_workflow_run
+.. autofunction:: workflow_definition_spec
 
-.. autofunction:: bound_workflow_run_from_run
+.. autofunction:: workflow_definition
 
-.. autofunction:: bound_workflow_schedule
+.. autofunction:: workflow_definition_from_definition
 
-.. autofunction:: bound_workflow_schedule_from_schedule
+.. autofunction:: workflow_run
 
-.. autofunction:: bound_workflow_event_trigger
+.. autofunction:: workflow_run_from_run
 
-.. autofunction:: bound_workflow_event_trigger_from_trigger
+.. autofunction:: workflow_run_event
 
 .. _python-agent-provider-models:
 

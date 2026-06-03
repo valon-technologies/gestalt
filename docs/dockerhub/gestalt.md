@@ -76,7 +76,7 @@ jobs:
 | `app connect NAME` | Connect an app via OAuth or manual authentication |
 | `app disconnect NAME` | Disconnect an app |
 | `app invoke NAME OP` | Execute an app operation |
-| `workflow ...` | Manage workflow schedules, triggers, events, and runs |
+| `workflow ...` | Deliver workflow events and inspect or cancel runs |
 | `agent` | Start or resume an interactive agent session |
 | `agent sessions ...` | Create, list, inspect, and update agent sessions |
 | `agent turns ...` | Create, list, inspect, cancel, and stream agent turns |

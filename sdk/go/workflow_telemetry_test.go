@@ -25,7 +25,7 @@ func TestWorkflowTelemetryRecordsMetrics(t *testing.T) {
 
 	opts := WorkflowOperationOptions{
 		ProviderName:  "temporal",
-		OperationName: WorkflowOperationPublishEvent,
+		OperationName: WorkflowOperationDeliverEvent,
 		TriggerKind:   WorkflowTriggerKindEvent,
 		TargetKind:    WorkflowTargetKindSteps,
 	}
@@ -33,12 +33,12 @@ func TestWorkflowTelemetryRecordsMetrics(t *testing.T) {
 	op.End(status.Error(codes.InvalidArgument, "bad event"))
 	op.End(nil)
 
-	RecordWorkflowEventPublished(ctx, nil, opts)
-	RecordWorkflowEventMatchedTriggers(ctx, 2, opts)
-	RecordWorkflowEventMatchedTriggers(ctx, 0, opts)
+	RecordWorkflowEventDelivered(ctx, nil, opts)
+	RecordWorkflowEventMatchedActivations(ctx, 2, opts)
+	RecordWorkflowEventMatchedActivations(ctx, 0, opts)
 	RecordWorkflowRunStarted(ctx, WorkflowOperationOptions{
 		ProviderName:  "temporal",
-		OperationName: WorkflowOperationPublishEvent,
+		OperationName: WorkflowOperationDeliverEvent,
 		TriggerKind:   WorkflowTriggerKindEvent,
 		TargetKind:    WorkflowTargetKindSteps,
 		RunStatus:     WorkflowRunStatusPending,
@@ -50,7 +50,7 @@ func TestWorkflowTelemetryRecordsMetrics(t *testing.T) {
 		TargetKind:    WorkflowTargetKindSteps,
 		RunStatus:     WorkflowRunStatusSucceeded,
 	})
-	RecordWorkflowScheduleFired(ctx, WorkflowOperationOptions{
+	RecordWorkflowActivationFired(ctx, WorkflowOperationOptions{
 		ProviderName:  "temporal",
 		OperationName: WorkflowOperationStartRun,
 		TriggerKind:   WorkflowTriggerKindSchedule,
@@ -59,7 +59,7 @@ func TestWorkflowTelemetryRecordsMetrics(t *testing.T) {
 
 	rm := collectWorkflowTelemetryMetrics(t, reader)
 	operationErrorAttrs := workflowTelemetryTestAttrs(
-		WorkflowOperationPublishEvent,
+		WorkflowOperationDeliverEvent,
 		WorkflowTriggerKindEvent,
 		WorkflowTargetKindSteps,
 		WorkflowRunStatusUnknown,
@@ -68,12 +68,12 @@ func TestWorkflowTelemetryRecordsMetrics(t *testing.T) {
 	requireWorkflowInt64Sum(t, rm, "gestaltd.workflows.provider.operation.count", 1, operationErrorAttrs)
 	requireWorkflowInt64Sum(t, rm, "gestaltd.workflows.provider.operation.error_count", 1, operationErrorAttrs)
 	requireWorkflowFloat64Histogram(t, rm, "gestaltd.workflows.provider.operation.duration", operationErrorAttrs)
-	requireWorkflowInt64Sum(t, rm, "gestaltd.workflows.events.published.count", 1, workflowTelemetryTestAttrs(WorkflowOperationPublishEvent, WorkflowTriggerKindEvent, WorkflowTargetKindSteps, WorkflowRunStatusUnknown, nil))
-	requireWorkflowInt64Sum(t, rm, "gestaltd.workflows.events.matched_triggers.count", 2, workflowTelemetryTestAttrs(WorkflowOperationPublishEvent, WorkflowTriggerKindEvent, WorkflowTargetKindSteps, WorkflowRunStatusUnknown, nil))
-	requireWorkflowInt64Sum(t, rm, "gestaltd.workflows.runs.started.count", 1, workflowTelemetryTestAttrs(WorkflowOperationPublishEvent, WorkflowTriggerKindEvent, WorkflowTargetKindSteps, WorkflowRunStatusPending, nil))
+	requireWorkflowInt64Sum(t, rm, "gestaltd.workflows.events.delivered.count", 1, workflowTelemetryTestAttrs(WorkflowOperationDeliverEvent, WorkflowTriggerKindEvent, WorkflowTargetKindSteps, WorkflowRunStatusUnknown, nil))
+	requireWorkflowInt64Sum(t, rm, "gestaltd.workflows.events.matched_activations.count", 2, workflowTelemetryTestAttrs(WorkflowOperationDeliverEvent, WorkflowTriggerKindEvent, WorkflowTargetKindSteps, WorkflowRunStatusUnknown, nil))
+	requireWorkflowInt64Sum(t, rm, "gestaltd.workflows.runs.started.count", 1, workflowTelemetryTestAttrs(WorkflowOperationDeliverEvent, WorkflowTriggerKindEvent, WorkflowTargetKindSteps, WorkflowRunStatusPending, nil))
 	requireWorkflowInt64Sum(t, rm, "gestaltd.workflows.runs.completed.count", 1, workflowTelemetryTestAttrs(WorkflowOperationStartRun, WorkflowTriggerKindManual, WorkflowTargetKindSteps, WorkflowRunStatusSucceeded, nil))
 	requireWorkflowFloat64Histogram(t, rm, "gestaltd.workflows.runs.duration", workflowTelemetryTestAttrs(WorkflowOperationStartRun, WorkflowTriggerKindManual, WorkflowTargetKindSteps, WorkflowRunStatusSucceeded, nil))
-	requireWorkflowInt64Sum(t, rm, "gestaltd.workflows.schedules.fired.count", 1, workflowTelemetryTestAttrs(WorkflowOperationStartRun, WorkflowTriggerKindSchedule, WorkflowTargetKindSteps, WorkflowRunStatusUnknown, nil))
+	requireWorkflowInt64Sum(t, rm, "gestaltd.workflows.activations.fired.count", 1, workflowTelemetryTestAttrs(WorkflowOperationStartRun, WorkflowTriggerKindSchedule, WorkflowTargetKindSteps, WorkflowRunStatusUnknown, nil))
 }
 
 func collectWorkflowTelemetryMetrics(t *testing.T, reader *sdkmetric.ManualReader) metricdata.ResourceMetrics {

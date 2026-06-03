@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
@@ -25,12 +26,12 @@ func (l *lazyWorkflowManager) SetTarget(target workflowmanager.Service) {
 	l.target = target
 }
 
-func (l *lazyWorkflowManager) CreateDefinition(ctx context.Context, p *principal.Principal, req workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+func (l *lazyWorkflowManager) ApplyDefinition(ctx context.Context, p *principal.Principal, req workflowmanager.DefinitionApply) (*workflowmanager.ManagedDefinition, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.CreateDefinition(ctx, p, req)
+	return target.ApplyDefinition(ctx, p, req)
 }
 
 func (l *lazyWorkflowManager) GetDefinition(ctx context.Context, p *principal.Principal, definitionID string) (*workflowmanager.ManagedDefinition, error) {
@@ -41,12 +42,28 @@ func (l *lazyWorkflowManager) GetDefinition(ctx context.Context, p *principal.Pr
 	return target.GetDefinition(ctx, p, definitionID)
 }
 
-func (l *lazyWorkflowManager) UpdateDefinition(ctx context.Context, p *principal.Principal, definitionID string, req workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+func (l *lazyWorkflowManager) ListDefinitions(ctx context.Context, p *principal.Principal) (*workflowmanager.ListDefinitionsResponse, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.UpdateDefinition(ctx, p, definitionID, req)
+	return target.ListDefinitions(ctx, p)
+}
+
+func (l *lazyWorkflowManager) SetDefinitionPaused(ctx context.Context, p *principal.Principal, definitionID string, paused bool) (*workflowmanager.ManagedDefinition, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.SetDefinitionPaused(ctx, p, definitionID, paused)
+}
+
+func (l *lazyWorkflowManager) SetActivationPaused(ctx context.Context, p *principal.Principal, definitionID, activationID string, paused bool) (*workflowmanager.ManagedDefinition, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.SetActivationPaused(ctx, p, definitionID, activationID, paused)
 }
 
 func (l *lazyWorkflowManager) DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) error {
@@ -55,118 +72,6 @@ func (l *lazyWorkflowManager) DeleteDefinition(ctx context.Context, p *principal
 		return err
 	}
 	return target.DeleteDefinition(ctx, p, definitionID)
-}
-
-func (l *lazyWorkflowManager) ListSchedules(ctx context.Context, p *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.ListSchedules(ctx, p)
-}
-
-func (l *lazyWorkflowManager) CreateSchedule(ctx context.Context, p *principal.Principal, req workflowmanager.ScheduleUpsert) (*workflowmanager.ManagedSchedule, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.CreateSchedule(ctx, p, req)
-}
-
-func (l *lazyWorkflowManager) GetSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*workflowmanager.ManagedSchedule, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.GetSchedule(ctx, p, scheduleID)
-}
-
-func (l *lazyWorkflowManager) UpdateSchedule(ctx context.Context, p *principal.Principal, scheduleID string, req workflowmanager.ScheduleUpsert) (*workflowmanager.ManagedSchedule, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.UpdateSchedule(ctx, p, scheduleID, req)
-}
-
-func (l *lazyWorkflowManager) DeleteSchedule(ctx context.Context, p *principal.Principal, scheduleID string) error {
-	target, err := l.current()
-	if err != nil {
-		return err
-	}
-	return target.DeleteSchedule(ctx, p, scheduleID)
-}
-
-func (l *lazyWorkflowManager) PauseSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*workflowmanager.ManagedSchedule, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.PauseSchedule(ctx, p, scheduleID)
-}
-
-func (l *lazyWorkflowManager) ResumeSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*workflowmanager.ManagedSchedule, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.ResumeSchedule(ctx, p, scheduleID)
-}
-
-func (l *lazyWorkflowManager) ListEventTriggers(ctx context.Context, p *principal.Principal) ([]*workflowmanager.ManagedEventTrigger, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.ListEventTriggers(ctx, p)
-}
-
-func (l *lazyWorkflowManager) CreateEventTrigger(ctx context.Context, p *principal.Principal, req workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.CreateEventTrigger(ctx, p, req)
-}
-
-func (l *lazyWorkflowManager) GetEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*workflowmanager.ManagedEventTrigger, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.GetEventTrigger(ctx, p, triggerID)
-}
-
-func (l *lazyWorkflowManager) UpdateEventTrigger(ctx context.Context, p *principal.Principal, triggerID string, req workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.UpdateEventTrigger(ctx, p, triggerID, req)
-}
-
-func (l *lazyWorkflowManager) DeleteEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) error {
-	target, err := l.current()
-	if err != nil {
-		return err
-	}
-	return target.DeleteEventTrigger(ctx, p, triggerID)
-}
-
-func (l *lazyWorkflowManager) PauseEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*workflowmanager.ManagedEventTrigger, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.PauseEventTrigger(ctx, p, triggerID)
-}
-
-func (l *lazyWorkflowManager) ResumeEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*workflowmanager.ManagedEventTrigger, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.ResumeEventTrigger(ctx, p, triggerID)
 }
 
 func (l *lazyWorkflowManager) ListRuns(ctx context.Context, p *principal.Principal, req coreworkflow.ListRunsRequest) (*workflowmanager.ListRunsResponse, error) {
@@ -193,6 +98,22 @@ func (l *lazyWorkflowManager) GetRun(ctx context.Context, p *principal.Principal
 	return target.GetRun(ctx, p, runID)
 }
 
+func (l *lazyWorkflowManager) GetRunEvents(ctx context.Context, p *principal.Principal, runID string) (*proto.GetWorkflowProviderRunEventsResponse, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.GetRunEvents(ctx, p, runID)
+}
+
+func (l *lazyWorkflowManager) GetRunOutput(ctx context.Context, p *principal.Principal, runID string) (*proto.GetWorkflowProviderRunOutputResponse, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.GetRunOutput(ctx, p, runID)
+}
+
 func (l *lazyWorkflowManager) CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*workflowmanager.ManagedRun, error) {
 	target, err := l.current()
 	if err != nil {
@@ -217,12 +138,12 @@ func (l *lazyWorkflowManager) SignalOrStartRun(ctx context.Context, p *principal
 	return target.SignalOrStartRun(ctx, p, req)
 }
 
-func (l *lazyWorkflowManager) PublishEvent(ctx context.Context, p *principal.Principal, req workflowmanager.EventPublish) (coreworkflow.Event, error) {
+func (l *lazyWorkflowManager) DeliverEvent(ctx context.Context, p *principal.Principal, req workflowmanager.EventDeliver) (coreworkflow.Event, error) {
 	target, err := l.current()
 	if err != nil {
 		return coreworkflow.Event{}, err
 	}
-	return target.PublishEvent(ctx, p, req)
+	return target.DeliverEvent(ctx, p, req)
 }
 
 func (l *lazyWorkflowManager) current() (workflowmanager.Service, error) {

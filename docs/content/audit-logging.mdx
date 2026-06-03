@@ -89,26 +89,17 @@ Non-invocation audit events use explicit operation names:
 
 Workflow-manager audit events use `source=workflow_manager`. Their `provider`
 field is the selected workflow backend, not an app or agent step. They
-emit one audit record per backend for fanout event publishes.
+emit one audit record per backend for fanout event delivery.
 
-- `workflow.definition.create`
-- `workflow.definition.update`
+- `workflow.definition.apply`
 - `workflow.definition.delete`
-- `workflow.schedule.create`
-- `workflow.schedule.update`
-- `workflow.schedule.delete`
-- `workflow.schedule.pause`
-- `workflow.schedule.resume`
-- `workflow.event_trigger.create`
-- `workflow.event_trigger.update`
-- `workflow.event_trigger.delete`
-- `workflow.event_trigger.pause`
-- `workflow.event_trigger.resume`
+- `workflow.definition.pause`
+- `workflow.activation.pause`
 - `workflow.run.start`
 - `workflow.run.signal`
 - `workflow.run.signal_or_start`
 - `workflow.run.cancel`
-- `workflow.event.publish`
+- `workflow.event.deliver`
 
 Denied requests to `/api/v1/{integration}/{operation}` that are blocked before
 `GuardedInvoker` still use the attempted catalog operation ID in `operation`,
@@ -120,7 +111,7 @@ rejects the request before invocation.
 ## Workflow Manager Events
 
 Workflow-manager audit records cover mutating workflow actions and event
-publishing from HTTP, CLI, and app SDK paths. Read-only workflow list/get
+delivery from HTTP, CLI, and app SDK paths. Read-only workflow list/get
 requests remain ordinary HTTP request telemetry.
 
 Workflow object actions set the generic target fields:
@@ -128,10 +119,9 @@ Workflow object actions set the generic target fields:
 | Object | `target_kind` | `target_id` | `target_name` |
 | --- | --- | --- | --- |
 | Definition | `workflow_definition` | Definition ID | Empty |
-| Schedule | `workflow_schedule` | Schedule ID | Empty |
-| Event trigger | `workflow_event_trigger` | Trigger ID | Empty |
+| Activation | `workflow_activation` | Activation ID | Empty |
 | Run | `workflow_run` | Run ID when available | Empty |
-| Published event | `workflow_event` | Empty | Event type |
+| Delivered event | `workflow_event` | Empty | Event type |
 
 Run start and signal-or-start events include `workflow_key_sha256` so operators
 can correlate repeated events for the same workflow key without logging the raw
@@ -163,7 +153,7 @@ the target provider and operation.
 | IndexedDB operations | Yes: `db.client.operation.duration` | No | Datastore calls are internal implementation telemetry, not audit events. |
 | API token inventory read | No dedicated semantic metric family | Yes | `api_token.list` is audited because it exposes stored API-token inventory. |
 | API token lifecycle | No dedicated semantic metric family | Yes | Audit records exist for explicit token create/revoke flows and CLI token minting. |
-| Workflow-manager mutations and event publishing | No dedicated semantic metric family | Yes | Workflow control-plane actions are audited with `source=workflow_manager`. |
+| Workflow-manager mutations and event delivery | No dedicated semantic metric family | Yes | Workflow control-plane actions are audited with `source=workflow_manager`. |
 | Logout, pending selection, disconnect | No dedicated semantic metric family | Yes | These remain audit-only workflow events. |
 
 See [Observability](/observability) for the metric families and attribute
@@ -197,7 +187,7 @@ Workflow-manager records keep workflow routing context in audit logs:
   "source": "workflow_manager",
   "subject_id": "service_account:slack-bot",
   "provider": "temporal",
-  "operation": "workflow.event.publish",
+  "operation": "workflow.event.deliver",
   "target_kind": "workflow_event",
   "target_name": "slack.message.created",
   "caller_app": "slack",

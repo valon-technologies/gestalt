@@ -56,7 +56,7 @@ export interface Request {
   host: Host;
   idempotencyKey: string;
   // Workflow callback metadata uses a JSON-style lowerCamelCase object such as
-  // runId, target.steps, trigger.scheduleId, and trigger.event.specVersion.
+  // runId, target.steps, trigger.activationId, and trigger.event.specVersion.
   workflow: Record<string, unknown>;
   toolRefs: AgentToolRef[];
   toolRefsSet: boolean;

@@ -42,13 +42,13 @@ func (i appClientInvoker) InvokeWorkflowApp(ctx context.Context, call AppInvocat
 	return out, nil
 }
 
-func (e *Executor) invokeAppStep(ctx context.Context, req Request, token string, app *gestalt.WorkflowStepAppCall, inputs map[string]any, outputs map[string]any, invocationScope, stepID string) (any, error) {
+func (e *Executor) invokeAppStep(ctx context.Context, req Request, token string, app *gestalt.WorkflowStepAppCall, inputs map[string]any, outputs map[string]any, stepInputs map[string]any, invocationScope, stepID string) (any, error) {
 	appName := strings.TrimSpace(app.Name)
 	operation := strings.TrimSpace(app.Operation)
 	if appName == "" || operation == "" {
 		return nil, fmt.Errorf("workflow step app name and operation are required")
 	}
-	evalCtx := EvalContext{Request: req, Outputs: outputs, Inputs: inputs, AllowInputs: true}
+	evalCtx := EvalContext{Request: req, Outputs: outputs, StepInputs: stepInputs}
 	paramsValue, ok, err := evalCtx.EvaluateValue(app.Input)
 	if err != nil {
 		return nil, WorkflowEvalError(err)
@@ -91,7 +91,7 @@ func (e *Executor) invokeAppStep(ctx context.Context, req Request, token string,
 	return output, nil
 }
 
-func (e *Executor) invokeAgentStep(ctx context.Context, req Request, token string, agent *gestalt.WorkflowStepAgentTurn, inputs map[string]any, sessions map[string]workflowAgentSessionState, invocationScope, stepID string, timeoutSeconds int32, stepMetadata any) (any, string, error) {
+func (e *Executor) invokeAgentStep(ctx context.Context, req Request, token string, agent *gestalt.WorkflowStepAgentTurn, inputs map[string]any, outputs map[string]any, stepInputs map[string]any, sessions map[string]workflowAgentSessionState, invocationScope, stepID string, timeoutSeconds int32, stepMetadata any) (any, string, error) {
 	client, err := e.newAgent(token)
 	if err != nil {
 		return nil, "", err
@@ -132,7 +132,7 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, token strin
 		state = workflowAgentSessionState{session: session, providerName: providerName, model: model, options: optionsKey}
 		sessions[sessionKey] = state
 	}
-	messages, err := workflowAgentTurnMessages(agent, inputs, req, nil)
+	messages, err := workflowAgentTurnMessages(agent, req, outputs, stepInputs)
 	if err != nil {
 		return nil, "", err
 	}
@@ -171,8 +171,8 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, token strin
 	}
 }
 
-func workflowAgentTurnMessages(agent *gestalt.WorkflowStepAgentTurn, inputs map[string]any, req Request, outputs map[string]any) ([]gestalt.AgentMessage, error) {
-	evalCtx := EvalContext{Request: req, Outputs: outputs, Inputs: inputs, AllowInputs: true}
+func workflowAgentTurnMessages(agent *gestalt.WorkflowStepAgentTurn, req Request, outputs map[string]any, stepInputs map[string]any) ([]gestalt.AgentMessage, error) {
+	evalCtx := EvalContext{Request: req, Outputs: outputs, StepInputs: stepInputs}
 	messages := make([]gestalt.AgentMessage, 0, len(agent.Messages)+1)
 	for i := range agent.Messages {
 		message := agent.Messages[i]

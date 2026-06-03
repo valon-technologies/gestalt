@@ -107,7 +107,7 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 			{
 				ID: "diagnosis",
 				Inputs: map[string]coreworkflow.Value{
-					"thread_ts": {SignalPayload: "event.ts"},
+					"thread_ts": {Signal: "event.ts"},
 				},
 				Agent: &coreworkflow.AgentTurn{
 					ProviderName: "managed",
@@ -258,7 +258,7 @@ func TestWorkflowRunTriggerToProtoPrefersScheduleOverManual(t *testing.T) {
 	trigger, err := RunTriggerToProto(coreworkflow.RunTrigger{
 		Manual: true,
 		Schedule: &coreworkflow.ScheduleTrigger{
-			ScheduleID:   "sched-1",
+			ActivationID: "nightly",
 			ScheduledFor: &scheduledFor,
 		},
 	})
@@ -268,8 +268,8 @@ func TestWorkflowRunTriggerToProtoPrefersScheduleOverManual(t *testing.T) {
 	if trigger == nil || trigger.GetSchedule() == nil {
 		t.Fatalf("trigger = %#v, want schedule trigger", trigger)
 	}
-	if got := trigger.GetSchedule().GetScheduleId(); got != "sched-1" {
-		t.Fatalf("schedule id = %q, want %q", got, "sched-1")
+	if got := trigger.GetSchedule().GetActivationId(); got != "nightly" {
+		t.Fatalf("activation id = %q, want %q", got, "nightly")
 	}
 	if got := trigger.GetManual(); got != nil {
 		t.Fatalf("manual trigger = %#v, want nil", got)

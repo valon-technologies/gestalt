@@ -1529,9 +1529,9 @@ func TestAgentTurnToolRefsDefaultBroadAndExplicitEmptyNone(t *testing.T) {
 	createTurn("explicit empty", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[]}`, http.StatusCreated)
 	createTurn("plugin broad", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"docs"}]}`, http.StatusCreated)
 	createTurn("missing output", `{"messages":[{"role":"user","text":"hello"}]}`, http.StatusBadRequest)
-	createTurn("null toolRefs", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":null}`, http.StatusBadRequest)
-	createTurn("global credential mode", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"*","credentialMode":"none"}]}`, http.StatusBadRequest)
-	createTurn("system title", `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"system":"workflow","operation":"schedules.list","title":"Schedules"}]}`, http.StatusBadRequest)
+	createTurn("null toolRefs", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":null}`, http.StatusBadRequest)
+	createTurn("global credential mode", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"*","credentialMode":"none"}]}`, http.StatusBadRequest)
+	createTurn("system title", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"system":"workflow","operation":"definitions.apply","title":"Definitions"}]}`, http.StatusBadRequest)
 
 	turnRequests := provider.capturedTurnRequests()
 	if len(turnRequests) != 3 {

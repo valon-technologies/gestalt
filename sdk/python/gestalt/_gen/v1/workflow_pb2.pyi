@@ -22,12 +22,29 @@ class WorkflowRunStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     WORKFLOW_RUN_STATUS_SUCCEEDED: _ClassVar[WorkflowRunStatus]
     WORKFLOW_RUN_STATUS_FAILED: _ClassVar[WorkflowRunStatus]
     WORKFLOW_RUN_STATUS_CANCELED: _ClassVar[WorkflowRunStatus]
+
+class WorkflowStepStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    WORKFLOW_STEP_STATUS_UNSPECIFIED: _ClassVar[WorkflowStepStatus]
+    WORKFLOW_STEP_STATUS_PENDING: _ClassVar[WorkflowStepStatus]
+    WORKFLOW_STEP_STATUS_RUNNING: _ClassVar[WorkflowStepStatus]
+    WORKFLOW_STEP_STATUS_SKIPPED: _ClassVar[WorkflowStepStatus]
+    WORKFLOW_STEP_STATUS_SUCCEEDED: _ClassVar[WorkflowStepStatus]
+    WORKFLOW_STEP_STATUS_FAILED: _ClassVar[WorkflowStepStatus]
+    WORKFLOW_STEP_STATUS_UNKNOWN: _ClassVar[WorkflowStepStatus]
 WORKFLOW_RUN_STATUS_UNSPECIFIED: WorkflowRunStatus
 WORKFLOW_RUN_STATUS_PENDING: WorkflowRunStatus
 WORKFLOW_RUN_STATUS_RUNNING: WorkflowRunStatus
 WORKFLOW_RUN_STATUS_SUCCEEDED: WorkflowRunStatus
 WORKFLOW_RUN_STATUS_FAILED: WorkflowRunStatus
 WORKFLOW_RUN_STATUS_CANCELED: WorkflowRunStatus
+WORKFLOW_STEP_STATUS_UNSPECIFIED: WorkflowStepStatus
+WORKFLOW_STEP_STATUS_PENDING: WorkflowStepStatus
+WORKFLOW_STEP_STATUS_RUNNING: WorkflowStepStatus
+WORKFLOW_STEP_STATUS_SKIPPED: WorkflowStepStatus
+WORKFLOW_STEP_STATUS_SUCCEEDED: WorkflowStepStatus
+WORKFLOW_STEP_STATUS_FAILED: WorkflowStepStatus
+WORKFLOW_STEP_STATUS_UNKNOWN: WorkflowStepStatus
 
 class BoundWorkflowTarget(_message.Message):
     __slots__ = ()
@@ -126,17 +143,19 @@ class WorkflowValue(_message.Message):
     OBJECT_FIELD_NUMBER: _ClassVar[int]
     ARRAY_FIELD_NUMBER: _ClassVar[int]
     TEMPLATE_FIELD_NUMBER: _ClassVar[int]
-    RUN_INPUT_FIELD_NUMBER: _ClassVar[int]
-    SIGNAL_PAYLOAD_FIELD_NUMBER: _ClassVar[int]
+    INPUT_FIELD_NUMBER: _ClassVar[int]
+    SIGNAL_FIELD_NUMBER: _ClassVar[int]
     STEP_OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    STEP_INPUT_FIELD_NUMBER: _ClassVar[int]
     literal: _struct_pb2.Value
     object: WorkflowObject
     array: WorkflowArray
     template: WorkflowText
-    run_input: WorkflowPathSource
-    signal_payload: WorkflowPathSource
+    input: WorkflowPathSource
+    signal: WorkflowPathSource
     step_output: WorkflowStepOutputSource
-    def __init__(self, literal: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ..., object: _Optional[_Union[WorkflowObject, _Mapping]] = ..., array: _Optional[_Union[WorkflowArray, _Mapping]] = ..., template: _Optional[_Union[WorkflowText, _Mapping]] = ..., run_input: _Optional[_Union[WorkflowPathSource, _Mapping]] = ..., signal_payload: _Optional[_Union[WorkflowPathSource, _Mapping]] = ..., step_output: _Optional[_Union[WorkflowStepOutputSource, _Mapping]] = ...) -> None: ...
+    step_input: WorkflowStepInputSource
+    def __init__(self, literal: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ..., object: _Optional[_Union[WorkflowObject, _Mapping]] = ..., array: _Optional[_Union[WorkflowArray, _Mapping]] = ..., template: _Optional[_Union[WorkflowText, _Mapping]] = ..., input: _Optional[_Union[WorkflowPathSource, _Mapping]] = ..., signal: _Optional[_Union[WorkflowPathSource, _Mapping]] = ..., step_output: _Optional[_Union[WorkflowStepOutputSource, _Mapping]] = ..., step_input: _Optional[_Union[WorkflowStepInputSource, _Mapping]] = ...) -> None: ...
 
 class WorkflowObject(_message.Message):
     __slots__ = ()
@@ -164,6 +183,14 @@ class WorkflowPathSource(_message.Message):
     def __init__(self, path: _Optional[str] = ...) -> None: ...
 
 class WorkflowStepOutputSource(_message.Message):
+    __slots__ = ()
+    STEP_ID_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    step_id: str
+    path: str
+    def __init__(self, step_id: _Optional[str] = ..., path: _Optional[str] = ...) -> None: ...
+
+class WorkflowStepInputSource(_message.Message):
     __slots__ = ()
     STEP_ID_FIELD_NUMBER: _ClassVar[int]
     PATH_FIELD_NUMBER: _ClassVar[int]
@@ -210,25 +237,91 @@ class WorkflowEventMatch(_message.Message):
     subject: str
     def __init__(self, type: _Optional[str] = ..., source: _Optional[str] = ..., subject: _Optional[str] = ...) -> None: ...
 
+class WorkflowScheduleActivation(_message.Message):
+    __slots__ = ()
+    CRON_FIELD_NUMBER: _ClassVar[int]
+    TIMEZONE_FIELD_NUMBER: _ClassVar[int]
+    cron: str
+    timezone: str
+    def __init__(self, cron: _Optional[str] = ..., timezone: _Optional[str] = ...) -> None: ...
+
+class WorkflowEventActivation(_message.Message):
+    __slots__ = ()
+    MATCH_FIELD_NUMBER: _ClassVar[int]
+    match: WorkflowEventMatch
+    def __init__(self, match: _Optional[_Union[WorkflowEventMatch, _Mapping]] = ...) -> None: ...
+
+class WorkflowActivation(_message.Message):
+    __slots__ = ()
+    ID_FIELD_NUMBER: _ClassVar[int]
+    INPUT_FIELD_NUMBER: _ClassVar[int]
+    PAUSED_FIELD_NUMBER: _ClassVar[int]
+    SCHEDULE_FIELD_NUMBER: _ClassVar[int]
+    EVENT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    input: WorkflowValue
+    paused: bool
+    schedule: WorkflowScheduleActivation
+    event: WorkflowEventActivation
+    def __init__(self, id: _Optional[str] = ..., input: _Optional[_Union[WorkflowValue, _Mapping]] = ..., paused: _Optional[bool] = ..., schedule: _Optional[_Union[WorkflowScheduleActivation, _Mapping]] = ..., event: _Optional[_Union[WorkflowEventActivation, _Mapping]] = ...) -> None: ...
+
+class WorkflowDefinitionSpec(_message.Message):
+    __slots__ = ()
+    ID_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_NUMBER: _ClassVar[int]
+    ACTIVATIONS_FIELD_NUMBER: _ClassVar[int]
+    PAUSED_FIELD_NUMBER: _ClassVar[int]
+    RUN_AS_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    target: BoundWorkflowTarget
+    activations: _containers.RepeatedCompositeFieldContainer[WorkflowActivation]
+    paused: bool
+    run_as: _app_pb2.SubjectContext
+    def __init__(self, id: _Optional[str] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., activations: _Optional[_Iterable[_Union[WorkflowActivation, _Mapping]]] = ..., paused: _Optional[bool] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ...) -> None: ...
+
+class WorkflowDefinition(_message.Message):
+    __slots__ = ()
+    ID_FIELD_NUMBER: _ClassVar[int]
+    GENERATION_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_NUMBER: _ClassVar[int]
+    ACTIVATIONS_FIELD_NUMBER: _ClassVar[int]
+    PAUSED_FIELD_NUMBER: _ClassVar[int]
+    CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
+    RUN_AS_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    generation: int
+    target: BoundWorkflowTarget
+    activations: _containers.RepeatedCompositeFieldContainer[WorkflowActivation]
+    paused: bool
+    created_by_subject_id: str
+    created_at: _timestamp_pb2.Timestamp
+    updated_at: _timestamp_pb2.Timestamp
+    provider_name: str
+    run_as: _app_pb2.SubjectContext
+    def __init__(self, id: _Optional[str] = ..., generation: _Optional[int] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., activations: _Optional[_Iterable[_Union[WorkflowActivation, _Mapping]]] = ..., paused: _Optional[bool] = ..., created_by_subject_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., provider_name: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ...) -> None: ...
+
 class WorkflowManualTrigger(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
 
 class WorkflowScheduleTrigger(_message.Message):
     __slots__ = ()
-    SCHEDULE_ID_FIELD_NUMBER: _ClassVar[int]
+    ACTIVATION_ID_FIELD_NUMBER: _ClassVar[int]
     SCHEDULED_FOR_FIELD_NUMBER: _ClassVar[int]
-    schedule_id: str
+    activation_id: str
     scheduled_for: _timestamp_pb2.Timestamp
-    def __init__(self, schedule_id: _Optional[str] = ..., scheduled_for: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    def __init__(self, activation_id: _Optional[str] = ..., scheduled_for: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class WorkflowEventTriggerInvocation(_message.Message):
     __slots__ = ()
-    TRIGGER_ID_FIELD_NUMBER: _ClassVar[int]
+    ACTIVATION_ID_FIELD_NUMBER: _ClassVar[int]
     EVENT_FIELD_NUMBER: _ClassVar[int]
-    trigger_id: str
+    activation_id: str
     event: WorkflowEvent
-    def __init__(self, trigger_id: _Optional[str] = ..., event: _Optional[_Union[WorkflowEvent, _Mapping]] = ...) -> None: ...
+    def __init__(self, activation_id: _Optional[str] = ..., event: _Optional[_Union[WorkflowEvent, _Mapping]] = ...) -> None: ...
 
 class WorkflowRunTrigger(_message.Message):
     __slots__ = ()
@@ -240,7 +333,49 @@ class WorkflowRunTrigger(_message.Message):
     event: WorkflowEventTriggerInvocation
     def __init__(self, manual: _Optional[_Union[WorkflowManualTrigger, _Mapping]] = ..., schedule: _Optional[_Union[WorkflowScheduleTrigger, _Mapping]] = ..., event: _Optional[_Union[WorkflowEventTriggerInvocation, _Mapping]] = ...) -> None: ...
 
-class BoundWorkflowRun(_message.Message):
+class WorkflowStepAttempt(_message.Message):
+    __slots__ = ()
+    ID_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
+    INPUT_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    STATUS_MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    STARTED_AT_FIELD_NUMBER: _ClassVar[int]
+    COMPLETED_AT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    status: WorkflowStepStatus
+    idempotency_key: str
+    input: _struct_pb2.Value
+    output: _struct_pb2.Value
+    status_message: str
+    started_at: _timestamp_pb2.Timestamp
+    completed_at: _timestamp_pb2.Timestamp
+    def __init__(self, id: _Optional[str] = ..., status: _Optional[_Union[WorkflowStepStatus, str]] = ..., idempotency_key: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ..., output: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ..., status_message: _Optional[str] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., completed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class WorkflowStepExecution(_message.Message):
+    __slots__ = ()
+    STEP_ID_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    ATTEMPTS_FIELD_NUMBER: _ClassVar[int]
+    INPUT_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    STATUS_MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    SKIP_REASON_FIELD_NUMBER: _ClassVar[int]
+    STARTED_AT_FIELD_NUMBER: _ClassVar[int]
+    COMPLETED_AT_FIELD_NUMBER: _ClassVar[int]
+    step_id: str
+    status: WorkflowStepStatus
+    attempts: _containers.RepeatedCompositeFieldContainer[WorkflowStepAttempt]
+    input: _struct_pb2.Value
+    output: _struct_pb2.Value
+    status_message: str
+    skip_reason: str
+    started_at: _timestamp_pb2.Timestamp
+    completed_at: _timestamp_pb2.Timestamp
+    def __init__(self, step_id: _Optional[str] = ..., status: _Optional[_Union[WorkflowStepStatus, str]] = ..., attempts: _Optional[_Iterable[_Union[WorkflowStepAttempt, _Mapping]]] = ..., input: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ..., output: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ..., status_message: _Optional[str] = ..., skip_reason: _Optional[str] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., completed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class WorkflowRun(_message.Message):
     __slots__ = ()
     ID_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
@@ -250,12 +385,16 @@ class BoundWorkflowRun(_message.Message):
     STARTED_AT_FIELD_NUMBER: _ClassVar[int]
     COMPLETED_AT_FIELD_NUMBER: _ClassVar[int]
     STATUS_MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    RESULT_BODY_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_FIELD_NUMBER: _ClassVar[int]
     CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_KEY_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
     DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     RUN_AS_FIELD_NUMBER: _ClassVar[int]
+    INPUT_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
+    CURRENT_STEP_ID_FIELD_NUMBER: _ClassVar[int]
+    STEPS_FIELD_NUMBER: _ClassVar[int]
     id: str
     status: WorkflowRunStatus
     target: BoundWorkflowTarget
@@ -264,79 +403,17 @@ class BoundWorkflowRun(_message.Message):
     started_at: _timestamp_pb2.Timestamp
     completed_at: _timestamp_pb2.Timestamp
     status_message: str
-    result_body: str
+    output: _struct_pb2.Value
     created_by_subject_id: str
     workflow_key: str
     provider_name: str
     definition_id: str
     run_as: _app_pb2.SubjectContext
-    def __init__(self, id: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., trigger: _Optional[_Union[WorkflowRunTrigger, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., completed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., status_message: _Optional[str] = ..., result_body: _Optional[str] = ..., created_by_subject_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., provider_name: _Optional[str] = ..., definition_id: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ...) -> None: ...
-
-class BoundWorkflowSchedule(_message.Message):
-    __slots__ = ()
-    ID_FIELD_NUMBER: _ClassVar[int]
-    CRON_FIELD_NUMBER: _ClassVar[int]
-    TIMEZONE_FIELD_NUMBER: _ClassVar[int]
-    TARGET_FIELD_NUMBER: _ClassVar[int]
-    PAUSED_FIELD_NUMBER: _ClassVar[int]
-    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
-    UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
-    NEXT_RUN_AT_FIELD_NUMBER: _ClassVar[int]
-    CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
-    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
-    RUN_AS_FIELD_NUMBER: _ClassVar[int]
-    id: str
-    cron: str
-    timezone: str
-    target: BoundWorkflowTarget
-    paused: bool
-    created_at: _timestamp_pb2.Timestamp
-    updated_at: _timestamp_pb2.Timestamp
-    next_run_at: _timestamp_pb2.Timestamp
-    created_by_subject_id: str
-    provider_name: str
-    definition_id: str
-    run_as: _app_pb2.SubjectContext
-    def __init__(self, id: _Optional[str] = ..., cron: _Optional[str] = ..., timezone: _Optional[str] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., paused: _Optional[bool] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., next_run_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., provider_name: _Optional[str] = ..., definition_id: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ...) -> None: ...
-
-class BoundWorkflowEventTrigger(_message.Message):
-    __slots__ = ()
-    ID_FIELD_NUMBER: _ClassVar[int]
-    MATCH_FIELD_NUMBER: _ClassVar[int]
-    TARGET_FIELD_NUMBER: _ClassVar[int]
-    PAUSED_FIELD_NUMBER: _ClassVar[int]
-    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
-    UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
-    CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
-    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
-    RUN_AS_FIELD_NUMBER: _ClassVar[int]
-    id: str
-    match: WorkflowEventMatch
-    target: BoundWorkflowTarget
-    paused: bool
-    created_at: _timestamp_pb2.Timestamp
-    updated_at: _timestamp_pb2.Timestamp
-    created_by_subject_id: str
-    provider_name: str
-    definition_id: str
-    run_as: _app_pb2.SubjectContext
-    def __init__(self, id: _Optional[str] = ..., match: _Optional[_Union[WorkflowEventMatch, _Mapping]] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., paused: _Optional[bool] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., provider_name: _Optional[str] = ..., definition_id: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ...) -> None: ...
-
-class BoundWorkflowDefinition(_message.Message):
-    __slots__ = ()
-    ID_FIELD_NUMBER: _ClassVar[int]
-    TARGET_FIELD_NUMBER: _ClassVar[int]
-    CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
-    id: str
-    target: BoundWorkflowTarget
-    created_by_subject_id: str
-    created_at: _timestamp_pb2.Timestamp
-    provider_name: str
-    def __init__(self, id: _Optional[str] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., provider_name: _Optional[str] = ...) -> None: ...
+    input: _struct_pb2.Struct
+    definition_generation: int
+    current_step_id: str
+    steps: _containers.RepeatedCompositeFieldContainer[WorkflowStepExecution]
+    def __init__(self, id: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., trigger: _Optional[_Union[WorkflowRunTrigger, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., completed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., status_message: _Optional[str] = ..., output: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., provider_name: _Optional[str] = ..., definition_id: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., definition_generation: _Optional[int] = ..., current_step_id: _Optional[str] = ..., steps: _Optional[_Iterable[_Union[WorkflowStepExecution, _Mapping]]] = ...) -> None: ...
 
 class WorkflowSignal(_message.Message):
     __slots__ = ()
@@ -358,9 +435,76 @@ class WorkflowSignal(_message.Message):
     sequence: int
     def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., payload: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., sequence: _Optional[int] = ...) -> None: ...
 
+class ApplyWorkflowProviderDefinitionRequest(_message.Message):
+    __slots__ = ()
+    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
+    SPEC_FIELD_NUMBER: _ClassVar[int]
+    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
+    REQUESTED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    provider_name: str
+    spec: WorkflowDefinitionSpec
+    invocation_token: str
+    idempotency_key: str
+    requested_by_subject_id: str
+    def __init__(self, provider_name: _Optional[str] = ..., spec: _Optional[_Union[WorkflowDefinitionSpec, _Mapping]] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., requested_by_subject_id: _Optional[str] = ...) -> None: ...
+
+class GetWorkflowProviderDefinitionRequest(_message.Message):
+    __slots__ = ()
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    definition_id: str
+    invocation_token: str
+    def __init__(self, definition_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
+
+class ListWorkflowProviderDefinitionsRequest(_message.Message):
+    __slots__ = ()
+    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    invocation_token: str
+    def __init__(self, invocation_token: _Optional[str] = ...) -> None: ...
+
+class ListWorkflowProviderDefinitionsResponse(_message.Message):
+    __slots__ = ()
+    DEFINITIONS_FIELD_NUMBER: _ClassVar[int]
+    definitions: _containers.RepeatedCompositeFieldContainer[WorkflowDefinition]
+    def __init__(self, definitions: _Optional[_Iterable[_Union[WorkflowDefinition, _Mapping]]] = ...) -> None: ...
+
+class SetWorkflowProviderDefinitionPausedRequest(_message.Message):
+    __slots__ = ()
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    PAUSED_FIELD_NUMBER: _ClassVar[int]
+    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    REQUESTED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    definition_id: str
+    paused: bool
+    invocation_token: str
+    requested_by_subject_id: str
+    def __init__(self, definition_id: _Optional[str] = ..., paused: _Optional[bool] = ..., invocation_token: _Optional[str] = ..., requested_by_subject_id: _Optional[str] = ...) -> None: ...
+
+class SetWorkflowProviderActivationPausedRequest(_message.Message):
+    __slots__ = ()
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    ACTIVATION_ID_FIELD_NUMBER: _ClassVar[int]
+    PAUSED_FIELD_NUMBER: _ClassVar[int]
+    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    REQUESTED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    definition_id: str
+    activation_id: str
+    paused: bool
+    invocation_token: str
+    requested_by_subject_id: str
+    def __init__(self, definition_id: _Optional[str] = ..., activation_id: _Optional[str] = ..., paused: _Optional[bool] = ..., invocation_token: _Optional[str] = ..., requested_by_subject_id: _Optional[str] = ...) -> None: ...
+
+class DeleteWorkflowProviderDefinitionRequest(_message.Message):
+    __slots__ = ()
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    definition_id: str
+    invocation_token: str
+    def __init__(self, definition_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
+
 class StartWorkflowProviderRunRequest(_message.Message):
     __slots__ = ()
-    TARGET_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_KEY_FIELD_NUMBER: _ClassVar[int]
@@ -368,7 +512,8 @@ class StartWorkflowProviderRunRequest(_message.Message):
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     RUN_AS_FIELD_NUMBER: _ClassVar[int]
-    target: BoundWorkflowTarget
+    INPUT_FIELD_NUMBER: _ClassVar[int]
+    EXPECTED_DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     idempotency_key: str
     created_by_subject_id: str
     workflow_key: str
@@ -376,7 +521,9 @@ class StartWorkflowProviderRunRequest(_message.Message):
     invocation_token: str
     definition_id: str
     run_as: _app_pb2.SubjectContext
-    def __init__(self, target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., created_by_subject_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ..., definition_id: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ...) -> None: ...
+    input: _struct_pb2.Struct
+    expected_definition_generation: int
+    def __init__(self, idempotency_key: _Optional[str] = ..., created_by_subject_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ..., definition_id: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., expected_definition_generation: _Optional[int] = ...) -> None: ...
 
 class GetWorkflowProviderRunRequest(_message.Message):
     __slots__ = ()
@@ -404,9 +551,9 @@ class ListWorkflowProviderRunsResponse(_message.Message):
     __slots__ = ()
     RUNS_FIELD_NUMBER: _ClassVar[int]
     NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    runs: _containers.RepeatedCompositeFieldContainer[BoundWorkflowRun]
+    runs: _containers.RepeatedCompositeFieldContainer[WorkflowRun]
     next_page_token: str
-    def __init__(self, runs: _Optional[_Iterable[_Union[BoundWorkflowRun, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
+    def __init__(self, runs: _Optional[_Iterable[_Union[WorkflowRun, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
 
 class CancelWorkflowProviderRunRequest(_message.Message):
     __slots__ = ()
@@ -431,7 +578,6 @@ class SignalWorkflowProviderRunRequest(_message.Message):
 class SignalOrStartWorkflowProviderRunRequest(_message.Message):
     __slots__ = ()
     WORKFLOW_KEY_FIELD_NUMBER: _ClassVar[int]
-    TARGET_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     SIGNAL_FIELD_NUMBER: _ClassVar[int]
@@ -439,8 +585,9 @@ class SignalOrStartWorkflowProviderRunRequest(_message.Message):
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     RUN_AS_FIELD_NUMBER: _ClassVar[int]
+    INPUT_FIELD_NUMBER: _ClassVar[int]
+    EXPECTED_DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     workflow_key: str
-    target: BoundWorkflowTarget
     idempotency_key: str
     created_by_subject_id: str
     signal: WorkflowSignal
@@ -448,7 +595,9 @@ class SignalOrStartWorkflowProviderRunRequest(_message.Message):
     invocation_token: str
     definition_id: str
     run_as: _app_pb2.SubjectContext
-    def __init__(self, workflow_key: _Optional[str] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., created_by_subject_id: _Optional[str] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ..., definition_id: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ...) -> None: ...
+    input: _struct_pb2.Struct
+    expected_definition_generation: int
+    def __init__(self, workflow_key: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., created_by_subject_id: _Optional[str] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ..., definition_id: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., expected_definition_generation: _Optional[int] = ...) -> None: ...
 
 class SignalWorkflowRunResponse(_message.Message):
     __slots__ = ()
@@ -456,204 +605,66 @@ class SignalWorkflowRunResponse(_message.Message):
     SIGNAL_FIELD_NUMBER: _ClassVar[int]
     STARTED_RUN_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_KEY_FIELD_NUMBER: _ClassVar[int]
-    run: BoundWorkflowRun
+    run: WorkflowRun
     signal: WorkflowSignal
     started_run: bool
     workflow_key: str
-    def __init__(self, run: _Optional[_Union[BoundWorkflowRun, _Mapping]] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., started_run: _Optional[bool] = ..., workflow_key: _Optional[str] = ...) -> None: ...
+    def __init__(self, run: _Optional[_Union[WorkflowRun, _Mapping]] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., started_run: _Optional[bool] = ..., workflow_key: _Optional[str] = ...) -> None: ...
 
-class UpsertWorkflowProviderScheduleRequest(_message.Message):
-    __slots__ = ()
-    SCHEDULE_ID_FIELD_NUMBER: _ClassVar[int]
-    CRON_FIELD_NUMBER: _ClassVar[int]
-    TIMEZONE_FIELD_NUMBER: _ClassVar[int]
-    TARGET_FIELD_NUMBER: _ClassVar[int]
-    PAUSED_FIELD_NUMBER: _ClassVar[int]
-    REQUESTED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
-    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
-    RUN_AS_FIELD_NUMBER: _ClassVar[int]
-    schedule_id: str
-    cron: str
-    timezone: str
-    target: BoundWorkflowTarget
-    paused: bool
-    requested_by_subject_id: str
-    provider_name: str
-    invocation_token: str
-    idempotency_key: str
-    definition_id: str
-    run_as: _app_pb2.SubjectContext
-    def __init__(self, schedule_id: _Optional[str] = ..., cron: _Optional[str] = ..., timezone: _Optional[str] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., paused: _Optional[bool] = ..., requested_by_subject_id: _Optional[str] = ..., provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., definition_id: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ...) -> None: ...
-
-class GetWorkflowProviderScheduleRequest(_message.Message):
-    __slots__ = ()
-    SCHEDULE_ID_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    schedule_id: str
-    invocation_token: str
-    def __init__(self, schedule_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
-
-class ListWorkflowProviderSchedulesRequest(_message.Message):
-    __slots__ = ()
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    invocation_token: str
-    def __init__(self, invocation_token: _Optional[str] = ...) -> None: ...
-
-class ListWorkflowProviderSchedulesResponse(_message.Message):
-    __slots__ = ()
-    SCHEDULES_FIELD_NUMBER: _ClassVar[int]
-    schedules: _containers.RepeatedCompositeFieldContainer[BoundWorkflowSchedule]
-    def __init__(self, schedules: _Optional[_Iterable[_Union[BoundWorkflowSchedule, _Mapping]]] = ...) -> None: ...
-
-class DeleteWorkflowProviderScheduleRequest(_message.Message):
-    __slots__ = ()
-    SCHEDULE_ID_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    schedule_id: str
-    invocation_token: str
-    def __init__(self, schedule_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
-
-class PauseWorkflowProviderScheduleRequest(_message.Message):
-    __slots__ = ()
-    SCHEDULE_ID_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    schedule_id: str
-    invocation_token: str
-    def __init__(self, schedule_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
-
-class ResumeWorkflowProviderScheduleRequest(_message.Message):
-    __slots__ = ()
-    SCHEDULE_ID_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    schedule_id: str
-    invocation_token: str
-    def __init__(self, schedule_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
-
-class UpsertWorkflowProviderEventTriggerRequest(_message.Message):
-    __slots__ = ()
-    TRIGGER_ID_FIELD_NUMBER: _ClassVar[int]
-    MATCH_FIELD_NUMBER: _ClassVar[int]
-    TARGET_FIELD_NUMBER: _ClassVar[int]
-    PAUSED_FIELD_NUMBER: _ClassVar[int]
-    REQUESTED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
-    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
-    RUN_AS_FIELD_NUMBER: _ClassVar[int]
-    trigger_id: str
-    match: WorkflowEventMatch
-    target: BoundWorkflowTarget
-    paused: bool
-    requested_by_subject_id: str
-    provider_name: str
-    invocation_token: str
-    idempotency_key: str
-    definition_id: str
-    run_as: _app_pb2.SubjectContext
-    def __init__(self, trigger_id: _Optional[str] = ..., match: _Optional[_Union[WorkflowEventMatch, _Mapping]] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., paused: _Optional[bool] = ..., requested_by_subject_id: _Optional[str] = ..., provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., definition_id: _Optional[str] = ..., run_as: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ...) -> None: ...
-
-class GetWorkflowProviderEventTriggerRequest(_message.Message):
-    __slots__ = ()
-    TRIGGER_ID_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    trigger_id: str
-    invocation_token: str
-    def __init__(self, trigger_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
-
-class ListWorkflowProviderEventTriggersRequest(_message.Message):
-    __slots__ = ()
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    invocation_token: str
-    def __init__(self, invocation_token: _Optional[str] = ...) -> None: ...
-
-class ListWorkflowProviderEventTriggersResponse(_message.Message):
-    __slots__ = ()
-    TRIGGERS_FIELD_NUMBER: _ClassVar[int]
-    triggers: _containers.RepeatedCompositeFieldContainer[BoundWorkflowEventTrigger]
-    def __init__(self, triggers: _Optional[_Iterable[_Union[BoundWorkflowEventTrigger, _Mapping]]] = ...) -> None: ...
-
-class DeleteWorkflowProviderEventTriggerRequest(_message.Message):
-    __slots__ = ()
-    TRIGGER_ID_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    trigger_id: str
-    invocation_token: str
-    def __init__(self, trigger_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
-
-class PauseWorkflowProviderEventTriggerRequest(_message.Message):
-    __slots__ = ()
-    TRIGGER_ID_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    trigger_id: str
-    invocation_token: str
-    def __init__(self, trigger_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
-
-class ResumeWorkflowProviderEventTriggerRequest(_message.Message):
-    __slots__ = ()
-    TRIGGER_ID_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    trigger_id: str
-    invocation_token: str
-    def __init__(self, trigger_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
-
-class PublishWorkflowProviderEventRequest(_message.Message):
+class DeliverWorkflowProviderEventRequest(_message.Message):
     __slots__ = ()
     APP_NAME_FIELD_NUMBER: _ClassVar[int]
     EVENT_FIELD_NUMBER: _ClassVar[int]
-    PUBLISHED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    DELIVERED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
     app_name: str
     event: WorkflowEvent
-    published_by_subject_id: str
+    delivered_by_subject_id: str
     invocation_token: str
     provider_name: str
-    def __init__(self, app_name: _Optional[str] = ..., event: _Optional[_Union[WorkflowEvent, _Mapping]] = ..., published_by_subject_id: _Optional[str] = ..., invocation_token: _Optional[str] = ..., provider_name: _Optional[str] = ...) -> None: ...
+    def __init__(self, app_name: _Optional[str] = ..., event: _Optional[_Union[WorkflowEvent, _Mapping]] = ..., delivered_by_subject_id: _Optional[str] = ..., invocation_token: _Optional[str] = ..., provider_name: _Optional[str] = ...) -> None: ...
 
-class CreateWorkflowProviderDefinitionRequest(_message.Message):
+class WorkflowRunEvent(_message.Message):
     __slots__ = ()
-    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
-    TARGET_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
-    CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    provider_name: str
-    target: BoundWorkflowTarget
-    invocation_token: str
-    idempotency_key: str
-    created_by_subject_id: str
-    def __init__(self, provider_name: _Optional[str] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., created_by_subject_id: _Optional[str] = ...) -> None: ...
+    ID_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    STEP_ID_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    run_id: str
+    step_id: str
+    type: str
+    data: _struct_pb2.Struct
+    created_at: _timestamp_pb2.Timestamp
+    def __init__(self, id: _Optional[str] = ..., run_id: _Optional[str] = ..., step_id: _Optional[str] = ..., type: _Optional[str] = ..., data: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
-class GetWorkflowProviderDefinitionRequest(_message.Message):
+class GetWorkflowProviderRunEventsRequest(_message.Message):
     __slots__ = ()
-    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    definition_id: str
+    run_id: str
     invocation_token: str
-    def __init__(self, definition_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
+    def __init__(self, run_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
 
-class UpdateWorkflowProviderDefinitionRequest(_message.Message):
+class GetWorkflowProviderRunEventsResponse(_message.Message):
     __slots__ = ()
-    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
-    TARGET_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    REQUESTED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    definition_id: str
-    provider_name: str
-    target: BoundWorkflowTarget
-    invocation_token: str
-    requested_by_subject_id: str
-    def __init__(self, definition_id: _Optional[str] = ..., provider_name: _Optional[str] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., invocation_token: _Optional[str] = ..., requested_by_subject_id: _Optional[str] = ...) -> None: ...
+    EVENTS_FIELD_NUMBER: _ClassVar[int]
+    events: _containers.RepeatedCompositeFieldContainer[WorkflowRunEvent]
+    def __init__(self, events: _Optional[_Iterable[_Union[WorkflowRunEvent, _Mapping]]] = ...) -> None: ...
 
-class DeleteWorkflowProviderDefinitionRequest(_message.Message):
+class GetWorkflowProviderRunOutputRequest(_message.Message):
     __slots__ = ()
-    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    definition_id: str
+    run_id: str
     invocation_token: str
-    def __init__(self, definition_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
+    def __init__(self, run_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
+
+class GetWorkflowProviderRunOutputResponse(_message.Message):
+    __slots__ = ()
+    OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    output: _struct_pb2.Value
+    def __init__(self, output: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ...) -> None: ...

@@ -337,10 +337,12 @@ func EncodeTargetMap(target coreworkflow.Target) map[string]any {
 
 func encodeStep(step coreworkflow.Step) map[string]any {
 	stepInfo := map[string]any{
-		"id":             step.ID,
-		"inputs":         encodeValueMap(step.Inputs),
-		"timeoutSeconds": step.TimeoutSeconds,
-		"metadata":       mapDeepClone(step.Metadata),
+		"id":       step.ID,
+		"inputs":   encodeValueMap(step.Inputs),
+		"metadata": mapDeepClone(step.Metadata),
+	}
+	if step.TimeoutSeconds != 0 {
+		stepInfo["timeoutSeconds"] = step.TimeoutSeconds
 	}
 	if step.App != nil {
 		stepInfo["app"] = encodeAppCall(*step.App)

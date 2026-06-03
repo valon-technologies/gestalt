@@ -8,8 +8,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func workflowTargetNodeInAppClosure(targetNode *yaml.Node, keepApps map[string]struct{}) bool {
-	for _, stepNode := range workflowStepNodesFromTargetNode(targetNode) {
+func workflowNodeInAppClosure(workflowNode *yaml.Node, keepApps map[string]struct{}) bool {
+	for _, stepNode := range workflowStepNodesFromWorkflowNode(workflowNode) {
 		appName := scalarStringNode(mappingValueNode(mappingValueNode(stepNode, "app"), "name"))
 		if appName == "" {
 			continue
@@ -23,8 +23,7 @@ func workflowTargetNodeInAppClosure(targetNode *yaml.Node, keepApps map[string]s
 
 func workflowRefsFromNode(workflowNode *yaml.Node) workflowAppRefs {
 	refs := workflowAppRefs{}
-	targetNode := mappingValueNode(workflowNode, "target")
-	for _, stepNode := range workflowStepNodesFromTargetNode(targetNode) {
+	for _, stepNode := range workflowStepNodesFromWorkflowNode(workflowNode) {
 		refs.Add(scalarStringNode(mappingValueNode(mappingValueNode(stepNode, "app"), "name")))
 		agentNode := mappingValueNode(stepNode, "agent")
 		if toolsNode := mappingValueNode(agentNode, "tools"); toolsNode != nil && toolsNode.Kind == yaml.SequenceNode {
@@ -36,8 +35,8 @@ func workflowRefsFromNode(workflowNode *yaml.Node) workflowAppRefs {
 	return refs
 }
 
-func workflowStepNodesFromTargetNode(targetNode *yaml.Node) []*yaml.Node {
-	stepsNode := mappingValueNode(targetNode, "steps")
+func workflowStepNodesFromWorkflowNode(workflowNode *yaml.Node) []*yaml.Node {
+	stepsNode := mappingValueNode(workflowNode, "steps")
 	if stepsNode == nil || stepsNode.Kind != yaml.SequenceNode {
 		return nil
 	}
@@ -70,30 +69,21 @@ func workflowsTargetingAppClosure(cfg *Config, keepApps map[string]struct{}) map
 		return nil
 	}
 	refsByName := map[string]workflowAppRefs{}
-	for name := range cfg.Workflows.Schedules {
-		schedule := cfg.Workflows.Schedules[name]
-		if workflowTargetInAppClosure(schedule.Target, keepApps) {
-			refsByName["schedule:"+name] = workflowScheduleAppRefs(schedule)
-		}
-	}
-	for name := range cfg.Workflows.EventTriggers {
-		trigger := cfg.Workflows.EventTriggers[name]
-		if workflowTargetInAppClosure(trigger.Target, keepApps) {
-			refsByName["trigger:"+name] = workflowEventTriggerAppRefs(trigger)
+	for name := range cfg.Workflows.Definitions {
+		definition := cfg.Workflows.Definitions[name]
+		if workflowStepsInAppClosure(definition.Steps, keepApps) {
+			refsByName["definition:"+name] = workflowDefinitionAppRefs(definition)
 		}
 	}
 	return refsByName
 }
 
-func workflowTargetInAppClosure(target *WorkflowTargetConfig, keepApps map[string]struct{}) bool {
-	if target == nil {
-		return false
-	}
-	for i := range target.Steps {
-		if target.Steps[i].App == nil {
+func workflowStepsInAppClosure(steps []WorkflowStepConfig, keepApps map[string]struct{}) bool {
+	for i := range steps {
+		if steps[i].App == nil {
 			continue
 		}
-		if _, ok := keepApps[strings.TrimSpace(target.Steps[i].App.Name)]; ok {
+		if _, ok := keepApps[strings.TrimSpace(steps[i].App.Name)]; ok {
 			return true
 		}
 	}
@@ -104,44 +94,26 @@ func filterWorkflowConfig(workflows *WorkflowsConfig, keep map[string]workflowAp
 	if workflows == nil {
 		return
 	}
-	if len(workflows.Schedules) > 0 {
-		filtered := make(map[string]WorkflowScheduleConfig)
-		for name := range workflows.Schedules {
-			if _, ok := keep["schedule:"+name]; ok {
-				filtered[name] = workflows.Schedules[name]
+	if len(workflows.Definitions) > 0 {
+		filtered := make(map[string]WorkflowDefinitionConfig)
+		for name := range workflows.Definitions {
+			if _, ok := keep["definition:"+name]; ok {
+				filtered[name] = workflows.Definitions[name]
 			}
 		}
-		workflows.Schedules = filtered
-	}
-	if len(workflows.EventTriggers) > 0 {
-		filtered := make(map[string]WorkflowEventTriggerConfig)
-		for name := range workflows.EventTriggers {
-			if _, ok := keep["trigger:"+name]; ok {
-				filtered[name] = workflows.EventTriggers[name]
-			}
-		}
-		workflows.EventTriggers = filtered
+		workflows.Definitions = filtered
 	}
 }
 
-func workflowScheduleAppRefs(schedule WorkflowScheduleConfig) workflowAppRefs {
+func workflowDefinitionAppRefs(definition WorkflowDefinitionConfig) workflowAppRefs {
 	refs := workflowAppRefs{}
-	addWorkflowTargetRefs(refs, schedule.Target)
+	addWorkflowStepRefs(refs, definition.Steps)
 	return refs
 }
 
-func workflowEventTriggerAppRefs(trigger WorkflowEventTriggerConfig) workflowAppRefs {
-	refs := workflowAppRefs{}
-	addWorkflowTargetRefs(refs, trigger.Target)
-	return refs
-}
-
-func addWorkflowTargetRefs(refs workflowAppRefs, target *WorkflowTargetConfig) {
-	if target == nil {
-		return
-	}
-	for i := range target.Steps {
-		step := &target.Steps[i]
+func addWorkflowStepRefs(refs workflowAppRefs, steps []WorkflowStepConfig) {
+	for i := range steps {
+		step := &steps[i]
 		if step.App != nil {
 			refs.Add(step.App.Name)
 		}

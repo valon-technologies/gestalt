@@ -34,26 +34,22 @@ const (
 	WorkflowRunStatusCanceled  = "canceled"
 	WorkflowRunStatusUnknown   = "unknown"
 
-	WorkflowOperationStartRun           = "start_run"
-	WorkflowOperationGetRun             = "get_run"
-	WorkflowOperationListRuns           = "list_runs"
-	WorkflowOperationCancelRun          = "cancel_run"
-	WorkflowOperationSignalRun          = "signal_run"
-	WorkflowOperationSignalOrStartRun   = "signal_or_start_run"
-	WorkflowOperationUpsertSchedule     = "upsert_schedule"
-	WorkflowOperationGetSchedule        = "get_schedule"
-	WorkflowOperationListSchedules      = "list_schedules"
-	WorkflowOperationDeleteSchedule     = "delete_schedule"
-	WorkflowOperationPauseSchedule      = "pause_schedule"
-	WorkflowOperationResumeSchedule     = "resume_schedule"
-	WorkflowOperationUpsertEventTrigger = "upsert_event_trigger"
-	WorkflowOperationGetEventTrigger    = "get_event_trigger"
-	WorkflowOperationListEventTriggers  = "list_event_triggers"
-	WorkflowOperationDeleteEventTrigger = "delete_event_trigger"
-	WorkflowOperationPauseEventTrigger  = "pause_event_trigger"
-	WorkflowOperationResumeEventTrigger = "resume_event_trigger"
-	WorkflowOperationPublishEvent       = "publish_event"
-	WorkflowOperationPing               = "ping"
+	WorkflowOperationApplyDefinition     = "apply_definition"
+	WorkflowOperationGetDefinition       = "get_definition"
+	WorkflowOperationListDefinitions     = "list_definitions"
+	WorkflowOperationSetDefinitionPaused = "set_definition_paused"
+	WorkflowOperationSetActivationPaused = "set_activation_paused"
+	WorkflowOperationDeleteDefinition    = "delete_definition"
+	WorkflowOperationStartRun            = "start_run"
+	WorkflowOperationGetRun              = "get_run"
+	WorkflowOperationListRuns            = "list_runs"
+	WorkflowOperationGetRunEvents        = "get_run_events"
+	WorkflowOperationGetRunOutput        = "get_run_output"
+	WorkflowOperationCancelRun           = "cancel_run"
+	WorkflowOperationSignalRun           = "signal_run"
+	WorkflowOperationSignalOrStartRun    = "signal_or_start_run"
+	WorkflowOperationDeliverEvent        = "deliver_event"
+	WorkflowOperationPing                = "ping"
 
 	workflowTelemetrySourceProvider = "provider"
 )
@@ -76,16 +72,16 @@ type WorkflowTelemetryOperation struct {
 }
 
 type workflowTelemetryMetrics struct {
-	providerOperationCount      metric.Int64Counter
-	providerOperationErrorCount metric.Int64Counter
-	providerOperationDuration   metric.Float64Histogram
-	runStartedCount             metric.Int64Counter
-	runCompletedCount           metric.Int64Counter
-	runDuration                 metric.Float64Histogram
-	eventPublishedCount         metric.Int64Counter
-	eventPublishedErrorCount    metric.Int64Counter
-	eventMatchedTriggersCount   metric.Int64Counter
-	scheduleFiredCount          metric.Int64Counter
+	providerOperationCount       metric.Int64Counter
+	providerOperationErrorCount  metric.Int64Counter
+	providerOperationDuration    metric.Float64Histogram
+	runStartedCount              metric.Int64Counter
+	runCompletedCount            metric.Int64Counter
+	runDuration                  metric.Float64Histogram
+	eventDeliveredCount          metric.Int64Counter
+	eventDeliveredErrorCount     metric.Int64Counter
+	eventMatchedActivationsCount metric.Int64Counter
+	activationFiredCount         metric.Int64Counter
 }
 
 var (
@@ -159,33 +155,33 @@ func RecordWorkflowRunCompleted(ctx context.Context, startedAt time.Time, opts W
 	metrics.runDuration.Record(ctx, time.Since(startedAt).Seconds(), metric.WithAttributes(attrs...))
 }
 
-func RecordWorkflowEventPublished(ctx context.Context, err error, opts WorkflowOperationOptions) {
+func RecordWorkflowEventDelivered(ctx context.Context, err error, opts WorkflowOperationOptions) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	attrs := workflowTelemetryAttrs(opts, err)
 	metrics := workflowMetrics()
-	metrics.eventPublishedCount.Add(ctx, 1, metric.WithAttributes(attrs...))
+	metrics.eventDeliveredCount.Add(ctx, 1, metric.WithAttributes(attrs...))
 	if err != nil {
-		metrics.eventPublishedErrorCount.Add(ctx, 1, metric.WithAttributes(attrs...))
+		metrics.eventDeliveredErrorCount.Add(ctx, 1, metric.WithAttributes(attrs...))
 	}
 }
 
-func RecordWorkflowEventMatchedTriggers(ctx context.Context, count int64, opts WorkflowOperationOptions) {
+func RecordWorkflowEventMatchedActivations(ctx context.Context, count int64, opts WorkflowOperationOptions) {
 	if count <= 0 {
 		return
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	workflowMetrics().eventMatchedTriggersCount.Add(ctx, count, metric.WithAttributes(workflowTelemetryAttrs(opts, nil)...))
+	workflowMetrics().eventMatchedActivationsCount.Add(ctx, count, metric.WithAttributes(workflowTelemetryAttrs(opts, nil)...))
 }
 
-func RecordWorkflowScheduleFired(ctx context.Context, opts WorkflowOperationOptions) {
+func RecordWorkflowActivationFired(ctx context.Context, opts WorkflowOperationOptions) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	workflowMetrics().scheduleFiredCount.Add(ctx, 1, metric.WithAttributes(workflowTelemetryAttrs(opts, nil)...))
+	workflowMetrics().activationFiredCount.Add(ctx, 1, metric.WithAttributes(workflowTelemetryAttrs(opts, nil)...))
 }
 
 func workflowMetrics() workflowTelemetryMetrics {
@@ -217,21 +213,21 @@ func workflowMetrics() workflowTelemetryMetrics {
 			metric.WithDescription("Measures gestaltd workflow run duration."),
 			metric.WithUnit("s"),
 		)
-		workflowTelemetryRecords.eventPublishedCount, _ = meter.Int64Counter(
-			"gestaltd.workflows.events.published.count",
-			metric.WithDescription("Counts gestaltd workflow published events."),
+		workflowTelemetryRecords.eventDeliveredCount, _ = meter.Int64Counter(
+			"gestaltd.workflows.events.delivered.count",
+			metric.WithDescription("Counts gestaltd workflow delivered events."),
 		)
-		workflowTelemetryRecords.eventPublishedErrorCount, _ = meter.Int64Counter(
-			"gestaltd.workflows.events.published.error_count",
-			metric.WithDescription("Counts failed gestaltd workflow published events."),
+		workflowTelemetryRecords.eventDeliveredErrorCount, _ = meter.Int64Counter(
+			"gestaltd.workflows.events.delivered.error_count",
+			metric.WithDescription("Counts failed gestaltd workflow delivered events."),
 		)
-		workflowTelemetryRecords.eventMatchedTriggersCount, _ = meter.Int64Counter(
-			"gestaltd.workflows.events.matched_triggers.count",
-			metric.WithDescription("Counts gestaltd workflow event trigger matches."),
+		workflowTelemetryRecords.eventMatchedActivationsCount, _ = meter.Int64Counter(
+			"gestaltd.workflows.events.matched_activations.count",
+			metric.WithDescription("Counts gestaltd workflow event activation matches."),
 		)
-		workflowTelemetryRecords.scheduleFiredCount, _ = meter.Int64Counter(
-			"gestaltd.workflows.schedules.fired.count",
-			metric.WithDescription("Counts gestaltd workflow schedule firings."),
+		workflowTelemetryRecords.activationFiredCount, _ = meter.Int64Counter(
+			"gestaltd.workflows.activations.fired.count",
+			metric.WithDescription("Counts gestaltd workflow activation firings."),
 		)
 	})
 	return workflowTelemetryRecords

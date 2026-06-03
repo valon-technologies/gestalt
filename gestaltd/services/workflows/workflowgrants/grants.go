@@ -8,58 +8,44 @@ import (
 
 const (
 	OperationRunsStart         = "runs.start"
+	OperationRunsList          = "runs.list"
+	OperationRunsGet           = "runs.get"
+	OperationRunsGetEvents     = "runs.getEvents"
+	OperationRunsGetOutput     = "runs.getOutput"
+	OperationRunsCancel        = "runs.cancel"
 	OperationRunsSignal        = "runs.signal"
 	OperationRunsSignalOrStart = "runs.signalOrStart"
 
-	OperationSchedulesCreate = "schedules.create"
-	OperationSchedulesGet    = "schedules.get"
-	OperationSchedulesUpdate = "schedules.update"
-	OperationSchedulesDelete = "schedules.delete"
-	OperationSchedulesPause  = "schedules.pause"
-	OperationSchedulesResume = "schedules.resume"
+	OperationEventsDeliver = "events.deliver"
 
-	OperationEventTriggersCreate = "eventTriggers.create"
-	OperationEventTriggersGet    = "eventTriggers.get"
-	OperationEventTriggersUpdate = "eventTriggers.update"
-	OperationEventTriggersDelete = "eventTriggers.delete"
-	OperationEventTriggersPause  = "eventTriggers.pause"
-	OperationEventTriggersResume = "eventTriggers.resume"
-
-	OperationEventsPublish = "events.publish"
-
-	OperationDefinitionsCreate = "definitions.create"
-	OperationDefinitionsGet    = "definitions.get"
-	OperationDefinitionsUpdate = "definitions.update"
-	OperationDefinitionsDelete = "definitions.delete"
+	OperationDefinitionsApply               = "definitions.apply"
+	OperationDefinitionsGet                 = "definitions.get"
+	OperationDefinitionsList                = "definitions.list"
+	OperationDefinitionsSetPaused           = "definitions.setPaused"
+	OperationDefinitionsSetActivationPaused = "definitions.setActivationPaused"
+	OperationDefinitionsDelete              = "definitions.delete"
 )
 
 type Grants map[string]struct{}
 
 var supportedOperations = map[string]struct{}{
 	OperationRunsStart:         {},
+	OperationRunsList:          {},
+	OperationRunsGet:           {},
+	OperationRunsGetEvents:     {},
+	OperationRunsGetOutput:     {},
+	OperationRunsCancel:        {},
 	OperationRunsSignal:        {},
 	OperationRunsSignalOrStart: {},
 
-	OperationSchedulesCreate: {},
-	OperationSchedulesGet:    {},
-	OperationSchedulesUpdate: {},
-	OperationSchedulesDelete: {},
-	OperationSchedulesPause:  {},
-	OperationSchedulesResume: {},
+	OperationEventsDeliver: {},
 
-	OperationEventTriggersCreate: {},
-	OperationEventTriggersGet:    {},
-	OperationEventTriggersUpdate: {},
-	OperationEventTriggersDelete: {},
-	OperationEventTriggersPause:  {},
-	OperationEventTriggersResume: {},
-
-	OperationEventsPublish: {},
-
-	OperationDefinitionsCreate: {},
-	OperationDefinitionsGet:    {},
-	OperationDefinitionsUpdate: {},
-	OperationDefinitionsDelete: {},
+	OperationDefinitionsApply:               {},
+	OperationDefinitionsGet:                 {},
+	OperationDefinitionsList:                {},
+	OperationDefinitionsSetPaused:           {},
+	OperationDefinitionsSetActivationPaused: {},
+	OperationDefinitionsDelete:              {},
 }
 
 func IsSupportedOperation(operation string) bool {
