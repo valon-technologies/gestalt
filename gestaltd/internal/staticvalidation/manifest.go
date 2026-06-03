@@ -19,6 +19,17 @@ func ProjectManifest(manifest *providermanifestv1.Manifest, manifestPath string,
 		}
 		cloned.Artifacts = nil
 		cloned.Entrypoint = nil
+		cloned.IconFile = ""
+		if cloned.Spec != nil {
+			spec := *cloned.Spec
+			spec.ConfigSchemaPath = ""
+			if spec.UI != nil {
+				ui := *spec.UI
+				ui.Path = ""
+				spec.UI = &ui
+			}
+			cloned.Spec = &spec
+		}
 		return RelativizeManifest(cloned, manifestPath), nil
 	}
 	return RelativizeManifest(manifest, manifestPath), nil

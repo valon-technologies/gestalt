@@ -138,20 +138,31 @@ func TestProviderReleaseRejectsCorruptArchive(t *testing.T) {
 func TestProviderReleaseMetadataIncludesPlatformArchives(t *testing.T) {
 	t.Parallel()
 
+	outputDir := t.TempDir()
+	linuxArchive := writeProviderReleaseArchiveForTest(t, outputDir, "gestalt-app-release-test_v1.0.0_linux_amd64.tar.gz", providerReleaseManifestForTest("1.0.0", "Release Test", "linux", "amd64"))
+	darwinArchive := writeProviderReleaseArchiveForTest(t, outputDir, "gestalt-app-release-test_v1.0.0_darwin_arm64.tar.gz", providerReleaseManifestForTest("1.0.0", "Release Test", "darwin", "arm64"))
+	linuxSHA, err := providerpkg.ArchiveDigest(linuxArchive)
+	if err != nil {
+		t.Fatalf("ArchiveDigest(linux): %v", err)
+	}
+	darwinSHA, err := providerpkg.ArchiveDigest(darwinArchive)
+	if err != nil {
+		t.Fatalf("ArchiveDigest(darwin): %v", err)
+	}
 	metadata, err := buildProviderReleaseMetadata(
 		providerReleaseManifestForTest("1.0.0", "Release Test", "linux", "amd64"),
 		"1.0.0",
 		[]releaseArchive{
-			{Path: "gestalt-app-release-test_v1.0.0_linux_amd64.tar.gz", SHA256: "linux-sha", Target: "linux/amd64"},
-			{Path: "gestalt-app-release-test_v1.0.0_darwin_arm64.tar.gz", SHA256: "darwin-sha", Target: "darwin/arm64"},
+			{Path: linuxArchive, SHA256: linuxSHA, Target: "linux/amd64"},
+			{Path: darwinArchive, SHA256: darwinSHA, Target: "darwin/arm64"},
 		},
 	)
 	if err != nil {
 		t.Fatalf("buildProviderReleaseMetadata: %v", err)
 	}
 	for target, wantSHA := range map[string]string{
-		"linux/amd64":  "linux-sha",
-		"darwin/arm64": "darwin-sha",
+		"linux/amd64":  linuxSHA,
+		"darwin/arm64": darwinSHA,
 	} {
 		artifact, ok := metadata.Artifacts[target]
 		if !ok {

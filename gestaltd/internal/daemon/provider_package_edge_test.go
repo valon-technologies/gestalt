@@ -159,8 +159,8 @@ func TestRun_ProviderPackageAndReleaseStagesOwnedUIPackage(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ReadLockfile: %v", err)
 			}
-			if len(lock.UIs) != 0 {
-				t.Fatalf("lock.UIs = %#v, want no separate UI entries for packaged owned UI", lock.UIs)
+			if len(lock.Providers.UI) != 0 {
+				t.Fatalf("lock.Providers.UI = %#v, want no separate UI entries for packaged owned UI", lock.Providers.UI)
 			}
 		})
 	}
