@@ -32,6 +32,12 @@ func TestRun_ProviderReleaseFinalizesArchivesWithoutSourceTree(t *testing.T) {
 	if artifact.Path != archiveName {
 		t.Fatalf("release metadata artifact path = %q, want %q", artifact.Path, archiveName)
 	}
+	if metadata.StaticValidation == nil || metadata.StaticValidation.Catalog == nil {
+		t.Fatalf("release metadata static catalog = %+v, want embedded catalog", metadata.StaticValidation)
+	}
+	if got := len(metadata.StaticValidation.Catalog.Operations); got != 1 {
+		t.Fatalf("release metadata static catalog operations = %d, want 1", got)
+	}
 }
 
 func TestProviderReleaseRejectsDuplicateArchiveTargets(t *testing.T) {
@@ -69,6 +75,34 @@ func TestProviderReleaseRejectsMismatchedArchiveManifests(t *testing.T) {
 	_, _, _, err := collectReleaseArchives(outputDir, testVersion)
 	if err == nil || !strings.Contains(err.Error(), "manifest does not match other release archives") {
 		t.Fatalf("collectReleaseArchives error = %v, want mismatched manifest failure", err)
+	}
+}
+
+func TestProviderReleaseRejectsMismatchedArchiveCatalogs(t *testing.T) {
+	t.Parallel()
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.4-catalog-mismatch.1"
+	alternatePlatform := releasePlatform{}
+	for _, platform := range defaultReleasePlatformsForTest(t) {
+		if platform.GOOS != runtime.GOOS || platform.GOARCH != runtime.GOARCH {
+			alternatePlatform = platform
+			break
+		}
+	}
+	if alternatePlatform.GOOS == "" {
+		t.Fatal("no alternate release platform available")
+	}
+	writeProviderReleaseArchiveWithCatalogForTest(t, outputDir, platformArchiveNameForTest(releaseTestAppName, testVersion, runtime.GOOS, runtime.GOARCH), providerReleaseManifestForTest(testVersion, "Release Test", runtime.GOOS, runtime.GOARCH), "name: provider\noperations:\n  - id: echo\n    method: POST\n")
+	writeProviderReleaseArchiveWithCatalogForTest(t, outputDir, platformArchiveNameForTest(releaseTestAppName, testVersion, alternatePlatform.GOOS, alternatePlatform.GOARCH), providerReleaseManifestForTest(testVersion, "Release Test", alternatePlatform.GOOS, alternatePlatform.GOARCH), "name: provider\noperations:\n  - id: status\n    method: GET\n")
+
+	manifest, version, archives, err := collectReleaseArchives(outputDir, testVersion)
+	if err != nil {
+		t.Fatalf("collectReleaseArchives: %v", err)
+	}
+	_, err = buildProviderReleaseMetadata(manifest, version, archives)
+	if err == nil || !strings.Contains(err.Error(), "static catalog does not match other release archives") {
+		t.Fatalf("buildProviderReleaseMetadata error = %v, want static catalog mismatch", err)
 	}
 }
 
@@ -138,27 +172,29 @@ func TestProviderReleaseRejectsCorruptArchive(t *testing.T) {
 func TestProviderReleaseMetadataIncludesPlatformArchives(t *testing.T) {
 	t.Parallel()
 
+	outputDir := t.TempDir()
+	const testVersion = "1.0.0"
+	writeProviderReleaseArchiveForTest(t, outputDir, "gestalt-app-release-test_v"+testVersion+"_linux_amd64.tar.gz", providerReleaseManifestForTest(testVersion, "Release Test", "linux", "amd64"))
+	writeProviderReleaseArchiveForTest(t, outputDir, "gestalt-app-release-test_v"+testVersion+"_darwin_arm64.tar.gz", providerReleaseManifestForTest(testVersion, "Release Test", "darwin", "arm64"))
+	manifest, version, archives, err := collectReleaseArchives(outputDir, testVersion)
+	if err != nil {
+		t.Fatalf("collectReleaseArchives: %v", err)
+	}
 	metadata, err := buildProviderReleaseMetadata(
-		providerReleaseManifestForTest("1.0.0", "Release Test", "linux", "amd64"),
-		"1.0.0",
-		[]releaseArchive{
-			{Path: "gestalt-app-release-test_v1.0.0_linux_amd64.tar.gz", SHA256: "linux-sha", Target: "linux/amd64"},
-			{Path: "gestalt-app-release-test_v1.0.0_darwin_arm64.tar.gz", SHA256: "darwin-sha", Target: "darwin/arm64"},
-		},
+		manifest,
+		version,
+		archives,
 	)
 	if err != nil {
 		t.Fatalf("buildProviderReleaseMetadata: %v", err)
 	}
-	for target, wantSHA := range map[string]string{
-		"linux/amd64":  "linux-sha",
-		"darwin/arm64": "darwin-sha",
-	} {
+	for _, target := range []string{"linux/amd64", "darwin/arm64"} {
 		artifact, ok := metadata.Artifacts[target]
 		if !ok {
 			t.Fatalf("metadata artifacts missing %s: %+v", target, metadata.Artifacts)
 		}
-		if artifact.SHA256 != wantSHA {
-			t.Fatalf("metadata artifact %s sha = %q, want %q", target, artifact.SHA256, wantSHA)
+		if artifact.SHA256 == "" {
+			t.Fatalf("metadata artifact %s sha is empty", target)
 		}
 	}
 }
@@ -190,4 +226,20 @@ func uiReleaseManifestForTest(version string) *providermanifestv1.Manifest {
 		IconFile:    releaseTestIconPath,
 		Spec:        &providermanifestv1.Spec{AssetRoot: uiTestAssetRoot},
 	}
+}
+
+func writeProviderReleaseArchiveWithCatalogForTest(t *testing.T, outputDir, archiveName string, manifest *providermanifestv1.Manifest, catalogYAML string) string {
+	t.Helper()
+
+	packageDir := t.TempDir()
+	writeProviderReleaseManifestSupportFilesForTest(t, packageDir, manifest)
+	writeReleasedManifestForArchiveTest(t, packageDir, manifest)
+	if err := os.WriteFile(filepath.Join(packageDir, providerpkg.StaticCatalogFile), []byte(catalogYAML), 0o644); err != nil {
+		t.Fatalf("write static catalog: %v", err)
+	}
+	archivePath := filepath.Join(outputDir, archiveName)
+	if err := providerpkg.CreatePackageFromDir(packageDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir(%s): %v", archiveName, err)
+	}
+	return archivePath
 }

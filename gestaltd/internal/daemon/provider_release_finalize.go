@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
@@ -286,6 +287,10 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 	if err != nil {
 		return nil, fmt.Errorf("project static validation manifest: %w", err)
 	}
+	staticCatalog, err := staticValidationCatalogFromReleaseArchives(archives)
+	if err != nil {
+		return nil, err
+	}
 
 	metadata := &providerReleaseMetadata{
 		Schema:        providerReleaseSchemaName,
@@ -297,6 +302,7 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 		Artifacts:     make(map[string]providerReleaseArtifact, len(archives)),
 		StaticValidation: &providerReleaseStaticValidationData{
 			Manifest: staticManifest,
+			Catalog:  staticCatalog,
 		},
 	}
 	for _, archive := range archives {
@@ -307,6 +313,48 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 		}
 	}
 	return metadata, nil
+}
+
+func staticValidationCatalogFromReleaseArchives(archives []releaseArchive) (*catalog.Catalog, error) {
+	var canonical *catalog.Catalog
+	var canonicalPayload []byte
+	hasCanonical := false
+	for _, archive := range archives {
+		cat, err := readStaticCatalogFromReleaseArchive(archive.Path)
+		if err != nil {
+			return nil, err
+		}
+		payload, err := json.Marshal(cat)
+		if err != nil {
+			return nil, fmt.Errorf("normalize static catalog for %s: %w", filepath.Base(archive.Path), err)
+		}
+		if !hasCanonical {
+			canonical = cat
+			canonicalPayload = payload
+			hasCanonical = true
+			continue
+		}
+		if !bytes.Equal(payload, canonicalPayload) {
+			return nil, fmt.Errorf("release archive %s static catalog does not match other release archives", filepath.Base(archive.Path))
+		}
+	}
+	return canonical, nil
+}
+
+func readStaticCatalogFromReleaseArchive(archivePath string) (*catalog.Catalog, error) {
+	tempDir, err := os.MkdirTemp("", "gestaltd-release-catalog-*")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = os.RemoveAll(tempDir) }()
+	if err := providerpkg.ExtractPackage(archivePath, tempDir); err != nil {
+		return nil, fmt.Errorf("extract static catalog from release archive %s: %w", filepath.Base(archivePath), err)
+	}
+	cat, err := providerpkg.ReadStaticCatalog(tempDir, "")
+	if err != nil {
+		return nil, fmt.Errorf("read static catalog from release archive %s: %w", filepath.Base(archivePath), err)
+	}
+	return cat, nil
 }
 
 func providerReleaseArtifactTarget(manifest *providermanifestv1.Manifest, archive releaseArchive) string {
