@@ -818,11 +818,15 @@ func (r *WorkflowRunAsConfig) SubjectRef() *core.RunAsSubject {
 	if r == nil || r.Subject == nil {
 		return nil
 	}
+	authSource := r.Subject.AuthSource
+	if authSource == "" {
+		authSource = "config"
+	}
 	return core.NormalizeRunAsSubject(&core.RunAsSubject{
 		SubjectID:   r.Subject.ID,
 		SubjectKind: r.Subject.Kind,
 		DisplayName: r.Subject.DisplayName,
-		AuthSource:  r.Subject.AuthSource,
+		AuthSource:  authSource,
 	})
 }
 
