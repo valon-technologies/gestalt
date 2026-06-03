@@ -80,10 +80,8 @@ type invokePluginEnvelope struct {
 
 type requestContextBody struct {
 	Subject struct {
-		ID          string `json:"id"`
-		Kind        string `json:"kind"`
-		DisplayName string `json:"display_name"`
-		AuthSource  string `json:"auth_source"`
+		ID    string `json:"id"`
+		Email string `json:"email"`
 	} `json:"subject"`
 	Credential struct {
 		Mode       string `json:"mode"`
@@ -6632,10 +6630,12 @@ func TestRuntimePublicCacheRelayRoundTripsThroughHostedApp(t *testing.T) {
 		BaseURL:       relaySrv.URL,
 		EncryptionKey: secret,
 		Caches: map[string]corecache.Cache{
-			"session": boundCache,
+			"session":    boundCache,
+			"rate_limit": coretesting.NewStubCache(),
 		},
 		CacheDefs: map[string]*config.ProviderEntry{
-			"session": {Config: mustNode(t, map[string]any{"namespace": "session"})},
+			"session":    {Config: mustNode(t, map[string]any{"namespace": "session"})},
+			"rate_limit": {Config: mustNode(t, map[string]any{"namespace": "rate_limit"})},
 		},
 		CacheFactory: func(yaml.Node) (corecache.Cache, error) {
 			return boundCache, nil
@@ -6752,7 +6752,8 @@ func TestRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 		BaseURL:       relaySrv.URL,
 		EncryptionKey: secret,
 		S3: map[string]s3sdk.S3{
-			"main": boundS3,
+			"main":    boundS3,
+			"archive": &coretesting.StubS3{},
 		},
 		PublicHostServices: publicHostServices,
 	}
@@ -8896,7 +8897,8 @@ func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
 	}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		Services: testutil.NewStubServices(t),
 		S3: map[string]s3sdk.S3{
-			"main": stubS3,
+			"main":    stubS3,
+			"archive": &coretesting.StubS3{},
 		},
 	}))
 	if err != nil {

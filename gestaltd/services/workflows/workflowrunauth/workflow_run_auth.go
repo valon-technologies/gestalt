@@ -6,9 +6,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -19,17 +17,11 @@ type Resolver interface {
 	ResolveWorkflowRun(ctx context.Context, providerName, runID string) (*coreworkflow.Run, error)
 }
 
-type TargetAuth struct {
-	Operations  map[string]map[string]core.ConnectionMode
-	Permissions principal.PermissionSet
-}
-
 type ResolvedInvocation struct {
 	ProviderName string
 	RunID        string
 	Run          *coreworkflow.Run
 	RunAs        *core.RunAsSubject
-	Auth         TargetAuth
 	Workflow     map[string]any
 }
 
@@ -71,71 +63,8 @@ func ResolveInvocationFromWorkflowRun(ctx context.Context, resolver Resolver, wo
 		RunID:        runID,
 		Run:          run,
 		RunAs:        runAs,
-		Auth:         TargetInvocationAuth(run.Target),
 		Workflow:     WorkflowContextWithPersistedRunAs(workflowMap, providerName, runID, runAs),
 	}, nil
-}
-
-func TargetInvocationAuth(target coreworkflow.Target) TargetAuth {
-	auth := TargetAuth{
-		Operations:  map[string]map[string]core.ConnectionMode{},
-		Permissions: principal.PermissionSet{},
-	}
-	for i := range target.Steps {
-		step := &target.Steps[i]
-		if step.App != nil {
-			addOperationGrant(auth.Operations, step.App.Name, step.App.Operation, step.App.CredentialMode)
-			addOperationPermission(auth.Permissions, step.App.Name, step.App.Operation)
-		}
-		if step.Agent != nil {
-			if providerName := strings.TrimSpace(step.Agent.ProviderName); providerName != "" {
-				auth.Permissions[providerName] = nil
-			}
-			for j := range step.Agent.ToolRefs {
-				addToolRefAuth(auth.Operations, auth.Permissions, &step.Agent.ToolRefs[j])
-			}
-		}
-	}
-	return auth
-}
-
-func addToolRefAuth(operations map[string]map[string]core.ConnectionMode, perms principal.PermissionSet, ref *coreagent.ToolRef) {
-	if ref == nil {
-		return
-	}
-	addOperationGrant(operations, ref.App, ref.Operation, "")
-	addOperationPermission(perms, ref.App, ref.Operation)
-}
-
-func addOperationGrant(operations map[string]map[string]core.ConnectionMode, appName, operation string, credentialMode core.ConnectionMode) {
-	appName = strings.TrimSpace(appName)
-	operation = strings.TrimSpace(operation)
-	if appName == "" || operation == "" {
-		return
-	}
-	appOperations := operations[appName]
-	if appOperations == nil {
-		appOperations = map[string]core.ConnectionMode{}
-	}
-	appOperations[operation] = core.NormalizeOptionalConnectionMode(credentialMode)
-	operations[appName] = appOperations
-}
-
-func addOperationPermission(perms principal.PermissionSet, appName, operation string) {
-	appName = strings.TrimSpace(appName)
-	operation = strings.TrimSpace(operation)
-	if appName == "" || operation == "" {
-		return
-	}
-	if existing, ok := perms[appName]; ok && existing == nil {
-		return
-	}
-	ops := perms[appName]
-	if ops == nil {
-		ops = map[string]struct{}{}
-	}
-	ops[operation] = struct{}{}
-	perms[appName] = ops
 }
 
 func WorkflowContextWithPersistedRunAs(workflowMap map[string]any, providerName, runID string, runAs *core.RunAsSubject) map[string]any {

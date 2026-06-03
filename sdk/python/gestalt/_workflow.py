@@ -1140,13 +1140,12 @@ def workflow_signal(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.WorkflowSignal):
         return _copy(value)
     data = _data(value, kwargs)
-    created_by = data.get("created_by_subject_id", data.get("created_by"))
     return pb.WorkflowSignal(
         id=data.get("id", ""),
         name=data.get("name", ""),
         payload=_optional_struct(data.get("payload")),
         metadata=_optional_struct(data.get("metadata")),
-        created_by_subject_id=str(data.get("created_by_subject_id", data.get("created_by", "")) or "").strip(),
+        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
         created_at=_optional_timestamp(data.get("created_at")),
         idempotency_key=data.get("idempotency_key", ""),
         sequence=data.get("sequence", 0),
@@ -1478,7 +1477,6 @@ def bound_workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
     data = _data(value, kwargs)
     target = data.get("target")
     trigger = data.get("trigger")
-    created_by = data.get("created_by_subject_id", data.get("created_by"))
     return pb.BoundWorkflowRun(
         id=data.get("id", ""),
         status=data.get("status", WORKFLOW_RUN_STATUS_UNSPECIFIED),
@@ -1489,7 +1487,7 @@ def bound_workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
         completed_at=_optional_timestamp(data.get("completed_at")),
         status_message=data.get("status_message", ""),
         result_body=data.get("result_body", ""),
-        created_by_subject_id=str(data.get("created_by_subject_id", data.get("created_by", "")) or "").strip(),
+        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
         workflow_key=data.get("workflow_key", ""),
         provider_name=data.get("provider_name", ""),
         definition_id=data.get("definition_id", ""),
@@ -1540,11 +1538,10 @@ def bound_workflow_definition(value: Any | None = None, **kwargs: Any) -> Any:
         return _copy(value)
     data = _data(value, kwargs)
     target = data.get("target")
-    created_by = data.get("created_by_subject_id", data.get("created_by"))
     return pb.BoundWorkflowDefinition(
         id=data.get("id", ""),
         target=bound_workflow_target(target) if target is not None else None,
-        created_by_subject_id=str(data.get("created_by_subject_id", data.get("created_by", "")) or "").strip(),
+        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
         created_at=_optional_timestamp(data.get("created_at")),
         provider_name=data.get("provider_name", ""),
     )
@@ -1584,7 +1581,6 @@ def bound_workflow_schedule(value: Any | None = None, **kwargs: Any) -> Any:
         return _copy(value)
     data = _data(value, kwargs)
     target = data.get("target")
-    created_by = data.get("created_by_subject_id", data.get("created_by"))
     return pb.BoundWorkflowSchedule(
         id=data.get("id", ""),
         cron=data.get("cron", ""),
@@ -1594,7 +1590,7 @@ def bound_workflow_schedule(value: Any | None = None, **kwargs: Any) -> Any:
         created_at=_optional_timestamp(data.get("created_at")),
         updated_at=_optional_timestamp(data.get("updated_at")),
         next_run_at=_optional_timestamp(data.get("next_run_at")),
-        created_by_subject_id=str(data.get("created_by_subject_id", data.get("created_by", "")) or "").strip(),
+        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
         provider_name=data.get("provider_name", ""),
         definition_id=data.get("definition_id", ""),
     )
@@ -1641,7 +1637,6 @@ def bound_workflow_event_trigger(value: Any | None = None, **kwargs: Any) -> Any
     data = _data(value, kwargs)
     match = data.get("match")
     target = data.get("target")
-    created_by = data.get("created_by_subject_id", data.get("created_by"))
     return pb.BoundWorkflowEventTrigger(
         id=data.get("id", ""),
         match=workflow_event_match(match) if match is not None else None,
@@ -1649,7 +1644,7 @@ def bound_workflow_event_trigger(value: Any | None = None, **kwargs: Any) -> Any
         paused=data.get("paused", False),
         created_at=_optional_timestamp(data.get("created_at")),
         updated_at=_optional_timestamp(data.get("updated_at")),
-        created_by_subject_id=str(data.get("created_by_subject_id", data.get("created_by", "")) or "").strip(),
+        created_by_subject_id=str(data.get("created_by_subject_id", "") or "").strip(),
         provider_name=data.get("provider_name", ""),
         definition_id=data.get("definition_id", ""),
     )

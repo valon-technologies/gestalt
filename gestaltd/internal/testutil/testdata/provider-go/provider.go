@@ -42,10 +42,8 @@ type RequestContextInput struct{}
 type InvokeRequestContextInput struct{}
 
 type RequestContextSubject struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind"`
-	DisplayName string `json:"display_name"`
-	AuthSource  string `json:"auth_source"`
+	ID    string `json:"id"`
+	Email string `json:"email"`
 }
 
 type RequestContextCredential struct {
@@ -135,16 +133,8 @@ func (p *Provider) status(_ context.Context, _ StatusInput, _ gestalt.Request) (
 func (p *Provider) requestContext(_ context.Context, _ RequestContextInput, req gestalt.Request) (gestalt.Response[RequestContextOutput], error) {
 	return gestalt.OK(RequestContextOutput{
 		Subject: RequestContextSubject{
-			ID:          req.Subject.ID,
-			Kind: func() string {
-				kind, _, ok := gestalt.ParseSubjectID(req.Subject.ID)
-				if ok {
-					return kind
-				}
-				return ""
-			}(),
-			DisplayName: req.Subject.Email,
-			AuthSource:  req.Subject.CredentialSubjectID,
+			ID:    req.Subject.ID,
+			Email: req.Subject.Email,
 		},
 		Credential: RequestContextCredential{
 			Mode:       req.Credential.Mode,

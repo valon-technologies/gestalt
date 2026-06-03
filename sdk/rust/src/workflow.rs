@@ -572,7 +572,6 @@ fn workflow_subject_to_proto(input: Subject) -> pb::SubjectContext {
     }
 }
 
-
 /// Creates workflow event-match fields.
 pub fn new_workflow_event_match(input: WorkflowEventMatch) -> WorkflowEventMatch {
     WorkflowEventMatch {

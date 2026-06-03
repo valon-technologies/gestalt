@@ -214,7 +214,7 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 	}
 }
 
-func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationToken(t *testing.T) {
+func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationTokenFromAppStep(t *testing.T) {
 	t.Parallel()
 
 	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-workflow-runas-secret"))
@@ -237,6 +237,9 @@ func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationToken(t *testi
 			if p == nil || p.SubjectID != "user:workflow-runner" {
 				t.Fatalf("principal = %#v, want workflow runner", p)
 			}
+			if p.TokenPermissions != nil {
+				t.Fatalf("token permissions = %#v, want unrestricted workflow runAs principal", p.TokenPermissions)
+			}
 			if got := invocation.WorkflowContextString(invocation.WorkflowContextFromContext(ctx), "runId"); got != "run-123" {
 				t.Fatalf("workflow run id = %q, want run-123", got)
 			}
@@ -252,6 +255,9 @@ func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationToken(t *testi
 		createTurn: func(ctx context.Context, p *principal.Principal, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 			if p == nil || p.SubjectID != "user:workflow-runner" {
 				t.Fatalf("principal = %#v, want workflow runner", p)
+			}
+			if p.TokenPermissions != nil {
+				t.Fatalf("token permissions = %#v, want unrestricted workflow runAs principal", p.TokenPermissions)
 			}
 			if p.CredentialSubjectID != "user:workflow-runner" {
 				t.Fatalf("credential subject = %q, want workflow runner", p.CredentialSubjectID)
@@ -272,9 +278,10 @@ func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationToken(t *testi
 		run: &coreworkflow.Run{
 			ID: "run-123",
 			Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
-				ID: "agent",
-				Agent: &coreworkflow.AgentTurn{
-					ProviderName: "managed",
+				ID: "app",
+				App: &coreworkflow.AppCall{
+					Name:      "reviewer",
+					Operation: "run",
 				},
 			}}},
 			RunAs: &core.RunAsSubject{

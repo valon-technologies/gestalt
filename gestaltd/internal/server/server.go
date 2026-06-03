@@ -65,7 +65,6 @@ type MountedHTTPBinding struct {
 	Target         string
 	CredentialMode core.ConnectionMode
 	RequestBody    *providermanifestv1.HTTPRequestBody
-	Ack            *providermanifestv1.HTTPAck
 	SecurityName   string
 	Security       *providermanifestv1.HTTPSecurityScheme
 }
@@ -138,7 +137,6 @@ type Server struct {
 	adminRoute              AdminRouteConfig
 	adminUI                 http.Handler
 	routeProfile            RouteProfile
-	httpBindingReplayStore  httpBindingReplayStore
 	authzFragmentBackfillMu sync.Mutex
 	authzFragmentBackfilled bool
 }
@@ -392,7 +390,6 @@ func New(cfg Config) (*Server, error) {
 		adminRoute:             adminRoute,
 		adminUI:                adminUI,
 		routeProfile:           cfg.RouteProfile,
-		httpBindingReplayStore: newMemoryHTTPBindingReplayStore(),
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:         cfg.Providers,

@@ -6,37 +6,37 @@ import (
 )
 
 type AuditEntry struct {
-	Timestamp             time.Time
-	RequestID             string
-	Source                string
-	SubjectID             string
-	AgentSubjectID        string
-	RunAsSubjectID        string
-	AccessPolicy          string
-	AccessRole            string
-	AuthorizationDecision string
-	CredentialMode        string
-	CredentialSubjectID   string
-	CredentialConnection  string
-	CredentialInstance    string
+	Timestamp                  time.Time
+	RequestID                  string
+	Source                     string
+	SubjectID                  string
+	AgentSubjectID             string
+	RunAsSubjectID             string
+	AccessPolicy               string
+	AccessRole                 string
+	AuthorizationDecision      string
+	CredentialMode             string
+	CredentialSubjectID        string
+	CredentialConnection       string
+	CredentialInstance         string
 	WorkflowCreatedBySubjectID string
-	WorkflowKeySHA256     string
-	CallerApp             string
-	WorkflowTargetKind    string
-	WorkflowTargetComponent string
-	WorkflowTargetProvider string
-	WorkflowTargetOperation string
-	TargetID              string
-	TargetKind            string
-	TargetName            string
-	Provider              string
-	Operation             string
-	Depth                 int
-	Allowed               bool
-	Error                 string
-	ClientIP              string
-	RemoteAddr            string
-	UserAgent             string
+	WorkflowKeySHA256          string
+	CallerApp                  string
+	WorkflowTargetKind         string
+	WorkflowTargetComponent    string
+	WorkflowTargetProvider     string
+	WorkflowTargetOperation    string
+	TargetID                   string
+	TargetKind                 string
+	TargetName                 string
+	Provider                   string
+	Operation                  string
+	Depth                      int
+	Allowed                    bool
+	Error                      string
+	ClientIP                   string
+	RemoteAddr                 string
+	UserAgent                  string
 }
 
 type AuditSink interface {

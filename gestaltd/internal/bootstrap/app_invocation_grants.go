@@ -15,6 +15,7 @@ func appInvocationDependencies(invokes []config.AppInvocationDependency) []appac
 		dependencies = append(dependencies, appaccessservice.InvocationDependency{
 			App:            invoke.App,
 			Operation:      invoke.Operation,
+			Surface:        invoke.Surface,
 			CredentialMode: core.ConnectionMode(invoke.CredentialMode),
 			RunAs:          invoke.RunAsSubject(),
 			ApplyByDefault: invoke.RunAs != nil && invoke.RunAsAppliesByDefault(),

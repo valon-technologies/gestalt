@@ -201,11 +201,10 @@ func workflowRunAsInvocationContext(ctx context.Context, resolver WorkflowRunRes
 	if err != nil {
 		return invocationTokenContext{}, err
 	}
-	grants := invocationGrantsFromWorkflowTargetAuth(resolved.Auth)
+	grants := AllInvocationGrants()
 	p := principal.Canonicalize(&principal.Principal{
 		SubjectID:           resolved.RunAs.SubjectID,
 		CredentialSubjectID: resolved.RunAs.CredentialSubjectID,
-		TokenPermissions:    resolved.Auth.Permissions,
 	})
 
 	tokenCtx := invocationTokenContext{
@@ -237,30 +236,6 @@ func workflowRunAsInvocationContext(ctx context.Context, resolver WorkflowRunRes
 	tokenCtx.credentialModeOverride = profile.CredentialMode
 	tokenCtx.operationProfile = profile
 	return tokenCtx, nil
-}
-
-func invocationGrantsFromWorkflowTargetAuth(auth workflowrunauth.TargetAuth) InvocationGrants {
-	grants := InvocationGrants{}
-	for appName, operations := range auth.Operations {
-		for operation, credentialMode := range operations {
-			addWorkflowOperationGrant(grants, appName, operation, credentialMode)
-		}
-	}
-	return grants
-}
-
-func addWorkflowOperationGrant(grants InvocationGrants, appName, operation string, credentialMode core.ConnectionMode) {
-	appName = strings.TrimSpace(appName)
-	operation = strings.TrimSpace(operation)
-	if appName == "" || operation == "" {
-		return
-	}
-	grant := grants[appName]
-	if grant.Operations == nil {
-		grant.Operations = map[string]core.ConnectionMode{}
-	}
-	grant.Operations[operation] = core.NormalizeOptionalConnectionMode(credentialMode)
-	grants[appName] = grant
 }
 
 func (s *AppServer) tokenContextForSurfaceInvoke(req *proto.AppInvokeGraphQLRequest, targetApp, surface string) (invocationTokenContext, error) {

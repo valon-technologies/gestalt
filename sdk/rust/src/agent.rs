@@ -1416,7 +1416,9 @@ pub(crate) fn session_from_proto(value: pb::AgentSession) -> ProviderResult<Agen
         client_ref: value.client_ref,
         state: AgentSessionState::try_from(value.state)?,
         metadata: json_from_struct(value.metadata),
-        created_by_subject_id: Some(value.created_by_subject_id).filter(|value| !value.trim().is_empty()).map(|value| value.to_string()),
+        created_by_subject_id: Some(value.created_by_subject_id)
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| value.to_string()),
         created_at: time_from_timestamp(value.created_at)?,
         updated_at: time_from_timestamp(value.updated_at)?,
         last_turn_at: time_from_timestamp(value.last_turn_at)?,
@@ -1455,7 +1457,9 @@ pub(crate) fn turn_from_proto(value: pb::AgentTurn) -> ProviderResult<AgentTurn>
         messages: value.messages.into_iter().map(message_from_proto).collect(),
         output: agent_turn_output_from_proto(value.output)?,
         status_message: value.status_message,
-        created_by_subject_id: Some(value.created_by_subject_id).filter(|value| !value.trim().is_empty()).map(|value| value.to_string()),
+        created_by_subject_id: Some(value.created_by_subject_id)
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| value.to_string()),
         created_at: time_from_timestamp(value.created_at)?,
         started_at: time_from_timestamp(value.started_at)?,
         completed_at: time_from_timestamp(value.completed_at)?,
@@ -1660,7 +1664,9 @@ fn create_session_request_from_proto(
         model: value.model,
         client_ref: value.client_ref,
         metadata: json_from_struct(value.metadata),
-        created_by_subject_id: Some(value.created_by_subject_id).filter(|value| !value.trim().is_empty()).map(|value| value.to_string()),
+        created_by_subject_id: Some(value.created_by_subject_id)
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| value.to_string()),
         subject: agent_subject_from_proto(value.subject),
         session_start: value.session_start.map(|value| AgentSessionStartConfig {
             hooks: value
@@ -1711,7 +1717,9 @@ fn create_turn_request_from_proto(
             .collect(),
         output: required_agent_output_from_proto(value.output)?,
         metadata: json_from_struct(value.metadata),
-        created_by_subject_id: Some(value.created_by_subject_id).filter(|value| !value.trim().is_empty()).map(|value| value.to_string()),
+        created_by_subject_id: Some(value.created_by_subject_id)
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| value.to_string()),
         execution_ref: value.execution_ref,
         tool_refs: value
             .tool_refs

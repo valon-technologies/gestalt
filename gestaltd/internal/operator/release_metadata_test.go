@@ -64,10 +64,6 @@ func TestDecodeProviderReleaseMetadataRejectsInvalidStaticValidation(t *testing.
 		wantErr string
 	}{
 		{
-			name:    "missing static validation",
-			wantErr: "staticValidation is required",
-		},
-		{
 			name: "platform-specific static manifest",
 			block: ptr(`
   manifest:

@@ -720,9 +720,7 @@ func workflowSystemToolBaseLogAttrs(req agentSystemToolExecutionRequest) []any {
 	if p := principal.Canonicalized(req.Principal); p != nil {
 		attrs = append(attrs,
 			"subject_id", strings.TrimSpace(p.SubjectID),
-			"subject_kind", strings.TrimSpace(string(p.Kind)),
 			"credential_subject_id", strings.TrimSpace(p.CredentialSubjectID),
-			"auth_source", strings.TrimSpace(p.AuthSource()),
 		)
 	}
 	return attrs

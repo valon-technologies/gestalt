@@ -90,6 +90,7 @@ _host_list_requests: list[dict[str, Any]] = []
 _host_execute_requests: list[dict[str, Any]] = []
 _host_connection_requests: list[dict[str, Any]] = []
 _manager_requests: list[dict[str, Any]] = []
+_manager_workflows: list[dict[str, Any]] = []
 _manager_relay_tokens: list[str] = []
 
 
@@ -397,6 +398,7 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
 
     def GetSession(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
+        _record_manager_workflow(request)
         _manager_requests.append(
             {
                 "method": "get_session",
@@ -656,6 +658,14 @@ def _record_relay_tokens(context: grpc.ServicerContext) -> None:
     )
 
 
+def _record_manager_workflow(request: Any) -> None:
+    _manager_workflows.append(
+        json_format.MessageToDict(request.workflow, preserving_proto_field_name=True)
+        if request.HasField("workflow")
+        else {}
+    )
+
+
 def _record_host_relay_tokens(context: grpc.ServicerContext) -> None:
     _host_relay_tokens.extend(
         value
@@ -733,6 +743,7 @@ class AgentTransportTests(unittest.TestCase):
         _host_execute_requests.clear()
         _host_connection_requests.clear()
         _manager_requests.clear()
+        _manager_workflows.clear()
         _manager_relay_tokens.clear()
 
     def test_private_generated_stubs_are_packaged(self) -> None:
@@ -1396,6 +1407,44 @@ class AgentTransportTests(unittest.TestCase):
                     "turn_id": "",
                     "interaction_id": "",
                     "reason": "",
+                }
+            ],
+        )
+
+    def test_request_agent_forwards_workflow_without_invocation_token(self) -> None:
+        request = Request(
+            workflow={
+                "runId": "run-python-agent",
+                "runAs": {"id": "service_account:workflow-test"},
+            }
+        )
+
+        with request.agent() as manager:
+            fetched = manager.get_session(
+                agent_pb2.GetAgentProviderSessionRequest(session_id="session-managed-1")
+            )
+
+        self.assertEqual(fetched.id, "session-managed-1")
+        self.assertEqual(
+            _manager_requests,
+            [
+                {
+                    "method": "get_session",
+                    "invocation_token": "",
+                    "provider_name": "",
+                    "session_id": "session-managed-1",
+                    "turn_id": "",
+                    "interaction_id": "",
+                    "reason": "",
+                }
+            ],
+        )
+        self.assertEqual(
+            _manager_workflows,
+            [
+                {
+                    "runId": "run-python-agent",
+                    "runAs": {"id": "service_account:workflow-test"},
                 }
             ],
         )

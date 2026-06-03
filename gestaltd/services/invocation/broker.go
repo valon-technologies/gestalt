@@ -365,11 +365,8 @@ func (b *Broker) observePlugin5xxResult(ctx context.Context, span trace.Span, p 
 	if binding := HTTPBindingFromContext(ctx); binding != "" {
 		attrs = append(attrs, "http_binding", binding)
 	}
-	if subjectID, subjectKind := resultSubjectFields(p); subjectID != "" {
+	if subjectID := resultSubjectID(p); subjectID != "" {
 		attrs = append(attrs, "subject_id", subjectID)
-		if subjectKind != "" {
-			attrs = append(attrs, "subject_kind", subjectKind)
-		}
 	}
 
 	b.log().WarnContext(ctx, "provider operation returned 5xx result", attrs...)
@@ -382,17 +379,12 @@ func truncateResultBodyForLog(body string) string {
 	return body[:resultBodyLogLimit]
 }
 
-func resultSubjectFields(p *principal.Principal) (string, string) {
+func resultSubjectID(p *principal.Principal) string {
 	p = principal.Canonicalized(p)
 	if p == nil {
-		return "", ""
+		return ""
 	}
-	subjectID := strings.TrimSpace(p.SubjectID)
-	subjectKind := strings.TrimSpace(string(p.Kind))
-	if subjectKind == "" && subjectID != "" {
-		subjectKind = string(principal.KindFromSubjectID(subjectID))
-	}
-	return subjectID, subjectKind
+	return strings.TrimSpace(p.SubjectID)
 }
 
 func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request GraphQLRequest) (result *core.OperationResult, err error) {

@@ -82,11 +82,10 @@ class _AppClient:
     Provider code should obtain this through :meth:`gestalt.Request.app`.
     """
 
-    def __init__(self, invocation_token: str) -> None:
+    def __init__(
+        self, invocation_token: str, *, workflow: JsonObjectInput | None = None
+    ) -> None:
         trimmed_token = invocation_token.strip()
-        if not trimmed_token:
-            raise RuntimeError("app: invocation token is not available")
-
         socket_path = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not socket_path:
             raise RuntimeError(
@@ -97,6 +96,9 @@ class _AppClient:
         self._channel = _app_channel(socket_path, token=relay_token)
         self._stub = pb_grpc.AppStub(self._channel)
         self._invocation_token = trimmed_token
+        self._workflow = _struct_from_dict_optional(
+            workflow, preserve_empty=False, path="app workflow"
+        )
 
     def close(self) -> None:
         """Close the underlying gRPC channel."""
@@ -131,6 +133,8 @@ class _AppClient:
         message = _struct_from_dict(params)
         if message is not None:
             request.params.CopyFrom(message)
+        if self._workflow is not None:
+            request.workflow.CopyFrom(self._workflow)
 
         return _response_from_proto(self._stub.Invoke(request))
 

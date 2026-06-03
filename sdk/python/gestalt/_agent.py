@@ -2199,11 +2199,10 @@ class Agent:
     method is mutated to include that invocation token before the RPC is sent.
     """
 
-    def __init__(self, invocation_token: str) -> None:
+    def __init__(
+        self, invocation_token: str, *, workflow: JsonObjectInput | None = None
+    ) -> None:
         trimmed_token = invocation_token.strip()
-        if not trimmed_token:
-            raise RuntimeError("agent: invocation token is not available")
-
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"agent: {ENV_HOST_SERVICE_SOCKET} is not set")
@@ -2212,6 +2211,7 @@ class Agent:
         self._channel = host_service_channel("agent", target, token=relay_token)
         self._stub = pb_grpc.AgentProviderStub(self._channel)
         self._invocation_token = trimmed_token
+        self._workflow = struct_from_dict(workflow) if workflow else None
 
     def close(self) -> None:
         """Close the underlying gRPC channel."""
@@ -2224,14 +2224,14 @@ class Agent:
         """Create an agent session."""
 
         request = _agent_create_session_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_session_from_proto(_grpc_call(self._stub.CreateSession, request))
 
     def get_session(self, request: Any | None = None, **kwargs: Any) -> AgentSession:
         """Fetch one agent session."""
 
         request = _agent_get_session_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_session_from_proto(_grpc_call(self._stub.GetSession, request))
 
     def list_sessions(
@@ -2240,7 +2240,7 @@ class Agent:
         """List agent sessions visible to the invocation token."""
 
         request = _agent_list_sessions_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return list_agent_sessions_response_from_proto(
             _grpc_call(self._stub.ListSessions, request)
         )
@@ -2251,21 +2251,21 @@ class Agent:
         """Update mutable fields on an agent session."""
 
         request = _agent_update_session_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_session_from_proto(_grpc_call(self._stub.UpdateSession, request))
 
     def create_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
         """Create an agent turn."""
 
         request = _agent_create_turn_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_turn_from_proto(_grpc_call(self._stub.CreateTurn, request))
 
     def get_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
         """Fetch one agent turn."""
 
         request = _agent_get_turn_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_turn_from_proto(_grpc_call(self._stub.GetTurn, request))
 
     def list_turns(
@@ -2274,7 +2274,7 @@ class Agent:
         """List turns for an agent session."""
 
         request = _agent_list_turns_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return list_agent_turns_response_from_proto(
             _grpc_call(self._stub.ListTurns, request)
         )
@@ -2283,7 +2283,7 @@ class Agent:
         """Cancel an in-progress agent turn."""
 
         request = _agent_cancel_turn_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_turn_from_proto(_grpc_call(self._stub.CancelTurn, request))
 
     def list_turn_events(
@@ -2292,7 +2292,7 @@ class Agent:
         """List events emitted for an agent turn."""
 
         request = _agent_list_turn_events_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return list_agent_turn_events_response_from_proto(
             _grpc_call(self._stub.ListTurnEvents, request)
         )
@@ -2303,7 +2303,7 @@ class Agent:
         """List pending or completed agent interactions."""
 
         request = _agent_list_interactions_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return list_agent_interactions_response_from_proto(
             _grpc_call(self._stub.ListInteractions, request)
         )
@@ -2314,10 +2314,15 @@ class Agent:
         """Resolve an agent interaction with a host response."""
 
         request = _agent_resolve_interaction_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_interaction_from_proto(
             _grpc_call(self._stub.ResolveInteraction, request)
         )
+
+    def _attach_context(self, request: Any) -> None:
+        request.invocation_token = self._invocation_token
+        if self._workflow is not None and hasattr(request, "workflow"):
+            request.workflow.CopyFrom(self._workflow)
 
     def __enter__(self) -> Agent:
         """Return the client for ``with`` statements."""
