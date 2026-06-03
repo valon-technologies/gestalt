@@ -11,7 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -379,10 +378,7 @@ func writeLocalProviderReleaseMetadata(dir string) error {
 				"kind":    manifest.Kind,
 				"source":  manifest.Source,
 				"version": manifest.Version,
-				"entrypoint": map[string]any{
-					"artifactPath": staticvalidation.EntrypointPlaceholder,
-				},
-				"spec": map[string]any{},
+				"spec":    map[string]any{},
 			},
 		},
 	}

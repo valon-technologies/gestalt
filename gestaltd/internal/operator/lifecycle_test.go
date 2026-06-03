@@ -3402,11 +3402,8 @@ func TestPortableStaticValidationManifestProjectsPlatformNeutralRuntimeFields(t 
 	if len(darwinProjected.Artifacts) != 0 {
 		t.Fatalf("projected artifacts = %+v, want nil", darwinProjected.Artifacts)
 	}
-	if darwinProjected.Entrypoint == nil || darwinProjected.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
-		t.Fatalf("projected entrypoint = %+v, want placeholder", darwinProjected.Entrypoint)
-	}
-	if len(darwinProjected.Entrypoint.Args) != 0 {
-		t.Fatalf("projected entrypoint args = %+v, want nil", darwinProjected.Entrypoint.Args)
+	if darwinProjected.Entrypoint != nil {
+		t.Fatalf("projected entrypoint = %+v, want nil", darwinProjected.Entrypoint)
 	}
 	if darwinProjected.Spec.Surfaces.OpenAPI.Document != "openapi.yaml" {
 		t.Fatalf("projected OpenAPI document = %q, want openapi.yaml", darwinProjected.Spec.Surfaces.OpenAPI.Document)
@@ -3422,7 +3419,7 @@ func TestPortableStaticValidationManifestProjectsPlatformNeutralRuntimeFields(t 
 	if !bytes.Equal(darwinJSON, linuxJSON) {
 		t.Fatalf("projected manifests differ:\ndarwin: %s\nlinux: %s", darwinJSON, linuxJSON)
 	}
-	if darwinManifest.Entrypoint.ArtifactPath == staticValidationEntrypointPlaceholder || len(darwinManifest.Artifacts) == 0 {
+	if len(darwinManifest.Artifacts) == 0 {
 		t.Fatal("portableStaticValidationManifest mutated source manifest")
 	}
 
@@ -3568,24 +3565,24 @@ func TestAttachStaticValidationMetadataProjectsPortableArchiveBackedSources(t *t
 		if len(staticManifest.Artifacts) != 0 {
 			t.Fatalf("%s artifacts = %+v, want nil", name, staticManifest.Artifacts)
 		}
-		if staticManifest.Entrypoint == nil || staticManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
-			t.Fatalf("%s entrypoint = %+v, want placeholder", name, staticManifest.Entrypoint)
+		if staticManifest.Entrypoint != nil {
+			t.Fatalf("%s entrypoint = %+v, want nil", name, staticManifest.Entrypoint)
 		}
 	}
 	agentManifest := lock.Agents["agentSnapshot"].StaticManifest
 	if len(agentManifest.Artifacts) != 0 {
 		t.Fatalf("agentSnapshot artifacts = %+v, want nil", agentManifest.Artifacts)
 	}
-	if agentManifest.Entrypoint == nil || agentManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
-		t.Fatalf("agentSnapshot entrypoint = %+v, want placeholder", agentManifest.Entrypoint)
+	if agentManifest.Entrypoint != nil {
+		t.Fatalf("agentSnapshot entrypoint = %+v, want nil", agentManifest.Entrypoint)
 	}
 	for _, name := range []string{"local", "gitSource", "gitSnapshotMissingSourceRef", "gitSnapshotSourceMaterialization", "gitSnapshotNoArchives", "gitSnapshotWrongSourceRefType"} {
 		staticManifest := lock.Providers[name].StaticManifest
 		if len(staticManifest.Artifacts) != 1 {
 			t.Fatalf("%s artifacts = %+v, want preserved runtime artifact", name, staticManifest.Artifacts)
 		}
-		if staticManifest.Entrypoint == nil || staticManifest.Entrypoint.ArtifactPath == staticValidationEntrypointPlaceholder {
-			t.Fatalf("%s entrypoint = %+v, want original entrypoint", name, staticManifest.Entrypoint)
+		if staticManifest.Entrypoint == nil {
+			t.Fatalf("%s entrypoint = nil, want original entrypoint", name)
 		}
 	}
 }
@@ -3668,8 +3665,8 @@ func TestArchiveBackedGitSnapshotStaticProjectionAvoidsAgentPlatformDrift(t *tes
 	if entry.StaticManifest == nil || len(entry.StaticManifest.Artifacts) != 0 {
 		t.Fatalf("static manifest artifacts = %+v, want nil", entry.StaticManifest)
 	}
-	if entry.StaticManifest.Entrypoint == nil || entry.StaticManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
-		t.Fatalf("static manifest entrypoint = %+v, want placeholder", entry.StaticManifest.Entrypoint)
+	if entry.StaticManifest.Entrypoint != nil {
+		t.Fatalf("static manifest entrypoint = %+v, want nil", entry.StaticManifest.Entrypoint)
 	}
 
 	lockPath := filepath.Join(t.TempDir(), LockfileName)
@@ -3684,8 +3681,8 @@ func TestArchiveBackedGitSnapshotStaticProjectionAvoidsAgentPlatformDrift(t *tes
 	if readBackManifest == nil || len(readBackManifest.Artifacts) != 0 {
 		t.Fatalf("read-back static manifest artifacts = %+v, want nil", readBackManifest)
 	}
-	if readBackManifest.Entrypoint == nil || readBackManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
-		t.Fatalf("read-back static manifest entrypoint = %+v, want placeholder", readBackManifest.Entrypoint)
+	if readBackManifest.Entrypoint != nil {
+		t.Fatalf("read-back static manifest entrypoint = %+v, want nil", readBackManifest.Entrypoint)
 	}
 }
 

@@ -200,10 +200,7 @@ func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manif
 				"kind":    manifest.Kind,
 				"source":  manifest.Source,
 				"version": manifest.Version,
-				"entrypoint": map[string]any{
-					"artifactPath": staticValidationEntrypointPlaceholder,
-				},
-				"spec": map[string]any{},
+				"spec":    map[string]any{},
 			},
 		},
 	}

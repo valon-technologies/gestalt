@@ -18,7 +18,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
@@ -188,8 +187,8 @@ func validateProviderReleaseStaticValidation(metadata *providerReleaseMetadata) 
 		if len(static.Manifest.Artifacts) != 0 {
 			return fmt.Errorf("provider release staticValidation.manifest must not include platform artifacts")
 		}
-		if static.Manifest.Entrypoint != nil && static.Manifest.Entrypoint.ArtifactPath != staticvalidation.EntrypointPlaceholder {
-			return fmt.Errorf("provider release staticValidation.manifest entrypoint artifactPath must be %q", staticvalidation.EntrypointPlaceholder)
+		if static.Manifest.Entrypoint != nil {
+			return fmt.Errorf("provider release staticValidation.manifest must not include entrypoint")
 		}
 	}
 	if static.Catalog != nil {

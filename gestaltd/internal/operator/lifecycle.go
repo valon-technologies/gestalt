@@ -44,8 +44,7 @@ const (
 	PreparedRuntimeDir             = ".gestaltd/runtime"
 	PreparedUIDir                  = ".gestaltd/ui"
 
-	platformKeyGeneric                    = "generic"
-	staticValidationEntrypointPlaceholder = staticvalidation.EntrypointPlaceholder
+	platformKeyGeneric = "generic"
 )
 
 type Lockfile struct {
