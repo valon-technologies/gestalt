@@ -207,7 +207,11 @@ with `\` to continue the same user message on the next prompt.
 
 `gestalt agent turns create` is the non-interactive equivalent. It supports
 repeated `--system`, repeated `--message`, repeated `--tool app:operation`,
-`--idempotency-key`, and `--input`. `gestalt agent turns transcript` renders a
+`--idempotency-key`, and `--input`. Use `--timeout-seconds` on interactive
+`gestalt agent`, `gestalt agent resume`, and `gestalt agent turns create` to set
+an optional per-turn execution budget for server-backed sessions; see
+[Agent — Turn timeouts (optional)](/providers/agent#turn-timeouts-optional).
+`gestalt agent turns transcript` renders a
 stored turn by combining the turn's messages from
 `GET /api/v1/agent/turns/{turnID}` with stored display-projected events from
 `GET /api/v1/agent/turns/{turnID}/events`. `gestalt agent turns events list`
