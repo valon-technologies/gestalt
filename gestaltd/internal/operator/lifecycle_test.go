@@ -3322,7 +3322,8 @@ func TestPortableStaticValidationManifestRelativizesLocalSurfaces(t *testing.T) 
 		},
 	}
 
-	got, err := portableStaticValidationManifest(manifest, manifestPath, false)
+	const preserveRuntimeFields = false // This test only exercises path relativization for local metadata.
+	got, err := portableStaticValidationManifest(manifest, manifestPath, preserveRuntimeFields)
 	if err != nil {
 		t.Fatalf("portableStaticValidationManifest: %v", err)
 	}
@@ -3343,7 +3344,7 @@ func TestPortableStaticValidationManifestRelativizesLocalSurfaces(t *testing.T) 
 	}
 }
 
-func TestPortableStaticValidationManifestProjectsReleaseRuntimeFields(t *testing.T) {
+func TestPortableStaticValidationManifestProjectsPlatformNeutralRuntimeFields(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -3389,11 +3390,12 @@ func TestPortableStaticValidationManifestProjectsReleaseRuntimeFields(t *testing
 		}},
 	)
 
-	darwinProjected, err := portableStaticValidationManifest(darwinManifest, manifestPath, true)
+	const platformNeutral = true // Archive-backed locks compare static metadata across host platforms.
+	darwinProjected, err := portableStaticValidationManifest(darwinManifest, manifestPath, platformNeutral)
 	if err != nil {
 		t.Fatalf("project darwin manifest: %v", err)
 	}
-	linuxProjected, err := portableStaticValidationManifest(linuxManifest, manifestPath, true)
+	linuxProjected, err := portableStaticValidationManifest(linuxManifest, manifestPath, platformNeutral)
 	if err != nil {
 		t.Fatalf("project linux manifest: %v", err)
 	}
@@ -3424,7 +3426,8 @@ func TestPortableStaticValidationManifestProjectsReleaseRuntimeFields(t *testing
 		t.Fatal("portableStaticValidationManifest mutated source manifest")
 	}
 
-	localProjected, err := portableStaticValidationManifest(darwinManifest, manifestPath, false)
+	const preserveRuntimeFields = false // Local/source manifests remain runnable and keep platform artifacts.
+	localProjected, err := portableStaticValidationManifest(darwinManifest, manifestPath, preserveRuntimeFields)
 	if err != nil {
 		t.Fatalf("project local manifest: %v", err)
 	}
@@ -3441,7 +3444,7 @@ func TestPortableStaticValidationManifestProjectsReleaseRuntimeFields(t *testing
 		Artifacts: []providermanifestv1.Artifact{{Path: "generic.tar.gz", SHA256: "generic-sha"}},
 		Spec:      &providermanifestv1.Spec{},
 	}
-	declarativeProjected, err := portableStaticValidationManifest(declarative, "", true)
+	declarativeProjected, err := portableStaticValidationManifest(declarative, "", platformNeutral)
 	if err != nil {
 		t.Fatalf("project declarative manifest: %v", err)
 	}
