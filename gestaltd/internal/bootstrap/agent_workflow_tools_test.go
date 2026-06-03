@@ -406,6 +406,10 @@ func TestWorkflowSystemToolStartRunSchemaMatchesV1Contract(t *testing.T) {
 	if !ok {
 		t.Fatalf("runs.start step properties = %#v", items["properties"])
 	}
+	stepTimeout, ok := stepProps["timeoutSeconds"].(map[string]any)
+	if !ok || stepTimeout["minimum"] != 1 {
+		t.Fatalf("runs.start step timeoutSeconds schema = %#v, want minimum 1", stepProps["timeoutSeconds"])
+	}
 	stepBranches, ok := items["oneOf"].([]any)
 	if !ok || len(stepBranches) != 2 {
 		t.Fatalf("runs.start step oneOf = %#v, want app and agent branches", items["oneOf"])
