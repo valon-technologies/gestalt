@@ -277,6 +277,15 @@ func TestProviderWorkflowAgentCallContextRequiresMarkerForParentDeadline(t *test
 	if !markedDeadline.Equal(parentDeadline) {
 		t.Fatalf("marked deadline = %s, want parent deadline %s", markedDeadline, parentDeadline)
 	}
+	markedTurn, markedTurnCancel := ProviderAgentTurnCreateContext(markedParent, int32((2 * ProviderRPCTimeout).Seconds()))
+	defer markedTurnCancel()
+	markedTurnDeadline, ok := markedTurn.Deadline()
+	if !ok {
+		t.Fatal("marked turn create context has no deadline")
+	}
+	if !markedTurnDeadline.Equal(parentDeadline) {
+		t.Fatalf("marked turn create deadline = %s, want parent deadline %s", markedTurnDeadline, parentDeadline)
+	}
 	parentCancel()
 	select {
 	case <-marked.Done():
@@ -296,6 +305,16 @@ func TestProviderWorkflowAgentCallContextFallsBackWithoutParentDeadline(t *testi
 	}
 	if remaining := time.Until(deadline); remaining > ProviderRPCTimeout {
 		t.Fatalf("remaining deadline = %s, want at most provider RPC timeout %s", remaining, ProviderRPCTimeout)
+	}
+
+	markedNoDeadline, markedNoDeadlineCancel := ProviderAgentTurnCreateContext(WithWorkflowAgentProviderDeadline(context.Background()), int32((2 * ProviderRPCTimeout).Seconds()))
+	defer markedNoDeadlineCancel()
+	markedNoDeadlineDeadline, ok := markedNoDeadline.Deadline()
+	if !ok {
+		t.Fatal("marked without parent deadline turn create context has no deadline")
+	}
+	if remaining := time.Until(markedNoDeadlineDeadline); remaining > ProviderRPCTimeout {
+		t.Fatalf("marked without parent deadline remaining = %s, want at most provider RPC timeout %s", remaining, ProviderRPCTimeout)
 	}
 }
 

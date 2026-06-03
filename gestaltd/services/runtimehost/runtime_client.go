@@ -184,6 +184,25 @@ func ProviderWorkflowAgentCallContext(parent context.Context) (context.Context, 
 	return ProviderCallContext(parent)
 }
 
+// ProviderAgentTurnCreateContext returns a context for agent turn creation RPCs.
+// Workflow-owned calls keep the workflow deadline; direct app calls may opt into
+// a longer turn deadline through CreateTurn.timeout_seconds.
+func ProviderAgentTurnCreateContext(parent context.Context, timeoutSeconds int32) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if marked, _ := parent.Value(workflowAgentProviderDeadlineKey{}).(bool); marked {
+		if _, ok := parent.Deadline(); ok {
+			return context.WithCancel(parent)
+		}
+		return ProviderCallContext(parent)
+	}
+	if timeoutSeconds > 0 {
+		return context.WithTimeout(parent, time.Duration(timeoutSeconds)*time.Second)
+	}
+	return ProviderCallContext(parent)
+}
+
 // ProviderSessionCreateContext returns a child context for agent CreateSession RPCs.
 // It preserves caller deadlines when present and otherwise applies a bounded fallback.
 func ProviderSessionCreateContext(parent context.Context) (context.Context, context.CancelFunc) {

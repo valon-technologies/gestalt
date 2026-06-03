@@ -145,7 +145,7 @@ func (r *remoteAgent) UpdateSession(ctx context.Context, req *proto.UpdateAgentP
 }
 
 func (r *remoteAgent) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
-	ctx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
+	ctx, cancel := runtimehost.ProviderAgentTurnCreateContext(ctx, req.GetTimeoutSeconds())
 	defer cancel()
 	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderTurnRequest{})
 	providerReq.InvocationToken = appaccess.InvocationTokenFromContext(ctx)

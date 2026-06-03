@@ -246,8 +246,10 @@ func TestRemoteAgentWorkflowAgentTurnCallsPreserveMarkedDeadline(t *testing.T) {
 func TestRemoteAgentTurnCallsKeepProviderTimeoutWithoutWorkflowMarker(t *testing.T) {
 	t.Parallel()
 
+	const requestTimeoutSeconds int32 = 120
 	parentDeadline := time.Now().Add(2 * runtimehost.ProviderSessionCreateTimeout)
 	var createTurnRemaining time.Duration
+	var createTurnWithTimeoutRemaining time.Duration
 	var getTurnRemaining time.Duration
 	var getSessionRemaining time.Duration
 	agent := &remoteAgent{
@@ -257,7 +259,14 @@ func TestRemoteAgentTurnCallsKeepProviderTimeoutWithoutWorkflowMarker(t *testing
 				if !ok {
 					t.Fatal("CreateTurn context has no deadline")
 				}
-				createTurnRemaining = time.Until(deadline)
+				if req.GetTimeoutSeconds() > 0 {
+					if req.GetTimeoutSeconds() != requestTimeoutSeconds {
+						t.Fatalf("CreateTurn timeout_seconds = %d, want %d", req.GetTimeoutSeconds(), requestTimeoutSeconds)
+					}
+					createTurnWithTimeoutRemaining = time.Until(deadline)
+				} else {
+					createTurnRemaining = time.Until(deadline)
+				}
 				return &proto.AgentTurn{Id: "turn-1", SessionId: req.GetSessionId()}, nil
 			},
 			getTurn: func(ctx context.Context, req *proto.GetAgentProviderTurnRequest, _ ...grpc.CallOption) (*proto.AgentTurn, error) {
@@ -284,6 +293,12 @@ func TestRemoteAgentTurnCallsKeepProviderTimeoutWithoutWorkflowMarker(t *testing
 	if _, err := agent.CreateTurn(parent, &proto.CreateAgentProviderTurnRequest{SessionId: "session-1"}); err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
+	if _, err := agent.CreateTurn(parent, &proto.CreateAgentProviderTurnRequest{
+		SessionId:      "session-2",
+		TimeoutSeconds: requestTimeoutSeconds,
+	}); err != nil {
+		t.Fatalf("CreateTurn with timeout: %v", err)
+	}
 	if _, err := agent.GetTurn(parent, &proto.GetAgentProviderTurnRequest{TurnId: "turn-1"}); err != nil {
 		t.Fatalf("GetTurn: %v", err)
 	}
@@ -299,6 +314,13 @@ func TestRemoteAgentTurnCallsKeepProviderTimeoutWithoutWorkflowMarker(t *testing
 		if remaining > runtimehost.ProviderRPCTimeout {
 			t.Fatalf("%s remaining deadline = %s, want at most provider RPC timeout %s", name, remaining, runtimehost.ProviderRPCTimeout)
 		}
+	}
+	if createTurnWithTimeoutRemaining <= runtimehost.ProviderRPCTimeout {
+		t.Fatalf("CreateTurn with timeout remaining deadline = %s, want above provider RPC timeout %s", createTurnWithTimeoutRemaining, runtimehost.ProviderRPCTimeout)
+	}
+	requestTimeout := time.Duration(requestTimeoutSeconds) * time.Second
+	if createTurnWithTimeoutRemaining > requestTimeout {
+		t.Fatalf("CreateTurn with timeout remaining deadline = %s, want at most request timeout %s", createTurnWithTimeoutRemaining, requestTimeout)
 	}
 }
 
