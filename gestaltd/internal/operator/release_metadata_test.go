@@ -118,6 +118,37 @@ artifacts:
 	}
 }
 
+func TestProviderReleaseMetadataCacheBustRetryPredicate(t *testing.T) {
+	t.Parallel()
+
+	_, err := decodeProviderReleaseMetadata([]byte(`
+schema: gestaltd-provider-release
+schemaVersion: 1
+package: github.com/acme/providers/provider
+kind: app
+version: 1.2.3
+runtime: executable
+artifacts:
+  linux/amd64:
+    path: provider-linux-amd64.tar.gz
+    sha256: linux-sha
+`))
+	if err == nil {
+		t.Fatal("decodeProviderReleaseMetadata error = nil, want missing staticValidation")
+	}
+	location := "https://storage.googleapis.com/gitlab-peach-street-gestalt-provider-snapshots/github.com/acme/providers/main/app/provider/provider-release.yaml"
+	if !shouldRetryProviderReleaseMetadataWithCacheBust(location, err) {
+		t.Fatal("shouldRetryProviderReleaseMetadataWithCacheBust = false, want true for GCS stale metadata")
+	}
+	if shouldRetryProviderReleaseMetadataWithCacheBust("https://example.com/provider-release.yaml", err) {
+		t.Fatal("shouldRetryProviderReleaseMetadataWithCacheBust = true, want false for non-GCS metadata")
+	}
+	cacheBusted := providerReleaseMetadataCacheBustLocation(location)
+	if !strings.HasPrefix(cacheBusted, location+"?gestaltdCacheBust=") {
+		t.Fatalf("cache-busted location = %q, want query appended to original location", cacheBusted)
+	}
+}
+
 func staticValidationBlock(block *string) string {
 	if block == nil {
 		return ""

@@ -238,9 +238,57 @@ func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, meta
 	}
 	metadata, err := decodeProviderReleaseMetadata(data)
 	if err != nil {
+		if shouldRetryProviderReleaseMetadataWithCacheBust(resolvedMetadataLocation, err) {
+			cacheBustedLocation := providerReleaseMetadataCacheBustLocation(resolvedMetadataLocation)
+			resp, fetchErr := doProviderReleaseHTTPRequestWithRetry(ctx, client, func(ctx context.Context) (*http.Request, error) {
+				return newAuthenticatedFetchRequest(ctx, cacheBustedLocation, token)
+			})
+			if fetchErr != nil {
+				return nil, "", nil, fmt.Errorf("fetch provider release metadata cache-bust retry: %w", fetchErr)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusOK {
+				return nil, "", nil, fmt.Errorf("unexpected status %d fetching provider release metadata from %s", resp.StatusCode, cacheBustedLocation)
+			}
+			data, fetchErr = io.ReadAll(io.LimitReader(resp.Body, providerReleaseMetadataMaxBytes+1))
+			if fetchErr != nil {
+				return nil, "", nil, fmt.Errorf("read provider release metadata cache-bust retry: %w", fetchErr)
+			}
+			if len(data) > providerReleaseMetadataMaxBytes {
+				return nil, "", nil, fmt.Errorf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)
+			}
+			metadata, fetchErr = decodeProviderReleaseMetadata(data)
+			if fetchErr == nil {
+				return metadata, resolvedMetadataLocation, gitHubReleaseAssets, nil
+			}
+		}
 		return nil, "", nil, err
 	}
 	return metadata, resolvedMetadataLocation, gitHubReleaseAssets, nil
+}
+
+func shouldRetryProviderReleaseMetadataWithCacheBust(metadataLocation string, err error) bool {
+	if err == nil || !strings.Contains(err.Error(), "provider release staticValidation is required") {
+		return false
+	}
+	parsed, parseErr := url.Parse(metadataLocation)
+	if parseErr != nil {
+		return false
+	}
+	return parsed.Scheme == "https" &&
+		parsed.Host == "storage.googleapis.com" &&
+		strings.HasSuffix(parsed.Path, "/provider-release.yaml")
+}
+
+func providerReleaseMetadataCacheBustLocation(metadataLocation string) string {
+	parsed, err := url.Parse(metadataLocation)
+	if err != nil {
+		return metadataLocation
+	}
+	query := parsed.Query()
+	query.Set("gestaltdCacheBust", fmt.Sprintf("%d", time.Now().UnixNano()))
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 func doProviderReleaseHTTPRequestWithRetry(ctx context.Context, client *http.Client, newRequest func(context.Context) (*http.Request, error)) (*http.Response, error) {
