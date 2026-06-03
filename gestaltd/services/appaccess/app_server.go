@@ -21,10 +21,9 @@ import (
 type AppServer struct {
 	proto.UnimplementedAppServer
 
-	invoker                     invocation.Invoker
-	tokens                      *InvocationTokenManager
-	workflowRuns                WorkflowRunResolver
-	workflowAppInvocationGrants map[string]InvocationGrants
+	invoker      invocation.Invoker
+	tokens       *InvocationTokenManager
+	workflowRuns WorkflowRunResolver
 }
 
 type WorkflowRunResolver = workflowrunauth.Resolver
@@ -34,25 +33,6 @@ type AppServerOption func(*AppServer)
 func WithWorkflowRunResolver(resolver WorkflowRunResolver) AppServerOption {
 	return func(s *AppServer) {
 		s.workflowRuns = resolver
-	}
-}
-
-func WithWorkflowAppInvocationGrants(grants map[string]InvocationGrants) AppServerOption {
-	return func(s *AppServer) {
-		if len(grants) == 0 {
-			s.workflowAppInvocationGrants = nil
-			return
-		}
-		s.workflowAppInvocationGrants = make(map[string]InvocationGrants, len(grants))
-		for app, appGrants := range grants {
-			app = strings.TrimSpace(app)
-			if app == "" {
-				continue
-			}
-			if cloned := cloneInvocationGrants(appGrants); len(cloned) > 0 {
-				s.workflowAppInvocationGrants[app] = cloned
-			}
-		}
 	}
 }
 
@@ -177,7 +157,7 @@ func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraph
 func (s *AppServer) tokenContextForInvoke(ctx context.Context, req *proto.AppInvokeRequest, targetApp, targetOperation string) (invocationTokenContext, error) {
 	invocationToken := strings.TrimSpace(req.GetInvocationToken())
 	if invocationToken == "" {
-		return workflowRunAsInvocationContext(ctx, s.workflowRuns, req.GetWorkflow(), targetApp, targetOperation, req.GetCredentialMode(), s.workflowAppInvocationGrants)
+		return workflowRunAsInvocationContext(ctx, s.workflowRuns, req.GetWorkflow(), targetApp, targetOperation, req.GetCredentialMode())
 	}
 	tokenCtx, err := s.tokens.resolveToken(invocationToken, "")
 	if err != nil {
@@ -209,28 +189,24 @@ func (s *AppServer) tokenContextForInvoke(ctx context.Context, req *proto.AppInv
 }
 
 func WorkflowRunAsTokenContext(ctx context.Context, resolver WorkflowRunResolver, workflow *structpb.Struct) (TokenContext, error) {
-	tokenCtx, err := workflowRunAsInvocationContext(ctx, resolver, workflow, "", "", "", nil)
+	tokenCtx, err := workflowRunAsInvocationContext(ctx, resolver, workflow, "", "", "")
 	if err != nil {
 		return TokenContext{}, err
 	}
 	return TokenContext{inner: tokenCtx}, nil
 }
 
-func workflowRunAsInvocationContext(ctx context.Context, resolver WorkflowRunResolver, workflow *structpb.Struct, targetApp, targetOperation, rawCredentialMode string, appInvocationGrants map[string]InvocationGrants) (invocationTokenContext, error) {
+func workflowRunAsInvocationContext(ctx context.Context, resolver WorkflowRunResolver, workflow *structpb.Struct, targetApp, targetOperation, rawCredentialMode string) (invocationTokenContext, error) {
 	resolved, err := workflowrunauth.ResolveInvocationFromWorkflowRun(ctx, resolver, workflow)
 	if err != nil {
 		return invocationTokenContext{}, err
 	}
-	grants := invocationGrantsFromWorkflowTargetAuth(resolved.Auth)
-	addWorkflowStepAppInvocationGrants(grants, resolved.Auth, appInvocationGrants)
-	permissions := principal.ClonePermissionSet(resolved.Auth.Permissions)
-	permissions = addWorkflowStepAppInvocationPermissions(permissions, resolved.Auth, appInvocationGrants)
+	grants := AllInvocationGrants()
 	p := principal.Canonicalize(&principal.Principal{
 		SubjectID:           resolved.RunAs.SubjectID,
 		CredentialSubjectID: resolved.RunAs.CredentialSubjectID,
 		DisplayName:         resolved.RunAs.DisplayName,
 		Kind:                principal.Kind(resolved.RunAs.SubjectKind),
-		TokenPermissions:    permissions,
 	})
 	principal.SetAuthSource(p, resolved.RunAs.AuthSource)
 
@@ -263,98 +239,6 @@ func workflowRunAsInvocationContext(ctx context.Context, resolver WorkflowRunRes
 	tokenCtx.credentialModeOverride = profile.CredentialMode
 	tokenCtx.operationProfile = profile
 	return tokenCtx, nil
-}
-
-func addWorkflowStepAppInvocationGrants(grants InvocationGrants, auth workflowrunauth.TargetAuth, appInvocationGrants map[string]InvocationGrants) {
-	if len(grants) == 0 || len(auth.StepApps) == 0 || len(appInvocationGrants) == 0 {
-		return
-	}
-	for appName := range auth.StepApps {
-		mergeWorkflowInvocationGrants(grants, appInvocationGrants[appName])
-	}
-}
-
-func mergeWorkflowInvocationGrants(dst, src InvocationGrants) {
-	for appName, grant := range src {
-		appName = strings.TrimSpace(appName)
-		if appName == "" || invocationGrantEmpty(grant) {
-			continue
-		}
-		dst[appName] = mergeInvocationGrant(dst[appName], grant)
-	}
-}
-
-func addWorkflowStepAppInvocationPermissions(perms principal.PermissionSet, auth workflowrunauth.TargetAuth, appInvocationGrants map[string]InvocationGrants) principal.PermissionSet {
-	if len(auth.StepApps) == 0 || len(appInvocationGrants) == 0 {
-		return perms
-	}
-	if perms == nil {
-		perms = principal.PermissionSet{}
-	}
-	for appName := range auth.StepApps {
-		addInvocationGrantPermissions(perms, appInvocationGrants[appName])
-	}
-	if len(perms) == 0 {
-		return nil
-	}
-	return perms
-}
-
-func addInvocationGrantPermissions(perms principal.PermissionSet, grants InvocationGrants) {
-	for appName, grant := range grants {
-		appName = strings.TrimSpace(appName)
-		if appName == "" || invocationGrantEmpty(grant) {
-			continue
-		}
-		if grant.AllOperations {
-			perms[appName] = nil
-			continue
-		}
-		ops, ok := perms[appName]
-		if ok && ops == nil {
-			continue
-		}
-		if ops == nil {
-			ops = map[string]struct{}{}
-		}
-		for operation := range grant.Operations {
-			if operation = strings.TrimSpace(operation); operation != "" {
-				ops[operation] = struct{}{}
-			}
-		}
-		for surface := range grant.Surfaces {
-			if surface = strings.ToLower(strings.TrimSpace(surface)); surface != "" {
-				ops[surface] = struct{}{}
-			}
-		}
-		if len(ops) > 0 {
-			perms[appName] = ops
-		}
-	}
-}
-
-func invocationGrantsFromWorkflowTargetAuth(auth workflowrunauth.TargetAuth) InvocationGrants {
-	grants := InvocationGrants{}
-	for appName, operations := range auth.Operations {
-		for operation, credentialMode := range operations {
-			addWorkflowOperationGrant(grants, appName, operation, credentialMode)
-		}
-	}
-	return grants
-}
-
-func addWorkflowOperationGrant(grants InvocationGrants, appName, operation string, credentialMode core.ConnectionMode) {
-	appName = strings.TrimSpace(appName)
-	operation = strings.TrimSpace(operation)
-	if appName == "" || operation == "" {
-		return
-	}
-	grant := grants[appName]
-	if grant.Operations == nil {
-		grant.Operations = map[string]core.ConnectionMode{}
-	}
-	grant.Operations[operation] = core.NormalizeOptionalConnectionMode(credentialMode)
-	grants[appName] = grant
 }
 
 func (s *AppServer) tokenContextForSurfaceInvoke(req *proto.AppInvokeGraphQLRequest, targetApp, surface string) (invocationTokenContext, error) {

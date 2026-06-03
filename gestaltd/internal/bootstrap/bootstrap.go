@@ -27,7 +27,6 @@ import (
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -152,34 +151,33 @@ func (m providerMetadata) descriptionOr(v string) string {
 type Deps struct {
 	// EncryptionKey is the derived 32-byte key from server.encryptionKey, not the
 	// raw config value.
-	EncryptionKey               []byte
-	BaseURL                     string
-	RuntimeRelayBaseURL         string
-	SecretManager               core.SecretManager
-	Services                    *coredata.Services
-	SelectedIndexedDBName       string
-	IndexedDBs                  map[string]indexeddb.IndexedDB
-	IndexedDBDefs               map[string]*config.ProviderEntry
-	IndexedDBFactory            IndexedDBFactory
-	Caches                      map[string]corecache.Cache
-	CacheDefs                   map[string]*config.ProviderEntry
-	CacheFactory                CacheFactory
-	S3                          map[string]s3sdk.S3
-	WorkflowRuntime             *workflowRuntime
-	AgentRuntime                *agentRuntime
-	AgentRunGrants              *agentgrant.Manager
-	WorkflowManager             workflowmanager.Service
-	AgentManager                agentmanager.Service
-	Egress                      EgressDeps
-	AuthorizationProvider       core.AuthorizationProvider
-	AppInvocation               invocation.Invoker
-	WorkflowAppInvocationGrants map[string]appaccessservice.InvocationGrants
-	Runtime                     runtimeprovider.Provider
-	RuntimeRegistry             *runtimeRegistry
-	PublicHostServices          *runtimehost.PublicHostServiceRegistry
-	HostServiceTLSCAFile        string
-	HostServiceTLSCAPEM         string
-	Telemetry                   core.TelemetryProvider
+	EncryptionKey         []byte
+	BaseURL               string
+	RuntimeRelayBaseURL   string
+	SecretManager         core.SecretManager
+	Services              *coredata.Services
+	SelectedIndexedDBName string
+	IndexedDBs            map[string]indexeddb.IndexedDB
+	IndexedDBDefs         map[string]*config.ProviderEntry
+	IndexedDBFactory      IndexedDBFactory
+	Caches                map[string]corecache.Cache
+	CacheDefs             map[string]*config.ProviderEntry
+	CacheFactory          CacheFactory
+	S3                    map[string]s3sdk.S3
+	WorkflowRuntime       *workflowRuntime
+	AgentRuntime          *agentRuntime
+	AgentRunGrants        *agentgrant.Manager
+	WorkflowManager       workflowmanager.Service
+	AgentManager          agentmanager.Service
+	Egress                EgressDeps
+	AuthorizationProvider core.AuthorizationProvider
+	AppInvocation         invocation.Invoker
+	Runtime               runtimeprovider.Provider
+	RuntimeRegistry       *runtimeRegistry
+	PublicHostServices    *runtimehost.PublicHostServiceRegistry
+	HostServiceTLSCAFile  string
+	HostServiceTLSCAPEM   string
+	Telemetry             core.TelemetryProvider
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -847,15 +845,14 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 
 	deps := Deps{
-		EncryptionKey:               encKey,
-		BaseURL:                     cfg.Server.BaseURL,
-		RuntimeRelayBaseURL:         cfg.Server.Runtime.RelayBaseURL,
-		SecretManager:               sm,
-		Telemetry:                   tp,
-		AgentRunGrants:              agentRunGrants,
-		WorkflowAppInvocationGrants: workflowAppInvocationGrants(cfg.Apps),
-		HostServiceTLSCAFile:        hostServiceTLSCAFile,
-		HostServiceTLSCAPEM:         hostServiceTLSCAPEM,
+		EncryptionKey:        encKey,
+		BaseURL:              cfg.Server.BaseURL,
+		RuntimeRelayBaseURL:  cfg.Server.Runtime.RelayBaseURL,
+		SecretManager:        sm,
+		Telemetry:            tp,
+		AgentRunGrants:       agentRunGrants,
+		HostServiceTLSCAFile: hostServiceTLSCAFile,
+		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
