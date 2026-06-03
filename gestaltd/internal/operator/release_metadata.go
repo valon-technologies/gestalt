@@ -171,7 +171,7 @@ func validateProviderReleaseStaticValidation(metadata *providerReleaseMetadata) 
 	if static == nil {
 		return nil
 	}
-	if static.Manifest == nil && static.Catalog == nil && !static.CatalogSessionOnly {
+	if static.Manifest == nil && static.Catalog == nil {
 		return fmt.Errorf("provider release staticValidation must include manifest or catalog metadata")
 	}
 	if static.Manifest != nil {

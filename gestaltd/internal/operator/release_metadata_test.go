@@ -57,21 +57,17 @@ staticValidation:
 	}
 }
 
-func TestDecodeProviderReleaseMetadataRejectsPlatformSpecificStaticManifest(t *testing.T) {
+func TestDecodeProviderReleaseMetadataRejectsInvalidStaticValidation(t *testing.T) {
 	t.Parallel()
 
-	_, err := decodeProviderReleaseMetadata([]byte(`
-schema: gestaltd-provider-release
-schemaVersion: 1
-package: github.com/acme/providers/provider
-kind: app
-version: 1.2.3
-runtime: executable
-artifacts:
-  linux/amd64:
-    path: provider-linux-amd64.tar.gz
-    sha256: linux-sha
-staticValidation:
+	cases := []struct {
+		name    string
+		block   string
+		wantErr string
+	}{
+		{
+			name: "platform-specific static manifest",
+			block: `
   manifest:
     kind: app
     source: github.com/acme/providers/provider
@@ -82,9 +78,38 @@ staticValidation:
         path: bin/provider
     entrypoint:
       artifactPath: bin/provider
-    spec: {}
+    spec: {}`,
+			wantErr: "staticValidation.manifest must not include platform artifacts",
+		},
+		{
+			name: "session-only flag without metadata",
+			block: `
+  catalogSessionOnly: true`,
+			wantErr: "staticValidation must include manifest or catalog metadata",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := decodeProviderReleaseMetadata([]byte(`
+schema: gestaltd-provider-release
+schemaVersion: 1
+package: github.com/acme/providers/provider
+kind: app
+version: 1.2.3
+runtime: executable
+artifacts:
+  linux/amd64:
+    path: provider-linux-amd64.tar.gz
+    sha256: linux-sha
+staticValidation:` + tc.block + `
 `))
-	if err == nil || !strings.Contains(err.Error(), "staticValidation.manifest must not include platform artifacts") {
-		t.Fatalf("decodeProviderReleaseMetadata error = %v, want platform artifact rejection", err)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("decodeProviderReleaseMetadata error = %v, want %q", err, tc.wantErr)
+			}
+		})
 	}
 }
