@@ -995,7 +995,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		return nil, fmt.Errorf("wait for runtime session %q ready: %w", sessionID, err)
 	}
 
-	hostServices, invTokens, err := buildProviderHostServices(name, deps)
+	hostServices, invTokens, err := buildProviderHostServices(name, appProviderHostServiceDeps(entry, deps))
 	if err != nil {
 		return nil, err
 	}
