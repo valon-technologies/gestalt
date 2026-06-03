@@ -787,22 +787,20 @@ type WorkflowsConfig struct {
 }
 
 type WorkflowScheduleConfig struct {
-	Provider string                 `yaml:"provider,omitempty"`
-	Target   *WorkflowTargetConfig  `yaml:"target,omitempty"`
-	RunAs    *WorkflowRunAsConfig   `yaml:"runAs,omitempty"`
-	Invokes  []WorkflowInvokeConfig `yaml:"invokes,omitempty"`
-	Cron     string                 `yaml:"cron,omitempty"`
-	Timezone string                 `yaml:"timezone,omitempty"`
-	Paused   bool                   `yaml:"paused,omitempty"`
+	Provider string                `yaml:"provider,omitempty"`
+	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
+	RunAs    *WorkflowRunAsConfig  `yaml:"runAs,omitempty"`
+	Cron     string                `yaml:"cron,omitempty"`
+	Timezone string                `yaml:"timezone,omitempty"`
+	Paused   bool                  `yaml:"paused,omitempty"`
 }
 
 type WorkflowEventTriggerConfig struct {
-	Provider string                 `yaml:"provider,omitempty"`
-	Target   *WorkflowTargetConfig  `yaml:"target,omitempty"`
-	RunAs    *WorkflowRunAsConfig   `yaml:"runAs,omitempty"`
-	Invokes  []WorkflowInvokeConfig `yaml:"invokes,omitempty"`
-	Match    WorkflowEventMatch     `yaml:"match,omitempty"`
-	Paused   bool                   `yaml:"paused,omitempty"`
+	Provider string                `yaml:"provider,omitempty"`
+	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
+	RunAs    *WorkflowRunAsConfig  `yaml:"runAs,omitempty"`
+	Match    WorkflowEventMatch    `yaml:"match,omitempty"`
+	Paused   bool                  `yaml:"paused,omitempty"`
 }
 
 type WorkflowRunAsConfig struct {
@@ -826,11 +824,6 @@ func (r *WorkflowRunAsConfig) SubjectRef() *core.RunAsSubject {
 		DisplayName: r.Subject.DisplayName,
 		AuthSource:  r.Subject.AuthSource,
 	})
-}
-
-type WorkflowInvokeConfig struct {
-	App       string `yaml:"app,omitempty"`
-	Operation string `yaml:"operation,omitempty"`
 }
 
 type WorkflowTargetConfig struct {

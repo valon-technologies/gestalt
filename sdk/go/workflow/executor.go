@@ -22,6 +22,7 @@ type Request struct {
 	Input           map[string]any
 	Metadata        map[string]any
 	CreatedBy       *gestalt.WorkflowActor
+	RunAs           *gestalt.Subject
 	InvocationToken string
 	Signals         []gestalt.WorkflowSignal
 }
@@ -108,9 +109,6 @@ func (e *Executor) Execute(ctx context.Context, req Request) (*Response, error) 
 		return nil, fmt.Errorf("workflow target steps are required")
 	}
 	token := strings.TrimSpace(req.InvocationToken)
-	if token == "" {
-		return nil, fmt.Errorf("workflow invocation token is required")
-	}
 	result := workflowStepsResult{
 		Version: 1,
 		Status:  "succeeded",

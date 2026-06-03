@@ -13,12 +13,11 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -33,7 +32,7 @@ type desiredWorkflowConfigSchedule struct {
 
 type workflowConfigProviderFilter func(providerName string) bool
 
-func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, tokens *appaccessservice.InvocationTokenManager, includeProvider workflowConfigProviderFilter) error {
+func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, includeProvider workflowConfigProviderFilter) error {
 	if cfg == nil || runtime == nil {
 		return nil
 	}
@@ -73,16 +72,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
-		permissions, err := workflowConfigExecutionPermissions(cfg, "workflows.schedules."+desiredEntry.ScheduleKey, schedule.Invokes)
-		if err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
-		}
-		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs, permissions); err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
-		}
-		executionPermissions := workflowConfigExecutionPermissionsForTarget(target, permissions)
-		providerCtx, err = workflowConfigInvocationContext(providerCtx, tokens, runAs, executionPermissions)
-		if err != nil {
+		if err := workflowConfigValidateExecutionTarget(cfg, target, runAs); err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
 		targetProto, err := workflowwire.TargetToProto(target)
@@ -96,6 +86,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			Target:      targetProto,
 			Paused:      schedule.Paused,
 			RequestedBy: workflowwire.ActorToProto(workflowConfigActor()),
+			RunAs:       agentwire.RunAsSubjectToProto(runAs),
 		}); err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
@@ -230,217 +221,16 @@ func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Targ
 
 func workflowConfigRunAsSubject(path string, runAs *config.WorkflowRunAsConfig) (*core.RunAsSubject, error) {
 	if runAs == nil {
-		return nil, nil
+		return nil, fmt.Errorf("config validation: %s is required", path)
 	}
 	subject := runAs.SubjectRef()
-	if subject == nil {
+	if subject == nil || strings.TrimSpace(subject.SubjectID) == "" {
 		return nil, fmt.Errorf("config validation: %s.subject is required", path)
-	}
-	kind, _, ok := core.ParseSubjectID(subject.SubjectID)
-	if !ok {
-		return nil, fmt.Errorf("config validation: %s.subject.id %q must be a fully-qualified service_account subject", path, subject.SubjectID)
-	}
-	if kind != "service_account" {
-		return nil, fmt.Errorf("config validation: %s.subject.id %q must identify a service_account subject", path, subject.SubjectID)
-	}
-	if subject.SubjectKind != kind {
-		return nil, fmt.Errorf("config validation: %s.subject.kind %q must match subject.id kind %q", path, subject.SubjectKind, kind)
 	}
 	if subject.AuthSource == "" {
 		subject.AuthSource = "config"
 	}
 	return subject, nil
-}
-
-func workflowConfigExecutionPermissions(cfg *config.Config, path string, invokes []config.WorkflowInvokeConfig) ([]core.AccessPermission, error) {
-	if len(invokes) == 0 {
-		return nil, nil
-	}
-	out := make([]core.AccessPermission, 0, len(invokes))
-	appIndexes := make(map[string]int, len(invokes))
-	seenOperations := make(map[string]map[string]struct{}, len(invokes))
-	for i, invoke := range invokes {
-		app := strings.TrimSpace(invoke.App)
-		if app == "" {
-			return nil, fmt.Errorf("config validation: %s.invokes[%d].app is required", path, i)
-		}
-		if cfg == nil || cfg.Apps[app] == nil {
-			return nil, fmt.Errorf("config validation: %s.invokes[%d].app references unknown app %q", path, i, app)
-		}
-		operation := strings.TrimSpace(invoke.Operation)
-		if operation == "" {
-			return nil, fmt.Errorf("config validation: %s.invokes[%d].operation is required", path, i)
-		}
-		if seenOperations[app] == nil {
-			seenOperations[app] = map[string]struct{}{}
-		}
-		if _, exists := seenOperations[app][operation]; exists {
-			continue
-		}
-		seenOperations[app][operation] = struct{}{}
-		idx, ok := appIndexes[app]
-		if !ok {
-			idx = len(out)
-			appIndexes[app] = idx
-			out = append(out, core.AccessPermission{App: app})
-		}
-		out[idx].Operations = append(out[idx].Operations, operation)
-	}
-	if len(out) == 0 {
-		return nil, nil
-	}
-	return out, nil
-}
-
-func workflowConfigExecutionPermissionsForTarget(target coreworkflow.Target, explicit ...[]core.AccessPermission) []core.AccessPermission {
-	base := make([]core.AccessPermission, 0)
-	for i := range target.Steps {
-		step := target.Steps[i]
-		if step.App != nil {
-			appName := strings.TrimSpace(step.App.Name)
-			operation := strings.TrimSpace(step.App.Operation)
-			if appName != "" && operation != "" {
-				base = append(base, core.AccessPermission{App: appName, Operations: []string{operation}})
-			}
-		}
-		if step.Agent != nil {
-			providerName := strings.TrimSpace(step.Agent.ProviderName)
-			if providerName != "" {
-				base = append(base, core.AccessPermission{App: providerName})
-			}
-			for j := range step.Agent.ToolRefs {
-				tool := step.Agent.ToolRefs[j]
-				appName := strings.TrimSpace(tool.App)
-				operation := strings.TrimSpace(tool.Operation)
-				if appName == "" || operation == "" {
-					continue
-				}
-				base = append(base, core.AccessPermission{App: appName, Operations: []string{operation}})
-			}
-		}
-	}
-	return workflowMergeExecutionPermissions(append([][]core.AccessPermission{base}, explicit...)...)
-}
-
-func workflowMergeExecutionPermissions(groups ...[]core.AccessPermission) []core.AccessPermission {
-	out := make([]core.AccessPermission, 0)
-	appIndexes := map[string]int{}
-	seenOperations := map[string]map[string]struct{}{}
-	for _, group := range groups {
-		for _, value := range group {
-			app := strings.TrimSpace(value.App)
-			if app == "" {
-				continue
-			}
-			operations := make([]string, 0, len(value.Operations))
-			for _, operation := range value.Operations {
-				operation = strings.TrimSpace(operation)
-				if operation != "" {
-					operations = append(operations, operation)
-				}
-			}
-			if len(operations) == 0 {
-				if _, ok := appIndexes[app]; !ok {
-					appIndexes[app] = len(out)
-					out = append(out, core.AccessPermission{App: app})
-				}
-				continue
-			}
-			idx, ok := appIndexes[app]
-			if !ok {
-				idx = len(out)
-				appIndexes[app] = idx
-				seenOperations[app] = map[string]struct{}{}
-				out = append(out, core.AccessPermission{App: app})
-			} else if seenOperations[app] == nil {
-				seenOperations[app] = map[string]struct{}{}
-			}
-			for _, operation := range operations {
-				if _, exists := seenOperations[app][operation]; exists {
-					continue
-				}
-				seenOperations[app][operation] = struct{}{}
-				out[idx].Operations = append(out[idx].Operations, operation)
-			}
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func workflowConfigInvocationContext(ctx context.Context, tokens *appaccessservice.InvocationTokenManager, runAs *core.RunAsSubject, permissions []core.AccessPermission) (context.Context, error) {
-	if tokens == nil {
-		return ctx, nil
-	}
-	tokenCtx := principal.WithPrincipal(ctx, workflowConfigPrincipal(runAs, permissions))
-	token, err := tokens.MintRootToken(tokenCtx, workflowConfigOwnerSubjectID(), workflowConfigInvocationGrants(permissions))
-	if err != nil {
-		return nil, fmt.Errorf("workflow config invocation token: %w", err)
-	}
-	return appaccessservice.WithInvocationToken(ctx, token), nil
-}
-
-func workflowConfigPrincipal(runAs *core.RunAsSubject, permissions []core.AccessPermission) *principal.Principal {
-	actor := workflowConfigActor()
-	subjectID := strings.TrimSpace(actor.SubjectID)
-	subjectKind := strings.TrimSpace(actor.SubjectKind)
-	credentialSubjectID := subjectID
-	displayName := strings.TrimSpace(actor.DisplayName)
-	authSource := strings.TrimSpace(actor.AuthSource)
-	if runAs := core.NormalizeRunAsSubject(runAs); runAs != nil {
-		subjectID = strings.TrimSpace(runAs.SubjectID)
-		subjectKind = strings.TrimSpace(runAs.SubjectKind)
-		credentialSubjectID = strings.TrimSpace(runAs.CredentialSubjectID)
-		displayName = strings.TrimSpace(runAs.DisplayName)
-		authSource = strings.TrimSpace(runAs.AuthSource)
-	}
-	compiled := principal.CompilePermissions(permissions)
-	value := &principal.Principal{
-		SubjectID:           subjectID,
-		CredentialSubjectID: credentialSubjectID,
-		DisplayName:         displayName,
-		Kind:                principal.Kind(subjectKind),
-		Scopes:              principal.PermissionApps(compiled),
-		TokenPermissions:    compiled,
-	}
-	principal.SetAuthSource(value, authSource)
-	if value.CredentialSubjectID == "" && principal.IsSystemSubjectID(value.SubjectID) {
-		value.CredentialSubjectID = value.SubjectID
-	}
-	return principal.Canonicalize(value)
-}
-
-func workflowConfigInvocationGrants(permissions []core.AccessPermission) appaccessservice.InvocationGrants {
-	if len(permissions) == 0 {
-		return nil
-	}
-	grants := make(appaccessservice.InvocationGrants, len(permissions))
-	for _, permission := range permissions {
-		appName := strings.TrimSpace(permission.App)
-		if appName == "" {
-			continue
-		}
-		grant := grants[appName]
-		operations := make(map[string]core.ConnectionMode)
-		for _, operation := range permission.Operations {
-			operation = strings.TrimSpace(operation)
-			if operation != "" {
-				operations[operation] = ""
-			}
-		}
-		if len(operations) == 0 {
-			grant.AllOperations = true
-		} else {
-			grant.Operations = operations
-		}
-		grants[appName] = grant
-	}
-	if len(grants) == 0 {
-		return nil
-	}
-	return grants
 }
 
 func workflowConfigActor() coreworkflow.Actor {
@@ -457,7 +247,7 @@ func workflowConfigScheduleID(scheduleKey string) string {
 	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
 }
 
-func workflowConfigValidateExecutionTarget(cfg *config.Config, target coreworkflow.Target, runAs *core.RunAsSubject, _ []core.AccessPermission) error {
+func workflowConfigValidateExecutionTarget(cfg *config.Config, target coreworkflow.Target, runAs *core.RunAsSubject) error {
 	runAs = core.NormalizeRunAsSubject(runAs)
 	hasRunAs := runAs != nil
 	for i := range target.Steps {

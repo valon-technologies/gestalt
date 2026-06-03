@@ -8,6 +8,7 @@ type WorkflowStartRun struct {
 	IdempotencyKey string
 	WorkflowKey    string
 	DefinitionID   string
+	RunAs          *Subject
 }
 
 type WorkflowSignalRun struct {
@@ -22,6 +23,7 @@ type WorkflowSignalOrStartRun struct {
 	IdempotencyKey string
 	Signal         *WorkflowSignal
 	DefinitionID   string
+	RunAs          *Subject
 }
 
 type WorkflowCreateDefinition struct {
@@ -52,6 +54,7 @@ type WorkflowCreateSchedule struct {
 	Paused         bool
 	IdempotencyKey string
 	DefinitionID   string
+	RunAs          *Subject
 }
 
 type WorkflowGetSchedule struct {
@@ -66,6 +69,7 @@ type WorkflowUpdateSchedule struct {
 	Target       *BoundWorkflowTarget
 	Paused       bool
 	DefinitionID string
+	RunAs        *Subject
 }
 
 type WorkflowDeleteSchedule struct {
@@ -87,6 +91,7 @@ type WorkflowCreateEventTrigger struct {
 	Paused         bool
 	IdempotencyKey string
 	DefinitionID   string
+	RunAs          *Subject
 }
 
 type WorkflowGetEventTrigger struct {
@@ -100,6 +105,7 @@ type WorkflowUpdateEventTrigger struct {
 	Target       *BoundWorkflowTarget
 	Paused       bool
 	DefinitionID string
+	RunAs        *Subject
 }
 
 type WorkflowDeleteEventTrigger struct {
@@ -158,6 +164,7 @@ func newWorkflowStartRunRequest(input WorkflowStartRun) (*proto.StartWorkflowPro
 		IdempotencyKey: input.IdempotencyKey,
 		WorkflowKey:    input.WorkflowKey,
 		DefinitionId:   input.DefinitionID,
+		RunAs:          subjectToProto(input.RunAs),
 	}, nil
 }
 
@@ -188,6 +195,7 @@ func newWorkflowSignalOrStartRunRequest(input WorkflowSignalOrStartRun) (*proto.
 		IdempotencyKey: input.IdempotencyKey,
 		Signal:         signal,
 		DefinitionId:   input.DefinitionID,
+		RunAs:          subjectToProto(input.RunAs),
 	}, nil
 }
 
@@ -236,6 +244,7 @@ func newWorkflowCreateScheduleRequest(input WorkflowCreateSchedule) (*proto.Upse
 		Paused:         input.Paused,
 		IdempotencyKey: input.IdempotencyKey,
 		DefinitionId:   input.DefinitionID,
+		RunAs:          subjectToProto(input.RunAs),
 	}, nil
 }
 
@@ -256,6 +265,7 @@ func newWorkflowUpdateScheduleRequest(input WorkflowUpdateSchedule) (*proto.Upse
 		Target:       target,
 		Paused:       input.Paused,
 		DefinitionId: input.DefinitionID,
+		RunAs:        subjectToProto(input.RunAs),
 	}, nil
 }
 
@@ -283,6 +293,7 @@ func newWorkflowCreateEventTriggerRequest(input WorkflowCreateEventTrigger) (*pr
 		Paused:         input.Paused,
 		IdempotencyKey: input.IdempotencyKey,
 		DefinitionId:   input.DefinitionID,
+		RunAs:          subjectToProto(input.RunAs),
 	}, nil
 }
 
@@ -302,6 +313,7 @@ func newWorkflowUpdateEventTriggerRequest(input WorkflowUpdateEventTrigger) (*pr
 		Target:       target,
 		Paused:       input.Paused,
 		DefinitionId: input.DefinitionID,
+		RunAs:        subjectToProto(input.RunAs),
 	}, nil
 }
 

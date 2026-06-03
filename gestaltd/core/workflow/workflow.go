@@ -180,6 +180,7 @@ type Run struct {
 	DefinitionID  string
 	Trigger       RunTrigger
 	CreatedBy     Actor
+	RunAs         *core.RunAsSubject
 	CreatedAt     *time.Time
 	StartedAt     *time.Time
 	CompletedAt   *time.Time
@@ -195,6 +196,7 @@ type Schedule struct {
 	DefinitionID string
 	Paused       bool
 	CreatedBy    Actor
+	RunAs        *core.RunAsSubject
 	CreatedAt    *time.Time
 	UpdatedAt    *time.Time
 	NextRunAt    *time.Time
@@ -207,6 +209,7 @@ type EventTrigger struct {
 	DefinitionID string
 	Paused       bool
 	CreatedBy    Actor
+	RunAs        *core.RunAsSubject
 	CreatedAt    *time.Time
 	UpdatedAt    *time.Time
 }

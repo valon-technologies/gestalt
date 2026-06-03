@@ -2989,6 +2989,10 @@ workflows:
   schedules:
     nightly:
       provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -2999,14 +3003,13 @@ workflows:
               credentialMode: none
               input:
                 source: yaml
-      invokes:
-        - app: slack
-          operation: conversations.list
-        - app: slack
-          operation: conversations.history
   eventTriggers:
     task_updated:
       provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-events
+          kind: service_account
       match:
         type: roadmap.task.updated
         source: roadmap
@@ -3018,9 +3021,6 @@ workflows:
               operation: backfill_items
               input:
                 source: event
-      invokes:
-        - app: slack
-          operation: chat.postMessage
       paused: true
 providers:
   workflow:
@@ -3043,13 +3043,16 @@ server:
 		}
 		wantSchedule := WorkflowScheduleConfig{
 			Provider: "temporal",
+			RunAs: &WorkflowRunAsConfig{
+				Subject: &WorkflowRunAsSubjectConfig{
+					ID:         "service_account:roadmap-workflow",
+					Kind:       "service_account",
+					AuthSource: "config",
+				},
+			},
 			Target: workflowTestAppStepTargetConfig("roadmap", "nightly_sync", providermanifestv1.ConnectionModeNone, map[string]any{
 				"source": "yaml",
 			}),
-			Invokes: []WorkflowInvokeConfig{
-				{App: "slack", Operation: "conversations.list"},
-				{App: "slack", Operation: "conversations.history"},
-			},
 			Cron:     "0 2 * * *",
 			Timezone: "UTC",
 		}
@@ -3058,10 +3061,16 @@ server:
 		}
 		wantTrigger := WorkflowEventTriggerConfig{
 			Provider: "temporal",
+			RunAs: &WorkflowRunAsConfig{
+				Subject: &WorkflowRunAsSubjectConfig{
+					ID:         "service_account:roadmap-events",
+					Kind:       "service_account",
+					AuthSource: "config",
+				},
+			},
 			Target: workflowTestAppStepTargetConfig("roadmap", "backfill_items", "", map[string]any{
 				"source": "event",
 			}),
-			Invokes: []WorkflowInvokeConfig{{App: "slack", Operation: "chat.postMessage"}},
 			Match: WorkflowEventMatch{
 				Type:   "roadmap.task.updated",
 				Source: "roadmap",
@@ -3088,6 +3097,10 @@ workflows:
   schedules:
     nightly:
       provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3106,38 +3119,7 @@ server:
 				want: `workflows.schedules.nightly.target.steps[0].app.name references unknown app "missing"`,
 			},
 			{
-				name: "unknown schedule invoke app",
-				yaml: `
-apps:
-  roadmap:
-    source:
-      path: ./app/manifest.yaml
-workflows:
-  schedules:
-    nightly:
-      provider: temporal
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: main
-            app:
-              name: roadmap
-              operation: nightly_sync
-      invokes:
-        - app: missing
-          operation: conversations.list
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`,
-				want: `workflows.schedules.nightly.invokes[0].app references unknown app "missing"`,
-			},
-			{
-				name: "schedule invoke requires operation",
+				name: "schedule rejects invokes",
 				yaml: `
 apps:
   roadmap:
@@ -3150,6 +3132,10 @@ workflows:
   schedules:
     nightly:
       provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3167,7 +3153,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.invokes[0].operation is required`,
+				want: `field invokes not found`,
 			},
 			{
 				name: "schedule app rejects unsupported credential mode",
@@ -3180,6 +3166,10 @@ workflows:
   schedules:
     nightly:
       provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3205,6 +3195,10 @@ workflows:
   schedules:
     nightly:
       provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3241,6 +3235,10 @@ workflows:
   schedules:
     nightly:
       provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3396,6 +3394,89 @@ server:
 		}
 	})
 
+	t.Run("workflow schedules and event triggers require runAs", func(t *testing.T) {
+		t.Parallel()
+
+		cases := []struct {
+			name string
+			yaml string
+			want string
+		}{
+			{
+				name: "schedule",
+				yaml: `
+apps:
+  roadmap:
+    source:
+      path: ./app/manifest.yaml
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: nightly_sync
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.runAs is required`,
+			},
+			{
+				name: "event trigger",
+				yaml: `
+apps:
+  roadmap:
+    source:
+      path: ./app/manifest.yaml
+workflows:
+  eventTriggers:
+    task_updated:
+      provider: temporal
+      match:
+        type: roadmap.task.updated
+      target:
+        steps:
+          - id: main
+            app:
+              name: roadmap
+              operation: backfill_items
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.eventTriggers.task_updated.runAs is required`,
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				path := mustWriteConfigFile(t, tc.yaml)
+				_, err := Load(path)
+				if err == nil {
+					t.Fatal("Load succeeded, want error")
+				}
+				if !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("Load error = %v, want %q", err, tc.want)
+				}
+			})
+		}
+	})
+
 	t.Run("workflow binding can select an explicit provider when multiple workflow providers exist", func(t *testing.T) {
 		t.Parallel()
 
@@ -3408,6 +3489,10 @@ workflows:
   schedules:
     nightly:
       provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3495,6 +3580,10 @@ workflows:
   schedules:
     nightly:
       provider: missing
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       cron: "0 2 * * *"
       target:
         steps:
@@ -3586,6 +3675,10 @@ workflows:
   schedules:
     invalid:
       provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       cron: "*/5 * * * *"
       target:
         steps:
@@ -3626,6 +3719,10 @@ workflows:
   eventTriggers:
     invalid:
       provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-events
+          kind: service_account
       match:
         type: roadmap.task.updated
       target:
@@ -3667,6 +3764,10 @@ workflows:
   eventTriggers:
     invalid:
       provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-events
+          kind: service_account
       match:
         source: roadmap
       target:
@@ -3711,6 +3812,10 @@ workflows:
   schedules:
     invalid:
       provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+          kind: service_account
       cron: "0 0 0 * * *"
       timezone: Mars/Olympus
       target:
@@ -6737,10 +6842,6 @@ func TestApplyAppScopeKeepsAppClosureAndUI(t *testing.T) {
 				"dropped": {
 					Target: workflowTestAppStepTargetConfig("gamma", "", "", nil),
 				},
-				"dependency_only": {
-					Target:  workflowTestAppStepTargetConfig("gamma", "", "", nil),
-					Invokes: []WorkflowInvokeConfig{{App: "alpha", Operation: "ping"}},
-				},
 			},
 		},
 	}
@@ -7065,18 +7166,19 @@ func TestApplyAppScopeRetainedWorkflowAddsReferencedApps(t *testing.T) {
 		Workflows: WorkflowsConfig{
 			Schedules: map[string]WorkflowScheduleConfig{
 				"fanout": {
-					Target: workflowTestAppStepTargetConfig("alpha", "", "", nil),
-					Invokes: []WorkflowInvokeConfig{{
-						App:       "beta",
-						Operation: "ping",
+					Target: &WorkflowTargetConfig{Steps: []WorkflowStepConfig{
+						{
+							ID:  "alpha",
+							App: &WorkflowStepAppCallConfig{Name: "alpha", Operation: "ping"},
+						},
+						{
+							ID:  "beta",
+							App: &WorkflowStepAppCallConfig{Name: "beta", Operation: "pong"},
+						},
 					}},
 				},
 				"dependency_target": {
 					Target: workflowTestAppStepTargetConfig("beta", "", "", nil),
-					Invokes: []WorkflowInvokeConfig{{
-						App:       "delta",
-						Operation: "pong",
-					}},
 				},
 			},
 		},

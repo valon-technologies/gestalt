@@ -176,6 +176,9 @@ func (s *ProviderServer) UpsertSchedule(ctx context.Context, req *proto.UpsertWo
 	} else if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationSchedulesUpdate); err != nil {
 		return nil, err
 	}
+	if req.GetRunAs() != nil {
+		return nil, status.Error(codes.PermissionDenied, "workflow run_as is only supported for config-managed workflows")
+	}
 	upsert, err := workflowManagerScheduleUpsert(
 		req.GetProviderName(),
 		req.GetCron(),
@@ -216,6 +219,9 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 	}
 	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsStart); err != nil {
 		return nil, err
+	}
+	if req.GetRunAs() != nil {
+		return nil, status.Error(codes.PermissionDenied, "workflow run_as is only supported for config-managed workflows")
 	}
 	target, err := workflowManagerTargetOrDefinition(req.GetTarget(), req.GetDefinitionId())
 	if err != nil {
@@ -288,6 +294,9 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 	}
 	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsSignalOrStart); err != nil {
 		return nil, err
+	}
+	if req.GetRunAs() != nil {
+		return nil, status.Error(codes.PermissionDenied, "workflow run_as is only supported for config-managed workflows")
 	}
 	target, err := workflowManagerTargetOrDefinition(req.GetTarget(), req.GetDefinitionId())
 	if err != nil {
@@ -426,6 +435,9 @@ func (s *ProviderServer) UpsertEventTrigger(ctx context.Context, req *proto.Upse
 		}
 	} else if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventTriggersUpdate); err != nil {
 		return nil, err
+	}
+	if req.GetRunAs() != nil {
+		return nil, status.Error(codes.PermissionDenied, "workflow run_as is only supported for config-managed workflows")
 	}
 	upsert, err := workflowManagerEventTriggerUpsert(
 		req.GetProviderName(),

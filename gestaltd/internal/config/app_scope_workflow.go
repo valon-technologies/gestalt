@@ -33,11 +33,6 @@ func workflowRefsFromNode(workflowNode *yaml.Node) workflowAppRefs {
 			}
 		}
 	}
-	if invokesNode := mappingValueNode(workflowNode, "invokes"); invokesNode != nil && invokesNode.Kind == yaml.SequenceNode {
-		for _, invoke := range invokesNode.Content {
-			refs.Add(scalarStringNode(mappingValueNode(invoke, "app")))
-		}
-	}
 	return refs
 }
 
@@ -132,14 +127,12 @@ func filterWorkflowConfig(workflows *WorkflowsConfig, keep map[string]workflowAp
 func workflowScheduleAppRefs(schedule WorkflowScheduleConfig) workflowAppRefs {
 	refs := workflowAppRefs{}
 	addWorkflowTargetRefs(refs, schedule.Target)
-	addWorkflowInvokeRefs(refs, schedule.Invokes)
 	return refs
 }
 
 func workflowEventTriggerAppRefs(trigger WorkflowEventTriggerConfig) workflowAppRefs {
 	refs := workflowAppRefs{}
 	addWorkflowTargetRefs(refs, trigger.Target)
-	addWorkflowInvokeRefs(refs, trigger.Invokes)
 	return refs
 }
 
@@ -157,11 +150,5 @@ func addWorkflowTargetRefs(refs workflowAppRefs, target *WorkflowTargetConfig) {
 				refs.Add(tool.App)
 			}
 		}
-	}
-}
-
-func addWorkflowInvokeRefs(refs workflowAppRefs, invokes []WorkflowInvokeConfig) {
-	for _, invoke := range invokes {
-		refs.Add(invoke.App)
 	}
 }

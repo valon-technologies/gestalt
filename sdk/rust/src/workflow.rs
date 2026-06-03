@@ -11,7 +11,7 @@ use crate::agent::{
     AgentOutput, AgentToolRef, agent_output_from_proto, agent_output_to_proto,
     agent_tool_ref_from_proto, agent_tool_ref_to_proto, new_agent_tool_ref,
 };
-use crate::api::RuntimeMetadata;
+use crate::api::{RuntimeMetadata, Subject};
 use crate::error::Result as ProviderResult;
 use crate::generated::v1 as pb;
 use crate::protocol;
@@ -228,6 +228,7 @@ pub struct BoundWorkflowRun {
     pub workflow_key: String,
     pub provider_name: String,
     pub definition_id: String,
+    pub run_as: Option<Subject>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -243,6 +244,7 @@ pub struct BoundWorkflowSchedule {
     pub created_by: Option<WorkflowActor>,
     pub provider_name: String,
     pub definition_id: String,
+    pub run_as: Option<Subject>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -256,6 +258,7 @@ pub struct BoundWorkflowEventTrigger {
     pub created_by: Option<WorkflowActor>,
     pub provider_name: String,
     pub definition_id: String,
+    pub run_as: Option<Subject>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -435,6 +438,7 @@ pub struct StartWorkflowProviderRunRequest {
     pub created_by: Option<WorkflowActor>,
     pub workflow_key: String,
     pub definition_id: String,
+    pub run_as: Option<Subject>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -470,6 +474,7 @@ pub struct SignalOrStartWorkflowProviderRunRequest {
     pub created_by: Option<WorkflowActor>,
     pub signal: Option<WorkflowSignal>,
     pub definition_id: String,
+    pub run_as: Option<Subject>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -482,6 +487,7 @@ pub struct UpsertWorkflowProviderScheduleRequest {
     pub requested_by: Option<WorkflowActor>,
     pub idempotency_key: String,
     pub definition_id: String,
+    pub run_as: Option<Subject>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -516,6 +522,7 @@ pub struct UpsertWorkflowProviderEventTriggerRequest {
     pub requested_by: Option<WorkflowActor>,
     pub idempotency_key: String,
     pub definition_id: String,
+    pub run_as: Option<Subject>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -583,6 +590,28 @@ fn workflow_actor_from_proto(input: pb::WorkflowActor) -> WorkflowActor {
         subject_kind: input.subject_kind,
         display_name: input.display_name,
         auth_source: input.auth_source,
+    }
+}
+
+fn workflow_subject_from_proto(input: pb::SubjectContext) -> Subject {
+    Subject {
+        id: input.id,
+        kind: input.kind,
+        credential_subject_id: input.credential_subject_id,
+        display_name: input.display_name,
+        auth_source: input.auth_source,
+        email: input.email,
+    }
+}
+
+fn workflow_subject_to_proto(input: Subject) -> pb::SubjectContext {
+    pb::SubjectContext {
+        id: input.id,
+        kind: input.kind,
+        credential_subject_id: input.credential_subject_id,
+        display_name: input.display_name,
+        auth_source: input.auth_source,
+        email: input.email,
     }
 }
 
@@ -1316,6 +1345,7 @@ pub fn new_bound_workflow_run(input: BoundWorkflowRun) -> ProviderResult<BoundWo
         workflow_key: input.workflow_key,
         provider_name: input.provider_name,
         definition_id: input.definition_id,
+        run_as: input.run_as,
     })
 }
 
@@ -1348,6 +1378,7 @@ pub fn bound_workflow_run_input_from_run(
         workflow_key: input.workflow_key.clone(),
         provider_name: input.provider_name.clone(),
         definition_id: input.definition_id.clone(),
+        run_as: input.run_as.clone(),
     })
 }
 
@@ -1374,6 +1405,7 @@ pub(crate) fn bound_workflow_run_to_proto(
         workflow_key: input.workflow_key,
         provider_name: input.provider_name,
         definition_id: input.definition_id,
+        run_as: input.run_as.map(workflow_subject_to_proto),
     })
 }
 
@@ -1412,6 +1444,7 @@ pub(crate) fn bound_workflow_run_from_proto(
         workflow_key: input.workflow_key,
         provider_name: input.provider_name,
         definition_id: input.definition_id,
+        run_as: input.run_as.map(workflow_subject_from_proto),
     })
 }
 
@@ -1458,6 +1491,7 @@ pub fn new_bound_workflow_schedule(
         created_by: input.created_by.map(new_workflow_actor),
         provider_name: input.provider_name,
         definition_id: input.definition_id,
+        run_as: input.run_as,
     })
 }
 
@@ -1484,6 +1518,7 @@ pub fn bound_workflow_schedule_input_from_schedule(
             .map(workflow_actor_input_from_actor),
         provider_name: input.provider_name.clone(),
         definition_id: input.definition_id.clone(),
+        run_as: input.run_as.clone(),
     })
 }
 
@@ -1505,6 +1540,7 @@ pub(crate) fn bound_workflow_schedule_to_proto(
         created_by: input.created_by.map(workflow_actor_to_proto),
         provider_name: input.provider_name,
         definition_id: input.definition_id,
+        run_as: input.run_as.map(workflow_subject_to_proto),
     })
 }
 
@@ -1538,6 +1574,7 @@ pub(crate) fn bound_workflow_schedule_from_proto(
         created_by: input.created_by.map(workflow_actor_from_proto),
         provider_name: input.provider_name,
         definition_id: input.definition_id,
+        run_as: input.run_as.map(workflow_subject_from_proto),
     })
 }
 
@@ -1562,6 +1599,7 @@ pub fn new_bound_workflow_event_trigger(
         created_by: input.created_by.map(new_workflow_actor),
         provider_name: input.provider_name,
         definition_id: input.definition_id,
+        run_as: input.run_as,
     })
 }
 
@@ -1589,6 +1627,7 @@ pub fn bound_workflow_event_trigger_input_from_trigger(
             .map(workflow_actor_input_from_actor),
         provider_name: input.provider_name.clone(),
         definition_id: input.definition_id.clone(),
+        run_as: input.run_as.clone(),
     })
 }
 
@@ -1608,6 +1647,7 @@ pub(crate) fn bound_workflow_event_trigger_to_proto(
         created_by: input.created_by.map(workflow_actor_to_proto),
         provider_name: input.provider_name,
         definition_id: input.definition_id,
+        run_as: input.run_as.map(workflow_subject_to_proto),
     })
 }
 
@@ -1635,6 +1675,7 @@ pub(crate) fn bound_workflow_event_trigger_from_proto(
         created_by: input.created_by.map(workflow_actor_from_proto),
         provider_name: input.provider_name,
         definition_id: input.definition_id,
+        run_as: input.run_as.map(workflow_subject_from_proto),
     })
 }
 
@@ -1691,6 +1732,7 @@ fn start_workflow_provider_run_request_from_proto(
         created_by: request.created_by.map(workflow_actor_from_proto),
         workflow_key: request.workflow_key,
         definition_id: request.definition_id,
+        run_as: request.run_as.map(workflow_subject_from_proto),
     })
 }
 
@@ -1772,6 +1814,7 @@ fn upsert_schedule_request_from_proto(
         requested_by: request.requested_by.map(workflow_actor_from_proto),
         idempotency_key: request.idempotency_key,
         definition_id: request.definition_id,
+        run_as: request.run_as.map(workflow_subject_from_proto),
     })
 }
 
@@ -1801,6 +1844,7 @@ fn upsert_event_trigger_request_from_proto(
         requested_by: request.requested_by.map(workflow_actor_from_proto),
         idempotency_key: request.idempotency_key,
         definition_id: request.definition_id,
+        run_as: request.run_as.map(workflow_subject_from_proto),
     })
 }
 
@@ -2358,6 +2402,7 @@ where
                         .transpose()
                         .map_err(|error| rpc_status("workflow signal or start run", error))?,
                     definition_id: request.definition_id,
+                    run_as: request.run_as.map(workflow_subject_from_proto),
                 }
             })
             .await

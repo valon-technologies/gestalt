@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const (
@@ -222,6 +223,14 @@ func (c TokenContext) Principal() *principal.Principal {
 
 func (c TokenContext) AllowsWorkflowManagerOperation(operation string) bool {
 	return c.inner.workflowGrants.Allows(operation)
+}
+
+func TokenContextWithWorkflow(tokenCtx TokenContext, workflow *structpb.Struct) TokenContext {
+	if workflow == nil {
+		return tokenCtx
+	}
+	tokenCtx.inner.workflow = invocation.CloneWorkflowContext(workflow.AsMap())
+	return tokenCtx
 }
 
 func (m *InvocationTokenManager) parseClaims(token string) (*invocationTokenClaims, error) {

@@ -27,7 +27,6 @@ import (
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -1219,15 +1218,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			_ = closeAgents(extraAgents...)
 		}
 	}()
-	workflowConfigTokens, err := appaccessservice.NewInvocationTokenManager(prepared.Deps.EncryptionKey)
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap: workflow config invocation tokens: %w", err)
-	}
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
-		if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime, workflowConfigTokens, includeProvider); err != nil {
+		if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
 			return err
 		}
-		if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, prepared.Deps.WorkflowRuntime, workflowConfigTokens, includeProvider); err != nil {
+		if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
 			return err
 		}
 		return nil

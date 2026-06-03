@@ -7,6 +7,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type agent struct {
@@ -32,11 +33,9 @@ type Agent interface {
 
 var sharedAgentTransport sharedManagerTransport[proto.AgentProviderClient]
 
-// NewAgent returns a capability that attaches invocationToken to every request.
+// NewAgent returns a capability that attaches invocationToken to every request
+// when one is available.
 func NewAgent(invocationToken string) (Agent, error) {
-	if strings.TrimSpace(invocationToken) == "" {
-		return nil, fmt.Errorf("agent: invocation token is not available")
-	}
 	target, token, err := hostServiceTarget("agent")
 	if err != nil {
 		return nil, err
@@ -73,6 +72,9 @@ func (c *agent) CreateSession(ctx context.Context, input AgentCreateSession) (*A
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
+	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.CreateSession(ctx, req)
 	if err != nil {
 		return nil, err
@@ -87,6 +89,9 @@ func (c *agent) GetSession(ctx context.Context, input AgentGetSession) (*AgentSe
 	}
 	req := newAgentGetSessionRequest(input)
 	req.InvocationToken = c.invocationToken
+	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.GetSession(ctx, req)
 	if err != nil {
 		return nil, err
@@ -101,6 +106,9 @@ func (c *agent) ListSessions(ctx context.Context, input AgentListSessions) (*Lis
 	}
 	req := newAgentListSessionsRequest(input)
 	req.InvocationToken = c.invocationToken
+	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.ListSessions(ctx, req)
 	if err != nil {
 		return nil, err
@@ -118,6 +126,9 @@ func (c *agent) UpdateSession(ctx context.Context, input AgentUpdateSession) (*A
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
+	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.UpdateSession(ctx, req)
 	if err != nil {
 		return nil, err
@@ -135,6 +146,9 @@ func (c *agent) CreateTurn(ctx context.Context, input AgentCreateTurn) (*AgentTu
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
+	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.CreateTurn(ctx, req)
 	if err != nil {
 		return nil, err
@@ -149,6 +163,9 @@ func (c *agent) GetTurn(ctx context.Context, input AgentGetTurn) (*AgentTurn, er
 	}
 	req := newAgentGetTurnRequest(input)
 	req.InvocationToken = c.invocationToken
+	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.GetTurn(ctx, req)
 	if err != nil {
 		return nil, err
@@ -163,6 +180,9 @@ func (c *agent) ListTurns(ctx context.Context, input AgentListTurns) (*ListAgent
 	}
 	req := newAgentListTurnsRequest(input)
 	req.InvocationToken = c.invocationToken
+	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.ListTurns(ctx, req)
 	if err != nil {
 		return nil, err
@@ -177,6 +197,9 @@ func (c *agent) CancelTurn(ctx context.Context, input AgentCancelTurn) (*AgentTu
 	}
 	req := newAgentCancelTurnRequest(input)
 	req.InvocationToken = c.invocationToken
+	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.CancelTurn(ctx, req)
 	if err != nil {
 		return nil, err
@@ -191,6 +214,9 @@ func (c *agent) ListTurnEvents(ctx context.Context, input AgentListTurnEvents) (
 	}
 	req := newAgentListTurnEventsRequest(input)
 	req.InvocationToken = c.invocationToken
+	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.ListTurnEvents(ctx, req)
 	if err != nil {
 		return nil, err
@@ -205,6 +231,9 @@ func (c *agent) ListInteractions(ctx context.Context, input AgentListInteraction
 	}
 	req := newAgentListInteractionsRequest(input)
 	req.InvocationToken = c.invocationToken
+	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.ListInteractions(ctx, req)
 	if err != nil {
 		return nil, err
@@ -222,9 +251,33 @@ func (c *agent) ResolveInteraction(ctx context.Context, input AgentResolveIntera
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
+	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+		return nil, err
+	}
 	resp, err := c.client.ResolveInteraction(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	return agentInteractionFromProto(resp), nil
+}
+
+func attachAgentWorkflow(ctx context.Context, set func(*structpb.Struct)) error {
+	workflow, err := agentWorkflowContext(ctx)
+	if err != nil {
+		return err
+	}
+	set(workflow)
+	return nil
+}
+
+func agentWorkflowContext(ctx context.Context) (*structpb.Struct, error) {
+	workflow := WorkflowContextFromContext(ctx)
+	if workflow == nil {
+		return nil, nil
+	}
+	msg, err := structFromAny(workflow)
+	if err != nil {
+		return nil, fmt.Errorf("agent: encode workflow context: %w", err)
+	}
+	return msg, nil
 }

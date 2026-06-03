@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -14,6 +15,15 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 )
+
+type staticWorkflowRunResolver struct {
+	run *coreworkflow.Run
+	err error
+}
+
+func (r staticWorkflowRunResolver) ResolveWorkflowRun(context.Context, string, string) (*coreworkflow.Run, error) {
+	return r.run, r.err
+}
 
 type recordingAppInvocation struct {
 	idempotencyKey        string
@@ -171,6 +181,162 @@ func TestAppServerInvokeUsesRequestWorkflowContext(t *testing.T) {
 	step := invocation.WorkflowContextMap(invoker.workflowContext, "step")
 	if got := invocation.WorkflowContextString(step, "id"); got != "notify" {
 		t.Fatalf("step.id = %q, want notify", got)
+	}
+}
+
+func TestAppServerInvokeUsesWorkflowRunAsWithoutInvocationToken(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("plugin-invoker-workflow-runas-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	workflow, err := structpb.NewStruct(map[string]any{
+		"providerName": "indexeddb",
+		"runId":        "run-123",
+		"step": map[string]any{
+			"id": "review",
+		},
+		"runAs": map[string]any{
+			"id":   "user:forged",
+			"kind": "user",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewStruct: %v", err)
+	}
+
+	invoker := &recordingAppInvocation{}
+	server := NewAppServer(invoker, tokens, WithWorkflowRunResolver(staticWorkflowRunResolver{
+		run: &coreworkflow.Run{
+			ID: "run-123",
+			Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+				ID: "review",
+				App: &coreworkflow.AppCall{
+					Name:      "codeReview",
+					Operation: "pullRequests.reviewWorkflow",
+				},
+			}}},
+			RunAs: &core.RunAsSubject{
+				SubjectID:           "user:workflow-runner",
+				SubjectKind:         "user",
+				CredentialSubjectID: "user:workflow-runner",
+				DisplayName:         "Workflow runner",
+				AuthSource:          "config",
+			},
+		},
+	}))
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
+	}))
+	if _, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		App:       "codeReview",
+		Operation: "pullRequests.reviewWorkflow",
+		Workflow:  workflow,
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+
+	if invoker.subjectID != "user:workflow-runner" {
+		t.Fatalf("subject id = %q, want user:workflow-runner", invoker.subjectID)
+	}
+	if invoker.credentialSubjectID != "user:workflow-runner" {
+		t.Fatalf("credential subject id = %q, want user:workflow-runner", invoker.credentialSubjectID)
+	}
+	if invoker.providerName != "codeReview" {
+		t.Fatalf("provider name = %q, want codeReview", invoker.providerName)
+	}
+	if invoker.operation != "pullRequests.reviewWorkflow" {
+		t.Fatalf("operation = %q, want pullRequests.reviewWorkflow", invoker.operation)
+	}
+	if got := invocation.WorkflowContextString(invoker.workflowContext, "providerName"); got != "indexeddb" {
+		t.Fatalf("providerName = %q, want indexeddb", got)
+	}
+	if got := invocation.WorkflowContextString(invoker.workflowContext, "runId"); got != "run-123" {
+		t.Fatalf("runId = %q, want run-123", got)
+	}
+	step := invocation.WorkflowContextMap(invoker.workflowContext, "step")
+	if got := invocation.WorkflowContextString(step, "id"); got != "review" {
+		t.Fatalf("step.id = %q, want review", got)
+	}
+	runAs := invocation.WorkflowContextMap(invoker.workflowContext, "runAs")
+	if got := invocation.WorkflowContextString(runAs, "id"); got != "user:workflow-runner" {
+		t.Fatalf("workflow runAs id = %q, want persisted runAs", got)
+	}
+}
+
+func TestAppServerInvokeRequiresPersistedWorkflowRunAsWithoutInvocationToken(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		workflow map[string]any
+		run      *coreworkflow.Run
+		wantCode codes.Code
+	}{
+		{
+			name:     "missing workflow",
+			wantCode: codes.FailedPrecondition,
+		},
+		{
+			name:     "missing provider",
+			workflow: map[string]any{"runId": "run-123"},
+			wantCode: codes.FailedPrecondition,
+		},
+		{
+			name:     "missing run id",
+			workflow: map[string]any{"providerName": "indexeddb"},
+			wantCode: codes.FailedPrecondition,
+		},
+		{
+			name:     "missing persisted runAs",
+			workflow: map[string]any{"providerName": "indexeddb", "runId": "run-123"},
+			run: &coreworkflow.Run{
+				ID:     "run-123",
+				Target: coreworkflow.Target{Steps: []coreworkflow.Step{{ID: "review", App: &coreworkflow.AppCall{Name: "codeReview", Operation: "pullRequests.reviewWorkflow"}}}},
+			},
+			wantCode: codes.FailedPrecondition,
+		},
+		{
+			name:     "operation outside persisted target",
+			workflow: map[string]any{"providerName": "indexeddb", "runId": "run-123"},
+			run: &coreworkflow.Run{
+				ID:     "run-123",
+				Target: coreworkflow.Target{Steps: []coreworkflow.Step{{ID: "other", App: &coreworkflow.AppCall{Name: "codeReview", Operation: "pullRequests.other"}}}},
+				RunAs:  &core.RunAsSubject{SubjectID: "user:workflow-runner"},
+			},
+			wantCode: codes.PermissionDenied,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			tokens, err := NewInvocationTokenManager([]byte("plugin-invoker-invalid-workflow-runas-" + tc.name))
+			if err != nil {
+				t.Fatalf("NewInvocationTokenManager: %v", err)
+			}
+			var workflow *structpb.Struct
+			if tc.workflow != nil {
+				var err error
+				workflow, err = structpb.NewStruct(tc.workflow)
+				if err != nil {
+					t.Fatalf("NewStruct: %v", err)
+				}
+			}
+
+			server := NewAppServer(&recordingAppInvocation{}, tokens, WithWorkflowRunResolver(staticWorkflowRunResolver{run: tc.run}))
+			client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+				proto.RegisterAppServer(srv, server)
+			}))
+			_, err = client.Invoke(context.Background(), &proto.AppInvokeRequest{
+				App:       "codeReview",
+				Operation: "pullRequests.reviewWorkflow",
+				Workflow:  workflow,
+			})
+			if got := status.Code(err); got != tc.wantCode {
+				t.Fatalf("Invoke status = %s, want %s (err=%v)", got, tc.wantCode, err)
+			}
+		})
 	}
 }
 

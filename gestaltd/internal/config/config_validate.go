@@ -2039,11 +2039,6 @@ func validateWorkflowsConfig(cfg *Config) error {
 				return err
 			}
 			schedule.RunAs = runAs
-			invokes, _, err := normalizeWorkflowExecutionInvokes(cfg, "workflows.schedules."+key+".invokes", schedule.Invokes)
-			if err != nil {
-				return err
-			}
-			schedule.Invokes = invokes
 			schedule.Provider = strings.TrimSpace(schedule.Provider)
 			providerName, _, err := cfg.EffectiveWorkflowProvider(schedule.Provider)
 			if err != nil {
@@ -2090,11 +2085,6 @@ func validateWorkflowsConfig(cfg *Config) error {
 				return err
 			}
 			trigger.RunAs = runAs
-			invokes, _, err := normalizeWorkflowExecutionInvokes(cfg, "workflows.eventTriggers."+key+".invokes", trigger.Invokes)
-			if err != nil {
-				return err
-			}
-			trigger.Invokes = invokes
 			trigger.Provider = strings.TrimSpace(trigger.Provider)
 			providerName, _, err := cfg.EffectiveWorkflowProvider(trigger.Provider)
 			if err != nil {
@@ -2153,7 +2143,7 @@ func validateWorkflowTargetApps(cfg *Config, path string, target *WorkflowTarget
 
 func normalizeWorkflowRunAs(path string, runAs *WorkflowRunAsConfig) (*WorkflowRunAsConfig, error) {
 	if runAs == nil {
-		return nil, nil
+		return nil, fmt.Errorf("config validation: %s is required", path)
 	}
 	if runAs.Subject == nil {
 		return nil, fmt.Errorf("config validation: %s.subject is required", path)
@@ -2170,57 +2160,14 @@ func normalizeWorkflowRunAs(path string, runAs *WorkflowRunAsConfig) (*WorkflowR
 		return nil, fmt.Errorf("config validation: %s.subject.id is required", path)
 	}
 	kind, _, ok := core.ParseSubjectID(subject.ID)
-	if !ok {
-		return nil, fmt.Errorf("config validation: %s.subject.id %q must be a fully-qualified service_account subject", path, subject.ID)
-	}
-	if kind != "service_account" {
-		return nil, fmt.Errorf("config validation: %s.subject.id %q must identify a service_account subject", path, subject.ID)
-	}
 	if subject.Kind == "" {
-		subject.Kind = kind
-	} else if subject.Kind != kind {
+		if ok {
+			subject.Kind = kind
+		}
+	} else if ok && subject.Kind != kind {
 		return nil, fmt.Errorf("config validation: %s.subject.kind %q must match subject.id kind %q", path, subject.Kind, kind)
 	}
 	return &WorkflowRunAsConfig{Subject: &subject}, nil
-}
-
-func normalizeWorkflowExecutionInvokes(cfg *Config, path string, values []WorkflowInvokeConfig) ([]WorkflowInvokeConfig, []core.AccessPermission, error) {
-	out := make([]WorkflowInvokeConfig, 0, len(values))
-	permissions := make([]core.AccessPermission, 0, len(values))
-	appIndexes := make(map[string]int, len(values))
-	seenOperations := make(map[string]map[string]struct{}, len(values))
-	for i, value := range values {
-		app := strings.TrimSpace(value.App)
-		if app == "" {
-			return nil, nil, fmt.Errorf("config validation: %s[%d].app is required", path, i)
-		}
-		if _, ok := cfg.Apps[app]; !ok {
-			return nil, nil, fmt.Errorf("config validation: %s[%d].app references unknown app %q", path, i, app)
-		}
-		operation := strings.TrimSpace(value.Operation)
-		if operation == "" {
-			return nil, nil, fmt.Errorf("config validation: %s[%d].operation is required", path, i)
-		}
-		if seenOperations[app] == nil {
-			seenOperations[app] = map[string]struct{}{}
-		}
-		if _, exists := seenOperations[app][operation]; exists {
-			continue
-		}
-		seenOperations[app][operation] = struct{}{}
-		out = append(out, WorkflowInvokeConfig{App: app, Operation: operation})
-		idx, ok := appIndexes[app]
-		if !ok {
-			idx = len(permissions)
-			appIndexes[app] = idx
-			permissions = append(permissions, core.AccessPermission{App: app})
-		}
-		permissions[idx].Operations = append(permissions[idx].Operations, operation)
-	}
-	if len(out) == 0 {
-		return nil, nil, nil
-	}
-	return out, permissions, nil
 }
 
 func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetConfig) error {

@@ -104,6 +104,8 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, token strin
 	if providerName == "" {
 		return nil, "", fmt.Errorf("workflow agent provider is required")
 	}
+	workflowContext := WorkflowRunContext(req)
+	ctx = gestalt.WithWorkflowContext(ctx, workflowContext)
 	sessionKey := strings.TrimSpace(agent.SessionKey)
 	if sessionKey == "" {
 		sessionKey = stepID
@@ -119,7 +121,7 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, token strin
 			ProviderName: providerName,
 			Model:        model,
 			Metadata: map[string]any{
-				"workflow":       WorkflowRunContext(req),
+				"workflow":       workflowContext,
 				"workflowStepId": stepID,
 			},
 			IdempotencyKey: WorkflowStepIdempotencyKey(req, invocationScope, stepID, "agent-session:"+sessionKey),

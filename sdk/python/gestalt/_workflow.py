@@ -1501,6 +1501,7 @@ def _workflow_publish_event_request(
     data = _data(value, kwargs)
     event = data.get("event")
     return pb.PublishWorkflowProviderEventRequest(
+        app_name=data.get("app_name", ""),
         provider_name=data.get("provider_name", ""),
         event=workflow_event(event) if event is not None else None,
     )

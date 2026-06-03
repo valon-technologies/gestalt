@@ -183,6 +183,7 @@ message CreateAgentProviderSessionRequest {
   string provider_name = 11;
   string invocation_token = 12;
   AgentWorkspace workspace = 13;
+  google.protobuf.Struct workflow = 14;
 }
 
 message AgentSessionStartConfig {
@@ -208,6 +209,7 @@ message GetAgentProviderSessionRequest {
   string session_id = 1;
   SubjectContext subject = 2;
   string invocation_token = 3;
+  google.protobuf.Struct workflow = 4;
 }
 
 message ListAgentProviderSessionsRequest {
@@ -222,6 +224,7 @@ message ListAgentProviderSessionsRequest {
   bool summary_only = 5;
   string provider_name = 6;
   string invocation_token = 7;
+  google.protobuf.Struct workflow = 8;
 }
 
 message ListAgentProviderSessionsResponse {
@@ -235,6 +238,7 @@ message UpdateAgentProviderSessionRequest {
   google.protobuf.Struct metadata = 4;
   SubjectContext subject = 5;
   string invocation_token = 6;
+  google.protobuf.Struct workflow = 7;
 }
 
 message AgentTurn {
@@ -302,6 +306,7 @@ message CreateAgentProviderTurnRequest {
   string invocation_token = 19;
   bool tool_refs_set = 20;
   AgentOutput output = 21;
+  google.protobuf.Struct workflow = 22;
 }
 
 message AgentTextOutput {}
@@ -321,6 +326,7 @@ message GetAgentProviderTurnRequest {
   string turn_id = 1;
   SubjectContext subject = 2;
   string invocation_token = 3;
+  google.protobuf.Struct workflow = 4;
 }
 
 message ListAgentProviderTurnsRequest {
@@ -336,6 +342,7 @@ message ListAgentProviderTurnsRequest {
   // direct lookup.
   bool summary_only = 6;
   string invocation_token = 7;
+  google.protobuf.Struct workflow = 8;
 }
 
 message ListAgentProviderTurnsResponse {
@@ -347,6 +354,7 @@ message CancelAgentProviderTurnRequest {
   string reason = 2;
   SubjectContext subject = 3;
   string invocation_token = 4;
+  google.protobuf.Struct workflow = 5;
 }
 
 message AgentTurnEvent {
@@ -367,6 +375,7 @@ message ListAgentProviderTurnEventsRequest {
   int32 limit = 3;
   SubjectContext subject = 4;
   string invocation_token = 5;
+  google.protobuf.Struct workflow = 6;
 }
 
 message ListAgentProviderTurnEventsResponse {
@@ -383,6 +392,7 @@ message ListAgentProviderInteractionsRequest {
   string turn_id = 1;
   SubjectContext subject = 2;
   string invocation_token = 3;
+  google.protobuf.Struct workflow = 4;
 }
 
 message ListAgentProviderInteractionsResponse {
@@ -395,6 +405,7 @@ message ResolveAgentProviderInteractionRequest {
   SubjectContext subject = 3;
   string invocation_token = 4;
   string turn_id = 5;
+  google.protobuf.Struct workflow = 6;
 }
 
 message ExecuteAgentToolRequest {

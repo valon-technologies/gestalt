@@ -160,6 +160,7 @@ message BoundWorkflowRun {
   string workflow_key = 12;
   string provider_name = 13;
   string definition_id = 14;
+  SubjectContext run_as = 15;
 }
 
 message BoundWorkflowSchedule {
@@ -174,6 +175,7 @@ message BoundWorkflowSchedule {
   WorkflowActor created_by = 9;
   string provider_name = 11;
   string definition_id = 12;
+  SubjectContext run_as = 13;
 }
 
 message BoundWorkflowEventTrigger {
@@ -186,6 +188,7 @@ message BoundWorkflowEventTrigger {
   WorkflowActor created_by = 7;
   string provider_name = 9;
   string definition_id = 10;
+  SubjectContext run_as = 11;
 }
 
 message BoundWorkflowDefinition {
@@ -215,6 +218,7 @@ message StartWorkflowProviderRunRequest {
   string provider_name = 7;
   string invocation_token = 8;
   string definition_id = 9;
+  SubjectContext run_as = 10;
 }
 
 message GetWorkflowProviderRunRequest {
@@ -256,6 +260,7 @@ message SignalOrStartWorkflowProviderRunRequest {
   string provider_name = 7;
   string invocation_token = 8;
   string definition_id = 9;
+  SubjectContext run_as = 10;
 }
 
 message SignalWorkflowRunResponse {
@@ -276,6 +281,7 @@ message UpsertWorkflowProviderScheduleRequest {
   string invocation_token = 10;
   string idempotency_key = 11;
   string definition_id = 12;
+  SubjectContext run_as = 13;
 }
 
 message GetWorkflowProviderScheduleRequest {
@@ -316,6 +322,7 @@ message UpsertWorkflowProviderEventTriggerRequest {
   string invocation_token = 9;
   string idempotency_key = 10;
   string definition_id = 11;
+  SubjectContext run_as = 12;
 }
 
 message GetWorkflowProviderEventTriggerRequest {

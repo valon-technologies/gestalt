@@ -31,6 +31,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
@@ -39,7 +40,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -1425,7 +1425,6 @@ type recordingWorkflowProvider struct {
 	definitions                map[string]*coreworkflow.Definition
 	nextDefinitionID           int
 	upsertedSchedules          []*proto.UpsertWorkflowProviderScheduleRequest
-	upsertedScheduleTokens     []string
 	listedSchedules            []*coreworkflow.Schedule
 	listSchedulesErr           error
 	deletedSchedules           []*proto.DeleteWorkflowProviderScheduleRequest
@@ -1434,7 +1433,6 @@ type recordingWorkflowProvider struct {
 	getScheduleErr             error
 	schedules                  map[string]*coreworkflow.Schedule
 	upsertedEventTriggers      []*proto.UpsertWorkflowProviderEventTriggerRequest
-	upsertedEventTriggerTokens []string
 	listedEventTriggers        []*coreworkflow.EventTrigger
 	listEventTriggersErr       error
 	deletedEventTriggers       []*proto.DeleteWorkflowProviderEventTriggerRequest
@@ -1522,9 +1520,8 @@ func (p *recordingWorkflowProvider) SignalRun(context.Context, *proto.SignalWork
 func (p *recordingWorkflowProvider) SignalOrStartRun(context.Context, *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
 	return &proto.SignalWorkflowRunResponse{Run: &proto.BoundWorkflowRun{}}, nil
 }
-func (p *recordingWorkflowProvider) UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+func (p *recordingWorkflowProvider) UpsertSchedule(_ context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	p.upsertedSchedules = append(p.upsertedSchedules, gproto.Clone(req).(*proto.UpsertWorkflowProviderScheduleRequest))
-	p.upsertedScheduleTokens = append(p.upsertedScheduleTokens, appaccessservice.InvocationTokenFromContext(ctx))
 	schedule := &coreworkflow.Schedule{
 		ID:           req.GetScheduleId(),
 		Cron:         req.GetCron(),
@@ -1533,6 +1530,7 @@ func (p *recordingWorkflowProvider) UpsertSchedule(ctx context.Context, req *pro
 		DefinitionID: req.GetDefinitionId(),
 		Paused:       req.GetPaused(),
 		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
+		RunAs:        agentwire.RunAsSubjectFromProto(req.GetRunAs()),
 	}
 	if p.schedules == nil {
 		p.schedules = map[string]*coreworkflow.Schedule{}
@@ -1604,9 +1602,8 @@ func (p *recordingWorkflowProvider) PauseSchedule(context.Context, *proto.PauseW
 func (p *recordingWorkflowProvider) ResumeSchedule(context.Context, *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	return &proto.BoundWorkflowSchedule{}, nil
 }
-func (p *recordingWorkflowProvider) UpsertEventTrigger(ctx context.Context, req *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+func (p *recordingWorkflowProvider) UpsertEventTrigger(_ context.Context, req *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
 	p.upsertedEventTriggers = append(p.upsertedEventTriggers, gproto.Clone(req).(*proto.UpsertWorkflowProviderEventTriggerRequest))
-	p.upsertedEventTriggerTokens = append(p.upsertedEventTriggerTokens, appaccessservice.InvocationTokenFromContext(ctx))
 	trigger := &coreworkflow.EventTrigger{
 		ID:           req.GetTriggerId(),
 		Match:        workflowwire.EventMatchFromProto(req.GetMatch()),
@@ -1614,6 +1611,7 @@ func (p *recordingWorkflowProvider) UpsertEventTrigger(ctx context.Context, req 
 		DefinitionID: req.GetDefinitionId(),
 		Paused:       req.GetPaused(),
 		CreatedBy:    workflowwire.ActorFromProto(req.GetRequestedBy()),
+		RunAs:        agentwire.RunAsSubjectFromProto(req.GetRunAs()),
 	}
 	if p.eventTriggers == nil {
 		p.eventTriggers = map[string]*coreworkflow.EventTrigger{}
@@ -1694,57 +1692,6 @@ func (p *recordingWorkflowProvider) Close() error {
 		p.closed.Store(true)
 	}
 	return nil
-}
-
-type recordingWorkflowConfigAppInvoker struct {
-	providerName string
-	operation    string
-	subjectID    string
-}
-
-func (i *recordingWorkflowConfigAppInvoker) Invoke(_ context.Context, p *principal.Principal, providerName, _ string, operation string, _ map[string]any) (*core.OperationResult, error) {
-	i.providerName = providerName
-	i.operation = operation
-	if p != nil {
-		i.subjectID = p.SubjectID
-	}
-	return &core.OperationResult{Status: http.StatusOK}, nil
-}
-
-func requireWorkflowConfigTokenContext(t *testing.T, encryptionKey []byte, token string) appaccessservice.TokenContext {
-	t.Helper()
-	if strings.TrimSpace(token) == "" {
-		t.Fatal("upsert invocation token is empty")
-	}
-	tokens, err := appaccessservice.NewInvocationTokenManager(encryptionKey)
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	tokenCtx, err := tokens.ResolveToken(token, "system:config")
-	if err != nil {
-		t.Fatalf("ResolveToken(config token): %v", err)
-	}
-	return tokenCtx
-}
-
-func assertWorkflowConfigTokenAllowsAppInvoke(t *testing.T, encryptionKey []byte, token, appName, operation string) {
-	t.Helper()
-	tokens, err := appaccessservice.NewInvocationTokenManager(encryptionKey)
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	invoker := &recordingWorkflowConfigAppInvoker{}
-	appServer := appaccessservice.NewAppServer(invoker, tokens)
-	if _, err := appServer.Invoke(context.Background(), &proto.AppInvokeRequest{
-		InvocationToken: token,
-		App:             appName,
-		Operation:       operation,
-	}); err != nil {
-		t.Fatalf("Invoke(%s.%s) with config token: %v", appName, operation, err)
-	}
-	if invoker.providerName != appName || invoker.operation != operation {
-		t.Fatalf("invoked %s.%s, want %s.%s", invoker.providerName, invoker.operation, appName, operation)
-	}
 }
 
 func (p *recordingWorkflowProvider) scheduleGetResponse(schedule *coreworkflow.Schedule) *coreworkflow.Schedule {
@@ -2083,6 +2030,7 @@ func setWorkflowFixture(cfg *config.Config, app string, workflow *workflowFixtur
 			Cron:     schedule.Cron,
 			Timezone: schedule.Timezone,
 			Paused:   schedule.Paused,
+			RunAs:    workflowFixtureRunAs(app),
 		}
 	}
 	for key, trigger := range workflow.EventTriggers {
@@ -2095,7 +2043,18 @@ func setWorkflowFixture(cfg *config.Config, app string, workflow *workflowFixtur
 				Subject: trigger.Match.Subject,
 			},
 			Paused: trigger.Paused,
+			RunAs:  workflowFixtureRunAs(app),
 		}
+	}
+}
+
+func workflowFixtureRunAs(app string) *config.WorkflowRunAsConfig {
+	return &config.WorkflowRunAsConfig{
+		Subject: &config.WorkflowRunAsSubjectConfig{
+			ID:          "service_account:" + strings.TrimSpace(app) + "-workflow",
+			Kind:        "service_account",
+			DisplayName: strings.TrimSpace(app) + " workflow",
+		},
 	}
 }
 
@@ -4894,21 +4853,13 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 			},
 		},
 	})
-	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Invokes = []config.WorkflowInvokeConfig{
-		{App: "slack", Operation: "conversations.list"},
-		{App: "slack", Operation: "conversations.history"},
-	}
-	cfg.Workflows.Schedules["nightly_sync"] = nightly
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
 	}
 
 	factories := validFactories()
 	recorders := map[string]*recordingWorkflowProvider{}
-	var workflowEncryptionKey []byte
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
-		workflowEncryptionKey = append([]byte(nil), deps.EncryptionKey...)
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{}
 		recorders[name] = recorder
 		return recorder, nil
@@ -4948,25 +4899,10 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if requestedBy.SubjectID != "system:config" || requestedBy.SubjectKind != "system" || requestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", requestedBy)
 	}
-	if len(recorder.upsertedScheduleTokens) != 1 {
-		t.Fatalf("upserted schedule tokens = %d, want 1", len(recorder.upsertedScheduleTokens))
+	runAs := agentwire.RunAsSubjectFromProto(got.GetRunAs())
+	if runAs == nil || runAs.SubjectID != "service_account:roadmap-workflow" || runAs.SubjectKind != "service_account" {
+		t.Fatalf("runAs = %#v", runAs)
 	}
-	tokenCtx := requireWorkflowConfigTokenContext(t, workflowEncryptionKey, recorder.upsertedScheduleTokens[0])
-	if got := tokenCtx.CallerApp(); got != "system:config" {
-		t.Fatalf("token caller app = %q, want system:config", got)
-	}
-	tokenPrincipal := tokenCtx.Principal()
-	if tokenPrincipal == nil || tokenPrincipal.SubjectID != "system:config" || tokenPrincipal.Kind != "system" || tokenPrincipal.AuthSource() != "config" {
-		t.Fatalf("token principal = %#v", tokenPrincipal)
-	}
-	if !principal.AllowsOperationPermission(tokenPrincipal, "roadmap", "sync") {
-		t.Fatalf("token principal does not allow roadmap.sync: %#v", tokenPrincipal.TokenPermissions)
-	}
-	if !principal.AllowsOperationPermission(tokenPrincipal, "slack", "conversations.history") {
-		t.Fatalf("token principal does not allow slack.conversations.history: %#v", tokenPrincipal.TokenPermissions)
-	}
-	assertWorkflowConfigTokenAllowsAppInvoke(t, workflowEncryptionKey, recorder.upsertedScheduleTokens[0], "roadmap", "sync")
-	assertWorkflowConfigTokenAllowsAppInvoke(t, workflowEncryptionKey, recorder.upsertedScheduleTokens[0], "slack", "conversations.history")
 }
 
 func TestValidateDoesNotApplyConfiguredWorkflowSchedules(t *testing.T) {
@@ -5010,36 +4946,6 @@ func TestValidateDoesNotApplyConfiguredWorkflowSchedules(t *testing.T) {
 	}
 	if len(recorder.deletedSchedules) != 0 {
 		t.Fatalf("deleted schedules = %d, want 0", len(recorder.deletedSchedules))
-	}
-}
-
-func TestBootstrapRejectsConfiguredWorkflowSchedulesForUserCredentialedApps(t *testing.T) {
-	t.Parallel()
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Apps["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeSubject
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-
-	factories := validFactories()
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return &recordingWorkflowProvider{}, nil
-	}
-
-	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil {
-		t.Fatal("expected Bootstrap to reject user-credentialed config-managed schedules")
-	}
-	if !strings.Contains(err.Error(), `config-managed workflows do not support user-credentialed app "roadmap"`) {
-		t.Fatalf("Bootstrap error = %v", err)
 	}
 }
 
@@ -5137,7 +5043,7 @@ func TestBootstrapConfiguredWorkflowScheduleRunAsAllowsUserCredentialedTarget(t 
 	}
 }
 
-func TestBootstrapRejectsConfiguredWorkflowScheduleRunAsUserSubject(t *testing.T) {
+func TestBootstrapPersistsConfiguredWorkflowScheduleRunAsUserSubject(t *testing.T) {
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
@@ -5158,16 +5064,27 @@ func TestBootstrapRejectsConfiguredWorkflowScheduleRunAsUserSubject(t *testing.T
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
 
 	factories := validFactories()
+	recorders := map[string]*recordingWorkflowProvider{}
 	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return &recordingWorkflowProvider{}, nil
+		recorder := &recordingWorkflowProvider{}
+		recorders["temporal"] = recorder
+		return recorder, nil
 	}
 
-	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil {
-		t.Fatal("expected Bootstrap to reject user runAs subject")
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
 	}
-	if !strings.Contains(err.Error(), `workflows.schedules.nightly_sync.runAs.subject.id "user:ada" must identify a service_account subject`) {
-		t.Fatalf("Bootstrap error = %v", err)
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	recorder := recorders["temporal"]
+	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
+		t.Fatalf("recorded schedules = %#v", recorders)
+	}
+	runAs := agentwire.RunAsSubjectFromProto(recorder.upsertedSchedules[0].GetRunAs())
+	if runAs == nil || runAs.SubjectID != "user:ada" || runAs.SubjectKind != "user" {
+		t.Fatalf("runAs = %#v, want user:ada", runAs)
 	}
 }
 
@@ -5220,60 +5137,6 @@ func TestBootstrapAppliesConfiguredWorkflowSchedulesForRunAsConnectionOnUserDefa
 	gotApp := requireCoreWorkflowAppStep(t, workflowwire.TargetFromProto(recorder.upsertedSchedules[0].GetTarget()))
 	if gotApp.Connection != "bot" {
 		t.Fatalf("target connection = %q, want bot", gotApp.Connection)
-	}
-}
-
-func TestBootstrapAllowsConfiguredWorkflowScheduleInvokesForUserCredentialedApps(t *testing.T) {
-	t.Parallel()
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Apps["slack"] = &config.ProviderEntry{
-		ConnectionMode: providermanifestv1.ConnectionModeSubject,
-		ResolvedManifest: &providermanifestv1.Manifest{
-			Spec: &providermanifestv1.Spec{
-				Surfaces: &providermanifestv1.ProviderSurfaces{
-					REST: &providermanifestv1.RESTSurface{
-						BaseURL: "https://slack.example.invalid",
-						Operations: []providermanifestv1.ProviderOperation{
-							{Name: "conversations.list", Method: http.MethodPost, Path: "/conversations.list"},
-						},
-					},
-				},
-			},
-		},
-	}
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Invokes = []config.WorkflowInvokeConfig{{App: "slack", Operation: "conversations.list"}}
-	cfg.Workflows.Schedules["nightly_sync"] = nightly
-
-	factories := validFactories()
-	recorders := map[string]*recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		recorder := &recordingWorkflowProvider{}
-		recorders[name] = recorder
-		return recorder, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	recorder := recorders["temporal"]
-	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
-		t.Fatalf("recorded schedules = %#v", recorders)
 	}
 }
 
@@ -5513,6 +5376,7 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigScheduleReconcileFails(t *tes
 			Target:   workflowFixtureTarget("roadmap", "sync", nil),
 			Cron:     "0 2 * * *",
 			Timezone: "UTC",
+			RunAs:    workflowFixtureRunAs("roadmap"),
 		},
 	}
 
@@ -5829,18 +5693,13 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 			},
 		},
 	})
-	taskUpdated := cfg.Workflows.EventTriggers["task_updated"]
-	taskUpdated.Invokes = []config.WorkflowInvokeConfig{{App: "slack", Operation: "conversations.history"}}
-	cfg.Workflows.EventTriggers["task_updated"] = taskUpdated
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
 	}
 
 	factories := validFactories()
 	recorders := map[string]*recordingWorkflowProvider{}
-	var workflowEncryptionKey []byte
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
-		workflowEncryptionKey = append([]byte(nil), deps.EncryptionKey...)
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{}
 		recorders[name] = recorder
 		return recorder, nil
@@ -5881,19 +5740,10 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	if requestedBy.SubjectID != "system:config" || requestedBy.SubjectKind != "system" || requestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", requestedBy)
 	}
-	if len(recorder.upsertedEventTriggerTokens) != 1 {
-		t.Fatalf("upserted event trigger tokens = %d, want 1", len(recorder.upsertedEventTriggerTokens))
+	runAs := agentwire.RunAsSubjectFromProto(got.GetRunAs())
+	if runAs == nil || runAs.SubjectID != "service_account:roadmap-workflow" || runAs.SubjectKind != "service_account" {
+		t.Fatalf("runAs = %#v", runAs)
 	}
-	tokenCtx := requireWorkflowConfigTokenContext(t, workflowEncryptionKey, recorder.upsertedEventTriggerTokens[0])
-	tokenPrincipal := tokenCtx.Principal()
-	if tokenPrincipal == nil || !principal.AllowsOperationPermission(tokenPrincipal, "roadmap", "sync") {
-		t.Fatalf("token principal does not allow roadmap.sync: %#v", tokenPrincipal)
-	}
-	if tokenPrincipal == nil || !principal.AllowsOperationPermission(tokenPrincipal, "slack", "conversations.history") {
-		t.Fatalf("token principal does not allow slack.conversations.history: %#v", tokenPrincipal)
-	}
-	assertWorkflowConfigTokenAllowsAppInvoke(t, workflowEncryptionKey, recorder.upsertedEventTriggerTokens[0], "roadmap", "sync")
-	assertWorkflowConfigTokenAllowsAppInvoke(t, workflowEncryptionKey, recorder.upsertedEventTriggerTokens[0], "slack", "conversations.history")
 }
 
 func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarget(t *testing.T) {
@@ -5924,9 +5774,7 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 
 	factories := validFactories()
 	recorders := map[string]*recordingWorkflowProvider{}
-	var workflowEncryptionKey []byte
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
-		workflowEncryptionKey = append([]byte(nil), deps.EncryptionKey...)
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{}
 		recorders[name] = recorder
 		return recorder, nil
@@ -5948,12 +5796,9 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 	if requestedBy.SubjectID != "system:config" || requestedBy.SubjectKind != "system" || requestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", requestedBy)
 	}
-	if len(recorder.upsertedEventTriggerTokens) != 1 {
-		t.Fatalf("upserted event trigger tokens = %d, want 1", len(recorder.upsertedEventTriggerTokens))
-	}
-	tokenPrincipal := requireWorkflowConfigTokenContext(t, workflowEncryptionKey, recorder.upsertedEventTriggerTokens[0]).Principal()
-	if tokenPrincipal == nil || tokenPrincipal.SubjectID != "service_account:roadmap-events" || tokenPrincipal.Kind != "service_account" || tokenPrincipal.CredentialSubjectID != "service_account:roadmap-events" || tokenPrincipal.AuthSource() != "config" {
-		t.Fatalf("token principal = %#v", tokenPrincipal)
+	runAs := agentwire.RunAsSubjectFromProto(got.GetRunAs())
+	if runAs == nil || runAs.SubjectID != "service_account:roadmap-events" || runAs.SubjectKind != "service_account" || runAs.CredentialSubjectID != "service_account:roadmap-events" || runAs.AuthSource != "config" {
+		t.Fatalf("runAs = %#v", runAs)
 	}
 }
 
@@ -5982,6 +5827,7 @@ func TestBootstrapConfigManagedAgentStepsPreserveWorkflowSystemToolRefs(t *testi
 			Cron:     "*/10 * * * *",
 			Timezone: "UTC",
 			Target:   agentStepTarget,
+			RunAs:    workflowFixtureRunAs("agent"),
 		},
 	}
 	cfg.Workflows.EventTriggers = map[string]config.WorkflowEventTriggerConfig{
@@ -5991,6 +5837,7 @@ func TestBootstrapConfigManagedAgentStepsPreserveWorkflowSystemToolRefs(t *testi
 				Type: "roadmap.updated",
 			},
 			Target: agentStepTarget,
+			RunAs:  workflowFixtureRunAs("agent"),
 		},
 	}
 

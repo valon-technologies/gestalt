@@ -305,7 +305,13 @@ func TestWorkflowConfigReconciliationReconcilesReadyRuntimeProvidersIndependentl
 				"ready_schedule": {
 					Provider: "ready",
 					Target:   workflowConfigTestAgentStepTarget(),
-					Cron:     "* * * * *",
+					RunAs: &config.WorkflowRunAsConfig{
+						Subject: &config.WorkflowRunAsSubjectConfig{
+							ID:   "service_account:ready-workflow",
+							Kind: "service_account",
+						},
+					},
+					Cron: "* * * * *",
 				},
 			},
 		},
@@ -325,10 +331,10 @@ func TestWorkflowConfigReconciliationReconcilesReadyRuntimeProvidersIndependentl
 	workflowRuntime.PublishProvider("ready", readyProvider)
 	workflowRuntime.PublishProvider("stuck", stuckProvider)
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
-		if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, nil, includeProvider); err != nil {
+		if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, includeProvider); err != nil {
 			return err
 		}
-		return reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, nil, includeProvider)
+		return reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, includeProvider)
 	}
 	result := &Result{
 		workflowConfigReconcileTasks: runtimeWorkflowConfigReconcileTasks(workflowRuntime, runtimePlacedWorkflowProviderNames(cfg), reconcileWorkflowConfig),
@@ -484,6 +490,9 @@ func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T)
 	t.Parallel()
 
 	ctx := context.Background()
+	runAs := &config.WorkflowRunAsConfig{
+		Subject: &config.WorkflowRunAsSubjectConfig{ID: "service_account:workflow-runner"},
+	}
 	cfg := &config.Config{
 		Providers: config.ProvidersConfig{
 			Workflow: map[string]*config.ProviderEntry{
@@ -510,11 +519,13 @@ func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T)
 					Provider: "local",
 					Target:   workflowConfigTestAgentStepTarget(),
 					Cron:     "* * * * *",
+					RunAs:    runAs,
 				},
 				"runtime_schedule": {
 					Provider: "runtime",
 					Target:   workflowConfigTestAgentStepTarget(),
 					Cron:     "* * * * *",
+					RunAs:    runAs,
 				},
 			},
 			EventTriggers: map[string]config.WorkflowEventTriggerConfig{
@@ -522,11 +533,13 @@ func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T)
 					Provider: "local",
 					Target:   workflowConfigTestAgentStepTarget(),
 					Match:    config.WorkflowEventMatch{Type: "local.changed"},
+					RunAs:    runAs,
 				},
 				"runtime_trigger": {
 					Provider: "runtime",
 					Target:   workflowConfigTestAgentStepTarget(),
 					Match:    config.WorkflowEventMatch{Type: "runtime.changed"},
+					RunAs:    runAs,
 				},
 			},
 		},
@@ -550,10 +563,10 @@ func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T)
 		return ok
 	}
 
-	if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, nil, localFilter); err != nil {
+	if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, localFilter); err != nil {
 		t.Fatalf("reconcile local schedules: %v", err)
 	}
-	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, nil, localFilter); err != nil {
+	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, localFilter); err != nil {
 		t.Fatalf("reconcile local event triggers: %v", err)
 	}
 	if got := len(localProvider.upsertedSchedules); got != 1 {
@@ -569,10 +582,10 @@ func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T)
 		t.Fatalf("runtime upserted event triggers during local reconcile = %d, want 0", got)
 	}
 
-	if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, nil, runtimeFilter); err != nil {
+	if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, runtimeFilter); err != nil {
 		t.Fatalf("reconcile runtime schedules: %v", err)
 	}
-	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, nil, runtimeFilter); err != nil {
+	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, runtimeFilter); err != nil {
 		t.Fatalf("reconcile runtime event triggers: %v", err)
 	}
 	if got := len(runtimeProvider.upsertedSchedules); got != 1 {
